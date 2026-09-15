@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session
 from creopdm.constants import (
     APP_NAME,
     APP_SCHEMA_VERSION,
+    CAD_OBJECT_TYPES,
     DEFAULT_BRANCH,
+    DOCUMENT_OBJECT_TYPES,
     PROJECT_JSON_NAME,
     PROJECT_MARKER_DIR,
     SCHEMA_VERSION_NAME,
@@ -349,22 +351,10 @@ class ProjectService:
             "assemblies": sum(1 for obj in objects if obj.object_type == "CREO_ASSEMBLY"),
             "drawings": sum(1 for obj in objects if obj.object_type == "CREO_DRAWING"),
             "documents": sum(
-                1
-                for obj in objects
-                if obj.object_type in {"PDF", "DOCUMENT", "SPREADSHEET", "TEXT", "IMAGE"}
+                1 for obj in objects if obj.object_type in {item.value for item in DOCUMENT_OBJECT_TYPES}
             ),
             "other": sum(
-                1
-                for obj in objects
-                if obj.object_type
-                not in {
-                    "CREO_PART",
-                    "CREO_ASSEMBLY",
-                    "CREO_DRAWING",
-                    "CREO_MANUFACTURING",
-                    "CAD",
-                    "STEP",
-                }
+                1 for obj in objects if obj.object_type not in {item.value for item in CAD_OBJECT_TYPES}
             ),
             "checked_out_by_me": mine,
             "checked_out_by_others": len(active) - mine,

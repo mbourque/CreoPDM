@@ -68,6 +68,7 @@
     assemblies: ["CREO_ASSEMBLY"],
     drawings: ["CREO_DRAWING"],
     documents: ["PDF", "DOCUMENT", "SPREADSHEET", "TEXT", "IMAGE"],
+    other: ["PDF", "DOCUMENT", "SPREADSHEET", "TEXT", "IMAGE", "OTHER"],
   };
   const METRIC_LABELS = {
     files: "all files",
@@ -75,6 +76,7 @@
     assemblies: "assemblies",
     drawings: "drawings",
     documents: "documents",
+    other: "non-CAD files",
   };
 
   function metricButtons() {

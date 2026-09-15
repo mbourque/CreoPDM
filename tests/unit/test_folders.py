@@ -27,6 +27,7 @@ def test_folder_view_counts_uses_immediate_files_only():
         "assemblies": 1,
         "drawings": 0,
         "documents": 1,
+        "other": 1,
     }
     nested = folder_view_counts(objects, "Incoming/lib")
     assert nested["files"] == 1
