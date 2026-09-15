@@ -41,6 +41,25 @@ def ensure_within(base: Path, target: Path) -> Path:
     return target_resolved
 
 
+def is_within(base: Path, target: Path) -> bool:
+    try:
+        ensure_within(base, target)
+        return True
+    except PathValidationError:
+        return False
+
+
+def require_within_project(location: Path, target: Path) -> Path:
+    """Files and folders can only be added from inside the project location."""
+    try:
+        return ensure_within(location, target)
+    except PathValidationError as exc:
+        raise PathValidationError(
+            "Choose files or folders inside the project location.",
+            details={"path": str(target), "location": str(location)},
+        ) from exc
+
+
 def validate_project_location(path: str | Path) -> Path:
     """Validate a user-chosen project repository location."""
     if not str(path).strip():

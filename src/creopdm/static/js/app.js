@@ -119,6 +119,9 @@
       const matchesView = !viewBtns.length || viewBtns.some((btn) => rowMatchesMetric(row, btn.dataset.filter));
       row.hidden = !(matchesSearch && matchesView);
     });
+    document.querySelectorAll("#object-table .folder-row").forEach((folder) => {
+      folder.hidden = Boolean(q) && !folder.textContent.toLowerCase().includes(q);
+    });
   }
 
   function applyMetricSelection() {
@@ -187,8 +190,9 @@
     if (!projectForm || !projectDialog) return;
     showError($("#project-error"), "");
     const title = $("#project-dialog-title");
-    const locationLabel = $("#project-location-label");
     const locationInput = projectForm.querySelector("[name=repository_path]");
+    const locationHint = $("#project-location-hint");
+    const browse = $("#browse-location-btn");
     const submit = $("#project-submit");
     projectForm.dataset.mode = mode;
     if (mode === "rename") {
@@ -197,21 +201,38 @@
       projectForm.elements.name.value = btn?.dataset.name || "";
       projectForm.elements.number.value = btn?.dataset.number || "";
       projectForm.elements.description.value = btn?.dataset.description || "";
-      if (locationLabel) locationLabel.hidden = true;
-      if (locationInput) locationInput.required = false;
+      if (locationInput) {
+        locationInput.value = btn?.dataset.path || "";
+        locationInput.required = false;
+        locationInput.readOnly = true;
+        locationInput.disabled = true;
+      }
+      if (browse) browse.hidden = true;
+      if (locationHint) {
+        locationHint.textContent =
+          "Location cannot be changed. Rename does not move the original folder or Git vault.";
+      }
       if (submit) submit.textContent = "Save";
     } else {
       projectForm.reset();
       if (title) title.textContent = "New project";
-      if (locationLabel) locationLabel.hidden = false;
-      if (locationInput) locationInput.required = true;
+      if (locationInput) {
+        locationInput.required = true;
+        locationInput.readOnly = false;
+        locationInput.disabled = false;
+      }
+      if (browse) browse.hidden = false;
+      if (locationHint) {
+        locationHint.textContent =
+          "Required. This is the project vault on disk. The parent folder must already exist.";
+      }
       if (submit) submit.textContent = "Create";
     }
     projectDialog.showModal();
   }
 
   $("#browse-location-btn")?.addEventListener("click", async () => {
-    if (!projectForm) return;
+    if (!projectForm || projectForm.dataset.mode === "rename") return;
     showError($("#project-error"), "");
     const response = await fetch("/api/projects/choose-location", { method: "POST" });
     if (!response.ok) {
@@ -256,6 +277,7 @@
   });
 
   let chosenPaths = [];
+  let chosenBaseFolder = null;
 
   async function loadAddFolder() {
     const projectId = addForm?.dataset.project;
@@ -267,9 +289,37 @@
     label.textContent = `Opens in: ${data.initial_directory}`;
   }
 
+  function chosenDisplayName(path, folder) {
+    if (!folder) return path.split(/[/\\]/).pop() || path;
+    const norm = String(path).replace(/\\/g, "/");
+    const root = String(folder).replace(/\\/g, "/").replace(/\/$/, "");
+    const prefix = root.toLowerCase() + "/";
+    if (norm.toLowerCase().startsWith(prefix)) {
+      return `${root.split("/").pop()}/${norm.slice(root.length + 1)}`;
+    }
+    return path.split(/[/\\]/).pop() || path;
+  }
+
+  function applyChosenPaths(paths, labelText, baseFolder) {
+    chosenPaths = paths || [];
+    chosenBaseFolder = baseFolder || null;
+    const label = $("#add-folder-label");
+    if (label && labelText) label.textContent = labelText;
+    const list = $("#chosen-file-list");
+    if (list) {
+      list.innerHTML = "";
+      chosenPaths.forEach((path) => {
+        const item = document.createElement("li");
+        item.textContent = chosenDisplayName(path, chosenBaseFolder);
+        list.appendChild(item);
+      });
+    }
+  }
+
   $("#add-files-btn")?.addEventListener("click", () => {
     showError($("#add-error"), "");
     chosenPaths = [];
+    chosenBaseFolder = null;
     const list = $("#chosen-file-list");
     if (list) list.innerHTML = "";
     loadAddFolder();
@@ -287,17 +337,37 @@
       return;
     }
     const data = await response.json();
-    const label = $("#add-folder-label");
-    if (label && data.initial_directory) label.textContent = `Opens in: ${data.initial_directory}`;
-    chosenPaths = data.selected || [];
-    const list = $("#chosen-file-list");
-    if (list) {
-      list.innerHTML = "";
-      chosenPaths.forEach((path) => {
-        const item = document.createElement("li");
-        item.textContent = path.split(/[/\\]/).pop() || path;
-        list.appendChild(item);
-      });
+    applyChosenPaths(
+      data.selected || [],
+      data.initial_directory ? `Opens in: ${data.initial_directory}` : ""
+    );
+    if (data.warning) showError($("#add-error"), data.warning);
+  });
+
+  $("#choose-workspace-folder")?.addEventListener("click", async () => {
+    const projectId = addForm?.dataset.project;
+    if (!projectId) return;
+    showError($("#add-error"), "");
+    const response = await fetch(`/api/projects/${projectId}/workspace/choose-folder`, { method: "POST" });
+    if (!response.ok) {
+      showError($("#add-error"), await readError(response));
+      return;
+    }
+    const data = await response.json();
+    if (data.cancelled) return;
+    if (data.warning) {
+      applyChosenPaths([], data.initial_directory ? `Opens in: ${data.initial_directory}` : "");
+      showError($("#add-error"), data.warning);
+      return;
+    }
+    const folder = data.folder || data.initial_directory;
+    applyChosenPaths(
+      data.selected || [],
+      folder ? `${(data.selected || []).length} file(s) from ${folder}` : "",
+      folder
+    );
+    if (!(data.selected || []).length) {
+      showError($("#add-error"), "No files to add were found in that folder.");
     }
   });
 
@@ -306,7 +376,7 @@
     const projectId = addForm.dataset.project;
     if (!projectId) return;
     if (!chosenPaths.length) {
-      showError($("#add-error"), "Choose at least one file from the workspace.");
+      showError($("#add-error"), "Choose files or a folder first.");
       return;
     }
     const comment = String(new FormData(addForm).get("comment") || "").trim();
@@ -314,7 +384,11 @@
       const response = await fetch(`/api/projects/${projectId}/objects/from-disk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paths: chosenPaths, comment: comment || null }),
+        body: JSON.stringify({
+          paths: chosenPaths,
+          comment: comment || null,
+          base_folder: chosenBaseFolder,
+        }),
       });
       if (!response.ok) {
         showError($("#add-error"), await readError(response));
@@ -376,15 +450,15 @@
     const queued = Number(checkinBtn?.dataset.newFiles || 0) + Number(checkinBtn?.dataset.pendingSaves || 0);
     if (checkinBtn) checkinBtn.disabled = checkinable.length === 0 && queued === 0;
     if (undoBtn) undoBtn.disabled = !selected.some((row) => row.dataset.owned === "1");
-    if (workspaceBtn) workspaceBtn.disabled = ids.length === 0;
-    if (purgeBtn) purgeBtn.disabled = ids.length === 0;
+    if (workspaceBtn) workspaceBtn.disabled = !selected.some((row) => row.dataset.inWorkspace !== "1");
+    if (purgeBtn) purgeBtn.disabled = !selected.some((row) => row.dataset.inWorkspace === "1");
     if (removeBtn) removeBtn.disabled = ids.length === 0;
     const filtering = metricButtons().some((btn) => metricMode(btn) === "filter");
     const summary = $("#selection-summary");
     if (summary) {
       summary.textContent = ids.length
-        ? `${ids.length} selected${filtering ? ". The list is filtered" : ""}. Checkout or To Workspace copies them into the workspace.`
-        : "Click a count to select a group. Ctrl-click a row to select it; Shift-click to select a range. Click a filename to open it. Click a row for history.";
+        ? `${ids.length} selected${filtering ? ". The list is filtered" : ""}. Copy to Workspace is for files that are not already in the workspace.`
+        : "Click a count to select a group. Click a row to select it; Shift-click a range; Ctrl-click to add or remove. Click a filename to open it. Double-click a row for history. Click or double-click a folder to open it.";
     }
   }
 
@@ -394,13 +468,22 @@
     syncToolbar();
   }
 
-  function selectRange(toRow) {
+  function selectOnly(row) {
+    rows().forEach((item) => item.classList.toggle("is-selected", item === row));
+    lastSelectRow = row;
+    syncToolbar();
+  }
+
+  function selectRange(toRow, additive = false) {
     const visible = rows().filter((row) => !row.hidden);
     const end = visible.indexOf(toRow);
     const start = lastSelectRow ? visible.indexOf(lastSelectRow) : end;
     if (end < 0) return;
     const from = start < 0 ? end : Math.min(start, end);
     const until = start < 0 ? end : Math.max(start, end);
+    if (!additive) {
+      visible.forEach((row) => row.classList.remove("is-selected"));
+    }
     visible.slice(from, until + 1).forEach((row) => row.classList.add("is-selected"));
     lastSelectRow = toRow;
     syncToolbar();
@@ -451,12 +534,28 @@
 
   document.querySelectorAll("table.grid").forEach(enableTableSort);
 
-  document.querySelector("#object-table")?.addEventListener("click", async (event) => {
+  function openFolderRow(folder) {
+    const projectId = $("#rename-project-btn")?.dataset.project;
+    const path = folder?.dataset.folder || "";
+    if (projectId && path) {
+      window.location.href = `/?project=${projectId}&folder=${encodeURIComponent(path)}`;
+    }
+  }
+
+  document.querySelector("#object-table")?.addEventListener("click", (event) => {
+    const folder = event.target.closest(".folder-row");
+    if (folder) {
+      event.preventDefault();
+      openFolderRow(folder);
+      return;
+    }
     const row = event.target.closest(".object-row");
     if (!row) return;
+    const openLink = event.target.closest(".object-open");
+    if (openLink) event.preventDefault();
     if (event.shiftKey) {
       event.preventDefault();
-      selectRange(row);
+      selectRange(row, event.ctrlKey || event.metaKey);
       return;
     }
     if (event.ctrlKey || event.metaKey) {
@@ -464,15 +563,23 @@
       toggleRow(row);
       return;
     }
-    const openLink = event.target.closest(".object-open");
-    if (openLink) {
+    selectOnly(row);
+    if (!openLink?.dataset.uuid || event.detail > 1) return;
+    void postAction("/api/creo/open", { object_id: openLink.dataset.uuid }, "POST", "Opening…");
+  });
+
+  document.querySelector("#object-table")?.addEventListener("dblclick", (event) => {
+    const folder = event.target.closest(".folder-row");
+    if (folder) {
       event.preventDefault();
-      await postAction("/api/creo/open", { object_id: openLink.dataset.uuid }, "POST", "Opening…");
+      openFolderRow(folder);
       return;
     }
-    if (row.dataset.detail) {
-      window.location.href = row.dataset.detail;
-    }
+    if (event.target.closest(".object-open")) return;
+    const row = event.target.closest(".object-row");
+    if (!row?.dataset.detail) return;
+    event.preventDefault();
+    window.location.href = row.dataset.detail;
   });
 
   document.querySelector("#metric-filters")?.addEventListener("click", (event) => {

@@ -140,12 +140,26 @@ DOCUMENT_OBJECT_TYPES = frozenset(
     }
 )
 
+CAD_OBJECT_TYPES = frozenset(
+    {
+        ObjectType.CREO_PART,
+        ObjectType.CREO_ASSEMBLY,
+        ObjectType.CREO_DRAWING,
+        ObjectType.CREO_MANUFACTURING,
+        ObjectType.CAD,
+        ObjectType.STEP,
+    }
+)
+
+OTHER_OBJECT_TYPES = frozenset(item for item in ObjectType if item not in CAD_OBJECT_TYPES)
+
 METRIC_TYPE_FILTERS: dict[str, frozenset[str] | None] = {
     "files": None,
     "creo_parts": frozenset({ObjectType.CREO_PART.value}),
     "assemblies": frozenset({ObjectType.CREO_ASSEMBLY.value}),
     "drawings": frozenset({ObjectType.CREO_DRAWING.value}),
     "documents": frozenset(item.value for item in DOCUMENT_OBJECT_TYPES),
+    "other": frozenset(item.value for item in OTHER_OBJECT_TYPES),
 }
 
 DEFAULT_LFS_PATTERNS = [

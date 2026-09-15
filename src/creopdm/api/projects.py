@@ -29,6 +29,7 @@ from creopdm.schemas.common import (
 )
 from creopdm.utils.launch import open_windows_folder
 from creopdm.utils.native_dialog import default_project_location_start, pick_files, pick_folder
+from creopdm.utils.paths import is_within, require_within_project
 
 router = APIRouter()
 
@@ -117,6 +118,8 @@ def forget_project(
         confirm_name=payload.confirm_name,
         workspace_path=workspace,
     )
+    if ctx.config.settings.ui.last_project_uuid == project_id:
+        ctx.config.remember_project(None)
     return ForgetProjectResponse.model_validate(result)
 
 
@@ -204,11 +207,57 @@ def choose_workspace_files(
     project = ctx.projects.get_project(db, project_id)
     start = ctx.projects.preferred_import_directory(project)
     start.mkdir(parents=True, exist_ok=True)
-    selected = [str(path) for path in pick_files(start, title="Add files to the project")]
+    root = Path(project.repository_path)
+    selected = []
+    skipped = 0
+    for path in pick_files(start, title="Add files to the project"):
+        if is_within(root, path):
+            selected.append(str(path))
+        else:
+            skipped += 1
+    warning = ""
+    if skipped and not selected:
+        warning = "Choose files inside the project location."
+    elif skipped:
+        warning = "Skipped files outside the project location."
     return WorkspacePickerResponse(
         workspace_root=str(ctx.workspaces.root_for(project.uuid)),
         initial_directory=str(start),
         selected=selected,
+        warning=warning,
+    )
+
+
+@router.post("/api/projects/{project_id}/workspace/choose-folder", response_model=WorkspacePickerResponse)
+def choose_workspace_folder(
+    project_id: str,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> WorkspacePickerResponse:
+    project = ctx.projects.get_project(db, project_id)
+    start = ctx.projects.preferred_import_directory(project)
+    start.mkdir(parents=True, exist_ok=True)
+    chosen = pick_folder(start, title="Add a folder to the project")
+    if chosen is None:
+        return WorkspacePickerResponse(
+            workspace_root=str(ctx.workspaces.root_for(project.uuid)),
+            initial_directory=str(start),
+            cancelled=True,
+        )
+    root = Path(project.repository_path)
+    if not is_within(root, chosen):
+        return WorkspacePickerResponse(
+            workspace_root=str(ctx.workspaces.root_for(project.uuid)),
+            initial_directory=str(start),
+            warning="Choose a folder inside the project location.",
+        )
+    extras = ctx.config.extra_cad_extensions()
+    selected = [str(path) for path in CreoFileManager.list_latest_in_folder(chosen, extras)]
+    return WorkspacePickerResponse(
+        workspace_root=str(ctx.workspaces.root_for(project.uuid)),
+        initial_directory=str(chosen),
+        selected=selected,
+        folder=str(chosen),
     )
 
 
@@ -240,8 +289,26 @@ def import_from_disk(
     project = ctx.projects.get_project(db, project_id)
     comment = (payload.comment or "").strip() or None
     extras = ctx.config.extra_cad_extensions()
+    root = Path(project.repository_path)
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
+    if payload.base_folder:
+        try:
+            require_within_project(root, Path(payload.base_folder))
+        except PathValidationError as exc:
+            failed.append(
+                BatchItemResult(
+                    uuid="",
+                    filename=Path(payload.base_folder).name,
+                    code=exc.code,
+                    message=exc.message,
+                )
+            )
+            return BatchOperationResponse(
+                ok=ok,
+                failed=failed,
+                workspace_root=str(ctx.workspaces.root_for(project.uuid)),
+            )
     raw_paths = [Path(raw) for raw in payload.paths]
     missing = [path for path in raw_paths if not path.is_file()]
     present = [path for path in raw_paths if path.is_file()]
@@ -257,7 +324,8 @@ def import_from_disk(
         )
     for path in selected:
         try:
-            relative = ctx.workspaces.relative_if_inside_repo(project, path)
+            require_within_project(root, path)
+            relative = ctx.workspaces.import_relative_path(project, path, payload.base_folder)
             obj = ctx.objects.import_file(
                 db,
                 project,

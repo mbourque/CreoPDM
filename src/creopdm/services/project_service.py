@@ -46,13 +46,6 @@ from creopdm.utils.paths import normalize_fs_path, validate_project_location
 
 logger = get_logger("projects")
 
-README_TEMPLATE = """# {name}
-
-Managed by {app_name}.
-
-Do not edit the `.git` directory. Use {app_name} to add files and record versions.
-"""
-
 GITIGNORE_TEMPLATE = """# Creo transients — not engineering objects
 *.tst
 *.err
@@ -127,7 +120,6 @@ class ProjectService:
                 location,
                 [
                     PROJECT_MARKER_DIR,
-                    "README.md",
                     ".gitignore",
                 ],
             )
@@ -243,7 +235,7 @@ class ProjectService:
     ) -> dict[str, str]:
         """Unregister the project and strip Git metadata. CAD files stay on disk.
 
-        Removes `.git`, Git ignore files, `.creopdm`, and CreoPDM workspace copies.
+        Removes `.git`, Git ignore files, `.creopdm`, CreoPDM README, and workspace copies.
         Does not delete engineering files in the project folder.
         """
         project = self.get_project(session, project_uuid)
@@ -281,8 +273,21 @@ class ProjectService:
         for name in (".gitignore", ".gitattributes"):
             remove_file(repo / name)
         remove_tree(repo / PROJECT_MARKER_DIR)
+        self._remove_creopdm_readme(repo / "README.md")
         for folder in STANDARD_PROJECT_FOLDERS:
             remove_file(repo / folder / ".gitkeep")
+
+    @staticmethod
+    def _remove_creopdm_readme(path: Path) -> None:
+        if not path.is_file():
+            return
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            return
+        if f"Managed by {APP_NAME}" not in text:
+            return
+        remove_file(path)
 
     def _delete_project_records(self, session: Session, project: Project) -> None:
         objects = list(
@@ -348,6 +353,19 @@ class ProjectService:
                 for obj in objects
                 if obj.object_type in {"PDF", "DOCUMENT", "SPREADSHEET", "TEXT", "IMAGE"}
             ),
+            "other": sum(
+                1
+                for obj in objects
+                if obj.object_type
+                not in {
+                    "CREO_PART",
+                    "CREO_ASSEMBLY",
+                    "CREO_DRAWING",
+                    "CREO_MANUFACTURING",
+                    "CAD",
+                    "STEP",
+                }
+            ),
             "checked_out_by_me": mine,
             "checked_out_by_others": len(active) - mine,
             "modified_locally": 0,
@@ -385,10 +403,6 @@ class ProjectService:
             encoding="utf-8",
         )
         (marker / SCHEMA_VERSION_NAME).write_text(f"{APP_SCHEMA_VERSION}\n", encoding="utf-8")
-        (location / "README.md").write_text(
-            README_TEMPLATE.format(name=name, app_name=APP_NAME),
-            encoding="utf-8",
-        )
         (location / ".gitignore").write_text(GITIGNORE_TEMPLATE, encoding="utf-8")
 
     def _rewrite_project_marker(

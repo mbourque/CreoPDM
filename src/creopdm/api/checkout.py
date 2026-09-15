@@ -36,6 +36,7 @@ def present_object(ctx: AppContext, db: Session, obj) -> ObjectResponse:
         modified_locally=modified,
         current_user=user,
         can_checkin=view.can_checkin or force_checkin,
+        in_workspace=ctx.workspaces.has_local_copy(obj.project, obj),
     )
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from creopdm.constants import APP_NAME, APP_VERSION
 
@@ -42,6 +42,8 @@ class ProjectCreateRequest(BaseModel):
 
 
 class ProjectUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1, max_length=255)
     number: str | None = None
     description: str | None = None
@@ -107,6 +109,7 @@ class ObjectResponse(BaseModel):
     modified_locally: bool = False
     can_checkout: bool = True
     can_checkin: bool = False
+    in_workspace: bool = False
     created_at: datetime | None
     updated_at: datetime | None
     current_version: ObjectVersionResponse | None = None
@@ -187,6 +190,7 @@ class ProjectStatusResponse(BaseModel):
     assemblies: int
     drawings: int
     documents: int
+    other: int
     checked_out_by_me: int
     checked_out_by_others: int
     modified_locally: int
@@ -197,12 +201,16 @@ class ProjectStatusResponse(BaseModel):
 class ImportLocalRequest(BaseModel):
     paths: list[str] = Field(min_length=1)
     comment: str | None = None
+    base_folder: str | None = None
 
 
 class WorkspacePickerResponse(BaseModel):
     workspace_root: str
     initial_directory: str
     selected: list[str] = Field(default_factory=list)
+    cancelled: bool = False
+    folder: str | None = None
+    warning: str = ""
 
 
 class FolderPickResponse(BaseModel):

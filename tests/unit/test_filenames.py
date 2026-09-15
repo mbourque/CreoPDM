@@ -97,6 +97,23 @@ def test_filter_to_latest_saves_skips_older_and_unnumbered(tmp_path):
     assert older.is_file() and v1.is_file() and inf.is_file()
 
 
+def test_list_latest_in_folder_skips_older_transients_and_git(tmp_path):
+    root = tmp_path / "models"
+    nested = root / "sub"
+    nested.mkdir(parents=True)
+    (root / "parallels.prt").write_bytes(b"old")
+    (root / "parallels.prt.1").write_bytes(b"1")
+    (root / "parallels.prt.3").write_bytes(b"3")
+    (nested / "bushing.prt.2").write_bytes(b"bush")
+    (root / "trail.txt").write_bytes(b"junk")
+    (root / "notes.bak").write_bytes(b"bak")
+    git = root / ".git"
+    git.mkdir()
+    (git / "config").write_bytes(b"git")
+    chosen = {path.name for path in CreoFileManager.list_latest_in_folder(root)}
+    assert chosen == {"parallels.prt.3", "bushing.prt.2"}
+
+
 def test_filter_to_latest_saves_uses_disk_siblings_when_only_old_selected(tmp_path):
     older = tmp_path / "shaft.prt"
     older.write_bytes(b"old")

@@ -13,6 +13,24 @@ from creopdm.utils.sta import run_on_sta
 
 logger = get_logger("dialog")
 
+# IFileDialog::Show / HRESULT_FROM_WIN32(ERROR_CANCELLED)
+_HRESULT_CANCELLED = 0x800704C7
+_WINERROR_CANCELLED = 1223
+
+
+def is_user_cancelled(exc: BaseException) -> bool:
+    """True when Windows reports that the user closed or cancelled a dialog."""
+    winerror = getattr(exc, "winerror", None)
+    if winerror is None:
+        winerror = getattr(exc, "errno", None)
+    try:
+        code = int(winerror)
+    except (TypeError, ValueError):
+        return False
+    return code in (_HRESULT_CANCELLED, _WINERROR_CANCELLED, -2147023673) or (
+        code & 0xFFFFFFFF
+    ) == _HRESULT_CANCELLED
+
 
 def cad_dialog_filter_patterns() -> str:
     """Glob list for the native file picker, including Creo numbered saves."""
@@ -59,16 +77,20 @@ def pick_folder(initial_dir: Path, title: str = "Choose project folder") -> Path
         return None
     try:
         return run_on_sta(lambda: _windows_folder_dialog(start, title))
+    except OSError as exc:
+        if is_user_cancelled(exc):
+            return None
+        logger.exception("IFileOpenDialog folder picker failed; trying Windows Forms")
     except Exception:
         logger.exception("IFileOpenDialog folder picker failed; trying Windows Forms")
-        try:
-            return _winforms_folder_dialog(start, title)
-        except Exception as exc:
-            logger.exception("Windows Forms folder picker also failed")
-            raise ValidationAppError(
-                "The folder picker could not be opened. Type a folder path instead.",
-                details={"reason": str(exc)},
-            ) from exc
+    try:
+        return _winforms_folder_dialog(start, title)
+    except Exception as fallback:
+        logger.exception("Windows Forms folder picker also failed")
+        raise ValidationAppError(
+            "The folder picker could not be opened. Type a folder path instead.",
+            details={"reason": str(fallback)},
+        ) from fallback
 
 
 def default_project_location_start() -> Path:
@@ -220,7 +242,8 @@ def _windows_folder_dialog(initial_dir: Path, title: str) -> Path | None:
         return proto(vtbl[index])
 
     release = method(2, ctypes.c_ulong)
-    show = method(3, HRESULT, HWND)
+    # c_long, not HRESULT: ctypes HRESULT restype raises OSError on cancel (0x800704C7).
+    show = method(3, ctypes.c_long, HWND)
     set_options = method(9, HRESULT, DWORD)
     set_folder = method(12, HRESULT, c_void_p)
     set_title = method(17, HRESULT, LPCWSTR)
@@ -247,11 +270,17 @@ def _windows_folder_dialog(initial_dir: Path, title: str) -> Path | None:
             set_folder(dialog, folder_item)
             folder_vtbl = ctypes.cast(folder_item, POINTER(POINTER(c_void_p))).contents
             ctypes.WINFUNCTYPE(ctypes.c_ulong, c_void_p)(folder_vtbl[2])(folder_item)
-        hr = show(dialog, hwnd)
-        if hr and (hr & 0xFFFFFFFF) == error_cancelled:
+        try:
+            hr = show(dialog, hwnd)
+        except OSError as exc:
+            if is_user_cancelled(exc):
+                return None
+            raise
+        hr_u = int(hr) & 0xFFFFFFFF
+        if hr_u in (error_cancelled, _HRESULT_CANCELLED, _WINERROR_CANCELLED):
             return None
         if hr:
-            raise OSError(hr)
+            raise OSError(None, "IFileOpenDialog.Show failed", None, int(hr))
         result_item = c_void_p()
         hr = get_result(dialog, byref(result_item))
         if hr or not result_item:

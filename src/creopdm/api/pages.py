@@ -15,6 +15,7 @@ from creopdm.api.serializers import project_to_response, revision_display
 from creopdm.constants import APP_NAME, APP_VERSION, ObjectType
 from creopdm.context import AppContext
 from creopdm.exceptions import ProjectNotFoundError
+from creopdm.utils.folders import folder_crumbs, folder_list_entries, folder_view_counts, normalize_folder_query
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
@@ -44,7 +45,7 @@ def home(
     ctx: AppContext = Depends(get_context),
 ) -> HTMLResponse:
     projects = [project_to_response(p) for p in ctx.projects.list_projects(db)]
-    selected_uuid = request.query_params.get("project")
+    selected_uuid = request.query_params.get("project") or ctx.config.settings.ui.last_project_uuid
     selected = None
     objects = []
     status = None
@@ -60,7 +61,8 @@ def home(
             status = ctx.projects.project_status(db, project.uuid)
         except ProjectNotFoundError:
             selected = None
-    elif projects:
+            project = None
+    if selected is None and projects:
         selected = projects[0]
         project = ctx.projects.get_project(db, selected.uuid)
         orm_objects = ctx.objects.list_objects(db, project.id)
@@ -68,6 +70,10 @@ def home(
         status = ctx.projects.project_status(db, project.uuid)
     if project is not None:
         checkin_queue = ctx.workspaces.project_checkin_queue(project, orm_objects)
+        ctx.config.remember_project(project.uuid)
+    current_folder = normalize_folder_query(request.query_params.get("folder"))
+    if status is not None and current_folder:
+        status = {**status, **folder_view_counts(objects, current_folder)}
 
     return render(
         request,
@@ -79,6 +85,9 @@ def home(
             "projects": projects,
             "selected": selected,
             "objects": objects,
+            "current_folder": current_folder,
+            "folder_crumbs": folder_crumbs(current_folder),
+            "list_entries": folder_list_entries(objects, current_folder),
             "status": status,
             "checkin_queue": checkin_queue,
             "workspace_path": str(ctx.config.workspace_for_project(selected.uuid)) if selected else None,

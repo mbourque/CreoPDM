@@ -52,6 +52,7 @@ class WorkspaceConfig(BaseModel):
 
 class UiConfig(BaseModel):
     open_browser_on_start: bool = True
+    last_project_uuid: str | None = None
 
 
 class CadConfig(BaseModel):
@@ -172,3 +173,11 @@ class ConfigManager:
         root = self.workspace_root()
         root.mkdir(parents=True, exist_ok=True)
         return root / project_uuid
+
+    def remember_project(self, project_uuid: str | None) -> None:
+        uuid_value = (project_uuid or "").strip() or None
+        settings = self.settings
+        if settings.ui.last_project_uuid == uuid_value:
+            return
+        settings.ui.last_project_uuid = uuid_value
+        self.save(settings)

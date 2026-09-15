@@ -63,6 +63,7 @@ def object_to_response(
     modified_locally: bool = False,
     current_user: UserIdentity | None = None,
     can_checkin: bool | None = None,
+    in_workspace: bool = False,
 ) -> ObjectResponse:
     checkout: Checkout | None = view.checkout if view else None
     label = view.label if view else "Available"
@@ -89,6 +90,7 @@ def object_to_response(
         modified_locally=modified_locally,
         can_checkout=view.can_checkout if view else obj.lifecycle_state == "IN_WORK",
         can_checkin=can_checkin if can_checkin is not None else (view.can_checkin if view else False),
+        in_workspace=in_workspace,
         created_at=obj.created_at,
         updated_at=obj.updated_at,
         current_version=version_to_response(

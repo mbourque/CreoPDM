@@ -151,7 +151,130 @@ def test_choose_files_starts_in_project_folder(client, repo_parent):
 
 
 @requires_git
-def test_from_disk_adds_only_latest_numbered_revision(client, repo_parent, tmp_path):
+def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch):
+    project, location = _create_project(client, repo_parent)
+    picked = location / "Incoming"
+    nested = picked / "lib"
+    nested.mkdir(parents=True)
+    (picked / "shaft.prt.1").write_bytes(b"1")
+    (picked / "shaft.prt.4").write_bytes(b"4")
+    (nested / "pin.prt").write_bytes(b"pin")
+    (picked / "trail.txt").write_bytes(b"nope")
+    monkeypatch.setattr(
+        "creopdm.api.projects.pick_folder",
+        lambda initial_dir, title="Add a folder to the project": picked,
+    )
+    response = client.post(f"/api/projects/{project['uuid']}/workspace/choose-folder")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["cancelled"] is False
+    names = {Path(path).name for path in body["selected"]}
+    assert names == {"shaft.prt.4", "pin.prt"}
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": body["selected"], "comment": "Folder add", "base_folder": str(picked)},
+    )
+    assert imported.status_code == 200, imported.text
+    listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
+    listed = {item["filename"]: item["relative_path"] for item in listing}
+    assert listed == {"shaft.prt.4": "Incoming/shaft.prt.4", "pin.prt": "Incoming/lib/pin.prt"}
+    page = client.get(f"/?project={project['uuid']}")
+    assert page.status_code == 200, page.text
+    assert 'class="folder-row"' in page.text
+    assert 'data-folder="Incoming"' in page.text
+    assert 'data-folder="Incoming/lib"' not in page.text
+    assert "pin.prt" not in page.text
+    inside = client.get(f"/?project={project['uuid']}&folder=Incoming")
+    assert inside.status_code == 200, inside.text
+    assert 'data-folder="Incoming/lib"' in inside.text
+    assert "shaft.prt.4" in inside.text
+    nested = client.get(f"/?project={project['uuid']}&folder=Incoming/lib")
+    assert nested.status_code == 200, nested.text
+    assert "pin.prt" in nested.text
+    assert "Files" in nested.text
+    assert (Path(project["repository_path"]) / "Incoming" / "shaft.prt.4").is_file()
+    assert (Path(project["repository_path"]) / "Incoming" / "lib" / "pin.prt").is_file()
+
+
+@requires_git
+def test_choose_folder_cancel_keeps_empty_selection(client, repo_parent, monkeypatch):
+    project, _location = _create_project(client, repo_parent)
+    monkeypatch.setattr(
+        "creopdm.api.projects.pick_folder",
+        lambda initial_dir, title="Add a folder to the project": None,
+    )
+    response = client.post(f"/api/projects/{project['uuid']}/workspace/choose-folder")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["cancelled"] is True
+    assert body["selected"] == []
+
+
+@requires_git
+def test_choose_folder_rejects_outside_project_location(client, repo_parent, tmp_path, monkeypatch):
+    project, _location = _create_project(client, repo_parent)
+    outside = tmp_path / "Elsewhere"
+    outside.mkdir()
+    (outside / "pin.prt").write_bytes(b"nope")
+    monkeypatch.setattr(
+        "creopdm.api.projects.pick_folder",
+        lambda initial_dir, title="Add a folder to the project": outside,
+    )
+    response = client.post(f"/api/projects/{project['uuid']}/workspace/choose-folder")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["selected"] == []
+    assert "project location" in body["warning"].lower()
+
+
+@requires_git
+def test_from_disk_rejects_file_outside_project_location(client, repo_parent, tmp_path):
+    project, _location = _create_project(client, repo_parent)
+    outsider = tmp_path / "foreign.prt"
+    outsider.write_bytes(b"nope")
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(outsider)], "comment": "Should not import"},
+    )
+    assert imported.status_code == 200, imported.text
+    body = imported.json()
+    assert body["ok"] == []
+    assert body["failed"]
+    assert "project location" in body["failed"][0]["message"].lower()
+    listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
+    assert listing == []
+
+
+@requires_git
+def test_choose_folder_inside_project_keeps_repo_relative_path(client, repo_parent, monkeypatch):
+    project, location = _create_project(client, repo_parent)
+    lib = location / "lib"
+    lib.mkdir()
+    (lib / "pin.prt").write_bytes(b"pin")
+    monkeypatch.setattr(
+        "creopdm.api.projects.pick_folder",
+        lambda initial_dir, title="Add a folder to the project": lib,
+    )
+    chosen = client.post(f"/api/projects/{project['uuid']}/workspace/choose-folder")
+    assert chosen.status_code == 200, chosen.text
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={
+            "paths": chosen.json()["selected"],
+            "comment": "Existing lib",
+            "base_folder": str(lib),
+        },
+    )
+    assert imported.status_code == 200, imported.text
+    listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
+    assert listing[0]["relative_path"] == "lib/pin.prt"
+    page = client.get(f"/?project={project['uuid']}")
+    assert 'data-folder="lib"' in page.text
+    assert (location / "lib" / "pin.prt").read_bytes() == b"pin"
+
+
+@requires_git
+def test_from_disk_adds_only_latest_numbered_revision(client, repo_parent):
     project, location = _create_project(client, repo_parent)
     older = location / "parallels.prt"
     older.write_bytes(b"old-generic")
@@ -159,7 +282,7 @@ def test_from_disk_adds_only_latest_numbered_revision(client, repo_parent, tmp_p
     first.write_bytes(b"rev-1")
     latest = location / "parallels.prt.3"
     latest.write_bytes(b"rev-3")
-    notes = tmp_path / "notes.pdf"
+    notes = location / "notes.pdf"
     notes.write_bytes(b"%PDF-notes")
     imported = client.post(
         f"/api/projects/{project['uuid']}/objects/from-disk",

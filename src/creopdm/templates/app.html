@@ -32,7 +32,8 @@
                   data-project="{{ selected.uuid }}"
                   data-name="{{ selected.name }}"
                   data-number="{{ selected.number or '' }}"
-                  data-description="{{ selected.description or '' }}">Rename</button>
+                  data-description="{{ selected.description or '' }}"
+                  data-path="{{ selected.repository_path }}">Rename</button>
           <button type="button" class="btn btn-small btn-danger" id="forget-project-btn"
                   data-project="{{ selected.uuid }}"
                   data-name="{{ selected.name }}"
@@ -58,7 +59,7 @@
       <li><button type="button" class="metric" data-filter="drawings" data-mode="off" title="Select drawings. Click again to filter. Click a third time to clear."><strong>{{ status.drawings }}</strong> Drawings</button></li>
       <li><button type="button" class="metric" data-filter="documents" data-mode="off" title="Select documents. Click again to filter. Click a third time to clear."><strong>{{ status.documents }}</strong> Documents</button></li>
     </ul>
-    <p class="muted small" id="selection-summary">Click a count to select a group. Ctrl-click a row to select it; Shift-click to select a range. Click a filename to open it. Click a row for history.</p>
+    <p class="muted small" id="selection-summary">Click a count to select a group. Click a row to select it; Shift-click a range; Ctrl-click to add or remove. Click a filename to open it. Double-click a row for history. Click or double-click a folder to open it.</p>
     {% endif %}
 
     {% set pending_count = (checkin_queue.saves|length) + (checkin_queue.new_files|length) %}
@@ -68,6 +69,22 @@
     </div>
 
     <section class="tab-panel" id="panel-files">
+    {% if current_folder %}
+    <nav class="folder-crumb" aria-label="Folder">
+      <a href="/?project={{ selected.uuid }}">Files</a>
+      {% for crumb in folder_crumbs %}
+      <span class="folder-crumb-sep" aria-hidden="true">/</span>
+      {% if loop.last %}
+      <span class="folder-crumb-current">
+        <svg class="folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.2A2.2 2.2 0 0 1 5.7 5h4.1c.4 0 .8.2 1 .5l1.3 1.4c.3.3.6.5 1 .5h5.2A2.2 2.2 0 0 1 20.5 9.6v8.2a2.2 2.2 0 0 1-2.2 2.2H5.7A2.2 2.2 0 0 1 3.5 17.8V7.2Z"/></svg>
+        {{ crumb.name }}
+      </span>
+      {% else %}
+      <a href="/?project={{ selected.uuid }}&folder={{ crumb.path }}">{{ crumb.name }}</a>
+      {% endif %}
+      {% endfor %}
+    </nav>
+    {% endif %}
     <div class="table-wrap">
       <table class="grid" id="object-table">
         <thead>
@@ -76,40 +93,76 @@
             <th data-sort="rev" aria-sort="none" title="Sort by revision. Click again to reverse.">Rev</th>
             <th data-sort="state" aria-sort="none" title="Sort by state. Click again to reverse.">State</th>
             <th data-sort="type" aria-sort="none" title="Sort by type. Click again to reverse.">Type</th>
+            <th data-sort="modified" aria-sort="none" title="Sort by modified date. Click again to reverse.">Modified</th>
             <th data-sort="checkout" aria-sort="none" title="Sort by checkout. Click again to reverse.">Checkout</th>
           </tr>
         </thead>
         <tbody>
-          {% for obj in objects %}
+          {% for entry in list_entries %}
+          {% if entry.kind == "folder" %}
+          <tr class="folder-row"
+              data-folder="{{ entry.path }}"
+              data-depth="{{ entry.depth }}"
+              data-sort-name="{{ entry.path }}/"
+              data-sort-rev="{{ entry.path }}/"
+              data-sort-state="{{ entry.path }}/"
+              data-sort-type="{{ entry.path }}/"
+              data-sort-modified="{% if entry.modified %}{{ entry.modified.strftime('%Y%m%d%H%M%S') }}{% endif %}"
+              data-sort-checkout="{{ entry.path }}/"
+              style="--depth: {{ entry.depth }}"
+              title="Click or double-click to open this folder.">
+            <td>
+              <span class="folder-label">
+                <svg class="folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.2A2.2 2.2 0 0 1 5.7 5h4.1c.4 0 .8.2 1 .5l1.3 1.4c.3.3.6.5 1 .5h5.2A2.2 2.2 0 0 1 20.5 9.6v8.2a2.2 2.2 0 0 1-2.2 2.2H5.7A2.2 2.2 0 0 1 3.5 17.8V7.2Z"/></svg>
+                {{ entry.name }}
+              </span>
+              <span class="muted small">{{ entry.count }} file{% if entry.count != 1 %}s{% endif %}</span>
+            </td>
+            <td></td>
+            <td></td>
+            <td>Folder</td>
+            <td>{% if entry.modified %}{{ entry.modified.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
+            <td></td>
+          </tr>
+          {% else %}
+          {% set obj = entry.object %}
           <tr data-uuid="{{ obj.uuid }}"
               data-object-type="{{ obj.object_type }}"
               data-can-checkout="{{ '1' if obj.can_checkout else '0' }}"
               data-can-checkin="{{ '1' if obj.can_checkin else '0' }}"
               data-owned="{{ '1' if obj.owned_by_me else '0' }}"
-              data-sort-name="{{ obj.filename }}"
-              data-sort-rev="{{ obj.revision }}-{{ '%06d'|format(obj.iteration) }}"
-              data-sort-state="{{ obj.lifecycle_state }}"
-              data-sort-type="{{ obj.object_type }}"
-              data-sort-checkout="{{ obj.checkout_status }}"
+              data-in-workspace="{{ '1' if obj.in_workspace else '0' }}"
+              data-tree="{{ entry.folder }}"
+              data-sort-name="{{ obj.relative_path }}"
+              data-sort-rev="{{ entry.folder }}/{{ obj.revision }}-{{ '%06d'|format(obj.iteration) }}"
+              data-sort-state="{{ entry.folder }}/{{ obj.lifecycle_state }}"
+              data-sort-type="{{ entry.folder }}/{{ obj.object_type }}"
+              data-sort-modified="{% if obj.updated_at %}{{ obj.updated_at.strftime('%Y%m%d%H%M%S') }}{% endif %}"
+              data-sort-checkout="{{ entry.folder }}/{{ obj.checkout_status }}"
               data-detail="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}#history"
               class="object-row"
-              title="Ctrl-click to select. Click for history.">
+              style="--depth: {{ entry.depth }}"
+              title="Click to select. Double-click for history.">
             <td>
               <a class="object-open" href="#" data-uuid="{{ obj.uuid }}" title="Click to open">{{ obj.filename }}</a>
+              {% if entry.depth == 0 and obj.relative_path and obj.relative_path != obj.filename %}
               <div class="muted small">{{ obj.relative_path }}</div>
+              {% endif %}
             </td>
             <td>{{ obj.display_revision }}</td>
             <td><span class="state" data-state="{{ obj.lifecycle_state }}">{{ obj.lifecycle_state.replace('_', ' ').title() }}</span></td>
             <td>{{ obj.object_type.replace('_', ' ').title() }}</td>
+            <td>{% if obj.updated_at %}{{ obj.updated_at.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
             <td>
               <span class="checkout-state" data-state="{% if obj.owned_by_me %}mine{% elif obj.checkout_user %}other{% else %}available{% endif %}">
                 {{ obj.checkout_status }}
               </span>
             </td>
           </tr>
+          {% endif %}
           {% else %}
           <tr class="empty-row">
-            <td colspan="5">No files in this project. Add a Creo model, PDF, or document to get started.</td>
+            <td colspan="6">{% if current_folder %}This folder is empty.{% else %}No files in this project. Add a Creo model, PDF, or document to get started.{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -179,8 +232,8 @@
 <footer class="toolbar">
   <div class="toolbar-actions">
     <button type="button" class="btn" id="add-files-btn" {% if not selected %}disabled{% endif %}>Add Files</button>
-    <span class="toolbar-tip" title="Copy the selected files into the CreoPDM workspace (AppData). Does not check them out.">
-      <button type="button" class="btn" id="workspace-btn" disabled>To Workspace</button>
+    <span class="toolbar-tip" title="Copy selected files into the CreoPDM workspace if they are not already there. Does not check them out.">
+      <button type="button" class="btn" id="workspace-btn" disabled>Copy to Workspace</button>
     </span>
     <span class="toolbar-tip" title="Open the CreoPDM workspace folder for this project in File Explorer.">
       <button type="button" class="btn" id="open-workspace-btn" {% if selected %}data-project="{{ selected.uuid }}"{% else %}disabled{% endif %}>Open Workspace</button>
@@ -208,7 +261,6 @@
     <span class="toolbar-tip" title="Remove the selected files from this project list and delete CreoPDM workspace copies. Files in your original project folder are not deleted.">
       <button type="button" class="btn btn-danger" id="remove-project-btn" disabled>Remove from Project</button>
     </span>
-    <button type="button" class="btn" disabled title="Get Latest is part of a later milestone">Get Latest</button>
   </div>
   <div class="toolbar-messages">
     <p class="error" id="toolbar-error" hidden></p>
@@ -233,7 +285,7 @@
         <input name="repository_path" required maxlength="1024" placeholder="Choose a folder…" autocomplete="off">
         <button type="button" class="btn" id="browse-location-btn">Browse…</button>
       </span>
-      <span class="muted small">Required. This is the project vault on disk. The parent folder must already exist.</span>
+      <span class="muted small" id="project-location-hint">Required. This is the project vault on disk. The parent folder must already exist.</span>
     </label>
     <p class="error" id="project-error" hidden></p>
     <div class="dialog-actions">
@@ -246,7 +298,7 @@
 <dialog id="forget-dialog" class="dialog">
   <form method="dialog" id="forget-form">
     <h2>Forget this project</h2>
-    <p>This removes Git history (<code>.git</code>), <code>.gitignore</code>, and CreoPDM registration. Workspace copies are deleted.</p>
+    <p>This removes Git history (<code>.git</code>), <code>.gitignore</code>, CreoPDM’s <code>README.md</code>, and CreoPDM registration. Workspace copies are deleted.</p>
     <p><strong>CAD files in the project folder are not deleted.</strong></p>
     <p class="muted small" id="forget-path"></p>
     <label>Type the project name to confirm
@@ -263,12 +315,15 @@
 <dialog id="add-dialog" class="dialog">
   <form method="dialog" id="add-form" {% if selected %}data-project="{{ selected.uuid }}"{% endif %}>
     <h2>Add files</h2>
-    <p class="muted">Choose Files opens in the original project folder. Numbered names such as <code>shaft.prt.3</code> are kept as-is. Workspace copies of every type go in one project folder.</p>
+    <p class="muted">Choose Files or Choose Folder from this project location only. Files from other folders cannot be added. Numbered names such as <code>shaft.prt.3</code> keep only the latest save.</p>
     <p class="muted small" id="add-folder-label">{% if selected %}Project: {{ selected.repository_path }}{% endif %}</p>
     <div class="dropzone" id="dropzone">
-      <button type="button" class="btn" id="choose-workspace-files">Choose Files</button>
+      <div class="dropzone-actions">
+        <button type="button" class="btn" id="choose-workspace-files">Choose Files</button>
+        <button type="button" class="btn" id="choose-workspace-folder">Choose Folder</button>
+      </div>
       <ul id="chosen-file-list" class="detect-list"></ul>
-      <span class="muted small">The Windows dialog starts in the project vault folder.</span>
+      <span class="muted small">The Windows dialog starts in the project location. Paths outside that folder are not added.</span>
     </div>
     <label>Comment
       <input name="comment" placeholder="Initial models">

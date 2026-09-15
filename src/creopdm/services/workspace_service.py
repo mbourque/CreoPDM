@@ -34,17 +34,34 @@ class WorkspaceService:
         return path
 
     def workspace_relative(self, obj: EngineeringObject) -> str:
-        """Workspace copies sit in the project workspace root, like a Creo working directory."""
-        return Path(str(obj.filename).replace("\\", "/")).name
+        """Keep the project's folder layout in the workspace."""
+        relative = str(obj.relative_path or obj.filename).replace("\\", "/")
+        return assert_safe_relative_path(relative).as_posix()
 
-    def _workspace_search_dirs(self, project_uuid: str) -> list[Path]:
+    def _workspace_search_dirs(
+        self,
+        project_uuid: str,
+        obj: EngineeringObject | None = None,
+    ) -> list[Path]:
         root = self.root_for(project_uuid)
-        dirs = [root]
+        ordered: list[Path] = []
+        seen: set[str] = set()
+
+        def add(path: Path) -> None:
+            key = str(path)
+            if key in seen:
+                return
+            seen.add(key)
+            ordered.append(path)
+
+        if obj is not None:
+            add(self.workspace_file_path(project_uuid, obj).parent)
+        add(root)
         for folder in STANDARD_PROJECT_FOLDERS:
-            path = root / folder
-            if path.is_dir():
-                dirs.append(path)
-        return dirs
+            leftover = root / folder
+            if leftover.is_dir():
+                add(leftover)
+        return ordered
 
     def workspace_file_path(self, project_uuid: str, obj: EngineeringObject) -> Path:
         return self.file_path(project_uuid, self.workspace_relative(obj))
@@ -113,7 +130,7 @@ class WorkspaceService:
 
     def locate_content(self, project_uuid: str, obj: EngineeringObject) -> Path:
         extras = self._cad_extensions()
-        for directory in self._workspace_search_dirs(project_uuid):
+        for directory in self._workspace_search_dirs(project_uuid, obj):
             latest = CreoFileManager.latest_in_directory(directory, obj.filename, extras)
             if latest is not None and latest.is_file():
                 return latest
@@ -122,6 +139,13 @@ class WorkspaceService:
             f"Workspace file not found for {obj.filename}.",
             details={"workspace": str(destination)},
         )
+
+    def has_local_copy(self, project: Project, obj: EngineeringObject) -> bool:
+        try:
+            self.locate_content(project.uuid, obj)
+            return True
+        except PathValidationError:
+            return False
 
     def is_modified(self, project: Project, obj: EngineeringObject) -> bool:
         try:
@@ -180,6 +204,8 @@ class WorkspaceService:
         failed: list[dict[str, str]] = []
         for project, obj in session_objects:
             try:
+                if self.has_local_copy(project, obj):
+                    continue
                 path = self.materialize(project, obj, writable=False)
                 ok.append({"uuid": obj.uuid, "filename": obj.filename, "path": str(path)})
             except Exception as exc:
@@ -214,6 +240,36 @@ class WorkspaceService:
             return self._canonical_relative(repo, Path(path))
         except (ValueError, PathValidationError):
             return None
+
+    def import_relative_path(
+        self,
+        project: Project,
+        source: Path,
+        base_folder: Path | str | None = None,
+    ) -> str | None:
+        """Repo-relative path used when adding a file.
+
+        Choose Files keeps files at the vault root unless they already live
+        inside the project folder. Choose Folder keeps the chosen folder name
+        as a group, including nested files.
+        """
+        path = Path(source)
+        inside = self.relative_if_inside_repo(project, path)
+        if not base_folder:
+            return inside
+        base = Path(base_folder)
+        try:
+            rel = path.resolve().relative_to(base.resolve())
+        except ValueError:
+            return inside
+        repo = Path(project.repository_path).resolve()
+        if base.resolve() == repo or repo in base.resolve().parents:
+            return inside
+        stored = CreoFileManager.canonical_repository_name(rel.name)
+        parent = rel.parent
+        if parent.as_posix() == ".":
+            return f"{base.name}/{stored}"
+        return (Path(base.name) / parent / stored).as_posix()
 
     def list_untracked(
         self,
@@ -292,7 +348,7 @@ class WorkspaceService:
         extras = self._cad_extensions()
         wanted = CreoFileManager.logical_filename(obj.filename, extras).lower()
         removed: list[str] = []
-        for directory in self._workspace_search_dirs(project.uuid):
+        for directory in self._workspace_search_dirs(project.uuid, obj):
             if not directory.is_dir():
                 continue
             for path in list(directory.iterdir()):

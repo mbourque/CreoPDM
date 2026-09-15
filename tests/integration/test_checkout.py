@@ -151,3 +151,38 @@ def test_batch_workspace_without_checkout(client, repo_parent, data_dir):
     listed = client.get(f"/api/objects/{obj['uuid']}").json()
     assert listed["owned_by_me"] is False
     assert listed["can_checkout"] is True
+    assert listed["in_workspace"] is True
+    again = client.post("/api/objects/batch/workspace", json={"object_ids": [obj["uuid"]]})
+    assert again.status_code == 200
+    assert again.json()["ok"] == []
+
+
+@requires_git
+def test_workspace_keeps_project_folders(client, repo_parent, data_dir):
+    location = repo_parent / "FolderArm"
+    project = client.post(
+        "/api/projects",
+        json={"name": "Folder Arm", "repository_path": str(location)},
+    ).json()
+    lib = location / "lib"
+    nested = lib / "step"
+    nested.mkdir(parents=True)
+    pin = nested / "pin.prt"
+    pin.write_bytes(b"pin-bytes")
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(pin)], "comment": "Nested library part"},
+    )
+    assert imported.status_code == 200, imported.text
+    obj = imported.json()["ok"][0]
+    listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
+    item = next(row for row in listing if row["uuid"] == obj["uuid"])
+    assert item["relative_path"] == "lib/step/pin.prt"
+
+    copied = client.post("/api/objects/batch/workspace", json={"object_ids": [obj["uuid"]]})
+    assert copied.status_code == 200, copied.text
+    workspace = data_dir / "workspaces" / project["uuid"]
+    assert (workspace / "lib" / "step" / "pin.prt").is_file()
+    assert (workspace / "lib" / "step" / "pin.prt").read_bytes() == b"pin-bytes"
+    assert not (workspace / "pin.prt").exists()
+

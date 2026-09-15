@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 from creopdm.constants import CREO_FILE_EXTENSIONS, DEFAULT_EXTRA_CAD_EXTENSIONS
@@ -13,6 +14,8 @@ _UUIDISH_STEM = re.compile(
     r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{6,12}$",
     re.IGNORECASE,
 )
+_SKIP_IMPORT_DIRS = {".git", ".creopdm", "__pycache__"}
+_SKIP_IMPORT_SUFFIXES = {".tst", ".err", ".lst", ".bak", ".tmp", ".acl"}
 
 
 def _dot_ext(value: str) -> str:
@@ -218,3 +221,42 @@ class CreoFileManager:
             latest = cls.select_latest_creo_version(family, extra_extensions)
             chosen.append(latest if latest is not None else family[0])
         return chosen
+
+    @classmethod
+    def iter_importable_files(
+        cls,
+        root: Path,
+        extra_extensions: Iterable[str] | None = None,
+    ) -> Iterator[Path]:
+        """Walk a folder for files that can be added to a project."""
+        folder = Path(root)
+        if not folder.is_dir():
+            return
+        for dirpath, dirnames, filenames in os.walk(folder):
+            dirnames[:] = [name for name in dirnames if name.lower() not in _SKIP_IMPORT_DIRS]
+            current = Path(dirpath)
+            for name in filenames:
+                if name.startswith("."):
+                    continue
+                if cls.is_workspace_transient(name):
+                    continue
+                path = current / name
+                if not path.is_file():
+                    continue
+                suffix = path.suffix.lower()
+                numbered = cls.normalize_creo_filename(name, extra_extensions)
+                check = Path(numbered).suffix.lower() if numbered != name else suffix
+                if check in _SKIP_IMPORT_SUFFIXES or suffix in _SKIP_IMPORT_SUFFIXES:
+                    continue
+                yield path
+
+    @classmethod
+    def list_latest_in_folder(
+        cls,
+        root: Path,
+        extra_extensions: Iterable[str] | None = None,
+    ) -> list[Path]:
+        return cls.filter_to_latest_saves(
+            list(cls.iter_importable_files(root, extra_extensions)),
+            extra_extensions,
+        )

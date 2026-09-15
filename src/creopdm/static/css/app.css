@@ -129,13 +129,28 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .grid th[data-sort]::after { content: " \2195"; opacity: 0.35; font-size: 0.85em; }
 .grid th[aria-sort="ascending"]::after { content: " \2191"; opacity: 1; color: var(--ink); }
 .grid th[aria-sort="descending"]::after { content: " \2193"; opacity: 1; color: var(--ink); }
-.object-row { cursor: pointer; }
+.object-row { cursor: pointer; user-select: none; }
 .object-row.is-selected { background: #e7f1f6; }
+.folder-row { background: transparent; cursor: pointer; }
+.folder-row:hover { background: #f6f8fa; }
+.folder-label { font-weight: 650; display: inline-flex; align-items: center; gap: 0.45rem; margin-right: 0.45rem; }
+.folder-icon {
+  width: 1.15rem; height: 1.15rem; flex-shrink: 0;
+  fill: #e0a04a; stroke: #b4531e; stroke-width: 1.1;
+}
+.folder-row:hover .folder-icon { fill: #ebb05a; }
+.folder-crumb {
+  display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center;
+  margin: 0 0 0.65rem; font-size: 0.88rem;
+}
+.folder-crumb a { font-weight: 600; }
+.folder-crumb-sep { color: var(--muted); }
+.folder-crumb-current { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 650; }
+.folder-crumb-current .folder-icon { width: 1rem; height: 1rem; }
 .object-open {
   font-weight: 600;
-  cursor: grab;
+  cursor: pointer;
 }
-.object-open:active { cursor: grabbing; }
 .detail-head .object-open { font-size: inherit; color: inherit; }
 .grid tr.is-latest { background: #eef6f1; }
 .grid tr.is-pending { background: #fff6e8; }
@@ -188,9 +203,13 @@ a.brand:hover { text-decoration: none; color: inherit; }
 }
 .dialog form { display: flex; flex-direction: column; gap: 0.7rem; padding: 1.1rem; }
 .dialog h2 { margin: 0; }
+[hidden] { display: none !important; }
 .dialog label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.88rem; font-weight: 600; }
 .dialog input, .dialog textarea {
   font: inherit; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 4px; font-weight: 400;
+}
+.dialog input:disabled, .dialog textarea:disabled {
+  background: #eef2f5; color: var(--muted); cursor: not-allowed;
 }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .path-picker { display: flex; gap: 0.4rem; align-items: stretch; font-weight: 400; }
@@ -221,7 +240,8 @@ body.is-busy, body.is-busy * { cursor: wait !important; }
   border: 1px dashed #7f93a6; border-radius: 6px; padding: 1.2rem; text-align: center;
   background: #f4f7fa; font-weight: 500;
 }
-.dropzone .btn { margin-bottom: 0.5rem; }
+.dropzone-actions { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.dropzone .btn { margin-bottom: 0; }
 #chosen-file-list { text-align: left; max-height: 8rem; overflow: auto; }
 
 .detail { padding: 1.2rem 1.4rem 2rem; }
