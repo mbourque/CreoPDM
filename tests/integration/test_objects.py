@@ -151,6 +151,37 @@ def test_choose_files_starts_in_project_folder(client, repo_parent):
 
 
 @requires_git
+def test_from_disk_adds_only_latest_numbered_revision(client, repo_parent, tmp_path):
+    project, location = _create_project(client, repo_parent)
+    older = location / "parallels.prt"
+    older.write_bytes(b"old-generic")
+    first = location / "parallels.prt.1"
+    first.write_bytes(b"rev-1")
+    latest = location / "parallels.prt.3"
+    latest.write_bytes(b"rev-3")
+    notes = tmp_path / "notes.pdf"
+    notes.write_bytes(b"%PDF-notes")
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={
+            "paths": [str(older), str(first), str(latest), str(notes)],
+            "comment": "Latest saves only",
+        },
+    )
+    assert imported.status_code == 200, imported.text
+    body = imported.json()
+    assert not body["failed"]
+    added = {item["filename"] for item in body["ok"]}
+    assert added == {"parallels.prt.3", "notes.pdf"}
+    listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
+    names = {item["filename"] for item in listing}
+    assert names == {"parallels.prt.3", "notes.pdf"}
+    assert older.is_file() and first.is_file() and latest.is_file()
+    assert older.read_bytes() == b"old-generic"
+    assert first.read_bytes() == b"rev-1"
+
+
+@requires_git
 def test_import_from_vault_after_git_deleted_keeps_file(client, repo_parent):
     project, location = _create_project(client, repo_parent)
     pin = location / "keep.prt.1"

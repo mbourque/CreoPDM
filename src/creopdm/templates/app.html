@@ -58,18 +58,18 @@
       <li><button type="button" class="metric" data-filter="drawings" data-mode="off" title="Select drawings. Click again to filter. Click a third time to clear."><strong>{{ status.drawings }}</strong> Drawings</button></li>
       <li><button type="button" class="metric" data-filter="documents" data-mode="off" title="Select documents. Click again to filter. Click a third time to clear."><strong>{{ status.documents }}</strong> Documents</button></li>
     </ul>
-    <p class="muted small" id="selection-summary">Click a count to select that group, again to filter the list, again to clear. Click a filename to open it. Click a row for history. Ctrl-click a row to select it.</p>
+    <p class="muted small" id="selection-summary">Click a count to select a group. Ctrl-click a row to select it; Shift-click to select a range. Click a filename to open it. Click a row for history.</p>
     {% endif %}
 
     <div class="table-wrap">
       <table class="grid" id="object-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Rev</th>
-            <th>State</th>
-            <th>Type</th>
-            <th>Checkout</th>
+            <th data-sort="name" aria-sort="none" title="Sort by name. Click again to reverse.">Name</th>
+            <th data-sort="rev" aria-sort="none" title="Sort by revision. Click again to reverse.">Rev</th>
+            <th data-sort="state" aria-sort="none" title="Sort by state. Click again to reverse.">State</th>
+            <th data-sort="type" aria-sort="none" title="Sort by type. Click again to reverse.">Type</th>
+            <th data-sort="checkout" aria-sort="none" title="Sort by checkout. Click again to reverse.">Checkout</th>
           </tr>
         </thead>
         <tbody>
@@ -79,12 +79,16 @@
               data-can-checkout="{{ '1' if obj.can_checkout else '0' }}"
               data-can-checkin="{{ '1' if obj.can_checkin else '0' }}"
               data-owned="{{ '1' if obj.owned_by_me else '0' }}"
+              data-sort-name="{{ obj.filename }}"
+              data-sort-rev="{{ obj.revision }}-{{ '%06d'|format(obj.iteration) }}"
+              data-sort-state="{{ obj.lifecycle_state }}"
+              data-sort-type="{{ obj.object_type }}"
+              data-sort-checkout="{{ obj.checkout_status }}"
               data-detail="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}#history"
               class="object-row"
-              title="View history and details. Ctrl-click to select.">
+              title="Ctrl-click to select. Click for history.">
             <td>
-              <a class="object-open" href="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}"
-                 data-uuid="{{ obj.uuid }}" title="Open this file">{{ obj.filename }}</a>
+              <a class="object-open" href="#" data-uuid="{{ obj.uuid }}" title="Click to open">{{ obj.filename }}</a>
               <div class="muted small">{{ obj.relative_path }}</div>
             </td>
             <td>{{ obj.display_revision }}</td>
@@ -230,6 +234,7 @@
       <p class="muted small">New files found in the workspace. These are models Creo saved next to the checked-out file. Checked items are added to the project with this check-in.</p>
       <div id="checkin-new-files"></div>
     </div>
+    <p class="pending-note" id="checkin-force-warn" hidden></p>
     <p class="error" id="checkin-error" hidden></p>
     <div class="dialog-actions">
       <button type="button" class="btn" id="checkin-cancel">Cancel</button>

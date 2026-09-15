@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from pathlib import Path
 
 from creopdm.constants import STANDARD_PROJECT_FOLDERS
@@ -64,6 +65,7 @@ class WorkspaceService:
         obj: EngineeringObject,
         writable: bool,
         overwrite_modified: bool = False,
+        keep_local: bool = False,
     ) -> Path:
         source = self.repository_file(project, obj.relative_path)
         if not source.is_file():
@@ -78,15 +80,15 @@ class WorkspaceService:
         conflict_path = latest if latest is not None and latest.is_file() else (
             destination if destination.exists() else None
         )
-        if (
-            conflict_path is not None
-            and not overwrite_modified
-            and self._file_modified(conflict_path, obj)
-        ):
-            raise WorkspaceConflictError(
-                f"{obj.filename} has local changes that would be overwritten.",
-                details={"path": str(conflict_path)},
-            )
+        if conflict_path is not None and self._file_modified(conflict_path, obj):
+            if keep_local:
+                self._try_set_mode(conflict_path, writable)
+                return conflict_path
+            if not overwrite_modified:
+                raise WorkspaceConflictError(
+                    f"{obj.filename} has local changes that would be overwritten.",
+                    details={"path": str(conflict_path)},
+                )
         if (
             obj.current_version is not None
             and destination.is_file()
@@ -127,6 +129,28 @@ class WorkspaceService:
         except PathValidationError:
             return False
         return self._file_modified(path, obj)
+
+    def pending_workspace_save(self, project: Project, obj: EngineeringObject) -> dict[str, str | int | bool] | None:
+        """Describe a workspace copy that is newer than the last checked-in version."""
+        try:
+            path = self.locate_content(project.uuid, obj)
+        except PathValidationError:
+            return None
+        recorded = obj.filename
+        newer_save = path.name.lower() != recorded.lower()
+        modified = self._file_modified(path, obj)
+        if not newer_save and not modified:
+            return None
+        stamp = datetime.fromtimestamp(path.stat().st_mtime)
+        return {
+            "filename": path.name,
+            "recorded_filename": recorded,
+            "file_size": path.stat().st_size,
+            "newer_save": newer_save,
+            "modified": modified,
+            "next_display": f"{obj.revision}.{obj.iteration + 1}",
+            "saved_at": stamp.strftime("%Y-%m-%d %H:%M"),
+        }
 
     def materialize_many(
         self,
@@ -208,15 +232,14 @@ class WorkspaceService:
 
     def _iter_workspace_files(self, root: Path):
         skip_dirs = {".git", ".creopdm", "__pycache__"}
-        skip_suffixes = {".tst", ".err", ".lst", ".bak", ".tmp"}
-        skip_names = {"trail.txt", "std.err", "std.out"}
+        skip_suffixes = {".tst", ".err", ".lst", ".bak", ".tmp", ".acl"}
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [name for name in dirnames if name.lower() not in skip_dirs]
             folder = Path(dirpath)
             for name in filenames:
                 if name.startswith("."):
                     continue
-                if name.lower() in skip_names:
+                if CreoFileManager.is_workspace_transient(name):
                     continue
                 path = folder / name
                 suffix = path.suffix.lower()

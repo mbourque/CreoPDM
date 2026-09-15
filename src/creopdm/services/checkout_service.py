@@ -108,7 +108,9 @@ class CheckoutService:
                         "since": since_text,
                     },
                 )
-            workspace_file = self._workspaces.materialize(project, obj, writable=True)
+            workspace_file = self._workspaces.materialize(
+                project, obj, writable=True, keep_local=True
+            )
             now = datetime.now(timezone.utc)
             record = Checkout(
                 object_id=obj.id,

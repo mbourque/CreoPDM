@@ -32,6 +32,15 @@ def test_normalize_leaves_unversioned_creo_files():
     assert CreoFileManager.normalize_creo_filename("SHAFT.PRT.1") == "SHAFT.PRT"
 
 
+def test_workspace_transients_are_ignored():
+    assert CreoFileManager.is_workspace_transient("trail.txt")
+    assert CreoFileManager.is_workspace_transient("trail.txt.5")
+    assert CreoFileManager.is_workspace_transient("std.out")
+    assert CreoFileManager.is_workspace_transient("747912f5-13ee-41f0-90d7-537c290.idx")
+    assert not CreoFileManager.is_workspace_transient("tool.idx")
+    assert not CreoFileManager.is_workspace_transient("parallels.prt.4")
+
+
 def test_app_identity():
     assert APP_NAME == "CreoPDM"
     assert APP_VERSION == "0.1.0"
@@ -55,6 +64,47 @@ def test_latest_creo_version_in_directory(tmp_path):
     numbered = CreoFileManager.latest_in_directory(folder, "shaft.prt.3")
     assert numbered is not None
     assert numbered.name == "shaft.prt.14"
+
+
+def test_select_latest_prefers_numbered_over_unnumbered(tmp_path):
+    older = tmp_path / "parallels.prt"
+    older.write_bytes(b"old")
+    v1 = tmp_path / "parallels.prt.1"
+    v1.write_bytes(b"1")
+    v3 = tmp_path / "parallels.prt.3"
+    v3.write_bytes(b"3")
+    chosen = CreoFileManager.select_latest_creo_version([older, v1, v3])
+    assert chosen is not None
+    assert chosen.name == "parallels.prt.3"
+
+
+def test_filter_to_latest_saves_skips_older_and_unnumbered(tmp_path):
+    older = tmp_path / "parallels.prt"
+    older.write_bytes(b"old")
+    v1 = tmp_path / "parallels.prt.1"
+    v1.write_bytes(b"1")
+    v3 = tmp_path / "parallels.prt.3"
+    v3.write_bytes(b"3")
+    notes = tmp_path / "notes.pdf"
+    notes.write_bytes(b"%PDF")
+    inf = tmp_path / "setup.inf"
+    inf.write_bytes(b"old-inf")
+    inf2 = tmp_path / "setup.inf.2"
+    inf2.write_bytes(b"new-inf")
+    chosen = CreoFileManager.filter_to_latest_saves([older, v1, v3, notes, inf, inf2])
+    names = {path.name for path in chosen}
+    assert names == {"parallels.prt.3", "notes.pdf", "setup.inf.2"}
+    assert older.is_file() and v1.is_file() and inf.is_file()
+
+
+def test_filter_to_latest_saves_uses_disk_siblings_when_only_old_selected(tmp_path):
+    older = tmp_path / "shaft.prt"
+    older.write_bytes(b"old")
+    latest = tmp_path / "shaft.prt.4"
+    latest.write_bytes(b"4")
+    (tmp_path / "shaft.prt.2").write_bytes(b"2")
+    chosen = CreoFileManager.filter_to_latest_saves([older])
+    assert [path.name for path in chosen] == ["shaft.prt.4"]
 
 
 def test_latest_numbered_extra_cad_in_directory(tmp_path):

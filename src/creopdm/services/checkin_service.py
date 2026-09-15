@@ -8,9 +8,15 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from creopdm.constants import ActivityAction, CheckoutStatus, DEFAULT_REVISION
+from creopdm.constants import ActivityAction, CheckoutStatus, DEFAULT_REVISION, LifecycleState
 from creopdm.creo.base import CreoConnector, CreoModelRef
-from creopdm.exceptions import RepositoryError, ValidationAppError
+from creopdm.exceptions import (
+    CheckoutOwnershipError,
+    PathValidationError,
+    ReleasedObjectError,
+    RepositoryError,
+    ValidationAppError,
+)
 from creopdm.logging_setup import get_logger
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
@@ -58,21 +64,38 @@ class CheckinService:
         user = self._users.get_current_user()
         checkout = self._checkouts.active_for(session, obj.id)
         view = self._checkouts.describe(obj, checkout, user)
-        modified = False
-        if view.owned_by_me:
-            modified = self._workspaces.is_modified(project, obj)
+        workspace_name = obj.filename
+        try:
+            workspace_name = self._workspaces.locate_content(project.uuid, obj).name
+        except PathValidationError:
+            pass
+        modified = self._workspaces.is_modified(project, obj)
+        pending = self._workspaces.pending_workspace_save(project, obj)
+        force_checkin = (
+            checkout is None
+            and pending is not None
+            and obj.lifecycle_state == LifecycleState.IN_WORK.value
+        )
         current = f"{obj.revision}.{obj.iteration}"
         nxt = f"{obj.revision}.{obj.iteration + 1}"
         siblings = self._objects.list_objects(session, project.id)
         new_files = self._new_files_for(project, obj, siblings)
+        warning = ""
+        if force_checkin:
+            warning = (
+                f"{workspace_name} is not checked out. Checking in will record this "
+                "workspace save without a checkout lock."
+            )
         return {
-            "filename": obj.filename,
+            "filename": workspace_name,
             "current_display": current,
             "next_display": nxt,
             "file_modified": modified,
             "parameters_changed": False,
             "dependencies_unchanged": True,
-            "can_checkin": view.can_checkin,
+            "can_checkin": view.can_checkin or force_checkin,
+            "force_checkin": force_checkin,
+            "warning": warning,
             "new_files": new_files,
         }
 
@@ -93,7 +116,18 @@ class CheckinService:
         to_add = [item.replace("\\", "/").strip() for item in (add_relative_paths or []) if item.strip()]
 
         with self._locks.acquire(project.uuid):
-            record = self._checkouts.require_owned(session, obj, user)
+            existing = self._checkouts.active_for(session, obj.id)
+            record = None
+            if existing is not None:
+                record = self._checkouts.require_owned(session, obj, user)
+            else:
+                pending = self._workspaces.pending_workspace_save(project, obj)
+                if pending is None:
+                    raise CheckoutOwnershipError(f"{obj.filename} is not checked out.")
+                if obj.lifecycle_state != LifecycleState.IN_WORK.value:
+                    raise ReleasedObjectError(
+                        f"{obj.filename} is {obj.lifecycle_state.replace('_', ' ').title()} and cannot be checked in."
+                    )
             if to_add:
                 self._add_workspace_files(session, project, obj, to_add, message)
             workspace_file = self._workspaces.locate_content(project.uuid, obj)
@@ -150,7 +184,8 @@ class CheckinService:
                 obj.iteration = new_iteration
                 obj.current_version_id = version.id
                 obj.updated_at = now
-                record.status = CheckoutStatus.RETURNED.value
+                if record is not None:
+                    record.status = CheckoutStatus.RETURNED.value
                 session.flush()
             except Exception as exc:
                 logger.exception("Metadata failed after storing check-in of %s", obj.filename)

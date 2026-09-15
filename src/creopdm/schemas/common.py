@@ -141,6 +141,8 @@ class CheckinPreviewResponse(BaseModel):
     parameters_changed: bool
     dependencies_unchanged: bool
     can_checkin: bool
+    force_checkin: bool = False
+    warning: str = ""
     new_files: list[CheckinNewFile] = Field(default_factory=list)
 
 

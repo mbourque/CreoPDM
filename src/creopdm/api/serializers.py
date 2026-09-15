@@ -62,11 +62,12 @@ def object_to_response(
     view: CheckoutView | None = None,
     modified_locally: bool = False,
     current_user: UserIdentity | None = None,
+    can_checkin: bool | None = None,
 ) -> ObjectResponse:
     checkout: Checkout | None = view.checkout if view else None
     label = view.label if view else "Available"
-    if modified_locally and (view is None or view.owned_by_me):
-        label = "Modified locally" if view is None or view.label == "Available" else f"{view.label} · Modified locally"
+    if modified_locally and (view is None or view.owned_by_me or checkout is None):
+        label = "Modified locally" if view is None or checkout is None else f"{view.label} · Modified locally"
     return ObjectResponse(
         uuid=obj.uuid,
         project_uuid=project_uuid,
@@ -87,7 +88,7 @@ def object_to_response(
         owned_by_me=view.owned_by_me if view else False,
         modified_locally=modified_locally,
         can_checkout=view.can_checkout if view else obj.lifecycle_state == "IN_WORK",
-        can_checkin=view.can_checkin if view else False,
+        can_checkin=can_checkin if can_checkin is not None else (view.can_checkin if view else False),
         created_at=obj.created_at,
         updated_at=obj.updated_at,
         current_version=version_to_response(

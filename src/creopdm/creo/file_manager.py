@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from pathlib import Path
 
 from creopdm.constants import CREO_FILE_EXTENSIONS, DEFAULT_EXTRA_CAD_EXTENSIONS
+
+_TRAIL_FILE = re.compile(r"^trail\.txt(?:\.\d+)?$", re.IGNORECASE)
+_UUIDISH_STEM = re.compile(
+    r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{6,12}$",
+    re.IGNORECASE,
+)
 
 
 def _dot_ext(value: str) -> str:
@@ -28,6 +35,20 @@ class CreoFileManager:
             if ext:
                 known.add(ext)
         return frozenset(known)
+
+    @classmethod
+    def is_workspace_transient(cls, filename: str) -> bool:
+        """Creo session junk that should never be added as a PDM object."""
+        name = Path(str(filename).replace("\\", "/")).name
+        lower = name.lower()
+        if lower in {"std.out", "std.err"}:
+            return True
+        if _TRAIL_FILE.match(lower):
+            return True
+        logical = cls.normalize_creo_filename(name)
+        if Path(logical).suffix.lower() == ".idx" and _UUIDISH_STEM.match(Path(logical).stem):
+            return True
+        return False
 
     @classmethod
     def is_creo_extension(cls, extension: str) -> bool:
@@ -142,3 +163,58 @@ class CreoFileManager:
             fallback = directory / canonical_name
             return fallback if fallback.is_file() else None
         return cls.select_latest_creo_version(matches, extra_extensions) or matches[0]
+
+    @classmethod
+    def is_cad_save_family(cls, filename: str, extra_extensions: Iterable[str] | None = None) -> bool:
+        name = Path(filename).name
+        if cls.normalize_creo_filename(name, extra_extensions) != name:
+            return True
+        return cls.is_versioned_extension(Path(name).suffix, extra_extensions)
+
+    @classmethod
+    def filter_to_latest_saves(
+        cls,
+        paths: list[Path],
+        extra_extensions: Iterable[str] | None = None,
+    ) -> list[Path]:
+        """Keep one file per CAD family: the highest .ext.N. Unnumbered is older."""
+        grouped: dict[str, list[Path]] = {}
+        order: list[str] = []
+        seen: dict[str, set[str]] = {}
+
+        def group_key(path: Path) -> str:
+            parent = path.resolve().parent.as_posix().lower()
+            logical = cls.logical_filename(path.name, extra_extensions).lower()
+            return f"{parent}/{logical}"
+
+        def add(key: str, path: Path) -> None:
+            if not path.is_file():
+                return
+            ident = str(path.resolve()).lower()
+            bucket = seen.setdefault(key, set())
+            if ident in bucket:
+                return
+            bucket.add(ident)
+            grouped.setdefault(key, []).append(path.resolve())
+
+        for path in paths:
+            key = group_key(path)
+            if key not in grouped:
+                grouped[key] = []
+                order.append(key)
+            add(key, path)
+            parent = path.parent
+            if parent.is_dir() and cls.is_cad_save_family(path.name, extra_extensions):
+                logical = cls.logical_filename(path.name, extra_extensions).lower()
+                for sibling in parent.iterdir():
+                    if sibling.is_file() and cls.logical_filename(sibling.name, extra_extensions).lower() == logical:
+                        add(key, sibling)
+
+        chosen: list[Path] = []
+        for key in order:
+            family = grouped.get(key) or []
+            if not family:
+                continue
+            latest = cls.select_latest_creo_version(family, extra_extensions)
+            chosen.append(latest if latest is not None else family[0])
+        return chosen

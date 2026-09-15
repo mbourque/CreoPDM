@@ -9,6 +9,7 @@ from creopdm.api.checkout import present_object
 from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import project_to_response
 from creopdm.context import AppContext
+from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import CreoPDMError, PathValidationError
 from creopdm.schemas.common import (
     BatchItemResult,
@@ -206,16 +207,24 @@ def import_from_disk(
 ) -> BatchOperationResponse:
     project = ctx.projects.get_project(db, project_id)
     comment = (payload.comment or "").strip() or None
+    extras = ctx.config.extra_cad_extensions()
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
-    for raw in payload.paths:
-        path = Path(raw)
+    raw_paths = [Path(raw) for raw in payload.paths]
+    missing = [path for path in raw_paths if not path.is_file()]
+    present = [path for path in raw_paths if path.is_file()]
+    selected = CreoFileManager.filter_to_latest_saves(present, extras)
+    for path in missing:
+        failed.append(
+            BatchItemResult(
+                uuid="",
+                filename=path.name,
+                code="INVALID_PATH",
+                message="The selected file was not found.",
+            )
+        )
+    for path in selected:
         try:
-            if not path.is_file():
-                raise PathValidationError(
-                    "The selected file was not found.",
-                    details={"path": str(path)},
-                )
             relative = ctx.workspaces.relative_if_inside_repo(project, path)
             obj = ctx.objects.import_file(
                 db,

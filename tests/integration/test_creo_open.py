@@ -83,8 +83,8 @@ def test_open_after_checkin_despite_creo_numbered_workspace_file(
         opened = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened.status_code == 200, opened.text
         assert recorder.opened
-        assert recorder.opened[-1].name == "nested-plywood.prt.1"
-        assert recorder.opened[-1].read_bytes() == b"creo-iteration"
+        assert recorder.opened[-1].name == "nested-plywood.prt.2"
+        assert recorder.opened[-1].read_bytes() == b"creo-after-checkin"
 
 
 def test_windows_connector_respects_executable_override(tmp_path: Path):

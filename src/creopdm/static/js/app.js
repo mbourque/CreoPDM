@@ -382,33 +382,95 @@
     if (summary) {
       summary.textContent = ids.length
         ? `${ids.length} selected${filtering ? ". The list is filtered" : ""}. Checkout or To Workspace copies them into the workspace.`
-        : "Click a count to select that group, again to filter the list, again to clear. Click a filename to open it. Click a row for history. Ctrl-click a row to select it.";
+        : "Click a count to select a group. Ctrl-click a row to select it; Shift-click to select a range. Click a filename to open it. Click a row for history.";
     }
   }
 
   function toggleRow(row) {
     row.classList.toggle("is-selected");
+    lastSelectRow = row;
     syncToolbar();
   }
 
+  function selectRange(toRow) {
+    const visible = rows().filter((row) => !row.hidden);
+    const end = visible.indexOf(toRow);
+    const start = lastSelectRow ? visible.indexOf(lastSelectRow) : end;
+    if (end < 0) return;
+    const from = start < 0 ? end : Math.min(start, end);
+    const until = start < 0 ? end : Math.max(start, end);
+    visible.slice(from, until + 1).forEach((row) => row.classList.add("is-selected"));
+    lastSelectRow = toRow;
+    syncToolbar();
+  }
+
+  let lastSelectRow = null;
+
+  function sortValue(row, key, columnIndex) {
+    const dataKey = `sort${key.charAt(0).toUpperCase()}${key.slice(1)}`;
+    const fromData = row.dataset[dataKey];
+    if (fromData !== undefined && fromData !== "") return fromData;
+    const cell = row.children[columnIndex];
+    return cell ? cell.textContent.replace(/\s+/g, " ").trim() : "";
+  }
+
+  function enableTableSort(table) {
+    const heads = [...table.querySelectorAll("th[data-sort]")];
+    if (!heads.length) return;
+    table.tHead?.addEventListener("click", (event) => {
+      const th = event.target.closest("th[data-sort]");
+      if (!th || !table.contains(th)) return;
+      event.preventDefault();
+      const key = th.dataset.sort;
+      const next = th.getAttribute("aria-sort") === "ascending" ? "desc" : "asc";
+      heads.forEach((item) => {
+        const active = item === th;
+        item.setAttribute("aria-sort", active ? (next === "asc" ? "ascending" : "descending") : "none");
+      });
+      const tbody = table.tBodies[0];
+      if (!tbody) return;
+      const columnIndex = [...th.parentElement.children].indexOf(th);
+      const pending = [...tbody.querySelectorAll("tr.is-pending")];
+      const empty = [...tbody.querySelectorAll("tr.empty-row")];
+      const sortable = [...tbody.rows].filter(
+        (row) => !row.classList.contains("is-pending") && !row.classList.contains("empty-row")
+      );
+      sortable.sort((a, b) => {
+        const cmp = sortValue(a, key, columnIndex).localeCompare(
+          sortValue(b, key, columnIndex),
+          undefined,
+          { numeric: true, sensitivity: "base" }
+        );
+        return next === "asc" ? cmp : -cmp;
+      });
+      [...pending, ...sortable, ...empty].forEach((row) => tbody.appendChild(row));
+    });
+  }
+
+  document.querySelectorAll("table.grid").forEach(enableTableSort);
+
   document.querySelector("#object-table")?.addEventListener("click", async (event) => {
+    const row = event.target.closest(".object-row");
+    if (!row) return;
+    if (event.shiftKey) {
+      event.preventDefault();
+      selectRange(row);
+      return;
+    }
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      toggleRow(row);
+      return;
+    }
     const openLink = event.target.closest(".object-open");
     if (openLink) {
       event.preventDefault();
       await postAction("/api/creo/open", { object_id: openLink.dataset.uuid }, "POST", "Opening…");
       return;
     }
-    const row = event.target.closest(".object-row");
-    if (!row) return;
-    if (event.ctrlKey || event.metaKey || event.shiftKey) {
-      toggleRow(row);
-      return;
-    }
     if (row.dataset.detail) {
       window.location.href = row.dataset.detail;
-      return;
     }
-    toggleRow(row);
   });
 
   document.querySelector("#metric-filters")?.addEventListener("click", (event) => {
@@ -537,6 +599,14 @@
     $("#checkin-current").textContent = data.current_display;
     $("#checkin-next").textContent = data.next_display;
     $("#checkin-comment").value = "";
+    if (checkinDialog) checkinDialog.dataset.force = data.force_checkin ? "1" : "";
+    const forceWarn = $("#checkin-force-warn");
+    if (forceWarn) {
+      forceWarn.hidden = !data.warning;
+      forceWarn.textContent = data.warning || "";
+    }
+    const submitBtn = checkinForm?.querySelector("button[type='submit']");
+    if (submitBtn) submitBtn.textContent = data.force_checkin ? "Check In anyway" : "Check In";
     const list = $("#checkin-changes");
     list.innerHTML = "";
     [
@@ -583,6 +653,10 @@
     if (!comment) {
       showError($("#checkin-error"), "A check-in comment is required.");
       return;
+    }
+    if (checkinDialog?.dataset.force === "1") {
+      const name = $("#checkin-filename")?.textContent || "This file";
+      if (!window.confirm(`${name} is not checked out. Check in the workspace save anyway?`)) return;
     }
     const result = await postAction(`/api/objects/${id}/checkin`, {
       comment,
@@ -726,6 +800,12 @@
       });
     }, 60000);
   }
+
+  document.querySelector(".detail-head .object-open")?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    const id = event.currentTarget.dataset.uuid;
+    if (id) await postAction("/api/creo/open", { object_id: id }, "POST", "Opening…");
+  });
 
   syncToolbar();
 })();

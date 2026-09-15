@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import object_to_response
+from creopdm.constants import LifecycleState
 from creopdm.context import AppContext
 from creopdm.schemas.common import (
     BatchObjectRequest,
@@ -22,12 +23,19 @@ def present_object(ctx: AppContext, db: Session, obj) -> ObjectResponse:
     checkout = ctx.checkouts.active_for(db, obj.id)
     view = ctx.checkouts.describe(obj, checkout, user)
     modified = ctx.workspaces.is_modified(obj.project, obj)
+    pending = ctx.workspaces.pending_workspace_save(obj.project, obj)
+    force_checkin = (
+        checkout is None
+        and pending is not None
+        and obj.lifecycle_state == LifecycleState.IN_WORK.value
+    )
     return object_to_response(
         obj,
         obj.project.uuid,
         view=view,
         modified_locally=modified,
         current_user=user,
+        can_checkin=view.can_checkin or force_checkin,
     )
 
 

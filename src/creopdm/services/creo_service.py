@@ -41,12 +41,24 @@ class CreoService:
         checkout = self._checkouts.active_for(session, obj.id)
         view = self._checkouts.describe(obj, checkout)
         if checkout is None:
-            path = self._workspaces.materialize(
-                project,
-                obj,
-                writable=False,
-                overwrite_modified=True,
-            )
+            try:
+                latest = self._workspaces.locate_content(project.uuid, obj)
+                if self._workspaces.is_modified(project, obj):
+                    path = latest
+                else:
+                    path = self._workspaces.materialize(
+                        project,
+                        obj,
+                        writable=False,
+                        overwrite_modified=True,
+                    )
+            except PathValidationError:
+                path = self._workspaces.materialize(
+                    project,
+                    obj,
+                    writable=False,
+                    overwrite_modified=True,
+                )
         else:
             try:
                 path = self._workspaces.locate_content(project.uuid, obj)

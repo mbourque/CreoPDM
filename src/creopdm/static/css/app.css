@@ -124,10 +124,25 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .grid { width: 100%; border-collapse: collapse; }
 .grid th, .grid td { text-align: left; padding: 0.55rem 0.75rem; border-bottom: 1px solid #edf1f5; }
 .grid th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); background: #f3f6f8; }
+.grid th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
+.grid th[data-sort]:hover { color: var(--ink); }
+.grid th[data-sort]::after { content: " \2195"; opacity: 0.35; font-size: 0.85em; }
+.grid th[aria-sort="ascending"]::after { content: " \2191"; opacity: 1; color: var(--ink); }
+.grid th[aria-sort="descending"]::after { content: " \2193"; opacity: 1; color: var(--ink); }
 .object-row { cursor: pointer; }
 .object-row.is-selected { background: #e7f1f6; }
-.object-open { font-weight: 600; cursor: pointer; }
+.object-open {
+  font-weight: 600;
+  cursor: grab;
+}
+.object-open:active { cursor: grabbing; }
+.detail-head .object-open { font-size: inherit; color: inherit; }
 .grid tr.is-latest { background: #eef6f1; }
+.grid tr.is-pending { background: #fff6e8; }
+.pending-note {
+  margin: 0 0 0.75rem; padding: 0.55rem 0.75rem; background: #fff6e8;
+  border: 1px solid #ead7b2; border-radius: 4px; color: var(--ink);
+}
 
 .state, .checkout-state {
   display: inline-flex; align-items: center; gap: 0.3rem;

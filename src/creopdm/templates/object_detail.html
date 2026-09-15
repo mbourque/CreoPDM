@@ -1,6 +1,16 @@
 {% extends "base.html" %}
 {% block title %}{{ object.filename }} — {{ app_name }}{% endblock %}
 {% block content %}
+{% macro version_file_label(version, older=None) %}
+  {% set name = version.filename or version.relative_path %}
+  {{ name or "—" }}
+  {% if older %}
+    {% set older_name = older.filename or older.relative_path %}
+    {% if older_name and name and older_name != name %}
+      <div class="muted small">from {{ older_name }}</div>
+    {% endif %}
+  {% endif %}
+{% endmacro %}
 <article class="detail">
   <nav class="crumb">
     <a href="/?project={{ project.uuid }}">{{ project.name }}</a>
@@ -10,7 +20,7 @@
 
   <header class="detail-head">
     <div>
-      <h1>{{ object.filename }}</h1>
+      <h1><a class="object-open" href="#" data-uuid="{{ object.uuid }}" title="Click to open">{{ object.filename }}</a></h1>
       <p class="muted">{{ object.object_type.replace('_', ' ').title() }} · {{ object.relative_path }}</p>
     </div>
     <div class="detail-meta">
@@ -49,7 +59,7 @@
     {% if is_creo %}
     <button type="button" class="tab" data-tab="parameters" disabled title="Live Creo parameters are a later milestone">Parameters</button>
     {% endif %}
-    <button type="button" class="tab" data-tab="history">History</button>
+    <button type="button" class="tab" data-tab="history">History{% if workspace_pending %} · unsaved{% endif %}</button>
     <button type="button" class="tab" data-tab="where-used" disabled title="Where-used is a later milestone">Where Used</button>
   </div>
 
@@ -66,6 +76,16 @@
   </section>
 
   <section class="tab-panel" id="panel-history" hidden>
+    {% if workspace_pending %}
+    <p class="pending-note">
+      {% if workspace_pending.newer_save %}
+      Creo saved a newer file in the workspace: <strong>{{ workspace_pending.filename }}</strong>
+      (last checked in: {{ workspace_pending.recorded_filename }}). Check in to record this change.
+      {% else %}
+      The workspace copy of <strong>{{ workspace_pending.filename }}</strong> has changes that are not checked in.
+      {% endif %}
+    </p>
+    {% endif %}
     <div class="subtabs" role="tablist">
       <button type="button" class="subtab is-active" data-subtab="files">File History</button>
       <button type="button" class="subtab" data-subtab="versions">Version History</button>
@@ -75,24 +95,42 @@
       <table class="grid">
         <thead>
           <tr>
-            <th>Rev</th>
-            <th>Filename</th>
-            <th>Size</th>
-            <th>User</th>
-            <th>Date</th>
+            <th data-sort="rev" aria-sort="none" title="Sort by revision. Click again to reverse.">Rev</th>
+            <th data-sort="filename" aria-sort="none" title="Sort by filename. Click again to reverse.">Filename</th>
+            <th data-sort="size" aria-sort="none" title="Sort by size. Click again to reverse.">Size</th>
+            <th data-sort="user" aria-sort="none" title="Sort by user. Click again to reverse.">User</th>
+            <th data-sort="date" aria-sort="none" title="Sort by date. Click again to reverse.">Date</th>
           </tr>
         </thead>
         <tbody>
+          {% if workspace_pending %}
+          <tr class="is-pending">
+            <td>{{ workspace_pending.next_display }} · not checked in</td>
+            <td class="filename-cell">
+              {{ workspace_pending.filename }}
+              {% if workspace_pending.newer_save %}
+              <div class="muted small">from {{ workspace_pending.recorded_filename }} · on disk in workspace</div>
+              {% else %}
+              <div class="muted small">modified in workspace</div>
+              {% endif %}
+            </td>
+            <td>{{ workspace_pending.file_size }} bytes</td>
+            <td>workspace</td>
+            <td>{{ workspace_pending.saved_at }}</td>
+          </tr>
+          {% endif %}
           {% for version in history %}
-          <tr {% if loop.first %}class="is-latest"{% endif %}>
-            <td>{{ version.revision }}.{{ version.iteration }}{% if loop.first %} · latest{% endif %}</td>
-            <td class="filename-cell">{{ version.relative_path or object.relative_path }}</td>
+          <tr {% if loop.first and not workspace_pending %}class="is-latest"{% endif %}>
+            <td>{{ version.revision }}.{{ version.iteration }}{% if loop.first and not workspace_pending %} · latest{% endif %}</td>
+            <td class="filename-cell">{% if not loop.last %}{{ version_file_label(version, history[loop.index0 + 1]) }}{% else %}{{ version_file_label(version) }}{% endif %}</td>
             <td>{{ version.file_size }} bytes</td>
             <td>{{ version.created_by }}</td>
             <td>{% if version.created_at %}{{ version.created_at.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
           </tr>
           {% else %}
+          {% if not workspace_pending %}
           <tr><td colspan="5">No file history yet.</td></tr>
+          {% endif %}
           {% endfor %}
         </tbody>
       </table>
@@ -102,22 +140,40 @@
       <table class="grid">
         <thead>
           <tr>
-            <th>Rev</th>
-            <th>User</th>
-            <th>Date</th>
-            <th>Comment</th>
+            <th data-sort="rev" aria-sort="none" title="Sort by revision. Click again to reverse.">Rev</th>
+            <th data-sort="filename" aria-sort="none" title="Sort by filename. Click again to reverse.">Filename</th>
+            <th data-sort="user" aria-sort="none" title="Sort by user. Click again to reverse.">User</th>
+            <th data-sort="date" aria-sort="none" title="Sort by date. Click again to reverse.">Date</th>
+            <th data-sort="comment" aria-sort="none" title="Sort by comment. Click again to reverse.">Comment</th>
           </tr>
         </thead>
         <tbody>
+          {% if workspace_pending %}
+          <tr class="is-pending">
+            <td>{{ workspace_pending.next_display }} · not checked in</td>
+            <td class="filename-cell">
+              {{ workspace_pending.filename }}
+              {% if workspace_pending.newer_save %}
+              <div class="muted small">from {{ workspace_pending.recorded_filename }} · on disk in workspace</div>
+              {% endif %}
+            </td>
+            <td>workspace</td>
+            <td>{{ workspace_pending.saved_at }}</td>
+            <td>Newer Creo save in the workspace. Check in to record it.</td>
+          </tr>
+          {% endif %}
           {% for version in history %}
-          <tr {% if loop.first %}class="is-latest"{% endif %}>
-            <td>{{ version.revision }}.{{ version.iteration }}{% if loop.first %} · latest{% endif %}</td>
+          <tr {% if loop.first and not workspace_pending %}class="is-latest"{% endif %}>
+            <td>{{ version.revision }}.{{ version.iteration }}{% if loop.first and not workspace_pending %} · latest{% endif %}</td>
+            <td class="filename-cell">{% if not loop.last %}{{ version_file_label(version, history[loop.index0 + 1]) }}{% else %}{{ version_file_label(version) }}{% endif %}</td>
             <td>{{ version.created_by }}</td>
             <td>{% if version.created_at %}{{ version.created_at.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
             <td>{{ version.comment }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="4">No history yet.</td></tr>
+          {% if not workspace_pending %}
+          <tr><td colspan="5">No history yet.</td></tr>
+          {% endif %}
           {% endfor %}
         </tbody>
       </table>
@@ -141,6 +197,7 @@
       <p class="muted small">New files found in the workspace. These are models Creo saved next to the checked-out file. Checked items are added to the project with this check-in.</p>
       <div id="checkin-new-files"></div>
     </div>
+    <p class="pending-note" id="checkin-force-warn" hidden></p>
     <p class="error" id="checkin-error" hidden></p>
     <div class="dialog-actions">
       <button type="button" class="btn" id="checkin-cancel">Cancel</button>

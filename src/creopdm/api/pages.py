@@ -94,6 +94,7 @@ def object_detail(
     payload = present_object(ctx, db, obj)
     is_assembly = obj.object_type == ObjectType.CREO_ASSEMBLY.value
     is_creo = obj.object_type.startswith("CREO_")
+    pending = ctx.workspaces.pending_workspace_save(project, obj)
     return render(
         request,
         "object_detail.html",
@@ -104,6 +105,7 @@ def object_detail(
             "project": project_to_response(project),
             "object": payload,
             "history": history,
+            "workspace_pending": pending,
             "is_assembly": is_assembly,
             "is_creo": is_creo,
             "workspace_path": str(ctx.config.workspace_for_project(project.uuid)),
