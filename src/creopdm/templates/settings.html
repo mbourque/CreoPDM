@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Settings — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page">
+  <nav class="crumb">
+    <a href="/">Projects</a>
+    <span>/</span>
+    <span>Settings</span>
+  </nav>
+  <h1>Settings</h1>
+  <p class="muted">These options apply to this workstation. They are not stored in project Git history.</p>
+
+  <form id="settings-form" class="settings-form">
+    <fieldset>
+      <legend>Open Creo models with</legend>
+      <label class="choice">
+        <input type="radio" name="creo_open_mode" value="executable" {% if settings.creo_open_mode != 'association' %}checked{% endif %}>
+        Specific application
+      </label>
+      <label>Application
+        <input name="creo_executable" type="text" value="{{ settings.creo_executable or '' }}" placeholder="C:\Program Files\PTC\Creo 10.0\Parametric\bin\parametric.exe">
+      </label>
+      <label class="choice">
+        <input type="radio" name="creo_open_mode" value="association" {% if settings.creo_open_mode == 'association' %}checked{% endif %}>
+        Windows file association
+      </label>
+      <p class="muted small">Word, Excel, PDF, text, and other non-CAD files always open with their Windows association.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Workspace</legend>
+      <p class="muted small">Checked-out and downloaded files are copied here, one folder per project. The default is shown; choose another folder if you want a different workspace.</p>
+      <label>Workspace folder
+        <input name="workspace_root" type="text" value="{{ settings.workspace_root }}" placeholder="{{ settings.default_workspace_root }}">
+      </label>
+      <p class="muted small">Default: {{ settings.default_workspace_root }}</p>
+    </fieldset>
+
+    <p class="error" id="settings-error" hidden></p>
+    <p class="ok" id="settings-ok" hidden>Saved.</p>
+    <div class="dialog-actions">
+      <button type="submit" class="btn btn-primary">Save settings</button>
+    </div>
+  </form>
+</article>
+{% endblock %}

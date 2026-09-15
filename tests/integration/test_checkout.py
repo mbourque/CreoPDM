@@ -1,0 +1,117 @@
+from pathlib import Path
+
+from creopdm.services.git_service import GitService
+from tests.conftest import requires_git
+
+
+def _create_part(client, repo_parent: Path):
+    location = repo_parent / "RobotArm"
+    project = client.post(
+        "/api/projects",
+        json={"name": "Robot Arm", "repository_path": str(location)},
+    ).json()
+    created = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("shaft.prt", b"original-content", "application/octet-stream")},
+        data={"comment": "Initial model"},
+    )
+    assert created.status_code == 201, created.text
+    return project, created.json(), location
+
+
+@requires_git
+def test_checkout_then_second_user_denied(client, repo_parent, identity, data_dir):
+    project, obj, location = _create_part(client, repo_parent)
+    git = GitService()
+    head_before = git.get_head(location)
+
+    first = client.post(f"/api/objects/{obj['uuid']}/checkout")
+    assert first.status_code == 200, first.text
+    assert first.json()["owned_by_me"] is True
+    assert first.json()["checkout_status"].startswith("Checked out by me")
+    assert first.json()["can_checkin"] is True
+
+    workspace = data_dir / "workspaces" / project["uuid"] / "CAD" / "shaft.prt"
+    assert workspace.is_file()
+    original = workspace.read_bytes()
+
+    identity.become("Bob", "ENG-PC-18")
+    denied = client.post(f"/api/objects/{obj['uuid']}/checkout")
+    assert denied.status_code == 409
+    body = denied.json()["error"]
+    assert body["code"] == "OBJECT_ALREADY_CHECKED_OUT"
+    assert body["details"]["user"] == "Alice"
+    assert body["details"]["machine"] == "ENG-PC-17"
+
+    identity.become("Alice", "ENG-PC-17")
+    still = client.get(f"/api/objects/{obj['uuid']}")
+    assert still.json()["owned_by_me"] is True
+    assert still.json()["checkout_user"] == "Alice"
+    assert workspace.read_bytes() == original
+    assert git.get_head(location) == head_before
+
+
+@requires_git
+def test_undo_checkout(client, repo_parent):
+    _project, obj, _location = _create_part(client, repo_parent)
+    assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
+    undone = client.post(f"/api/objects/{obj['uuid']}/undo-checkout")
+    assert undone.status_code == 200, undone.text
+    payload = undone.json()
+    assert payload["owned_by_me"] is False
+    assert payload["can_checkout"] is True
+    assert payload["checkout_status"] == "Available"
+
+
+@requires_git
+def test_batch_checkout_copies_all_selected_files(client, repo_parent, data_dir):
+    location = repo_parent / "BatchArm"
+    project = client.post(
+        "/api/projects",
+        json={"name": "Batch Arm", "repository_path": str(location)},
+    ).json()
+    part = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("shaft.prt", b"part", "application/octet-stream")},
+        data={"comment": "Part"},
+    ).json()
+    notes = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("notes.txt", b"hello", "text/plain")},
+        data={"comment": "Notes"},
+    ).json()
+    assembly = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("arm.asm", b"asm", "application/octet-stream")},
+        data={"comment": "Assembly"},
+    ).json()
+
+    result = client.post(
+        "/api/objects/batch/checkout",
+        json={"object_ids": [part["uuid"], notes["uuid"], assembly["uuid"]]},
+    )
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert len(body["ok"]) == 3
+    assert body["failed"] == []
+    workspace = data_dir / "workspaces" / project["uuid"]
+    assert (workspace / "CAD" / "shaft.prt").is_file()
+    assert (workspace / "Documents" / "notes.txt").is_file()
+    assert (workspace / "CAD" / "arm.asm").is_file()
+
+
+@requires_git
+def test_batch_workspace_without_checkout(client, repo_parent, data_dir):
+    project, obj, _location = _create_part(client, repo_parent)
+    result = client.post(
+        "/api/objects/batch/workspace",
+        json={"object_ids": [obj["uuid"]]},
+    )
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert len(body["ok"]) == 1
+    copied = data_dir / "workspaces" / project["uuid"] / "CAD" / "shaft.prt"
+    assert copied.is_file()
+    listed = client.get(f"/api/objects/{obj['uuid']}").json()
+    assert listed["owned_by_me"] is False
+    assert listed["can_checkout"] is True

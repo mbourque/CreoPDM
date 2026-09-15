@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <div class="brand-name">{{ app_name }}</div>
+        <div class="brand-version">Version {{ app_version }}</div>
+      </div>
+    </a>
+    <div class="status-cluster">
+      <a class="status-pill" href="/settings">Settings</a>
+      <span class="status-pill" data-state="running">Status: Running</span>
+      <span class="status-pill" data-state="{% if creo_label == 'Connected' %}ok{% else %}idle{% endif %}">
+        Creo: {{ creo_label }}
+      </span>
+    </div>
+  </header>
+  <main class="shell">
+    {% block content %}{% endblock %}
+  </main>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

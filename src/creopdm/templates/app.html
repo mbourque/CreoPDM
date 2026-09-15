@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }}{% if selected %} — {{ selected.name }}{% endif %}{% endblock %}
+{% block content %}
+<section class="workspace">
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <h2>Projects</h2>
+      <button type="button" class="btn btn-small" id="new-project-btn">New</button>
+    </div>
+    <ul class="project-list" id="project-list">
+      {% for project in projects %}
+      <li>
+        <a class="project-item {% if selected and project.uuid == selected.uuid %}is-active{% endif %}"
+           href="/?project={{ project.uuid }}">
+          <span class="project-name">{{ project.name }}</span>
+          <span class="project-number">{{ project.number or "Local" }}</span>
+        </a>
+      </li>
+      {% else %}
+      <li class="empty">No projects yet.</li>
+      {% endfor %}
+    </ul>
+  </aside>
+
+  <section class="content">
+    {% if selected %}
+    <div class="content-head">
+      <div>
+        <h1>{{ selected.name }}</h1>
+        <p class="muted">{{ selected.description or "No description" }} · {{ selected.repository_path }}</p>
+        {% if workspace_path %}
+        <p class="muted small">Workspace: {{ workspace_path }}</p>
+        {% endif %}
+      </div>
+      <form class="search-form" id="search-form">
+        <label class="sr-only" for="search-input">Search</label>
+        <input id="search-input" name="q" type="search" placeholder="Search number, name, filename, type…">
+      </form>
+    </div>
+
+    {% if status %}
+    <ul class="metrics" id="metric-filters">
+      <li><button type="button" class="metric" data-filter="files" title="Select all files"><strong>{{ status.files }}</strong> Files</button></li>
+      <li><button type="button" class="metric" data-filter="creo_parts" title="Select Creo parts"><strong>{{ status.creo_parts }}</strong> Creo Parts</button></li>
+      <li><button type="button" class="metric" data-filter="assemblies" title="Select assemblies"><strong>{{ status.assemblies }}</strong> Assemblies</button></li>
+      <li><button type="button" class="metric" data-filter="drawings" title="Select drawings"><strong>{{ status.drawings }}</strong> Drawings</button></li>
+      <li><button type="button" class="metric" data-filter="documents" title="Select documents"><strong>{{ status.documents }}</strong> Documents</button></li>
+    </ul>
+    <p class="muted small" id="selection-summary">Click a count to select that group. Click a row to toggle one file.</p>
+    {% endif %}
+
+    <div class="table-wrap">
+      <table class="grid" id="object-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Rev</th>
+            <th>State</th>
+            <th>Type</th>
+            <th>Checkout</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in objects %}
+          <tr data-uuid="{{ obj.uuid }}"
+              data-object-type="{{ obj.object_type }}"
+              data-can-checkout="{{ '1' if obj.can_checkout else '0' }}"
+              data-can-checkin="{{ '1' if obj.can_checkin else '0' }}"
+              data-owned="{{ '1' if obj.owned_by_me else '0' }}"
+              class="object-row">
+            <td>
+              <a href="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}">{{ obj.filename }}</a>
+              <div class="muted small">{{ obj.relative_path }}</div>
+            </td>
+            <td>{{ obj.display_revision }}</td>
+            <td><span class="state" data-state="{{ obj.lifecycle_state }}">{{ obj.lifecycle_state.replace('_', ' ').title() }}</span></td>
+            <td>{{ obj.object_type.replace('_', ' ').title() }}</td>
+            <td>
+              <span class="checkout-state" data-state="{% if obj.owned_by_me %}mine{% elif obj.checkout_user %}other{% else %}available{% endif %}">
+                {{ obj.checkout_status }}
+              </span>
+            </td>
+          </tr>
+          {% else %}
+          <tr class="empty-row">
+            <td colspan="5">No files in this project. Add a Creo model, PDF, or document to get started.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="hero">
+      <h1>{{ app_name }}</h1>
+      <p class="lede">Version {{ app_version }}</p>
+      <p class="status-line">Status: Running</p>
+      <p>Create a project to start managing engineering files. Git stays in the background.</p>
+    </div>
+    {% endif %}
+  </section>
+</section>
+
+<footer class="toolbar">
+  <div class="toolbar-actions">
+    <button type="button" class="btn" id="add-files-btn" {% if not selected %}disabled{% endif %}>Add Files</button>
+    <button type="button" class="btn" id="workspace-btn" disabled>To Workspace</button>
+    <button type="button" class="btn" id="open-workspace-btn" {% if selected %}data-project="{{ selected.uuid }}"{% else %}disabled{% endif %}>Open Workspace</button>
+    <button type="button" class="btn" id="open-btn" disabled>Open</button>
+    <button type="button" class="btn" id="checkout-btn" disabled>Checkout</button>
+    <button type="button" class="btn" id="checkin-btn" disabled>Check In</button>
+    <button type="button" class="btn" id="undo-btn" disabled>Undo Checkout</button>
+    <button type="button" class="btn" id="history-btn" disabled>History</button>
+    <button type="button" class="btn" id="purge-workspace-btn" disabled title="Delete local copies. The project vault is unchanged.">Remove from Workspace</button>
+    <button type="button" class="btn btn-danger" id="remove-project-btn" disabled title="Delete the vault file and local copies.">Remove from Project</button>
+    <button type="button" class="btn" disabled title="Get Latest is part of a later milestone">Get Latest</button>
+  </div>
+  <div class="toolbar-messages">
+    <p class="error" id="toolbar-error" hidden></p>
+    <p class="ok" id="toolbar-ok" hidden></p>
+  </div>
+</footer>
+
+<dialog id="project-dialog" class="dialog">
+  <form method="dialog" id="project-form">
+    <h2>New project</h2>
+    <label>Name
+      <input name="name" required maxlength="255" placeholder="Robot Arm">
+    </label>
+    <label>Number
+      <input name="number" maxlength="64" placeholder="PRJ-0027">
+    </label>
+    <label>Description
+      <textarea name="description" rows="3" placeholder="Prototype robotic arm"></textarea>
+    </label>
+    <label>Location
+      <input name="repository_path" required placeholder="D:\Engineering\Projects\RobotArm">
+    </label>
+    <p class="error" id="project-error" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" value="cancel" id="project-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Create</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="add-dialog" class="dialog">
+  <form method="dialog" id="add-form" {% if selected %}data-project="{{ selected.uuid }}"{% endif %}>
+    <h2>Add files</h2>
+    <p class="muted">Choose Files opens in the workspace so you can pick models Creo just saved. Numbered names such as <code>shaft.prt.3</code> are kept as-is.</p>
+    <p class="muted small" id="add-folder-label">{% if workspace_path %}Workspace: {{ workspace_path }}{% endif %}</p>
+    <div class="dropzone" id="dropzone">
+      <button type="button" class="btn" id="choose-workspace-files">Choose Files</button>
+      <ul id="chosen-file-list" class="detect-list"></ul>
+      <span class="muted small">The Windows dialog starts in your workspace folder.</span>
+    </div>
+    <label>Comment
+      <input name="comment" placeholder="Initial models">
+    </label>
+    <p class="error" id="add-error" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="add-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Add</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="checkin-dialog" class="dialog">
+  <form method="dialog" id="checkin-form">
+    <h2>Check In</h2>
+    <dl class="kv">
+      <dt>Object</dt><dd id="checkin-filename">—</dd>
+      <dt>Current</dt><dd id="checkin-current">—</dd>
+      <dt>New version</dt><dd id="checkin-next">—</dd>
+    </dl>
+    <label>Comment
+      <textarea name="comment" id="checkin-comment" rows="3" required placeholder="Changed shaft diameter for new bearing."></textarea>
+    </label>
+    <ul class="detect-list" id="checkin-changes"></ul>
+    <div id="checkin-new-wrap" hidden>
+      <p class="muted small">New files found in the workspace. These are models Creo saved next to the checked-out file. Checked items are added to the project with this check-in.</p>
+      <div id="checkin-new-files"></div>
+    </div>
+    <p class="error" id="checkin-error" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="checkin-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Check In</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}

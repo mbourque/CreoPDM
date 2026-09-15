@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}{{ object.filename }} — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail">
+  <nav class="crumb">
+    <a href="/?project={{ project.uuid }}">{{ project.name }}</a>
+    <span>/</span>
+    <span>{{ object.filename }}</span>
+  </nav>
+
+  <header class="detail-head">
+    <div>
+      <h1>{{ object.filename }}</h1>
+      <p class="muted">{{ object.object_type.replace('_', ' ').title() }} · {{ object.relative_path }}</p>
+    </div>
+    <div class="detail-meta">
+      <span class="state" data-state="{{ object.lifecycle_state }}">{{ object.lifecycle_state.replace('_', ' ').title() }}</span>
+      <span class="checkout-state" data-state="{% if object.owned_by_me %}mine{% elif object.checkout_user %}other{% else %}available{% endif %}">{{ object.checkout_status }}</span>
+      <span class="rev">{{ object.display_revision }}</span>
+    </div>
+  </header>
+
+  <div class="toolbar-actions detail-actions">
+    <button type="button" class="btn" id="open-btn" data-uuid="{{ object.uuid }}">Open</button>
+    <button type="button" class="btn" id="open-workspace-btn" data-project="{{ project.uuid }}">Open Workspace</button>
+    <button type="button" class="btn" id="checkout-btn" data-uuid="{{ object.uuid }}" {% if not object.can_checkout %}disabled{% endif %}>Checkout</button>
+    <button type="button" class="btn" id="checkin-btn" data-uuid="{{ object.uuid }}" {% if not object.can_checkin %}disabled{% endif %}>Check In</button>
+    <button type="button" class="btn" id="undo-btn" data-uuid="{{ object.uuid }}" {% if not object.owned_by_me %}disabled{% endif %}>Undo Checkout</button>
+    <button type="button" class="btn" id="purge-workspace-btn" data-uuid="{{ object.uuid }}" title="Delete local copies. The project vault is unchanged.">Remove from Workspace</button>
+    <button type="button" class="btn btn-danger" id="remove-project-btn" data-uuid="{{ object.uuid }}" title="Delete the vault file and local copies.">Remove from Project</button>
+  </div>
+  <div class="toolbar-messages">
+    <p class="error" id="toolbar-error" hidden></p>
+    <p class="ok" id="toolbar-ok" hidden></p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button type="button" class="tab is-active" data-tab="overview">Overview</button>
+    {% if is_assembly %}
+    <button type="button" class="tab" data-tab="structure" disabled title="Assembly structure is a later milestone">Structure</button>
+    <button type="button" class="tab" data-tab="bom" disabled title="BOM is a later milestone">BOM</button>
+    {% endif %}
+    {% if is_creo %}
+    <button type="button" class="tab" data-tab="parameters" disabled title="Live Creo parameters are a later milestone">Parameters</button>
+    {% endif %}
+    <button type="button" class="tab" data-tab="history">History</button>
+    <button type="button" class="tab" data-tab="where-used" disabled title="Where-used is a later milestone">Where Used</button>
+  </div>
+
+  <section class="tab-panel" id="panel-overview">
+    <dl class="kv">
+      <dt>Number</dt><dd>{{ object.number or "—" }}</dd>
+      <dt>Name</dt><dd>{{ object.name }}</dd>
+      <dt>Revision</dt><dd>{{ object.display_revision }}</dd>
+      <dt>Lifecycle</dt><dd>{{ object.lifecycle_state.replace('_', ' ').title() }}</dd>
+      <dt>Checkout</dt><dd>{{ object.checkout_status }}</dd>
+      <dt>Content hash</dt><dd class="mono">{{ object.current_version.content_hash if object.current_version else "—" }}</dd>
+      <dt>Size</dt><dd>{% if object.current_version %}{{ object.current_version.file_size }} bytes{% else %}—{% endif %}</dd>
+    </dl>
+  </section>
+
+  <section class="tab-panel" id="panel-history" hidden>
+    <div class="subtabs" role="tablist">
+      <button type="button" class="subtab is-active" data-subtab="files">File History</button>
+      <button type="button" class="subtab" data-subtab="versions">Version History</button>
+    </div>
+
+    <div class="subtab-panel" id="subpanel-files">
+      <table class="grid">
+        <thead>
+          <tr>
+            <th>Rev</th>
+            <th>Filename</th>
+            <th>Size</th>
+            <th>User</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for version in history %}
+          <tr {% if loop.first %}class="is-latest"{% endif %}>
+            <td>{{ version.revision }}.{{ version.iteration }}{% if loop.first %} · latest{% endif %}</td>
+            <td class="filename-cell">{{ version.relative_path or object.relative_path }}</td>
+            <td>{{ version.file_size }} bytes</td>
+            <td>{{ version.created_by }}</td>
+            <td>{% if version.created_at %}{{ version.created_at.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">No file history yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="subtab-panel" id="subpanel-versions" hidden>
+      <table class="grid">
+        <thead>
+          <tr>
+            <th>Rev</th>
+            <th>User</th>
+            <th>Date</th>
+            <th>Comment</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for version in history %}
+          <tr {% if loop.first %}class="is-latest"{% endif %}>
+            <td>{{ version.revision }}.{{ version.iteration }}{% if loop.first %} · latest{% endif %}</td>
+            <td>{{ version.created_by }}</td>
+            <td>{% if version.created_at %}{{ version.created_at.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
+            <td>{{ version.comment }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No history yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</article>
+
+<dialog id="checkin-dialog" class="dialog">
+  <form method="dialog" id="checkin-form">
+    <h2>Check In</h2>
+    <dl class="kv">
+      <dt>Object</dt><dd id="checkin-filename">—</dd>
+      <dt>Current</dt><dd id="checkin-current">—</dd>
+      <dt>New version</dt><dd id="checkin-next">—</dd>
+    </dl>
+    <label>Comment
+      <textarea name="comment" id="checkin-comment" rows="3" required placeholder="Changed shaft diameter for new bearing."></textarea>
+    </label>
+    <ul class="detect-list" id="checkin-changes"></ul>
+    <div id="checkin-new-wrap" hidden>
+      <p class="muted small">New files found in the workspace. These are models Creo saved next to the checked-out file. Checked items are added to the project with this check-in.</p>
+      <div id="checkin-new-files"></div>
+    </div>
+    <p class="error" id="checkin-error" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="checkin-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Check In</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
