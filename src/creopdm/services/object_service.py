@@ -66,6 +66,13 @@ class ObjectService:
         self._users = users
         self._config = config
 
+    def _vault(self, project: Project) -> Path:
+        if self._config is None:
+            raise RepositoryError("Workspace configuration is missing.")
+        path = self._config.workspace_for_project(project.uuid)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     def _cad_extensions(self) -> list[str]:
         if self._config is None:
             return list(DEFAULT_EXTRA_CAD_EXTENSIONS)
@@ -129,7 +136,7 @@ class ObjectService:
         """Unregister the object from the project. Never deletes the original file.
 
         Workspace copies are purged by the caller. Git tracking is dropped with
-        --cached so the file in the original project folder stays on disk.
+        --cached so a leftover file in the original project folder stays on disk.
         """
         obj = self.get_object(session, object_uuid)
         project = obj.project
@@ -137,7 +144,7 @@ class ObjectService:
         filename = obj.filename
         relative = obj.relative_path
         uuid_value = obj.uuid
-        repo = Path(project.repository_path)
+        repo = self._vault(project)
         with self._locks.acquire(project.uuid):
             captured = self._store.capture_checkpoint(repo)
             try:
@@ -239,7 +246,7 @@ class ObjectService:
                 details={"relative_path": relative, "existing": existing.filename},
             )
 
-        repo = Path(project.repository_path)
+        repo = self._vault(project)
         destination = ensure_within(repo, repo / rel)
         user = self._users.get_current_user()
         content_hash = calculate_sha256(source_path)

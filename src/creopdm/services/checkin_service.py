@@ -113,7 +113,8 @@ class CheckinService:
         obj = self._objects.get_object(session, object_uuid)
         project = obj.project
         user = self._users.get_current_user()
-        repo = Path(project.repository_path)
+        self._workspaces.ensure_vault(project)
+        repo = self._workspaces.vault_for(project)
         to_add = [item.replace("\\", "/").strip() for item in (add_relative_paths or []) if item.strip()]
 
         with self._locks.acquire(project.uuid):
@@ -365,6 +366,7 @@ class CheckinService:
                 project,
                 source,
                 original_name=source.name,
+                relative_path=relative,
                 comment=comment,
             )
             logger.info("Added %s during check-in of %s", item["filename"], source_label)

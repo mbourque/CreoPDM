@@ -18,7 +18,7 @@
     <div class="status-cluster">
       <a class="status-pill" href="/settings">Settings</a>
       <span class="status-pill" data-state="running">Status: Running</span>
-      <span class="status-pill" data-state="{% if creo_label == 'Connected' %}ok{% else %}idle{% endif %}">
+      <span class="status-pill" data-state="{% if creo_label == 'Connected' %}ok{% else %}idle{% endif %}"{% if creo_executable %} title="{{ creo_executable }}"{% endif %}>
         Creo: {{ creo_label }}
       </span>
     </div>

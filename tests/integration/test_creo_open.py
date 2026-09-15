@@ -32,7 +32,7 @@ def test_open_in_creo_uses_connector(data_dir, repo_parent, identity: StaticUser
         location = repo_parent / "OpenProj"
         project = client.post(
             "/api/projects",
-            json={"name": "Open", "repository_path": str(location)},
+            json={"name": "Open"},
         ).json()
         created = client.post(
             f"/api/projects/{project['uuid']}/objects",
@@ -62,7 +62,7 @@ def test_open_after_checkin_despite_creo_numbered_workspace_file(
         location = repo_parent / "Plywood"
         project = client.post(
             "/api/projects",
-            json={"name": "Plywood", "repository_path": str(location)},
+            json={"name": "Plywood"},
         ).json()
         created = client.post(
             f"/api/projects/{project['uuid']}/objects",
@@ -154,7 +154,7 @@ def test_open_document_uses_windows_association(data_dir, repo_parent, identity,
         location = repo_parent / "DocsProj"
         project = client.post(
             "/api/projects",
-            json={"name": "Docs", "repository_path": str(location)},
+            json={"name": "Docs"},
         ).json()
         created = client.post(
             f"/api/projects/{project['uuid']}/objects",

@@ -38,6 +38,21 @@ def _creo_label(ctx: AppContext) -> str:
     return "Not Connected"
 
 
+def _creo_executable(ctx: AppContext) -> str | None:
+    finder = getattr(ctx.creo, "find_executable", None)
+    if not callable(finder):
+        return None
+    found = finder()
+    return str(found) if found else None
+
+
+def _creo_page(ctx: AppContext) -> dict[str, str | None]:
+    return {
+        "creo_label": _creo_label(ctx),
+        "creo_executable": _creo_executable(ctx),
+    }
+
+
 @router.get("/", response_class=HTMLResponse)
 def home(
     request: Request,
@@ -72,7 +87,7 @@ def home(
         checkin_queue = ctx.workspaces.project_checkin_queue(project, orm_objects)
         ctx.config.remember_project(project.uuid)
     current_folder = normalize_folder_query(request.query_params.get("folder"))
-    if status is not None and current_folder:
+    if status is not None:
         status = {**status, **folder_view_counts(objects, current_folder)}
 
     return render(
@@ -81,7 +96,7 @@ def home(
         {
             "app_name": APP_NAME,
             "app_version": APP_VERSION,
-            "creo_label": _creo_label(ctx),
+            **_creo_page(ctx),
             "projects": projects,
             "selected": selected,
             "objects": objects,
@@ -118,7 +133,7 @@ def object_detail(
         {
             "app_name": APP_NAME,
             "app_version": APP_VERSION,
-            "creo_label": _creo_label(ctx),
+            **_creo_page(ctx),
             "project": project_to_response(project),
             "object": payload,
             "history": history,
@@ -143,7 +158,7 @@ def settings_page(
         {
             "app_name": APP_NAME,
             "app_version": APP_VERSION,
-            "creo_label": _creo_label(ctx),
+            **_creo_page(ctx),
             "settings": settings_to_response(ctx),
         },
     )

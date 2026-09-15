@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 from creopdm.exceptions import RepositoryError
+from creopdm.utils.files import remove_tree
 from creopdm.logging_setup import get_logger
 from creopdm.utils.identity import UserIdentity
 
@@ -100,6 +102,28 @@ class GitService:
             path,
         )
         self.init_repository(path, default_branch)
+
+    def clone_into(self, source: Path, dest: Path) -> None:
+        """Copy a Git repository into dest, keeping dest files that Git does not track."""
+        dest.mkdir(parents=True, exist_ok=True)
+        if self.is_repository(dest):
+            return
+        source = source.resolve()
+        dest = dest.resolve()
+        populated = any(dest.iterdir())
+        if not populated:
+            self._run(["clone", str(source), str(dest)], cwd=source.parent)
+            return
+        tmp = dest.parent / f"{dest.name}.git-migrate"
+        if tmp.exists():
+            remove_tree(tmp)
+        try:
+            self._run(["clone", str(source), str(tmp)], cwd=source.parent)
+            shutil.copytree(tmp / ".git", dest / ".git")
+        finally:
+            if tmp.exists():
+                remove_tree(tmp)
+        self._run(["checkout", "HEAD", "--", "."], cwd=dest, check=False)
 
     def init_repository(self, path: Path, default_branch: str = "main") -> None:
         path.mkdir(parents=True, exist_ok=True)

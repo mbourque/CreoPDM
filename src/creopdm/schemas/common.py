@@ -28,17 +28,8 @@ class ErrorResponse(BaseModel):
 
 class ProjectCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    repository_path: str = Field(min_length=1)
     number: str | None = None
     description: str | None = None
-
-    @field_validator("repository_path")
-    @classmethod
-    def location_required(cls, value: str) -> str:
-        cleaned = value.strip()
-        if not cleaned:
-            raise ValueError("A project location is required.")
-        return cleaned
 
 
 class ProjectUpdateRequest(BaseModel):
@@ -191,6 +182,7 @@ class ProjectStatusResponse(BaseModel):
     drawings: int
     documents: int
     other: int
+    checked_out: int = 0
     checked_out_by_me: int
     checked_out_by_others: int
     modified_locally: int
@@ -202,6 +194,12 @@ class ImportLocalRequest(BaseModel):
     paths: list[str] = Field(min_length=1)
     comment: str | None = None
     base_folder: str | None = None
+
+
+class WorkspaceWatchResponse(BaseModel):
+    stamp: str
+    pending_saves: int = 0
+    new_files: int = 0
 
 
 class WorkspacePickerResponse(BaseModel):

@@ -25,7 +25,11 @@ class GitVersionStore(VersionStore):
     ) -> str:
         self._git.ensure_repository(repository_path, DEFAULT_BRANCH)
         if remove_relative_paths:
-            self._git.remove_files(repository_path, remove_relative_paths)
+            self._git.remove_files(
+                repository_path,
+                remove_relative_paths,
+                keep_working_copy=True,
+            )
         self._git.stage_files(repository_path, relative_paths)
         return self._git.commit(
             repository_path,

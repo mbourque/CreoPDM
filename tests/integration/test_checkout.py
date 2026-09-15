@@ -8,7 +8,7 @@ def _create_part(client, repo_parent: Path):
     location = repo_parent / "RobotArm"
     project = client.post(
         "/api/projects",
-        json={"name": "Robot Arm", "repository_path": str(location)},
+        json={"name": "Robot Arm"},
     ).json()
     created = client.post(
         f"/api/projects/{project['uuid']}/objects",
@@ -21,9 +21,10 @@ def _create_part(client, repo_parent: Path):
 
 @requires_git
 def test_checkout_then_second_user_denied(client, repo_parent, identity, data_dir):
-    project, obj, location = _create_part(client, repo_parent)
+    project, obj, _location = _create_part(client, repo_parent)
     git = GitService()
-    head_before = git.get_head(location)
+    vault = data_dir / "workspaces" / project["uuid"]
+    head_before = git.get_head(vault)
 
     first = client.post(f"/api/objects/{obj['uuid']}/checkout")
     assert first.status_code == 200, first.text
@@ -31,7 +32,7 @@ def test_checkout_then_second_user_denied(client, repo_parent, identity, data_di
     assert first.json()["checkout_status"].startswith("Checked out by me")
     assert first.json()["can_checkin"] is True
 
-    workspace = data_dir / "workspaces" / project["uuid"] / "shaft.prt"
+    workspace = vault / "shaft.prt"
     assert workspace.is_file()
     original = workspace.read_bytes()
 
@@ -48,7 +49,7 @@ def test_checkout_then_second_user_denied(client, repo_parent, identity, data_di
     assert still.json()["owned_by_me"] is True
     assert still.json()["checkout_user"] == "Alice"
     assert workspace.read_bytes() == original
-    assert git.get_head(location) == head_before
+    assert git.get_head(vault) == head_before
 
 
 @requires_git
@@ -68,7 +69,7 @@ def test_batch_checkout_copies_all_selected_files(client, repo_parent, data_dir)
     location = repo_parent / "BatchArm"
     project = client.post(
         "/api/projects",
-        json={"name": "Batch Arm", "repository_path": str(location)},
+        json={"name": "Batch Arm"},
     ).json()
     part = client.post(
         f"/api/projects/{project['uuid']}/objects",
@@ -105,7 +106,7 @@ def test_batch_undo_checkout_releases_all_selected_files(client, repo_parent):
     location = repo_parent / "UndoArm"
     project = client.post(
         "/api/projects",
-        json={"name": "Undo Arm", "repository_path": str(location)},
+        json={"name": "Undo Arm"},
     ).json()
     part = client.post(
         f"/api/projects/{project['uuid']}/objects",
@@ -139,13 +140,6 @@ def test_batch_undo_checkout_releases_all_selected_files(client, repo_parent):
 @requires_git
 def test_batch_workspace_without_checkout(client, repo_parent, data_dir):
     project, obj, _location = _create_part(client, repo_parent)
-    result = client.post(
-        "/api/objects/batch/workspace",
-        json={"object_ids": [obj["uuid"]]},
-    )
-    assert result.status_code == 200, result.text
-    body = result.json()
-    assert len(body["ok"]) == 1
     copied = data_dir / "workspaces" / project["uuid"] / "shaft.prt"
     assert copied.is_file()
     listed = client.get(f"/api/objects/{obj['uuid']}").json()
@@ -162,7 +156,7 @@ def test_workspace_keeps_project_folders(client, repo_parent, data_dir):
     location = repo_parent / "FolderArm"
     project = client.post(
         "/api/projects",
-        json={"name": "Folder Arm", "repository_path": str(location)},
+        json={"name": "Folder Arm"},
     ).json()
     lib = location / "lib"
     nested = lib / "step"
@@ -171,18 +165,16 @@ def test_workspace_keeps_project_folders(client, repo_parent, data_dir):
     pin.write_bytes(b"pin-bytes")
     imported = client.post(
         f"/api/projects/{project['uuid']}/objects/from-disk",
-        json={"paths": [str(pin)], "comment": "Nested library part"},
+        json={"paths": [str(pin)], "comment": "Nested library part", "base_folder": str(lib)},
     )
     assert imported.status_code == 200, imported.text
     obj = imported.json()["ok"][0]
     listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
     item = next(row for row in listing if row["uuid"] == obj["uuid"])
     assert item["relative_path"] == "lib/step/pin.prt"
-
-    copied = client.post("/api/objects/batch/workspace", json={"object_ids": [obj["uuid"]]})
-    assert copied.status_code == 200, copied.text
     workspace = data_dir / "workspaces" / project["uuid"]
     assert (workspace / "lib" / "step" / "pin.prt").is_file()
     assert (workspace / "lib" / "step" / "pin.prt").read_bytes() == b"pin-bytes"
     assert not (workspace / "pin.prt").exists()
+    assert item["in_workspace"] is True
 

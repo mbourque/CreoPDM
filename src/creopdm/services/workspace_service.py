@@ -1,29 +1,51 @@
-"""Workspace files are separate from the Git repository working tree."""
+"""Workspace files are the Git vault."""
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from datetime import datetime
 from pathlib import Path
 
-from creopdm.constants import STANDARD_PROJECT_FOLDERS
+from creopdm.constants import (
+    APP_NAME,
+    APP_SCHEMA_VERSION,
+    DEFAULT_BRANCH,
+    PROJECT_JSON_NAME,
+    PROJECT_MARKER_DIR,
+    SCHEMA_VERSION_NAME,
+    STANDARD_PROJECT_FOLDERS,
+)
 from creopdm.config import ConfigManager
 from creopdm.creo.file_manager import CreoFileManager
-from creopdm.exceptions import PathValidationError, WorkspaceConflictError
+from creopdm.exceptions import PathValidationError, RepositoryError, WorkspaceConflictError
 from creopdm.logging_setup import get_logger
 from creopdm.models.object import EngineeringObject
 from creopdm.models.project import Project
+from creopdm.services.git_service import GitService
 from creopdm.utils.classify import classify_filename
-from creopdm.utils.files import copy_file, set_file_readonly, set_file_writable
+from creopdm.utils.files import copy_file, remove_file, remove_tree, set_file_readonly, set_file_writable
 from creopdm.utils.hashing import calculate_sha256
+from creopdm.utils.identity import UserIdentity
 from creopdm.utils.paths import assert_safe_relative_path, ensure_within
 
 logger = get_logger("workspace")
 
+GITIGNORE_TEMPLATE = """# Creo transients — not engineering objects
+*.tst
+*.err
+*.acl
+trail.txt*
+std.out
+std.err
+"""
+
 
 class WorkspaceService:
-    def __init__(self, config: ConfigManager) -> None:
+    def __init__(self, config: ConfigManager, git: GitService | None = None) -> None:
         self._config = config
+        self._git = git
 
     def _cad_extensions(self) -> list[str]:
         return self._config.extra_cad_extensions()
@@ -32,6 +54,64 @@ class WorkspaceService:
         path = self._config.workspace_for_project(project_uuid)
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def vault_for(self, project: Project) -> Path:
+        return self.root_for(project.uuid)
+
+    def leftover_source(self, project: Project) -> Path | None:
+        """Old Creo folder recorded before Git lived in the workspace."""
+        raw = (project.repository_path or "").strip()
+        if not raw:
+            return None
+        path = Path(raw)
+        try:
+            if path.resolve() == self.vault_for(project).resolve():
+                return None
+        except OSError:
+            return path
+        return path
+
+    def location_for(self, project: Project) -> Path | None:
+        return self.leftover_source(project)
+
+    def ensure_vault(self, project: Project) -> Path:
+        """Git lives in the workspace. Move leftover source-folder repos here once."""
+        vault = self.root_for(project.uuid)
+        location = self.leftover_source(project)
+        git = self._git
+        if git is None:
+            return vault
+        if git.is_repository(vault):
+            if location is not None and git.is_repository(location):
+                self.strip_location_git(location)
+            return vault
+        if location is not None and git.is_repository(location):
+            logger.info("Moving Git history from %s into workspace %s", location, vault)
+            git.clone_into(location, vault)
+            if not git.is_repository(vault):
+                raise RepositoryError(
+                    "Could not move Git history into the workspace.",
+                    details={"location": str(location), "workspace": str(vault)},
+                )
+            self.strip_location_git(location)
+            return vault
+        git.init_repository(vault, DEFAULT_BRANCH)
+        gitignore = vault / ".gitignore"
+        if not gitignore.is_file():
+            gitignore.write_text(GITIGNORE_TEMPLATE, encoding="utf-8")
+        return vault
+
+    def init_vault(self, project_uuid: str, name: str, user: UserIdentity) -> Path:
+        if self._git is None:
+            raise RepositoryError("Git is required to create a project but was not found on PATH.")
+        vault = self.root_for(project_uuid)
+        self._git.init_repository(vault, DEFAULT_BRANCH)
+        (vault / ".gitignore").write_text(GITIGNORE_TEMPLATE, encoding="utf-8")
+        self._write_project_marker(vault, project_uuid, name, None, None)
+        with_files = [".gitignore", PROJECT_MARKER_DIR]
+        self._git.stage_files(vault, with_files)
+        self._git.commit(vault, f"Initialize project {name}", user)
+        return vault
 
     def workspace_relative(self, obj: EngineeringObject) -> str:
         """Keep the project's folder layout in the workspace."""
@@ -73,8 +153,8 @@ class WorkspaceService:
 
     def repository_file(self, project: Project, relative_path: str) -> Path:
         relative = assert_safe_relative_path(relative_path)
-        repo = Path(project.repository_path)
-        return ensure_within(repo, repo / relative)
+        root = self.vault_for(project)
+        return ensure_within(root, root / relative)
 
     def materialize(
         self,
@@ -85,6 +165,8 @@ class WorkspaceService:
         keep_local: bool = False,
     ) -> Path:
         source = self.repository_file(project, obj.relative_path)
+        if not source.is_file():
+            self._restore_tracked(project, obj.relative_path)
         if not source.is_file():
             raise PathValidationError(
                 f"Repository file is missing: {obj.filename}",
@@ -111,6 +193,9 @@ class WorkspaceService:
             and destination.is_file()
             and not self._file_modified(destination, obj)
         ):
+            self._try_set_mode(destination, writable)
+            return destination
+        if source.resolve() == destination.resolve():
             self._try_set_mode(destination, writable)
             return destination
         try:
@@ -196,6 +281,27 @@ class WorkspaceService:
             )
         return {"saves": saves, "new_files": self.list_untracked(project, objects)}
 
+    def watch_stamp(self, project: Project, objects: list[EngineeringObject]) -> dict[str, str | int]:
+        """Fingerprint of workspace files so the UI can notice Creo saves."""
+        root = self.root_for(project.uuid)
+        parts: list[str] = []
+        if root.is_dir():
+            for path in self._iter_workspace_files(root):
+                try:
+                    stat = path.stat()
+                    relative = path.resolve().relative_to(root.resolve()).as_posix()
+                    parts.append(f"{relative}:{stat.st_mtime_ns}:{stat.st_size}")
+                except OSError:
+                    continue
+        parts.sort()
+        digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:20]
+        queue = self.project_checkin_queue(project, objects)
+        return {
+            "stamp": digest,
+            "pending_saves": len(queue["saves"]),
+            "new_files": len(queue["new_files"]),
+        }
+
     def materialize_many(
         self,
         session_objects: list[tuple[Project, EngineeringObject]],
@@ -223,6 +329,14 @@ class WorkspaceService:
                 )
         return {"ok": ok, "failed": failed}
 
+    def copy_into_workspace(self, project: Project, obj: EngineeringObject) -> Path | None:
+        """Copy a newly added vault file into the workspace. Best-effort."""
+        try:
+            return self.materialize(project, obj, writable=False)
+        except Exception:
+            logger.exception("Could not copy %s into the workspace", obj.filename)
+            return None
+
     def preferred_add_directory(self, project_uuid: str, owned_relative_paths: list[str] | None = None) -> Path:
         """Workspace root: all working copies live in one folder."""
         return self.root_for(project_uuid)
@@ -234,37 +348,25 @@ class WorkspaceService:
         except ValueError:
             return None
 
-    def relative_if_inside_repo(self, project: Project, path: Path) -> str | None:
-        repo = Path(project.repository_path)
-        try:
-            return self._canonical_relative(repo, Path(path))
-        except (ValueError, PathValidationError):
-            return None
-
     def import_relative_path(
         self,
         project: Project,
         source: Path,
         base_folder: Path | str | None = None,
     ) -> str | None:
-        """Repo-relative path used when adding a file.
+        """Workspace-relative path used when adding a file.
 
-        Choose Files keeps files at the vault root unless they already live
-        inside the project folder. Choose Folder keeps the chosen folder name
-        as a group, including nested files.
+        Choose Folder keeps the chosen folder name as a group, including nested
+        files. Choose Files stores the file at the workspace root.
         """
         path = Path(source)
-        inside = self.relative_if_inside_repo(project, path)
         if not base_folder:
-            return inside
+            return None
         base = Path(base_folder)
         try:
             rel = path.resolve().relative_to(base.resolve())
         except ValueError:
-            return inside
-        repo = Path(project.repository_path).resolve()
-        if base.resolve() == repo or repo in base.resolve().parents:
-            return inside
+            return None
         stored = CreoFileManager.canonical_repository_name(rel.name)
         parent = rel.parent
         if parent.as_posix() == ".":
@@ -398,3 +500,79 @@ class WorkspaceService:
         if current is None or not path.is_file():
             return False
         return calculate_sha256(path) != current.content_hash
+
+    def _restore_tracked(self, project: Project, relative_path: str) -> None:
+        if self._git is None:
+            return
+        vault = self.vault_for(project)
+        if not self._git.is_repository(vault):
+            return
+        try:
+            self._git.restore_file(vault, relative_path.replace("\\", "/"), "HEAD")
+        except Exception:
+            logger.exception("Could not restore %s from Git", relative_path)
+
+    def strip_location_git(self, location: Path) -> None:
+        """Remove CreoPDM Git leftovers from the original folder. CAD files stay."""
+        remove_tree(location / ".git")
+        for name in (".gitignore", ".gitattributes"):
+            remove_file(location / name)
+        remove_tree(location / PROJECT_MARKER_DIR)
+        self._remove_creopdm_readme(location / "README.md")
+        for folder in STANDARD_PROJECT_FOLDERS:
+            remove_file(location / folder / ".gitkeep")
+
+    @staticmethod
+    def _remove_creopdm_readme(path: Path) -> None:
+        if not path.is_file():
+            return
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            return
+        if f"Managed by {APP_NAME}" not in text:
+            return
+        remove_file(path)
+
+    def write_project_marker(
+        self,
+        project: Project,
+        name: str,
+        number: str | None,
+        description: str | None,
+    ) -> None:
+        self._write_project_marker(self.vault_for(project), project.uuid, name, number, description)
+
+    def _write_project_marker(
+        self,
+        vault: Path,
+        project_uuid: str,
+        name: str,
+        number: str | None,
+        description: str | None,
+    ) -> None:
+        marker = vault / PROJECT_MARKER_DIR
+        marker.mkdir(parents=True, exist_ok=True)
+        path = marker / PROJECT_JSON_NAME
+        payload: dict = {}
+        if path.is_file():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    payload = loaded
+            except json.JSONDecodeError:
+                payload = {}
+        payload.update(
+            {
+                "uuid": project_uuid,
+                "name": name,
+                "number": number,
+                "description": description,
+                "default_branch": payload.get("default_branch") or DEFAULT_BRANCH,
+                "schema_version": payload.get("schema_version") or APP_SCHEMA_VERSION,
+            }
+        )
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        schema = marker / SCHEMA_VERSION_NAME
+        if not schema.is_file():
+            schema.write_text(f"{APP_SCHEMA_VERSION}\n", encoding="utf-8")

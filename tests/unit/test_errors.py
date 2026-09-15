@@ -12,7 +12,7 @@ def test_unknown_project_error_envelope(client):
 
 
 def test_validation_error_envelope_is_json(client):
-    response = client.post("/api/projects", json={"name": "No Path", "repository_path": "   "})
+    response = client.post("/api/projects", json={"name": ""})
     assert response.status_code == 422
     payload = response.json()
     assert payload["error"]["code"] == "VALIDATION_ERROR"

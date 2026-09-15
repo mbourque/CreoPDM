@@ -48,6 +48,16 @@
     }
   }
 
+  async function withHtmlDialogClosed(dialog, work) {
+    const wasOpen = Boolean(dialog?.open);
+    if (wasOpen) dialog.close();
+    try {
+      return await work();
+    } finally {
+      if (wasOpen && dialog && !dialog.open) dialog.showModal();
+    }
+  }
+
   async function readError(response) {
     try {
       const payload = await response.json();
@@ -77,6 +87,7 @@
     drawings: "drawings",
     documents: "documents",
     other: "non-CAD files",
+    checked_out: "checked out files",
   };
 
   function metricButtons() {
@@ -88,6 +99,7 @@
   }
 
   function rowMatchesMetric(row, key) {
+    if (key === "checked_out") return row.dataset.checkedOut === "1";
     const types = FILTERS[key];
     return types === null || types.includes(row.dataset.objectType);
   }
@@ -155,8 +167,6 @@
   $("#forget-project-btn")?.addEventListener("click", () => {
     const btn = $("#forget-project-btn");
     showError($("#forget-error"), "");
-    const path = $("#forget-path");
-    if (path) path.textContent = btn?.dataset.path || "";
     if (forgetForm) forgetForm.reset();
     forgetDialog?.showModal();
   });
@@ -192,9 +202,6 @@
     if (!projectForm || !projectDialog) return;
     showError($("#project-error"), "");
     const title = $("#project-dialog-title");
-    const locationInput = projectForm.querySelector("[name=repository_path]");
-    const locationHint = $("#project-location-hint");
-    const browse = $("#browse-location-btn");
     const submit = $("#project-submit");
     projectForm.dataset.mode = mode;
     if (mode === "rename") {
@@ -203,47 +210,14 @@
       projectForm.elements.name.value = btn?.dataset.name || "";
       projectForm.elements.number.value = btn?.dataset.number || "";
       projectForm.elements.description.value = btn?.dataset.description || "";
-      if (locationInput) {
-        locationInput.value = btn?.dataset.path || "";
-        locationInput.required = false;
-        locationInput.readOnly = true;
-        locationInput.disabled = true;
-      }
-      if (browse) browse.hidden = true;
-      if (locationHint) {
-        locationHint.textContent =
-          "Location cannot be changed. Rename does not move the original folder or Git vault.";
-      }
       if (submit) submit.textContent = "Save";
     } else {
       projectForm.reset();
       if (title) title.textContent = "New project";
-      if (locationInput) {
-        locationInput.required = true;
-        locationInput.readOnly = false;
-        locationInput.disabled = false;
-      }
-      if (browse) browse.hidden = false;
-      if (locationHint) {
-        locationHint.textContent =
-          "Required. This is the project vault on disk. The parent folder must already exist.";
-      }
       if (submit) submit.textContent = "Create";
     }
     projectDialog.showModal();
   }
-
-  $("#browse-location-btn")?.addEventListener("click", async () => {
-    if (!projectForm || projectForm.dataset.mode === "rename") return;
-    showError($("#project-error"), "");
-    const response = await fetch("/api/projects/choose-location", { method: "POST" });
-    if (!response.ok) {
-      showError($("#project-error"), await readError(response));
-      return;
-    }
-    const data = await response.json();
-    if (data.path) projectForm.elements.repository_path.value = data.path;
-  });
 
   projectForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -254,12 +228,9 @@
       number: String(data.get("number") || "").trim() || null,
       description: String(data.get("description") || "").trim() || null,
     };
-    if (!renaming) {
-      body.repository_path = String(data.get("repository_path") || "").trim();
-      if (!body.repository_path) {
-        showError($("#project-error"), "A project location is required.");
-        return;
-      }
+    if (!body.name) {
+      showError($("#project-error"), "A project name is required.");
+      return;
     }
     const projectId = $("#rename-project-btn")?.dataset.project;
     const url = renaming ? `/api/projects/${projectId}` : "/api/projects";
@@ -333,44 +304,48 @@
     const projectId = addForm?.dataset.project;
     if (!projectId) return;
     showError($("#add-error"), "");
-    const response = await fetch(`/api/projects/${projectId}/workspace/choose-files`, { method: "POST" });
-    if (!response.ok) {
-      showError($("#add-error"), await readError(response));
-      return;
-    }
-    const data = await response.json();
-    applyChosenPaths(
-      data.selected || [],
-      data.initial_directory ? `Opens in: ${data.initial_directory}` : ""
-    );
-    if (data.warning) showError($("#add-error"), data.warning);
+    await withHtmlDialogClosed(addDialog, async () => {
+      const response = await fetch(`/api/projects/${projectId}/workspace/choose-files`, { method: "POST" });
+      if (!response.ok) {
+        showError($("#add-error"), await readError(response));
+        return;
+      }
+      const data = await response.json();
+      applyChosenPaths(
+        data.selected || [],
+        data.initial_directory ? `Opens in: ${data.initial_directory}` : ""
+      );
+      if (data.warning) showError($("#add-error"), data.warning);
+    });
   });
 
   $("#choose-workspace-folder")?.addEventListener("click", async () => {
     const projectId = addForm?.dataset.project;
     if (!projectId) return;
     showError($("#add-error"), "");
-    const response = await fetch(`/api/projects/${projectId}/workspace/choose-folder`, { method: "POST" });
-    if (!response.ok) {
-      showError($("#add-error"), await readError(response));
-      return;
-    }
-    const data = await response.json();
-    if (data.cancelled) return;
-    if (data.warning) {
-      applyChosenPaths([], data.initial_directory ? `Opens in: ${data.initial_directory}` : "");
-      showError($("#add-error"), data.warning);
-      return;
-    }
-    const folder = data.folder || data.initial_directory;
-    applyChosenPaths(
-      data.selected || [],
-      folder ? `${(data.selected || []).length} file(s) from ${folder}` : "",
-      folder
-    );
-    if (!(data.selected || []).length) {
-      showError($("#add-error"), "No files to add were found in that folder.");
-    }
+    await withHtmlDialogClosed(addDialog, async () => {
+      const response = await fetch(`/api/projects/${projectId}/workspace/choose-folder`, { method: "POST" });
+      if (!response.ok) {
+        showError($("#add-error"), await readError(response));
+        return;
+      }
+      const data = await response.json();
+      if (data.cancelled) return;
+      if (data.warning) {
+        applyChosenPaths([], data.initial_directory ? `Opens in: ${data.initial_directory}` : "");
+        showError($("#add-error"), data.warning);
+        return;
+      }
+      const folder = data.folder || data.initial_directory;
+      applyChosenPaths(
+        data.selected || [],
+        folder ? `${(data.selected || []).length} file(s) from ${folder}` : "",
+        folder
+      );
+      if (!(data.selected || []).length) {
+        showError($("#add-error"), "No files to add were found in that folder.");
+      }
+    });
   });
 
   addForm?.addEventListener("submit", async (event) => {
@@ -971,6 +946,96 @@
         fetch(`/api/objects/${id}/heartbeat`, { method: "POST" });
       });
     }, 60000);
+  }
+
+  const WATCH_KEY = "creopdmWatchRestore";
+  function rememberWatchView() {
+    const activeTab = document.querySelector(".tabs .tab.is-active")?.dataset.tab || "";
+    sessionStorage.setItem(
+      WATCH_KEY,
+      JSON.stringify({
+        ids: selectedIds(),
+        tab: activeTab,
+      })
+    );
+  }
+  function restoreWatchView() {
+    const raw = sessionStorage.getItem(WATCH_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(WATCH_KEY);
+    let saved;
+    try {
+      saved = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (saved.tab) {
+      document.querySelector(`.tabs .tab[data-tab="${saved.tab}"]`)?.click();
+    }
+    const wanted = new Set(saved.ids || []);
+    if (wanted.size) {
+      rows().forEach((row) => row.classList.toggle("is-selected", wanted.has(row.dataset.uuid)));
+      syncToolbar();
+    }
+  }
+  restoreWatchView();
+
+  function watchPaused() {
+    return document.hidden || busyDepth > 0 || Boolean(document.querySelector("dialog[open]"));
+  }
+
+  function objectWatchStamp(data) {
+    return [
+      data.filename,
+      data.display_revision,
+      data.checkout_status,
+      data.can_checkin ? "1" : "0",
+      data.modified_locally ? "1" : "0",
+      data.in_workspace ? "1" : "0",
+    ].join("|");
+  }
+
+  const watchProjectId = openWorkspaceBtn?.dataset.project || addForm?.dataset.project;
+  const watchObjectId = document.querySelector(".detail-head .object-open")?.dataset.uuid;
+  let watchStamp = null;
+  let watchReloadTimer = 0;
+
+  async function pollWorkspaceWatch() {
+    if (!watchProjectId || watchPaused()) return;
+    try {
+      let next = "";
+      if (watchObjectId) {
+        const response = await fetch(`/api/objects/${watchObjectId}`);
+        if (!response.ok) return;
+        next = objectWatchStamp(await response.json());
+      } else {
+        const response = await fetch(`/api/projects/${watchProjectId}/workspace-watch`);
+        if (!response.ok) return;
+        next = (await response.json()).stamp || "";
+      }
+      if (watchStamp === null) {
+        watchStamp = next;
+        return;
+      }
+      if (next === watchStamp) return;
+      watchStamp = next;
+      window.clearTimeout(watchReloadTimer);
+      watchReloadTimer = window.setTimeout(() => {
+        if (watchPaused()) return;
+        rememberWatchView();
+        window.location.reload();
+      }, 400);
+    } catch {
+      /* ignore a missed poll */
+    }
+  }
+
+  if (watchProjectId) {
+    setInterval(pollWorkspaceWatch, 2000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) pollWorkspaceWatch();
+    });
+    pollWorkspaceWatch();
   }
 
   document.querySelector(".detail-head .object-open")?.addEventListener("click", async (event) => {

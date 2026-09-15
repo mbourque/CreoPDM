@@ -50,7 +50,7 @@ def is_within(base: Path, target: Path) -> bool:
 
 
 def require_within_project(location: Path, target: Path) -> Path:
-    """Files and folders can only be added from inside the project location."""
+    """Resolve target and require it to sit inside location."""
     try:
         return ensure_within(location, target)
     except PathValidationError as exc:

@@ -14,7 +14,6 @@ from creopdm.exceptions import CreoPDMError, PathValidationError
 from creopdm.schemas.common import (
     BatchItemResult,
     BatchOperationResponse,
-    FolderPickResponse,
     ForgetProjectRequest,
     ForgetProjectResponse,
     CheckinPreviewResponse,
@@ -26,10 +25,10 @@ from creopdm.schemas.common import (
     ProjectUpdateRequest,
     QueueCheckinRequest,
     WorkspacePickerResponse,
+    WorkspaceWatchResponse,
 )
 from creopdm.utils.launch import open_windows_folder
-from creopdm.utils.native_dialog import default_project_location_start, pick_files, pick_folder
-from creopdm.utils.paths import is_within, require_within_project
+from creopdm.utils.native_dialog import pick_files, pick_folder
 
 router = APIRouter()
 
@@ -51,21 +50,10 @@ def create_project(
     project = ctx.projects.create_project(
         db,
         name=payload.name,
-        repository_path=payload.repository_path,
         number=payload.number,
         description=payload.description,
     )
     return project_to_response(project)
-
-
-@router.post("/api/projects/choose-location", response_model=FolderPickResponse)
-def choose_project_location() -> FolderPickResponse:
-    start = default_project_location_start()
-    chosen = pick_folder(start, title="Choose project folder")
-    return FolderPickResponse(
-        path=str(chosen) if chosen else None,
-        initial_directory=str(start),
-    )
 
 
 @router.get("/api/projects/{project_id}", response_model=ProjectResponse)
@@ -110,8 +98,7 @@ def forget_project(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ForgetProjectResponse:
-    project = ctx.projects.get_project(db, project_id)
-    workspace = ctx.config.workspace_for_project(project.uuid)
+    workspace = ctx.config.workspace_for_project(project_id)
     result = ctx.projects.forget_project(
         db,
         project_id,
@@ -151,6 +138,17 @@ def project_status(
 ) -> ProjectStatusResponse:
     counts = ctx.projects.project_status(db, project_id)
     return ProjectStatusResponse.model_validate(counts)
+
+
+@router.get("/api/projects/{project_id}/workspace-watch", response_model=WorkspaceWatchResponse)
+def workspace_watch(
+    project_id: str,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> WorkspaceWatchResponse:
+    project = ctx.projects.get_project(db, project_id)
+    objects = ctx.objects.list_objects(db, project.id)
+    return WorkspaceWatchResponse.model_validate(ctx.workspaces.watch_stamp(project, objects))
 
 
 @router.get("/api/projects/{project_id}/checkin-preview", response_model=CheckinPreviewResponse)
@@ -207,24 +205,11 @@ def choose_workspace_files(
     project = ctx.projects.get_project(db, project_id)
     start = ctx.projects.preferred_import_directory(project)
     start.mkdir(parents=True, exist_ok=True)
-    root = Path(project.repository_path)
-    selected = []
-    skipped = 0
-    for path in pick_files(start, title="Add files to the project"):
-        if is_within(root, path):
-            selected.append(str(path))
-        else:
-            skipped += 1
-    warning = ""
-    if skipped and not selected:
-        warning = "Choose files inside the project location."
-    elif skipped:
-        warning = "Skipped files outside the project location."
+    selected = [str(path) for path in pick_files(start, title="Add files to the project")]
     return WorkspacePickerResponse(
         workspace_root=str(ctx.workspaces.root_for(project.uuid)),
         initial_directory=str(start),
         selected=selected,
-        warning=warning,
     )
 
 
@@ -243,13 +228,6 @@ def choose_workspace_folder(
             workspace_root=str(ctx.workspaces.root_for(project.uuid)),
             initial_directory=str(start),
             cancelled=True,
-        )
-    root = Path(project.repository_path)
-    if not is_within(root, chosen):
-        return WorkspacePickerResponse(
-            workspace_root=str(ctx.workspaces.root_for(project.uuid)),
-            initial_directory=str(start),
-            warning="Choose a folder inside the project location.",
         )
     extras = ctx.config.extra_cad_extensions()
     selected = [str(path) for path in CreoFileManager.list_latest_in_folder(chosen, extras)]
@@ -289,26 +267,8 @@ def import_from_disk(
     project = ctx.projects.get_project(db, project_id)
     comment = (payload.comment or "").strip() or None
     extras = ctx.config.extra_cad_extensions()
-    root = Path(project.repository_path)
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
-    if payload.base_folder:
-        try:
-            require_within_project(root, Path(payload.base_folder))
-        except PathValidationError as exc:
-            failed.append(
-                BatchItemResult(
-                    uuid="",
-                    filename=Path(payload.base_folder).name,
-                    code=exc.code,
-                    message=exc.message,
-                )
-            )
-            return BatchOperationResponse(
-                ok=ok,
-                failed=failed,
-                workspace_root=str(ctx.workspaces.root_for(project.uuid)),
-            )
     raw_paths = [Path(raw) for raw in payload.paths]
     missing = [path for path in raw_paths if not path.is_file()]
     present = [path for path in raw_paths if path.is_file()]
@@ -324,7 +284,6 @@ def import_from_disk(
         )
     for path in selected:
         try:
-            require_within_project(root, path)
             relative = ctx.workspaces.import_relative_path(project, path, payload.base_folder)
             obj = ctx.objects.import_file(
                 db,
@@ -334,6 +293,7 @@ def import_from_disk(
                 relative_path=relative,
                 comment=comment,
             )
+            ctx.workspaces.copy_into_workspace(project, obj)
             ok.append(BatchItemResult(uuid=obj.uuid, filename=obj.filename, status="added", path=str(path)))
         except CreoPDMError as exc:
             failed.append(

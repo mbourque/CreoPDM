@@ -56,4 +56,4 @@ Tests use temporary directories. They never touch a real project repository.
 
 ## Data location
 
-Application data lives in `%LOCALAPPDATA%\CreoPDM\`. Project repositories can live anywhere you choose.
+Application data lives in `%LOCALAPPDATA%\CreoPDM\`. Git history and working copies live in the per-project workspace under that folder.

@@ -34,6 +34,11 @@ def folder_view_counts(objects: list[Any], current: str = "") -> dict[str, int]:
         "drawings": sum(1 for obj in view if getattr(obj, "object_type", "") == "CREO_DRAWING"),
         "documents": sum(1 for obj in view if getattr(obj, "object_type", "") in docs),
         "other": sum(1 for obj in view if getattr(obj, "object_type", "") not in cad),
+        "checked_out": sum(
+            1
+            for obj in view
+            if getattr(obj, "owned_by_me", False) or getattr(obj, "checkout_user", None)
+        ),
     }
 
 

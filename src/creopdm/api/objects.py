@@ -44,6 +44,7 @@ async def add_object(
     )
     db.refresh(obj)
     obj = ctx.objects.get_object(db, obj.uuid)
+    ctx.workspaces.copy_into_workspace(project, obj)
     return present_object(ctx, db, obj)
 
 

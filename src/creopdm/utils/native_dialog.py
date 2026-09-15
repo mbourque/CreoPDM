@@ -93,6 +93,24 @@ def pick_folder(initial_dir: Path, title: str = "Choose project folder") -> Path
         ) from fallback
 
 
+def _dialog_owner_hwnd():
+    """Own native pickers from the browser window, not the uvicorn console.
+
+    GetConsoleWindow() makes IFileOpenDialog flash and close: the HTML
+    <dialog> stays in front and Windows treats the picker as cancelled.
+    """
+    import ctypes
+    from ctypes.wintypes import HWND
+
+    user32 = ctypes.windll.user32
+    user32.GetForegroundWindow.restype = HWND
+    user32.GetForegroundWindow.argtypes = []
+    try:
+        return user32.GetForegroundWindow() or 0
+    except Exception:
+        return 0
+
+
 def default_project_location_start() -> Path:
     """Sensible starting folder for the New Project location picker."""
     for candidate in (
@@ -180,7 +198,6 @@ def _windows_folder_dialog(initial_dir: Path, title: str) -> Path | None:
 
     ole32 = ctypes.windll.ole32
     shell32 = ctypes.windll.shell32
-    kernel32 = ctypes.windll.kernel32
 
     class GUID(ctypes.Structure):
         _fields_ = [
@@ -249,13 +266,7 @@ def _windows_folder_dialog(initial_dir: Path, title: str) -> Path | None:
     set_title = method(17, HRESULT, LPCWSTR)
     get_result = method(20, HRESULT, POINTER(c_void_p))
 
-    hwnd = 0
-    try:
-        kernel32.GetConsoleWindow.restype = HWND
-        kernel32.GetConsoleWindow.argtypes = []
-        hwnd = kernel32.GetConsoleWindow() or 0
-    except Exception:
-        hwnd = 0
+    hwnd = _dialog_owner_hwnd()
 
     try:
         set_options(dialog, fos_pickfolders | fos_forcefilesystem | fos_nochangedir | fos_pathmustexist)
@@ -359,15 +370,7 @@ def _windows_open_dialog(initial_dir: Path, title: str) -> list[Path]:
 
     ofn = OPENFILENAMEW()
     ofn.lStructSize = ctypes.sizeof(OPENFILENAMEW)
-    hwnd = 0
-    try:
-        get_console = ctypes.windll.kernel32.GetConsoleWindow
-        get_console.restype = wintypes.HWND
-        get_console.argtypes = []
-        hwnd = get_console() or 0
-    except Exception:
-        hwnd = 0
-    ofn.hwndOwner = hwnd
+    ofn.hwndOwner = _dialog_owner_hwnd()
     ofn.lpstrFilter = ctypes.addressof(filter_buf)
     ofn.nFilterIndex = 1
     ofn.lpstrFile = ctypes.addressof(file_buf)

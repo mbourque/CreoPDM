@@ -32,15 +32,15 @@
                   data-project="{{ selected.uuid }}"
                   data-name="{{ selected.name }}"
                   data-number="{{ selected.number or '' }}"
-                  data-description="{{ selected.description or '' }}"
-                  data-path="{{ selected.repository_path }}">Rename</button>
+                  data-description="{{ selected.description or '' }}">Rename</button>
           <button type="button" class="btn btn-small btn-danger" id="forget-project-btn"
                   data-project="{{ selected.uuid }}"
                   data-name="{{ selected.name }}"
-                  data-path="{{ selected.repository_path }}"
-                  title="Remove Git and CreoPDM registration. CAD files are not deleted.">Forget project</button>
+                  title="Remove Git and CreoPDM registration. CAD files on disk are not deleted.">Forget project</button>
         </div>
-        <p class="muted">{{ selected.description or "No description" }} · {{ selected.repository_path }}</p>
+        {% if selected.description %}
+        <p class="muted">{{ selected.description }}</p>
+        {% endif %}
         {% if workspace_path %}
         <p class="muted small">Workspace: {{ workspace_path }}</p>
         {% endif %}
@@ -51,7 +51,7 @@
       </form>
     </div>
 
-    {% if status %}
+    {% if status and status.files %}
     <ul class="metrics" id="metric-filters">
       <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Select all files. Click again to filter. Click a third time to clear."><strong>{{ status.files }}</strong> Files</button></li>
       <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Select Creo parts. Click again to filter. Click a third time to clear."><strong>{{ status.creo_parts }}</strong> Creo Parts</button></li>
@@ -59,8 +59,13 @@
       <li><button type="button" class="metric" data-filter="drawings" data-mode="off" title="Select drawings. Click again to filter. Click a third time to clear."><strong>{{ status.drawings }}</strong> Drawings</button></li>
       <li><button type="button" class="metric" data-filter="documents" data-mode="off" title="Select documents. Click again to filter. Click a third time to clear."><strong>{{ status.documents }}</strong> Documents</button></li>
       <li><button type="button" class="metric" data-filter="other" data-mode="off" title="Select non-CAD files. Click again to filter. Click a third time to clear."><strong>{{ status.other }}</strong> Other</button></li>
+      {% if status.checked_out %}
+      <li><button type="button" class="metric" data-filter="checked_out" data-mode="off" title="Select checked out files. Click again to filter. Click a third time to clear."><strong>{{ status.checked_out }}</strong> Checked out</button></li>
+      {% endif %}
     </ul>
     <p class="muted small" id="selection-summary">Click a count to select a group. Click a row to select it; Shift-click a range; Ctrl-click to add or remove. Click a filename to open it. Double-click a row for history. Click or double-click a folder to open it.</p>
+    {% elif status %}
+    <p class="muted small" id="selection-summary">Click or double-click a folder to open it.</p>
     {% endif %}
 
     {% set pending_count = (checkin_queue.saves|length) + (checkin_queue.new_files|length) %}
@@ -132,6 +137,7 @@
               data-can-checkout="{{ '1' if obj.can_checkout else '0' }}"
               data-can-checkin="{{ '1' if obj.can_checkin else '0' }}"
               data-owned="{{ '1' if obj.owned_by_me else '0' }}"
+              data-checked-out="{{ '1' if obj.owned_by_me or obj.checkout_user else '0' }}"
               data-in-workspace="{{ '1' if obj.in_workspace else '0' }}"
               data-tree="{{ entry.folder }}"
               data-sort-name="{{ obj.relative_path }}"
@@ -281,13 +287,6 @@
     <label>Description
       <textarea name="description" rows="3" placeholder="Prototype robotic arm"></textarea>
     </label>
-    <label id="project-location-label">Location
-      <span class="path-picker">
-        <input name="repository_path" required maxlength="1024" placeholder="Choose a folder…" autocomplete="off">
-        <button type="button" class="btn" id="browse-location-btn">Browse…</button>
-      </span>
-      <span class="muted small" id="project-location-hint">Required. This is the project vault on disk. The parent folder must already exist.</span>
-    </label>
     <p class="error" id="project-error" hidden></p>
     <div class="dialog-actions">
       <button type="button" class="btn" value="cancel" id="project-cancel">Cancel</button>
@@ -299,9 +298,8 @@
 <dialog id="forget-dialog" class="dialog">
   <form method="dialog" id="forget-form">
     <h2>Forget this project</h2>
-    <p>This removes Git history (<code>.git</code>), <code>.gitignore</code>, CreoPDM’s <code>README.md</code>, and CreoPDM registration. Workspace copies are deleted.</p>
-    <p><strong>CAD files in the project folder are not deleted.</strong></p>
-    <p class="muted small" id="forget-path"></p>
+    <p>This deletes the workspace (including Git history) and unregisters the project.</p>
+    <p><strong>CAD files on disk are not deleted.</strong></p>
     <label>Type the project name to confirm
       <input name="confirm_name" id="forget-confirm" required maxlength="255" autocomplete="off">
     </label>
@@ -316,15 +314,15 @@
 <dialog id="add-dialog" class="dialog">
   <form method="dialog" id="add-form" {% if selected %}data-project="{{ selected.uuid }}"{% endif %}>
     <h2>Add files</h2>
-    <p class="muted">Choose Files or Choose Folder from this project location only. Files from other folders cannot be added. Numbered names such as <code>shaft.prt.3</code> keep only the latest save.</p>
-    <p class="muted small" id="add-folder-label">{% if selected %}Project: {{ selected.repository_path }}{% endif %}</p>
+    <p class="muted">Files are copied into the workspace. Numbered names such as <code>shaft.prt.3</code> keep only the latest save.</p>
+    <p class="muted small" id="add-folder-label">{% if selected %}Project: {{ selected.name }}{% endif %}</p>
     <div class="dropzone" id="dropzone">
       <div class="dropzone-actions">
         <button type="button" class="btn" id="choose-workspace-files">Choose Files</button>
         <button type="button" class="btn" id="choose-workspace-folder">Choose Folder</button>
       </div>
       <ul id="chosen-file-list" class="detect-list"></ul>
-      <span class="muted small">The Windows dialog starts in the project location. Paths outside that folder are not added.</span>
+      <span class="muted small">Choose files or a folder from anywhere. Copies go into the workspace.</span>
     </div>
     <label>Comment
       <input name="comment" placeholder="Initial models">

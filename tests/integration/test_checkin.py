@@ -9,7 +9,7 @@ def _create_part(client, repo_parent: Path):
     location = repo_parent / "RobotArm"
     project = client.post(
         "/api/projects",
-        json={"name": "Robot Arm", "repository_path": str(location)},
+        json={"name": "Robot Arm"},
     ).json()
     created = client.post(
         f"/api/projects/{project['uuid']}/objects",
@@ -110,7 +110,28 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     assert "shaft.prt" in files
     assert "pin.prt" in files
     assert files["pin.prt"]["display_revision"] == "A.1"
-    assert (Path(project["repository_path"]) / "pin.prt").is_file()
+    assert (data_dir / "workspaces" / project["uuid"] / "pin.prt").is_file()
+
+
+@requires_git
+def test_workspace_watch_stamp_changes_when_creo_saves(client, repo_parent, data_dir):
+    project, obj = _create_part(client, repo_parent)
+    assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
+    first = client.get(f"/api/projects/{project['uuid']}/workspace-watch")
+    assert first.status_code == 200, first.text
+    before = first.json()
+    assert before["stamp"]
+    workspace = data_dir / "workspaces" / project["uuid"]
+    (workspace / "shaft.prt.2").write_bytes(b"creo-save")
+    second = client.get(f"/api/projects/{project['uuid']}/workspace-watch")
+    assert second.status_code == 200, second.text
+    after = second.json()
+    assert after["stamp"] != before["stamp"]
+    assert after["pending_saves"] >= 1
+    listing = client.get(f"/api/objects/{obj['uuid']}")
+    assert listing.status_code == 200
+    assert listing.json()["modified_locally"] is True
+    assert listing.json()["can_checkin"] is True
 
 
 @requires_git
@@ -134,7 +155,7 @@ def test_checkin_keeps_creo_numbered_filename(client, repo_parent, data_dir):
     payload = checked.json()
     assert payload["filename"] == "shaft.prt.4"
     assert payload["relative_path"] == "shaft.prt.4"
-    assert (Path(project["repository_path"]) / "shaft.prt.4").is_file()
+    assert (data_dir / "workspaces" / project["uuid"] / "shaft.prt.4").is_file()
 
     history = client.get(f"/api/objects/{obj['uuid']}/history").json()
     assert history[0]["filename"] == "shaft.prt.4"
@@ -152,7 +173,7 @@ def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_paren
     location = repo_parent / "RobotArm"
     project = client.post(
         "/api/projects",
-        json={"name": "Robot Arm", "repository_path": str(location)},
+        json={"name": "Robot Arm"},
     ).json()
     created = client.post(
         f"/api/projects/{project['uuid']}/objects",
@@ -196,7 +217,7 @@ def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_paren
     payload = checked.json()
     assert payload["filename"] == "shaft.prt.4"
     assert payload["relative_path"] == "shaft.prt.4"
-    vault = Path(project["repository_path"])
+    vault = data_dir / "workspaces" / project["uuid"]
     assert (vault / "shaft.prt.4").read_bytes() == b"creo-save-4"
     page = client.get(f"/projects/{project['uuid']}/objects/{obj['uuid']}")
     assert page.status_code == 200
@@ -211,7 +232,7 @@ def test_force_checkin_records_workspace_save_without_checkout(client, repo_pare
     location = repo_parent / "ForceArm"
     project = client.post(
         "/api/projects",
-        json={"name": "Force Arm", "repository_path": str(location)},
+        json={"name": "Force Arm"},
     ).json()
     created = client.post(
         f"/api/projects/{project['uuid']}/objects",
@@ -248,7 +269,7 @@ def test_force_checkin_records_workspace_save_without_checkout(client, repo_pare
     assert payload["filename"] == "shaft.prt.5"
     assert payload["owned_by_me"] is False
     assert payload["can_checkin"] is False
-    assert (Path(project["repository_path"]) / "shaft.prt.5").read_bytes() == b"save-5"
+    assert (workspace / "shaft.prt.5").read_bytes() == b"save-5"
 
 
 @requires_git
@@ -256,7 +277,7 @@ def test_checkout_keeps_newer_workspace_save(client, repo_parent, data_dir):
     location = repo_parent / "KeepLocal"
     project = client.post(
         "/api/projects",
-        json={"name": "Keep Local", "repository_path": str(location)},
+        json={"name": "Keep Local"},
     ).json()
     created = client.post(
         f"/api/projects/{project['uuid']}/objects",
@@ -280,7 +301,7 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     location = repo_parent / "QueueArm"
     project = client.post(
         "/api/projects",
-        json={"name": "Queue Arm", "repository_path": str(location)},
+        json={"name": "Queue Arm"},
     ).json()
     created = client.post(
         f"/api/projects/{project['uuid']}/objects",
@@ -311,7 +332,7 @@ def test_project_checkin_queue_adds_new_workspace_file_without_checkout(client, 
     location = repo_parent / "NewFileArm"
     project = client.post(
         "/api/projects",
-        json={"name": "New File Arm", "repository_path": str(location)},
+        json={"name": "New File Arm"},
     ).json()
     created = client.post(
         f"/api/projects/{project['uuid']}/objects",
@@ -347,7 +368,7 @@ def test_project_checkin_queue_adds_new_workspace_file_without_checkout(client, 
     listed = {item["filename"] for item in listing.json()}
     assert "bushing.prt" in listed
     assert "shaft.prt" in listed
-    assert (Path(project["repository_path"]) / "bushing.prt").read_bytes() == b"new-bushing"
+    assert (workspace / "bushing.prt").read_bytes() == b"new-bushing"
 
 
 @requires_git
@@ -355,7 +376,7 @@ def test_project_checkin_queue_records_pending_save_and_new_file(client, repo_pa
     location = repo_parent / "QueueCheckin"
     project = client.post(
         "/api/projects",
-        json={"name": "Queue Checkin", "repository_path": str(location)},
+        json={"name": "Queue Checkin"},
     ).json()
     created = client.post(
         f"/api/projects/{project['uuid']}/objects",
@@ -385,4 +406,4 @@ def test_project_checkin_queue_records_pending_save_and_new_file(client, repo_pa
     assert current["filename"] == "shaft.prt.4"
     listing = {item["filename"] for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
     assert "bushing.prt" in listing
-    assert (Path(project["repository_path"]) / "shaft.prt.4").read_bytes() == b"save-4"
+    assert (workspace / "shaft.prt.4").read_bytes() == b"save-4"

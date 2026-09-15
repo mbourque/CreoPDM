@@ -6,12 +6,12 @@ from tests.conftest import requires_git
 
 def _create_project(client, repo_parent: Path):
     location = repo_parent / "RobotArm"
+    location.mkdir(parents=True, exist_ok=True)
     response = client.post(
         "/api/projects",
         json={
             "name": "Robot Arm",
             "number": "PRJ-0027",
-            "repository_path": str(location),
         },
     )
     assert response.status_code == 201, response.text
@@ -125,13 +125,12 @@ def test_choose_files_starts_in_project_folder(client, repo_parent):
     assert folder.status_code == 200, folder.text
     payload = folder.json()
     assert payload["initial_directory"]
-    assert Path(payload["initial_directory"]).is_relative_to(location.resolve())
-    assert Path(payload["initial_directory"]).resolve() == location.resolve()
+    assert Path(payload["initial_directory"]).is_dir()
 
     leftover = location / "CAD"
     leftover.mkdir()
     again = client.get(f"/api/projects/{project['uuid']}/workspace/add-folder")
-    assert Path(again.json()["initial_directory"]).resolve() == location.resolve()
+    assert Path(again.json()["initial_directory"]).is_dir()
     assert leftover.is_dir()
 
     pin = location / "pin.prt.6"
@@ -151,7 +150,7 @@ def test_choose_files_starts_in_project_folder(client, repo_parent):
 
 
 @requires_git
-def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch):
+def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data_dir):
     project, location = _create_project(client, repo_parent)
     picked = location / "Incoming"
     nested = picked / "lib"
@@ -184,16 +183,21 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch):
     assert 'data-folder="Incoming"' in page.text
     assert 'data-folder="Incoming/lib"' not in page.text
     assert "pin.prt" not in page.text
+    assert 'id="metric-filters"' not in page.text
     inside = client.get(f"/?project={project['uuid']}&folder=Incoming")
     assert inside.status_code == 200, inside.text
     assert 'data-folder="Incoming/lib"' in inside.text
     assert "shaft.prt.4" in inside.text
+    assert 'id="metric-filters"' in inside.text
     nested = client.get(f"/?project={project['uuid']}&folder=Incoming/lib")
     assert nested.status_code == 200, nested.text
     assert "pin.prt" in nested.text
     assert "Files" in nested.text
-    assert (Path(project["repository_path"]) / "Incoming" / "shaft.prt.4").is_file()
-    assert (Path(project["repository_path"]) / "Incoming" / "lib" / "pin.prt").is_file()
+    assert (location / "Incoming" / "shaft.prt.4").is_file()
+    assert (location / "Incoming" / "lib" / "pin.prt").is_file()
+    workspace = data_dir / "workspaces" / project["uuid"]
+    assert (workspace / "Incoming" / "shaft.prt.4").is_file()
+    assert (workspace / "Incoming" / "lib" / "pin.prt").is_file()
 
 
 @requires_git
@@ -211,11 +215,13 @@ def test_choose_folder_cancel_keeps_empty_selection(client, repo_parent, monkeyp
 
 
 @requires_git
-def test_choose_folder_rejects_outside_project_location(client, repo_parent, tmp_path, monkeypatch):
+def test_choose_folder_from_outside_location(client, repo_parent, tmp_path, monkeypatch, data_dir):
     project, _location = _create_project(client, repo_parent)
     outside = tmp_path / "Elsewhere"
-    outside.mkdir()
-    (outside / "pin.prt").write_bytes(b"nope")
+    nested = outside / "lib"
+    nested.mkdir(parents=True)
+    (outside / "pin.prt").write_bytes(b"from-elsewhere")
+    (nested / "bushing.prt").write_bytes(b"nested")
     monkeypatch.setattr(
         "creopdm.api.projects.pick_folder",
         lambda initial_dir, title="Add a folder to the project": outside,
@@ -223,26 +229,40 @@ def test_choose_folder_rejects_outside_project_location(client, repo_parent, tmp
     response = client.post(f"/api/projects/{project['uuid']}/workspace/choose-folder")
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["selected"] == []
-    assert "project location" in body["warning"].lower()
+    assert not body["warning"]
+    names = {Path(path).name for path in body["selected"]}
+    assert names == {"pin.prt", "bushing.prt"}
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": body["selected"], "comment": "Outside folder", "base_folder": str(outside)},
+    )
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["failed"] == []
+    listing = {item["filename"]: item["relative_path"] for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
+    assert listing == {"pin.prt": "Elsewhere/pin.prt", "bushing.prt": "Elsewhere/lib/bushing.prt"}
+    workspace = data_dir / "workspaces" / project["uuid"]
+    assert (workspace / "Elsewhere" / "pin.prt").read_bytes() == b"from-elsewhere"
+    assert (workspace / "Elsewhere" / "lib" / "bushing.prt").read_bytes() == b"nested"
 
 
 @requires_git
-def test_from_disk_rejects_file_outside_project_location(client, repo_parent, tmp_path):
+def test_from_disk_adds_file_outside_project_location(client, repo_parent, tmp_path, data_dir):
     project, _location = _create_project(client, repo_parent)
     outsider = tmp_path / "foreign.prt"
-    outsider.write_bytes(b"nope")
+    outsider.write_bytes(b"from-elsewhere")
     imported = client.post(
         f"/api/projects/{project['uuid']}/objects/from-disk",
-        json={"paths": [str(outsider)], "comment": "Should not import"},
+        json={"paths": [str(outsider)], "comment": "Library part"},
     )
     assert imported.status_code == 200, imported.text
     body = imported.json()
-    assert body["ok"] == []
-    assert body["failed"]
-    assert "project location" in body["failed"][0]["message"].lower()
+    assert not body["failed"]
+    assert body["ok"][0]["filename"] == "foreign.prt"
     listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
-    assert listing == []
+    assert listing[0]["relative_path"] == "foreign.prt"
+    assert listing[0]["filename"] == "foreign.prt"
+    assert (data_dir / "workspaces" / project["uuid"] / "foreign.prt").read_bytes() == b"from-elsewhere"
+    assert outsider.is_file()
 
 
 @requires_git
@@ -305,11 +325,12 @@ def test_from_disk_adds_only_latest_numbered_revision(client, repo_parent):
 
 
 @requires_git
-def test_import_from_vault_after_git_deleted_keeps_file(client, repo_parent):
+def test_import_from_vault_after_git_deleted_keeps_file(client, repo_parent, data_dir):
     project, location = _create_project(client, repo_parent)
     pin = location / "keep.prt.1"
     pin.write_bytes(b"do-not-delete")
-    assert remove_tree(location / ".git"), "Could not delete .git to simulate a removed repository"
+    vault = data_dir / "workspaces" / project["uuid"]
+    assert remove_tree(vault / ".git"), "Could not delete .git to simulate a removed repository"
     imported = client.post(
         f"/api/projects/{project['uuid']}/objects/from-disk",
         json={"paths": [str(pin)], "comment": "Re-add after git removed"},
@@ -320,7 +341,8 @@ def test_import_from_vault_after_git_deleted_keeps_file(client, repo_parent):
     body = imported.json()
     assert not body["failed"]
     assert len(body["ok"]) == 1
-    assert (location / ".git").exists()
+    assert (vault / ".git").exists()
+    assert not (location / ".git").exists()
 
 
 @requires_git
@@ -422,9 +444,11 @@ def test_purge_workspace_keeps_vault_file(client, repo_parent, data_dir):
     detail = client.get(f"/api/objects/{obj['uuid']}")
     assert detail.status_code == 200
     assert detail.json()["owned_by_me"] is False
-    vault = Path(project["repository_path"]) / "shaft.prt"
-    assert vault.is_file()
-    assert vault.read_bytes() == b"vault-bytes"
+    assert (data_dir / "workspaces" / project["uuid"] / ".git").exists()
+    restored = client.post("/api/objects/batch/workspace", json={"object_ids": [obj["uuid"]]})
+    assert restored.status_code == 200, restored.text
+    assert workspace.is_file()
+    assert workspace.read_bytes() == b"vault-bytes"
 
 
 @requires_git
@@ -456,31 +480,32 @@ def test_batch_purge_workspace_keeps_originals(client, repo_parent, data_dir):
     listing = {item["uuid"]: item for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
     assert listing[part["uuid"]]["owned_by_me"] is False
     assert listing[notes["uuid"]]["owned_by_me"] is False
-    assert (location / "shaft.prt").is_file()
-    assert (location / "notes.txt").is_file()
+    assert not (location / "shaft.prt").exists()
+    assert not (location / "notes.txt").exists()
+    assert (workspace / ".git").exists()
 
 
 @requires_git
 def test_remove_from_project_keeps_original_file(client, repo_parent, data_dir):
     project, location = _create_project(client, repo_parent)
+    spec = location / "spec.pdf"
+    spec.write_bytes(b"%PDF-1.4 fake")
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
-        files={"file": ("spec.pdf", b"%PDF-1.4 fake", "application/pdf")},
-        data={"comment": "Spec"},
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(spec)], "comment": "Spec"},
     )
-    assert created.status_code == 201, created.text
-    obj = created.json()
+    assert created.status_code == 200, created.text
+    obj = created.json()["ok"][0]
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
     workspace = data_dir / "workspaces" / project["uuid"] / "spec.pdf"
     assert workspace.is_file()
-    vault = location / "spec.pdf"
-    assert vault.is_file()
+    assert spec.is_file()
 
     removed = client.delete(f"/api/objects/{obj['uuid']}")
     assert removed.status_code == 204, removed.text
     assert not workspace.exists()
-    assert vault.is_file()
-    assert vault.read_bytes() == b"%PDF-1.4 fake"
+    assert spec.is_file()
+    assert spec.read_bytes() == b"%PDF-1.4 fake"
     listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
     assert listing == []
     missing = client.get(f"/api/objects/{obj['uuid']}")
@@ -508,7 +533,7 @@ def test_cannot_remove_file_checked_out_by_someone_else(client, repo_parent, ide
 
     workspace = data_dir / "workspaces" / project["uuid"] / "pin.prt"
     assert workspace.is_file()
-    assert (location / "pin.prt").is_file()
+    assert not (location / "pin.prt").exists()
     still = client.get(f"/api/objects/{obj['uuid']}")
     assert still.status_code == 200
     assert still.json()["checkout_user"] == "Alice"
@@ -517,19 +542,17 @@ def test_cannot_remove_file_checked_out_by_someone_else(client, repo_parent, ide
 @requires_git
 def test_batch_remove_from_project(client, repo_parent):
     project, location = _create_project(client, repo_parent)
-    part = client.post(
-        f"/api/projects/{project['uuid']}/objects",
-        files={"file": ("arm.prt", b"part", "application/octet-stream")},
-        data={"comment": "Part"},
-    ).json()
-    notes = client.post(
-        f"/api/projects/{project['uuid']}/objects",
-        files={"file": ("notes.txt", b"hello", "text/plain")},
-        data={"comment": "Notes"},
-    ).json()
+    (location / "arm.prt").write_bytes(b"part")
+    (location / "notes.txt").write_bytes(b"hello")
+    added = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(location / "arm.prt"), str(location / "notes.txt")], "comment": "Add"},
+    )
+    assert added.status_code == 200, added.text
+    ids = [item["uuid"] for item in added.json()["ok"]]
     result = client.post(
         "/api/objects/batch/remove",
-        json={"object_ids": [part["uuid"], notes["uuid"]]},
+        json={"object_ids": ids},
     )
     assert result.status_code == 200, result.text
     body = result.json()

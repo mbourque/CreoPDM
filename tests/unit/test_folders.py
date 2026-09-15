@@ -28,10 +28,37 @@ def test_folder_view_counts_uses_immediate_files_only():
         "drawings": 0,
         "documents": 1,
         "other": 1,
+        "checked_out": 0,
     }
     nested = folder_view_counts(objects, "Incoming/lib")
     assert nested["files"] == 1
     assert nested["creo_parts"] == 1
+    only_nested = [
+        SimpleNamespace(filename="pin.prt", relative_path="ribbed2/pin.prt", object_type="CREO_PART"),
+        SimpleNamespace(filename="notes.pdf", relative_path="ribbed2/notes.pdf", object_type="PDF"),
+    ]
+    assert folder_view_counts(only_nested, "")["files"] == 0
+
+
+def test_folder_view_counts_checked_out():
+    objects = [
+        SimpleNamespace(
+            filename="shaft.prt",
+            relative_path="shaft.prt",
+            object_type="CREO_PART",
+            owned_by_me=True,
+        ),
+        SimpleNamespace(
+            filename="notes.pdf",
+            relative_path="notes.pdf",
+            object_type="PDF",
+            checkout_user="Bob",
+        ),
+        SimpleNamespace(filename="pin.prt", relative_path="pin.prt", object_type="CREO_PART"),
+    ]
+    counts = folder_view_counts(objects, "")
+    assert counts["checked_out"] == 2
+    assert counts["files"] == 3
 
 
 def test_folder_of_root_and_nested():

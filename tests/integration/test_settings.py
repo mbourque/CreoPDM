@@ -58,7 +58,7 @@ def test_cad_extensions_setting_changes_classification(client, repo_parent):
     location = repo_parent / "CadExt"
     project = client.post(
         "/api/projects",
-        json={"name": "Cad Ext", "repository_path": str(location)},
+        json={"name": "Cad Ext"},
     )
     assert project.status_code == 201, project.text
     created = client.post(
@@ -83,7 +83,7 @@ def test_custom_workspace_used_on_checkout(client, repo_parent, tmp_path):
     location = repo_parent / "WorkspaceProj"
     project = client.post(
         "/api/projects",
-        json={"name": "Workspace Proj", "repository_path": str(location)},
+        json={"name": "Workspace Proj"},
     ).json()
     created = client.post(
         f"/api/projects/{project['uuid']}/objects",
