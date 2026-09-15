@@ -61,6 +61,13 @@
     <p class="muted small" id="selection-summary">Click a count to select a group. Ctrl-click a row to select it; Shift-click to select a range. Click a filename to open it. Click a row for history.</p>
     {% endif %}
 
+    {% set pending_count = (checkin_queue.saves|length) + (checkin_queue.new_files|length) %}
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab is-active" data-tab="files">Files</button>
+      <button type="button" class="tab" data-tab="changes">Would check in{% if pending_count %} · {{ pending_count }}{% endif %}</button>
+    </div>
+
+    <section class="tab-panel" id="panel-files">
     <div class="table-wrap">
       <table class="grid" id="object-table">
         <thead>
@@ -108,6 +115,56 @@
         </tbody>
       </table>
     </div>
+    </section>
+
+    <section class="tab-panel" id="panel-changes" hidden>
+      <p class="muted small">Workspace files that are not in the last checked-in version. Check in a listed object to record its save; checked new files are added with that check-in.</p>
+      <div class="table-wrap">
+        <table class="grid" id="changes-table">
+          <thead>
+            <tr>
+              <th data-sort="change" aria-sort="none" title="Sort by change. Click again to reverse.">Change</th>
+              <th data-sort="filename" aria-sort="none" title="Sort by filename. Click again to reverse.">Filename</th>
+              <th data-sort="detail" aria-sort="none" title="Sort by detail. Click again to reverse.">Detail</th>
+              <th data-sort="size" aria-sort="none" title="Sort by size. Click again to reverse.">Size</th>
+              <th data-sort="date" aria-sort="none" title="Sort by date. Click again to reverse.">Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in checkin_queue.saves %}
+            <tr class="is-pending">
+              <td>{% if item.newer_save %}Newer Creo save{% else %}Modified{% endif %}</td>
+              <td class="filename-cell">
+                <a href="/projects/{{ selected.uuid }}/objects/{{ item.uuid }}#history">{{ item.filename }}</a>
+                {% if item.newer_save %}
+                <div class="muted small">from {{ item.recorded_filename }}</div>
+                {% endif %}
+              </td>
+              <td>{{ item.next_display }} · not checked in</td>
+              <td>{{ item.file_size }} bytes</td>
+              <td>{{ item.saved_at }}</td>
+            </tr>
+            {% endfor %}
+            {% for item in checkin_queue.new_files %}
+            <tr>
+              <td>New file</td>
+              <td class="filename-cell">{{ item.filename }}
+                <div class="muted small">{{ item.relative_path }}</div>
+              </td>
+              <td>Not in the project yet. Offered when you check in a nearby file.</td>
+              <td>{{ item.size }} bytes</td>
+              <td>—</td>
+            </tr>
+            {% endfor %}
+            {% if not checkin_queue.saves and not checkin_queue.new_files %}
+            <tr class="empty-row">
+              <td colspan="5">Nothing in the workspace is waiting to be checked in.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
     {% else %}
     <div class="hero">
       <h1>{{ app_name }}</h1>
@@ -132,7 +189,13 @@
       <button type="button" class="btn" id="open-btn" disabled>Open</button>
     </span>
     <button type="button" class="btn" id="checkout-btn" disabled>Checkout</button>
-    <button type="button" class="btn" id="checkin-btn" disabled>Check In</button>
+    <span class="toolbar-tip" title="Check in selected files, or add new files Creo saved in the workspace.">
+      <button type="button" class="btn" id="checkin-btn"
+              {% if selected %}data-project="{{ selected.uuid }}"
+              data-new-files="{{ checkin_queue.new_files|length }}"
+              data-pending-saves="{{ checkin_queue.saves|length }}"{% endif %}
+              {% if not selected or ((checkin_queue.new_files|length) == 0 and (checkin_queue.saves|length) == 0) %}disabled{% endif %}>Check In</button>
+    </span>
     <span class="toolbar-tip" title="Cancel your checkout on every selected file you own. Workspace copies are restored from the original. Files in your original project folder are not deleted.">
       <button type="button" class="btn" id="undo-btn" disabled>Undo Checkout</button>
     </span>
@@ -223,15 +286,15 @@
     <h2>Check In</h2>
     <dl class="kv">
       <dt>Object</dt><dd id="checkin-filename">—</dd>
-      <dt>Current</dt><dd id="checkin-current">—</dd>
-      <dt>New version</dt><dd id="checkin-next">—</dd>
+      <dt id="checkin-current-label">Current</dt><dd id="checkin-current">—</dd>
+      <dt id="checkin-next-label">New version</dt><dd id="checkin-next">—</dd>
     </dl>
     <label>Comment
       <textarea name="comment" id="checkin-comment" rows="3" required placeholder="Changed shaft diameter for new bearing."></textarea>
     </label>
     <ul class="detect-list" id="checkin-changes"></ul>
     <div id="checkin-new-wrap" hidden>
-      <p class="muted small">New files found in the workspace. These are models Creo saved next to the checked-out file. Checked items are added to the project with this check-in.</p>
+      <p class="muted small" id="checkin-new-help">New files found in the workspace. Checked items are added to the project with this check-in.</p>
       <div id="checkin-new-files"></div>
     </div>
     <p class="pending-note" id="checkin-force-warn" hidden></p>

@@ -125,6 +125,20 @@ class CheckinRequest(BaseModel):
         return stripped
 
 
+class QueueCheckinRequest(BaseModel):
+    comment: str = Field(min_length=1)
+    object_ids: list[str] = Field(default_factory=list)
+    add_relative_paths: list[str] = Field(default_factory=list)
+
+    @field_validator("comment")
+    @classmethod
+    def comment_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("A check-in comment is required.")
+        return stripped
+
+
 class CheckinNewFile(BaseModel):
     filename: str
     relative_path: str
@@ -143,6 +157,9 @@ class CheckinPreviewResponse(BaseModel):
     can_checkin: bool
     force_checkin: bool = False
     warning: str = ""
+    queue_mode: bool = False
+    object_ids: list[str] = Field(default_factory=list)
+    pending_files: list[str] = Field(default_factory=list)
     new_files: list[CheckinNewFile] = Field(default_factory=list)
 
 

@@ -152,6 +152,26 @@ class WorkspaceService:
             "saved_at": stamp.strftime("%Y-%m-%d %H:%M"),
         }
 
+    def project_checkin_queue(
+        self,
+        project: Project,
+        objects: list[EngineeringObject],
+    ) -> dict[str, list]:
+        """Files in the workspace that would be recorded on check-in."""
+        saves: list[dict[str, str | int | bool]] = []
+        for obj in objects:
+            pending = self.pending_workspace_save(project, obj)
+            if pending is None:
+                continue
+            saves.append(
+                {
+                    **pending,
+                    "uuid": obj.uuid,
+                    "kind": "newer_save" if pending["newer_save"] else "modified",
+                }
+            )
+        return {"saves": saves, "new_files": self.list_untracked(project, objects)}
+
     def materialize_many(
         self,
         session_objects: list[tuple[Project, EngineeringObject]],

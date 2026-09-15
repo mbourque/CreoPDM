@@ -17,12 +17,14 @@ from creopdm.schemas.common import (
     FolderPickResponse,
     ForgetProjectRequest,
     ForgetProjectResponse,
+    CheckinPreviewResponse,
     ImportLocalRequest,
     ObjectResponse,
     ProjectCreateRequest,
     ProjectResponse,
     ProjectStatusResponse,
     ProjectUpdateRequest,
+    QueueCheckinRequest,
     WorkspacePickerResponse,
 )
 from creopdm.utils.launch import open_windows_folder
@@ -146,6 +148,36 @@ def project_status(
 ) -> ProjectStatusResponse:
     counts = ctx.projects.project_status(db, project_id)
     return ProjectStatusResponse.model_validate(counts)
+
+
+@router.get("/api/projects/{project_id}/checkin-preview", response_model=CheckinPreviewResponse)
+def project_checkin_preview(
+    project_id: str,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> CheckinPreviewResponse:
+    project = ctx.projects.get_project(db, project_id)
+    return CheckinPreviewResponse.model_validate(ctx.checkins.preview_queue(db, project))
+
+
+@router.post("/api/projects/{project_id}/checkin-queue", response_model=BatchOperationResponse)
+def project_checkin_queue(
+    project_id: str,
+    payload: QueueCheckinRequest,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BatchOperationResponse:
+    project = ctx.projects.get_project(db, project_id)
+    result = ctx.checkins.checkin_queue(
+        db,
+        project,
+        payload.comment,
+        payload.object_ids,
+        payload.add_relative_paths,
+    )
+    return BatchOperationResponse.model_validate(
+        {**result, "workspace_root": str(ctx.workspaces.root_for(project.uuid))}
+    )
 
 
 @router.get("/api/projects/{project_id}/workspace/add-folder", response_model=WorkspacePickerResponse)

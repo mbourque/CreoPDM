@@ -12,6 +12,7 @@ from creopdm.constants import ActivityAction, CheckoutStatus, DEFAULT_REVISION, 
 from creopdm.creo.base import CreoConnector, CreoModelRef
 from creopdm.exceptions import (
     CheckoutOwnershipError,
+    CreoPDMError,
     PathValidationError,
     ReleasedObjectError,
     RepositoryError,
@@ -129,7 +130,7 @@ class CheckinService:
                         f"{obj.filename} is {obj.lifecycle_state.replace('_', ' ').title()} and cannot be checked in."
                     )
             if to_add:
-                self._add_workspace_files(session, project, obj, to_add, message)
+                self._add_workspace_files(session, project, to_add, message, obj.filename)
             workspace_file = self._workspaces.locate_content(project.uuid, obj)
             content_hash = calculate_sha256(workspace_file)
             file_size = workspace_file.stat().st_size
@@ -223,6 +224,89 @@ class CheckinService:
             session.refresh(obj)
             return obj
 
+    def preview_queue(self, session: Session, project) -> dict[str, str | bool | list]:
+        siblings = self._objects.list_objects(session, project.id)
+        queue = self._workspaces.project_checkin_queue(project, siblings)
+        new_files = []
+        for item in queue["new_files"]:
+            new_files.append(
+                {
+                    "filename": item["filename"],
+                    "relative_path": item["relative_path"],
+                    "path": item["path"],
+                    "object_type": item["object_type"],
+                    "same_folder": True,
+                }
+            )
+        pending = queue["saves"]
+        names = [str(item["filename"]) for item in pending] + [str(item["filename"]) for item in new_files]
+        label = names[0] if len(names) == 1 else f"{len(names)} workspace files"
+        return {
+            "filename": label,
+            "current_display": "—",
+            "next_display": "—",
+            "file_modified": bool(names),
+            "parameters_changed": False,
+            "dependencies_unchanged": True,
+            "can_checkin": bool(names),
+            "force_checkin": False,
+            "warning": "",
+            "queue_mode": True,
+            "new_files": new_files,
+            "object_ids": [str(item["uuid"]) for item in pending],
+            "pending_files": [str(item["filename"]) for item in pending],
+        }
+
+    def checkin_queue(
+        self,
+        session: Session,
+        project,
+        comment: str,
+        object_ids: list[str] | None = None,
+        add_relative_paths: list[str] | None = None,
+    ) -> dict[str, list]:
+        message = (comment or "").strip()
+        if not message:
+            raise ValidationAppError("A check-in comment is required.")
+        ok: list[dict[str, str]] = []
+        failed: list[dict[str, str]] = []
+        for object_uuid in object_ids or []:
+            filename = object_uuid
+            try:
+                obj = self.checkin(session, object_uuid, message, None)
+                ok.append({"uuid": obj.uuid, "filename": obj.filename, "status": "checked_in"})
+            except CreoPDMError as exc:
+                try:
+                    filename = self._objects.get_object(session, object_uuid).filename
+                except CreoPDMError:
+                    pass
+                failed.append(
+                    {
+                        "uuid": object_uuid,
+                        "filename": filename,
+                        "code": exc.code,
+                        "message": exc.message,
+                    }
+                )
+        to_add = [item.replace("\\", "/").strip() for item in (add_relative_paths or []) if item.strip()]
+        if to_add:
+            try:
+                self._add_workspace_files(session, project, to_add, message, "workspace")
+                for relative in to_add:
+                    ok.append({"uuid": "", "filename": Path(relative).name, "status": "added", "path": relative})
+            except CreoPDMError as exc:
+                failed.append(
+                    {
+                        "uuid": "",
+                        "filename": Path(to_add[0]).name if to_add else "",
+                        "code": exc.code,
+                        "message": exc.message,
+                    }
+                )
+        if not ok and not failed:
+            raise ValidationAppError("There are no workspace files to check in.")
+        return {"ok": ok, "failed": failed}
+
     def _new_files_for(
         self,
         project,
@@ -253,9 +337,9 @@ class CheckinService:
         self,
         session: Session,
         project,
-        obj: EngineeringObject,
         relative_paths: list[str],
         comment: str,
+        source_label: str = "workspace",
     ) -> None:
         siblings = self._objects.list_objects(session, project.id)
         available = {
@@ -283,7 +367,7 @@ class CheckinService:
                 original_name=source.name,
                 comment=comment,
             )
-            logger.info("Added %s during check-in of %s", item["filename"], obj.filename)
+            logger.info("Added %s during check-in of %s", item["filename"], source_label)
 
     def _capture_parameters(
         self,

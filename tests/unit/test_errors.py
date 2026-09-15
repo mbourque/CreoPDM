@@ -9,3 +9,11 @@ def test_unknown_project_error_envelope(client):
     assert "message" in payload["error"]
     assert payload["error"]["details"]["uuid"] == "00000000-0000-0000-0000-000000000000"
     assert APP_NAME not in payload["error"]["code"]
+
+
+def test_validation_error_envelope_is_json(client):
+    response = client.post("/api/projects", json={"name": "No Path", "repository_path": "   "})
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error"]["code"] == "VALIDATION_ERROR"
+    assert isinstance(payload["error"]["details"]["errors"], list)

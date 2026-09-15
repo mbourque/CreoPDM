@@ -48,19 +48,26 @@ def home(
     selected = None
     objects = []
     status = None
+    checkin_queue: dict[str, list] = {"saves": [], "new_files": []}
+    orm_objects = []
+    project = None
     if selected_uuid:
         try:
             project = ctx.projects.get_project(db, selected_uuid)
             selected = project_to_response(project)
-            objects = [present_object(ctx, db, obj) for obj in ctx.objects.list_objects(db, project.id)]
+            orm_objects = ctx.objects.list_objects(db, project.id)
+            objects = [present_object(ctx, db, obj) for obj in orm_objects]
             status = ctx.projects.project_status(db, project.uuid)
         except ProjectNotFoundError:
             selected = None
     elif projects:
         selected = projects[0]
         project = ctx.projects.get_project(db, selected.uuid)
-        objects = [present_object(ctx, db, obj) for obj in ctx.objects.list_objects(db, project.id)]
+        orm_objects = ctx.objects.list_objects(db, project.id)
+        objects = [present_object(ctx, db, obj) for obj in orm_objects]
         status = ctx.projects.project_status(db, project.uuid)
+    if project is not None:
+        checkin_queue = ctx.workspaces.project_checkin_queue(project, orm_objects)
 
     return render(
         request,
@@ -73,6 +80,7 @@ def home(
             "selected": selected,
             "objects": objects,
             "status": status,
+            "checkin_queue": checkin_queue,
             "workspace_path": str(ctx.config.workspace_for_project(selected.uuid)) if selected else None,
             "object_types": [item.value for item in ObjectType],
             "revision_display": revision_display,

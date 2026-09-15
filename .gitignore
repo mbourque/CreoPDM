@@ -8,6 +8,7 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+pytest-last.log
 dist/
 build/
 *.spec

@@ -372,7 +372,9 @@
     if (openBtn) openBtn.disabled = ids.length !== 1;
     if (historyBtn) historyBtn.disabled = ids.length !== 1;
     if (checkoutBtn) checkoutBtn.disabled = !selected.some((row) => row.dataset.canCheckout === "1");
-    if (checkinBtn) checkinBtn.disabled = selected.filter((row) => row.dataset.canCheckin === "1").length !== 1;
+    const checkinable = selected.filter((row) => row.dataset.canCheckin === "1");
+    const queued = Number(checkinBtn?.dataset.newFiles || 0) + Number(checkinBtn?.dataset.pendingSaves || 0);
+    if (checkinBtn) checkinBtn.disabled = checkinable.length === 0 && queued === 0;
     if (undoBtn) undoBtn.disabled = !selected.some((row) => row.dataset.owned === "1");
     if (workspaceBtn) workspaceBtn.disabled = ids.length === 0;
     if (purgeBtn) purgeBtn.disabled = ids.length === 0;
@@ -586,10 +588,18 @@
 
   checkinBtn?.addEventListener("click", async () => {
     const owned = selectedRows().filter((row) => row.dataset.canCheckin === "1");
-    const id = owned[0]?.dataset.uuid || selectedIds()[0];
-    if (!id || !checkinDialog) return;
+    const projectId = checkinBtn.dataset.project;
+    const queued = Number(checkinBtn.dataset.newFiles || 0) + Number(checkinBtn.dataset.pendingSaves || 0);
+    if (!checkinDialog) return;
+    const useQueue = owned.length !== 1;
+    if (owned.length === 0 && queued === 0) return;
+    if (useQueue && !projectId) return;
     showError($("#checkin-error"), "");
-    const preview = await fetch(`/api/objects/${id}/checkin-preview`);
+    const preview = await fetch(
+      useQueue
+        ? `/api/projects/${projectId}/checkin-preview`
+        : `/api/objects/${owned[0].dataset.uuid}/checkin-preview`
+    );
     if (!preview.ok) {
       showError($("#toolbar-error"), await readError(preview));
       return;
@@ -598,8 +608,20 @@
     $("#checkin-filename").textContent = data.filename;
     $("#checkin-current").textContent = data.current_display;
     $("#checkin-next").textContent = data.next_display;
+    ["checkin-current", "checkin-next", "checkin-current-label", "checkin-next-label"].forEach((itemId) => {
+      const el = $("#" + itemId);
+      if (el) el.hidden = useQueue;
+    });
     $("#checkin-comment").value = "";
-    if (checkinDialog) checkinDialog.dataset.force = data.force_checkin ? "1" : "";
+    if (checkinDialog) {
+      checkinDialog.dataset.force = data.force_checkin ? "1" : "";
+      checkinDialog.dataset.queue = useQueue ? "1" : "";
+      checkinDialog.dataset.objectId = useQueue ? "" : owned[0].dataset.uuid;
+      const selectedIdsForQueue = owned.map((row) => row.dataset.uuid);
+      checkinDialog.dataset.objectIds = JSON.stringify(
+        selectedIdsForQueue.length ? selectedIdsForQueue : data.object_ids || []
+      );
+    }
     const forceWarn = $("#checkin-force-warn");
     if (forceWarn) {
       forceWarn.hidden = !data.warning;
@@ -609,17 +631,36 @@
     if (submitBtn) submitBtn.textContent = data.force_checkin ? "Check In anyway" : "Check In";
     const list = $("#checkin-changes");
     list.innerHTML = "";
-    [
-      [data.file_modified, "File modified"],
-      [data.parameters_changed, "Parameters changed"],
-      [data.dependencies_unchanged, "Dependencies unchanged"],
-    ].forEach(([flag, label]) => {
-      const item = document.createElement("li");
-      item.textContent = `${flag ? "✓" : "–"} ${label}`;
-      list.appendChild(item);
-    });
+    if (useQueue) {
+      (data.pending_files || []).forEach((name) => {
+        const item = document.createElement("li");
+        item.textContent = `✓ Check in ${name}`;
+        list.appendChild(item);
+      });
+      if (!(data.pending_files || []).length && !(data.new_files || []).length) {
+        const item = document.createElement("li");
+        item.textContent = "– Nothing to check in";
+        list.appendChild(item);
+      }
+    } else {
+      [
+        [data.file_modified, "File modified"],
+        [data.parameters_changed, "Parameters changed"],
+        [data.dependencies_unchanged, "Dependencies unchanged"],
+      ].forEach(([flag, label]) => {
+        const item = document.createElement("li");
+        item.textContent = `${flag ? "✓" : "–"} ${label}`;
+        list.appendChild(item);
+      });
+    }
     const wrap = $("#checkin-new-wrap");
     const box = $("#checkin-new-files");
+    const help = $("#checkin-new-help");
+    if (help) {
+      help.textContent = useQueue
+        ? "New files found in the workspace. Checked items are added to the project with this check-in."
+        : "New files found in the workspace. These are models Creo saved next to the checked-out file. Checked items are added to the project with this check-in.";
+    }
     if (wrap && box) {
       box.innerHTML = "";
       const news = data.new_files || [];
@@ -630,7 +671,7 @@
         const input = document.createElement("input");
         input.type = "checkbox";
         input.value = item.relative_path;
-        input.checked = Boolean(item.same_folder);
+        input.checked = Boolean(item.same_folder) || useQueue;
         label.appendChild(input);
         label.append(` ${item.filename}`);
         const hint = document.createElement("span");
@@ -640,16 +681,14 @@
         box.appendChild(label);
       });
     }
-    checkinDialog.dataset.objectId = id;
     checkinDialog.showModal();
   });
 
   $("#checkin-cancel")?.addEventListener("click", () => checkinDialog?.close());
   checkinForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const id = checkinDialog?.dataset.objectId || selectedIds()[0];
+    const id = checkinDialog?.dataset.objectId || "";
     const comment = String($("#checkin-comment")?.value || "").trim();
-    if (!id) return;
     if (!comment) {
       showError($("#checkin-error"), "A check-in comment is required.");
       return;
@@ -658,13 +697,35 @@
       const name = $("#checkin-filename")?.textContent || "This file";
       if (!window.confirm(`${name} is not checked out. Check in the workspace save anyway?`)) return;
     }
-    const result = await postAction(`/api/objects/${id}/checkin`, {
-      comment,
-      add_relative_paths: [...document.querySelectorAll("#checkin-new-files input:checked")].map(
-        (input) => input.value
-      ),
-    }, "POST", "Checking in…");
-    if (result) window.location.reload();
+    const added = [...document.querySelectorAll("#checkin-new-files input:checked")].map(
+      (input) => input.value
+    );
+    let result;
+    if (checkinDialog?.dataset.queue === "1") {
+      const projectId = checkinBtn?.dataset.project;
+      if (!projectId) return;
+      let objectIds = [];
+      try {
+        objectIds = JSON.parse(checkinDialog.dataset.objectIds || "[]");
+      } catch {
+        objectIds = [];
+      }
+      result = await postAction(`/api/projects/${projectId}/checkin-queue`, {
+        comment,
+        object_ids: objectIds,
+        add_relative_paths: added,
+      }, "POST", "Checking in…");
+    } else {
+      if (!id) return;
+      result = await postAction(`/api/objects/${id}/checkin`, {
+        comment,
+        add_relative_paths: added,
+      }, "POST", "Checking in…");
+    }
+    if (!result) return;
+    const warning = formatBatch(result);
+    if (warning) showError($("#toolbar-error"), warning);
+    if (result.ok ? result.ok.length : true) window.location.reload();
   });
 
   historyBtn?.addEventListener("click", () => {
@@ -760,6 +821,8 @@
   } else if (window.location.hash === "#versions") {
     document.querySelector('.tab[data-tab="history"]')?.click();
     showHistorySubtab("versions");
+  } else if (window.location.hash === "#changes") {
+    document.querySelector('.tab[data-tab="changes"]')?.click();
   }
 
   settingsForm?.addEventListener("submit", async (event) => {

@@ -1,6 +1,6 @@
-import shutil
 from pathlib import Path
 
+from creopdm.utils.files import remove_tree
 from tests.conftest import requires_git
 
 
@@ -186,7 +186,7 @@ def test_import_from_vault_after_git_deleted_keeps_file(client, repo_parent):
     project, location = _create_project(client, repo_parent)
     pin = location / "keep.prt.1"
     pin.write_bytes(b"do-not-delete")
-    shutil.rmtree(location / ".git")
+    assert remove_tree(location / ".git"), "Could not delete .git to simulate a removed repository"
     imported = client.post(
         f"/api/projects/{project['uuid']}/objects/from-disk",
         json={"paths": [str(pin)], "comment": "Re-add after git removed"},

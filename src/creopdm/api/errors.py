@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -11,6 +13,16 @@ from creopdm.exceptions import CreoPDMError
 from creopdm.logging_setup import get_logger
 
 logger = get_logger("api")
+
+
+def _json_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return str(value)
 
 
 def register_error_handlers(app: FastAPI) -> None:
@@ -30,7 +42,7 @@ def register_error_handlers(app: FastAPI) -> None:
                 "error": {
                     "code": "VALIDATION_ERROR",
                     "message": "The request was invalid.",
-                    "details": {"errors": exc.errors()},
+                    "details": {"errors": _json_safe(exc.errors())},
                 }
             },
         )

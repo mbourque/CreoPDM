@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import stat
 
 from tests.conftest import requires_git
@@ -272,3 +273,116 @@ def test_checkout_keeps_newer_workspace_save(client, repo_parent, data_dir):
     checked_out = client.post(f"/api/objects/{created['uuid']}/checkout")
     assert checked_out.status_code == 200, checked_out.text
     assert (workspace / "pin.prt.2").read_bytes() == b"kept-local"
+
+
+@requires_git
+def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, data_dir):
+    location = repo_parent / "QueueArm"
+    project = client.post(
+        "/api/projects",
+        json={"name": "Queue Arm", "repository_path": str(location)},
+    ).json()
+    created = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("shaft.prt.3", b"v3", "application/octet-stream")},
+        data={"comment": "Initial"},
+    ).json()
+    assert client.post(f"/api/objects/{created['uuid']}/checkout").status_code == 200
+    workspace = data_dir / "workspaces" / project["uuid"]
+    (workspace / "shaft.prt.4").write_bytes(b"save-4")
+    (workspace / "bushing.prt").write_bytes(b"new-bushing")
+    page = client.get(f"/?project={project['uuid']}")
+    assert page.status_code == 200, page.text
+    assert "Would check in" in page.text
+    assert "Newer Creo save" in page.text
+    assert "shaft.prt.4" in page.text
+    assert "from shaft.prt.3" in page.text
+    assert "New file" in page.text
+    assert "bushing.prt" in page.text
+    assert "Would check in · 2" in page.text
+    match = re.search(r'<button[^>]*id="checkin-btn"[^>]*>', page.text)
+    assert match, page.text
+    assert "disabled" not in match.group(0)
+    assert 'data-new-files="1"' in match.group(0)
+
+
+@requires_git
+def test_project_checkin_queue_adds_new_workspace_file_without_checkout(client, repo_parent, data_dir):
+    location = repo_parent / "NewFileArm"
+    project = client.post(
+        "/api/projects",
+        json={"name": "New File Arm", "repository_path": str(location)},
+    ).json()
+    created = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("shaft.prt", b"v1", "application/octet-stream")},
+        data={"comment": "Initial"},
+    )
+    assert created.status_code == 201, created.text
+    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "bushing.prt").write_bytes(b"new-bushing")
+    page = client.get(f"/?project={project['uuid']}")
+    assert page.status_code == 200, page.text
+    match = re.search(r'<button[^>]*id="checkin-btn"[^>]*>', page.text)
+    assert match, page.text
+    assert "disabled" not in match.group(0)
+    preview = client.get(f"/api/projects/{project['uuid']}/checkin-preview")
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["queue_mode"] is True
+    assert body["can_checkin"] is True
+    names = {item["filename"] for item in body["new_files"]}
+    assert names == {"bushing.prt"}
+    added = client.post(
+        f"/api/projects/{project['uuid']}/checkin-queue",
+        json={"comment": "Add bushing from workspace", "add_relative_paths": ["bushing.prt"]},
+    )
+    assert added.status_code == 200, added.text
+    payload = added.json()
+    assert payload["failed"] == []
+    assert payload["ok"][0]["filename"] == "bushing.prt"
+    listing = client.get(f"/api/projects/{project['uuid']}/objects")
+    assert listing.status_code == 200, listing.text
+    listed = {item["filename"] for item in listing.json()}
+    assert "bushing.prt" in listed
+    assert "shaft.prt" in listed
+    assert (Path(project["repository_path"]) / "bushing.prt").read_bytes() == b"new-bushing"
+
+
+@requires_git
+def test_project_checkin_queue_records_pending_save_and_new_file(client, repo_parent, data_dir):
+    location = repo_parent / "QueueCheckin"
+    project = client.post(
+        "/api/projects",
+        json={"name": "Queue Checkin", "repository_path": str(location)},
+    ).json()
+    created = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("shaft.prt.3", b"v3", "application/octet-stream")},
+        data={"comment": "Initial"},
+    ).json()
+    assert client.post(f"/api/objects/{created['uuid']}/checkout").status_code == 200
+    workspace = data_dir / "workspaces" / project["uuid"]
+    (workspace / "shaft.prt.4").write_bytes(b"save-4")
+    (workspace / "bushing.prt").write_bytes(b"new-bushing")
+    preview = client.get(f"/api/projects/{project['uuid']}/checkin-preview")
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert created["uuid"] in body["object_ids"]
+    assert "shaft.prt.4" in body["pending_files"]
+    result = client.post(
+        f"/api/projects/{project['uuid']}/checkin-queue",
+        json={
+            "comment": "Save numbered revision and add bushing",
+            "object_ids": body["object_ids"],
+            "add_relative_paths": ["bushing.prt"],
+        },
+    )
+    assert result.status_code == 200, result.text
+    assert result.json()["failed"] == []
+    current = client.get(f"/api/objects/{created['uuid']}").json()
+    assert current["filename"] == "shaft.prt.4"
+    listing = {item["filename"] for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
+    assert "bushing.prt" in listing
+    assert (Path(project["repository_path"]) / "shaft.prt.4").read_bytes() == b"save-4"
