@@ -12,8 +12,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from creopdm.constants import APP_NAME, DEFAULT_LFS_PATTERNS
+from creopdm.constants import APP_NAME, DEFAULT_EXTRA_CAD_EXTENSIONS, DEFAULT_LFS_PATTERNS, PREVIOUS_DEFAULT_EXTRA_CAD_SETS
 from creopdm.exceptions import ConfigurationError, PathValidationError
+from creopdm.utils.classify import extra_cad_set, parse_extension_text
 
 
 class ServerConfig(BaseModel):
@@ -53,12 +54,28 @@ class UiConfig(BaseModel):
     open_browser_on_start: bool = True
 
 
+class CadConfig(BaseModel):
+    extra_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_EXTRA_CAD_EXTENSIONS))
+
+    @field_validator("extra_extensions", mode="before")
+    @classmethod
+    def normalize_extensions(cls, value: object) -> list[str]:
+        if value is None:
+            return list(DEFAULT_EXTRA_CAD_EXTENSIONS)
+        if isinstance(value, str):
+            return parse_extension_text(value)
+        if isinstance(value, (list, tuple, set, frozenset)):
+            return sorted(extra_cad_set(str(item) for item in value))
+        return list(DEFAULT_EXTRA_CAD_EXTENSIONS)
+
+
 class AppSettings(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     git: GitConfig = Field(default_factory=GitConfig)
     creo: CreoConfig = Field(default_factory=CreoConfig)
     workspace: WorkspaceConfig = Field(default_factory=WorkspaceConfig)
     ui: UiConfig = Field(default_factory=UiConfig)
+    cad: CadConfig = Field(default_factory=CadConfig)
 
 
 def data_dir_from_environment() -> Path:
@@ -115,6 +132,9 @@ class ConfigManager:
             settings = AppSettings.model_validate(raw)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             raise ConfigurationError(f"Unable to read settings: {exc}") from exc
+        if extra_cad_set(settings.cad.extra_extensions) in PREVIOUS_DEFAULT_EXTRA_CAD_SETS:
+            settings.cad.extra_extensions = list(DEFAULT_EXTRA_CAD_EXTENSIONS)
+            self.save(settings)
         self._settings = settings
         return settings
 
@@ -142,6 +162,9 @@ class ConfigManager:
         if configured:
             return Path(configured).expanduser().resolve()
         return self.workspaces_dir
+
+    def extra_cad_extensions(self) -> list[str]:
+        return sorted(extra_cad_set(self.settings.cad.extra_extensions))
 
     def workspace_for_project(self, project_uuid: str) -> Path:
         if not project_uuid or any(ch in project_uuid for ch in r"/\:"):

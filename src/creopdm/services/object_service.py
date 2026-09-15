@@ -11,11 +11,13 @@ from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from creopdm.constants import (
+    DEFAULT_EXTRA_CAD_EXTENSIONS,
     DEFAULT_REVISION,
     INITIAL_ITERATION,
     ActivityAction,
     LifecycleState,
 )
+from creopdm.config import ConfigManager
 from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import (
     CreoPDMError,
@@ -36,7 +38,7 @@ from creopdm.models.version import ObjectVersion
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.storage.base import VersionStore
-from creopdm.utils.classify import classify_filename, default_folder_for
+from creopdm.utils.classify import classify_filename
 from creopdm.utils.files import copy_file, set_file_readonly
 from creopdm.utils.hashing import calculate_sha256
 from creopdm.utils.identity import CurrentUserProvider
@@ -56,11 +58,18 @@ class ObjectService:
         locks: ProjectLockManager,
         activities: ActivityService,
         users: CurrentUserProvider,
+        config: ConfigManager | None = None,
     ) -> None:
         self._store = version_store
         self._locks = locks
         self._activities = activities
         self._users = users
+        self._config = config
+
+    def _cad_extensions(self) -> list[str]:
+        if self._config is None:
+            return list(DEFAULT_EXTRA_CAD_EXTENSIONS)
+        return self._config.extra_cad_extensions()
 
     def list_objects(
         self,
@@ -117,9 +126,10 @@ class ObjectService:
         return obj
 
     def delete_object(self, session: Session, object_uuid: str) -> dict[str, str]:
-        """Remove the object from the vault and project metadata.
+        """Unregister the object from the project. Never deletes the original file.
 
-        Does not touch workspace files; callers should purge those first or after.
+        Workspace copies are purged by the caller. Git tracking is dropped with
+        --cached so the file in the original project folder stays on disk.
         """
         obj = self.get_object(session, object_uuid)
         project = obj.project
@@ -131,15 +141,21 @@ class ObjectService:
         with self._locks.acquire(project.uuid):
             captured = self._store.capture_checkpoint(repo)
             try:
-                self._store.remove_files(repo, [relative], f"Remove {filename}", user)
-            except CreoPDMError:
-                raise
-            except Exception as exc:
-                logger.exception("Git remove failed for %s", relative)
-                raise RepositoryError(
-                    f"Could not remove {filename} from the project vault.",
-                    details={"file": filename, "relative_path": relative},
-                ) from exc
+                self._store.remove_files(
+                    repo,
+                    [relative],
+                    f"Unregister {filename}",
+                    user,
+                    keep_working_copy=True,
+                )
+            except Exception:
+                if (repo / ".git").exists():
+                    logger.exception("Git untrack failed for %s", relative)
+                    raise RepositoryError(
+                        f"Could not unregister {filename} from project history.",
+                        details={"file": filename, "relative_path": relative},
+                    )
+                logger.warning("Git history missing; unregistering %s from the project list only", filename)
             try:
                 self._delete_metadata(session, obj)
                 self._activities.record(
@@ -151,15 +167,14 @@ class ObjectService:
                     details={"filename": filename, "relative_path": relative, "uuid": uuid_value},
                 )
             except Exception as exc:
-                logger.exception("Metadata failed after removing %s", relative)
+                logger.exception("Metadata failed after unregistering %s", relative)
                 if captured:
                     self._store.restore_checkpoint(repo, captured)
                 raise RepositoryError(
-                    "The file was removed from storage but project metadata could not be updated. "
-                    "The repository was restored.",
+                    "Project metadata could not be updated. The original file was not deleted.",
                     details={"file": filename},
                 ) from exc
-        logger.info("Removed object %s (%s)", uuid_value, relative)
+        logger.info("Unregistered object %s (%s); original file left in place", uuid_value, relative)
         return {"uuid": uuid_value, "filename": filename, "relative_path": relative}
 
     def _delete_metadata(self, session: Session, obj: EngineeringObject) -> None:
@@ -200,8 +215,8 @@ class ObjectService:
 
         display_name = sanitize_filename(original_name or source_path.name)
         stored_name = CreoFileManager.canonical_repository_name(display_name)
-        logical_name = CreoFileManager.logical_filename(stored_name)
-        object_type = classify_filename(stored_name)
+        logical_name = CreoFileManager.logical_filename(stored_name, self._cad_extensions())
+        object_type = classify_filename(stored_name, self._cad_extensions())
         extension = Path(logical_name).suffix.lower() or Path(stored_name).suffix.lower()
         stem = Path(logical_name).stem
 
@@ -210,9 +225,12 @@ class ObjectService:
             if rel.name != stored_name:
                 rel = rel.parent / stored_name
         else:
-            rel = Path(default_folder_for(object_type)) / stored_name
+            rel = Path(stored_name)
         rel = assert_safe_relative_path(str(rel).replace("\\", "/"))
         relative = rel.as_posix()
+        reserved = {part.lower() for part in rel.parts}
+        if reserved & {".git", ".creopdm"}:
+            raise PathValidationError("That location is reserved for CreoPDM.")
 
         existing = self.existing_logical(session, project.id, relative)
         if existing is not None:
@@ -236,7 +254,7 @@ class ObjectService:
         now = datetime.now(timezone.utc)
 
         with self._locks.acquire(project.uuid):
-            copy_file(source_path, destination)
+            created_copy = copy_file(source_path, destination)
             try:
                 git_hash = self._store.store_version(
                     repo,
@@ -245,7 +263,8 @@ class ObjectService:
                     user,
                 )
             except Exception:
-                self._remove_copied_file(destination)
+                if created_copy:
+                    self._remove_copied_file(destination)
                 raise
 
             obj = EngineeringObject(
@@ -354,14 +373,15 @@ class ObjectService:
         relative: str,
         exclude_id: int | None = None,
     ) -> EngineeringObject | None:
-        logical = CreoFileManager.logical_repo_path(relative)
+        extras = self._cad_extensions()
+        logical = CreoFileManager.logical_repo_path(relative, extras)
         objects = session.scalars(
             select(EngineeringObject).where(EngineeringObject.project_id == project_id)
         )
         for item in objects:
             if exclude_id is not None and item.id == exclude_id:
                 continue
-            if CreoFileManager.logical_repo_path(item.relative_path) == logical:
+            if CreoFileManager.logical_repo_path(item.relative_path, extras) == logical:
                 return item
         return None
 

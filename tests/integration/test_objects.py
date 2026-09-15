@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 from tests.conftest import requires_git
@@ -35,7 +36,7 @@ def test_import_creo_and_document_files(client, repo_parent, tmp_path):
     assert part["filename"] == "shaft.prt.3"
     assert part["object_type"] == "CREO_PART"
     assert part["display_revision"] == "A.1"
-    assert part["relative_path"] == "CAD/shaft.prt.3"
+    assert part["relative_path"] == "shaft.prt.3"
     assert part["current_version"]["content_hash"]
     assert part["current_version"]["comment"] == "Initial shaft"
 
@@ -47,7 +48,7 @@ def test_import_creo_and_document_files(client, repo_parent, tmp_path):
     assert doc_resp.status_code == 201, doc_resp.text
     doc = doc_resp.json()
     assert doc["object_type"] == "PDF"
-    assert doc["relative_path"] == "Documents/spec.pdf"
+    assert doc["relative_path"] == "spec.pdf"
 
     listing = client.get(f"/api/projects/{project['uuid']}/objects")
     names = {item["filename"] for item in listing.json()}
@@ -58,41 +59,114 @@ def test_import_creo_and_document_files(client, repo_parent, tmp_path):
     first = history.json()[0]
     assert first["iteration"] == 1
     assert first["filename"] == "shaft.prt.3"
-    assert first["relative_path"] == "CAD/shaft.prt.3"
+    assert first["relative_path"] == "shaft.prt.3"
 
     detail = client.get(f"/api/objects/{part['uuid']}")
     assert detail.status_code == 200
     page = client.get(f"/projects/{project['uuid']}/objects/{part['uuid']}")
     assert page.status_code == 200
     assert "File History" in page.text
-    assert "CAD/shaft.prt.3" in page.text
+    assert "shaft.prt.3" in page.text
 
 
 @requires_git
-def test_choose_files_starts_in_workspace(client, repo_parent, data_dir):
+def test_extra_cad_extensions_go_to_cad_folder(client, repo_parent, tmp_path):
     project, _location = _create_project(client, repo_parent)
+    dxf = tmp_path / "outline.dxf"
+    dxf.write_bytes(b"dxf-bytes")
+    ncl = tmp_path / "rough.ncl"
+    ncl.write_bytes(b"ncl-bytes")
+    added = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("outline.dxf", dxf.read_bytes(), "application/octet-stream")},
+        data={"comment": "DXF outline"},
+    )
+    assert added.status_code == 201, added.text
+    body = added.json()
+    assert body["object_type"] == "CAD"
+    assert body["relative_path"] == "outline.dxf"
+    toolpath = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("rough.ncl", ncl.read_bytes(), "application/octet-stream")},
+        data={"comment": "NCL path"},
+    )
+    assert toolpath.status_code == 201, toolpath.text
+    assert toolpath.json()["relative_path"] == "rough.ncl"
+
+
+@requires_git
+def test_numbered_extra_cad_goes_to_cad_folder(client, repo_parent, tmp_path):
+    project, _location = _create_project(client, repo_parent)
+    inf = tmp_path / "setup.inf.1"
+    inf.write_bytes(b"inf-bytes")
+    added = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("setup.inf.1", inf.read_bytes(), "application/octet-stream")},
+        data={"comment": "Creo info file"},
+    )
+    assert added.status_code == 201, added.text
+    body = added.json()
+    assert body["filename"] == "setup.inf.1"
+    assert body["object_type"] == "CAD"
+    assert body["relative_path"] == "setup.inf.1"
+    later = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("setup.inf.2", b"later-inf", "application/octet-stream")},
+        data={"comment": "Later info save"},
+    )
+    assert later.status_code == 409
+    assert later.json()["error"]["code"] == "DUPLICATE_OBJECT"
+
+
+@requires_git
+def test_choose_files_starts_in_project_folder(client, repo_parent):
+    project, location = _create_project(client, repo_parent)
     folder = client.get(f"/api/projects/{project['uuid']}/workspace/add-folder")
     assert folder.status_code == 200, folder.text
     payload = folder.json()
     assert payload["initial_directory"]
-    workspace = data_dir / "workspaces" / project["uuid"]
-    assert str(workspace) in payload["workspace_root"]
-    assert payload["initial_directory"].rstrip("\\/").endswith("CAD")
+    assert Path(payload["initial_directory"]).is_relative_to(location.resolve())
+    assert Path(payload["initial_directory"]).resolve() == location.resolve()
 
-    cad = workspace / "CAD"
-    cad.mkdir(parents=True, exist_ok=True)
-    pin = cad / "pin.prt.6"
-    pin.write_bytes(b"workspace-pin")
+    leftover = location / "CAD"
+    leftover.mkdir()
+    again = client.get(f"/api/projects/{project['uuid']}/workspace/add-folder")
+    assert Path(again.json()["initial_directory"]).resolve() == location.resolve()
+    assert leftover.is_dir()
+
+    pin = location / "pin.prt.6"
+    pin.write_bytes(b"vault-pin")
     imported = client.post(
         f"/api/projects/{project['uuid']}/objects/from-disk",
-        json={"paths": [str(pin)], "comment": "From workspace"},
+        json={"paths": [str(pin)], "comment": "From project folder"},
     )
     assert imported.status_code == 200, imported.text
     body = imported.json()
     assert len(body["ok"]) == 1
     assert body["ok"][0]["filename"] == "pin.prt.6"
     listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
-    assert any(item["filename"] == "pin.prt.6" and item["relative_path"] == "CAD/pin.prt.6" for item in listing)
+    assert any(item["filename"] == "pin.prt.6" and item["relative_path"] == "pin.prt.6" for item in listing)
+    assert pin.is_file()
+    assert pin.read_bytes() == b"vault-pin"
+
+
+@requires_git
+def test_import_from_vault_after_git_deleted_keeps_file(client, repo_parent):
+    project, location = _create_project(client, repo_parent)
+    pin = location / "keep.prt.1"
+    pin.write_bytes(b"do-not-delete")
+    shutil.rmtree(location / ".git")
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(pin)], "comment": "Re-add after git removed"},
+    )
+    assert imported.status_code == 200, imported.text
+    assert pin.is_file()
+    assert pin.read_bytes() == b"do-not-delete"
+    body = imported.json()
+    assert not body["failed"]
+    assert len(body["ok"]) == 1
+    assert (location / ".git").exists()
 
 
 @requires_git
@@ -179,7 +253,7 @@ def test_purge_workspace_keeps_vault_file(client, repo_parent, data_dir):
     assert created.status_code == 201, created.text
     obj = created.json()
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"] / "CAD" / "shaft.prt"
+    workspace = data_dir / "workspaces" / project["uuid"] / "shaft.prt"
     extra = workspace.with_name("shaft.prt.4")
     extra.write_bytes(b"later-save")
     assert workspace.is_file()
@@ -194,13 +268,46 @@ def test_purge_workspace_keeps_vault_file(client, repo_parent, data_dir):
     detail = client.get(f"/api/objects/{obj['uuid']}")
     assert detail.status_code == 200
     assert detail.json()["owned_by_me"] is False
-    vault = Path(project["repository_path"]) / "CAD" / "shaft.prt"
+    vault = Path(project["repository_path"]) / "shaft.prt"
     assert vault.is_file()
     assert vault.read_bytes() == b"vault-bytes"
 
 
 @requires_git
-def test_remove_from_project_deletes_vault_and_metadata(client, repo_parent, data_dir):
+def test_batch_purge_workspace_keeps_originals(client, repo_parent, data_dir):
+    project, location = _create_project(client, repo_parent)
+    part = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("shaft.prt", b"part", "application/octet-stream")},
+        data={"comment": "Part"},
+    ).json()
+    notes = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("notes.txt", b"hello", "text/plain")},
+        data={"comment": "Notes"},
+    ).json()
+    ids = [part["uuid"], notes["uuid"]]
+    assert client.post("/api/objects/batch/checkout", json={"object_ids": ids}).status_code == 200
+    workspace = data_dir / "workspaces" / project["uuid"]
+    assert (workspace / "shaft.prt").is_file()
+    assert (workspace / "notes.txt").is_file()
+
+    result = client.post("/api/objects/batch/purge-workspace", json={"object_ids": ids})
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert len(body["ok"]) == 2
+    assert body["failed"] == []
+    assert not (workspace / "shaft.prt").exists()
+    assert not (workspace / "notes.txt").exists()
+    listing = {item["uuid"]: item for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
+    assert listing[part["uuid"]]["owned_by_me"] is False
+    assert listing[notes["uuid"]]["owned_by_me"] is False
+    assert (location / "shaft.prt").is_file()
+    assert (location / "notes.txt").is_file()
+
+
+@requires_git
+def test_remove_from_project_keeps_original_file(client, repo_parent, data_dir):
     project, location = _create_project(client, repo_parent)
     created = client.post(
         f"/api/projects/{project['uuid']}/objects",
@@ -210,15 +317,16 @@ def test_remove_from_project_deletes_vault_and_metadata(client, repo_parent, dat
     assert created.status_code == 201, created.text
     obj = created.json()
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"] / "Documents" / "spec.pdf"
+    workspace = data_dir / "workspaces" / project["uuid"] / "spec.pdf"
     assert workspace.is_file()
-    vault = location / "Documents" / "spec.pdf"
+    vault = location / "spec.pdf"
     assert vault.is_file()
 
     removed = client.delete(f"/api/objects/{obj['uuid']}")
     assert removed.status_code == 204, removed.text
     assert not workspace.exists()
-    assert not vault.exists()
+    assert vault.is_file()
+    assert vault.read_bytes() == b"%PDF-1.4 fake"
     listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
     assert listing == []
     missing = client.get(f"/api/objects/{obj['uuid']}")
@@ -244,9 +352,9 @@ def test_cannot_remove_file_checked_out_by_someone_else(client, repo_parent, ide
     assert denied_delete.status_code == 403
     assert denied_delete.json()["error"]["code"] == "CHECKOUT_OWNERSHIP"
 
-    workspace = data_dir / "workspaces" / project["uuid"] / "CAD" / "pin.prt"
+    workspace = data_dir / "workspaces" / project["uuid"] / "pin.prt"
     assert workspace.is_file()
-    assert (location / "CAD" / "pin.prt").is_file()
+    assert (location / "pin.prt").is_file()
     still = client.get(f"/api/objects/{obj['uuid']}")
     assert still.status_code == 200
     assert still.json()["checkout_user"] == "Alice"
@@ -275,5 +383,5 @@ def test_batch_remove_from_project(client, repo_parent):
     assert body["failed"] == []
     listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
     assert listing == []
-    assert not (location / "CAD" / "arm.prt").exists()
-    assert not (location / "Documents" / "notes.txt").exists()
+    assert (location / "arm.prt").is_file()
+    assert (location / "notes.txt").is_file()

@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session
 
 from creopdm.constants import (
@@ -26,14 +26,21 @@ from creopdm.exceptions import (
     PathValidationError,
     ProjectNotFoundError,
     RepositoryError,
+    ValidationAppError,
 )
 from creopdm.logging_setup import get_logger
+from creopdm.models.activity import Activity
 from creopdm.models.checkout import Checkout
+from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
+from creopdm.models.parameter import Parameter
 from creopdm.models.project import Project
+from creopdm.models.remote import Remote
+from creopdm.models.version import ObjectVersion
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.git_service import GitService
 from creopdm.services.lock_manager import ProjectLockManager
+from creopdm.utils.files import remove_file, remove_tree
 from creopdm.utils.identity import CurrentUserProvider
 from creopdm.utils.paths import normalize_fs_path, validate_project_location
 
@@ -49,13 +56,10 @@ Do not edit the `.git` directory. Use {app_name} to add files and record version
 GITIGNORE_TEMPLATE = """# Creo transients — not engineering objects
 *.tst
 *.err
-*.inf
-*.idx
 *.acl
-*.crc
 trail.txt*
 std.out
-*.log
+std.err
 """
 
 
@@ -123,7 +127,6 @@ class ProjectService:
                 location,
                 [
                     PROJECT_MARKER_DIR,
-                    *STANDARD_PROJECT_FOLDERS,
                     "README.md",
                     ".gitignore",
                 ],
@@ -157,13 +160,164 @@ class ProjectService:
         logger.info("Created project %s at %s", project.uuid, location)
         return project
 
+    def update_project(
+        self,
+        session: Session,
+        project_uuid: str,
+        name: str,
+        number: str | None = None,
+        description: str | None = None,
+    ) -> Project:
+        project = self.get_project(session, project_uuid)
+        new_name = name.strip()
+        if not new_name:
+            raise ValidationAppError("A project name is required.")
+        new_number = (number or "").strip() or None
+        new_description = (description or "").strip() or None
+        user = self._users.get_current_user()
+        repo = Path(project.repository_path)
+        marker_rel = f"{PROJECT_MARKER_DIR}/{PROJECT_JSON_NAME}"
+        with self._locks.acquire(project.uuid):
+            captured = None
+            try:
+                captured = self._git.get_head(repo)
+            except Exception:
+                captured = None
+            self._rewrite_project_marker(
+                repo,
+                project.uuid,
+                new_name,
+                new_number,
+                new_description,
+            )
+            try:
+                self._git.stage_files(repo, [marker_rel])
+                if self._git.is_dirty(repo):
+                    self._git.commit(repo, f"Rename project to {new_name}", user)
+            except Exception as exc:
+                if captured:
+                    self._git.reset_to(repo, captured)
+                raise RepositoryError(
+                    "Could not record the project rename in the vault.",
+                    details={"name": new_name},
+                ) from exc
+            old_name = project.name
+            try:
+                project.name = new_name
+                project.number = new_number
+                project.description = new_description
+                project.updated_at = datetime.now(timezone.utc)
+                session.flush()
+                self._activities.record(
+                    session,
+                    ActivityAction.PROJECT_UPDATED,
+                    user,
+                    project_id=project.id,
+                    details={"old_name": old_name, "name": new_name},
+                )
+            except Exception as exc:
+                if captured:
+                    self._git.reset_to(repo, captured)
+                raise RepositoryError(
+                    "The vault was updated but project metadata could not be saved. "
+                    "The repository was restored.",
+                    details={"name": new_name},
+                ) from exc
+        logger.info("Renamed project %s to %s", project.uuid, new_name)
+        return project
+
     def delete_project(self, session: Session, project_uuid: str) -> None:
-        """Soft-delete. Never delete repository files from disk."""
+        """Hide the project in CreoPDM. Never delete repository files from disk."""
         project = self.get_project(session, project_uuid)
         project.active = False
         project.updated_at = datetime.now(timezone.utc)
         session.flush()
         logger.info("Deactivated project %s", project.uuid)
+
+    def forget_project(
+        self,
+        session: Session,
+        project_uuid: str,
+        confirm_name: str,
+        workspace_path: Path | None = None,
+    ) -> dict[str, str]:
+        """Unregister the project and strip Git metadata. CAD files stay on disk.
+
+        Removes `.git`, Git ignore files, `.creopdm`, and CreoPDM workspace copies.
+        Does not delete engineering files in the project folder.
+        """
+        project = self.get_project(session, project_uuid)
+        expected = project.name.strip()
+        if confirm_name.strip() != expected:
+            raise ValidationAppError(
+                "Type the project name exactly to forget it.",
+                details={"name": expected},
+            )
+        repo = Path(project.repository_path)
+        name = project.name
+        warnings: list[str] = []
+        with self._locks.acquire(project.uuid):
+            self._strip_git_metadata(repo)
+            if (repo / ".git").exists():
+                warnings.append(
+                    "Git metadata is still present because a program has the project folder open."
+                )
+            if workspace_path is not None and not remove_tree(workspace_path):
+                warnings.append(
+                    "The workspace folder is still open in another program (often File Explorer). "
+                    "Close that window and delete the leftover workspace folder if you want it gone."
+                )
+            self._delete_project_records(session, project)
+        logger.info("Forgot project %s at %s; engineering files were left in place", project_uuid, repo)
+        return {
+            "uuid": project_uuid,
+            "name": name,
+            "repository_path": str(repo),
+            "warning": " ".join(warnings) if warnings else "",
+        }
+
+    def _strip_git_metadata(self, repo: Path) -> None:
+        remove_tree(repo / ".git")
+        for name in (".gitignore", ".gitattributes"):
+            remove_file(repo / name)
+        remove_tree(repo / PROJECT_MARKER_DIR)
+        for folder in STANDARD_PROJECT_FOLDERS:
+            remove_file(repo / folder / ".gitkeep")
+
+    def _delete_project_records(self, session: Session, project: Project) -> None:
+        objects = list(
+            session.scalars(select(EngineeringObject).where(EngineeringObject.project_id == project.id))
+        )
+        object_ids = [item.id for item in objects]
+        if object_ids:
+            session.execute(
+                update(EngineeringObject)
+                .where(EngineeringObject.id.in_(object_ids))
+                .values(current_version_id=None)
+            )
+            session.flush()
+            session.execute(delete(Parameter).where(Parameter.object_id.in_(object_ids)))
+            session.execute(delete(Checkout).where(Checkout.object_id.in_(object_ids)))
+            session.execute(
+                delete(Dependency).where(
+                    or_(
+                        Dependency.parent_object_id.in_(object_ids),
+                        Dependency.child_object_id.in_(object_ids),
+                    )
+                )
+            )
+            session.execute(delete(Activity).where(Activity.object_id.in_(object_ids)))
+            session.execute(delete(ObjectVersion).where(ObjectVersion.object_id.in_(object_ids)))
+            session.execute(delete(EngineeringObject).where(EngineeringObject.id.in_(object_ids)))
+        session.execute(delete(Dependency).where(Dependency.project_id == project.id))
+        session.execute(delete(Activity).where(Activity.project_id == project.id))
+        session.execute(delete(Remote).where(Remote.project_id == project.id))
+        session.delete(project)
+        session.flush()
+
+    def preferred_import_directory(self, project: Project) -> Path:
+        """Folder the Add Files dialog should start in: the original project folder."""
+        return Path(project.repository_path)
 
     def project_status(self, session: Session, project_uuid: str) -> dict[str, int | str]:
         project = self.get_project(session, project_uuid)
@@ -231,15 +385,42 @@ class ProjectService:
             encoding="utf-8",
         )
         (marker / SCHEMA_VERSION_NAME).write_text(f"{APP_SCHEMA_VERSION}\n", encoding="utf-8")
-        for folder in STANDARD_PROJECT_FOLDERS:
-            folder_path = location / folder
-            folder_path.mkdir(exist_ok=True)
-            (folder_path / ".gitkeep").write_text("", encoding="utf-8")
         (location / "README.md").write_text(
             README_TEMPLATE.format(name=name, app_name=APP_NAME),
             encoding="utf-8",
         )
         (location / ".gitignore").write_text(GITIGNORE_TEMPLATE, encoding="utf-8")
+
+    def _rewrite_project_marker(
+        self,
+        location: Path,
+        project_uuid: str,
+        name: str,
+        number: str | None,
+        description: str | None,
+    ) -> None:
+        marker = location / PROJECT_MARKER_DIR
+        marker.mkdir(parents=True, exist_ok=True)
+        path = marker / PROJECT_JSON_NAME
+        payload: dict = {}
+        if path.is_file():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    payload = loaded
+            except json.JSONDecodeError:
+                payload = {}
+        payload.update(
+            {
+                "uuid": project_uuid,
+                "name": name,
+                "number": number,
+                "description": description,
+                "default_branch": payload.get("default_branch") or DEFAULT_BRANCH,
+                "schema_version": payload.get("schema_version") or APP_SCHEMA_VERSION,
+            }
+        )
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
     @staticmethod
     def repository_path(project: Project) -> Path:

@@ -73,5 +73,6 @@ class VersionStore(ABC):
         relative_paths: list[str],
         message: str,
         author: UserIdentity,
+        keep_working_copy: bool = False,
     ) -> str:
-        """Remove files from storage and return the new version reference."""
+        """Stop tracking files. keep_working_copy leaves files on disk."""

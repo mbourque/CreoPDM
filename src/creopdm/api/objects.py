@@ -47,6 +47,59 @@ async def add_object(
     return present_object(ctx, db, obj)
 
 
+@router.post("/api/objects/batch/purge-workspace", response_model=BatchOperationResponse)
+def purge_workspace_batch(
+    payload: BatchObjectRequest,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BatchOperationResponse:
+    ok: list[BatchItemResult] = []
+    failed: list[BatchItemResult] = []
+    for object_uuid in payload.object_ids:
+        filename = object_uuid
+        try:
+            obj = ctx.objects.get_object(db, object_uuid)
+            filename = obj.filename
+            _purge_and_release(ctx, db, obj, ignore_locked=False)
+            ctx.activities.record(
+                db,
+                ActivityAction.WORKSPACE_CLEARED,
+                ctx.users.get_current_user(),
+                project_id=obj.project.id,
+                object_id=obj.id,
+                details={"filename": obj.filename},
+            )
+            ok.append(BatchItemResult(uuid=object_uuid, filename=filename, status="purged"))
+        except CreoPDMError as exc:
+            failed.append(
+                BatchItemResult(uuid=object_uuid, filename=filename, code=exc.code, message=exc.message)
+            )
+    return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.config.workspace_root()))
+
+
+@router.post("/api/objects/batch/remove", response_model=BatchOperationResponse)
+def remove_batch(
+    payload: BatchObjectRequest,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BatchOperationResponse:
+    ok: list[BatchItemResult] = []
+    failed: list[BatchItemResult] = []
+    for object_uuid in payload.object_ids:
+        filename = object_uuid
+        try:
+            obj = ctx.objects.get_object(db, object_uuid)
+            filename = obj.filename
+            _purge_and_release(ctx, db, obj, ignore_locked=True)
+            ctx.objects.delete_object(db, object_uuid)
+            ok.append(BatchItemResult(uuid=object_uuid, filename=filename, status="removed"))
+        except CreoPDMError as exc:
+            failed.append(
+                BatchItemResult(uuid=object_uuid, filename=filename, code=exc.code, message=exc.message)
+            )
+    return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.config.workspace_root()))
+
+
 @router.get("/api/objects/{object_id}", response_model=ObjectResponse)
 def get_object(
     object_id: str,
@@ -118,56 +171,3 @@ def delete_object(
     _purge_and_release(ctx, db, obj, ignore_locked=True)
     ctx.objects.delete_object(db, object_id)
     return Response(status_code=204)
-
-
-@router.post("/api/objects/batch/purge-workspace", response_model=BatchOperationResponse)
-def purge_workspace_batch(
-    payload: BatchObjectRequest,
-    db: Session = Depends(get_db),
-    ctx: AppContext = Depends(get_context),
-) -> BatchOperationResponse:
-    ok: list[BatchItemResult] = []
-    failed: list[BatchItemResult] = []
-    for object_uuid in payload.object_ids:
-        filename = object_uuid
-        try:
-            obj = ctx.objects.get_object(db, object_uuid)
-            filename = obj.filename
-            _purge_and_release(ctx, db, obj, ignore_locked=False)
-            ctx.activities.record(
-                db,
-                ActivityAction.WORKSPACE_CLEARED,
-                ctx.users.get_current_user(),
-                project_id=obj.project.id,
-                object_id=obj.id,
-                details={"filename": obj.filename},
-            )
-            ok.append(BatchItemResult(uuid=object_uuid, filename=filename, status="purged"))
-        except CreoPDMError as exc:
-            failed.append(
-                BatchItemResult(uuid=object_uuid, filename=filename, code=exc.code, message=exc.message)
-            )
-    return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.config.workspace_root()))
-
-
-@router.post("/api/objects/batch/remove", response_model=BatchOperationResponse)
-def remove_batch(
-    payload: BatchObjectRequest,
-    db: Session = Depends(get_db),
-    ctx: AppContext = Depends(get_context),
-) -> BatchOperationResponse:
-    ok: list[BatchItemResult] = []
-    failed: list[BatchItemResult] = []
-    for object_uuid in payload.object_ids:
-        filename = object_uuid
-        try:
-            obj = ctx.objects.get_object(db, object_uuid)
-            filename = obj.filename
-            _purge_and_release(ctx, db, obj, ignore_locked=True)
-            ctx.objects.delete_object(db, object_uuid)
-            ok.append(BatchItemResult(uuid=object_uuid, filename=filename, status="removed"))
-        except CreoPDMError as exc:
-            failed.append(
-                BatchItemResult(uuid=object_uuid, filename=filename, code=exc.code, message=exc.message)
-            )
-    return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.config.workspace_root()))

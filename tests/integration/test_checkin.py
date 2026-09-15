@@ -39,7 +39,7 @@ def test_checkin_increments_iteration_and_releases_lock(client, repo_parent, dat
     assert current["display_revision"] == "A.3"
 
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"] / "CAD" / "shaft.prt"
+    workspace = data_dir / "workspaces" / project["uuid"] / "shaft.prt"
     workspace.write_bytes(b"bearing-diameter-25mm")
 
     preview = client.get(f"/api/objects/{obj['uuid']}/checkin-preview")
@@ -71,22 +71,22 @@ def test_checkin_increments_iteration_and_releases_lock(client, repo_parent, dat
     assert versions[0]["iteration"] == 4
     assert versions[0]["comment"] == "Increased bearing diameter to 25 mm"
     assert versions[0]["filename"] == "shaft.prt"
-    assert versions[0]["relative_path"] == "CAD/shaft.prt"
+    assert versions[0]["relative_path"] == "shaft.prt"
     comments = [item["comment"] for item in versions]
     assert "Increased bearing diameter to 25 mm" in comments
 
     page = client.get(f"/projects/{project['uuid']}/objects/{obj['uuid']}")
     assert page.status_code == 200
     assert page.text.index("A.4") < page.text.index("A.3")
-    assert page.text.count("CAD/shaft.prt") >= 4
+    assert page.text.count("shaft.prt") >= 4
 
 
 @requires_git
 def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     project, obj = _create_part(client, repo_parent)
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    cad = data_dir / "workspaces" / project["uuid"] / "CAD"
-    (cad / "pin.prt").write_bytes(b"new-pin")
+    workspace = data_dir / "workspaces" / project["uuid"]
+    (workspace / "pin.prt").write_bytes(b"new-pin")
 
     preview = client.get(f"/api/objects/{obj['uuid']}/checkin-preview")
     assert preview.status_code == 200, preview.text
@@ -94,13 +94,13 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     assert "pin.prt" in names
     pin = next(item for item in preview.json()["new_files"] if item["filename"] == "pin.prt")
     assert pin["same_folder"] is True
-    assert pin["relative_path"] == "CAD/pin.prt"
+    assert pin["relative_path"] == "pin.prt"
 
     checked_in = client.post(
         f"/api/objects/{obj['uuid']}/checkin",
         json={
             "comment": "Added pin created in Creo",
-            "add_relative_paths": ["CAD/pin.prt"],
+            "add_relative_paths": ["pin.prt"],
         },
     )
     assert checked_in.status_code == 200, checked_in.text
@@ -109,7 +109,7 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     assert "shaft.prt" in files
     assert "pin.prt" in files
     assert files["pin.prt"]["display_revision"] == "A.1"
-    assert (Path(project["repository_path"]) / "CAD" / "pin.prt").is_file()
+    assert (Path(project["repository_path"]) / "pin.prt").is_file()
 
 
 @requires_git
@@ -117,8 +117,8 @@ def test_checkin_keeps_creo_numbered_filename(client, repo_parent, data_dir):
     project, obj = _create_part(client, repo_parent)
     assert obj["filename"] == "shaft.prt"
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    cad = data_dir / "workspaces" / project["uuid"] / "CAD"
-    (cad / "shaft.prt.4").write_bytes(b"creo-save-4")
+    workspace = data_dir / "workspaces" / project["uuid"]
+    (workspace / "shaft.prt.4").write_bytes(b"creo-save-4")
 
     checked = client.post(
         f"/api/objects/{obj['uuid']}/checkin",
@@ -127,11 +127,11 @@ def test_checkin_keeps_creo_numbered_filename(client, repo_parent, data_dir):
     assert checked.status_code == 200, checked.text
     payload = checked.json()
     assert payload["filename"] == "shaft.prt.4"
-    assert payload["relative_path"] == "CAD/shaft.prt.4"
-    assert (Path(project["repository_path"]) / "CAD" / "shaft.prt.4").is_file()
+    assert payload["relative_path"] == "shaft.prt.4"
+    assert (Path(project["repository_path"]) / "shaft.prt.4").is_file()
 
     history = client.get(f"/api/objects/{obj['uuid']}/history").json()
     assert history[0]["filename"] == "shaft.prt.4"
-    assert history[0]["relative_path"] == "CAD/shaft.prt.4"
+    assert history[0]["relative_path"] == "shaft.prt.4"
     assert history[-1]["filename"] == "shaft.prt"
-    assert history[-1]["relative_path"] == "CAD/shaft.prt"
+    assert history[-1]["relative_path"] == "shaft.prt"

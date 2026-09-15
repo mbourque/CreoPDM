@@ -43,6 +43,18 @@ def checkout_batch(
     )
 
 
+@router.post("/api/objects/batch/undo-checkout", response_model=BatchOperationResponse)
+def undo_checkout_batch(
+    payload: BatchObjectRequest,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BatchOperationResponse:
+    result = ctx.checkouts.undo_checkout_many(db, payload.object_ids)
+    return BatchOperationResponse.model_validate(
+        {**result, "workspace_root": str(ctx.config.workspace_root())}
+    )
+
+
 @router.post("/api/objects/batch/workspace", response_model=BatchOperationResponse)
 def send_to_workspace(
     payload: BatchObjectRequest,

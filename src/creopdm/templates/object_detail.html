@@ -22,12 +22,18 @@
 
   <div class="toolbar-actions detail-actions">
     <button type="button" class="btn" id="open-btn" data-uuid="{{ object.uuid }}">Open</button>
-    <button type="button" class="btn" id="open-workspace-btn" data-project="{{ project.uuid }}">Open Workspace</button>
+    <span class="toolbar-tip" title="Open the CreoPDM workspace folder for this project in File Explorer.">
+      <button type="button" class="btn" id="open-workspace-btn" data-project="{{ project.uuid }}">Open Workspace</button>
+    </span>
     <button type="button" class="btn" id="checkout-btn" data-uuid="{{ object.uuid }}" {% if not object.can_checkout %}disabled{% endif %}>Checkout</button>
     <button type="button" class="btn" id="checkin-btn" data-uuid="{{ object.uuid }}" {% if not object.can_checkin %}disabled{% endif %}>Check In</button>
     <button type="button" class="btn" id="undo-btn" data-uuid="{{ object.uuid }}" {% if not object.owned_by_me %}disabled{% endif %}>Undo Checkout</button>
-    <button type="button" class="btn" id="purge-workspace-btn" data-uuid="{{ object.uuid }}" title="Delete local copies. The project vault is unchanged.">Remove from Workspace</button>
-    <button type="button" class="btn btn-danger" id="remove-project-btn" data-uuid="{{ object.uuid }}" title="Delete the vault file and local copies.">Remove from Project</button>
+    <span class="toolbar-tip" title="Delete CreoPDM working copies of this file. The original in your project folder is not deleted. If you have it checked out, that checkout is cancelled.">
+      <button type="button" class="btn" id="purge-workspace-btn" data-uuid="{{ object.uuid }}">Remove from Workspace</button>
+    </span>
+    <span class="toolbar-tip" title="Remove this file from the project list and delete CreoPDM workspace copies. The original in your project folder is not deleted.">
+      <button type="button" class="btn btn-danger" id="remove-project-btn" data-uuid="{{ object.uuid }}">Remove from Project</button>
+    </span>
   </div>
   <div class="toolbar-messages">
     <p class="error" id="toolbar-error" hidden></p>

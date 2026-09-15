@@ -26,7 +26,19 @@
     {% if selected %}
     <div class="content-head">
       <div>
-        <h1>{{ selected.name }}</h1>
+        <div class="title-row">
+          <h1>{{ selected.name }}</h1>
+          <button type="button" class="btn btn-small" id="rename-project-btn"
+                  data-project="{{ selected.uuid }}"
+                  data-name="{{ selected.name }}"
+                  data-number="{{ selected.number or '' }}"
+                  data-description="{{ selected.description or '' }}">Rename</button>
+          <button type="button" class="btn btn-small btn-danger" id="forget-project-btn"
+                  data-project="{{ selected.uuid }}"
+                  data-name="{{ selected.name }}"
+                  data-path="{{ selected.repository_path }}"
+                  title="Remove Git and CreoPDM registration. CAD files are not deleted.">Forget project</button>
+        </div>
         <p class="muted">{{ selected.description or "No description" }} · {{ selected.repository_path }}</p>
         {% if workspace_path %}
         <p class="muted small">Workspace: {{ workspace_path }}</p>
@@ -40,13 +52,13 @@
 
     {% if status %}
     <ul class="metrics" id="metric-filters">
-      <li><button type="button" class="metric" data-filter="files" title="Select all files"><strong>{{ status.files }}</strong> Files</button></li>
-      <li><button type="button" class="metric" data-filter="creo_parts" title="Select Creo parts"><strong>{{ status.creo_parts }}</strong> Creo Parts</button></li>
-      <li><button type="button" class="metric" data-filter="assemblies" title="Select assemblies"><strong>{{ status.assemblies }}</strong> Assemblies</button></li>
-      <li><button type="button" class="metric" data-filter="drawings" title="Select drawings"><strong>{{ status.drawings }}</strong> Drawings</button></li>
-      <li><button type="button" class="metric" data-filter="documents" title="Select documents"><strong>{{ status.documents }}</strong> Documents</button></li>
+      <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Select all files. Click again to filter. Click a third time to clear."><strong>{{ status.files }}</strong> Files</button></li>
+      <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Select Creo parts. Click again to filter. Click a third time to clear."><strong>{{ status.creo_parts }}</strong> Creo Parts</button></li>
+      <li><button type="button" class="metric" data-filter="assemblies" data-mode="off" title="Select assemblies. Click again to filter. Click a third time to clear."><strong>{{ status.assemblies }}</strong> Assemblies</button></li>
+      <li><button type="button" class="metric" data-filter="drawings" data-mode="off" title="Select drawings. Click again to filter. Click a third time to clear."><strong>{{ status.drawings }}</strong> Drawings</button></li>
+      <li><button type="button" class="metric" data-filter="documents" data-mode="off" title="Select documents. Click again to filter. Click a third time to clear."><strong>{{ status.documents }}</strong> Documents</button></li>
     </ul>
-    <p class="muted small" id="selection-summary">Click a count to select that group. Click a row to toggle one file.</p>
+    <p class="muted small" id="selection-summary">Click a count to select that group, again to filter the list, again to clear. Click a filename to open it. Click a row for history. Ctrl-click a row to select it.</p>
     {% endif %}
 
     <div class="table-wrap">
@@ -67,9 +79,12 @@
               data-can-checkout="{{ '1' if obj.can_checkout else '0' }}"
               data-can-checkin="{{ '1' if obj.can_checkin else '0' }}"
               data-owned="{{ '1' if obj.owned_by_me else '0' }}"
-              class="object-row">
+              data-detail="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}#history"
+              class="object-row"
+              title="View history and details. Ctrl-click to select.">
             <td>
-              <a href="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}">{{ obj.filename }}</a>
+              <a class="object-open" href="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}"
+                 data-uuid="{{ obj.uuid }}" title="Open this file">{{ obj.filename }}</a>
               <div class="muted small">{{ obj.relative_path }}</div>
             </td>
             <td>{{ obj.display_revision }}</td>
@@ -103,15 +118,29 @@
 <footer class="toolbar">
   <div class="toolbar-actions">
     <button type="button" class="btn" id="add-files-btn" {% if not selected %}disabled{% endif %}>Add Files</button>
-    <button type="button" class="btn" id="workspace-btn" disabled>To Workspace</button>
-    <button type="button" class="btn" id="open-workspace-btn" {% if selected %}data-project="{{ selected.uuid }}"{% else %}disabled{% endif %}>Open Workspace</button>
-    <button type="button" class="btn" id="open-btn" disabled>Open</button>
+    <span class="toolbar-tip" title="Copy the selected files into the CreoPDM workspace (AppData). Does not check them out.">
+      <button type="button" class="btn" id="workspace-btn" disabled>To Workspace</button>
+    </span>
+    <span class="toolbar-tip" title="Open the CreoPDM workspace folder for this project in File Explorer.">
+      <button type="button" class="btn" id="open-workspace-btn" {% if selected %}data-project="{{ selected.uuid }}"{% else %}disabled{% endif %}>Open Workspace</button>
+    </span>
+    <span class="toolbar-tip" title="Open the selected file in Creo or its Windows associated program.">
+      <button type="button" class="btn" id="open-btn" disabled>Open</button>
+    </span>
     <button type="button" class="btn" id="checkout-btn" disabled>Checkout</button>
     <button type="button" class="btn" id="checkin-btn" disabled>Check In</button>
-    <button type="button" class="btn" id="undo-btn" disabled>Undo Checkout</button>
-    <button type="button" class="btn" id="history-btn" disabled>History</button>
-    <button type="button" class="btn" id="purge-workspace-btn" disabled title="Delete local copies. The project vault is unchanged.">Remove from Workspace</button>
-    <button type="button" class="btn btn-danger" id="remove-project-btn" disabled title="Delete the vault file and local copies.">Remove from Project</button>
+    <span class="toolbar-tip" title="Cancel your checkout on every selected file you own. Workspace copies are restored from the original. Files in your original project folder are not deleted.">
+      <button type="button" class="btn" id="undo-btn" disabled>Undo Checkout</button>
+    </span>
+    <span class="toolbar-tip" title="Open version history and details for the selected file.">
+      <button type="button" class="btn" id="history-btn" disabled>History</button>
+    </span>
+    <span class="toolbar-tip" title="Delete CreoPDM working copies of the selected files only. Files in your original project folder are not deleted. Checkouts on those files are cancelled.">
+      <button type="button" class="btn" id="purge-workspace-btn" disabled>Remove from Workspace</button>
+    </span>
+    <span class="toolbar-tip" title="Remove the selected files from this project list and delete CreoPDM workspace copies. Files in your original project folder are not deleted.">
+      <button type="button" class="btn btn-danger" id="remove-project-btn" disabled>Remove from Project</button>
+    </span>
     <button type="button" class="btn" disabled title="Get Latest is part of a later milestone">Get Latest</button>
   </div>
   <div class="toolbar-messages">
@@ -122,7 +151,7 @@
 
 <dialog id="project-dialog" class="dialog">
   <form method="dialog" id="project-form">
-    <h2>New project</h2>
+    <h2 id="project-dialog-title">New project</h2>
     <label>Name
       <input name="name" required maxlength="255" placeholder="Robot Arm">
     </label>
@@ -132,13 +161,34 @@
     <label>Description
       <textarea name="description" rows="3" placeholder="Prototype robotic arm"></textarea>
     </label>
-    <label>Location
-      <input name="repository_path" required placeholder="D:\Engineering\Projects\RobotArm">
+    <label id="project-location-label">Location
+      <span class="path-picker">
+        <input name="repository_path" required maxlength="1024" placeholder="Choose a folder…" autocomplete="off">
+        <button type="button" class="btn" id="browse-location-btn">Browse…</button>
+      </span>
+      <span class="muted small">Required. This is the project vault on disk. The parent folder must already exist.</span>
     </label>
     <p class="error" id="project-error" hidden></p>
     <div class="dialog-actions">
       <button type="button" class="btn" value="cancel" id="project-cancel">Cancel</button>
-      <button type="submit" class="btn btn-primary">Create</button>
+      <button type="submit" class="btn btn-primary" id="project-submit">Create</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="forget-dialog" class="dialog">
+  <form method="dialog" id="forget-form">
+    <h2>Forget this project</h2>
+    <p>This removes Git history (<code>.git</code>), <code>.gitignore</code>, and CreoPDM registration. Workspace copies are deleted.</p>
+    <p><strong>CAD files in the project folder are not deleted.</strong></p>
+    <p class="muted small" id="forget-path"></p>
+    <label>Type the project name to confirm
+      <input name="confirm_name" id="forget-confirm" required maxlength="255" autocomplete="off">
+    </label>
+    <p class="error" id="forget-error" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="forget-cancel">Cancel</button>
+      <button type="submit" class="btn btn-danger">Forget project</button>
     </div>
   </form>
 </dialog>
@@ -146,12 +196,12 @@
 <dialog id="add-dialog" class="dialog">
   <form method="dialog" id="add-form" {% if selected %}data-project="{{ selected.uuid }}"{% endif %}>
     <h2>Add files</h2>
-    <p class="muted">Choose Files opens in the workspace so you can pick models Creo just saved. Numbered names such as <code>shaft.prt.3</code> are kept as-is.</p>
-    <p class="muted small" id="add-folder-label">{% if workspace_path %}Workspace: {{ workspace_path }}{% endif %}</p>
+    <p class="muted">Choose Files opens in the original project folder. Numbered names such as <code>shaft.prt.3</code> are kept as-is. Workspace copies of every type go in one project folder.</p>
+    <p class="muted small" id="add-folder-label">{% if selected %}Project: {{ selected.repository_path }}{% endif %}</p>
     <div class="dropzone" id="dropzone">
       <button type="button" class="btn" id="choose-workspace-files">Choose Files</button>
       <ul id="chosen-file-list" class="detect-list"></ul>
-      <span class="muted small">The Windows dialog starts in your workspace folder.</span>
+      <span class="muted small">The Windows dialog starts in the project vault folder.</span>
     </div>
     <label>Comment
       <input name="comment" placeholder="Initial models">

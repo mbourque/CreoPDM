@@ -2,29 +2,59 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
-from creopdm.constants import CREO_FILE_EXTENSIONS
+from creopdm.constants import CREO_FILE_EXTENSIONS, DEFAULT_EXTRA_CAD_EXTENSIONS
+
+
+def _dot_ext(value: str) -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    return text if text.startswith(".") else f".{text}"
 
 
 class CreoFileManager:
     """Handles Creo numbered filenames and canonical repository copies."""
 
     @staticmethod
-    def is_creo_extension(extension: str) -> bool:
-        return extension.lower() in CREO_FILE_EXTENSIONS
+    def versioned_extensions(extra_extensions: Iterable[str] | None = None) -> frozenset[str]:
+        """Extensions that use Creo-style .ext.N save numbers."""
+        extras = DEFAULT_EXTRA_CAD_EXTENSIONS if extra_extensions is None else extra_extensions
+        known = set(CREO_FILE_EXTENSIONS)
+        for item in extras:
+            ext = _dot_ext(item)
+            if ext:
+                known.add(ext)
+        return frozenset(known)
 
-    @staticmethod
-    def normalize_creo_filename(filename: str) -> str:
-        """Strip Creo save-version suffixes from known Creo files only.
+    @classmethod
+    def is_creo_extension(cls, extension: str) -> bool:
+        return _dot_ext(extension) in CREO_FILE_EXTENSIONS
+
+    @classmethod
+    def is_versioned_extension(
+        cls,
+        extension: str,
+        extra_extensions: Iterable[str] | None = None,
+    ) -> bool:
+        return _dot_ext(extension) in cls.versioned_extensions(extra_extensions)
+
+    @classmethod
+    def normalize_creo_filename(
+        cls,
+        filename: str,
+        extra_extensions: Iterable[str] | None = None,
+    ) -> str:
+        """Strip save-version suffixes from CAD files that use .ext.N numbering.
 
         Examples:
             shaft.prt.1   -> shaft.prt
-            shaft.prt.25  -> shaft.prt
-            motor.asm.7   -> motor.asm
-            layout.drw.3  -> layout.drw
-            notes.txt.1   -> notes.txt.1   (not a Creo extension)
-            report.2024   -> report.2024   (numeric suffix is not after a Creo ext)
+            setup.inf.1   -> setup.inf
+            outline.dxf.4 -> outline.dxf
+            notes.txt.1   -> notes.txt.1   (not a versioned CAD extension)
+            report.2024   -> report.2024
         """
         name = Path(str(filename).replace("\\", "/")).name
         if not name:
@@ -35,7 +65,7 @@ class CreoFileManager:
         stem, extension, suffix = parts
         if not stem or not suffix.isdigit():
             return name
-        if f".{extension.lower()}" not in CREO_FILE_EXTENSIONS:
+        if f".{extension.lower()}" not in cls.versioned_extensions(extra_extensions):
             return name
         return f"{stem}.{extension}"
 
@@ -45,29 +75,41 @@ class CreoFileManager:
         return Path(str(filename).replace("\\", "/")).name
 
     @classmethod
-    def logical_filename(cls, filename: str) -> str:
-        """Logical Creo model name used to match numbered siblings."""
-        return cls.normalize_creo_filename(filename)
+    def logical_filename(
+        cls,
+        filename: str,
+        extra_extensions: Iterable[str] | None = None,
+    ) -> str:
+        """Logical CAD name used to match numbered siblings."""
+        return cls.normalize_creo_filename(filename, extra_extensions)
 
     @classmethod
-    def logical_repo_path(cls, relative_path: str) -> str:
+    def logical_repo_path(
+        cls,
+        relative_path: str,
+        extra_extensions: Iterable[str] | None = None,
+    ) -> str:
         path = Path(str(relative_path).replace("\\", "/"))
-        name = cls.logical_filename(path.name)
+        name = cls.logical_filename(path.name, extra_extensions)
         parent = path.parent
         if parent.as_posix() == ".":
             return name.lower()
         return (parent / name).as_posix().lower()
 
     @classmethod
-    def select_latest_creo_version(cls, paths: list[Path]) -> Path | None:
-        """Choose the highest numbered Creo save among sibling files."""
+    def select_latest_creo_version(
+        cls,
+        paths: list[Path],
+        extra_extensions: Iterable[str] | None = None,
+    ) -> Path | None:
+        """Choose the highest numbered save among sibling files."""
         best: tuple[int, Path] | None = None
         unnumbered: Path | None = None
         for path in paths:
             name = path.name
-            normalized = cls.normalize_creo_filename(name)
+            normalized = cls.normalize_creo_filename(name, extra_extensions)
             if normalized == name:
-                if cls.is_creo_extension(path.suffix):
+                if cls.is_versioned_extension(path.suffix, extra_extensions):
                     unnumbered = path
                 continue
             suffix = name.rsplit(".", 1)[-1]
@@ -80,18 +122,23 @@ class CreoFileManager:
         return unnumbered
 
     @classmethod
-    def latest_in_directory(cls, directory: Path, canonical_name: str) -> Path | None:
-        """Return the newest Creo save (or the canonical file) for a logical object."""
+    def latest_in_directory(
+        cls,
+        directory: Path,
+        canonical_name: str,
+        extra_extensions: Iterable[str] | None = None,
+    ) -> Path | None:
+        """Return the newest numbered save (or the canonical file) for a logical object."""
         if not directory.is_dir():
             return None
-        wanted = cls.logical_filename(canonical_name).lower()
+        wanted = cls.logical_filename(canonical_name, extra_extensions).lower()
         matches: list[Path] = []
         for path in directory.iterdir():
             if not path.is_file():
                 continue
-            if cls.logical_filename(path.name).lower() == wanted:
+            if cls.logical_filename(path.name, extra_extensions).lower() == wanted:
                 matches.append(path)
         if not matches:
             fallback = directory / canonical_name
             return fallback if fallback.is_file() else None
-        return cls.select_latest_creo_version(matches) or matches[0]
+        return cls.select_latest_creo_version(matches, extra_extensions) or matches[0]

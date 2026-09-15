@@ -6,11 +6,25 @@ import os
 import subprocess
 from pathlib import Path
 
+from creopdm.constants import CREO_FILE_EXTENSIONS, DEFAULT_EXTRA_CAD_EXTENSIONS
 from creopdm.exceptions import ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.utils.sta import run_on_sta
 
 logger = get_logger("dialog")
+
+
+def cad_dialog_filter_patterns() -> str:
+    """Glob list for the native file picker, including Creo numbered saves."""
+    seen: set[str] = set()
+    patterns: list[str] = []
+    for ext in (*CREO_FILE_EXTENSIONS, *DEFAULT_EXTRA_CAD_EXTENSIONS):
+        if ext in seen:
+            continue
+        seen.add(ext)
+        patterns.append(f"*{ext}")
+        patterns.append(f"*{ext}.*")
+    return ";".join(patterns)
 
 
 def pick_files(initial_dir: Path, title: str = "Add files to the project") -> list[Path]:
@@ -36,6 +50,39 @@ def pick_files(initial_dir: Path, title: str = "Add files to the project") -> li
             ) from exc
 
 
+def pick_folder(initial_dir: Path, title: str = "Choose project folder") -> Path | None:
+    """Open a native folder picker. Returns None if the user cancels."""
+    start = Path(initial_dir)
+    if not start.is_dir():
+        start = start.parent if start.parent.is_dir() else Path.home()
+    if os.name != "nt":
+        return None
+    try:
+        return run_on_sta(lambda: _windows_folder_dialog(start, title))
+    except Exception:
+        logger.exception("IFileOpenDialog folder picker failed; trying Windows Forms")
+        try:
+            return _winforms_folder_dialog(start, title)
+        except Exception as exc:
+            logger.exception("Windows Forms folder picker also failed")
+            raise ValidationAppError(
+                "The folder picker could not be opened. Type a folder path instead.",
+                details={"reason": str(exc)},
+            ) from exc
+
+
+def default_project_location_start() -> Path:
+    """Sensible starting folder for the New Project location picker."""
+    for candidate in (
+        Path(r"D:\Engineering\Projects"),
+        Path.home() / "Documents",
+        Path.home(),
+    ):
+        if candidate.is_dir():
+            return candidate
+    return Path.cwd()
+
+
 def _winforms_open_dialog(initial_dir: Path, title: str) -> list[Path]:
     """Fallback picker that does not need Tcl/Tk."""
     script = (
@@ -44,7 +91,7 @@ def _winforms_open_dialog(initial_dir: Path, title: str) -> list[Path]:
         "$d.InitialDirectory = $env:CREOPDM_DIALOG_DIR; "
         "$d.Title = $env:CREOPDM_DIALOG_TITLE; "
         "$d.Multiselect = $true; "
-        "$d.Filter = 'All files (*.*)|*.*'; "
+        f"$d.Filter = 'All files (*.*)|*.*|CAD files|{cad_dialog_filter_patterns()}|Documents|*.pdf;*.docx;*.doc;*.xlsx;*.xls;*.txt'; "
         "$d.CheckFileExists = $true; "
         "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { "
         "$d.FileNames | ForEach-Object { $_ } }"
@@ -66,6 +113,167 @@ def _winforms_open_dialog(initial_dir: Path, title: str) -> list[Path]:
             details={"stderr": (result.stderr or "").strip()[:400]},
         )
     return [Path(line.strip()) for line in result.stdout.splitlines() if line.strip()]
+
+
+def _winforms_folder_dialog(initial_dir: Path, title: str) -> Path | None:
+    script = (
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "[void][System.Windows.Forms.Application]::EnableVisualStyles(); "
+        "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
+        "$d.Description = $env:CREOPDM_DIALOG_TITLE; "
+        "$d.SelectedPath = $env:CREOPDM_DIALOG_DIR; "
+        "$d.ShowNewFolderButton = $true; "
+        "try { $d.UseDescriptionForTitle = $true } catch {}; "
+        "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { "
+        "$d.SelectedPath }"
+    )
+    env = os.environ.copy()
+    env["CREOPDM_DIALOG_DIR"] = str(initial_dir)
+    env["CREOPDM_DIALOG_TITLE"] = title
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-STA", "-WindowStyle", "Hidden", "-Command", script],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+        shell=False,
+    )
+    if result.returncode != 0:
+        raise ValidationAppError(
+            "The folder picker could not be opened.",
+            details={"stderr": (result.stderr or "").strip()[:400]},
+        )
+    line = (result.stdout or "").strip().splitlines()
+    if not line:
+        return None
+    chosen = Path(line[-1].strip())
+    return chosen if chosen.is_dir() else None
+
+
+def _windows_folder_dialog(initial_dir: Path, title: str) -> Path | None:
+    """Vista-style folder picker (IFileOpenDialog with FOS_PICKFOLDERS)."""
+    import ctypes
+    from ctypes import HRESULT, POINTER, byref, c_void_p
+    from ctypes.wintypes import DWORD, HWND, LPCWSTR, LPWSTR
+
+    ole32 = ctypes.windll.ole32
+    shell32 = ctypes.windll.shell32
+    kernel32 = ctypes.windll.kernel32
+
+    class GUID(ctypes.Structure):
+        _fields_ = [
+            ("Data1", ctypes.c_ulong),
+            ("Data2", ctypes.c_ushort),
+            ("Data3", ctypes.c_ushort),
+            ("Data4", ctypes.c_ubyte * 8),
+        ]
+
+    ole32.CLSIDFromString.argtypes = [LPCWSTR, POINTER(GUID)]
+    ole32.CLSIDFromString.restype = HRESULT
+    ole32.CoCreateInstance.argtypes = [
+        POINTER(GUID),
+        c_void_p,
+        DWORD,
+        POINTER(GUID),
+        POINTER(c_void_p),
+    ]
+    ole32.CoCreateInstance.restype = HRESULT
+    ole32.CoTaskMemFree.argtypes = [c_void_p]
+    shell32.SHCreateItemFromParsingName.argtypes = [
+        LPCWSTR,
+        c_void_p,
+        POINTER(GUID),
+        POINTER(c_void_p),
+    ]
+    shell32.SHCreateItemFromParsingName.restype = HRESULT
+
+    def as_guid(value: str) -> GUID:
+        guid = GUID()
+        hr = ole32.CLSIDFromString(value, byref(guid))
+        if hr:
+            raise OSError(hr)
+        return guid
+
+    clsctx_inproc = 1
+    fos_pickfolders = 0x20
+    fos_forcefilesystem = 0x40
+    fos_nochangedir = 0x8
+    fos_pathmustexist = 0x800
+    sigdn_filesyspath = 0x80058000
+    error_cancelled = 0x800704C7
+
+    dialog = c_void_p()
+    hr = ole32.CoCreateInstance(
+        byref(as_guid("{DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7}")),
+        None,
+        clsctx_inproc,
+        byref(as_guid("{D57C7288-D4AD-4768-BE02-9D969532D960}")),
+        byref(dialog),
+    )
+    if hr:
+        raise OSError(hr)
+
+    vtbl = ctypes.cast(dialog, POINTER(POINTER(c_void_p))).contents
+
+    def method(index: int, restype, *argtypes):
+        proto = ctypes.WINFUNCTYPE(restype, c_void_p, *argtypes)
+        return proto(vtbl[index])
+
+    release = method(2, ctypes.c_ulong)
+    show = method(3, HRESULT, HWND)
+    set_options = method(9, HRESULT, DWORD)
+    set_folder = method(12, HRESULT, c_void_p)
+    set_title = method(17, HRESULT, LPCWSTR)
+    get_result = method(20, HRESULT, POINTER(c_void_p))
+
+    hwnd = 0
+    try:
+        kernel32.GetConsoleWindow.restype = HWND
+        kernel32.GetConsoleWindow.argtypes = []
+        hwnd = kernel32.GetConsoleWindow() or 0
+    except Exception:
+        hwnd = 0
+
+    try:
+        set_options(dialog, fos_pickfolders | fos_forcefilesystem | fos_nochangedir | fos_pathmustexist)
+        set_title(dialog, title)
+        folder_item = c_void_p()
+        if initial_dir.is_dir() and shell32.SHCreateItemFromParsingName(
+            str(initial_dir),
+            None,
+            byref(as_guid("{43826D1E-E718-42EE-BC55-A1E261C37BFE}")),
+            byref(folder_item),
+        ) == 0 and folder_item:
+            set_folder(dialog, folder_item)
+            folder_vtbl = ctypes.cast(folder_item, POINTER(POINTER(c_void_p))).contents
+            ctypes.WINFUNCTYPE(ctypes.c_ulong, c_void_p)(folder_vtbl[2])(folder_item)
+        hr = show(dialog, hwnd)
+        if hr and (hr & 0xFFFFFFFF) == error_cancelled:
+            return None
+        if hr:
+            raise OSError(hr)
+        result_item = c_void_p()
+        hr = get_result(dialog, byref(result_item))
+        if hr or not result_item:
+            return None
+        item_vtbl = ctypes.cast(result_item, POINTER(POINTER(c_void_p))).contents
+        get_display_name = ctypes.WINFUNCTYPE(HRESULT, c_void_p, DWORD, POINTER(LPWSTR))(
+            item_vtbl[5]
+        )
+        release_item = ctypes.WINFUNCTYPE(ctypes.c_ulong, c_void_p)(item_vtbl[2])
+        name = LPWSTR()
+        hr = get_display_name(result_item, sigdn_filesyspath, byref(name))
+        try:
+            if hr or not name.value:
+                return None
+            chosen = Path(name.value)
+        finally:
+            if name:
+                ole32.CoTaskMemFree(name)
+            release_item(result_item)
+        return chosen if chosen.is_dir() else None
+    finally:
+        release(dialog)
 
 
 def _windows_open_dialog(initial_dir: Path, title: str) -> list[Path]:
@@ -108,10 +316,11 @@ def _windows_open_dialog(initial_dir: Path, title: str) -> list[Path]:
 
     buffer_chars = 32768
     file_buf = ctypes.create_unicode_buffer(buffer_chars)
+    cad_patterns = cad_dialog_filter_patterns()
     filter_text = (
         "All files\0*.*\0"
-        "Creo files\0*.prt;*.prt.*;*.asm;*.asm.*;*.drw;*.drw.*;*.mfg;*.mfg.*\0"
-        "Documents\0*.pdf;*.docx;*.doc;*.xlsx;*.xls;*.txt;*.step;*.stp\0\0"
+        f"CAD files\0{cad_patterns}\0"
+        "Documents\0*.pdf;*.docx;*.doc;*.xlsx;*.xls;*.txt\0\0"
     )
     filter_buf = ctypes.create_unicode_buffer(len(filter_text) + 2)
     for index, char in enumerate(filter_text):

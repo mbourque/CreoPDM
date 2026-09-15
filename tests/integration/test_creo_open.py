@@ -47,7 +47,7 @@ def test_open_in_creo_uses_connector(data_dir, repo_parent, identity: StaticUser
         assert opened.json()["working_directory"] == str(recorder.opened[0].parent)
         assert recorder.opened
         assert recorder.opened[0].name == "base.prt"
-        assert recorder.opened[0].parent.name == "CAD"
+        assert recorder.opened[0].parent.name == project["uuid"]
 
 
 @requires_git
@@ -72,14 +72,14 @@ def test_open_after_checkin_despite_creo_numbered_workspace_file(
         assert created.status_code == 201, created.text
         obj_id = created.json()["uuid"]
         assert client.post(f"/api/objects/{obj_id}/checkout").status_code == 200
-        cad = data_dir / "workspaces" / project["uuid"] / "CAD"
-        (cad / "nested-plywood.prt.1").write_bytes(b"creo-iteration")
+        workspace = data_dir / "workspaces" / project["uuid"]
+        (workspace / "nested-plywood.prt.1").write_bytes(b"creo-iteration")
         checked = client.post(
             f"/api/objects/{obj_id}/checkin",
             json={"comment": "Saved from Creo"},
         )
         assert checked.status_code == 200, checked.text
-        (cad / "nested-plywood.prt.2").write_bytes(b"creo-after-checkin")
+        (workspace / "nested-plywood.prt.2").write_bytes(b"creo-after-checkin")
         opened = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened.status_code == 200, opened.text
         assert recorder.opened
@@ -167,4 +167,4 @@ def test_open_document_uses_windows_association(data_dir, repo_parent, identity,
         assert opened_resp.json()["method"] == "shell"
         assert opened
         assert opened[0].name == "notes.txt"
-        assert opened[0].parent.name == "Documents"
+        assert opened[0].parent.name == project["uuid"]

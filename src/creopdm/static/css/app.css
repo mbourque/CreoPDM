@@ -71,7 +71,9 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .project-number { font-size: 0.75rem; color: #8ea0b2; }
 .empty, .empty-row td { color: var(--muted); padding: 1rem; }
 
-.content { padding: 1rem 1.25rem 5rem; background: var(--panel); }
+.content { padding: 1rem 1.25rem 7.5rem; background: var(--panel); }
+.title-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.title-row h1 { margin: 0; }
 .content-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
 .content h1, .hero h1 { margin: 0 0 0.2rem; font-size: 1.45rem; }
 .muted { color: var(--muted); }
@@ -92,9 +94,18 @@ a.brand:hover { text-decoration: none; color: inherit; }
   padding: 0.45rem 0.85rem; box-shadow: var(--shadow); font-size: 0.85rem;
   cursor: pointer; color: inherit;
 }
-.metric:hover, .metric.is-active {
+.metric:hover {
   border-color: var(--accent-2);
-  background: #e7f1f6;
+}
+.metric.is-selected {
+  border-color: #2f6f8f;
+  background: #d7ebf5;
+  color: #16384a;
+}
+.metric.is-filtered {
+  border-color: var(--accent);
+  background: #f4d2b8;
+  color: #6a2e0c;
 }
 .settings-form { max-width: 40rem; display: flex; flex-direction: column; gap: 1.1rem; }
 .settings-form fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 0.9rem 1rem; background: white; }
@@ -107,6 +118,7 @@ a.brand:hover { text-decoration: none; color: inherit; }
 #checkin-new-files { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.4rem 0 0.2rem; }
 #checkin-new-files label { font-weight: 500; }
 .ok { color: var(--ok); margin: 0; }
+.error { color: #9b1c1c; margin: 0; }
 
 .table-wrap { background: white; border: 1px solid var(--line); border-radius: 6px; overflow: auto; }
 .grid { width: 100%; border-collapse: collapse; }
@@ -114,6 +126,7 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .grid th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); background: #f3f6f8; }
 .object-row { cursor: pointer; }
 .object-row.is-selected { background: #e7f1f6; }
+.object-open { font-weight: 600; cursor: pointer; }
 .grid tr.is-latest { background: #eef6f1; }
 
 .state, .checkout-state {
@@ -136,7 +149,9 @@ a.brand:hover { text-decoration: none; color: inherit; }
   position: sticky; bottom: 0; display: flex; flex-direction: column; align-items: stretch;
   gap: 0.35rem; padding: 0.6rem 1rem; background: #f0f3f6; border-top: 1px solid var(--line);
 }
-.toolbar-actions { display: flex; gap: 0.4rem; flex-wrap: nowrap; overflow-x: auto; align-items: center; }
+.toolbar-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+.toolbar-tip { display: inline-flex; }
+.toolbar-tip .btn:disabled { pointer-events: none; }
 .toolbar-messages { width: 100%; min-width: 0; }
 .toolbar-messages .error, .toolbar-messages .ok { overflow-wrap: anywhere; }
 .toolbar-note { color: var(--muted); font-size: 0.8rem; }
@@ -163,7 +178,30 @@ a.brand:hover { text-decoration: none; color: inherit; }
   font: inherit; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 4px; font-weight: 400;
 }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
-.error { color: #9b1c1c; margin: 0; }
+.path-picker { display: flex; gap: 0.4rem; align-items: stretch; font-weight: 400; }
+.path-picker input { flex: 1; min-width: 0; }
+.path-picker .btn { flex-shrink: 0; }
+.dialog label .muted { font-weight: 400; }
+.busy-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(18, 25, 32, 0.45);
+}
+.busy-overlay[hidden] { display: none !important; }
+.busy-panel {
+  display: flex; align-items: center; gap: 0.8rem;
+  min-width: 16rem; max-width: 28rem;
+  background: white; border: 1px solid var(--line); border-radius: 8px;
+  padding: 1.05rem 1.3rem; box-shadow: 0 16px 40px rgba(16, 24, 32, 0.25);
+}
+.busy-panel p { margin: 0; font-weight: 600; }
+.busy-spinner {
+  width: 1.25rem; height: 1.25rem; flex-shrink: 0;
+  border: 3px solid #d5dee8; border-top-color: var(--accent);
+  border-radius: 50%; animation: busy-spin 0.7s linear infinite;
+}
+@keyframes busy-spin { to { transform: rotate(360deg); } }
+body.is-busy, body.is-busy * { cursor: wait !important; }
 .dropzone {
   border: 1px dashed #7f93a6; border-radius: 6px; padding: 1.2rem; text-align: center;
   background: #f4f7fa; font-weight: 500;

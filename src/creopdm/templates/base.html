@@ -26,6 +26,12 @@
   <main class="shell">
     {% block content %}{% endblock %}
   </main>
+  <div id="busy-overlay" class="busy-overlay" hidden>
+    <div class="busy-panel" role="status" aria-live="polite">
+      <span class="busy-spinner" aria-hidden="true"></span>
+      <p id="busy-message">Working…</p>
+    </div>
+  </div>
   <script src="/static/js/app.js"></script>
 </body>
 </html>

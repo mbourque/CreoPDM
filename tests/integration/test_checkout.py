@@ -31,7 +31,7 @@ def test_checkout_then_second_user_denied(client, repo_parent, identity, data_di
     assert first.json()["checkout_status"].startswith("Checked out by me")
     assert first.json()["can_checkin"] is True
 
-    workspace = data_dir / "workspaces" / project["uuid"] / "CAD" / "shaft.prt"
+    workspace = data_dir / "workspaces" / project["uuid"] / "shaft.prt"
     assert workspace.is_file()
     original = workspace.read_bytes()
 
@@ -95,9 +95,45 @@ def test_batch_checkout_copies_all_selected_files(client, repo_parent, data_dir)
     assert len(body["ok"]) == 3
     assert body["failed"] == []
     workspace = data_dir / "workspaces" / project["uuid"]
-    assert (workspace / "CAD" / "shaft.prt").is_file()
-    assert (workspace / "Documents" / "notes.txt").is_file()
-    assert (workspace / "CAD" / "arm.asm").is_file()
+    assert (workspace / "shaft.prt").is_file()
+    assert (workspace / "notes.txt").is_file()
+    assert (workspace / "arm.asm").is_file()
+
+
+@requires_git
+def test_batch_undo_checkout_releases_all_selected_files(client, repo_parent):
+    location = repo_parent / "UndoArm"
+    project = client.post(
+        "/api/projects",
+        json={"name": "Undo Arm", "repository_path": str(location)},
+    ).json()
+    part = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("shaft.prt", b"part", "application/octet-stream")},
+        data={"comment": "Part"},
+    ).json()
+    notes = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("notes.txt", b"hello", "text/plain")},
+        data={"comment": "Notes"},
+    ).json()
+    assembly = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("arm.asm", b"asm", "application/octet-stream")},
+        data={"comment": "Assembly"},
+    ).json()
+    ids = [part["uuid"], notes["uuid"], assembly["uuid"]]
+    assert client.post("/api/objects/batch/checkout", json={"object_ids": ids}).status_code == 200
+
+    result = client.post("/api/objects/batch/undo-checkout", json={"object_ids": ids})
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert len(body["ok"]) == 3
+    assert body["failed"] == []
+    for object_id in ids:
+        listed = client.get(f"/api/objects/{object_id}").json()
+        assert listed["owned_by_me"] is False
+        assert listed["checkout_status"] == "Available"
 
 
 @requires_git
@@ -110,7 +146,7 @@ def test_batch_workspace_without_checkout(client, repo_parent, data_dir):
     assert result.status_code == 200, result.text
     body = result.json()
     assert len(body["ok"]) == 1
-    copied = data_dir / "workspaces" / project["uuid"] / "CAD" / "shaft.prt"
+    copied = data_dir / "workspaces" / project["uuid"] / "shaft.prt"
     assert copied.is_file()
     listed = client.get(f"/api/objects/{obj['uuid']}").json()
     assert listed["owned_by_me"] is False

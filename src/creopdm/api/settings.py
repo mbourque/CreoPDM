@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 
 from creopdm.api.deps import get_context
 from creopdm.config import AppSettings
+from creopdm.constants import DEFAULT_EXTRA_CAD_EXTENSIONS
 from creopdm.context import AppContext
 from creopdm.creo.connector_factory import create_creo_connector
 from creopdm.exceptions import PathValidationError
@@ -25,6 +26,8 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         workspace_root=str(current_root),
         default_workspace_root=str(default_root),
         open_browser_on_start=settings.ui.open_browser_on_start,
+        cad_extensions=ctx.config.extra_cad_extensions(),
+        default_cad_extensions=list(DEFAULT_EXTRA_CAD_EXTENSIONS),
     )
 
 
@@ -74,5 +77,7 @@ def update_settings(
         current.workspace.root = None
     if payload.open_browser_on_start is not None:
         current.ui.open_browser_on_start = payload.open_browser_on_start
+    if payload.cad_extensions is not None:
+        current.cad.extra_extensions = payload.cad_extensions
     apply_settings(ctx, current)
     return settings_to_response(ctx)

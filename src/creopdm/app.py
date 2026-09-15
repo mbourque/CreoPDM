@@ -48,7 +48,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
     locks = ProjectLockManager()
     activities = ActivityService()
     workspaces = WorkspaceService(manager)
-    objects = ObjectService(version_store, locks, activities, identity)
+    objects = ObjectService(version_store, locks, activities, identity, manager)
     checkouts = CheckoutService(objects, workspaces, locks, activities, identity)
     creo_connector = create_creo_connector(
         app_settings.creo.connector,

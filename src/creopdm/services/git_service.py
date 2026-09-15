@@ -88,6 +88,19 @@ class GitService:
             return False
         return result.returncode == 0
 
+    def is_repository(self, path: Path) -> bool:
+        return (path / ".git").exists()
+
+    def ensure_repository(self, path: Path, default_branch: str = "main") -> None:
+        """Create Git metadata if it is missing. Existing files are left untouched."""
+        if self.is_repository(path):
+            return
+        logger.warning(
+            "Git metadata missing at %s; initializing a new repository without deleting files.",
+            path,
+        )
+        self.init_repository(path, default_branch)
+
     def init_repository(self, path: Path, default_branch: str = "main") -> None:
         path.mkdir(parents=True, exist_ok=True)
         if (path / ".git").exists():
@@ -139,10 +152,13 @@ class GitService:
             return
         self._run(["add", "--", *files], cwd=path)
 
-    def remove_files(self, path: Path, files: list[str]) -> None:
+    def remove_files(self, path: Path, files: list[str], *, keep_working_copy: bool = False) -> None:
         if not files:
             return
-        self._run(["rm", "-f", "--ignore-unmatch", "--", *files], cwd=path)
+        args = ["rm", "-f", "--ignore-unmatch"]
+        if keep_working_copy:
+            args.append("--cached")
+        self._run([*args, "--", *files], cwd=path)
 
     def commit(
         self,

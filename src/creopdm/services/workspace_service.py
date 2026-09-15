@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from creopdm.constants import STANDARD_PROJECT_FOLDERS
 from creopdm.config import ConfigManager
 from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import PathValidationError, WorkspaceConflictError
@@ -23,10 +24,29 @@ class WorkspaceService:
     def __init__(self, config: ConfigManager) -> None:
         self._config = config
 
+    def _cad_extensions(self) -> list[str]:
+        return self._config.extra_cad_extensions()
+
     def root_for(self, project_uuid: str) -> Path:
         path = self._config.workspace_for_project(project_uuid)
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def workspace_relative(self, obj: EngineeringObject) -> str:
+        """Workspace copies sit in the project workspace root, like a Creo working directory."""
+        return Path(str(obj.filename).replace("\\", "/")).name
+
+    def _workspace_search_dirs(self, project_uuid: str) -> list[Path]:
+        root = self.root_for(project_uuid)
+        dirs = [root]
+        for folder in STANDARD_PROJECT_FOLDERS:
+            path = root / folder
+            if path.is_dir():
+                dirs.append(path)
+        return dirs
+
+    def workspace_file_path(self, project_uuid: str, obj: EngineeringObject) -> Path:
+        return self.file_path(project_uuid, self.workspace_relative(obj))
 
     def file_path(self, project_uuid: str, relative_path: str) -> Path:
         relative = assert_safe_relative_path(relative_path)
@@ -51,8 +71,10 @@ class WorkspaceService:
                 f"Repository file is missing: {obj.filename}",
                 details={"relative_path": obj.relative_path},
             )
-        destination = self.file_path(project.uuid, obj.relative_path)
-        latest = CreoFileManager.latest_in_directory(destination.parent, obj.filename)
+        destination = self.workspace_file_path(project.uuid, obj)
+        latest = CreoFileManager.latest_in_directory(
+            destination.parent, obj.filename, self._cad_extensions()
+        )
         conflict_path = latest if latest is not None and latest.is_file() else (
             destination if destination.exists() else None
         )
@@ -88,21 +110,18 @@ class WorkspaceService:
         return destination
 
     def locate_content(self, project_uuid: str, obj: EngineeringObject) -> Path:
-        destination = self.file_path(project_uuid, obj.relative_path)
-        latest = CreoFileManager.latest_in_directory(destination.parent, obj.filename)
-        if latest is None or not latest.is_file():
-            raise PathValidationError(
-                f"Workspace file not found for {obj.filename}.",
-                details={"workspace": str(destination)},
-            )
-        return latest
+        extras = self._cad_extensions()
+        for directory in self._workspace_search_dirs(project_uuid):
+            latest = CreoFileManager.latest_in_directory(directory, obj.filename, extras)
+            if latest is not None and latest.is_file():
+                return latest
+        destination = self.workspace_file_path(project_uuid, obj)
+        raise PathValidationError(
+            f"Workspace file not found for {obj.filename}.",
+            details={"workspace": str(destination)},
+        )
 
     def is_modified(self, project: Project, obj: EngineeringObject) -> bool:
-        destination = self.file_path(project.uuid, obj.relative_path)
-        if not destination.exists() and CreoFileManager.latest_in_directory(
-            destination.parent, obj.filename
-        ) is None:
-            return False
         try:
             path = self.locate_content(project.uuid, obj)
         except PathValidationError:
@@ -135,24 +154,21 @@ class WorkspaceService:
         return {"ok": ok, "failed": failed}
 
     def preferred_add_directory(self, project_uuid: str, owned_relative_paths: list[str] | None = None) -> Path:
-        """Folder the Add Files dialog should start in: a checked-out CAD folder when possible."""
-        root = self.root_for(project_uuid)
-        for relative in owned_relative_paths or []:
-            try:
-                folder = self.file_path(project_uuid, relative).parent
-            except PathValidationError:
-                continue
-            if folder.is_dir():
-                return folder
-        cad = root / "CAD"
-        cad.mkdir(parents=True, exist_ok=True)
-        return cad
+        """Workspace root: all working copies live in one folder."""
+        return self.root_for(project_uuid)
 
     def relative_if_inside(self, project_uuid: str, path: Path) -> str | None:
         root = self.root_for(project_uuid)
         try:
             return self._canonical_relative(root, Path(path))
         except ValueError:
+            return None
+
+    def relative_if_inside_repo(self, project: Project, path: Path) -> str | None:
+        repo = Path(project.repository_path)
+        try:
+            return self._canonical_relative(repo, Path(path))
+        except (ValueError, PathValidationError):
             return None
 
     def list_untracked(
@@ -166,17 +182,18 @@ class WorkspaceService:
         copies of files already in the project are ignored.
         """
         root = self.root_for(project.uuid)
-        known = {CreoFileManager.logical_repo_path(obj.relative_path) for obj in objects}
+        extras = self._cad_extensions()
+        known = {CreoFileManager.logical_repo_path(obj.relative_path, extras) for obj in objects}
         grouped: dict[str, list[Path]] = {}
         if root.is_dir():
             for path in self._iter_workspace_files(root):
                 relative = path.resolve().relative_to(root.resolve()).as_posix()
-                grouped.setdefault(CreoFileManager.logical_repo_path(relative), []).append(path)
+                grouped.setdefault(CreoFileManager.logical_repo_path(relative, extras), []).append(path)
         found: list[dict[str, str | int]] = []
         for key, paths in sorted(grouped.items()):
             if key in known:
                 continue
-            chosen = CreoFileManager.select_latest_creo_version(paths) or paths[0]
+            chosen = CreoFileManager.select_latest_creo_version(paths, extras) or paths[0]
             relative = chosen.resolve().relative_to(root.resolve()).as_posix()
             found.append(
                 {
@@ -184,14 +201,14 @@ class WorkspaceService:
                     "relative_path": relative,
                     "path": str(chosen),
                     "size": chosen.stat().st_size if chosen.is_file() else 0,
-                    "object_type": classify_filename(Path(relative).name).value,
+                    "object_type": classify_filename(Path(relative).name, extras).value,
                 }
             )
         return found
 
     def _iter_workspace_files(self, root: Path):
         skip_dirs = {".git", ".creopdm", "__pycache__"}
-        skip_suffixes = {".log", ".idx", ".inf", ".crc", ".tst", ".err", ".ncl", ".lst", ".bak", ".tmp"}
+        skip_suffixes = {".tst", ".err", ".lst", ".bak", ".tmp"}
         skip_names = {"trail.txt", "std.err", "std.out"}
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [name for name in dirnames if name.lower() not in skip_dirs]
@@ -203,7 +220,7 @@ class WorkspaceService:
                     continue
                 path = folder / name
                 suffix = path.suffix.lower()
-                numbered = CreoFileManager.normalize_creo_filename(name)
+                numbered = CreoFileManager.normalize_creo_filename(name, self._cad_extensions())
                 check = Path(numbered).suffix.lower() if numbered != name else suffix
                 if check in skip_suffixes or suffix in skip_suffixes:
                     continue
@@ -229,26 +246,26 @@ class WorkspaceService:
 
     def purge_local(self, project: Project, obj: EngineeringObject) -> list[str]:
         """Delete workspace copies only. Never touches the project repository."""
-        destination = self.file_path(project.uuid, obj.relative_path)
+        extras = self._cad_extensions()
+        wanted = CreoFileManager.logical_filename(obj.filename, extras).lower()
         removed: list[str] = []
-        directory = destination.parent
-        if not directory.is_dir():
-            return removed
-        wanted = CreoFileManager.logical_filename(obj.filename).lower()
-        for path in list(directory.iterdir()):
-            if not path.is_file():
+        for directory in self._workspace_search_dirs(project.uuid):
+            if not directory.is_dir():
                 continue
-            if CreoFileManager.logical_filename(path.name).lower() != wanted:
-                continue
-            try:
-                set_file_writable(path)
-                path.unlink()
-                removed.append(str(path))
-            except OSError:
-                raise PathValidationError(
-                    f"Could not delete the workspace copy of {obj.filename}.",
-                    details={"path": str(path)},
-                )
+            for path in list(directory.iterdir()):
+                if not path.is_file():
+                    continue
+                if CreoFileManager.logical_filename(path.name, extras).lower() != wanted:
+                    continue
+                try:
+                    set_file_writable(path)
+                    path.unlink()
+                    removed.append(str(path))
+                except OSError:
+                    raise PathValidationError(
+                        f"Could not delete the workspace copy of {obj.filename}.",
+                        details={"path": str(path)},
+                    )
         return removed
 
     def mark_readonly(self, path: Path) -> None:

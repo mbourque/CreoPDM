@@ -13,15 +13,19 @@ from creopdm.exceptions import CreoPDMError, PathValidationError
 from creopdm.schemas.common import (
     BatchItemResult,
     BatchOperationResponse,
+    FolderPickResponse,
+    ForgetProjectRequest,
+    ForgetProjectResponse,
     ImportLocalRequest,
     ObjectResponse,
     ProjectCreateRequest,
     ProjectResponse,
     ProjectStatusResponse,
+    ProjectUpdateRequest,
     WorkspacePickerResponse,
 )
 from creopdm.utils.launch import open_windows_folder
-from creopdm.utils.native_dialog import pick_files
+from creopdm.utils.native_dialog import default_project_location_start, pick_files, pick_folder
 
 router = APIRouter()
 
@@ -50,6 +54,16 @@ def create_project(
     return project_to_response(project)
 
 
+@router.post("/api/projects/choose-location", response_model=FolderPickResponse)
+def choose_project_location() -> FolderPickResponse:
+    start = default_project_location_start()
+    chosen = pick_folder(start, title="Choose project folder")
+    return FolderPickResponse(
+        path=str(chosen) if chosen else None,
+        initial_directory=str(start),
+    )
+
+
 @router.get("/api/projects/{project_id}", response_model=ProjectResponse)
 def get_project(
     project_id: str,
@@ -59,6 +73,23 @@ def get_project(
     return project_to_response(ctx.projects.get_project(db, project_id))
 
 
+@router.patch("/api/projects/{project_id}", response_model=ProjectResponse)
+def update_project(
+    project_id: str,
+    payload: ProjectUpdateRequest,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ProjectResponse:
+    project = ctx.projects.update_project(
+        db,
+        project_id,
+        name=payload.name,
+        number=payload.number,
+        description=payload.description,
+    )
+    return project_to_response(project)
+
+
 @router.delete("/api/projects/{project_id}", status_code=204)
 def delete_project(
     project_id: str,
@@ -66,6 +97,24 @@ def delete_project(
     ctx: AppContext = Depends(get_context),
 ) -> None:
     ctx.projects.delete_project(db, project_id)
+
+
+@router.post("/api/projects/{project_id}/forget", response_model=ForgetProjectResponse)
+def forget_project(
+    project_id: str,
+    payload: ForgetProjectRequest,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ForgetProjectResponse:
+    project = ctx.projects.get_project(db, project_id)
+    workspace = ctx.config.workspace_for_project(project.uuid)
+    result = ctx.projects.forget_project(
+        db,
+        project_id,
+        confirm_name=payload.confirm_name,
+        workspace_path=workspace,
+    )
+    return ForgetProjectResponse.model_validate(result)
 
 
 @router.get("/api/projects/{project_id}/objects", response_model=list[ObjectResponse])
@@ -98,16 +147,6 @@ def project_status(
     return ProjectStatusResponse.model_validate(counts)
 
 
-def _owned_relative_paths(ctx: AppContext, db: Session, project) -> list[str]:
-    user = ctx.users.get_current_user()
-    owned: list[str] = []
-    for obj in ctx.objects.list_objects(db, project.id):
-        checkout = ctx.checkouts.active_for(db, obj.id)
-        if checkout is not None and checkout.user_name == user.user_name:
-            owned.append(obj.relative_path)
-    return owned
-
-
 @router.get("/api/projects/{project_id}/workspace/add-folder", response_model=WorkspacePickerResponse)
 def workspace_add_folder(
     project_id: str,
@@ -115,7 +154,7 @@ def workspace_add_folder(
     ctx: AppContext = Depends(get_context),
 ) -> WorkspacePickerResponse:
     project = ctx.projects.get_project(db, project_id)
-    start = ctx.workspaces.preferred_add_directory(project.uuid, _owned_relative_paths(ctx, db, project))
+    start = ctx.projects.preferred_import_directory(project)
     start.mkdir(parents=True, exist_ok=True)
     return WorkspacePickerResponse(
         workspace_root=str(ctx.workspaces.root_for(project.uuid)),
@@ -130,9 +169,9 @@ def choose_workspace_files(
     ctx: AppContext = Depends(get_context),
 ) -> WorkspacePickerResponse:
     project = ctx.projects.get_project(db, project_id)
-    start = ctx.workspaces.preferred_add_directory(project.uuid, _owned_relative_paths(ctx, db, project))
+    start = ctx.projects.preferred_import_directory(project)
     start.mkdir(parents=True, exist_ok=True)
-    selected = [str(path) for path in pick_files(start, title="Add files from workspace")]
+    selected = [str(path) for path in pick_files(start, title="Add files to the project")]
     return WorkspacePickerResponse(
         workspace_root=str(ctx.workspaces.root_for(project.uuid)),
         initial_directory=str(start),
@@ -177,7 +216,7 @@ def import_from_disk(
                     "The selected file was not found.",
                     details={"path": str(path)},
                 )
-            relative = ctx.workspaces.relative_if_inside(project.uuid, path)
+            relative = ctx.workspaces.relative_if_inside_repo(project, path)
             obj = ctx.objects.import_file(
                 db,
                 project,

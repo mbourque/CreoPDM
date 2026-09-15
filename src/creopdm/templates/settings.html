@@ -28,8 +28,17 @@
     </fieldset>
 
     <fieldset>
+      <legend>CAD file types</legend>
+      <p class="muted small">Creo models (<code>.prt</code>, <code>.asm</code>, <code>.drw</code>, <code>.mfg</code>) stay Creo types. Numbered saves such as <code>shaft.prt.3</code>, <code>setup.inf.1</code>, and <code>format.frm.2</code> count as those extensions. Add other types that should be treated as CAD. Workspace copies all go in one folder; the original project folder is not reorganized.</p>
+      <label>Extra CAD extensions
+        <textarea name="cad_extensions" rows="4" placeholder=".dxf&#10;.ncl&#10;.tph">{{ settings.cad_extensions | join('\n') }}</textarea>
+      </label>
+      <p class="muted small">One per line, with or without the dot. Default: {{ settings.default_cad_extensions | join(', ') }}</p>
+    </fieldset>
+
+    <fieldset>
       <legend>Workspace</legend>
-      <p class="muted small">Checked-out and downloaded files are copied here, one folder per project. The default is shown; choose another folder if you want a different workspace.</p>
+      <p class="muted small">Checked-out and downloaded files are copied here, one folder per project, with every file in that folder. The default is shown; choose another folder if you want a different workspace.</p>
       <label>Workspace folder
         <input name="workspace_root" type="text" value="{{ settings.workspace_root }}" placeholder="{{ settings.default_workspace_root }}">
       </label>

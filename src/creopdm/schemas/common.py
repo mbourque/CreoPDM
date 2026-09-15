@@ -32,6 +32,31 @@ class ProjectCreateRequest(BaseModel):
     number: str | None = None
     description: str | None = None
 
+    @field_validator("repository_path")
+    @classmethod
+    def location_required(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("A project location is required.")
+        return cleaned
+
+
+class ProjectUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    number: str | None = None
+    description: str | None = None
+
+
+class ForgetProjectRequest(BaseModel):
+    confirm_name: str = Field(min_length=1, max_length=255)
+
+
+class ForgetProjectResponse(BaseModel):
+    uuid: str
+    name: str
+    repository_path: str
+    warning: str = ""
+
 
 class ProjectResponse(BaseModel):
     uuid: str
@@ -161,6 +186,11 @@ class WorkspacePickerResponse(BaseModel):
     selected: list[str] = Field(default_factory=list)
 
 
+class FolderPickResponse(BaseModel):
+    path: str | None = None
+    initial_directory: str
+
+
 class BatchObjectRequest(BaseModel):
     object_ids: list[str] = Field(min_length=1)
 
@@ -186,6 +216,8 @@ class SettingsResponse(BaseModel):
     workspace_root: str
     default_workspace_root: str
     open_browser_on_start: bool
+    cad_extensions: list[str] = Field(default_factory=list)
+    default_cad_extensions: list[str] = Field(default_factory=list)
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -193,6 +225,7 @@ class SettingsUpdateRequest(BaseModel):
     creo_executable: str | None = None
     workspace_root: str | None = None
     open_browser_on_start: bool | None = None
+    cad_extensions: list[str] | None = None
 
     @field_validator("creo_open_mode")
     @classmethod
@@ -201,3 +234,12 @@ class SettingsUpdateRequest(BaseModel):
         if key not in {"executable", "association"}:
             raise ValueError("Open mode must be 'executable' or 'association'.")
         return key
+
+    @field_validator("cad_extensions")
+    @classmethod
+    def valid_cad_extensions(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        from creopdm.utils.classify import extra_cad_set
+
+        return sorted(extra_cad_set(value))

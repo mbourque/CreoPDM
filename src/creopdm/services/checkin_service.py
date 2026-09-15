@@ -194,7 +194,7 @@ class CheckinService:
         obj: EngineeringObject,
         siblings: list[EngineeringObject],
     ) -> list[dict[str, str | bool]]:
-        folder = Path(obj.relative_path.replace("\\", "/")).parent.as_posix()
+        folder = Path(self._workspaces.workspace_relative(obj)).parent.as_posix()
         if folder == ".":
             folder = ""
         found = []
@@ -246,7 +246,6 @@ class CheckinService:
                 project,
                 source,
                 original_name=source.name,
-                relative_path=str(item["relative_path"]),
                 comment=comment,
             )
             logger.info("Added %s during check-in of %s", item["filename"], obj.filename)

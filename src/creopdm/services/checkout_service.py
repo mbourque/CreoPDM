@@ -186,6 +186,50 @@ class CheckoutService:
             )
             logger.info("Cancelled checkout of %s", obj.filename)
 
+    def undo_checkout_many(self, session: Session, object_uuids: list[str]) -> dict[str, list]:
+        ok: list[dict[str, str]] = []
+        failed: list[dict[str, str]] = []
+        user = self._users.get_current_user()
+        seen: set[str] = set()
+        for object_uuid in object_uuids:
+            if not object_uuid or object_uuid in seen:
+                continue
+            seen.add(object_uuid)
+            filename = object_uuid
+            try:
+                obj = self._objects.get_object(session, object_uuid)
+                filename = obj.filename
+                existing = self.active_for(session, obj.id)
+                if existing is None:
+                    ok.append({"uuid": object_uuid, "filename": filename, "status": "already_available"})
+                    continue
+                if existing.user_name != user.user_name:
+                    raise CheckoutOwnershipError(
+                        f"{obj.filename} is checked out by {existing.user_name}.",
+                        details={"user": existing.user_name, "machine": existing.machine_name},
+                    )
+                self.undo_checkout(session, object_uuid)
+                ok.append({"uuid": object_uuid, "filename": filename, "status": "cancelled"})
+            except CreoPDMError as exc:
+                failed.append(
+                    {
+                        "uuid": object_uuid,
+                        "filename": filename,
+                        "code": exc.code,
+                        "message": exc.message,
+                    }
+                )
+            except Exception as exc:
+                failed.append(
+                    {
+                        "uuid": object_uuid,
+                        "filename": filename,
+                        "code": "APPLICATION_ERROR",
+                        "message": str(exc),
+                    }
+                )
+        return {"ok": ok, "failed": failed}
+
     def release_mine(self, session: Session, obj: EngineeringObject) -> None:
         """Drop my active checkout without restoring workspace files."""
         user = self._users.get_current_user()

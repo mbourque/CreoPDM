@@ -24,6 +24,7 @@ class ObjectType(StrEnum):
     CREO_ASSEMBLY = "CREO_ASSEMBLY"
     CREO_DRAWING = "CREO_DRAWING"
     CREO_MANUFACTURING = "CREO_MANUFACTURING"
+    CAD = "CAD"
     STEP = "STEP"
     PDF = "PDF"
     DOCUMENT = "DOCUMENT"
@@ -57,6 +58,7 @@ class DependencyType(StrEnum):
 
 class ActivityAction(StrEnum):
     PROJECT_CREATED = "PROJECT_CREATED"
+    PROJECT_UPDATED = "PROJECT_UPDATED"
     OBJECT_ADDED = "OBJECT_ADDED"
     OBJECT_REMOVED = "OBJECT_REMOVED"
     WORKSPACE_CLEARED = "WORKSPACE_CLEARED"
@@ -85,6 +87,10 @@ CREO_FILE_EXTENSIONS = frozenset(
         ".lay",
         ".sec",
         ".gph",
+        ".dgm",
+        ".tbl",
+        ".sym",
+        ".xch",
     }
 )
 
@@ -114,6 +120,7 @@ DEFAULT_FOLDER_BY_TYPE: dict[ObjectType, str] = {
     ObjectType.CREO_ASSEMBLY: "CAD",
     ObjectType.CREO_DRAWING: "CAD",
     ObjectType.CREO_MANUFACTURING: "CAD",
+    ObjectType.CAD: "CAD",
     ObjectType.STEP: "Exports",
     ObjectType.PDF: "Documents",
     ObjectType.DOCUMENT: "Documents",
@@ -155,3 +162,95 @@ DEFAULT_LFS_PATTERNS = [
     "*.iges",
     "*.igs",
 ]
+
+DEFAULT_EXTRA_CAD_EXTENSIONS = (
+    ".ncl",
+    ".dxf",
+    ".tap",
+    ".tph",
+    ".inf",
+    ".xml",
+    ".out",
+    ".tool",
+    ".idx",
+    ".log",
+    ".step",
+    ".stp",
+    ".ipt",
+    ".stl",
+    ".wrl",
+    ".sec",
+    ".crc",
+    ".dat",
+    ".m_p",
+    ".bom",
+    ".igs",
+    ".tbl",
+    ".frm",
+    ".mfg",
+    ".dgm",
+    ".lay",
+    ".xch",
+    ".sym",
+    ".bin",
+    ".stk",
+    ".mrd",
+    ".xpr",
+)
+
+PREVIOUS_DEFAULT_EXTRA_CAD_SETS = (
+    frozenset({".dxf", ".dwg", ".ncl", ".tph", ".nc", ".tap", ".cnc"}),
+    frozenset(
+        {
+            ".ncl",
+            ".dxf",
+            ".tap",
+            ".tph",
+            ".inf",
+            ".xml",
+            ".out",
+            ".tool",
+            ".idx",
+            ".log",
+            ".step",
+            ".stp",
+            ".ipt",
+            ".stl",
+            ".wrl",
+            ".sec",
+            ".crc",
+        }
+    ),
+    frozenset(
+        {
+            ".ncl",
+            ".dxf",
+            ".tap",
+            ".tph",
+            ".inf",
+            ".xml",
+            ".out",
+            ".tool",
+            ".idx",
+            ".log",
+            ".step",
+            ".stp",
+            ".ipt",
+            ".stl",
+            ".wrl",
+            ".sec",
+            ".crc",
+            ".dat",
+            ".m_p",
+            ".bom",
+            ".igs",
+            ".tbl",
+            ".frm",
+            ".mfg",
+            ".dgm",
+            ".lay",
+            ".xch",
+            ".sym",
+        }
+    ),
+)

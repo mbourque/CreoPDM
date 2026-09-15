@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from creopdm.constants import DEFAULT_BRANCH
 from creopdm.services.git_service import GitService
 from creopdm.storage.base import StoredVersion, VersionStore
 from creopdm.utils.identity import UserIdentity
@@ -22,6 +23,7 @@ class GitVersionStore(VersionStore):
         allow_empty: bool = False,
         remove_relative_paths: list[str] | None = None,
     ) -> str:
+        self._git.ensure_repository(repository_path, DEFAULT_BRANCH)
         if remove_relative_paths:
             self._git.remove_files(repository_path, remove_relative_paths)
         self._git.stage_files(repository_path, relative_paths)
@@ -79,8 +81,13 @@ class GitVersionStore(VersionStore):
         relative_paths: list[str],
         message: str,
         author: UserIdentity,
+        keep_working_copy: bool = False,
     ) -> str:
-        self._git.remove_files(repository_path, relative_paths)
+        self._git.remove_files(
+            repository_path,
+            relative_paths,
+            keep_working_copy=keep_working_copy,
+        )
         if not self._git.is_dirty(repository_path):
             return self._git.get_head(repository_path)
         return self._git.commit(repository_path, message, author)
