@@ -26,13 +26,22 @@ from creopdm.models.object import EngineeringObject
 from creopdm.models.project import Project
 from creopdm.services.git_service import GitService, GitStatus
 from creopdm.utils.classify import classify_filename
-from creopdm.utils.files import copy_file, remove_file, remove_tree, set_file_readonly, set_file_writable
+from creopdm.utils.files import (
+    copy_file,
+    prune_empty_dirs,
+    remove_file,
+    remove_tree,
+    set_file_readonly,
+    set_file_writable,
+)
 from creopdm.utils.hashing import calculate_sha256
 from creopdm.utils.identity import UserIdentity
 from creopdm.utils.ignore import sync_gitignore
 from creopdm.utils.paths import assert_safe_relative_path, ensure_within
 
 logger = get_logger("workspace")
+
+_RESERVED_WORKSPACE_DIRS = frozenset({".git", ".creopdm", "__pycache__"})
 
 
 class WorkspaceService:
@@ -613,6 +622,7 @@ class WorkspaceService:
                         f"Could not delete the workspace copy of {obj.filename}.",
                         details={"path": str(path)},
                     )
+        self._prune_empty_workspace_dirs(self.root_for(project.uuid), removed)
         return removed
 
     def purge_local_many(
@@ -633,7 +643,7 @@ class WorkspaceService:
         root = self.root_for(project.uuid)
         if not root.is_dir():
             return []
-        skip = {".git", ".creopdm", "__pycache__"}
+        skip = _RESERVED_WORKSPACE_DIRS
         removed: list[str] = []
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [name for name in dirnames if name.lower() not in skip]
@@ -654,7 +664,13 @@ class WorkspaceService:
                             f"Could not delete the workspace copy of {name}.",
                             details={"path": str(path)},
                         )
+        self._prune_empty_workspace_dirs(root, removed)
         return removed
+
+    def _prune_empty_workspace_dirs(self, root: Path, removed: list[str]) -> None:
+        parents = {Path(path).parent for path in removed}
+        for directory in sorted(parents, key=lambda item: len(item.parts), reverse=True):
+            prune_empty_dirs(directory, root, reserved_names=_RESERVED_WORKSPACE_DIRS)
 
     def mark_readonly(self, path: Path) -> None:
         try:

@@ -570,6 +570,10 @@
     metricButtons().forEach((btn) => {
       const mode = saved[btn.dataset.filter];
       if (mode !== "select" && mode !== "filter" && mode !== "off") return;
+      if (btn.disabled) {
+        setMetricMode(btn, "off");
+        return;
+      }
       setMetricMode(btn, mode);
       applied = true;
     });
@@ -701,7 +705,7 @@
 
   document.querySelector("#metric-filters")?.addEventListener("click", (event) => {
     const btn = event.target.closest(".metric");
-    if (!btn) return;
+    if (!btn || btn.disabled) return;
     const current = metricMode(btn);
     const next = current === "off" ? "select" : current === "select" ? "filter" : "off";
     setMetricMode(btn, next);

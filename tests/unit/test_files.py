@@ -43,3 +43,32 @@ def test_copy_file_reports_new_file(tmp_path: Path):
     assert copy_file(source, dest) is True
     assert dest.read_bytes() == b"model"
     assert copy_file(source, dest) is False
+
+
+def test_prune_empty_dirs_removes_nested_tree_not_root(tmp_path: Path):
+    from creopdm.utils.files import prune_empty_dirs
+
+    nested = tmp_path / "html_tutorials" / "css"
+    nested.mkdir(parents=True)
+    leftover = tmp_path / "keep" / "notes.txt"
+    leftover.parent.mkdir()
+    leftover.write_text("stay", encoding="utf-8")
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    prune_empty_dirs(nested, tmp_path, reserved_names=frozenset({".git"}))
+    assert not (tmp_path / "html_tutorials").exists()
+    assert leftover.is_file()
+    assert git_dir.is_dir()
+    assert tmp_path.is_dir()
+
+
+def test_prune_empty_dirs_stops_when_sibling_file_remains(tmp_path: Path):
+    from creopdm.utils.files import prune_empty_dirs
+
+    folder = tmp_path / "html_tutorials"
+    nested = folder / "css"
+    nested.mkdir(parents=True)
+    (folder / "index.html").write_text("home", encoding="utf-8")
+    prune_empty_dirs(nested, tmp_path)
+    assert not nested.exists()
+    assert (folder / "index.html").is_file()

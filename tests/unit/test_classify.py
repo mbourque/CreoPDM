@@ -1,4 +1,4 @@
-from creopdm.constants import ObjectType
+from creopdm.constants import DEFAULT_TYPE_LABELS, ObjectType
 from creopdm.utils.classify import (
     classify_filename,
     default_folder_for,
@@ -20,6 +20,13 @@ def test_classify_known_extensions():
     assert classify_filename("bom.xlsx") == ObjectType.SPREADSHEET
     assert classify_filename("photo.png") == ObjectType.IMAGE
     assert classify_filename("readme.txt") == ObjectType.TEXT
+    assert classify_filename("index.html") == ObjectType.DOCUMENT
+    assert classify_filename("site.css") == ObjectType.DOCUMENT
+    assert classify_filename("app.js") == ObjectType.DOCUMENT
+    assert classify_filename("app.ts") == ObjectType.DOCUMENT
+    assert classify_filename("board.eda") == ObjectType.CAD
+    assert classify_filename("calc.mcdx") == ObjectType.DOCUMENT
+    assert classify_filename("duct.spro") == ObjectType.CAD
 
 
 def test_classify_unknown_is_other():
@@ -61,6 +68,8 @@ def test_default_extra_cad_extensions():
     assert classify_filename("world.wrl") == ObjectType.CAD
     assert classify_filename("board.idx") == ObjectType.CAD
     assert classify_filename("print.3mf") == ObjectType.CAD
+    assert classify_filename("board.eda") == ObjectType.CAD
+    assert classify_filename("duct.spro") == ObjectType.CAD
     assert default_folder_for(ObjectType.CAD) == "CAD"
     assert default_folder_for(ObjectType.CREO_MANUFACTURING) == "CAD"
 
@@ -90,11 +99,16 @@ def test_creo_openable_models():
     assert is_extra_cad("setup.inf")
     assert is_extra_cad("preview.mtl.1")
     assert is_extra_cad("1-inch.xpr")
+    assert is_extra_cad("board.eda")
+    assert is_extra_cad("duct.spro")
     assert not is_extra_cad("rough.ncl")
     assert not is_extra_cad("session.log")
     assert not is_extra_cad("shaft.prt")
     assert not is_extra_cad("world.wrl")
     assert not is_extra_cad("notes.pdf")
+    assert not is_extra_cad("calc.mcdx")
+    assert not is_creo_openable("board.eda")
+    assert not is_creo_openable("duct.spro")
 
 
 def test_default_folders():
@@ -150,3 +164,12 @@ def test_display_type_label_defaults_and_overrides():
     assert display_type_label("mc_error.log", "CAD", logs) == "ModelCHECK Error Log"
     assert display_type_label("mc_error.log.1", "CAD", logs) == "ModelCHECK Error Log"
     assert display_type_label("session.log", "CAD", logs) == "Log file"
+    defaults = unique_type_labels(DEFAULT_TYPE_LABELS)
+    assert display_type_label("index.html", "DOCUMENT", defaults) == "Webpage"
+    assert display_type_label("site.css", "DOCUMENT", defaults) == "Stylesheet"
+    assert display_type_label("app.js", "DOCUMENT", defaults) == "JavaScript"
+    assert display_type_label("widget.tsx", "DOCUMENT", defaults) == "JavaScript"
+    assert display_type_label("theme.scss", "DOCUMENT", defaults) == "Stylesheet"
+    assert display_type_label("board.eda", "CAD", defaults) == "ECAD data"
+    assert display_type_label("calc.mcdx", "DOCUMENT", defaults) == "Mathcad"
+    assert display_type_label("duct.spro", "CAD", defaults) == "Creo Flow Analysis"

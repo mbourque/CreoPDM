@@ -61,6 +61,40 @@ def remove_file(path: Path) -> bool:
     return True
 
 
+def prune_empty_dirs(
+    start: Path,
+    root: Path,
+    *,
+    reserved_names: frozenset[str] | set[str] | None = None,
+) -> None:
+    """Delete empty folders from start up to, but not including, root.
+
+    Stops at the first non-empty folder, a reserved name, or a path outside root.
+    """
+    reserved = {name.lower() for name in (reserved_names or ())}
+    try:
+        root_resolved = root.resolve()
+        current = start.resolve()
+    except OSError:
+        return
+    if current == root_resolved:
+        return
+    try:
+        current.relative_to(root_resolved)
+    except ValueError:
+        return
+    while current != root_resolved:
+        if current.name.lower() in reserved:
+            break
+        try:
+            if any(current.iterdir()):
+                break
+            current.rmdir()
+        except OSError:
+            break
+        current = current.parent
+
+
 def _cwd_inside(path: Path) -> bool:
     try:
         resolved = path.resolve()

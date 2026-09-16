@@ -350,6 +350,7 @@ class CheckinService:
             str(item["relative_path"]).replace("\\", "/").lower(): item
             for item in self._workspaces.list_untracked(project, siblings)
         }
+        jobs: list[tuple[Path, str | None, str | None]] = []
         for relative in relative_paths:
             key = relative.replace("\\", "/").lower()
             item = available.get(key)
@@ -364,15 +365,13 @@ class CheckinService:
                     f"{item['filename']} is no longer in the workspace.",
                     details={"path": str(source)},
                 )
-            self._objects.import_file(
-                session,
-                project,
-                source,
-                original_name=source.name,
-                relative_path=relative,
-                comment=comment,
-            )
-            logger.info("Added %s during check-in of %s", item["filename"], source_label)
+            jobs.append((source, source.name, relative))
+        if not jobs:
+            return
+        for outcome in self._objects.import_files(session, project, jobs, comment):
+            if outcome.error is not None:
+                raise outcome.error
+            logger.info("Added %s during check-in of %s", outcome.filename, source_label)
 
     def _capture_parameters(
         self,

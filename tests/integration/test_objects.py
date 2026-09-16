@@ -218,6 +218,10 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data
     assert 'data-folder="Incoming/lib"' in inside.text
     assert "shaft.prt.4" in inside.text
     assert 'id="metric-filters"' in inside.text
+    assert 'data-filter="creo_parts"' in inside.text
+    assert "disabled" not in inside.text.split('data-filter="creo_parts"')[1].split("</button>")[0]
+    assert "disabled" in inside.text.split('data-filter="assemblies"')[1].split("</button>")[0]
+    assert "disabled" in inside.text.split('data-filter="drawings"')[1].split("</button>")[0]
     nested = client.get(f"/?project={project['uuid']}&folder=Incoming/lib")
     assert nested.status_code == 200, nested.text
     assert "pin.prt" in nested.text
@@ -684,6 +688,93 @@ def test_batch_remove_from_project(client, repo_parent, data_dir):
     messages = [entry.message for entry in GitService().get_history(vault)]
     unregister = [item for item in messages if item.startswith("Unregister")]
     assert unregister == ["Unregister 2 files"]
+
+
+@requires_git
+def test_remove_from_project_prunes_empty_workspace_folder(client, repo_parent, data_dir):
+    project, location = _create_project(client, repo_parent)
+    picked = location / "html_tutorials"
+    nested = picked / "css"
+    nested.mkdir(parents=True)
+    (picked / "index.html").write_bytes(b"home")
+    (nested / "site.css").write_bytes(b"body{}")
+    added = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={
+            "paths": [str(picked / "index.html"), str(nested / "site.css")],
+            "comment": "Tutorials",
+            "base_folder": str(picked),
+        },
+    )
+    assert added.status_code == 200, added.text
+    ids = [item["uuid"] for item in added.json()["ok"]]
+    workspace = data_dir / "workspaces" / project["uuid"]
+    assert (workspace / "html_tutorials" / "index.html").is_file()
+    removed = client.post("/api/objects/batch/remove", json={"object_ids": ids})
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["failed"] == []
+    assert not (workspace / "html_tutorials").exists()
+    assert (workspace / ".git").exists()
+    assert (picked / "index.html").is_file()
+    assert (nested / "site.css").is_file()
+
+
+@requires_git
+def test_batch_add_from_disk_one_commit(client, repo_parent, data_dir):
+    project, location = _create_project(client, repo_parent)
+    (location / "arm.prt").write_bytes(b"part")
+    (location / "notes.txt").write_bytes(b"hello")
+    added = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(location / "arm.prt"), str(location / "notes.txt")]},
+    )
+    assert added.status_code == 200, added.text
+    body = added.json()
+    assert {item["filename"] for item in body["ok"]} == {"arm.prt", "notes.txt"}
+    assert body["failed"] == []
+    listing = {item["filename"]: item for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
+    assert set(listing) == {"arm.prt", "notes.txt"}
+    assert (location / "arm.prt").is_file()
+    assert (location / "notes.txt").is_file()
+    from creopdm.services.git_service import GitService
+
+    vault = data_dir / "workspaces" / project["uuid"]
+    messages = [entry.message for entry in GitService().get_history(vault)]
+    assert [item for item in messages if item.startswith("Add")] == ["Add 2 files"]
+
+
+@requires_git
+def test_batch_add_later_save_same_commit(client, repo_parent, tmp_path, data_dir):
+    project, _location = _create_project(client, repo_parent)
+    first = tmp_path / "bridgeport_mill.prt.4"
+    first.write_bytes(b"save-4")
+    added = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(first)], "comment": "Initial mill"},
+    )
+    assert added.status_code == 200, added.text
+    later = tmp_path / "bridgeport_mill.prt.6"
+    later.write_bytes(b"save-6")
+    notes = tmp_path / "notes.txt"
+    notes.write_bytes(b"hello")
+    batch = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(later), str(notes)], "comment": "Batch later"},
+    )
+    assert batch.status_code == 200, batch.text
+    assert batch.json()["failed"] == []
+    listing = {item["filename"]: item for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
+    assert listing["bridgeport_mill.prt.6"]["display_revision"] == "A.2"
+    assert listing["bridgeport_mill.prt.6"]["uuid"] == added.json()["ok"][0]["uuid"]
+    assert "notes.txt" in listing
+    assert later.is_file()
+    assert notes.is_file()
+    from creopdm.services.git_service import GitService
+
+    vault = data_dir / "workspaces" / project["uuid"]
+    messages = [entry.message for entry in GitService().get_history(vault)]
+    assert messages.count("Batch later") == 1
+    assert messages[0] == "Batch later"
 
 
 _CREO_UGC_HEADER = (

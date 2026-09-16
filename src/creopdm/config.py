@@ -174,6 +174,11 @@ _ADDED_DEFAULT_TYPE_LABELS = (
     "mc_error.log",
     ".tmp",
     ".crc",
+    ".css, .scss, .sass, .less",
+    ".js, .mjs, .cjs, .jsx, .ts, .tsx",
+    ".eda",
+    ".mcdx",
+    ".spro",
 )
 
 

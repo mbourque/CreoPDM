@@ -138,7 +138,9 @@ def test_previous_cad_defaults_migrate(tmp_path):
     assert extra_cad_set(loaded.cad.extra_extensions) == extra_cad_set(DEFAULT_EXTRA_CAD_EXTENSIONS)
     assert extra_cad_set(loaded.cad.openable_extensions) == extra_cad_set(DEFAULT_OPENABLE_CAD_EXTENSIONS)
     assert ".inf" in loaded.cad.extra_extensions
-    assert ".m_p" in loaded.cad.extra_extensions
+    assert ".mtl" in loaded.cad.extra_extensions
+    assert ".eda" in loaded.cad.extra_extensions
+    assert ".spro" in loaded.cad.extra_extensions
     assert ".ncl" in loaded.cad.openable_extensions
     assert ".ncl" not in loaded.cad.extra_extensions
     assert ".wrl" not in loaded.cad.extra_extensions
@@ -263,7 +265,19 @@ def test_custom_type_labels_are_not_migrated(tmp_path):
 def test_previous_type_labels_gain_new_defaults(tmp_path):
     manager = ConfigManager(tmp_path / "appdata")
     manager.ensure_layout()
-    added = {"reviewref.inf", ".mrd", "mw_settings.xml", "mc_error.log", ".tmp", ".crc"}
+    added = {
+        "reviewref.inf",
+        ".mrd",
+        "mw_settings.xml",
+        "mc_error.log",
+        ".tmp",
+        ".crc",
+        ".css, .scss, .sass, .less",
+        ".js, .mjs, .cjs, .jsx, .ts, .tsx",
+        ".eda",
+        ".mcdx",
+        ".spro",
+    }
     settings = AppSettings()
     settings.cad.type_labels = [
         item
@@ -281,3 +295,8 @@ def test_previous_type_labels_gain_new_defaults(tmp_path):
     assert {"extension": "mc_error.log", "label": "ModelCHECK Error Log"} in labels
     assert {"extension": ".tmp", "label": "Temp File"} in labels
     assert {"extension": ".crc", "label": "Circular Reference File"} in labels
+    assert {"extension": ".css, .scss, .sass, .less", "label": "Stylesheet"} in labels
+    assert {"extension": ".js, .mjs, .cjs, .jsx, .ts, .tsx", "label": "JavaScript"} in labels
+    assert {"extension": ".eda", "label": "ECAD data"} in labels
+    assert {"extension": ".mcdx", "label": "Mathcad"} in labels
+    assert {"extension": ".spro", "label": "Creo Flow Analysis"} in labels

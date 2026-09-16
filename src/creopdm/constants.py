@@ -246,6 +246,20 @@ OBJECT_TYPE_BY_EXTENSION: dict[str, ObjectType] = {
     ".jpg": ObjectType.IMAGE,
     ".jpeg": ObjectType.IMAGE,
     ".png": ObjectType.IMAGE,
+    ".html": ObjectType.DOCUMENT,
+    ".htm": ObjectType.DOCUMENT,
+    ".xhtml": ObjectType.DOCUMENT,
+    ".css": ObjectType.DOCUMENT,
+    ".js": ObjectType.DOCUMENT,
+    ".mjs": ObjectType.DOCUMENT,
+    ".cjs": ObjectType.DOCUMENT,
+    ".jsx": ObjectType.DOCUMENT,
+    ".ts": ObjectType.DOCUMENT,
+    ".tsx": ObjectType.DOCUMENT,
+    ".scss": ObjectType.DOCUMENT,
+    ".sass": ObjectType.DOCUMENT,
+    ".less": ObjectType.DOCUMENT,
+    ".mcdx": ObjectType.DOCUMENT,
 }
 
 DEFAULT_FOLDER_BY_TYPE: dict[ObjectType, str] = {
@@ -334,6 +348,8 @@ DEFAULT_EXTRA_CAD_EXTENSIONS = (
     ".mrd",
     ".xpr",
     ".mtl",
+    ".eda",
+    ".spro",
 )
 
 DEFAULT_TYPE_LABELS: tuple[dict[str, str], ...] = (
@@ -381,6 +397,9 @@ DEFAULT_TYPE_LABELS: tuple[dict[str, str], ...] = (
     {"extension": ".tpm", "label": "Tool Parameters"},
     {"extension": ".tph", "label": "Toolpath"},
     {"extension": ".crc", "label": "Circular Reference File"},
+    {"extension": ".eda", "label": "ECAD data"},
+    {"extension": ".mcdx", "label": "Mathcad"},
+    {"extension": ".spro", "label": "Creo Flow Analysis"},
     {"extension": "reviewref.inf", "label": "Reference Info"},
     {"extension": ".zip, .rar, .7z, .tar, .gz, .tgz, .bz2, .tbz", "label": "Archive"},
     {
@@ -388,6 +407,8 @@ DEFAULT_TYPE_LABELS: tuple[dict[str, str], ...] = (
         "label": "Image File",
     },
     {"extension": ".html, .htm", "label": "Webpage"},
+    {"extension": ".css, .scss, .sass, .less", "label": "Stylesheet"},
+    {"extension": ".js, .mjs, .cjs, .jsx, .ts, .tsx", "label": "JavaScript"},
     {"extension": ".bat, .cmd, .ps1, .py", "label": "Scripts/programming"},
     {"extension": ".md", "label": "Markdown"},
     {"extension": ".json", "label": "JSON"},
@@ -650,6 +671,26 @@ PREVIOUS_DEFAULT_EXTRA_CAD_SETS = (
             ".out",
             ".tool",
             ".log",
+            ".crc",
+            ".dat",
+            ".m_p",
+            ".bom",
+            ".tbl",
+            ".xch",
+            ".sym",
+            ".bin",
+            ".stk",
+            ".mrd",
+            ".xpr",
+            ".mtl",
+        }
+    ),
+    frozenset(
+        {
+            ".tph",
+            ".inf",
+            ".out",
+            ".tool",
             ".crc",
             ".dat",
             ".m_p",

@@ -97,6 +97,15 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .metric:hover {
   border-color: var(--accent-2);
 }
+.metric:disabled,
+.metric:disabled:hover {
+  cursor: default;
+  opacity: 1;
+  color: inherit;
+  background: white;
+  border-color: var(--line);
+  box-shadow: var(--shadow);
+}
 .metric.is-selected {
   border-color: #2f6f8f;
   background: #d7ebf5;

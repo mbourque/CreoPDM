@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -55,6 +56,31 @@ from creopdm.utils.paths import (
 )
 
 logger = get_logger("objects")
+
+
+@dataclass
+class ImportJobResult:
+    source: Path
+    filename: str
+    obj: EngineeringObject | None = None
+    error: CreoPDMError | None = None
+
+
+@dataclass
+class _ImportPlan:
+    source: Path
+    stored_name: str
+    relative: str
+    logical: str
+    stem: str
+    extension: str
+    object_type: str
+    content_hash: str
+    file_size: int
+    creo_release: str | None
+    kind: str
+    existing: EngineeringObject | None = None
+    old_relative: str | None = None
 
 
 class ObjectService:
@@ -358,156 +384,434 @@ class ObjectService:
         relative_path: str | None = None,
         comment: str | None = None,
     ) -> EngineeringObject:
-        if not source_path.is_file():
-            raise PathValidationError("The selected file does not exist.")
-
-        display_name = sanitize_filename(original_name or source_path.name)
-        stored_name = CreoFileManager.canonical_repository_name(display_name)
-        ignore = self._config.ignore_patterns() if self._config else None
-        if CreoFileManager.is_ignored(stored_name, ignore):
-            raise PathValidationError(
-                f"{stored_name} is an ignored session file and is not stored in CreoPDM.",
-                details={"filename": stored_name},
-            )
-        logical_name = CreoFileManager.logical_filename(stored_name, self._cad_extensions())
-        extras = self._config.data_cad_extensions() if self._config else None
-        models = self._config.model_cad_extensions() if self._config else None
-        object_type = classify_filename(
-            stored_name,
-            extra_cad_extensions=extras,
-            model_extensions=models,
+        results = self.import_files(
+            session,
+            project,
+            [(source_path, original_name, relative_path)],
+            comment,
         )
-        extension = Path(logical_name).suffix.lower() or Path(stored_name).suffix.lower()
-        stem = Path(logical_name).stem
+        if not results:
+            raise PathValidationError("The selected file does not exist.")
+        outcome = results[0]
+        if outcome.error is not None:
+            raise outcome.error
+        if outcome.obj is None:
+            raise PathValidationError("The selected file does not exist.")
+        return outcome.obj
 
-        if relative_path:
-            rel = assert_safe_relative_path(relative_path)
-            if rel.name != stored_name:
-                rel = rel.parent / stored_name
-        else:
-            rel = Path(stored_name)
-        rel = assert_safe_relative_path(str(rel).replace("\\", "/"))
-        relative = rel.as_posix()
-        reserved = {part.lower() for part in rel.parts}
-        if reserved & {".git", ".creopdm"}:
-            raise PathValidationError("That location is reserved for CreoPDM.")
+    def import_files(
+        self,
+        session: Session,
+        project: Project,
+        jobs: list[tuple[Path, str | None, str | None]],
+        comment: str | None = None,
+    ) -> list[ImportJobResult]:
+        """Copy accepted files, then one Git add and one commit.
 
-        existing = self.existing_logical(session, project.id, relative)
-        if existing is not None:
-            extras_all = self._cad_extensions()
-            incoming_n = CreoFileManager.save_number(stored_name, extras_all)
-            recorded_n = CreoFileManager.save_number(existing.filename, extras_all)
-            if incoming_n > recorded_n:
-                return self._import_later_save(
-                    session,
-                    project,
-                    existing,
-                    source_path,
-                    stored_name,
-                    comment,
-                )
-            if incoming_n < recorded_n:
-                raise DuplicateObjectError(
-                    f"{stored_name} is an older save of {existing.filename}, which is already in this project.",
-                    details={"relative_path": existing.relative_path, "existing": existing.filename},
-                )
-            raise DuplicateObjectError(
-                f"{stored_name} is already in this project as {existing.filename}.",
-                details={"relative_path": existing.relative_path, "existing": existing.filename},
-            )
-
-        repo = self._vault(project)
-        destination = ensure_within(repo, repo / rel)
+        Ignored, duplicate, and older saves are skipped per file. A later Creo
+        numbered save of an existing object becomes the next iteration.
+        """
+        if not jobs:
+            return []
+        extras = self._cad_extensions()
+        ignore = self._config.ignore_patterns() if self._config else None
         user = self._users.get_current_user()
-        content_hash = calculate_sha256(source_path)
-        file_size = source_path.stat().st_size
-        creo_release = creo_release_for(source_path, stored_name)
-        message = (comment or f"Add {stored_name}").strip()
-        if not message:
-            raise ValidationAppError("A comment is required when adding a file.")
+        index = self._logical_index(session, project.id)
+        checkouts = self._active_checkouts(session, [obj.id for obj in index.values()])
+        results: list[ImportJobResult] = []
+        plans: list[_ImportPlan] = []
+        pending_logical: dict[str, str] = {}
+        for source_path, original_name, relative_path in jobs:
+            planned, error = self._plan_import(
+                project,
+                source_path,
+                original_name,
+                relative_path,
+                extras,
+                ignore,
+                index,
+                checkouts,
+                user.user_name,
+                pending_logical,
+            )
+            filename = (original_name or source_path.name) if source_path else ""
+            if error is not None:
+                results.append(ImportJobResult(source=source_path, filename=Path(filename).name, error=error))
+                continue
+            assert planned is not None
+            pending_logical[planned.logical] = planned.stored_name
+            plans.append(planned)
+            results.append(ImportJobResult(source=source_path, filename=planned.stored_name))
 
-        captured_head = self._store.capture_checkpoint(repo)
-        object_uuid = str(uuid.uuid4())
-        version_uuid = str(uuid.uuid4())
+        if not plans:
+            return results
+
+        git_plans = [item for item in plans if item.kind in {"new", "later"}]
+        stage_plans = [item for item in plans if item.kind == "stage"]
+        raw_comment = (comment or "").strip()
+        if git_plans:
+            if raw_comment:
+                message = raw_comment
+            elif len(git_plans) == 1:
+                message = f"Add {git_plans[0].stored_name}"
+            else:
+                message = f"Add {len(git_plans)} files"
+        else:
+            message = raw_comment or "Add files"
+
+        created: list[Path] = []
+        repo = self._vault(project)
         now = datetime.now(timezone.utc)
 
         with self._locks.acquire(project.uuid):
-            created_copy = copy_file(source_path, destination)
+            for plan in stage_plans:
+                if plan.existing is None:
+                    self._mark_result(
+                        results,
+                        plan,
+                        error=RepositoryError("Missing object for later save."),
+                    )
+                    continue
+                try:
+                    self._stage_later_workspace_save(
+                        project,
+                        plan.existing,
+                        plan.source,
+                        plan.stored_name,
+                    )
+                except CreoPDMError as except_error:
+                    self._mark_result(results, plan, error=except_error)
+                except Exception as exc:
+                    self._mark_result(results, plan, error=RepositoryError(str(exc)))
+            captured_head = self._store.capture_checkpoint(repo) if git_plans else None
             try:
-                git_hash = self._store.store_version(
-                    repo,
-                    [relative],
-                    message,
-                    user,
+                for plan in git_plans:
+                    destination = ensure_within(repo, repo / Path(plan.relative))
+                    created_copy = copy_file(plan.source, destination)
+                    if created_copy:
+                        created.append(destination)
+                if git_plans:
+                    add_paths = [plan.relative for plan in git_plans]
+                    remove_paths = list(
+                        dict.fromkeys(
+                            plan.old_relative
+                            for plan in git_plans
+                            if plan.kind == "later"
+                            and plan.old_relative
+                            and plan.old_relative != plan.relative
+                        )
+                    )
+                    git_hash = self._store.store_version(
+                        repo,
+                        add_paths,
+                        message,
+                        user,
+                        remove_relative_paths=remove_paths,
+                    )
+                    self._record_batch_versions(
+                        session,
+                        project,
+                        git_plans,
+                        git_hash,
+                        message,
+                        user.user_name,
+                        now,
+                    )
+                    self._record_import_activity(session, project, git_plans, user)
+                    for plan in git_plans:
+                        destination = ensure_within(repo, repo / Path(plan.relative))
+                        try:
+                            set_file_readonly(destination)
+                        except Exception:
+                            logger.warning("Could not mark %s read-only after import", destination)
+            except Exception as exc:
+                logger.exception("Batch import failed for %s files", len(git_plans))
+                if captured_head:
+                    self._store.restore_checkpoint(repo, captured_head)
+                for path in created:
+                    self._remove_copied_file(path)
+                if isinstance(exc, CreoPDMError):
+                    raise
+                raise RepositoryError(
+                    "The files could not be added to the project.",
+                    details={"count": len(git_plans)},
+                ) from exc
+
+        for plan in git_plans:
+            if plan.existing is not None:
+                self._mark_result(results, plan, obj=plan.existing)
+        for plan in stage_plans:
+            if plan.existing is not None:
+                self._mark_result(results, plan, obj=plan.existing)
+        logger.info("Imported %s files (%s git, %s staged)", len(plans), len(git_plans), len(stage_plans))
+        return results
+
+    def _plan_import(
+        self,
+        _project: Project,
+        source_path: Path,
+        original_name: str | None,
+        relative_path: str | None,
+        extras: list[str],
+        ignore: list[str] | None,
+        index: dict[str, EngineeringObject],
+        checkouts: dict[int, Checkout],
+        user_name: str,
+        pending_logical: dict[str, str],
+    ) -> tuple[_ImportPlan | None, CreoPDMError | None]:
+        try:
+            if not source_path.is_file():
+                raise PathValidationError(
+                    "The selected file was not found.",
+                    details={"path": str(source_path)},
                 )
-            except Exception:
-                if created_copy:
-                    self._remove_copied_file(destination)
-                raise
-
-            obj = EngineeringObject(
-                uuid=object_uuid,
-                project_id=project.id,
-                number=stem.upper(),
-                name=stem,
-                filename=stored_name,
-                extension=extension,
-                object_type=object_type.value,
-                relative_path=relative,
-                revision=DEFAULT_REVISION,
-                iteration=INITIAL_ITERATION,
-                lifecycle_state=LifecycleState.IN_WORK.value,
-                created_at=now,
-                updated_at=now,
+            display_name = sanitize_filename(original_name or source_path.name)
+            stored_name = CreoFileManager.canonical_repository_name(display_name)
+            if CreoFileManager.is_ignored(stored_name, ignore):
+                raise PathValidationError(
+                    f"{stored_name} is an ignored session file and is not stored in CreoPDM.",
+                    details={"filename": stored_name},
+                )
+            logical_name = CreoFileManager.logical_filename(stored_name, extras)
+            data_extras = self._config.data_cad_extensions() if self._config else None
+            models = self._config.model_cad_extensions() if self._config else None
+            object_type = classify_filename(
+                stored_name,
+                extra_cad_extensions=data_extras,
+                model_extensions=models,
             )
-            session.add(obj)
-            session.flush()
+            extension = Path(logical_name).suffix.lower() or Path(stored_name).suffix.lower()
+            stem = Path(logical_name).stem
+            if relative_path:
+                rel = assert_safe_relative_path(relative_path)
+                if rel.name != stored_name:
+                    rel = rel.parent / stored_name
+            else:
+                rel = Path(stored_name)
+            rel = assert_safe_relative_path(str(rel).replace("\\", "/"))
+            relative = rel.as_posix()
+            reserved = {part.lower() for part in rel.parts}
+            if reserved & {".git", ".creopdm"}:
+                raise PathValidationError("That location is reserved for CreoPDM.")
+            logical = CreoFileManager.logical_repo_path(relative, extras)
+            if logical in pending_logical:
+                other = pending_logical[logical]
+                raise DuplicateObjectError(
+                    f"{stored_name} is already being added as {other}.",
+                    details={"relative_path": relative, "existing": other},
+                )
+            existing = index.get(logical)
+            kind = "new"
+            old_relative: str | None = None
+            if existing is not None:
+                incoming_n = CreoFileManager.save_number(stored_name, extras)
+                recorded_n = CreoFileManager.save_number(existing.filename, extras)
+                if incoming_n > recorded_n:
+                    if existing.lifecycle_state != LifecycleState.IN_WORK.value:
+                        raise ReleasedObjectError(
+                            f"{existing.filename} is {existing.lifecycle_state.replace('_', ' ').title()} "
+                            "and cannot take a later save.",
+                            details={"uuid": existing.uuid},
+                        )
+                    active = checkouts.get(existing.id)
+                    if active is not None:
+                        if active.user_name != user_name:
+                            raise ObjectAlreadyCheckedOutError(
+                                f"{existing.filename} is checked out by {active.user_name}.",
+                                details={"uuid": existing.uuid, "user": active.user_name},
+                            )
+                        kind = "stage"
+                    else:
+                        kind = "later"
+                    relative = self._later_save_relative(existing, stored_name)
+                    old_relative = existing.relative_path.replace("\\", "/")
+                elif incoming_n < recorded_n:
+                    raise DuplicateObjectError(
+                        f"{stored_name} is an older save of {existing.filename}, which is already in this project.",
+                        details={"relative_path": existing.relative_path, "existing": existing.filename},
+                    )
+                else:
+                    raise DuplicateObjectError(
+                        f"{stored_name} is already in this project as {existing.filename}.",
+                        details={"relative_path": existing.relative_path, "existing": existing.filename},
+                    )
+            content_hash = calculate_sha256(source_path)
+            file_size = source_path.stat().st_size
+            creo_release = creo_release_for(source_path, stored_name)
+            return (
+                _ImportPlan(
+                    source=source_path,
+                    stored_name=stored_name,
+                    relative=relative,
+                    logical=logical,
+                    stem=stem,
+                    extension=extension,
+                    object_type=object_type.value,
+                    content_hash=content_hash,
+                    file_size=file_size,
+                    creo_release=creo_release,
+                    kind=kind,
+                    existing=existing,
+                    old_relative=old_relative,
+                ),
+                None,
+            )
+        except CreoPDMError as exc:
+            return None, exc
 
+    def _logical_index(self, session: Session, project_id: int) -> dict[str, EngineeringObject]:
+        extras = self._cad_extensions()
+        objects = session.scalars(
+            select(EngineeringObject).where(EngineeringObject.project_id == project_id)
+        )
+        return {
+            CreoFileManager.logical_repo_path(obj.relative_path, extras): obj
+            for obj in objects
+        }
+
+    def _active_checkouts(self, session: Session, object_ids: list[int]) -> dict[int, Checkout]:
+        found: dict[int, Checkout] = {}
+        for start in range(0, len(object_ids), 400):
+            chunk = object_ids[start : start + 400]
+            rows = session.scalars(
+                select(Checkout).where(
+                    Checkout.object_id.in_(chunk),
+                    Checkout.status == CheckoutStatus.ACTIVE.value,
+                )
+            )
+            for row in rows:
+                found[row.object_id] = row
+        return found
+
+    @staticmethod
+    def _mark_result(
+        results: list[ImportJobResult],
+        plan: _ImportPlan,
+        obj: EngineeringObject | None = None,
+        error: CreoPDMError | None = None,
+    ) -> None:
+        for item in results:
+            if item.source != plan.source or item.filename != plan.stored_name:
+                continue
+            if error is not None:
+                item.error = error
+            elif obj is not None and item.error is None:
+                item.obj = obj
+            return
+
+    def _record_batch_versions(
+        self,
+        session: Session,
+        project: Project,
+        plans: list[_ImportPlan],
+        git_hash: str,
+        message: str,
+        user_name: str,
+        now: datetime,
+    ) -> None:
+        for plan in plans:
+            if plan.kind == "new":
+                obj = EngineeringObject(
+                    uuid=str(uuid.uuid4()),
+                    project_id=project.id,
+                    number=plan.stem.upper(),
+                    name=plan.stem,
+                    filename=plan.stored_name,
+                    extension=plan.extension,
+                    object_type=plan.object_type,
+                    relative_path=plan.relative,
+                    revision=DEFAULT_REVISION,
+                    iteration=INITIAL_ITERATION,
+                    lifecycle_state=LifecycleState.IN_WORK.value,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(obj)
+                plan.existing = obj
+            elif plan.kind == "later" and plan.existing is not None:
+                obj = plan.existing
+                obj.filename = plan.stored_name
+                obj.relative_path = plan.relative
+                obj.updated_at = now
+                obj.iteration = obj.iteration + 1
+        session.flush()
+        pairs: list[tuple[EngineeringObject, ObjectVersion]] = []
+        for plan in plans:
+            obj = plan.existing
+            if obj is None:
+                continue
             version = ObjectVersion(
-                uuid=version_uuid,
+                uuid=str(uuid.uuid4()),
                 object_id=obj.id,
-                revision=DEFAULT_REVISION,
-                iteration=INITIAL_ITERATION,
+                revision=obj.revision or DEFAULT_REVISION,
+                iteration=obj.iteration,
                 git_commit_hash=git_hash,
-                content_hash=content_hash,
-                file_size=file_size,
-                filename=stored_name,
-                relative_path=relative,
-                creo_release=creo_release,
-                created_by=user.user_name,
+                content_hash=plan.content_hash,
+                file_size=plan.file_size,
+                filename=plan.stored_name,
+                relative_path=plan.relative,
+                creo_release=plan.creo_release,
+                created_by=user_name,
                 created_at=now,
                 comment=message,
             )
             session.add(version)
-            session.flush()
+            pairs.append((obj, version))
+        session.flush()
+        for obj, version in pairs:
             obj.current_version_id = version.id
             obj.updated_at = now
-            try:
-                session.flush()
-            except Exception as exc:
-                logger.exception("Metadata failed after storing %s", relative)
-                if captured_head:
-                    self._store.restore_checkpoint(repo, captured_head)
-                raise RepositoryError(
-                    "The file was stored but project metadata could not be updated. "
-                    "The repository was restored and the file was not added.",
-                    details={"file": stored_name},
-                ) from exc
-            try:
-                set_file_readonly(destination)
-            except Exception:
-                logger.warning("Could not mark %s read-only after import", destination)
+        session.flush()
 
+    def _record_import_activity(self, session: Session, project: Project, plans: list[_ImportPlan], user) -> None:
+        new_plans = [plan for plan in plans if plan.kind == "new"]
+        later_plans = [plan for plan in plans if plan.kind == "later"]
+        if len(new_plans) == 1:
+            plan = new_plans[0]
             self._activities.record(
                 session,
                 ActivityAction.OBJECT_ADDED,
                 user,
                 project_id=project.id,
-                object_id=obj.id,
-                details={"filename": stored_name, "relative_path": relative},
+                object_id=plan.existing.id if plan.existing is not None else None,
+                details={"filename": plan.stored_name, "relative_path": plan.relative},
             )
-            logger.info("Added object %s (%s)", obj.uuid, relative)
-            return obj
+        elif new_plans:
+            self._activities.record(
+                session,
+                ActivityAction.OBJECT_ADDED,
+                user,
+                project_id=project.id,
+                object_id=None,
+                details={
+                    "count": len(new_plans),
+                    "filenames": [plan.stored_name for plan in new_plans[:20]],
+                },
+            )
+        if len(later_plans) == 1:
+            plan = later_plans[0]
+            iteration = plan.existing.iteration if plan.existing is not None else None
+            self._activities.record(
+                session,
+                ActivityAction.CHECKED_IN,
+                user,
+                project_id=project.id,
+                object_id=plan.existing.id if plan.existing is not None else None,
+                details={
+                    "filename": plan.stored_name,
+                    "relative_path": plan.relative,
+                    "iteration": iteration,
+                },
+            )
+        elif later_plans:
+            self._activities.record(
+                session,
+                ActivityAction.CHECKED_IN,
+                user,
+                project_id=project.id,
+                object_id=None,
+                details={"count": len(later_plans), "iteration": True},
+            )
 
     def _import_later_save(
         self,

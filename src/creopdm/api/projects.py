@@ -10,7 +10,7 @@ from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import project_to_response
 from creopdm.context import AppContext
 from creopdm.creo.file_manager import CreoFileManager
-from creopdm.exceptions import CreoPDMError, PathValidationError
+from creopdm.exceptions import PathValidationError
 from creopdm.schemas.common import (
     BatchItemResult,
     BatchOperationResponse,
@@ -303,28 +303,37 @@ def import_from_disk(
                 message="The selected file was not found.",
             )
         )
-    for path in selected:
-        try:
-            relative = ctx.workspaces.import_relative_path(project, path, payload.base_folder)
-            obj = ctx.objects.import_file(
-                db,
-                project,
-                path,
-                original_name=path.name,
-                relative_path=relative,
-                comment=comment,
-            )
-            checkout = ctx.checkouts.active_for(db, obj.id)
-            mine = checkout is not None and checkout.user_name == ctx.users.get_current_user().user_name
-            ctx.workspaces.copy_into_workspace(project, obj, writable=mine, keep_local=mine)
-            ok.append(BatchItemResult(uuid=obj.uuid, filename=path.name, status="added", path=str(path)))
-        except CreoPDMError as exc:
-            failed.append(
-                BatchItemResult(
-                    uuid="",
-                    filename=path.name,
-                    code=exc.code,
-                    message=exc.message,
+    jobs = [
+        (path, path.name, ctx.workspaces.import_relative_path(project, path, payload.base_folder))
+        for path in selected
+    ]
+    if jobs:
+        for outcome in ctx.objects.import_files(db, project, jobs, comment):
+            if outcome.error is not None:
+                failed.append(
+                    BatchItemResult(
+                        uuid="",
+                        filename=outcome.filename,
+                        code=outcome.error.code,
+                        message=outcome.error.message,
+                    )
                 )
-            )
+            elif outcome.obj is not None:
+                ok.append(
+                    BatchItemResult(
+                        uuid=outcome.obj.uuid,
+                        filename=outcome.filename,
+                        status="added",
+                        path=str(outcome.source),
+                    )
+                )
+            else:
+                failed.append(
+                    BatchItemResult(
+                        uuid="",
+                        filename=outcome.filename,
+                        code="APPLICATION_ERROR",
+                        message="The file was not added.",
+                    )
+                )
     return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.workspaces.root_for(project.uuid)))
