@@ -341,16 +341,18 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     page = client.get(f"/?project={project['uuid']}")
     assert page.status_code == 200, page.text
     assert "Would check in" in page.text
-    assert "Newer Creo save" in page.text
-    assert "shaft.prt.4" in page.text
-    assert "from shaft.prt.3" in page.text
-    assert "New file" in page.text
-    assert "bushing.prt" in page.text
-    assert "Would check in · 2" in page.text
+    assert "Would check in · 2" not in page.text
+    assert "Newer Creo save" not in page.text
     match = re.search(r'<button[^>]*id="checkin-btn"[^>]*>', page.text)
     assert match, page.text
     assert "disabled" not in match.group(0)
-    assert 'data-new-files="1"' in match.group(0)
+    queue = client.get(f"/api/projects/{project['uuid']}/checkin-queue")
+    assert queue.status_code == 200, queue.text
+    body = queue.json()
+    saves = {item["filename"] for item in body["saves"]}
+    created_names = {item["filename"] for item in body["new_files"]}
+    assert "shaft.prt.4" in saves
+    assert "bushing.prt" in created_names
 
 
 @requires_git

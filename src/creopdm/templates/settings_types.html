@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}File type names — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page">
+  <nav class="crumb">
+    <a href="/">Projects</a>
+    <span>/</span>
+    <a href="/settings">Settings</a>
+    <span>/</span>
+    <span>File type names</span>
+  </nav>
+  <h1>File type names</h1>
+  <p class="muted">Map a file extension or a specific file name to the Type column. Variants can share one row, such as <code>.stp, .step</code>. A name such as <code>reviewref.inf</code> matches that file, including numbered saves like <code>reviewref.inf.1</code>. Leave unused rows blank. Anything without a row keeps the usual CreoPDM name.</p>
+
+  <form id="type-labels-form" class="settings-form settings-form-wide">
+    <input type="hidden" name="creo_open_mode" value="{{ settings.creo_open_mode }}">
+    <section class="settings-card">
+      <table class="grid type-label-table">
+        <thead>
+          <tr>
+            <th>Extension</th>
+            <th>Type name</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="type-label-rows">
+          {% for item in settings.type_labels %}
+          <tr>
+            <td><input name="extension" type="text" value="{{ item.extension }}" placeholder=".stp, .step" autocomplete="off"></td>
+            <td><input name="label" type="text" value="{{ item.label }}" placeholder="STEP Model" autocomplete="off"></td>
+            <td><button type="button" class="btn btn-small type-label-remove">Remove</button></td>
+          </tr>
+          {% else %}
+          <tr>
+            <td><input name="extension" type="text" value="" placeholder=".stp, .step" autocomplete="off"></td>
+            <td><input name="label" type="text" value="" placeholder="STEP Model" autocomplete="off"></td>
+            <td><button type="button" class="btn btn-small type-label-remove">Remove</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="dialog-actions">
+        <button type="button" class="btn" id="type-label-add">Add row</button>
+      </p>
+    </section>
+    <p class="error" id="settings-error" hidden></p>
+    <p class="ok" id="settings-ok" hidden>Saved.</p>
+    <div class="dialog-actions">
+      <button type="submit" class="btn btn-primary">Save type names</button>
+      <a class="btn" href="/settings">Back to Settings</a>
+    </div>
+  </form>
+</article>
+{% endblock %}

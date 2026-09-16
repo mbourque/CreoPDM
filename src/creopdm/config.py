@@ -10,11 +10,30 @@ import os
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from creopdm.constants import APP_NAME, DEFAULT_EXTRA_CAD_EXTENSIONS, DEFAULT_LFS_PATTERNS, PREVIOUS_DEFAULT_EXTRA_CAD_SETS
+from creopdm.constants import (
+    APP_NAME,
+    DEFAULT_CREO_MODEL_EXTENSIONS,
+    DEFAULT_EXTRA_CAD_EXTENSIONS,
+    DEFAULT_IGNORE_PATTERNS,
+    DEFAULT_LFS_PATTERNS,
+    DEFAULT_OPENABLE_CAD_EXTENSIONS,
+    DEFAULT_TYPE_LABELS,
+    PREVIOUS_DEFAULT_CREO_MODEL_SETS,
+    PREVIOUS_DEFAULT_EXTRA_CAD_SETS,
+    PREVIOUS_DEFAULT_IGNORE_SETS,
+    PREVIOUS_DEFAULT_TYPE_LABEL_SETS,
+)
 from creopdm.exceptions import ConfigurationError, PathValidationError
-from creopdm.utils.classify import extra_cad_set, parse_extension_text
+from creopdm.utils.classify import (
+    exclude_extensions,
+    extra_cad_set,
+    parse_extension_text,
+    unique_extensions,
+    unique_type_labels,
+)
+from creopdm.utils.ignore import parse_ignore_text, unique_ignore_patterns
 
 
 class ServerConfig(BaseModel):
@@ -71,19 +90,69 @@ class UiConfig(BaseModel):
     last_project_uuid: str | None = None
 
 
+def _normalize_extension_list(value: object, default: tuple[str, ...] | list[str]) -> list[str]:
+    if value is None:
+        return list(default)
+    if isinstance(value, str):
+        return parse_extension_text(value)
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return unique_extensions(str(item) for item in value)
+    return list(default)
+
+
 class CadConfig(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    model_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_CREO_MODEL_EXTENSIONS))
+    openable_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_OPENABLE_CAD_EXTENSIONS))
     extra_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_EXTRA_CAD_EXTENSIONS))
+    type_labels: list[dict[str, str]] = Field(
+        default_factory=lambda: unique_type_labels(DEFAULT_TYPE_LABELS)
+    )
+
+    @field_validator("model_extensions", mode="before")
+    @classmethod
+    def normalize_model_extensions(cls, value: object) -> list[str]:
+        return _normalize_extension_list(value, DEFAULT_CREO_MODEL_EXTENSIONS)
+
+    @field_validator("openable_extensions", mode="before")
+    @classmethod
+    def normalize_openable_extensions(cls, value: object) -> list[str]:
+        return _normalize_extension_list(value, DEFAULT_OPENABLE_CAD_EXTENSIONS)
 
     @field_validator("extra_extensions", mode="before")
     @classmethod
-    def normalize_extensions(cls, value: object) -> list[str]:
+    def normalize_extra_extensions(cls, value: object) -> list[str]:
+        return _normalize_extension_list(value, DEFAULT_EXTRA_CAD_EXTENSIONS)
+
+    @field_validator("type_labels", mode="before")
+    @classmethod
+    def normalize_type_labels(cls, value: object) -> list[dict[str, str]]:
+        return unique_type_labels(value)
+
+    @model_validator(mode="after")
+    def extras_exclude_openable_models(self) -> CadConfig:
+        self.openable_extensions = exclude_extensions(self.openable_extensions, self.model_extensions)
+        self.extra_extensions = exclude_extensions(
+            self.extra_extensions,
+            (*self.model_extensions, *self.openable_extensions),
+        )
+        return self
+
+
+class IgnoreConfig(BaseModel):
+    patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_IGNORE_PATTERNS))
+
+    @field_validator("patterns", mode="before")
+    @classmethod
+    def normalize_patterns(cls, value: object) -> list[str]:
         if value is None:
-            return list(DEFAULT_EXTRA_CAD_EXTENSIONS)
+            return list(DEFAULT_IGNORE_PATTERNS)
         if isinstance(value, str):
-            return parse_extension_text(value)
+            return parse_ignore_text(value)
         if isinstance(value, (list, tuple, set, frozenset)):
-            return sorted(extra_cad_set(str(item) for item in value))
-        return list(DEFAULT_EXTRA_CAD_EXTENSIONS)
+            return unique_ignore_patterns(str(item) for item in value)
+        return list(DEFAULT_IGNORE_PATTERNS)
 
 
 class AppSettings(BaseModel):
@@ -94,6 +163,27 @@ class AppSettings(BaseModel):
     workspace: WorkspaceConfig = Field(default_factory=WorkspaceConfig)
     ui: UiConfig = Field(default_factory=UiConfig)
     cad: CadConfig = Field(default_factory=CadConfig)
+    ignore: IgnoreConfig = Field(default_factory=IgnoreConfig)
+
+
+_ADDED_DEFAULT_TYPE_LABELS = ("reviewref.inf", ".mrd", "mw_settings.xml", "mc_error.log", ".tmp")
+
+
+def _type_label_fingerprint(values: object) -> tuple[tuple[str, str], ...]:
+    return tuple((item["extension"], item["label"]) for item in unique_type_labels(values))
+
+
+def _previous_type_label_fingerprints() -> set[tuple[tuple[str, str], ...]]:
+    found: set[tuple[tuple[str, str], ...]] = set(PREVIOUS_DEFAULT_TYPE_LABEL_SETS)
+    skip: set[str] = set()
+    for key in reversed(_ADDED_DEFAULT_TYPE_LABELS):
+        skip.add(key)
+        found.add(
+            _type_label_fingerprint(
+                item for item in DEFAULT_TYPE_LABELS if item["extension"] not in skip
+            )
+        )
+    return found
 
 
 def data_dir_from_environment() -> Path:
@@ -151,13 +241,56 @@ class ConfigManager:
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             raise ConfigurationError(f"Unable to read settings: {exc}") from exc
         dirty = False
-        if extra_cad_set(settings.cad.extra_extensions) in PREVIOUS_DEFAULT_EXTRA_CAD_SETS:
+        cad_raw = raw.get("cad") if isinstance(raw, dict) else None
+        raw_extras = extra_cad_set((cad_raw or {}).get("extra_extensions")) if isinstance(cad_raw, dict) else extra_cad_set()
+        if raw_extras in PREVIOUS_DEFAULT_EXTRA_CAD_SETS:
             settings.cad.extra_extensions = list(DEFAULT_EXTRA_CAD_EXTENSIONS)
+            settings.cad.openable_extensions = list(DEFAULT_OPENABLE_CAD_EXTENSIONS)
+            dirty = True
+        if not isinstance(cad_raw, dict) or "openable_extensions" not in cad_raw:
+            settings.cad.openable_extensions = list(DEFAULT_OPENABLE_CAD_EXTENSIONS)
+            dirty = True
+        raw_models = extra_cad_set((cad_raw or {}).get("model_extensions")) if isinstance(cad_raw, dict) else extra_cad_set()
+        if (
+            not isinstance(cad_raw, dict)
+            or "model_extensions" not in cad_raw
+            or raw_models in PREVIOUS_DEFAULT_CREO_MODEL_SETS
+        ):
+            settings.cad.model_extensions = list(DEFAULT_CREO_MODEL_EXTENSIONS)
+            dirty = True
+        stripped_openable = exclude_extensions(settings.cad.openable_extensions, settings.cad.model_extensions)
+        if stripped_openable != unique_extensions(settings.cad.openable_extensions):
+            settings.cad.openable_extensions = stripped_openable
+            dirty = True
+        stripped = exclude_extensions(
+            settings.cad.extra_extensions,
+            (*settings.cad.model_extensions, *settings.cad.openable_extensions),
+        )
+        if stripped != unique_extensions(settings.cad.extra_extensions):
+            settings.cad.extra_extensions = stripped
+            dirty = True
+        raw_labels = (cad_raw or {}).get("type_labels") if isinstance(cad_raw, dict) else None
+        label_fp = _type_label_fingerprint(raw_labels)
+        if (
+            not isinstance(cad_raw, dict)
+            or "type_labels" not in cad_raw
+            or label_fp in _previous_type_label_fingerprints()
+        ):
+            settings.cad.type_labels = unique_type_labels(DEFAULT_TYPE_LABELS)
             dirty = True
         if settings.server.host in {"127.0.0.1", "localhost"}:
             settings.server.host = "0.0.0.0"
             dirty = True
         if "database" not in raw:
+            dirty = True
+        ignore_raw = raw.get("ignore") if isinstance(raw, dict) else None
+        raw_ignore = frozenset(
+            str(item).strip().lower()
+            for item in ((ignore_raw or {}).get("patterns") or [])
+            if str(item).strip()
+        ) if isinstance(ignore_raw, dict) else frozenset()
+        if "ignore" not in raw or raw_ignore in PREVIOUS_DEFAULT_IGNORE_SETS:
+            settings.ignore.patterns = list(DEFAULT_IGNORE_PATTERNS)
             dirty = True
         if dirty:
             self.save(settings)
@@ -198,8 +331,32 @@ class ConfigManager:
             return Path(configured).expanduser().resolve()
         return self.workspaces_dir
 
+    def model_cad_extensions(self) -> list[str]:
+        return unique_extensions(self.settings.cad.model_extensions or DEFAULT_CREO_MODEL_EXTENSIONS)
+
+    def openable_cad_extensions(self) -> list[str]:
+        return exclude_extensions(self.settings.cad.openable_extensions, self.model_cad_extensions())
+
     def extra_cad_extensions(self) -> list[str]:
-        return sorted(extra_cad_set(self.settings.cad.extra_extensions))
+        return exclude_extensions(
+            self.settings.cad.extra_extensions,
+            (*self.model_cad_extensions(), *self.openable_cad_extensions()),
+        )
+
+    def data_cad_extensions(self) -> list[str]:
+        return unique_extensions((*self.openable_cad_extensions(), *self.extra_cad_extensions()))
+
+    def all_cad_extensions(self) -> list[str]:
+        return unique_extensions((*self.model_cad_extensions(), *self.data_cad_extensions()))
+
+    def type_labels(self) -> list[dict[str, str]]:
+        return unique_type_labels(self.settings.cad.type_labels)
+
+    def ignore_patterns(self) -> list[str]:
+        configured = self.settings.ignore.patterns
+        if configured is None:
+            return list(DEFAULT_IGNORE_PATTERNS)
+        return unique_ignore_patterns(configured)
 
     def workspace_for_project(self, project_uuid: str) -> Path:
         if not project_uuid or any(ch in project_uuid for ch in r"/\:"):

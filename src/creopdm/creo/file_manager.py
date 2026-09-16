@@ -7,15 +7,19 @@ import re
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
-from creopdm.constants import CREO_FILE_EXTENSIONS, DEFAULT_EXTRA_CAD_EXTENSIONS
+from creopdm.constants import (
+    CREO_FILE_EXTENSIONS,
+    DEFAULT_CREO_MODEL_EXTENSIONS,
+    DEFAULT_EXTRA_CAD_EXTENSIONS,
+    DEFAULT_OPENABLE_CAD_EXTENSIONS,
+)
 
-_TRAIL_FILE = re.compile(r"^trail\.txt(?:\.\d+)?$", re.IGNORECASE)
 _UUIDISH_STEM = re.compile(
     r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{6,12}$",
     re.IGNORECASE,
 )
 _SKIP_IMPORT_DIRS = {".git", ".creopdm", "__pycache__"}
-_SKIP_IMPORT_SUFFIXES = {".tst", ".err", ".lst", ".bak", ".tmp", ".acl"}
+_SKIP_IMPORT_SUFFIXES = {".lst", ".bak", ".tmp"}
 
 
 def _dot_ext(value: str) -> str:
@@ -25,13 +29,22 @@ def _dot_ext(value: str) -> str:
     return text if text.startswith(".") else f".{text}"
 
 
+_EXTRA_CAD_ONLY = frozenset(
+    _dot_ext(item) for item in (*DEFAULT_OPENABLE_CAD_EXTENSIONS, *DEFAULT_EXTRA_CAD_EXTENSIONS)
+)
+
+
 class CreoFileManager:
     """Handles Creo numbered filenames and canonical repository copies."""
 
     @staticmethod
     def versioned_extensions(extra_extensions: Iterable[str] | None = None) -> frozenset[str]:
         """Extensions that use Creo-style .ext.N save numbers."""
-        extras = DEFAULT_EXTRA_CAD_EXTENSIONS if extra_extensions is None else extra_extensions
+        extras = (
+            (*DEFAULT_CREO_MODEL_EXTENSIONS, *DEFAULT_OPENABLE_CAD_EXTENSIONS, *DEFAULT_EXTRA_CAD_EXTENSIONS)
+            if extra_extensions is None
+            else extra_extensions
+        )
         known = set(CREO_FILE_EXTENSIONS)
         for item in extras:
             ext = _dot_ext(item)
@@ -40,18 +53,29 @@ class CreoFileManager:
         return frozenset(known)
 
     @classmethod
-    def is_workspace_transient(cls, filename: str) -> bool:
-        """Creo session junk that should never be added as a PDM object."""
+    def is_ignored(
+        cls,
+        filename: str,
+        ignore_patterns: Iterable[str] | None = None,
+    ) -> bool:
+        """True for session junk that must never be stored or listed."""
+        from creopdm.utils.ignore import is_ignored_name
+
         name = Path(str(filename).replace("\\", "/")).name
-        lower = name.lower()
-        if lower in {"std.out", "std.err"}:
-            return True
-        if _TRAIL_FILE.match(lower):
+        if is_ignored_name(name, ignore_patterns):
             return True
         logical = cls.normalize_creo_filename(name)
         if Path(logical).suffix.lower() == ".idx" and _UUIDISH_STEM.match(Path(logical).stem):
             return True
         return False
+
+    @classmethod
+    def is_workspace_transient(
+        cls,
+        filename: str,
+        ignore_patterns: Iterable[str] | None = None,
+    ) -> bool:
+        return cls.is_ignored(filename, ignore_patterns)
 
     @classmethod
     def is_creo_extension(cls, extension: str) -> bool:
@@ -66,32 +90,63 @@ class CreoFileManager:
         return _dot_ext(extension) in cls.versioned_extensions(extra_extensions)
 
     @classmethod
+    def _numbered_save(
+        cls,
+        filename: str,
+        extra_extensions: Iterable[str] | None = None,
+    ) -> tuple[str, int]:
+        """Return (logical_name, save_number). 0 means the file is unnumbered.
+
+        Creo-openable models accept both name.ext.N and name.N.ext.
+        Extra CAD only uses name.ext.N.
+        """
+        name = Path(str(filename).replace("\\", "/")).name
+        if not name:
+            return name, 0
+        parts = name.split(".")
+        if len(parts) < 3 or not parts[0]:
+            return name, 0
+        last = parts[-1]
+        prev = parts[-2]
+        if last.isdigit() and cls.is_versioned_extension(f".{prev}", extra_extensions):
+            return ".".join(parts[:-1]), int(last)
+        if (
+            prev.isdigit()
+            and cls.is_versioned_extension(f".{last}", extra_extensions)
+            and _dot_ext(last) not in _EXTRA_CAD_ONLY
+        ):
+            return ".".join((*parts[:-2], last)), int(prev)
+        return name, 0
+
+    @classmethod
     def normalize_creo_filename(
         cls,
         filename: str,
         extra_extensions: Iterable[str] | None = None,
     ) -> str:
-        """Strip save-version suffixes from CAD files that use .ext.N numbering.
+        """Strip save-version numbers from CAD files.
 
         Examples:
             shaft.prt.1   -> shaft.prt
+            shaft.1.prt   -> shaft.prt
+            preview.2.pvz -> preview.pvz
             setup.inf.1   -> setup.inf
-            outline.dxf.4 -> outline.dxf
-            notes.txt.1   -> notes.txt.1   (not a versioned CAD extension)
+            setup.1.inf   -> setup.1.inf   (extra CAD is .ext.N only)
+            notes.txt.1   -> notes.txt.1
             report.2024   -> report.2024
         """
-        name = Path(str(filename).replace("\\", "/")).name
-        if not name:
-            return name
-        parts = name.rsplit(".", 2)
-        if len(parts) != 3:
-            return name
-        stem, extension, suffix = parts
-        if not stem or not suffix.isdigit():
-            return name
-        if f".{extension.lower()}" not in cls.versioned_extensions(extra_extensions):
-            return name
-        return f"{stem}.{extension}"
+        logical, _number = cls._numbered_save(filename, extra_extensions)
+        return logical
+
+    @classmethod
+    def save_number(
+        cls,
+        filename: str,
+        extra_extensions: Iterable[str] | None = None,
+    ) -> int:
+        """Save number from name.ext.N or, for Creo-openable models, name.N.ext."""
+        _logical, number = cls._numbered_save(filename, extra_extensions)
+        return number
 
     @classmethod
     def canonical_repository_name(cls, filename: str) -> str:
@@ -131,16 +186,13 @@ class CreoFileManager:
         unnumbered: Path | None = None
         for path in paths:
             name = path.name
-            normalized = cls.normalize_creo_filename(name, extra_extensions)
-            if normalized == name:
+            version = cls.save_number(name, extra_extensions)
+            if version == 0:
                 if cls.is_versioned_extension(path.suffix, extra_extensions):
                     unnumbered = path
                 continue
-            suffix = name.rsplit(".", 1)[-1]
-            if suffix.isdigit():
-                version = int(suffix)
-                if best is None or version > best[0]:
-                    best = (version, path)
+            if best is None or version > best[0]:
+                best = (version, path)
         if best is not None:
             return best[1]
         return unnumbered
@@ -227,6 +279,7 @@ class CreoFileManager:
         cls,
         root: Path,
         extra_extensions: Iterable[str] | None = None,
+        ignore_patterns: Iterable[str] | None = None,
     ) -> Iterator[Path]:
         """Walk a folder for files that can be added to a project."""
         folder = Path(root)
@@ -238,7 +291,7 @@ class CreoFileManager:
             for name in filenames:
                 if name.startswith("."):
                     continue
-                if cls.is_workspace_transient(name):
+                if cls.is_ignored(name, ignore_patterns):
                     continue
                 path = current / name
                 if not path.is_file():
@@ -255,8 +308,9 @@ class CreoFileManager:
         cls,
         root: Path,
         extra_extensions: Iterable[str] | None = None,
+        ignore_patterns: Iterable[str] | None = None,
     ) -> list[Path]:
         return cls.filter_to_latest_saves(
-            list(cls.iter_importable_files(root, extra_extensions)),
+            list(cls.iter_importable_files(root, extra_extensions, ignore_patterns)),
             extra_extensions,
         )

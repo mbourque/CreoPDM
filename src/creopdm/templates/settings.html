@@ -28,12 +28,45 @@
     </section>
 
     <section class="settings-card">
-      <h2>CAD file types</h2>
-      <p class="muted small">Creo models (<code>.prt</code>, <code>.asm</code>, <code>.drw</code>, <code>.mfg</code>) stay Creo types. Numbered saves such as <code>shaft.prt.3</code>, <code>setup.inf.1</code>, and <code>format.frm.2</code> count as those extensions. Add other types that should be treated as CAD. Workspace copies all go in one folder; the original project folder is not reorganized.</p>
-      <label>Extra CAD extensions
-        <textarea name="cad_extensions" rows="4" placeholder=".dxf&#10;.ncl&#10;.tph">{{ settings.cad_extensions | join('\n') }}</textarea>
+      <h2>CAD models</h2>
+      <p class="muted small">Types Creo can open. Click-to-open uses Creo for these files. Numbered saves such as <code>shaft.prt.3</code> and <code>outline.dxf.4</code> count as those extensions.</p>
+      <label>Creo-openable extensions
+        <textarea name="cad_model_extensions" rows="3" placeholder=".prt, .asm, .drw">{{ settings.cad_model_extensions | join(', ') }}</textarea>
       </label>
-      <p class="muted small">One per line, with or without the dot. Default: {{ settings.default_cad_extensions | join(', ') }}</p>
+      <p class="muted small">Comma-separated, with or without the dot.</p>
+    </section>
+
+    <section class="settings-card">
+      <h2>Openable CAD data</h2>
+      <p class="muted small">CAD-like files Creo does not open. They still count as CAD and open with the default Windows application.</p>
+      <label>Openable CAD extensions
+        <textarea name="cad_openable_extensions" rows="3" placeholder=".ncl, .tap, .xml, .log">{{ settings.cad_openable_extensions | join(', ') }}</textarea>
+      </label>
+      <p class="muted small">Comma-separated, with or without the dot.</p>
+    </section>
+
+    <section class="settings-card">
+      <h2>Non openable CAD data</h2>
+      <p class="muted small">CAD-like files Creo does not open. They still count as CAD in the project but will not open.</p>
+      <label>Non openable CAD extensions
+        <textarea name="cad_extensions" rows="3" placeholder=".inf, .xpr, .mtl">{{ settings.cad_extensions | join(', ') }}</textarea>
+      </label>
+      <p class="muted small">Comma-separated, with or without the dot.</p>
+    </section>
+
+    <section class="settings-card">
+      <h2>File type names</h2>
+      <p class="muted small">Optional labels for the Type column. Use an extension such as <code>.stp, .step</code>, or a file name such as <code>reviewref.inf</code>. If a row is empty or missing, CreoPDM uses the usual names such as Creo Part or Pdf.</p>
+      <p><a class="btn" href="/settings/types">Edit type names</a></p>
+    </section>
+
+    <section class="settings-card">
+      <h2>Ignored files</h2>
+      <p class="muted small">These never enter the workspace, are never stored in Git, and never appear in the file list. Patterns are written to each project's <code>.gitignore</code>.</p>
+      <label>Ignore patterns
+        <textarea name="ignore_patterns" rows="3" placeholder="*.tst, trail.txt*, std.out">{{ settings.ignore_patterns | join(', ') }}</textarea>
+      </label>
+      <p class="muted small">Comma-separated gitignore patterns.</p>
     </section>
 
     <section class="settings-card">

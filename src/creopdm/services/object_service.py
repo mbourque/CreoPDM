@@ -11,7 +11,9 @@ from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from creopdm.constants import (
+    DEFAULT_CREO_MODEL_EXTENSIONS,
     DEFAULT_EXTRA_CAD_EXTENSIONS,
+    DEFAULT_OPENABLE_CAD_EXTENSIONS,
     DEFAULT_REVISION,
     INITIAL_ITERATION,
     ActivityAction,
@@ -75,8 +77,14 @@ class ObjectService:
 
     def _cad_extensions(self) -> list[str]:
         if self._config is None:
-            return list(DEFAULT_EXTRA_CAD_EXTENSIONS)
-        return self._config.extra_cad_extensions()
+            return list(
+                (
+                    *DEFAULT_CREO_MODEL_EXTENSIONS,
+                    *DEFAULT_OPENABLE_CAD_EXTENSIONS,
+                    *DEFAULT_EXTRA_CAD_EXTENSIONS,
+                )
+            )
+        return self._config.all_cad_extensions()
 
     def list_objects(
         self,
@@ -118,6 +126,15 @@ class ObjectService:
                 )
             ).unique()
         )
+
+    def list_path_index(self, session: Session, project_id: int) -> list[tuple[str, str]]:
+        """Imported relative_path and filename only. Used by workspace watch."""
+        rows = session.execute(
+            select(EngineeringObject.relative_path, EngineeringObject.filename).where(
+                EngineeringObject.project_id == project_id
+            )
+        ).all()
+        return [(str(relative), str(filename)) for relative, filename in rows]
 
     def get_object(self, session: Session, object_uuid: str) -> EngineeringObject:
         obj = session.scalar(
@@ -222,8 +239,20 @@ class ObjectService:
 
         display_name = sanitize_filename(original_name or source_path.name)
         stored_name = CreoFileManager.canonical_repository_name(display_name)
+        ignore = self._config.ignore_patterns() if self._config else None
+        if CreoFileManager.is_ignored(stored_name, ignore):
+            raise PathValidationError(
+                f"{stored_name} is an ignored session file and is not stored in CreoPDM.",
+                details={"filename": stored_name},
+            )
         logical_name = CreoFileManager.logical_filename(stored_name, self._cad_extensions())
-        object_type = classify_filename(stored_name, self._cad_extensions())
+        extras = self._config.data_cad_extensions() if self._config else None
+        models = self._config.model_cad_extensions() if self._config else None
+        object_type = classify_filename(
+            stored_name,
+            extra_cad_extensions=extras,
+            model_extensions=models,
+        )
         extension = Path(logical_name).suffix.lower() or Path(stored_name).suffix.lower()
         stem = Path(logical_name).stem
 
@@ -407,6 +436,41 @@ class ObjectService:
             object_type=object_type,
             lifecycle_state=lifecycle_state,
         )
+
+    def list_folder_view(
+        self,
+        session: Session,
+        project_id: int,
+        current_folder: str = "",
+    ) -> tuple[list[EngineeringObject], list[dict]]:
+        """Folders from the imported catalog; full rows only for files in this folder."""
+        from creopdm.utils.folders import folder_index, normalize_folder_query
+
+        current = normalize_folder_query(current_folder)
+        stmt = select(EngineeringObject.relative_path, EngineeringObject.updated_at).where(
+            EngineeringObject.project_id == project_id
+        )
+        if current:
+            stmt = stmt.where(EngineeringObject.relative_path.startswith(f"{current}/"))
+        rows = session.execute(stmt).all()
+        folder_entries, file_rels = folder_index(list(rows), current)
+        files: list[EngineeringObject] = []
+        if file_rels:
+            files = list(
+                session.scalars(
+                    select(EngineeringObject)
+                    .options(
+                        joinedload(EngineeringObject.current_version),
+                        joinedload(EngineeringObject.project),
+                    )
+                    .where(
+                        EngineeringObject.project_id == project_id,
+                        EngineeringObject.relative_path.in_(file_rels),
+                    )
+                    .order_by(EngineeringObject.filename.asc())
+                ).unique()
+            )
+        return files, folder_entries
 
     @staticmethod
     def _remove_copied_file(destination: Path) -> None:

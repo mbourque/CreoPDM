@@ -9,11 +9,12 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from creopdm.creo.base import CreoConnector
-from creopdm.exceptions import CreoUnavailableError, PathValidationError
+from creopdm.exceptions import CreoUnavailableError, PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
+from creopdm.utils.classify import is_creo_openable, is_extra_cad
 from creopdm.utils.launch import open_windows_file, working_directory_for
 
 logger = get_logger("creo-service")
@@ -70,7 +71,19 @@ class CreoService:
                     overwrite_modified=False,
                 )
         workdir = working_directory_for(path)
-        method = self._open_path(path, creo_object=obj.object_type.startswith("CREO_"))
+        models = self._workspaces._config.model_cad_extensions()
+        extras = self._workspaces._config.extra_cad_extensions()
+        all_cad = self._workspaces._cad_extensions()
+        if is_extra_cad(path.name, extras, models):
+            raise ValidationAppError(
+                f"{path.name} cannot be opened. This file type is not opened by Creo.",
+                details={"path": str(path), "filename": path.name},
+            )
+        method = self._open_path(
+            path,
+            creo_object=obj.object_type.startswith("CREO_")
+            or is_creo_openable(path.name, models, all_cad),
+        )
         logger.info("Opened %s via %s from %s", path, method, workdir)
         return {
             "path": str(path),

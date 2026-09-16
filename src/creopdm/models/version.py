@@ -30,5 +30,6 @@ class ObjectVersion(Base):
     object: Mapped["EngineeringObject"] = relationship(  # noqa: F821
         back_populates="versions",
         foreign_keys=[object_id],
+        overlaps="current_version",
     )
     parameters: Mapped[list["Parameter"]] = relationship(back_populates="version")  # noqa: F821

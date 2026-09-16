@@ -45,6 +45,12 @@ def test_create_list_and_get_project(client, repo_parent, data_dir):
     assert (vault / ".creopdm" / "project.json").exists()
     ignore = (vault / ".gitignore").read_text(encoding="utf-8")
     assert "*.tst" in ignore
+    assert "trail.txt*" in ignore
+    assert "proimpex.errors" in ignore
+    assert "regen_backup_model*.mrd.*" in ignore
+    assert "traceback.log" in ignore
+    assert "config.pro" in ignore
+    assert "creo_parametric_customization.ui" in ignore
     for ext in (".inf", ".idx", ".log", ".crc", ".dat", ".out"):
         assert f"*{ext}\n" not in ignore and not ignore.endswith(f"*{ext}")
 

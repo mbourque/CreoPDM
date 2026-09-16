@@ -89,6 +89,51 @@ class _Node:
         return max(stamps) if stamps else None
 
 
+def folder_index(rows: list[tuple[str, Any]], current: str = "") -> tuple[list[dict[str, Any]], list[str]]:
+    """Folder rows and file paths for this view, from imported relative_path values.
+
+    Does not open Git or the workspace. counts come from the object catalog.
+    """
+    current = normalize_folder_query(current)
+    prefix = f"{current}/" if current else ""
+    folders: dict[str, dict[str, Any]] = {}
+    files: list[str] = []
+    for relative, updated in rows:
+        rel = str(relative or "").replace("\\", "/")
+        if prefix:
+            if not rel.startswith(prefix):
+                continue
+            rest = rel[len(prefix) :]
+        else:
+            rest = rel
+        if not rest:
+            continue
+        slash = rest.find("/")
+        if slash >= 0:
+            name = rest[:slash]
+            info = folders.setdefault(name, {"count": 0, "modified": None})
+            info["count"] += 1
+            if updated is not None and (info["modified"] is None or updated > info["modified"]):
+                info["modified"] = updated
+        else:
+            files.append(rel)
+    entries = []
+    for name in sorted(folders, key=str.lower):
+        info = folders[name]
+        path = f"{current}/{name}" if current else name
+        entries.append(
+            {
+                "kind": "folder",
+                "name": name,
+                "path": path,
+                "depth": 0,
+                "count": info["count"],
+                "modified": info["modified"],
+            }
+        )
+    return entries, files
+
+
 def folder_list_entries(objects: list[Any], current: str = "") -> list[dict[str, Any]]:
     """Immediate folders and files in the current folder view."""
     current = normalize_folder_query(current)

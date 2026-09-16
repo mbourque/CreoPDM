@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -28,18 +29,10 @@ from creopdm.utils.classify import classify_filename
 from creopdm.utils.files import copy_file, remove_file, remove_tree, set_file_readonly, set_file_writable
 from creopdm.utils.hashing import calculate_sha256
 from creopdm.utils.identity import UserIdentity
+from creopdm.utils.ignore import sync_gitignore
 from creopdm.utils.paths import assert_safe_relative_path, ensure_within
 
 logger = get_logger("workspace")
-
-GITIGNORE_TEMPLATE = """# Creo transients — not engineering objects
-*.tst
-*.err
-*.acl
-trail.txt*
-std.out
-std.err
-"""
 
 
 class WorkspaceService:
@@ -48,7 +41,25 @@ class WorkspaceService:
         self._git = git
 
     def _cad_extensions(self) -> list[str]:
-        return self._config.extra_cad_extensions()
+        return self._config.all_cad_extensions()
+
+    def _ignore_patterns(self) -> list[str]:
+        return self._config.ignore_patterns()
+
+    def _is_ignored(self, filename: str) -> bool:
+        return CreoFileManager.is_ignored(filename, self._ignore_patterns())
+
+    def sync_gitignore(self, vault: Path | None = None) -> None:
+        patterns = self._ignore_patterns()
+        if vault is not None:
+            sync_gitignore(vault / ".gitignore", patterns)
+            return
+        root = self._config.workspace_root()
+        if not root.is_dir():
+            return
+        for child in root.iterdir():
+            if child.is_dir() and (child / ".git").exists():
+                sync_gitignore(child / ".gitignore", patterns)
 
     def root_for(self, project_uuid: str) -> Path:
         path = self._config.workspace_for_project(project_uuid)
@@ -84,6 +95,7 @@ class WorkspaceService:
         if git.is_repository(vault):
             if location is not None and git.is_repository(location):
                 self.strip_location_git(location)
+            self.sync_gitignore(vault)
             return vault
         if location is not None and git.is_repository(location):
             logger.info("Moving Git history from %s into workspace %s", location, vault)
@@ -94,11 +106,10 @@ class WorkspaceService:
                     details={"location": str(location), "workspace": str(vault)},
                 )
             self.strip_location_git(location)
+            self.sync_gitignore(vault)
             return vault
         git.init_repository(vault, DEFAULT_BRANCH)
-        gitignore = vault / ".gitignore"
-        if not gitignore.is_file():
-            gitignore.write_text(GITIGNORE_TEMPLATE, encoding="utf-8")
+        self.sync_gitignore(vault)
         return vault
 
     def init_vault(self, project_uuid: str, name: str, user: UserIdentity) -> Path:
@@ -106,7 +117,7 @@ class WorkspaceService:
             raise RepositoryError("Git is required to create a project but was not found on PATH.")
         vault = self.root_for(project_uuid)
         self._git.init_repository(vault, DEFAULT_BRANCH)
-        (vault / ".gitignore").write_text(GITIGNORE_TEMPLATE, encoding="utf-8")
+        self.sync_gitignore(vault)
         self._write_project_marker(vault, project_uuid, name, None, None)
         with_files = [".gitignore", PROJECT_MARKER_DIR]
         self._git.stage_files(vault, with_files)
@@ -228,6 +239,27 @@ class WorkspaceService:
     def has_local_copy(self, project: Project, obj: EngineeringObject) -> bool:
         return self.workspace_file_path(project.uuid, obj).is_file()
 
+    def local_copy_uuids(self, project: Project, objects: list[EngineeringObject]) -> set[str]:
+        """UUIDs whose workspace files exist, from one directory walk."""
+        if not objects:
+            return set()
+        root = self.root_for(project.uuid)
+        names: set[str] = set()
+        if root.is_dir():
+            skip = {".git", ".creopdm", "__pycache__"}
+            root_s = str(root)
+            for dirpath, dirnames, filenames in os.walk(root):
+                dirnames[:] = [name for name in dirnames if name.lower() not in skip]
+                rel_dir = os.path.relpath(dirpath, root_s).replace("\\", "/")
+                for name in filenames:
+                    rel = name if rel_dir == "." else f"{rel_dir}/{name}"
+                    names.add(rel.lower())
+        found: set[str] = set()
+        for obj in objects:
+            if self.workspace_relative(obj).lower() in names:
+                found.add(obj.uuid)
+        return found
+
     def is_modified(self, project: Project, obj: EngineeringObject) -> bool:
         try:
             path = self.locate_content(project.uuid, obj)
@@ -247,6 +279,21 @@ class WorkspaceService:
         except Exception:
             logger.exception("git status failed for %s", project.uuid)
             return empty
+
+    def _status_lookups(
+        self,
+        project: Project,
+        status: GitStatus,
+    ) -> tuple[list[str], Path, set[str], dict[str, list[Path]]]:
+        extras = self._cad_extensions()
+        vault = self.vault_for(project)
+        dirty_paths = {item.replace("\\", "/") for item in (*status.staged, *status.unstaged)}
+        untracked_by_logical: dict[str, list[Path]] = defaultdict(list)
+        if status.dirty:
+            for item in status.untracked:
+                key = CreoFileManager.logical_repo_path(item, extras)
+                untracked_by_logical[key].append(vault / item)
+        return extras, vault, dirty_paths, untracked_by_logical
 
     def pending_workspace_save(self, project: Project, obj: EngineeringObject) -> dict[str, str | int | bool] | None:
         """Describe a workspace copy that is newer than the last checked-in version."""
@@ -275,28 +322,27 @@ class WorkspaceService:
         project: Project,
         obj: EngineeringObject,
         status: GitStatus,
+        extras: list[str] | None = None,
+        vault: Path | None = None,
+        dirty_paths: set[str] | None = None,
+        untracked_by_logical: dict[str, list[Path]] | None = None,
     ) -> dict[str, str | int | bool] | None:
         if not status.dirty:
             return None
-        extras = self._cad_extensions()
-        vault = self.vault_for(project)
+        if extras is None or vault is None or dirty_paths is None or untracked_by_logical is None:
+            extras, vault, dirty_paths, untracked_by_logical = self._status_lookups(project, status)
         rel = obj.relative_path.replace("\\", "/")
         logical = CreoFileManager.logical_repo_path(rel, extras)
-        dirty = {item.replace("\\", "/") for item in status.staged + status.unstaged}
-        siblings = [
-            vault / item
-            for item in status.untracked
-            if CreoFileManager.logical_repo_path(item, extras) == logical
-        ]
-        siblings = [path for path in siblings if path.is_file()]
+        siblings = [path for path in untracked_by_logical.get(logical, ()) if path.is_file()]
         path: Path | None = None
         newer_save = False
+        recorded_number = CreoFileManager.save_number(obj.filename, extras)
         if siblings:
             latest = CreoFileManager.select_latest_creo_version(siblings, extras) or siblings[0]
-            if latest.name.lower() != obj.filename.lower():
+            if CreoFileManager.save_number(latest.name, extras) > recorded_number:
                 path = latest
                 newer_save = True
-        if path is None and rel in dirty:
+        if path is None and rel in dirty_paths:
             candidate = vault / rel
             if candidate.is_file():
                 path = candidate
@@ -320,9 +366,18 @@ class WorkspaceService:
     ) -> dict[str, list]:
         """Files in the workspace that would be recorded on check-in."""
         status = self._git_status(project)
+        extras, vault, dirty_paths, untracked_by_logical = self._status_lookups(project, status)
         saves: list[dict[str, str | int | bool]] = []
         for obj in objects:
-            pending = self._pending_from_status(project, obj, status)
+            pending = self._pending_from_status(
+                project,
+                obj,
+                status,
+                extras=extras,
+                vault=vault,
+                dirty_paths=dirty_paths,
+                untracked_by_logical=untracked_by_logical,
+            )
             if pending is None:
                 continue
             saves.append(
@@ -334,28 +389,45 @@ class WorkspaceService:
             )
         return {"saves": saves, "new_files": self.list_untracked(project, objects, status)}
 
-    def watch_stamp(self, project: Project, objects: list[EngineeringObject] | None = None) -> dict[str, str | int]:
+    def watch_stamp(
+        self,
+        project: Project,
+        known_paths: list[tuple[str, str]] | None = None,
+    ) -> dict[str, str | int]:
         """Fingerprint of git status so the UI can notice Creo saves without hashing files."""
         status = self._git_status(project)
         digest = hashlib.sha256(status.raw.encode("utf-8")).hexdigest()[:20]
         extras = self._cad_extensions()
-        new_files = [
-            item
-            for item in status.untracked
-            if not CreoFileManager.is_workspace_transient(Path(item).name)
-        ]
-        if objects:
-            known = {CreoFileManager.logical_repo_path(obj.relative_path, extras) for obj in objects}
-            new_files = [
-                item for item in new_files if CreoFileManager.logical_repo_path(item, extras) not in known
-            ]
-        pending = len(status.staged) + len(status.unstaged)
-        if objects:
-            pending = sum(1 for obj in objects if self._pending_from_status(project, obj, status))
+        known = {
+            CreoFileManager.logical_repo_path(relative, extras): filename
+            for relative, filename in known_paths or ()
+        }
+        dirty_logical = {
+            CreoFileManager.logical_repo_path(item, extras)
+            for item in (*status.staged, *status.unstaged)
+        }
+        pending: set[str] = set()
+        new_files = 0
+        if known:
+            pending.update(item for item in dirty_logical if item in known)
+            for item in status.untracked:
+                name = Path(item).name
+                if self._is_ignored(name):
+                    continue
+                logical = CreoFileManager.logical_repo_path(item, extras)
+                recorded = known.get(logical)
+                if recorded is None:
+                    new_files += 1
+                    continue
+                if CreoFileManager.save_number(name, extras) > CreoFileManager.save_number(recorded, extras):
+                    pending.add(logical)
+        else:
+            pending.update(dirty_logical)
+            new_files = sum(1 for item in status.untracked if not self._is_ignored(Path(item).name))
         return {
             "stamp": digest,
-            "pending_saves": pending,
-            "new_files": len(new_files),
+            "pending_saves": len(pending),
+            "new_files": new_files,
         }
 
     def materialize_many(
@@ -443,7 +515,7 @@ class WorkspaceService:
         grouped: dict[str, list[Path]] = {}
         for relative in snapshot.untracked:
             name = Path(relative).name
-            if CreoFileManager.is_workspace_transient(name):
+            if self._is_ignored(name):
                 continue
             path = vault / relative
             if not path.is_file():
@@ -461,21 +533,25 @@ class WorkspaceService:
                     "relative_path": relative,
                     "path": str(chosen),
                     "size": chosen.stat().st_size if chosen.is_file() else 0,
-                    "object_type": classify_filename(Path(relative).name, extras).value,
+                    "object_type": classify_filename(
+                        Path(relative).name,
+                        extra_cad_extensions=self._config.data_cad_extensions(),
+                        model_extensions=self._config.model_cad_extensions(),
+                    ).value,
                 }
             )
         return found
 
     def _iter_workspace_files(self, root: Path):
         skip_dirs = {".git", ".creopdm", "__pycache__"}
-        skip_suffixes = {".tst", ".err", ".lst", ".bak", ".tmp", ".acl"}
+        skip_suffixes = {".lst", ".bak", ".tmp"}
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [name for name in dirnames if name.lower() not in skip_dirs]
             folder = Path(dirpath)
             for name in filenames:
                 if name.startswith("."):
                     continue
-                if CreoFileManager.is_workspace_transient(name):
+                if self._is_ignored(name):
                     continue
                 path = folder / name
                 suffix = path.suffix.lower()

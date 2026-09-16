@@ -95,6 +95,30 @@ def test_extra_cad_extensions_go_to_cad_folder(client, repo_parent, tmp_path):
 
 
 @requires_git
+def test_ignored_session_files_are_not_added(client, repo_parent, tmp_path):
+    project, _location = _create_project(client, repo_parent)
+    rejected = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("trail.txt", b"junk", "application/octet-stream")},
+        data={"comment": "Should not store"},
+    )
+    assert rejected.status_code in {400, 422}, rejected.text
+    trail = tmp_path / "proimpex.errors"
+    trail.write_bytes(b"nope")
+    part = tmp_path / "pin.prt"
+    part.write_bytes(b"pin")
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(trail), str(part)], "comment": "Mixed add"},
+    )
+    assert imported.status_code == 200, imported.text
+    names = {item["filename"] for item in imported.json()["ok"]}
+    assert names == {"pin.prt"}
+    listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
+    assert {item["filename"] for item in listing} == {"pin.prt"}
+
+
+@requires_git
 def test_numbered_extra_cad_goes_to_cad_folder(client, repo_parent, tmp_path):
     project, _location = _create_project(client, repo_parent)
     inf = tmp_path / "setup.inf.1"

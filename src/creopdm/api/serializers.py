@@ -9,6 +9,7 @@ from creopdm.models.project import Project
 from creopdm.models.version import ObjectVersion
 from creopdm.schemas.common import ObjectResponse, ObjectVersionResponse, ProjectResponse
 from creopdm.services.checkout_service import CheckoutView
+from creopdm.utils.classify import display_type_label
 from creopdm.utils.identity import UserIdentity
 
 
@@ -64,6 +65,7 @@ def object_to_response(
     current_user: UserIdentity | None = None,
     can_checkin: bool | None = None,
     in_workspace: bool = False,
+    type_label: str | None = None,
 ) -> ObjectResponse:
     checkout: Checkout | None = view.checkout if view else None
     label = view.label if view else "Available"
@@ -77,6 +79,7 @@ def object_to_response(
         filename=obj.filename,
         extension=obj.extension,
         object_type=obj.object_type,
+        type_label=type_label if type_label is not None else display_type_label(obj.filename, obj.object_type),
         relative_path=obj.relative_path,
         revision=obj.revision,
         iteration=obj.iteration,

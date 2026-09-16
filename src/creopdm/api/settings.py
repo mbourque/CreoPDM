@@ -6,11 +6,17 @@ from fastapi import APIRouter, Depends
 
 from creopdm.api.deps import get_context
 from creopdm.config import AppSettings
-from creopdm.constants import DEFAULT_EXTRA_CAD_EXTENSIONS
+from creopdm.constants import (
+    DEFAULT_CREO_MODEL_EXTENSIONS,
+    DEFAULT_EXTRA_CAD_EXTENSIONS,
+    DEFAULT_IGNORE_PATTERNS,
+    DEFAULT_OPENABLE_CAD_EXTENSIONS,
+)
 from creopdm.context import AppContext
 from creopdm.creo.connector_factory import create_creo_connector
 from creopdm.exceptions import PathValidationError
 from creopdm.schemas.common import SettingsResponse, SettingsUpdateRequest
+from creopdm.utils.classify import exclude_extensions, unique_type_labels
 from creopdm.utils.paths import validate_project_location
 
 router = APIRouter()
@@ -28,6 +34,13 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         open_browser_on_start=settings.ui.open_browser_on_start,
         cad_extensions=ctx.config.extra_cad_extensions(),
         default_cad_extensions=list(DEFAULT_EXTRA_CAD_EXTENSIONS),
+        cad_openable_extensions=ctx.config.openable_cad_extensions(),
+        default_cad_openable_extensions=list(DEFAULT_OPENABLE_CAD_EXTENSIONS),
+        cad_model_extensions=ctx.config.model_cad_extensions(),
+        default_cad_model_extensions=list(DEFAULT_CREO_MODEL_EXTENSIONS),
+        type_labels=ctx.config.type_labels(),
+        ignore_patterns=ctx.config.ignore_patterns(),
+        default_ignore_patterns=list(DEFAULT_IGNORE_PATTERNS),
         database_url=ctx.config.database_url(),
         default_database_url=ctx.config.default_sqlite_url(),
     )
@@ -43,6 +56,7 @@ def apply_settings(ctx: AppContext, settings: AppSettings) -> None:
     )
     ctx.creo_service.set_connector(ctx.creo)
     ctx.checkins.set_connector(ctx.creo)
+    ctx.workspaces.sync_gitignore()
 
 
 @router.get("/api/settings", response_model=SettingsResponse)
@@ -79,8 +93,24 @@ def update_settings(
         current.workspace.root = None
     if payload.open_browser_on_start is not None:
         current.ui.open_browser_on_start = payload.open_browser_on_start
+    if payload.cad_model_extensions is not None:
+        current.cad.model_extensions = payload.cad_model_extensions
+    if payload.cad_openable_extensions is not None:
+        current.cad.openable_extensions = payload.cad_openable_extensions
     if payload.cad_extensions is not None:
         current.cad.extra_extensions = payload.cad_extensions
+    if payload.type_labels is not None:
+        current.cad.type_labels = unique_type_labels(payload.type_labels)
+    current.cad.openable_extensions = exclude_extensions(
+        current.cad.openable_extensions,
+        current.cad.model_extensions,
+    )
+    current.cad.extra_extensions = exclude_extensions(
+        current.cad.extra_extensions,
+        (*current.cad.model_extensions, *current.cad.openable_extensions),
+    )
+    if payload.ignore_patterns is not None:
+        current.ignore.patterns = payload.ignore_patterns
     if payload.database_url is not None:
         text = payload.database_url.strip()
         default = ctx.config.default_sqlite_url()

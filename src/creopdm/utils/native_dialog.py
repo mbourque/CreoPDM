@@ -6,7 +6,11 @@ import os
 import subprocess
 from pathlib import Path
 
-from creopdm.constants import CREO_FILE_EXTENSIONS, DEFAULT_EXTRA_CAD_EXTENSIONS
+from creopdm.constants import (
+    DEFAULT_CREO_MODEL_EXTENSIONS,
+    DEFAULT_EXTRA_CAD_EXTENSIONS,
+    DEFAULT_OPENABLE_CAD_EXTENSIONS,
+)
 from creopdm.exceptions import ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.utils.sta import run_on_sta
@@ -33,15 +37,26 @@ def is_user_cancelled(exc: BaseException) -> bool:
 
 
 def cad_dialog_filter_patterns() -> str:
-    """Glob list for the native file picker, including Creo numbered saves."""
+    """Glob list for the native file picker, including Creo numbered saves.
+
+    Creo-openable models: *.ext, *.ext.*, and *.*.ext (name.N.ext).
+    Other CAD data: *.ext and *.ext.* only.
+    """
     seen: set[str] = set()
+    openable = set(DEFAULT_CREO_MODEL_EXTENSIONS)
     patterns: list[str] = []
-    for ext in (*CREO_FILE_EXTENSIONS, *DEFAULT_EXTRA_CAD_EXTENSIONS):
+    for ext in (
+        *DEFAULT_CREO_MODEL_EXTENSIONS,
+        *DEFAULT_OPENABLE_CAD_EXTENSIONS,
+        *DEFAULT_EXTRA_CAD_EXTENSIONS,
+    ):
         if ext in seen:
             continue
         seen.add(ext)
         patterns.append(f"*{ext}")
         patterns.append(f"*{ext}.*")
+        if ext in openable:
+            patterns.append(f"*.*{ext}")
     return ";".join(patterns)
 
 

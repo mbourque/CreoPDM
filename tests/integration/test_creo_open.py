@@ -197,36 +197,56 @@ def test_open_document_uses_windows_association(data_dir, repo_parent, identity,
 
 
 @requires_git
-def test_open_nested_cad_file_uses_folder_as_working_directory(
+def test_open_extra_cad_does_not_launch_association(
     data_dir, repo_parent, identity, monkeypatch
 ):
-    opened: list[tuple[Path, Path]] = []
+    opened: list[Path] = []
     monkeypatch.setattr("creopdm.services.creo_service.os.name", "nt")
     monkeypatch.setattr("creopdm.utils.launch.os.name", "nt")
 
     def fake_start(path: Path, workdir: Path) -> None:
-        opened.append((Path(path), Path(workdir)))
+        opened.append(Path(path))
 
     monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
-        location = repo_parent / "Ribbed"
-        ribbed = location / "ribbed2"
-        ribbed.mkdir(parents=True)
-        model = ribbed / "1-inch.xpr"
-        model.write_bytes(b"xpr")
-        project = client.post("/api/projects", json={"name": "Ribbed"}).json()
-        imported = client.post(
-            f"/api/projects/{project['uuid']}/objects/from-disk",
-            json={"paths": [str(model)], "comment": "Nested xpr", "base_folder": str(ribbed)},
+        project = client.post("/api/projects", json={"name": "ExtraCad"}).json()
+        created = client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={"file": ("setup.inf", b"info", "application/octet-stream")},
+            data={"comment": "Extra CAD"},
         )
-        assert imported.status_code == 200, imported.text
-        obj = imported.json()["ok"][0]
-        opened_resp = client.post("/api/creo/open", json={"object_id": obj["uuid"]})
+        assert created.status_code == 201, created.text
+        opened_resp = client.post("/api/creo/open", json={"object_id": created.json()["uuid"]})
+        assert opened_resp.status_code == 400, opened_resp.text
+        payload = opened_resp.json()["error"]
+        assert "cannot be opened" in payload["message"].lower()
+        assert not opened
+
+
+@requires_git
+def test_open_openable_cad_uses_windows_association(
+    data_dir, repo_parent, identity, monkeypatch
+):
+    opened: list[Path] = []
+    monkeypatch.setattr("creopdm.services.creo_service.os.name", "nt")
+    monkeypatch.setattr("creopdm.utils.launch.os.name", "nt")
+
+    def fake_start(path: Path, workdir: Path) -> None:
+        opened.append(Path(path))
+
+    monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
+    ctx = build_context(ConfigManager(), users=identity)
+    with TestClient(create_app(ctx)) as client:
+        project = client.post("/api/projects", json={"name": "OpenableCad"}).json()
+        created = client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={"file": ("rough.ncl", b"g1 x0", "text/plain")},
+            data={"comment": "Openable CAD"},
+        )
+        assert created.status_code == 201, created.text
+        opened_resp = client.post("/api/creo/open", json={"object_id": created.json()["uuid"]})
         assert opened_resp.status_code == 200, opened_resp.text
         assert opened_resp.json()["method"] == "shell"
         assert opened
-        assert opened[0][0].name == "1-inch.xpr"
-        assert opened[0][0].parent.name == "ribbed2"
-        assert opened[0][1].name == "ribbed2"
-        assert opened_resp.json()["working_directory"].endswith("ribbed2")
+        assert opened[0].name == "rough.ncl"

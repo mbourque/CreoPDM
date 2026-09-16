@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from creopdm.utils.classify import extra_cad_set
+from creopdm.utils.classify import extra_cad_set, unique_type_labels
+from creopdm.constants import DEFAULT_TYPE_LABELS
 from tests.conftest import requires_git
 
 
@@ -12,13 +13,45 @@ def test_get_and_update_settings(client, tmp_path):
     assert payload["workspace_root"]
     assert payload["default_workspace_root"]
     defaults = payload["default_cad_extensions"]
-    assert ".ncl" in defaults
     assert ".m_p" in defaults
-    assert ".frm" in defaults
+    assert ".frm" not in defaults
+    assert ".dxf" not in defaults
+    assert ".ncl" not in defaults
+    assert ".log" not in defaults
     assert ".bin" in defaults
     assert ".mrd" in defaults
     assert ".xpr" in defaults
+    assert ".mtl" in defaults
     assert extra_cad_set(payload["cad_extensions"]) == extra_cad_set(defaults)
+    openable = payload["cad_openable_extensions"]
+    assert ".ncl" in openable
+    assert ".tap" in openable
+    assert ".xml" in openable
+    assert ".log" in openable
+    assert extra_cad_set(openable) == extra_cad_set(payload["default_cad_openable_extensions"])
+    models = payload["cad_model_extensions"]
+    assert ".prt" in models
+    assert ".dxf" in models
+    assert ".sldprt" in models
+    assert ".catpart" in models
+    assert ".tmu" in models
+    assert ".pvz" in models
+    assert ".tmz" in models
+    assert ".ol" in models
+    assert ".wrl" in models
+    assert ".idx" in models
+    assert ".3mf" in models
+    assert ".wrl" not in defaults
+    assert ".idx" not in defaults
+    assert extra_cad_set(models) == extra_cad_set(payload["default_cad_model_extensions"])
+    assert payload["ignore_patterns"] == payload["default_ignore_patterns"]
+    assert "trail.txt*" in payload["ignore_patterns"]
+    assert "proimpex.errors" in payload["ignore_patterns"]
+    assert "regen_backup_model*.mrd.*" in payload["ignore_patterns"]
+    assert "traceback.log" in payload["ignore_patterns"]
+    assert "config.pro" in payload["ignore_patterns"]
+    assert "creo_parametric_customization.ui" in payload["ignore_patterns"]
+    assert ".exe" in payload["ignore_patterns"]
     assert payload["database_url"].startswith("sqlite:///")
     assert payload["default_database_url"].startswith("sqlite:///")
 
@@ -54,8 +87,19 @@ def test_get_and_update_settings(client, tmp_path):
     assert page.status_code == 200
     assert "Open Creo models with" in page.text
     assert "Workspace" in page.text
-    assert "CAD file types" in page.text
+    assert "CAD models" in page.text
+    assert "Openable CAD data" in page.text
+    assert "Non openable CAD data" in page.text
+    assert "Ignored files" in page.text
     assert "Database" in page.text
+    assert "File type names" in page.text
+    assert 'href="/settings/types"' in page.text
+    assert payload["type_labels"] == unique_type_labels(DEFAULT_TYPE_LABELS)
+
+    types_page = client.get("/settings/types")
+    assert types_page.status_code == 200
+    assert "File type names" in types_page.text
+    assert 'id="type-labels-form"' in types_page.text
 
 
 @requires_git
@@ -110,3 +154,75 @@ def test_custom_workspace_used_on_checkout(client, repo_parent, tmp_path):
     copied = workspace / project["uuid"] / "shaft.prt"
     assert copied.is_file()
     assert copied.read_bytes() == b"original-content"
+
+
+def test_type_labels_persist_and_keep_when_omitted(client):
+    saved = client.put(
+        "/api/settings",
+        json={
+            "creo_open_mode": "executable",
+            "type_labels": [
+                {"extension": ".prt", "label": "Part file"},
+                {"extension": "", "label": "skip me"},
+            ],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["type_labels"] == [{"extension": ".prt", "label": "Part file"}]
+
+    kept = client.put("/api/settings", json={"creo_open_mode": "executable"})
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["type_labels"] == [{"extension": ".prt", "label": "Part file"}]
+
+    types_page = client.get("/settings/types")
+    assert types_page.status_code == 200
+    assert 'value=".prt"' in types_page.text
+    assert 'value="Part file"' in types_page.text
+
+    variants = client.put(
+        "/api/settings",
+        json={
+            "creo_open_mode": "executable",
+            "type_labels": [{"extension": ".stp, step; .STEP", "label": "STEP Model"}],
+        },
+    )
+    assert variants.status_code == 200, variants.text
+    assert variants.json()["type_labels"] == [{"extension": ".stp, .step", "label": "STEP Model"}]
+    assert client.get("/settings/types").text.count('value=".stp, .step"') == 1
+
+    cleared = client.put(
+        "/api/settings",
+        json={"creo_open_mode": "executable", "type_labels": []},
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["type_labels"] == []
+
+
+@requires_git
+def test_type_labels_shown_in_file_list(client, repo_parent):
+    saved = client.put(
+        "/api/settings",
+        json={
+            "creo_open_mode": "executable",
+            "type_labels": [{"extension": ".prt", "label": "Machined part"}],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    project = client.post("/api/projects", json={"name": "Type Labels"}).json()
+    created = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("shaft.prt", b"original-content", "application/octet-stream")},
+        data={"comment": "Initial model"},
+    )
+    assert created.status_code == 201, created.text
+
+    page = client.get(f"/?project={project['uuid']}")
+    assert page.status_code == 200
+    assert "Machined part" in page.text
+    assert 'title="Machined part"' in page.text
+    assert "Click to select. Double-click for history." not in page.text
+
+    detail = client.get(f"/projects/{project['uuid']}/objects/{created.json()['uuid']}")
+    assert detail.status_code == 200
+    assert "Machined part" in detail.text

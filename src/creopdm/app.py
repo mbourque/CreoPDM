@@ -68,6 +68,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
     return AppContext(
         config=manager,
         settings=app_settings,
+        engine=engine,
         session_factory=session_factory,
         git=git,
         version_store=version_store,
@@ -90,8 +91,11 @@ def create_app(context: AppContext | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         logger.info("%s is running", APP_NAME)
-        yield
-        logger.info("%s shutdown", APP_NAME)
+        try:
+            yield
+        finally:
+            logger.info("%s shutdown", APP_NAME)
+            ctx.engine.dispose()
 
     app = FastAPI(title=APP_NAME, version=APP_VERSION, docs_url="/api/docs", lifespan=lifespan)
     app.state.ctx = ctx

@@ -17,6 +17,20 @@ def test_normalize_creo_numbered_files():
     assert CreoFileManager.normalize_creo_filename("cnc-part.mrd.4") == "cnc-part.mrd"
     assert CreoFileManager.normalize_creo_filename("150-inch.xpr.1") == "150-inch.xpr"
     assert CreoFileManager.normalize_creo_filename("op10.bin.2") == "op10.bin"
+    assert CreoFileManager.normalize_creo_filename("cutter.tmu.3") == "cutter.tmu"
+    assert CreoFileManager.normalize_creo_filename("preview.pvz.4") == "preview.pvz"
+    assert CreoFileManager.normalize_creo_filename("preview.4.pvz") == "preview.pvz"
+    assert CreoFileManager.normalize_creo_filename("shaft.1.prt") == "shaft.prt"
+    assert CreoFileManager.normalize_creo_filename("outline.4.dxf") == "outline.dxf"
+    assert CreoFileManager.normalize_creo_filename("cutter.3.tmu") == "cutter.tmu"
+    assert CreoFileManager.normalize_creo_filename("setup.1.inf") == "setup.1.inf"
+    assert CreoFileManager.save_number("shaft.prt") == 0
+    assert CreoFileManager.save_number("shaft.prt.4") == 4
+    assert CreoFileManager.save_number("shaft.1.prt") == 1
+    assert CreoFileManager.save_number("preview.2.pvz") == 2
+    assert CreoFileManager.save_number("preview.pvz.3") == 3
+    assert CreoFileManager.save_number("setup.inf.12") == 12
+    assert CreoFileManager.save_number("setup.1.inf") == 0
     assert CreoFileManager.normalize_creo_filename("blank.stk.3") == "blank.stk"
 
 
@@ -36,9 +50,23 @@ def test_workspace_transients_are_ignored():
     assert CreoFileManager.is_workspace_transient("trail.txt")
     assert CreoFileManager.is_workspace_transient("trail.txt.5")
     assert CreoFileManager.is_workspace_transient("std.out")
+    assert CreoFileManager.is_workspace_transient("std.err")
+    assert CreoFileManager.is_workspace_transient("scratch.tst")
+    assert CreoFileManager.is_workspace_transient("scratch.err")
+    assert CreoFileManager.is_workspace_transient("lock.acl")
+    assert CreoFileManager.is_workspace_transient("proimpex.errors")
+    assert CreoFileManager.is_workspace_transient("regen_backup_model.mrd.1")
+    assert CreoFileManager.is_workspace_transient("regen_backup_model-asm.mrd.12")
+    assert CreoFileManager.is_workspace_transient("traceback.log")
+    assert CreoFileManager.is_workspace_transient("mapkeys.pro")
+    assert CreoFileManager.is_workspace_transient("config.pro")
+    assert CreoFileManager.is_workspace_transient("config.sup")
+    assert CreoFileManager.is_workspace_transient("creo_parametric_customization.ui")
+    assert not CreoFileManager.is_workspace_transient("cnc-part.mrd.4")
     assert CreoFileManager.is_workspace_transient("747912f5-13ee-41f0-90d7-537c290.idx")
     assert not CreoFileManager.is_workspace_transient("tool.idx")
     assert not CreoFileManager.is_workspace_transient("parallels.prt.4")
+    assert not CreoFileManager.is_workspace_transient("report.out")
 
 
 def test_app_identity():
@@ -64,6 +92,21 @@ def test_latest_creo_version_in_directory(tmp_path):
     numbered = CreoFileManager.latest_in_directory(folder, "shaft.prt.3")
     assert numbered is not None
     assert numbered.name == "shaft.prt.14"
+
+
+def test_latest_openable_dotted_save_in_directory(tmp_path):
+    folder = tmp_path / "CAD"
+    folder.mkdir()
+    (folder / "preview.pvz").write_bytes(b"old")
+    (folder / "preview.1.pvz").write_bytes(b"1")
+    (folder / "preview.3.pvz").write_bytes(b"3")
+    (folder / "preview.2.pvz").write_bytes(b"2")
+    latest = CreoFileManager.latest_in_directory(folder, "preview.pvz")
+    assert latest is not None
+    assert latest.name == "preview.3.pvz"
+    from_numbered = CreoFileManager.latest_in_directory(folder, "preview.1.pvz")
+    assert from_numbered is not None
+    assert from_numbered.name == "preview.3.pvz"
 
 
 def test_select_latest_prefers_numbered_over_unnumbered(tmp_path):
@@ -106,6 +149,9 @@ def test_list_latest_in_folder_skips_older_transients_and_git(tmp_path):
     (root / "parallels.prt.3").write_bytes(b"3")
     (nested / "bushing.prt.2").write_bytes(b"bush")
     (root / "trail.txt").write_bytes(b"junk")
+    (root / "proimpex.errors").write_bytes(b"err")
+    (root / "scratch.tst").write_bytes(b"tst")
+    (root / "regen_backup_model.mrd.2").write_bytes(b"bak")
     (root / "notes.bak").write_bytes(b"bak")
     git = root / ".git"
     git.mkdir()
@@ -137,11 +183,54 @@ def test_latest_numbered_extra_cad_in_directory(tmp_path):
 
 def test_cad_dialog_filter_includes_numbered_defaults():
     patterns = cad_dialog_filter_patterns()
-    assert "*.prt;*.prt.*" in patterns
+    assert "*.prt;*.prt.*;*.*.prt" in patterns
     assert "*.inf;*.inf.*" in patterns
+    assert "*.ncl;*.ncl.*" in patterns
+    assert "*.log;*.log.*" in patterns
+    assert "*.*.ncl" not in patterns
+    assert "*.*.inf" not in patterns
     assert "*.m_p;*.m_p.*" in patterns
-    assert "*.frm;*.frm.*" in patterns
+    assert "*.frm;*.frm.*;*.*.frm" in patterns
     assert "*.sym;*.sym.*" in patterns
     assert "*.bin;*.bin.*" in patterns
     assert "*.mrd;*.mrd.*" in patterns
     assert "*.xpr;*.xpr.*" in patterns
+    assert "*.mtl;*.mtl.*" in patterns
+    assert "*.sldprt;*.sldprt.*;*.*.sldprt" in patterns
+    assert "*.catpart;*.catpart.*;*.*.catpart" in patterns
+    assert "*.tmu;*.tmu.*;*.*.tmu" in patterns
+    assert "*.pvz;*.pvz.*;*.*.pvz" in patterns
+    assert "*.tmz;*.tmz.*;*.*.tmz" in patterns
+    assert "*.wrl;*.wrl.*;*.*.wrl" in patterns
+    assert "*.idx;*.idx.*;*.*.idx" in patterns
+    assert "*.3mf;*.3mf.*;*.*.3mf" in patterns
+    assert "*.x_t;*.x_t.*;*.*.x_t" in patterns
+
+
+def test_sync_gitignore_rewrites_managed_block(tmp_path):
+    from creopdm.utils.ignore import gitignore_section, sync_gitignore
+
+    path = tmp_path / ".gitignore"
+    sync_gitignore(path)
+    text = path.read_text(encoding="utf-8")
+    assert "trail.txt*" in text
+    assert "proimpex.errors" in text
+    assert "traceback.log" in text
+    assert "config.pro" in text
+    path.write_text(text + "custom.keep\n", encoding="utf-8")
+    sync_gitignore(path, ["*.tst", "std.out"])
+    updated = path.read_text(encoding="utf-8")
+    assert "std.out" in updated
+    assert "proimpex.errors" not in updated
+    assert "custom.keep" in updated
+    assert gitignore_section(["*.tst"]).count("*.tst") == 1
+
+
+def test_sync_gitignore_skips_write_when_unchanged(tmp_path):
+    from creopdm.utils.ignore import sync_gitignore
+
+    path = tmp_path / ".gitignore"
+    sync_gitignore(path)
+    first = path.stat().st_mtime_ns
+    sync_gitignore(path)
+    assert path.stat().st_mtime_ns == first

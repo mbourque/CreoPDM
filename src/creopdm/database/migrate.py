@@ -19,6 +19,7 @@ def alembic_config(database_url: str) -> Config:
     cfg.set_main_option("script_location", str(MIGRATIONS_DIR))
     cfg.set_main_option("sqlalchemy.url", database_url)
     cfg.set_main_option("prepend_sys_path", ".")
+    cfg.set_main_option("path_separator", "os")
     return cfg
 
 

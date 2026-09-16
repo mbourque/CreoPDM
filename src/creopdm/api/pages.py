@@ -16,11 +16,33 @@ from creopdm.api.serializers import project_to_response, revision_display
 from creopdm.constants import APP_NAME, APP_VERSION, ObjectType
 from creopdm.context import AppContext
 from creopdm.exceptions import ProjectNotFoundError
-from creopdm.utils.folders import folder_crumbs, folder_list_entries, folder_view_counts, normalize_folder_query
+from creopdm.utils.folders import folder_crumbs, folder_view_counts, normalize_folder_query
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
 router = APIRouter()
+
+
+def _folder_page(
+    ctx: AppContext,
+    db: Session,
+    project_id: int,
+    current_folder: str,
+) -> tuple[list, list[dict]]:
+    """Show imported folders plus only the files that belong in this view."""
+    files, folder_entries = ctx.objects.list_folder_view(db, project_id, current_folder)
+    presented = present_objects(ctx, db, files)
+    list_entries = list(folder_entries)
+    for obj in presented:
+        list_entries.append(
+            {
+                "kind": "file",
+                "object": obj,
+                "folder": current_folder,
+                "depth": 0,
+            }
+        )
+    return presented, list_entries
 
 
 def render(request: Request, name: str, context: dict) -> HTMLResponse:
@@ -73,33 +95,27 @@ def home(
     projects = [project_to_response(p) for p in ctx.projects.list_projects(db)]
     selected_uuid = request.query_params.get("project") or ctx.config.settings.ui.last_project_uuid
     selected = None
-    objects = []
     status = None
     checkin_queue: dict[str, list] = {"saves": [], "new_files": []}
-    orm_objects = []
     project = None
     if selected_uuid:
         try:
             project = ctx.projects.get_project(db, selected_uuid)
             selected = project_to_response(project)
-            orm_objects = ctx.objects.list_objects(db, project.id)
-            objects = present_objects(ctx, db, orm_objects)
-            status = ctx.projects.project_status(db, project.uuid)
         except ProjectNotFoundError:
             selected = None
             project = None
     if selected is None and projects:
         selected = projects[0]
         project = ctx.projects.get_project(db, selected.uuid)
-        orm_objects = ctx.objects.list_objects(db, project.id)
-        objects = present_objects(ctx, db, orm_objects)
-        status = ctx.projects.project_status(db, project.uuid)
-    if project is not None:
-        checkin_queue = ctx.workspaces.project_checkin_queue(project, orm_objects)
-        ctx.config.remember_project(project.uuid)
     current_folder = normalize_folder_query(request.query_params.get("folder"))
-    if status is not None:
-        status = {**status, **folder_view_counts(objects, current_folder)}
+    objects: list = []
+    list_entries: list = []
+    if project is not None:
+        ctx.config.remember_project(project.uuid)
+        objects, list_entries = _folder_page(ctx, db, project.id, current_folder)
+    if objects or list_entries:
+        status = folder_view_counts(objects, current_folder)
 
     return render(
         request,
@@ -113,7 +129,7 @@ def home(
             "objects": objects,
             "current_folder": current_folder,
             "folder_crumbs": folder_crumbs(current_folder),
-            "list_entries": folder_list_entries(objects, current_folder),
+            "list_entries": list_entries,
             "status": status,
             "checkin_queue": checkin_queue,
             "workspace_path": str(ctx.config.workspace_for_project(selected.uuid)) if selected else None,
@@ -166,6 +182,25 @@ def settings_page(
     return render(
         request,
         "settings.html",
+        {
+            "app_name": APP_NAME,
+            "app_version": APP_VERSION,
+            **_creo_page(ctx),
+            "settings": settings_to_response(ctx),
+        },
+    )
+
+
+@router.get("/settings/types", response_class=HTMLResponse)
+def settings_types_page(
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+) -> HTMLResponse:
+    from creopdm.api.settings import settings_to_response
+
+    return render(
+        request,
+        "settings_types.html",
         {
             "app_name": APP_NAME,
             "app_version": APP_VERSION,

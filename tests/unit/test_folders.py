@@ -1,7 +1,9 @@
+from datetime import datetime
 from types import SimpleNamespace
 
 from creopdm.utils.folders import (
     folder_crumbs,
+    folder_index,
     folder_list_entries,
     folder_of,
     folder_view_counts,
@@ -99,3 +101,59 @@ def test_folder_list_entries_shows_only_current_view():
 
     nested = folder_list_entries(objects, "Incoming/lib")
     assert [item["object"].filename for item in nested if item["kind"] == "file"] == ["pin.prt"]
+
+
+def test_folder_index_counts_without_loading_files():
+    rows = [
+        ("shaft.prt", None),
+        ("Incoming/arm.asm", None),
+        ("Incoming/lib/pin.prt", None),
+        ("Incoming/notes.pdf", None),
+    ]
+    folders, files = folder_index(rows, "")
+    assert files == ["shaft.prt"]
+    incoming = next(item for item in folders if item["path"] == "Incoming")
+    assert incoming["count"] == 3
+    nested, nested_files = folder_index(rows, "Incoming")
+    assert nested_files == ["Incoming/arm.asm", "Incoming/notes.pdf"]
+    assert nested[0]["name"] == "lib"
+    assert nested[0]["count"] == 1
+
+
+def test_folder_index_folder_only_catalog_has_no_file_rows():
+    rows = [(f"html_tutorials/page{index}.html", None) for index in range(6)]
+    folders, files = folder_index(rows, "")
+    assert files == []
+    assert len(folders) == 1
+    assert folders[0]["name"] == "html_tutorials"
+    assert folders[0]["count"] == 6
+    nested, nested_files = folder_index(rows, "html_tutorials")
+    assert nested == []
+    assert len(nested_files) == 6
+
+
+def test_folder_index_missing_folder_is_empty():
+    folders, files = folder_index([("Incoming/pin.prt", None)], "Missing")
+    assert folders == []
+    assert files == []
+
+
+def test_folder_index_uses_latest_modified_on_folder():
+    older = datetime(2020, 1, 1)
+    newer = datetime(2024, 6, 1)
+    folders, _ = folder_index(
+        [
+            ("Incoming/a.prt", older),
+            ("Incoming/lib/b.prt", newer),
+        ],
+        "",
+    )
+    assert folders[0]["modified"] == newer
+
+
+def test_folder_index_normalizes_backslashes():
+    folders, files = folder_index([("Incoming\\lib\\pin.prt", None)], "")
+    assert files == []
+    assert folders[0]["path"] == "Incoming"
+    assert folders[0]["count"] == 1
+

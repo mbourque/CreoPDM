@@ -87,6 +87,7 @@ class ObjectResponse(BaseModel):
     filename: str
     extension: str
     object_type: str
+    type_label: str = ""
     relative_path: str
     revision: str
     iteration: int
@@ -243,6 +244,13 @@ class SettingsResponse(BaseModel):
     open_browser_on_start: bool
     cad_extensions: list[str] = Field(default_factory=list)
     default_cad_extensions: list[str] = Field(default_factory=list)
+    cad_openable_extensions: list[str] = Field(default_factory=list)
+    default_cad_openable_extensions: list[str] = Field(default_factory=list)
+    cad_model_extensions: list[str] = Field(default_factory=list)
+    default_cad_model_extensions: list[str] = Field(default_factory=list)
+    type_labels: list[dict[str, str]] = Field(default_factory=list)
+    ignore_patterns: list[str] = Field(default_factory=list)
+    default_ignore_patterns: list[str] = Field(default_factory=list)
     database_url: str = ""
     default_database_url: str = ""
 
@@ -253,6 +261,10 @@ class SettingsUpdateRequest(BaseModel):
     workspace_root: str | None = None
     open_browser_on_start: bool | None = None
     cad_extensions: list[str] | None = None
+    cad_openable_extensions: list[str] | None = None
+    cad_model_extensions: list[str] | None = None
+    type_labels: list[dict[str, str]] | None = None
+    ignore_patterns: list[str] | None = None
     database_url: str | None = None
 
     @field_validator("creo_open_mode")
@@ -271,6 +283,42 @@ class SettingsUpdateRequest(BaseModel):
         from creopdm.utils.classify import extra_cad_set
 
         return sorted(extra_cad_set(value))
+
+    @field_validator("cad_openable_extensions")
+    @classmethod
+    def valid_cad_openable_extensions(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        from creopdm.utils.classify import extra_cad_set
+
+        return sorted(extra_cad_set(value))
+
+    @field_validator("cad_model_extensions")
+    @classmethod
+    def valid_cad_model_extensions(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        from creopdm.utils.classify import unique_extensions
+
+        return unique_extensions(value)
+
+    @field_validator("type_labels")
+    @classmethod
+    def valid_type_labels(cls, value: list[dict[str, str]] | None) -> list[dict[str, str]] | None:
+        if value is None:
+            return None
+        from creopdm.utils.classify import unique_type_labels
+
+        return unique_type_labels(value)
+
+    @field_validator("ignore_patterns")
+    @classmethod
+    def valid_ignore_patterns(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        from creopdm.utils.ignore import unique_ignore_patterns
+
+        return unique_ignore_patterns(value)
 
     @field_validator("database_url")
     @classmethod

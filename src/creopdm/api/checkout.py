@@ -14,6 +14,7 @@ from creopdm.schemas.common import (
     CheckinRequest,
     ObjectResponse,
 )
+from creopdm.utils.classify import display_type_label, type_label_maps
 
 router = APIRouter()
 
@@ -30,11 +31,22 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
     checkouts = ctx.checkouts.active_map(db, [obj.id for obj in objects])
     project = objects[0].project
     status = ctx.workspaces._git_status(project)
+    name_labels, ext_labels = type_label_maps(ctx.config.type_labels())
+    in_workspace = ctx.workspaces.local_copy_uuids(project, objects)
+    extras, vault, dirty_paths, untracked_by_logical = ctx.workspaces._status_lookups(project, status)
     presented: list[ObjectResponse] = []
     for obj in objects:
         checkout = checkouts.get(obj.id)
         view = ctx.checkouts.describe(obj, checkout, user)
-        pending = ctx.workspaces._pending_from_status(project, obj, status)
+        pending = ctx.workspaces._pending_from_status(
+            project,
+            obj,
+            status,
+            extras=extras,
+            vault=vault,
+            dirty_paths=dirty_paths,
+            untracked_by_logical=untracked_by_logical,
+        )
         modified = pending is not None
         force_checkin = (
             checkout is None
@@ -49,7 +61,13 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
                 modified_locally=modified,
                 current_user=user,
                 can_checkin=view.can_checkin or force_checkin,
-                in_workspace=ctx.workspaces.has_local_copy(obj.project, obj),
+                in_workspace=obj.uuid in in_workspace,
+                type_label=display_type_label(
+                    obj.filename,
+                    obj.object_type,
+                    names=name_labels,
+                    extensions=ext_labels,
+                ),
             )
         )
     return presented

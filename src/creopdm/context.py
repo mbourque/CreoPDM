@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from creopdm.config import AppSettings, ConfigManager
@@ -25,6 +26,7 @@ from creopdm.utils.identity import CurrentUserProvider
 class AppContext:
     config: ConfigManager
     settings: AppSettings
+    engine: Engine
     session_factory: sessionmaker[Session]
     git: GitService
     version_store: VersionStore

@@ -476,6 +476,72 @@
     return cell ? cell.textContent.replace(/\s+/g, " ").trim() : "";
   }
 
+  function currentProjectId() {
+    return (
+      $("#rename-project-btn")?.dataset.project ||
+      $("#forget-project-btn")?.dataset.project ||
+      $("#open-workspace-btn")?.dataset.project ||
+      new URLSearchParams(window.location.search).get("project") ||
+      ""
+    );
+  }
+
+  function sortStoreKey(table) {
+    const project = currentProjectId();
+    const tableId = table.id || "";
+    if (!project || !tableId) return "";
+    return `creopdm.sort.${project}.${tableId}`;
+  }
+
+  function readStoredSort(table) {
+    const key = sortStoreKey(table);
+    if (!key) return null;
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || "null");
+      if (!parsed || typeof parsed.key !== "string") return null;
+      return { key: parsed.key, dir: parsed.dir === "desc" ? "desc" : "asc" };
+    } catch {
+      return null;
+    }
+  }
+
+  function writeStoredSort(table, key, dir) {
+    const storeKey = sortStoreKey(table);
+    if (!storeKey) return;
+    try {
+      localStorage.setItem(storeKey, JSON.stringify({ key, dir }));
+    } catch {
+      /* quota / private mode */
+    }
+  }
+
+  function applyTableSort(table, key, dir) {
+    const heads = [...table.querySelectorAll("th[data-sort]")];
+    const th = heads.find((item) => item.dataset.sort === key);
+    if (!th) return;
+    heads.forEach((item) => {
+      const active = item === th;
+      item.setAttribute("aria-sort", active ? (dir === "asc" ? "ascending" : "descending") : "none");
+    });
+    const tbody = table.tBodies[0];
+    if (!tbody) return;
+    const columnIndex = [...th.parentElement.children].indexOf(th);
+    const pending = [...tbody.querySelectorAll("tr.is-pending")];
+    const empty = [...tbody.querySelectorAll("tr.empty-row")];
+    const sortable = [...tbody.rows].filter(
+      (row) => !row.classList.contains("is-pending") && !row.classList.contains("empty-row")
+    );
+    sortable.sort((a, b) => {
+      const cmp = sortValue(a, key, columnIndex).localeCompare(
+        sortValue(b, key, columnIndex),
+        undefined,
+        { numeric: true, sensitivity: "base" }
+      );
+      return dir === "asc" ? cmp : -cmp;
+    });
+    [...pending, ...sortable, ...empty].forEach((row) => tbody.appendChild(row));
+  }
+
   function enableTableSort(table) {
     const heads = [...table.querySelectorAll("th[data-sort]")];
     if (!heads.length) return;
@@ -485,28 +551,11 @@
       event.preventDefault();
       const key = th.dataset.sort;
       const next = th.getAttribute("aria-sort") === "ascending" ? "desc" : "asc";
-      heads.forEach((item) => {
-        const active = item === th;
-        item.setAttribute("aria-sort", active ? (next === "asc" ? "ascending" : "descending") : "none");
-      });
-      const tbody = table.tBodies[0];
-      if (!tbody) return;
-      const columnIndex = [...th.parentElement.children].indexOf(th);
-      const pending = [...tbody.querySelectorAll("tr.is-pending")];
-      const empty = [...tbody.querySelectorAll("tr.empty-row")];
-      const sortable = [...tbody.rows].filter(
-        (row) => !row.classList.contains("is-pending") && !row.classList.contains("empty-row")
-      );
-      sortable.sort((a, b) => {
-        const cmp = sortValue(a, key, columnIndex).localeCompare(
-          sortValue(b, key, columnIndex),
-          undefined,
-          { numeric: true, sensitivity: "base" }
-        );
-        return next === "asc" ? cmp : -cmp;
-      });
-      [...pending, ...sortable, ...empty].forEach((row) => tbody.appendChild(row));
+      applyTableSort(table, key, next);
+      writeStoredSort(table, key, next);
     });
+    const saved = readStoredSort(table);
+    if (saved) applyTableSort(table, saved.key, saved.dir);
   }
 
   document.querySelectorAll("table.grid").forEach(enableTableSort);
@@ -678,7 +727,6 @@
   checkinBtn?.addEventListener("click", async () => {
     const owned = selectedRows().filter((row) => row.dataset.canCheckin === "1");
     const projectId = checkinBtn.dataset.project || openWorkspaceBtn?.dataset.project;
-    const queued = Number(checkinBtn.dataset.newFiles || 0) + Number(checkinBtn.dataset.pendingSaves || 0);
     if (!checkinDialog) return;
     const fallbackId = checkinBtn.dataset.uuid || "";
     let objectId = "";
@@ -688,7 +736,6 @@
       objectId = fallbackId;
     }
     const useQueue = !objectId;
-    if (useQueue && queued === 0 && owned.length === 0) return;
     if (useQueue && !projectId) return;
     showError($("#checkin-error"), "");
     const preview = await withBusy("Preparing check-in…", () =>
@@ -890,6 +937,83 @@
     if (result.ok?.length) window.location.reload();
   });
 
+  let changesLoaded = false;
+  async function loadChangesTab() {
+    const projectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
+    const body = $("#changes-table tbody");
+    const tab = document.querySelector('.tab[data-tab="changes"]');
+    if (!projectId || !body || changesLoaded) return;
+    changesLoaded = true;
+    body.replaceChildren();
+    const loading = document.createElement("tr");
+    loading.className = "empty-row";
+    const loadingCell = document.createElement("td");
+    loadingCell.colSpan = 5;
+    loadingCell.textContent = "Looking for workspace changes…";
+    loading.appendChild(loadingCell);
+    body.appendChild(loading);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/checkin-queue`);
+      if (!response.ok) throw new Error("queue");
+      const data = await response.json();
+      const saves = data.saves || [];
+      const created = data.new_files || [];
+      const pending = saves.length + created.length;
+      if (tab) tab.textContent = pending ? `Would check in · ${pending}` : "Would check in";
+      body.replaceChildren();
+      if (!pending) {
+        const row = document.createElement("tr");
+        row.className = "empty-row";
+        const cell = document.createElement("td");
+        cell.colSpan = 5;
+        cell.textContent = "Nothing in the workspace is waiting to be checked in.";
+        row.appendChild(cell);
+        body.appendChild(row);
+        return;
+      }
+      const addRow = (values, className) => {
+        const row = document.createElement("tr");
+        if (className) row.className = className;
+        values.forEach((text) => {
+          const cell = document.createElement("td");
+          cell.textContent = text;
+          row.appendChild(cell);
+        });
+        body.appendChild(row);
+      };
+      saves.forEach((item) => {
+        addRow(
+          [
+            item.newer_save ? "Newer Creo save" : "Modified",
+            item.filename || "",
+            `${item.next_display || "—"} · not checked in`,
+            item.file_size != null ? `${item.file_size} bytes` : "",
+            item.saved_at || "",
+          ],
+          "is-pending"
+        );
+      });
+      created.forEach((item) => {
+        addRow([
+          "New file",
+          item.filename || "",
+          "Not in the project yet. Offered when you check in a nearby file.",
+          item.size != null ? `${item.size} bytes` : "",
+          "—",
+        ]);
+      });
+    } catch {
+      body.replaceChildren();
+      const row = document.createElement("tr");
+      row.className = "empty-row";
+      const cell = document.createElement("td");
+      cell.colSpan = 5;
+      cell.textContent = "Could not load workspace changes.";
+      row.appendChild(cell);
+      body.appendChild(row);
+    }
+  }
+
   function showHistorySubtab(name) {
     document.querySelectorAll(".subtab").forEach((item) => {
       item.classList.toggle("is-active", item.dataset.subtab === name);
@@ -907,6 +1031,7 @@
       document.querySelectorAll(".tab-panel").forEach((panel) => {
         panel.hidden = panel.id !== `panel-${name}`;
       });
+      if (name === "changes") loadChangesTab();
     });
   });
 
@@ -936,11 +1061,90 @@
       creo_open_mode: String(data.get("creo_open_mode") || "executable"),
       creo_executable: String(data.get("creo_executable") || "").trim() || null,
       workspace_root: String(data.get("workspace_root") || "").trim() || null,
+      cad_model_extensions: String(data.get("cad_model_extensions") || "")
+        .split(/[\s,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+      cad_openable_extensions: String(data.get("cad_openable_extensions") || "")
+        .split(/[\s,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean),
       cad_extensions: String(data.get("cad_extensions") || "")
         .split(/[\s,;]+/)
         .map((item) => item.trim())
         .filter(Boolean),
+      ignore_patterns: String(data.get("ignore_patterns") || "")
+        .split(/[\s,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean),
       database_url: String(data.get("database_url") || "").trim(),
+    };
+    const response = await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      showError($("#settings-error"), await readError(response));
+      return;
+    }
+    if (ok) ok.hidden = false;
+  });
+
+  const typeLabelsForm = $("#type-labels-form");
+  const typeLabelRows = $("#type-label-rows");
+  function typeLabelRow(extension = "", label = "") {
+    const tr = document.createElement("tr");
+    const extTd = document.createElement("td");
+    const extInput = document.createElement("input");
+    extInput.name = "extension";
+    extInput.type = "text";
+    extInput.value = extension;
+    extInput.placeholder = ".stp, .step";
+    extInput.autocomplete = "off";
+    extTd.appendChild(extInput);
+    const labelTd = document.createElement("td");
+    const labelInput = document.createElement("input");
+    labelInput.name = "label";
+    labelInput.type = "text";
+    labelInput.value = label;
+    labelInput.placeholder = "STEP Model";
+    labelInput.autocomplete = "off";
+    labelTd.appendChild(labelInput);
+    const actionTd = document.createElement("td");
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "btn btn-small type-label-remove";
+    remove.textContent = "Remove";
+    actionTd.appendChild(remove);
+    tr.append(extTd, labelTd, actionTd);
+    return tr;
+  }
+  $("#type-label-add")?.addEventListener("click", () => {
+    typeLabelRows?.appendChild(typeLabelRow());
+  });
+  typeLabelRows?.addEventListener("click", (event) => {
+    const button = event.target.closest(".type-label-remove");
+    if (!button) return;
+    button.closest("tr")?.remove();
+    if (typeLabelRows && !typeLabelRows.querySelector("tr")) {
+      typeLabelRows.appendChild(typeLabelRow());
+    }
+  });
+  typeLabelsForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    showError($("#settings-error"), "");
+    const ok = $("#settings-ok");
+    if (ok) ok.hidden = true;
+    const type_labels = [...(typeLabelRows?.querySelectorAll("tr") || [])]
+      .map((row) => ({
+        extension: String(row.querySelector("[name=extension]")?.value || "").trim(),
+        label: String(row.querySelector("[name=label]")?.value || "").trim(),
+      }))
+      .filter((item) => item.extension || item.label);
+    const body = {
+      creo_open_mode: String(new FormData(typeLabelsForm).get("creo_open_mode") || "executable"),
+      type_labels,
     };
     const response = await fetch("/api/settings", {
       method: "PUT",

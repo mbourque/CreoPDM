@@ -147,7 +147,8 @@ def workspace_watch(
     ctx: AppContext = Depends(get_context),
 ) -> WorkspaceWatchResponse:
     project = ctx.projects.get_project(db, project_id)
-    return WorkspaceWatchResponse.model_validate(ctx.workspaces.watch_stamp(project))
+    known = ctx.objects.list_path_index(db, project.id)
+    return WorkspaceWatchResponse.model_validate(ctx.workspaces.watch_stamp(project, known))
 
 
 @router.get("/api/projects/{project_id}/checkin-preview", response_model=CheckinPreviewResponse)
@@ -158,6 +159,17 @@ def project_checkin_preview(
 ) -> CheckinPreviewResponse:
     project = ctx.projects.get_project(db, project_id)
     return CheckinPreviewResponse.model_validate(ctx.checkins.preview_queue(db, project))
+
+
+@router.get("/api/projects/{project_id}/checkin-queue")
+def project_checkin_queue_view(
+    project_id: str,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> dict:
+    project = ctx.projects.get_project(db, project_id)
+    objects = ctx.objects.list_objects(db, project.id)
+    return ctx.workspaces.project_checkin_queue(project, objects)
 
 
 @router.post("/api/projects/{project_id}/checkin-queue", response_model=BatchOperationResponse)
@@ -228,8 +240,12 @@ def choose_workspace_folder(
             initial_directory=str(start),
             cancelled=True,
         )
-    extras = ctx.config.extra_cad_extensions()
-    selected = [str(path) for path in CreoFileManager.list_latest_in_folder(chosen, extras)]
+    extras = ctx.config.all_cad_extensions()
+    ignored = ctx.config.ignore_patterns()
+    selected = [
+        str(path)
+        for path in CreoFileManager.list_latest_in_folder(chosen, extras, ignored)
+    ]
     return WorkspacePickerResponse(
         workspace_root=str(ctx.workspaces.root_for(project.uuid)),
         initial_directory=str(chosen),
@@ -265,12 +281,17 @@ def import_from_disk(
 ) -> BatchOperationResponse:
     project = ctx.projects.get_project(db, project_id)
     comment = (payload.comment or "").strip() or None
-    extras = ctx.config.extra_cad_extensions()
+    extras = ctx.config.all_cad_extensions()
+    ignored = ctx.config.ignore_patterns()
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
     raw_paths = [Path(raw) for raw in payload.paths]
     missing = [path for path in raw_paths if not path.is_file()]
-    present = [path for path in raw_paths if path.is_file()]
+    present = [
+        path
+        for path in raw_paths
+        if path.is_file() and not CreoFileManager.is_ignored(path.name, ignored)
+    ]
     selected = CreoFileManager.filter_to_latest_saves(present, extras)
     for path in missing:
         failed.append(

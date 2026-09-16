@@ -267,13 +267,20 @@ class ProjectService:
             return leftover
         return default_project_location_start()
 
-    def project_status(self, session: Session, project_uuid: str) -> dict[str, int | str]:
-        project = self.get_project(session, project_uuid)
-        objects = list(
-            session.scalars(
-                select(EngineeringObject).where(EngineeringObject.project_id == project.id)
+    def project_status(
+        self,
+        session: Session,
+        project_uuid: str,
+        objects: list | None = None,
+        project: Project | None = None,
+    ) -> dict[str, int | str]:
+        project = project or self.get_project(session, project_uuid)
+        if objects is None:
+            objects = list(
+                session.scalars(
+                    select(EngineeringObject).where(EngineeringObject.project_id == project.id)
+                )
             )
-        )
         user = self._users.get_current_user()
         active = list(
             session.scalars(

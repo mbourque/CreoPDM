@@ -47,10 +47,12 @@ class EngineeringObject(Base):
     versions: Mapped[list["ObjectVersion"]] = relationship(  # noqa: F821
         back_populates="object",
         foreign_keys="ObjectVersion.object_id",
+        overlaps="current_version",
     )
     current_version: Mapped["ObjectVersion | None"] = relationship(  # noqa: F821
         foreign_keys=[current_version_id],
         post_update=True,
+        overlaps="versions,object",
     )
     checkouts: Mapped[list["Checkout"]] = relationship(back_populates="object")  # noqa: F821
     parameters: Mapped[list["Parameter"]] = relationship(back_populates="object")  # noqa: F821

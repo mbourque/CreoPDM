@@ -108,6 +108,13 @@ a.brand:hover { text-decoration: none; color: inherit; }
   color: #6a2e0c;
 }
 .settings-form { max-width: 40rem; display: flex; flex-direction: column; gap: 1.1rem; }
+.settings-form-wide { max-width: 48rem; }
+.type-label-table { table-layout: fixed; }
+.type-label-table th:first-child,
+.type-label-table td:first-child { width: 38%; }
+.type-label-table th:last-child,
+.type-label-table td:last-child { width: 6.75rem; text-align: right; }
+.type-label-table input[type="text"] { width: 100%; box-sizing: border-box; }
 .settings-card {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -121,8 +128,16 @@ a.brand:hover { text-decoration: none; color: inherit; }
   font-weight: 700;
 }
 .settings-form label { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.55rem 0; font-weight: 600; }
-.settings-form input[type="text"] {
+.settings-form input[type="text"],
+.settings-form textarea {
   font: inherit; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 4px; font-weight: 400;
+}
+.settings-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 4.5rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 .settings-form .muted.small { overflow-wrap: anywhere; }
 .choice { flex-direction: row !important; align-items: center; gap: 0.45rem !important; font-weight: 500 !important; }
@@ -133,7 +148,7 @@ a.brand:hover { text-decoration: none; color: inherit; }
 
 .table-wrap { background: white; border: 1px solid var(--line); border-radius: 6px; overflow: auto; }
 .grid { width: 100%; border-collapse: collapse; }
-.grid th, .grid td { text-align: left; padding: 0.55rem 0.75rem; border-bottom: 1px solid #edf1f5; }
+.grid th, .grid td { text-align: left; padding: 0.55rem 0.75rem; border-bottom: 1px solid #edf1f5; vertical-align: middle; }
 .grid th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); background: #f3f6f8; }
 .grid th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
 .grid th[data-sort]:hover { color: var(--ink); }
@@ -142,6 +157,38 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .grid th[aria-sort="descending"]::after { content: " \2193"; opacity: 1; color: var(--ink); }
 .object-row { cursor: pointer; user-select: none; }
 .object-row.is-selected { background: #e7f1f6; }
+#object-table {
+  table-layout: auto;
+  width: 100%;
+}
+#object-table th,
+#object-table td {
+  white-space: nowrap;
+}
+#object-table th:first-child,
+#object-table td:first-child {
+  width: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#object-table th:not(:first-child),
+#object-table td:not(:first-child) {
+  width: 1%;
+  overflow: visible;
+  text-overflow: clip;
+}
+#object-table td:first-child .object-open,
+#object-table .object-row td:first-child .muted.small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  text-align: left;
+}
+#object-table td:first-child .folder-label {
+  max-width: calc(100% - 5.5rem);
+}
 .folder-row { background: transparent; cursor: pointer; }
 .folder-row:hover { background: #f6f8fa; }
 .folder-label { font-weight: 650; display: inline-flex; align-items: center; gap: 0.45rem; margin-right: 0.45rem; }
