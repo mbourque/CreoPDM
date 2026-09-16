@@ -44,7 +44,9 @@ async def add_object(
     )
     db.refresh(obj)
     obj = ctx.objects.get_object(db, obj.uuid)
-    ctx.workspaces.copy_into_workspace(project, obj)
+    checkout = ctx.checkouts.active_for(db, obj.id)
+    mine = checkout is not None and checkout.user_name == ctx.users.get_current_user().user_name
+    ctx.workspaces.copy_into_workspace(project, obj, writable=mine, keep_local=mine)
     return present_object(ctx, db, obj)
 
 

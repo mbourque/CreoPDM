@@ -73,10 +73,10 @@
       <button type="button" class="tab" data-tab="changes">Would check in</button>
     </div>
 
-    <section class="tab-panel" id="panel-files">
+    <section class="tab-panel" id="panel-files" data-folder="{{ current_folder }}">
     {% if current_folder %}
     <nav class="folder-crumb" aria-label="Folder">
-      <a href="/?project={{ selected.uuid }}">Files</a>
+      <a href="/?project={{ selected.uuid }}&folder=">Files</a>
       {% for crumb in folder_crumbs %}
       <span class="folder-crumb-sep" aria-hidden="true">/</span>
       {% if loop.last %}

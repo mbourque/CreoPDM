@@ -195,6 +195,7 @@
     }
     const result = await response.json().catch(() => ({}));
     if (result.warning) sessionStorage.setItem("creopdmNotice", result.warning);
+    clearProjectViewStorage(projectId);
     window.location.href = "/";
   });
 
@@ -505,6 +506,80 @@
     }
   }
 
+  function currentFolder() {
+    return document.querySelector("#panel-files")?.dataset.folder || "";
+  }
+
+  function filterStoreKey(folder) {
+    const project = currentProjectId();
+    if (!project) return "";
+    return `creopdm.filters.${project}.${folder}`;
+  }
+
+  function readStoredFilters() {
+    const project = currentProjectId();
+    if (!project) return null;
+    const keys = [filterStoreKey(currentFolder()), filterStoreKey("_last")];
+    for (const key of keys) {
+      if (!key) continue;
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || "null");
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+      } catch {
+        /* ignore */
+      }
+    }
+    return null;
+  }
+
+  function writeStoredFilters() {
+    const project = currentProjectId();
+    if (!project) return;
+    const modes = {};
+    metricButtons().forEach((btn) => {
+      const name = btn.dataset.filter;
+      const mode = metricMode(btn);
+      if (name) modes[name] = mode;
+    });
+    const payload = JSON.stringify(modes);
+    try {
+      localStorage.setItem(filterStoreKey(currentFolder()), payload);
+      localStorage.setItem(filterStoreKey("_last"), payload);
+    } catch {
+      /* quota / private mode */
+    }
+  }
+
+  function restoreStoredFilters() {
+    const saved = readStoredFilters();
+    if (!saved) return;
+    let applied = false;
+    metricButtons().forEach((btn) => {
+      const mode = saved[btn.dataset.filter];
+      if (mode !== "select" && mode !== "filter" && mode !== "off") return;
+      setMetricMode(btn, mode);
+      applied = true;
+    });
+    if (!applied) return;
+    applyMetricVisibility();
+    applyMetricSelection();
+  }
+
+  function clearProjectViewStorage(projectId) {
+    if (!projectId) return;
+    const prefixes = [`creopdm.filters.${projectId}.`, `creopdm.sort.${projectId}.`];
+    const remove = [];
+    try {
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index);
+        if (key && prefixes.some((prefix) => key.startsWith(prefix))) remove.push(key);
+      }
+      remove.forEach((key) => localStorage.removeItem(key));
+    } catch {
+      /* private mode */
+    }
+  }
+
   function writeStoredSort(table, key, dir) {
     const storeKey = sortStoreKey(table);
     if (!storeKey) return;
@@ -626,6 +701,7 @@
     }
     applyMetricVisibility();
     applyMetricSelection();
+    writeStoredFilters();
     syncToolbar();
   });
 
@@ -1250,5 +1326,6 @@
     if (id) await postAction("/api/creo/open", { object_id: id }, "POST", "");
   });
 
+  restoreStoredFilters();
   syncToolbar();
 })();

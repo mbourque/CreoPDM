@@ -138,8 +138,11 @@ def test_numbered_extra_cad_goes_to_cad_folder(client, repo_parent, tmp_path):
         files={"file": ("setup.inf.2", b"later-inf", "application/octet-stream")},
         data={"comment": "Later info save"},
     )
-    assert later.status_code == 409
-    assert later.json()["error"]["code"] == "DUPLICATE_OBJECT"
+    assert later.status_code == 201, later.text
+    body = later.json()
+    assert body["uuid"] == added.json()["uuid"]
+    assert body["filename"] == "setup.inf.2"
+    assert body["display_revision"] == "A.2"
 
 
 @requires_git
@@ -217,6 +220,15 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data
     assert nested.status_code == 200, nested.text
     assert "pin.prt" in nested.text
     assert "Files" in nested.text
+    reopened = client.get(f"/?project={project['uuid']}")
+    assert reopened.status_code == 200, reopened.text
+    assert "pin.prt" in reopened.text
+    assert 'id="panel-files" data-folder="Incoming/lib"' in reopened.text
+    root = client.get(f"/?project={project['uuid']}&folder=")
+    assert root.status_code == 200, root.text
+    assert 'id="panel-files" data-folder=""' in root.text
+    assert 'data-folder="Incoming"' in root.text
+    assert "pin.prt" not in root.text
     assert (location / "Incoming" / "shaft.prt.4").is_file()
     assert (location / "Incoming" / "lib" / "pin.prt").is_file()
     workspace = data_dir / "workspaces" / project["uuid"]
@@ -403,8 +415,86 @@ def test_numbered_creo_file_is_same_object(client, repo_parent):
         files={"file": ("base.prt.4", b"later-save", "application/octet-stream")},
         data={"comment": "Add later save"},
     )
-    assert second.status_code == 409
-    assert second.json()["error"]["code"] == "DUPLICATE_OBJECT"
+    assert second.status_code == 201, second.text
+    body = second.json()
+    assert body["uuid"] == first.json()["uuid"]
+    assert body["filename"] == "base.prt.4"
+    assert body["relative_path"] == "base.prt.4"
+    assert body["display_revision"] == "A.2"
+    listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
+    assert len(listing) == 1
+    assert listing[0]["filename"] == "base.prt.4"
+    older = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("base.prt.2", b"older-save", "application/octet-stream")},
+        data={"comment": "Older save"},
+    )
+    assert older.status_code == 409
+    assert older.json()["error"]["code"] == "DUPLICATE_OBJECT"
+
+
+@requires_git
+def test_from_disk_later_numbered_save_updates_workspace(client, repo_parent, tmp_path, data_dir):
+    project, _location = _create_project(client, repo_parent)
+    first = tmp_path / "bridgeport_mill.prt.4"
+    first.write_bytes(b"save-4")
+    added = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(first)], "comment": "Initial mill"},
+    )
+    assert added.status_code == 200, added.text
+    assert added.json()["ok"][0]["filename"] == "bridgeport_mill.prt.4"
+    later = tmp_path / "elsewhere" / "bridgeport_mill.prt.6"
+    later.parent.mkdir()
+    later.write_bytes(b"save-6")
+    updated = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(later)], "comment": "Later mill save"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["failed"] == []
+    assert updated.json()["ok"][0]["filename"] == "bridgeport_mill.prt.6"
+    listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
+    assert len(listing) == 1
+    assert listing[0]["filename"] == "bridgeport_mill.prt.6"
+    assert listing[0]["display_revision"] == "A.2"
+    workspace = data_dir / "workspaces" / project["uuid"]
+    assert (workspace / "bridgeport_mill.prt.6").is_file()
+    assert (workspace / "bridgeport_mill.prt.6").read_bytes() == b"save-6"
+
+
+@requires_git
+def test_from_disk_later_save_while_checked_out_stays_working_copy(client, repo_parent, tmp_path, data_dir):
+    project, _location = _create_project(client, repo_parent)
+    first = tmp_path / "bridgeport_mill.prt.4"
+    first.write_bytes(b"save-4")
+    added = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(first)], "comment": "Initial mill"},
+    )
+    assert added.status_code == 200, added.text
+    obj = client.get(f"/api/projects/{project['uuid']}/objects").json()[0]
+    assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
+    later = tmp_path / "bridgeport_mill.prt.6"
+    later.write_bytes(b"save-6")
+    updated = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(later)], "comment": "Later mill save"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["failed"] == []
+    listing = client.get(f"/api/projects/{project['uuid']}/objects").json()[0]
+    assert listing["filename"] == "bridgeport_mill.prt.4"
+    assert listing["owned_by_me"] is True
+    workspace = data_dir / "workspaces" / project["uuid"]
+    assert (workspace / "bridgeport_mill.prt.6").read_bytes() == b"save-6"
+    checked = client.post(
+        f"/api/objects/{obj['uuid']}/checkin",
+        json={"comment": "Record later mill save"},
+    )
+    assert checked.status_code == 200, checked.text
+    assert checked.json()["filename"] == "bridgeport_mill.prt.6"
+    assert checked.json()["owned_by_me"] is False
 
 
 @requires_git

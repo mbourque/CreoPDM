@@ -107,6 +107,7 @@ def forget_project(
     )
     if ctx.config.settings.ui.last_project_uuid == project_id:
         ctx.config.remember_project(None)
+    ctx.config.forget_project_view(project_id)
     return ForgetProjectResponse.model_validate(result)
 
 
@@ -313,8 +314,10 @@ def import_from_disk(
                 relative_path=relative,
                 comment=comment,
             )
-            ctx.workspaces.copy_into_workspace(project, obj)
-            ok.append(BatchItemResult(uuid=obj.uuid, filename=obj.filename, status="added", path=str(path)))
+            checkout = ctx.checkouts.active_for(db, obj.id)
+            mine = checkout is not None and checkout.user_name == ctx.users.get_current_user().user_name
+            ctx.workspaces.copy_into_workspace(project, obj, writable=mine, keep_local=mine)
+            ok.append(BatchItemResult(uuid=obj.uuid, filename=path.name, status="added", path=str(path)))
         except CreoPDMError as exc:
             failed.append(
                 BatchItemResult(

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 import time
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -108,11 +109,22 @@ def home(
     if selected is None and projects:
         selected = projects[0]
         project = ctx.projects.get_project(db, selected.uuid)
-    current_folder = normalize_folder_query(request.query_params.get("folder"))
+    if project is not None:
+        ctx.config.remember_project(project.uuid)
+        if "folder" not in request.query_params:
+            remembered = ctx.config.remembered_folder(project.uuid)
+            if remembered:
+                return RedirectResponse(
+                    url=f"/?project={quote(project.uuid)}&folder={quote(remembered)}",
+                    status_code=303,
+                )
+        current_folder = normalize_folder_query(request.query_params.get("folder"))
+        ctx.config.remember_folder(project.uuid, current_folder)
+    else:
+        current_folder = normalize_folder_query(request.query_params.get("folder"))
     objects: list = []
     list_entries: list = []
     if project is not None:
-        ctx.config.remember_project(project.uuid)
         objects, list_entries = _folder_page(ctx, db, project.id, current_folder)
     if objects or list_entries:
         status = folder_view_counts(objects, current_folder)

@@ -88,6 +88,7 @@ class WorkspaceConfig(BaseModel):
 class UiConfig(BaseModel):
     open_browser_on_start: bool = True
     last_project_uuid: str | None = None
+    project_folders: dict[str, str] = Field(default_factory=dict)
 
 
 def _normalize_extension_list(value: object, default: tuple[str, ...] | list[str]) -> list[str]:
@@ -371,4 +372,40 @@ class ConfigManager:
         if settings.ui.last_project_uuid == uuid_value:
             return
         settings.ui.last_project_uuid = uuid_value
+        self.save(settings)
+
+    def remembered_folder(self, project_uuid: str) -> str:
+        from creopdm.utils.folders import normalize_folder_query
+
+        return normalize_folder_query(self.settings.ui.project_folders.get(project_uuid, ""))
+
+    def remember_folder(self, project_uuid: str, folder: str) -> None:
+        from creopdm.utils.folders import normalize_folder_query
+
+        uuid_value = (project_uuid or "").strip()
+        if not uuid_value:
+            return
+        folder = normalize_folder_query(folder)
+        settings = self.settings
+        current = dict(settings.ui.project_folders)
+        stored = current.get(uuid_value, "")
+        if stored == folder:
+            return
+        if folder:
+            current[uuid_value] = folder
+        else:
+            current.pop(uuid_value, None)
+        settings.ui.project_folders = current
+        self.save(settings)
+
+    def forget_project_view(self, project_uuid: str) -> None:
+        uuid_value = (project_uuid or "").strip()
+        if not uuid_value:
+            return
+        settings = self.settings
+        current = dict(settings.ui.project_folders)
+        if uuid_value not in current:
+            return
+        current.pop(uuid_value, None)
+        settings.ui.project_folders = current
         self.save(settings)

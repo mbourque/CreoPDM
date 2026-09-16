@@ -17,6 +17,7 @@ from creopdm.constants import (
     DEFAULT_REVISION,
     INITIAL_ITERATION,
     ActivityAction,
+    CheckoutStatus,
     LifecycleState,
 )
 from creopdm.config import ConfigManager
@@ -24,8 +25,10 @@ from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import (
     CreoPDMError,
     DuplicateObjectError,
+    ObjectAlreadyCheckedOutError,
     ObjectNotFoundError,
     PathValidationError,
+    ReleasedObjectError,
     RepositoryError,
     ValidationAppError,
 )
@@ -41,7 +44,7 @@ from creopdm.services.activity_service import ActivityService
 from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.storage.base import VersionStore
 from creopdm.utils.classify import classify_filename
-from creopdm.utils.files import copy_file, set_file_readonly
+from creopdm.utils.files import copy_file, set_file_readonly, set_file_writable
 from creopdm.utils.hashing import calculate_sha256
 from creopdm.utils.identity import CurrentUserProvider
 from creopdm.utils.paths import (
@@ -270,9 +273,26 @@ class ObjectService:
 
         existing = self.existing_logical(session, project.id, relative)
         if existing is not None:
+            extras_all = self._cad_extensions()
+            incoming_n = CreoFileManager.save_number(stored_name, extras_all)
+            recorded_n = CreoFileManager.save_number(existing.filename, extras_all)
+            if incoming_n > recorded_n:
+                return self._import_later_save(
+                    session,
+                    project,
+                    existing,
+                    source_path,
+                    stored_name,
+                    comment,
+                )
+            if incoming_n < recorded_n:
+                raise DuplicateObjectError(
+                    f"{stored_name} is an older save of {existing.filename}, which is already in this project.",
+                    details={"relative_path": existing.relative_path, "existing": existing.filename},
+                )
             raise DuplicateObjectError(
-                f"{stored_name} is already in this project.",
-                details={"relative_path": relative, "existing": existing.filename},
+                f"{stored_name} is already in this project as {existing.filename}.",
+                details={"relative_path": existing.relative_path, "existing": existing.filename},
             )
 
         repo = self._vault(project)
@@ -365,6 +385,135 @@ class ObjectService:
             )
             logger.info("Added object %s (%s)", obj.uuid, relative)
             return obj
+
+    def _import_later_save(
+        self,
+        session: Session,
+        project: Project,
+        existing: EngineeringObject,
+        source_path: Path,
+        stored_name: str,
+        comment: str | None,
+    ) -> EngineeringObject:
+        """Record a higher Creo save number as the next iteration of an existing object."""
+        if existing.lifecycle_state != LifecycleState.IN_WORK.value:
+            raise ReleasedObjectError(
+                f"{existing.filename} is {existing.lifecycle_state.replace('_', ' ').title()} "
+                "and cannot take a later save.",
+                details={"uuid": existing.uuid},
+            )
+        active = session.scalar(
+            select(Checkout).where(
+                Checkout.object_id == existing.id,
+                Checkout.status == CheckoutStatus.ACTIVE.value,
+            )
+        )
+        user = self._users.get_current_user()
+        if active is not None:
+            if active.user_name != user.user_name:
+                raise ObjectAlreadyCheckedOutError(
+                    f"{existing.filename} is checked out by {active.user_name}.",
+                    details={"uuid": existing.uuid, "user": active.user_name},
+                )
+            self._stage_later_workspace_save(project, existing, source_path, stored_name)
+            return existing
+        relative = self._later_save_relative(existing, stored_name)
+        old_relative = existing.relative_path.replace("\\", "/")
+        repo = self._vault(project)
+        destination = ensure_within(repo, repo / Path(relative))
+        content_hash = calculate_sha256(source_path)
+        file_size = source_path.stat().st_size
+        message = (comment or f"Add {stored_name}").strip()
+        if not message:
+            raise ValidationAppError("A comment is required when adding a file.")
+        captured_head = self._store.capture_checkpoint(repo)
+        now = datetime.now(timezone.utc)
+        new_iteration = existing.iteration + 1
+        with self._locks.acquire(project.uuid):
+            created_copy = copy_file(source_path, destination)
+            try:
+                git_hash = self._store.store_version(
+                    repo,
+                    [relative],
+                    message,
+                    user,
+                    remove_relative_paths=[old_relative] if old_relative != relative else [],
+                )
+            except Exception:
+                if created_copy:
+                    self._remove_copied_file(destination)
+                raise
+            existing.filename = stored_name
+            existing.relative_path = relative
+            existing.updated_at = now
+            existing.iteration = new_iteration
+            version = ObjectVersion(
+                uuid=str(uuid.uuid4()),
+                object_id=existing.id,
+                revision=existing.revision or DEFAULT_REVISION,
+                iteration=new_iteration,
+                git_commit_hash=git_hash,
+                content_hash=content_hash,
+                file_size=file_size,
+                filename=stored_name,
+                relative_path=relative,
+                created_by=user.user_name,
+                created_at=now,
+                comment=message,
+            )
+            session.add(version)
+            session.flush()
+            existing.current_version_id = version.id
+            try:
+                session.flush()
+            except Exception as exc:
+                logger.exception("Metadata failed after storing later save %s", relative)
+                if captured_head:
+                    self._store.restore_checkpoint(repo, captured_head)
+                raise RepositoryError(
+                    "The later save was stored but project metadata could not be updated. "
+                    "The repository was restored and the file was not added.",
+                    details={"file": stored_name},
+                ) from exc
+            try:
+                set_file_readonly(destination)
+            except Exception:
+                logger.warning("Could not mark %s read-only after import", destination)
+            self._activities.record(
+                session,
+                ActivityAction.CHECKED_IN,
+                user,
+                project_id=project.id,
+                object_id=existing.id,
+                details={"filename": stored_name, "relative_path": relative, "iteration": new_iteration},
+            )
+            logger.info("Recorded later save %s as %s.%s", stored_name, existing.revision, new_iteration)
+            return existing
+
+    @staticmethod
+    def _later_save_relative(existing: EngineeringObject, stored_name: str) -> str:
+        parent = Path(str(existing.relative_path or "").replace("\\", "/")).parent
+        relative = stored_name if parent.as_posix() == "." else (parent / stored_name).as_posix()
+        return assert_safe_relative_path(relative).as_posix()
+
+    def _stage_later_workspace_save(
+        self,
+        project: Project,
+        existing: EngineeringObject,
+        source_path: Path,
+        stored_name: str,
+    ) -> Path:
+        """Put a later Creo save in the workspace. Check-in records the version."""
+        relative = self._later_save_relative(existing, stored_name)
+        destination = ensure_within(self._vault(project), self._vault(project) / Path(relative))
+        with self._locks.acquire(project.uuid):
+            copy_file(source_path, destination)
+            try:
+                set_file_writable(destination)
+            except Exception:
+                logger.warning("Could not mark %s writable after adding a later save", destination)
+        logger.info("Staged later save %s in the workspace for %s", stored_name, existing.filename)
+        return destination
 
     def import_upload(
         self,

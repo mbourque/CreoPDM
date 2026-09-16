@@ -85,6 +85,20 @@ def test_config_layout(data_dir):
     assert manager.database_url().endswith("creopdm.db")
 
 
+def test_remember_folder_is_per_project(tmp_path):
+    manager = ConfigManager(tmp_path / "appdata")
+    manager.load()
+    manager.remember_folder("proj-a", "Incoming/lib")
+    manager.remember_folder("proj-b", "html_tutorials")
+    assert manager.remembered_folder("proj-a") == "Incoming/lib"
+    assert manager.remembered_folder("proj-b") == "html_tutorials"
+    manager.remember_folder("proj-a", "")
+    assert manager.remembered_folder("proj-a") == ""
+    assert manager.remembered_folder("proj-b") == "html_tutorials"
+    manager.forget_project_view("proj-b")
+    assert manager.remembered_folder("proj-b") == ""
+
+
 def test_database_url_setting_overrides_sqlite(tmp_path, monkeypatch):
     monkeypatch.delenv("CREOPDM_DATABASE_URL", raising=False)
     manager = ConfigManager(tmp_path / "appdata")

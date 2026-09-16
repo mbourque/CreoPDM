@@ -184,17 +184,23 @@ class WorkspaceService:
                 details={"relative_path": obj.relative_path},
             )
         destination = self.workspace_file_path(project.uuid, obj)
+        extras = self._cad_extensions()
         latest = CreoFileManager.latest_in_directory(
-            destination.parent, obj.filename, self._cad_extensions()
+            destination.parent, obj.filename, extras
         )
         conflict_path = latest if latest is not None and latest.is_file() else (
             destination if destination.exists() else None
         )
         if conflict_path is not None and self._file_modified(conflict_path, obj):
+            older_sibling = (
+                conflict_path.resolve() != destination.resolve()
+                and CreoFileManager.save_number(conflict_path.name, extras)
+                < CreoFileManager.save_number(obj.filename, extras)
+            )
             if keep_local:
                 self._try_set_mode(conflict_path, writable)
                 return conflict_path
-            if not overwrite_modified:
+            if not overwrite_modified and not older_sibling:
                 raise WorkspaceConflictError(
                     f"{obj.filename} has local changes that would be overwritten.",
                     details={"path": str(conflict_path)},
@@ -457,10 +463,16 @@ class WorkspaceService:
                 )
         return {"ok": ok, "failed": failed}
 
-    def copy_into_workspace(self, project: Project, obj: EngineeringObject) -> Path | None:
+    def copy_into_workspace(
+        self,
+        project: Project,
+        obj: EngineeringObject,
+        writable: bool = False,
+        keep_local: bool = False,
+    ) -> Path | None:
         """Copy a newly added vault file into the workspace. Best-effort."""
         try:
-            return self.materialize(project, obj, writable=False)
+            return self.materialize(project, obj, writable=writable, keep_local=keep_local)
         except Exception:
             logger.exception("Could not copy %s into the workspace", obj.filename)
             return None
