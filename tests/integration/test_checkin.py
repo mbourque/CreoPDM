@@ -273,6 +273,32 @@ def test_force_checkin_records_workspace_save_without_checkout(client, repo_pare
 
 
 @requires_git
+def test_checkin_after_undo_checkout_records_numbered_save(client, repo_parent, data_dir):
+    project, obj = _create_part(client, repo_parent)
+    assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
+    workspace = data_dir / "workspaces" / project["uuid"]
+    (workspace / "shaft.prt.2").write_bytes(b"creo-save")
+    undone = client.post(f"/api/objects/{obj['uuid']}/undo-checkout")
+    assert undone.status_code == 200, undone.text
+    listing = undone.json()
+    assert listing["owned_by_me"] is False
+    assert listing["can_checkin"] is True
+    page = client.get(f"/projects/{project['uuid']}/objects/{obj['uuid']}")
+    assert page.status_code == 200
+    match = re.search(r'<button[^>]*id="checkin-btn"[^>]*>', page.text)
+    assert match, page.text
+    assert "disabled" not in match.group(0)
+    checked = client.post(
+        f"/api/objects/{obj['uuid']}/checkin",
+        json={"comment": "Keep the Creo save after undo"},
+    )
+    assert checked.status_code == 200, checked.text
+    payload = checked.json()
+    assert payload["filename"] == "shaft.prt.2"
+    assert payload["current_version"]["comment"] == "Keep the Creo save after undo"
+
+
+@requires_git
 def test_checkout_keeps_newer_workspace_save(client, repo_parent, data_dir):
     location = repo_parent / "KeepLocal"
     project = client.post(

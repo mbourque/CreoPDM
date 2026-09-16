@@ -15,6 +15,16 @@ from creopdm.utils.identity import UserIdentity
 logger = get_logger("git")
 
 
+def _porcelain_path(raw: str) -> str:
+    """Turn a git status --porcelain path into a repo-relative posix path."""
+    name = (raw or "").strip()
+    if " -> " in name:
+        name = name.split(" -> ", 1)[1]
+    if len(name) >= 2 and name[0] == '"' and name[-1] == '"':
+        name = name[1:-1].encode("utf-8").decode("unicode_escape")
+    return name.replace("\\", "/")
+
+
 @dataclass(frozen=True, slots=True)
 class GitStatus:
     branch: str
@@ -22,6 +32,7 @@ class GitStatus:
     staged: list[str]
     unstaged: list[str]
     untracked: list[str]
+    raw: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,9 +64,13 @@ class GitService:
         cwd: Path,
         check: bool = True,
         extra_env: dict[str, str] | None = None,
+        quiet: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         command = [self.executable, *args]
-        logger.info("git %s", " ".join(args))
+        if quiet:
+            logger.debug("git %s", " ".join(args))
+        else:
+            logger.info("git %s", " ".join(args))
         try:
             result = subprocess.run(
                 command,
@@ -142,17 +157,20 @@ class GitService:
                 self._run(["symbolic-ref", "HEAD", f"refs/heads/{default_branch}"], cwd=path)
 
     def status(self, path: Path) -> GitStatus:
-        branch_result = self._run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=path, check=False)
+        branch_result = self._run(["rev-parse", "--abbrev-ref", "HEAD"], cwd=path, check=False, quiet=True)
         branch = (branch_result.stdout or "main").strip() or "main"
-        porcelain = self._run(["status", "--porcelain"], cwd=path)
+        porcelain = self._run(["status", "--porcelain", "-uall"], cwd=path, quiet=True)
+        raw = porcelain.stdout or ""
         staged: list[str] = []
         unstaged: list[str] = []
         untracked: list[str] = []
-        for line in porcelain.stdout.splitlines():
+        for line in raw.splitlines():
             if not line:
                 continue
             code = line[:2]
-            file_name = line[3:]
+            file_name = _porcelain_path(line[3:])
+            if not file_name:
+                continue
             if code == "??":
                 untracked.append(file_name)
             else:
@@ -166,6 +184,7 @@ class GitService:
             staged=staged,
             unstaged=unstaged,
             untracked=untracked,
+            raw=raw,
         )
 
     def is_dirty(self, path: Path) -> bool:

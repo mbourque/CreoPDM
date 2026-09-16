@@ -28,7 +28,7 @@ def test_config_layout(data_dir):
     assert manager.settings_path.exists()
     assert manager.database_dir.exists()
     assert manager.logs_dir.exists()
-    assert settings.server.host == "127.0.0.1"
+    assert settings.server.host == "0.0.0.0"
     assert settings.creo.connector == "auto"
     assert extra_cad_set(settings.cad.extra_extensions) == extra_cad_set(DEFAULT_EXTRA_CAD_EXTENSIONS)
     assert ".m_p" in settings.cad.extra_extensions
@@ -36,6 +36,38 @@ def test_config_layout(data_dir):
     assert ".sym" in settings.cad.extra_extensions
     assert ".mrd" in settings.cad.extra_extensions
     assert ".xpr" in settings.cad.extra_extensions
+    assert settings.database.url == ""
+    assert manager.database_url().startswith("sqlite:///")
+    assert manager.database_url().endswith("creopdm.db")
+
+
+def test_database_url_setting_overrides_sqlite(tmp_path, monkeypatch):
+    monkeypatch.delenv("CREOPDM_DATABASE_URL", raising=False)
+    manager = ConfigManager(tmp_path / "appdata")
+    settings = manager.load()
+    settings.database.url = "postgresql+psycopg://creopdm@localhost:5432/creopdm"
+    manager.save(settings)
+    loaded = ConfigManager(tmp_path / "appdata")
+    assert loaded.database_url() == "postgresql+psycopg://creopdm@localhost:5432/creopdm"
+
+
+def test_database_url_env_overrides_settings(tmp_path, monkeypatch):
+    manager = ConfigManager(tmp_path / "appdata")
+    settings = manager.load()
+    settings.database.url = "postgresql+psycopg://from-file/db"
+    manager.save(settings)
+    monkeypatch.setenv("CREOPDM_DATABASE_URL", "postgresql+psycopg://from-env/db")
+    assert manager.database_url() == "postgresql+psycopg://from-env/db"
+
+
+def test_previous_localhost_bind_migrates_to_all_interfaces(tmp_path):
+    manager = ConfigManager(tmp_path / "appdata")
+    manager.ensure_layout()
+    settings = AppSettings()
+    settings.server.host = "127.0.0.1"
+    manager.save(settings)
+    loaded = manager.load()
+    assert loaded.server.host == "0.0.0.0"
 
 
 def test_previous_cad_defaults_migrate(tmp_path):

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from creopdm.api.checkout import present_object
+from creopdm.api.checkout import present_object, present_objects
 from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import project_to_response, revision_display
 from creopdm.constants import APP_NAME, APP_VERSION, ObjectType
@@ -46,11 +47,21 @@ def _creo_executable(ctx: AppContext) -> str | None:
     return str(found) if found else None
 
 
+_CREO_PAGE_TTL = 20.0
+_CREO_PAGE_CACHE: tuple[float, dict[str, str | None]] | None = None
+
+
 def _creo_page(ctx: AppContext) -> dict[str, str | None]:
-    return {
+    global _CREO_PAGE_CACHE
+    now = time.monotonic()
+    if _CREO_PAGE_CACHE is not None and now - _CREO_PAGE_CACHE[0] < _CREO_PAGE_TTL:
+        return _CREO_PAGE_CACHE[1]
+    payload = {
         "creo_label": _creo_label(ctx),
         "creo_executable": _creo_executable(ctx),
     }
+    _CREO_PAGE_CACHE = (now, payload)
+    return payload
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -72,7 +83,7 @@ def home(
             project = ctx.projects.get_project(db, selected_uuid)
             selected = project_to_response(project)
             orm_objects = ctx.objects.list_objects(db, project.id)
-            objects = [present_object(ctx, db, obj) for obj in orm_objects]
+            objects = present_objects(ctx, db, orm_objects)
             status = ctx.projects.project_status(db, project.uuid)
         except ProjectNotFoundError:
             selected = None
@@ -81,7 +92,7 @@ def home(
         selected = projects[0]
         project = ctx.projects.get_project(db, selected.uuid)
         orm_objects = ctx.objects.list_objects(db, project.id)
-        objects = [present_object(ctx, db, obj) for obj in orm_objects]
+        objects = present_objects(ctx, db, orm_objects)
         status = ctx.projects.project_status(db, project.uuid)
     if project is not None:
         checkin_queue = ctx.workspaces.project_checkin_queue(project, orm_objects)

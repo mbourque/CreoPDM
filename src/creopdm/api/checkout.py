@@ -19,25 +19,40 @@ router = APIRouter()
 
 
 def present_object(ctx: AppContext, db: Session, obj) -> ObjectResponse:
+    return present_objects(ctx, db, [obj])[0]
+
+
+def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectResponse]:
+    """Build list rows without SHA-256 of every file. Git status is the dirty signal."""
+    if not objects:
+        return []
     user = ctx.users.get_current_user()
-    checkout = ctx.checkouts.active_for(db, obj.id)
-    view = ctx.checkouts.describe(obj, checkout, user)
-    modified = ctx.workspaces.is_modified(obj.project, obj)
-    pending = ctx.workspaces.pending_workspace_save(obj.project, obj)
-    force_checkin = (
-        checkout is None
-        and pending is not None
-        and obj.lifecycle_state == LifecycleState.IN_WORK.value
-    )
-    return object_to_response(
-        obj,
-        obj.project.uuid,
-        view=view,
-        modified_locally=modified,
-        current_user=user,
-        can_checkin=view.can_checkin or force_checkin,
-        in_workspace=ctx.workspaces.has_local_copy(obj.project, obj),
-    )
+    checkouts = ctx.checkouts.active_map(db, [obj.id for obj in objects])
+    project = objects[0].project
+    status = ctx.workspaces._git_status(project)
+    presented: list[ObjectResponse] = []
+    for obj in objects:
+        checkout = checkouts.get(obj.id)
+        view = ctx.checkouts.describe(obj, checkout, user)
+        pending = ctx.workspaces._pending_from_status(project, obj, status)
+        modified = pending is not None
+        force_checkin = (
+            checkout is None
+            and pending is not None
+            and obj.lifecycle_state == LifecycleState.IN_WORK.value
+        )
+        presented.append(
+            object_to_response(
+                obj,
+                obj.project.uuid,
+                view=view,
+                modified_locally=modified,
+                current_user=user,
+                can_checkin=view.can_checkin or force_checkin,
+                in_workspace=ctx.workspaces.has_local_copy(obj.project, obj),
+            )
+        )
+    return presented
 
 
 @router.post("/api/objects/batch/checkout", response_model=BatchOperationResponse)

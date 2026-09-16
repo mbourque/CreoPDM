@@ -1,4 +1,4 @@
-"""Application entrypoint: localhost server and optional browser launch."""
+"""Application entrypoint: LAN server and optional browser launch."""
 
 from __future__ import annotations
 
@@ -26,9 +26,30 @@ def find_available_port(host: str, preferred: int = 0) -> int:
         return int(sock.getsockname()[1])
 
 
+def lan_addresses() -> list[str]:
+    """IPv4 addresses other devices on this network can use to reach this PC."""
+    found: list[str] = []
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            address = sock.getsockname()[0]
+            if address and not address.startswith("127."):
+                found.append(address)
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            address = info[4][0]
+            if address and not address.startswith("127.") and address not in found:
+                found.append(address)
+    except OSError:
+        pass
+    return found
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog=APP_NAME)
-    parser.add_argument("--host", help="Bind address (default: 127.0.0.1)")
+    parser.add_argument("--host", help="Bind address (default: 0.0.0.0, reachable on your LAN)")
     parser.add_argument("--port", type=int, help="TCP port. 0 selects an available port.")
     parser.add_argument("--no-browser", action="store_true", help="Do not open the default browser.")
     parser.add_argument("--data-dir", help="Override the application data directory.")
@@ -45,23 +66,28 @@ def main(argv: list[str] | None = None) -> None:
     config = ConfigManager()
     ctx = build_context(config)
     settings = ctx.settings
-    host = args.host or settings.server.host or "127.0.0.1"
-    if host not in {"127.0.0.1", "localhost"}:
-        logger.warning("Binding to %s; the default is localhost-only", host)
+    host = args.host or settings.server.host or "0.0.0.0"
     preferred = settings.server.port if args.port is None else args.port
     port = find_available_port(host, preferred)
     open_browser = settings.ui.open_browser_on_start and not args.no_browser
 
     app = create_app(ctx)
-    url = f"http://{host}:{port}"
-    logger.info("Starting %s %s at %s", APP_NAME, APP_VERSION, url)
+    local_url = f"http://127.0.0.1:{port}"
+    bind_url = f"http://{host}:{port}"
+    phone_urls = [f"http://{address}:{port}" for address in lan_addresses()] if host in {"0.0.0.0", "::"} else []
+    logger.info("Starting %s %s at %s", APP_NAME, APP_VERSION, bind_url)
     print(f"{APP_NAME} {APP_VERSION}")
-    print(f"Status: Running")
-    print(url)
+    print("Status: Running")
+    print(f"This PC: {local_url}")
+    for url in phone_urls:
+        print(f"Phone:   {url}")
+        logger.info("LAN URL %s", url)
+    if not phone_urls and host in {"0.0.0.0", "::"}:
+        print("Phone:   use this PC's Wi-Fi IPv4 address and the port above")
 
     if open_browser:
         try:
-            webbrowser.open(url)
+            webbrowser.open(local_url)
         except Exception:
             logger.exception("Unable to open the default browser")
 

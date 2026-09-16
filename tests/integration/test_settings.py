@@ -19,6 +19,8 @@ def test_get_and_update_settings(client, tmp_path):
     assert ".mrd" in defaults
     assert ".xpr" in defaults
     assert extra_cad_set(payload["cad_extensions"]) == extra_cad_set(defaults)
+    assert payload["database_url"].startswith("sqlite:///")
+    assert payload["default_database_url"].startswith("sqlite:///")
 
     fake_creo = tmp_path / "parametric.exe"
     fake_creo.write_bytes(b"fake")
@@ -38,11 +40,22 @@ def test_get_and_update_settings(client, tmp_path):
     assert Path(body["workspace_root"]) == workspace.resolve()
     assert workspace.is_dir()
 
+    stored = client.put(
+        "/api/settings",
+        json={
+            "creo_open_mode": "association",
+            "database_url": "postgresql+psycopg://creopdm@localhost:5432/creopdm",
+        },
+    )
+    assert stored.status_code == 200, stored.text
+    assert stored.json()["database_url"] == "postgresql+psycopg://creopdm@localhost:5432/creopdm"
+
     page = client.get("/settings")
     assert page.status_code == 200
     assert "Open Creo models with" in page.text
     assert "Workspace" in page.text
     assert "CAD file types" in page.text
+    assert "Database" in page.text
 
 
 @requires_git

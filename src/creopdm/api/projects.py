@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
-from creopdm.api.checkout import present_object
+from creopdm.api.checkout import present_object, present_objects
 from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import project_to_response
 from creopdm.context import AppContext
@@ -127,7 +127,7 @@ def list_objects(
         object_type=object_type,
         lifecycle_state=lifecycle_state,
     )
-    return [present_object(ctx, db, obj) for obj in objects]
+    return present_objects(ctx, db, objects)
 
 
 @router.get("/api/projects/{project_id}/status", response_model=ProjectStatusResponse)
@@ -147,8 +147,7 @@ def workspace_watch(
     ctx: AppContext = Depends(get_context),
 ) -> WorkspaceWatchResponse:
     project = ctx.projects.get_project(db, project_id)
-    objects = ctx.objects.list_objects(db, project.id)
-    return WorkspaceWatchResponse.model_validate(ctx.workspaces.watch_stamp(project, objects))
+    return WorkspaceWatchResponse.model_validate(ctx.workspaces.watch_stamp(project))
 
 
 @router.get("/api/projects/{project_id}/checkin-preview", response_model=CheckinPreviewResponse)

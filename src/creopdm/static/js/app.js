@@ -542,7 +542,7 @@
     }
     selectOnly(row);
     if (!openLink?.dataset.uuid || event.detail > 1) return;
-    void postAction("/api/creo/open", { object_id: openLink.dataset.uuid }, "POST", "Opening…");
+    void postAction("/api/creo/open", { object_id: openLink.dataset.uuid }, "POST", "");
   });
 
   document.querySelector("#object-table")?.addEventListener("dblclick", (event) => {
@@ -583,7 +583,7 @@
   async function postAction(url, body, method = "POST", busyMessage = "Working…") {
     showError($("#toolbar-error"), "");
     showOk("");
-    return withBusy(busyMessage, async () => {
+    const run = async () => {
       const response = await fetch(url, {
         method,
         headers: body ? { "Content-Type": "application/json" } : undefined,
@@ -595,7 +595,9 @@
       }
       if (response.status === 204) return {};
       return response.json();
-    });
+    };
+    if (!busyMessage) return run();
+    return withBusy(busyMessage, run);
   }
 
   function formatBatch(result) {
@@ -610,7 +612,7 @@
       showError($("#toolbar-error"), "Select one file to open.");
       return;
     }
-    await postAction("/api/creo/open", { object_id: ids[0] }, "POST", "Opening…");
+    await postAction("/api/creo/open", { object_id: ids[0] }, "POST", "");
   });
 
   checkoutBtn?.addEventListener("click", async () => {
@@ -655,7 +657,10 @@
     if (!objectIds.length) return;
     if (objectIds.length === 1 && !selectedRows().length) {
       const result = await postAction(`/api/objects/${objectIds[0]}/undo-checkout`, undefined, "POST", "Cancelling checkout…");
-      if (result) window.location.reload();
+      if (result) {
+        rememberWatchView();
+        window.location.reload();
+      }
       return;
     }
     const result = await postAction(
@@ -672,17 +677,26 @@
 
   checkinBtn?.addEventListener("click", async () => {
     const owned = selectedRows().filter((row) => row.dataset.canCheckin === "1");
-    const projectId = checkinBtn.dataset.project;
+    const projectId = checkinBtn.dataset.project || openWorkspaceBtn?.dataset.project;
     const queued = Number(checkinBtn.dataset.newFiles || 0) + Number(checkinBtn.dataset.pendingSaves || 0);
     if (!checkinDialog) return;
-    const useQueue = owned.length !== 1;
-    if (owned.length === 0 && queued === 0) return;
+    const fallbackId = checkinBtn.dataset.uuid || "";
+    let objectId = "";
+    if (owned.length === 1) {
+      objectId = owned[0].dataset.uuid;
+    } else if (!owned.length && fallbackId) {
+      objectId = fallbackId;
+    }
+    const useQueue = !objectId;
+    if (useQueue && queued === 0 && owned.length === 0) return;
     if (useQueue && !projectId) return;
     showError($("#checkin-error"), "");
-    const preview = await fetch(
-      useQueue
-        ? `/api/projects/${projectId}/checkin-preview`
-        : `/api/objects/${owned[0].dataset.uuid}/checkin-preview`
+    const preview = await withBusy("Preparing check-in…", () =>
+      fetch(
+        useQueue
+          ? `/api/projects/${projectId}/checkin-preview`
+          : `/api/objects/${objectId}/checkin-preview`
+      )
     );
     if (!preview.ok) {
       showError($("#toolbar-error"), await readError(preview));
@@ -700,7 +714,7 @@
     if (checkinDialog) {
       checkinDialog.dataset.force = data.force_checkin ? "1" : "";
       checkinDialog.dataset.queue = useQueue ? "1" : "";
-      checkinDialog.dataset.objectId = useQueue ? "" : owned[0].dataset.uuid;
+      checkinDialog.dataset.objectId = useQueue ? "" : objectId;
       const selectedIdsForQueue = owned.map((row) => row.dataset.uuid);
       checkinDialog.dataset.objectIds = JSON.stringify(
         selectedIdsForQueue.length ? selectedIdsForQueue : data.object_ids || []
@@ -809,7 +823,10 @@
     if (!result) return;
     const warning = formatBatch(result);
     if (warning) showError($("#toolbar-error"), warning);
-    if (result.ok ? result.ok.length : true) window.location.reload();
+    if (result.ok ? result.ok.length : true) {
+      rememberWatchView();
+      window.location.reload();
+    }
   });
 
   historyBtn?.addEventListener("click", () => {
@@ -923,6 +940,7 @@
         .split(/[\s,;]+/)
         .map((item) => item.trim())
         .filter(Boolean),
+      database_url: String(data.get("database_url") || "").trim(),
     };
     const response = await fetch("/api/settings", {
       method: "PUT",
@@ -971,6 +989,9 @@
     }
     if (saved.tab) {
       document.querySelector(`.tabs .tab[data-tab="${saved.tab}"]`)?.click();
+      if (saved.tab === "history") {
+        window.history.replaceState(null, "", "#history");
+      }
     }
     const wanted = new Set(saved.ids || []);
     if (wanted.size) {
@@ -984,35 +1005,16 @@
     return document.hidden || busyDepth > 0 || Boolean(document.querySelector("dialog[open]"));
   }
 
-  function objectWatchStamp(data) {
-    return [
-      data.filename,
-      data.display_revision,
-      data.checkout_status,
-      data.can_checkin ? "1" : "0",
-      data.modified_locally ? "1" : "0",
-      data.in_workspace ? "1" : "0",
-    ].join("|");
-  }
-
   const watchProjectId = openWorkspaceBtn?.dataset.project || addForm?.dataset.project;
-  const watchObjectId = document.querySelector(".detail-head .object-open")?.dataset.uuid;
   let watchStamp = null;
   let watchReloadTimer = 0;
 
   async function pollWorkspaceWatch() {
     if (!watchProjectId || watchPaused()) return;
     try {
-      let next = "";
-      if (watchObjectId) {
-        const response = await fetch(`/api/objects/${watchObjectId}`);
-        if (!response.ok) return;
-        next = objectWatchStamp(await response.json());
-      } else {
-        const response = await fetch(`/api/projects/${watchProjectId}/workspace-watch`);
-        if (!response.ok) return;
-        next = (await response.json()).stamp || "";
-      }
+      const response = await fetch(`/api/projects/${watchProjectId}/workspace-watch`);
+      if (!response.ok) return;
+      const next = (await response.json()).stamp || "";
       if (watchStamp === null) {
         watchStamp = next;
         return;
@@ -1041,7 +1043,7 @@
   document.querySelector(".detail-head .object-open")?.addEventListener("click", async (event) => {
     event.preventDefault();
     const id = event.currentTarget.dataset.uuid;
-    if (id) await postAction("/api/creo/open", { object_id: id }, "POST", "Opening…");
+    if (id) await postAction("/api/creo/open", { object_id: id }, "POST", "");
   });
 
   syncToolbar();

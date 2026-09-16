@@ -139,6 +139,32 @@ def test_windows_connector_starts_in_model_directory(tmp_path: Path, monkeypatch
     assert launched["shell"] is False
 
 
+def test_windows_connector_opens_numbered_save_as_logical_name(tmp_path: Path, monkeypatch):
+    fake = tmp_path / "parametric.exe"
+    fake.write_bytes(b"fake")
+    folder = tmp_path / "ribbed2"
+    folder.mkdir()
+    model = folder / "4259827_cp25.prt.2"
+    model.write_bytes(b"creo-save")
+    launched: dict[str, object] = {}
+
+    def fake_popen(args, cwd=None, shell=False, **kwargs):
+        launched["args"] = list(args)
+        launched["cwd"] = cwd
+        launched["shell"] = shell
+
+        class _Proc:
+            pass
+
+        return _Proc()
+
+    monkeypatch.setattr("creopdm.utils.launch.subprocess.Popen", fake_popen)
+    connector = WindowsCreoConnector(executable=str(fake), open_mode="executable")
+    connector.open_model(model)
+    assert launched["cwd"] == str(folder.resolve())
+    assert launched["args"] == [str(fake), "4259827_cp25.prt"]
+
+
 @requires_git
 def test_open_document_uses_windows_association(data_dir, repo_parent, identity, monkeypatch):
     opened: list[Path] = []
@@ -168,3 +194,39 @@ def test_open_document_uses_windows_association(data_dir, repo_parent, identity,
         assert opened
         assert opened[0].name == "notes.txt"
         assert opened[0].parent.name == project["uuid"]
+
+
+@requires_git
+def test_open_nested_cad_file_uses_folder_as_working_directory(
+    data_dir, repo_parent, identity, monkeypatch
+):
+    opened: list[tuple[Path, Path]] = []
+    monkeypatch.setattr("creopdm.services.creo_service.os.name", "nt")
+    monkeypatch.setattr("creopdm.utils.launch.os.name", "nt")
+
+    def fake_start(path: Path, workdir: Path) -> None:
+        opened.append((Path(path), Path(workdir)))
+
+    monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
+    ctx = build_context(ConfigManager(), users=identity)
+    with TestClient(create_app(ctx)) as client:
+        location = repo_parent / "Ribbed"
+        ribbed = location / "ribbed2"
+        ribbed.mkdir(parents=True)
+        model = ribbed / "1-inch.xpr"
+        model.write_bytes(b"xpr")
+        project = client.post("/api/projects", json={"name": "Ribbed"}).json()
+        imported = client.post(
+            f"/api/projects/{project['uuid']}/objects/from-disk",
+            json={"paths": [str(model)], "comment": "Nested xpr", "base_folder": str(ribbed)},
+        )
+        assert imported.status_code == 200, imported.text
+        obj = imported.json()["ok"][0]
+        opened_resp = client.post("/api/creo/open", json={"object_id": obj["uuid"]})
+        assert opened_resp.status_code == 200, opened_resp.text
+        assert opened_resp.json()["method"] == "shell"
+        assert opened
+        assert opened[0][0].name == "1-inch.xpr"
+        assert opened[0][0].parent.name == "ribbed2"
+        assert opened[0][1].name == "ribbed2"
+        assert opened_resp.json()["working_directory"].endswith("ribbed2")

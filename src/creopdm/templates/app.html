@@ -151,7 +151,7 @@
               style="--depth: {{ entry.depth }}"
               title="Click to select. Double-click for history.">
             <td>
-              <a class="object-open" href="#" data-uuid="{{ obj.uuid }}" title="Click to open">{{ obj.filename }}</a>
+              <button type="button" class="object-open" data-uuid="{{ obj.uuid }}" title="Click to open">{{ obj.filename }}</button>
               {% if entry.depth == 0 and obj.relative_path and obj.relative_path != obj.filename %}
               <div class="muted small">{{ obj.relative_path }}</div>
               {% endif %}
@@ -256,7 +256,7 @@
               data-pending-saves="{{ checkin_queue.saves|length }}"{% endif %}
               {% if not selected or ((checkin_queue.new_files|length) == 0 and (checkin_queue.saves|length) == 0) %}disabled{% endif %}>Check In</button>
     </span>
-    <span class="toolbar-tip" title="Cancel your checkout on every selected file you own. Workspace copies are restored from the original. Files in your original project folder are not deleted.">
+    <span class="toolbar-tip" title="Release your checkout lock. Does not delete the workspace file or record a new version. A Creo save still on disk can be checked in afterward.">
       <button type="button" class="btn" id="undo-btn" disabled>Undo Checkout</button>
     </span>
     <span class="toolbar-tip" title="Open version history and details for the selected file.">

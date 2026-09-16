@@ -23,7 +23,7 @@ from creopdm.exceptions import PathValidationError, RepositoryError, WorkspaceCo
 from creopdm.logging_setup import get_logger
 from creopdm.models.object import EngineeringObject
 from creopdm.models.project import Project
-from creopdm.services.git_service import GitService
+from creopdm.services.git_service import GitService, GitStatus
 from creopdm.utils.classify import classify_filename
 from creopdm.utils.files import copy_file, remove_file, remove_tree, set_file_readonly, set_file_writable
 from creopdm.utils.hashing import calculate_sha256
@@ -226,11 +226,7 @@ class WorkspaceService:
         )
 
     def has_local_copy(self, project: Project, obj: EngineeringObject) -> bool:
-        try:
-            self.locate_content(project.uuid, obj)
-            return True
-        except PathValidationError:
-            return False
+        return self.workspace_file_path(project.uuid, obj).is_file()
 
     def is_modified(self, project: Project, obj: EngineeringObject) -> bool:
         try:
@@ -238,6 +234,19 @@ class WorkspaceService:
         except PathValidationError:
             return False
         return self._file_modified(path, obj)
+
+    def _git_status(self, project: Project) -> GitStatus:
+        empty = GitStatus(branch="main", dirty=False, staged=[], unstaged=[], untracked=[], raw="")
+        if self._git is None:
+            return empty
+        vault = self.vault_for(project)
+        if not self._git.is_repository(vault):
+            return empty
+        try:
+            return self._git.status(vault)
+        except Exception:
+            logger.exception("git status failed for %s", project.uuid)
+            return empty
 
     def pending_workspace_save(self, project: Project, obj: EngineeringObject) -> dict[str, str | int | bool] | None:
         """Describe a workspace copy that is newer than the last checked-in version."""
@@ -261,15 +270,59 @@ class WorkspaceService:
             "saved_at": stamp.strftime("%Y-%m-%d %H:%M"),
         }
 
+    def _pending_from_status(
+        self,
+        project: Project,
+        obj: EngineeringObject,
+        status: GitStatus,
+    ) -> dict[str, str | int | bool] | None:
+        if not status.dirty:
+            return None
+        extras = self._cad_extensions()
+        vault = self.vault_for(project)
+        rel = obj.relative_path.replace("\\", "/")
+        logical = CreoFileManager.logical_repo_path(rel, extras)
+        dirty = {item.replace("\\", "/") for item in status.staged + status.unstaged}
+        siblings = [
+            vault / item
+            for item in status.untracked
+            if CreoFileManager.logical_repo_path(item, extras) == logical
+        ]
+        siblings = [path for path in siblings if path.is_file()]
+        path: Path | None = None
+        newer_save = False
+        if siblings:
+            latest = CreoFileManager.select_latest_creo_version(siblings, extras) or siblings[0]
+            if latest.name.lower() != obj.filename.lower():
+                path = latest
+                newer_save = True
+        if path is None and rel in dirty:
+            candidate = vault / rel
+            if candidate.is_file():
+                path = candidate
+        if path is None or not path.is_file():
+            return None
+        stamp = datetime.fromtimestamp(path.stat().st_mtime)
+        return {
+            "filename": path.name,
+            "recorded_filename": obj.filename,
+            "file_size": path.stat().st_size,
+            "newer_save": newer_save or path.name.lower() != obj.filename.lower(),
+            "modified": True,
+            "next_display": f"{obj.revision}.{obj.iteration + 1}",
+            "saved_at": stamp.strftime("%Y-%m-%d %H:%M"),
+        }
+
     def project_checkin_queue(
         self,
         project: Project,
         objects: list[EngineeringObject],
     ) -> dict[str, list]:
         """Files in the workspace that would be recorded on check-in."""
+        status = self._git_status(project)
         saves: list[dict[str, str | int | bool]] = []
         for obj in objects:
-            pending = self.pending_workspace_save(project, obj)
+            pending = self._pending_from_status(project, obj, status)
             if pending is None:
                 continue
             saves.append(
@@ -279,27 +332,30 @@ class WorkspaceService:
                     "kind": "newer_save" if pending["newer_save"] else "modified",
                 }
             )
-        return {"saves": saves, "new_files": self.list_untracked(project, objects)}
+        return {"saves": saves, "new_files": self.list_untracked(project, objects, status)}
 
-    def watch_stamp(self, project: Project, objects: list[EngineeringObject]) -> dict[str, str | int]:
-        """Fingerprint of workspace files so the UI can notice Creo saves."""
-        root = self.root_for(project.uuid)
-        parts: list[str] = []
-        if root.is_dir():
-            for path in self._iter_workspace_files(root):
-                try:
-                    stat = path.stat()
-                    relative = path.resolve().relative_to(root.resolve()).as_posix()
-                    parts.append(f"{relative}:{stat.st_mtime_ns}:{stat.st_size}")
-                except OSError:
-                    continue
-        parts.sort()
-        digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:20]
-        queue = self.project_checkin_queue(project, objects)
+    def watch_stamp(self, project: Project, objects: list[EngineeringObject] | None = None) -> dict[str, str | int]:
+        """Fingerprint of git status so the UI can notice Creo saves without hashing files."""
+        status = self._git_status(project)
+        digest = hashlib.sha256(status.raw.encode("utf-8")).hexdigest()[:20]
+        extras = self._cad_extensions()
+        new_files = [
+            item
+            for item in status.untracked
+            if not CreoFileManager.is_workspace_transient(Path(item).name)
+        ]
+        if objects:
+            known = {CreoFileManager.logical_repo_path(obj.relative_path, extras) for obj in objects}
+            new_files = [
+                item for item in new_files if CreoFileManager.logical_repo_path(item, extras) not in known
+            ]
+        pending = len(status.staged) + len(status.unstaged)
+        if objects:
+            pending = sum(1 for obj in objects if self._pending_from_status(project, obj, status))
         return {
             "stamp": digest,
-            "pending_saves": len(queue["saves"]),
-            "new_files": len(queue["new_files"]),
+            "pending_saves": pending,
+            "new_files": len(new_files),
         }
 
     def materialize_many(
@@ -377,26 +433,28 @@ class WorkspaceService:
         self,
         project: Project,
         objects: list[EngineeringObject],
+        status: GitStatus | None = None,
     ) -> list[dict[str, str | int]]:
-        """Find workspace files that are not already PDM objects.
-
-        Creo saves new models into the workspace working directory. Numbered
-        copies of files already in the project are ignored.
-        """
-        root = self.root_for(project.uuid)
+        """Find workspace files that are not already PDM objects."""
         extras = self._cad_extensions()
         known = {CreoFileManager.logical_repo_path(obj.relative_path, extras) for obj in objects}
+        snapshot = status if status is not None else self._git_status(project)
+        vault = self.vault_for(project)
         grouped: dict[str, list[Path]] = {}
-        if root.is_dir():
-            for path in self._iter_workspace_files(root):
-                relative = path.resolve().relative_to(root.resolve()).as_posix()
-                grouped.setdefault(CreoFileManager.logical_repo_path(relative, extras), []).append(path)
+        for relative in snapshot.untracked:
+            name = Path(relative).name
+            if CreoFileManager.is_workspace_transient(name):
+                continue
+            path = vault / relative
+            if not path.is_file():
+                continue
+            grouped.setdefault(CreoFileManager.logical_repo_path(relative, extras), []).append(path)
         found: list[dict[str, str | int]] = []
         for key, paths in sorted(grouped.items()):
             if key in known:
                 continue
             chosen = CreoFileManager.select_latest_creo_version(paths, extras) or paths[0]
-            relative = chosen.resolve().relative_to(root.resolve()).as_posix()
+            relative = chosen.resolve().relative_to(vault.resolve()).as_posix()
             found.append(
                 {
                     "filename": Path(relative).name,

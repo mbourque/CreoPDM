@@ -28,6 +28,8 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         open_browser_on_start=settings.ui.open_browser_on_start,
         cad_extensions=ctx.config.extra_cad_extensions(),
         default_cad_extensions=list(DEFAULT_EXTRA_CAD_EXTENSIONS),
+        database_url=ctx.config.database_url(),
+        default_database_url=ctx.config.default_sqlite_url(),
     )
 
 
@@ -79,5 +81,9 @@ def update_settings(
         current.ui.open_browser_on_start = payload.open_browser_on_start
     if payload.cad_extensions is not None:
         current.cad.extra_extensions = payload.cad_extensions
+    if payload.database_url is not None:
+        text = payload.database_url.strip()
+        default = ctx.config.default_sqlite_url()
+        current.database.url = "" if not text or text == default else text
     apply_settings(ctx, current)
     return settings_to_response(ctx)

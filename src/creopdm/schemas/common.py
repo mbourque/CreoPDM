@@ -243,6 +243,8 @@ class SettingsResponse(BaseModel):
     open_browser_on_start: bool
     cad_extensions: list[str] = Field(default_factory=list)
     default_cad_extensions: list[str] = Field(default_factory=list)
+    database_url: str = ""
+    default_database_url: str = ""
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -251,6 +253,7 @@ class SettingsUpdateRequest(BaseModel):
     workspace_root: str | None = None
     open_browser_on_start: bool | None = None
     cad_extensions: list[str] | None = None
+    database_url: str | None = None
 
     @field_validator("creo_open_mode")
     @classmethod
@@ -268,3 +271,17 @@ class SettingsUpdateRequest(BaseModel):
         from creopdm.utils.classify import extra_cad_set
 
         return sorted(extra_cad_set(value))
+
+    @field_validator("database_url")
+    @classmethod
+    def valid_database_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        if not text:
+            return ""
+        if "://" not in text:
+            raise ValueError(
+                "Database URL must look like sqlite:///path or postgresql+psycopg://user@host/db"
+            )
+        return text

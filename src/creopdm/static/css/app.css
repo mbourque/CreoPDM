@@ -108,12 +108,23 @@ a.brand:hover { text-decoration: none; color: inherit; }
   color: #6a2e0c;
 }
 .settings-form { max-width: 40rem; display: flex; flex-direction: column; gap: 1.1rem; }
-.settings-form fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 0.9rem 1rem; background: white; }
-.settings-form legend { font-weight: 700; }
+.settings-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem 1.1rem 0.95rem;
+  background: white;
+  min-width: 0;
+}
+.settings-card h2 {
+  margin: 0 0 0.55rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
 .settings-form label { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.55rem 0; font-weight: 600; }
 .settings-form input[type="text"] {
   font: inherit; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 4px; font-weight: 400;
 }
+.settings-form .muted.small { overflow-wrap: anywhere; }
 .choice { flex-direction: row !important; align-items: center; gap: 0.45rem !important; font-weight: 500 !important; }
 #checkin-new-files { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.4rem 0 0.2rem; }
 #checkin-new-files label { font-weight: 500; }
@@ -151,6 +162,16 @@ a.brand:hover { text-decoration: none; color: inherit; }
   font-weight: 600;
   cursor: pointer;
 }
+button.object-open {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent-2);
+  cursor: pointer;
+}
+button.object-open:hover { text-decoration: underline; }
 .detail-head .object-open { font-size: inherit; color: inherit; }
 .grid tr.is-latest { background: #eef6f1; }
 .grid tr.is-pending { background: #fff6e8; }

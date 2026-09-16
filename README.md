@@ -36,7 +36,7 @@ pip install -e ".[dev]"
 python -m creopdm
 ```
 
-The application binds to `127.0.0.1`, chooses a free port, and opens a browser.
+The application binds to `0.0.0.0`, chooses a free port, and opens a browser on this PC. The console prints a `Phone:` URL you can open on another device on the same Wi-Fi. Allow CreoPDM in Windows Firewall if prompted.
 
 ```
 CreoPDM

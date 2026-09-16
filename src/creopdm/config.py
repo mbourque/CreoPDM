@@ -18,13 +18,13 @@ from creopdm.utils.classify import extra_cad_set, parse_extension_text
 
 
 class ServerConfig(BaseModel):
-    host: str = "127.0.0.1"
+    host: str = "0.0.0.0"
     port: int = 0
 
     @field_validator("host")
     @classmethod
-    def default_localhost_only(cls, value: str) -> str:
-        return value.strip() or "127.0.0.1"
+    def default_all_interfaces(cls, value: str) -> str:
+        return value.strip() or "0.0.0.0"
 
 
 class GitConfig(BaseModel):
@@ -44,6 +44,22 @@ class CreoConfig(BaseModel):
         if key not in {"executable", "association"}:
             return "executable"
         return key
+
+
+class DatabaseConfig(BaseModel):
+    url: str = ""
+
+    @field_validator("url")
+    @classmethod
+    def empty_or_sqlalchemy_url(cls, value: str) -> str:
+        text = (value or "").strip()
+        if not text:
+            return ""
+        if "://" not in text:
+            raise ValueError(
+                "Database URL must look like sqlite:///path or postgresql+psycopg://user@host/db"
+            )
+        return text
 
 
 class WorkspaceConfig(BaseModel):
@@ -72,6 +88,7 @@ class CadConfig(BaseModel):
 
 class AppSettings(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     git: GitConfig = Field(default_factory=GitConfig)
     creo: CreoConfig = Field(default_factory=CreoConfig)
     workspace: WorkspaceConfig = Field(default_factory=WorkspaceConfig)
@@ -133,8 +150,16 @@ class ConfigManager:
             settings = AppSettings.model_validate(raw)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             raise ConfigurationError(f"Unable to read settings: {exc}") from exc
+        dirty = False
         if extra_cad_set(settings.cad.extra_extensions) in PREVIOUS_DEFAULT_EXTRA_CAD_SETS:
             settings.cad.extra_extensions = list(DEFAULT_EXTRA_CAD_EXTENSIONS)
+            dirty = True
+        if settings.server.host in {"127.0.0.1", "localhost"}:
+            settings.server.host = "0.0.0.0"
+            dirty = True
+        if "database" not in raw:
+            dirty = True
+        if dirty:
             self.save(settings)
         self._settings = settings
         return settings
@@ -154,9 +179,18 @@ class ConfigManager:
             return self.load()
         return self._settings
 
-    def database_url(self) -> str:
+    def default_sqlite_url(self) -> str:
         path = self.database_path.resolve().as_posix()
         return f"sqlite:///{path}"
+
+    def database_url(self) -> str:
+        env = (os.environ.get("CREOPDM_DATABASE_URL") or "").strip()
+        if env:
+            return env
+        configured = (self.settings.database.url or "").strip()
+        if configured:
+            return configured
+        return self.default_sqlite_url()
 
     def workspace_root(self) -> Path:
         configured = (self.settings.workspace.root or "").strip()

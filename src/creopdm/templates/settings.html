@@ -11,8 +11,8 @@
   <p class="muted">These options apply to this workstation. They are not stored in project Git history.</p>
 
   <form id="settings-form" class="settings-form">
-    <fieldset>
-      <legend>Open Creo models with</legend>
+    <section class="settings-card">
+      <h2>Open Creo models with</h2>
       <label class="choice">
         <input type="radio" name="creo_open_mode" value="executable" {% if settings.creo_open_mode != 'association' %}checked{% endif %}>
         Specific application
@@ -25,25 +25,34 @@
         Windows file association
       </label>
       <p class="muted small">Word, Excel, PDF, text, and other non-CAD files always open with their Windows association.</p>
-    </fieldset>
+    </section>
 
-    <fieldset>
-      <legend>CAD file types</legend>
+    <section class="settings-card">
+      <h2>CAD file types</h2>
       <p class="muted small">Creo models (<code>.prt</code>, <code>.asm</code>, <code>.drw</code>, <code>.mfg</code>) stay Creo types. Numbered saves such as <code>shaft.prt.3</code>, <code>setup.inf.1</code>, and <code>format.frm.2</code> count as those extensions. Add other types that should be treated as CAD. Workspace copies all go in one folder; the original project folder is not reorganized.</p>
       <label>Extra CAD extensions
         <textarea name="cad_extensions" rows="4" placeholder=".dxf&#10;.ncl&#10;.tph">{{ settings.cad_extensions | join('\n') }}</textarea>
       </label>
       <p class="muted small">One per line, with or without the dot. Default: {{ settings.default_cad_extensions | join(', ') }}</p>
-    </fieldset>
+    </section>
 
-    <fieldset>
-      <legend>Workspace</legend>
+    <section class="settings-card">
+      <h2>Workspace</h2>
       <p class="muted small">Checked-out and downloaded files are copied here, one folder per project, with every file in that folder. The default is shown; choose another folder if you want a different workspace.</p>
       <label>Workspace folder
         <input name="workspace_root" type="text" value="{{ settings.workspace_root }}" placeholder="{{ settings.default_workspace_root }}">
       </label>
       <p class="muted small">Default: {{ settings.default_workspace_root }}</p>
-    </fieldset>
+    </section>
+
+    <section class="settings-card">
+      <h2>Database</h2>
+      <p class="muted small">Leave blank to use the local SQLite file. A Postgres URL is for a later Linux/server move and takes effect the next time CreoPDM starts.</p>
+      <label>Database URL
+        <input name="database_url" type="text" value="{{ settings.database_url }}" placeholder="{{ settings.default_database_url }}" autocomplete="off">
+      </label>
+      <p class="muted small">Default SQLite: {{ settings.default_database_url }}</p>
+    </section>
 
     <p class="error" id="settings-error" hidden></p>
     <p class="ok" id="settings-ok" hidden>Saved.</p>

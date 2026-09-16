@@ -20,7 +20,7 @@
 
   <header class="detail-head">
     <div>
-      <h1><a class="object-open" href="#" data-uuid="{{ object.uuid }}" title="Click to open">{{ object.filename }}</a></h1>
+      <h1><button type="button" class="object-open" data-uuid="{{ object.uuid }}" title="Click to open">{{ object.filename }}</button></h1>
       <p class="muted">{{ object.object_type.replace('_', ' ').title() }} · {{ object.relative_path }}</p>
     </div>
     <div class="detail-meta">
@@ -36,7 +36,7 @@
       <button type="button" class="btn" id="open-workspace-btn" data-project="{{ project.uuid }}">Open Workspace</button>
     </span>
     <button type="button" class="btn" id="checkout-btn" data-uuid="{{ object.uuid }}" {% if not object.can_checkout %}disabled{% endif %}>Checkout</button>
-    <button type="button" class="btn" id="checkin-btn" data-uuid="{{ object.uuid }}" {% if not object.can_checkin %}disabled{% endif %}>Check In</button>
+    <button type="button" class="btn" id="checkin-btn" data-uuid="{{ object.uuid }}" data-project="{{ project.uuid }}" {% if not object.can_checkin %}disabled{% endif %}>Check In</button>
     <button type="button" class="btn" id="undo-btn" data-uuid="{{ object.uuid }}" {% if not object.owned_by_me %}disabled{% endif %}>Undo Checkout</button>
     <span class="toolbar-tip" title="Delete CreoPDM working copies of this file. The original in your project folder is not deleted. If you have it checked out, that checkout is cancelled.">
       <button type="button" class="btn" id="purge-workspace-btn" data-uuid="{{ object.uuid }}">Remove from Workspace</button>
