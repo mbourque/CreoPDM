@@ -33,6 +33,7 @@ from creopdm.utils.files import (
     remove_tree,
     set_file_readonly,
     set_file_writable,
+    set_hidden,
 )
 from creopdm.utils.hashing import calculate_sha256
 from creopdm.utils.identity import UserIdentity
@@ -61,19 +62,45 @@ class WorkspaceService:
     def sync_gitignore(self, vault: Path | None = None) -> None:
         patterns = self._ignore_patterns()
         if vault is not None:
-            sync_gitignore(vault / ".gitignore", patterns)
+            self._sync_vault_gitignore(vault, patterns)
             return
         root = self._config.workspace_root()
         if not root.is_dir():
             return
         for child in root.iterdir():
             if child.is_dir() and (child / ".git").exists():
-                sync_gitignore(child / ".gitignore", patterns)
+                self._sync_vault_gitignore(child, patterns)
+
+    @staticmethod
+    def _sync_vault_gitignore(vault: Path, patterns: list[str]) -> None:
+        path = vault / ".gitignore"
+        set_hidden(path, False)
+        sync_gitignore(path, patterns)
+        WorkspaceService._hide_bookkeeping(vault)
+
+    @staticmethod
+    def _hide_bookkeeping(vault: Path) -> None:
+        set_hidden(vault / PROJECT_MARKER_DIR)
+        set_hidden(vault / ".gitignore")
 
     def root_for(self, project_uuid: str) -> Path:
         path = self._config.workspace_for_project(project_uuid)
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def explorer_directory(self, project_uuid: str, folder: str = "") -> Path:
+        """Workspace folder currently shown in Files, or the project root."""
+        from creopdm.utils.folders import normalize_folder_query
+
+        root = self.root_for(project_uuid)
+        current = normalize_folder_query(folder)
+        if not current:
+            return root
+        try:
+            target = ensure_within(root, root / Path(current))
+        except PathValidationError:
+            return root
+        return target if target.is_dir() else root
 
     def vault_for(self, project: Project) -> Path:
         return self.root_for(project.uuid)
@@ -100,11 +127,13 @@ class WorkspaceService:
         location = self.leftover_source(project)
         git = self._git
         if git is None:
+            self._hide_bookkeeping(vault)
             return vault
         if git.is_repository(vault):
             if location is not None and git.is_repository(location):
                 self.strip_location_git(location)
             self.sync_gitignore(vault)
+            self._hide_bookkeeping(vault)
             return vault
         if location is not None and git.is_repository(location):
             logger.info("Moving Git history from %s into workspace %s", location, vault)
@@ -116,9 +145,11 @@ class WorkspaceService:
                 )
             self.strip_location_git(location)
             self.sync_gitignore(vault)
+            self._hide_bookkeeping(vault)
             return vault
         git.init_repository(vault, DEFAULT_BRANCH)
         self.sync_gitignore(vault)
+        self._hide_bookkeeping(vault)
         return vault
 
     def init_vault(self, project_uuid: str, name: str, user: UserIdentity) -> Path:
@@ -779,3 +810,4 @@ class WorkspaceService:
         schema = marker / SCHEMA_VERSION_NAME
         if not schema.is_file():
             schema.write_text(f"{APP_SCHEMA_VERSION}\n", encoding="utf-8")
+        self._hide_bookkeeping(vault)

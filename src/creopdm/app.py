@@ -91,6 +91,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         logger.info("%s is running", APP_NAME)
+        ctx.workspaces.sync_gitignore()
         try:
             yield
         finally:

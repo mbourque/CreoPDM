@@ -17,7 +17,7 @@ from creopdm.api.serializers import project_to_response, revision_display
 from creopdm.constants import APP_NAME, APP_VERSION, ObjectType
 from creopdm.context import AppContext
 from creopdm.exceptions import ProjectNotFoundError
-from creopdm.utils.folders import folder_crumbs, folder_view_counts, normalize_folder_query
+from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
@@ -180,6 +180,7 @@ def object_detail(
             "is_assembly": is_assembly,
             "is_creo": is_creo,
             "workspace_path": str(ctx.config.workspace_for_project(project.uuid)),
+            "workspace_folder": folder_of(obj.relative_path),
         },
     )
 

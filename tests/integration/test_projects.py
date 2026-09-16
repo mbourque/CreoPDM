@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import shutil
 
 from sqlalchemy import select
@@ -43,6 +44,11 @@ def test_create_list_and_get_project(client, repo_parent, data_dir):
     vault = data_dir / "workspaces" / payload["uuid"]
     assert (vault / ".git").exists()
     assert (vault / ".creopdm" / "project.json").exists()
+    if os.name == "nt":
+        from creopdm.utils.files import is_hidden
+
+        assert is_hidden(vault / ".creopdm")
+        assert is_hidden(vault / ".gitignore")
     ignore = (vault / ".gitignore").read_text(encoding="utf-8")
     assert "*.tst" in ignore
     assert "trail.txt*" in ignore
@@ -61,6 +67,23 @@ def test_create_list_and_get_project(client, repo_parent, data_dir):
     fetched = client.get(f"/api/projects/{payload['uuid']}")
     assert fetched.status_code == 200
     assert fetched.json()["repository_path"] == ""
+
+
+@requires_git
+def test_sync_gitignore_hides_existing_bookkeeping(client, app, repo_parent, data_dir):
+    payload, _ = _create_project(client, repo_parent, name="Hide Bookkeeping")
+    vault = data_dir / "workspaces" / payload["uuid"]
+    from creopdm.utils.files import is_hidden, set_hidden
+
+    set_hidden(vault / ".gitignore", False)
+    set_hidden(vault / ".creopdm", False)
+    if os.name == "nt":
+        assert not is_hidden(vault / ".gitignore")
+        assert not is_hidden(vault / ".creopdm")
+    app.state.ctx.workspaces.sync_gitignore()
+    if os.name == "nt":
+        assert is_hidden(vault / ".creopdm")
+        assert is_hidden(vault / ".gitignore")
 
 
 @requires_git
@@ -146,6 +169,52 @@ def test_open_workspace_launches_explorer(client, repo_parent, monkeypatch):
     assert len(opened) == 1
     assert opened[0].is_dir()
     assert payload["uuid"] in str(opened[0])
+
+
+@requires_git
+def test_open_workspace_opens_current_files_folder(client, repo_parent, data_dir, monkeypatch):
+    opened: list[Path] = []
+    monkeypatch.setattr(
+        "creopdm.api.projects.open_windows_folder",
+        lambda path: opened.append(path),
+    )
+    payload, location = _create_project(client, repo_parent)
+    picked = location / "html_tutorials"
+    nested = picked / "css"
+    nested.mkdir(parents=True)
+    (picked / "index.html").write_bytes(b"home")
+    (nested / "site.css").write_bytes(b"body{}")
+    added = client.post(
+        f"/api/projects/{payload['uuid']}/objects/from-disk",
+        json={
+            "paths": [str(picked / "index.html"), str(nested / "site.css")],
+            "comment": "Tutorials",
+            "base_folder": str(picked),
+        },
+    )
+    assert added.status_code == 200, added.text
+    workspace = data_dir / "workspaces" / payload["uuid"]
+    nested_open = client.post(
+        f"/api/projects/{payload['uuid']}/workspace/open",
+        params={"folder": "html_tutorials/css"},
+    )
+    assert nested_open.status_code == 204, nested_open.text
+    assert opened[-1].resolve() == (workspace / "html_tutorials" / "css").resolve()
+    root_open = client.post(f"/api/projects/{payload['uuid']}/workspace/open")
+    assert root_open.status_code == 204, root_open.text
+    assert opened[-1].resolve() == workspace.resolve()
+    missing = client.post(
+        f"/api/projects/{payload['uuid']}/workspace/open",
+        params={"folder": "html_tutorials/missing"},
+    )
+    assert missing.status_code == 204, missing.text
+    assert opened[-1].resolve() == workspace.resolve()
+    traversal = client.post(
+        f"/api/projects/{payload['uuid']}/workspace/open",
+        params={"folder": "../secret"},
+    )
+    assert traversal.status_code == 204, traversal.text
+    assert opened[-1].resolve() == workspace.resolve()
 
 
 @requires_git

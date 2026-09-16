@@ -791,7 +791,14 @@
   openWorkspaceBtn?.addEventListener("click", async () => {
     const projectId = openWorkspaceBtn.dataset.project;
     if (!projectId) return;
-    const result = await postAction(`/api/projects/${projectId}/workspace/open`, undefined, "POST", "Opening workspace…");
+    const folder = openWorkspaceBtn.dataset.folder || currentFolder() || "";
+    const query = folder ? `?folder=${encodeURIComponent(folder)}` : "";
+    const result = await postAction(
+      `/api/projects/${projectId}/workspace/open${query}`,
+      undefined,
+      "POST",
+      "Opening workspace…"
+    );
     if (result) showOk("Opened the workspace folder.");
   });
 

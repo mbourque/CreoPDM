@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object, present_objects
@@ -258,17 +258,18 @@ def choose_workspace_folder(
 @router.post("/api/projects/{project_id}/workspace/open", status_code=204)
 def open_workspace_folder(
     project_id: str,
+    folder: str | None = Query(default=None),
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> Response:
     project = ctx.projects.get_project(db, project_id)
-    folder = ctx.workspaces.root_for(project.uuid)
+    opened = ctx.workspaces.explorer_directory(project.uuid, folder or "")
     try:
-        open_windows_folder(folder)
+        open_windows_folder(opened)
     except OSError as exc:
         raise PathValidationError(
             "Could not open the workspace folder in Explorer.",
-            details={"path": str(folder)},
+            details={"path": str(opened)},
         ) from exc
     return Response(status_code=204)
 

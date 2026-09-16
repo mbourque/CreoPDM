@@ -32,8 +32,8 @@
 
   <div class="toolbar-actions detail-actions">
     <button type="button" class="btn" id="open-btn" data-uuid="{{ object.uuid }}">Open</button>
-    <span class="toolbar-tip" title="Open the CreoPDM workspace folder for this project in File Explorer.">
-      <button type="button" class="btn" id="open-workspace-btn" data-project="{{ project.uuid }}">Open Workspace</button>
+    <span class="toolbar-tip" title="Open this file's folder in Explorer.">
+      <button type="button" class="btn" id="open-workspace-btn" data-project="{{ project.uuid }}" data-folder="{{ workspace_folder }}">Open Workspace</button>
     </span>
     <button type="button" class="btn" id="checkout-btn" data-uuid="{{ object.uuid }}" {% if not object.can_checkout %}disabled{% endif %}>Checkout</button>
     <button type="button" class="btn" id="checkin-btn" data-uuid="{{ object.uuid }}" data-project="{{ project.uuid }}" {% if not object.can_checkin %}disabled{% endif %}>Check In</button>

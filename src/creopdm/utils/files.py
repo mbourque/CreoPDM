@@ -52,6 +52,52 @@ def is_writable(path: Path) -> bool:
     return path.exists() and os.access(path, os.W_OK)
 
 
+_FILE_ATTRIBUTE_HIDDEN = 0x2
+_INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF
+
+
+def is_hidden(path: Path) -> bool:
+    """True when Windows marks the path hidden. Dot names count on other systems."""
+    if not path.exists():
+        return False
+    if os.name != "nt":
+        return path.name.startswith(".")
+    attrs = getattr(path.stat(), "st_file_attributes", 0)
+    return bool(attrs & _FILE_ATTRIBUTE_HIDDEN)
+
+
+def set_hidden(path: Path, hidden: bool = True) -> None:
+    """Best-effort Windows hidden attribute. No-op when the path is missing or not Windows."""
+    if os.name != "nt" or not path.exists():
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        get_attrs = ctypes.windll.kernel32.GetFileAttributesW
+        set_attrs = ctypes.windll.kernel32.SetFileAttributesW
+        get_attrs.argtypes = [wintypes.LPCWSTR]
+        get_attrs.restype = wintypes.DWORD
+        set_attrs.argtypes = [wintypes.LPCWSTR, wintypes.DWORD]
+        set_attrs.restype = wintypes.BOOL
+        target = str(path.resolve())
+        attrs = get_attrs(target)
+        if attrs == _INVALID_FILE_ATTRIBUTES:
+            return
+        if hidden:
+            if attrs & _FILE_ATTRIBUTE_HIDDEN:
+                return
+            next_attrs = attrs | _FILE_ATTRIBUTE_HIDDEN
+        else:
+            if not (attrs & _FILE_ATTRIBUTE_HIDDEN):
+                return
+            next_attrs = attrs & ~_FILE_ATTRIBUTE_HIDDEN
+        if not set_attrs(target, next_attrs):
+            logger.warning("Could not change hidden attribute on %s", path)
+    except Exception:
+        logger.warning("Could not change hidden attribute on %s", path)
+
+
 def remove_file(path: Path) -> bool:
     """Delete a file. Returns True if it was present."""
     if not path.is_file():

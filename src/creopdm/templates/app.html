@@ -253,8 +253,8 @@
     <span class="toolbar-tip" title="Copy selected files into the CreoPDM workspace if they are not already there. Does not check them out.">
       <button type="button" class="btn" id="workspace-btn" disabled>Copy to Workspace</button>
     </span>
-    <span class="toolbar-tip" title="Open the CreoPDM workspace folder for this project in File Explorer.">
-      <button type="button" class="btn" id="open-workspace-btn" {% if selected %}data-project="{{ selected.uuid }}"{% else %}disabled{% endif %}>Open Workspace</button>
+    <span class="toolbar-tip" title="Open the current Files folder in Explorer. Opens the workspace root when you are at the top of the project.">
+      <button type="button" class="btn" id="open-workspace-btn" {% if selected %}data-project="{{ selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}>Open Workspace</button>
     </span>
     <span class="toolbar-tip" title="Open the selected file in Creo or its Windows associated program.">
       <button type="button" class="btn" id="open-btn" disabled>Open</button>

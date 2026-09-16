@@ -72,3 +72,22 @@ def test_prune_empty_dirs_stops_when_sibling_file_remains(tmp_path: Path):
     prune_empty_dirs(nested, tmp_path)
     assert not nested.exists()
     assert (folder / "index.html").is_file()
+
+
+def test_set_hidden_roundtrip(tmp_path: Path):
+    from creopdm.utils.files import is_hidden, set_hidden
+
+    folder = tmp_path / ".creopdm"
+    folder.mkdir()
+    ignore = tmp_path / ".gitignore"
+    ignore.write_text("*.tst\n", encoding="utf-8")
+    set_hidden(folder)
+    set_hidden(ignore)
+    if os.name == "nt":
+        assert is_hidden(folder)
+        assert is_hidden(ignore)
+        set_hidden(ignore, False)
+        assert not is_hidden(ignore)
+    else:
+        assert is_hidden(folder)
+        assert is_hidden(ignore)
