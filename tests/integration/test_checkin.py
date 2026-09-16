@@ -435,3 +435,44 @@ def test_project_checkin_queue_records_pending_save_and_new_file(client, repo_pa
     listing = {item["filename"] for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
     assert "bushing.prt" in listing
     assert (workspace / "shaft.prt.4").read_bytes() == b"save-4"
+
+
+_CREO_UGC_HEADER = (
+    "#UGC:2 PART 1 1 1 1 1 1 1 1 00000000 \\\n"
+    "#-END_OF_UGC_HEADER\n"
+    "#Creo  TM  13  (c) 2026 by PTC Inc.  All Rights Reserved. 13.4.1.0\n"
+    "#UGC_TOC 2 32 81 17#############################################################"
+).encode("ascii")
+
+_CREO_UGC_HEADER_NEXT = (
+    "#UGC:2 PART 1 1 1 1 1 1 1 1 00000000 \\\n"
+    "#-END_OF_UGC_HEADER\n"
+    "#Creo  TM  13  (c) 2026 by PTC Inc.  All Rights Reserved. 13.4.2.0\n"
+    "#UGC_TOC 2 32 81 17#############################################################"
+).encode("ascii")
+
+
+@requires_git
+def test_checkin_records_creo_release_from_workspace_file(client, repo_parent, data_dir):
+    project = client.post("/api/projects", json={"name": "Robot Arm"}).json()
+    created = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("shaft.prt.1", _CREO_UGC_HEADER, "application/octet-stream")},
+        data={"comment": "Initial model"},
+    )
+    assert created.status_code == 201, created.text
+    obj = created.json()
+    assert obj["creo_release"] == "13.4.1.0"
+    assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
+    workspace = data_dir / "workspaces" / project["uuid"] / "shaft.prt.1"
+    workspace.write_bytes(_CREO_UGC_HEADER_NEXT)
+    checked = client.post(
+        f"/api/objects/{obj['uuid']}/checkin",
+        json={"comment": "Saved in a newer Creo build"},
+    )
+    assert checked.status_code == 200, checked.text
+    payload = checked.json()
+    assert payload["creo_release"] == "13.4.2.0"
+    assert payload["current_version"]["creo_release"] == "13.4.2.0"
+    history = client.get(f"/api/objects/{obj['uuid']}/history").json()
+    assert [item["creo_release"] for item in history] == ["13.4.2.0", "13.4.1.0"]

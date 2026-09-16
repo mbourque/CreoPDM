@@ -63,9 +63,9 @@
       <li><button type="button" class="metric" data-filter="checked_out" data-mode="off" title="Select checked out files. Click again to filter. Click a third time to clear."><strong>{{ status.checked_out }}</strong> Checked out</button></li>
       {% endif %}
     </ul>
-    <p class="muted small" id="selection-summary">Click a count to select a group. Click a row to select it; Shift-click a range; Ctrl-click to add or remove. Click a filename to open it. Double-click a row for history. Click or double-click a folder to open it.</p>
+    <p class="muted small" id="selection-summary">Click a count to select a group. Click a row to select it; Shift-click a range; Ctrl-click to add or remove. Click a filename to open it. Click a folder name to open the folder. Double-click a file for history.</p>
     {% elif status %}
-    <p class="muted small" id="selection-summary">Click or double-click a folder to open it.</p>
+    <p class="muted small" id="selection-summary">Click a row to select a folder and the files in it. Click the folder name to open it.</p>
     {% endif %}
 
     <div class="tabs" role="tablist">
@@ -98,6 +98,7 @@
             <th data-sort="rev" aria-sort="none" title="Sort by revision. Click again to reverse.">Rev</th>
             <th data-sort="state" aria-sort="none" title="Sort by state. Click again to reverse.">State</th>
             <th data-sort="type" aria-sort="none" title="Sort by type. Click again to reverse.">Type</th>
+            <th data-sort="creo" aria-sort="none" title="Sort by Creo release. Click again to reverse.">Creo</th>
             <th data-sort="modified" aria-sort="none" title="Sort by modified date. Click again to reverse.">Modified</th>
             <th data-sort="checkout" aria-sort="none" title="Sort by checkout. Click again to reverse.">Checkout</th>
           </tr>
@@ -107,25 +108,35 @@
           {% if entry.kind == "folder" %}
           <tr class="folder-row"
               data-folder="{{ entry.path }}"
+              data-object-ids="{{ entry.object_ids|join(',') }}"
+              data-can-checkout="{{ '1' if entry.object_ids else '0' }}"
+              data-can-checkin="0"
+              data-owned="0"
+              data-checked-out="0"
+              data-in-workspace="mixed"
               data-depth="{{ entry.depth }}"
               data-sort-name="{{ entry.path }}/"
               data-sort-rev="{{ entry.path }}/"
               data-sort-state="{{ entry.path }}/"
               data-sort-type="{{ entry.path }}/"
+              data-sort-creo="{{ entry.path }}/"
               data-sort-modified="{% if entry.modified %}{{ entry.modified.strftime('%Y%m%d%H%M%S') }}{% endif %}"
               data-sort-checkout="{{ entry.path }}/"
               style="--depth: {{ entry.depth }}"
-              title="Click or double-click to open this folder.">
+              title="Click to select this folder and the files in it. Click the folder name to open it.">
             <td title="{{ entry.name }}">
-              <span class="folder-label">
-                <svg class="folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.2A2.2 2.2 0 0 1 5.7 5h4.1c.4 0 .8.2 1 .5l1.3 1.4c.3.3.6.5 1 .5h5.2A2.2 2.2 0 0 1 20.5 9.6v8.2a2.2 2.2 0 0 1-2.2 2.2H5.7A2.2 2.2 0 0 1 3.5 17.8V7.2Z"/></svg>
-                {{ entry.name }}
-              </span>
+              <button type="button" class="folder-open" data-folder="{{ entry.path }}" title="Open {{ entry.name }}">
+                <span class="folder-label">
+                  <svg class="folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.2A2.2 2.2 0 0 1 5.7 5h4.1c.4 0 .8.2 1 .5l1.3 1.4c.3.3.6.5 1 .5h5.2A2.2 2.2 0 0 1 20.5 9.6v8.2a2.2 2.2 0 0 1-2.2 2.2H5.7A2.2 2.2 0 0 1 3.5 17.8V7.2Z"/></svg>
+                  {{ entry.name }}
+                </span>
+              </button>
               <span class="muted small">{{ entry.count }} file{% if entry.count != 1 %}s{% endif %}</span>
             </td>
             <td></td>
             <td></td>
             <td title="Folder">Folder</td>
+            <td></td>
             <td title="{% if entry.modified %}{{ entry.modified.strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}">{% if entry.modified %}{{ entry.modified.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
             <td></td>
           </tr>
@@ -143,6 +154,7 @@
               data-sort-rev="{{ entry.folder }}/{{ obj.revision }}-{{ '%06d'|format(obj.iteration) }}"
               data-sort-state="{{ entry.folder }}/{{ obj.lifecycle_state }}"
               data-sort-type="{{ entry.folder }}/{{ obj.type_label }}"
+              data-sort-creo="{{ entry.folder }}/{{ obj.creo_release or '' }}"
               data-sort-modified="{% if obj.updated_at %}{{ obj.updated_at.strftime('%Y%m%d%H%M%S') }}{% endif %}"
               data-sort-checkout="{{ entry.folder }}/{{ obj.checkout_status }}"
               data-detail="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}#history"
@@ -157,6 +169,7 @@
             <td title="{{ obj.display_revision }}">{{ obj.display_revision }}</td>
             <td title="{{ obj.lifecycle_state.replace('_', ' ').title() }}"><span class="state" data-state="{{ obj.lifecycle_state }}">{{ obj.lifecycle_state.replace('_', ' ').title() }}</span></td>
             <td title="{{ obj.type_label }}">{{ obj.type_label }}</td>
+            <td title="{{ obj.creo_release or '' }}">{{ obj.creo_release or "" }}</td>
             <td title="{% if obj.updated_at %}{{ obj.updated_at.strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}">{% if obj.updated_at %}{{ obj.updated_at.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
             <td title="{{ obj.checkout_status }}">
               <span class="checkout-state" data-state="{% if obj.owned_by_me %}mine{% elif obj.checkout_user %}other{% else %}available{% endif %}">
@@ -167,7 +180,7 @@
           {% endif %}
           {% else %}
           <tr class="empty-row">
-            <td colspan="6">{% if current_folder %}This folder is empty.{% else %}No files in this project. Add a Creo model, PDF, or document to get started.{% endif %}</td>
+            <td colspan="7">{% if current_folder %}This folder is empty.{% else %}No files in this project. Add a Creo model, PDF, or document to get started.{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>

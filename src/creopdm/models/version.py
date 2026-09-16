@@ -20,6 +20,7 @@ class ObjectVersion(Base):
     iteration: Mapped[int] = mapped_column(Integer, nullable=False)
     filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     relative_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    creo_release: Mapped[str | None] = mapped_column(String(64), nullable=True)
     git_commit_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, default=0)

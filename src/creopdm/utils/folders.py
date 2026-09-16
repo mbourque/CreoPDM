@@ -98,7 +98,10 @@ def folder_index(rows: list[tuple[str, Any]], current: str = "") -> tuple[list[d
     prefix = f"{current}/" if current else ""
     folders: dict[str, dict[str, Any]] = {}
     files: list[str] = []
-    for relative, updated in rows:
+    for row in rows:
+        relative = row[0] if row else ""
+        updated = row[1] if len(row) > 1 else None
+        uuid = str(row[2]) if len(row) > 2 and row[2] else ""
         rel = str(relative or "").replace("\\", "/")
         if prefix:
             if not rel.startswith(prefix):
@@ -111,8 +114,10 @@ def folder_index(rows: list[tuple[str, Any]], current: str = "") -> tuple[list[d
         slash = rest.find("/")
         if slash >= 0:
             name = rest[:slash]
-            info = folders.setdefault(name, {"count": 0, "modified": None})
+            info = folders.setdefault(name, {"count": 0, "modified": None, "object_ids": []})
             info["count"] += 1
+            if uuid:
+                info["object_ids"].append(uuid)
             if updated is not None and (info["modified"] is None or updated > info["modified"]):
                 info["modified"] = updated
         else:
@@ -129,6 +134,7 @@ def folder_index(rows: list[tuple[str, Any]], current: str = "") -> tuple[list[d
                 "depth": 0,
                 "count": info["count"],
                 "modified": info["modified"],
+                "object_ids": info["object_ids"],
             }
         )
     return entries, files

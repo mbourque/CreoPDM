@@ -14,6 +14,14 @@ from creopdm.utils.identity import UserIdentity
 
 logger = get_logger("git")
 
+# Windows CreateProcess command lines cap near 32KB. Keep path batches small.
+_PATHSPEC_CHUNK = 64
+
+
+def _chunks(items: list[str], size: int = _PATHSPEC_CHUNK):
+    for index in range(0, len(items), size):
+        yield items[index : index + size]
+
 
 def _porcelain_path(raw: str) -> str:
     """Turn a git status --porcelain path into a repo-relative posix path."""
@@ -193,7 +201,9 @@ class GitService:
     def stage_files(self, path: Path, files: list[str]) -> None:
         if not files:
             return
-        self._run(["add", "--", *files], cwd=path)
+        logger.info("git add (%s files)", len(files))
+        for chunk in _chunks(files):
+            self._run(["add", "--", *chunk], cwd=path, quiet=True)
 
     def remove_files(self, path: Path, files: list[str], *, keep_working_copy: bool = False) -> None:
         if not files:
@@ -201,7 +211,9 @@ class GitService:
         args = ["rm", "-f", "--ignore-unmatch"]
         if keep_working_copy:
             args.append("--cached")
-        self._run([*args, "--", *files], cwd=path)
+        logger.info("git rm %s(%s files)", "--cached " if keep_working_copy else "", len(files))
+        for chunk in _chunks(files):
+            self._run([*args, "--", *chunk], cwd=path, quiet=True)
 
     def commit(
         self,

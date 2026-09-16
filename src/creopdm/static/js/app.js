@@ -129,18 +129,24 @@
     });
     const q = searchInput?.value.trim().toLowerCase() || "";
     rows().forEach((row) => {
+      if (row.classList.contains("folder-row")) {
+        const matchesSearch = !q || row.textContent.toLowerCase().includes(q);
+        row.hidden = Boolean(q) && !matchesSearch;
+        return;
+      }
       const matchesSearch = !q || row.textContent.toLowerCase().includes(q);
       const matchesView = !viewBtns.length || viewBtns.some((btn) => rowMatchesMetric(row, btn.dataset.filter));
       row.hidden = !(matchesSearch && matchesView);
-    });
-    document.querySelectorAll("#object-table .folder-row").forEach((folder) => {
-      folder.hidden = Boolean(q) && !folder.textContent.toLowerCase().includes(q);
     });
   }
 
   function applyMetricSelection() {
     const active = metricButtons().filter((btn) => metricMode(btn) !== "off");
     rows().forEach((row) => {
+      if (row.classList.contains("folder-row")) {
+        if (!active.length) row.classList.remove("is-selected");
+        return;
+      }
       if (!active.length) {
         row.classList.remove("is-selected");
         return;
@@ -386,7 +392,7 @@
   });
 
   const searchInput = $("#search-input");
-  const rows = () => [...document.querySelectorAll(".object-row")];
+  const rows = () => [...document.querySelectorAll(".object-row, .folder-row")];
   const isListPage = Boolean(document.querySelector("#object-table"));
   searchInput?.addEventListener("input", () => {
     applyMetricVisibility();
@@ -403,6 +409,13 @@
   const purgeBtn = $("#purge-workspace-btn");
   const removeBtn = $("#remove-project-btn");
 
+  function rowObjectIds(row) {
+    if (row.classList.contains("folder-row")) {
+      return (row.dataset.objectIds || "").split(",").map((item) => item.trim()).filter(Boolean);
+    }
+    return row.dataset.uuid ? [row.dataset.uuid] : [];
+  }
+
   function selectedRows() {
     const picked = rows().filter((row) => row.classList.contains("is-selected") && !row.hidden);
     if (picked.length) return picked;
@@ -411,7 +424,7 @@
   }
 
   function selectedIds() {
-    const ids = selectedRows().map((row) => row.dataset.uuid).filter(Boolean);
+    const ids = selectedRows().flatMap(rowObjectIds);
     if (ids.length) return ids;
     const fallback = checkoutBtn?.dataset.uuid || openBtn?.dataset.uuid;
     return fallback ? [fallback] : [];
@@ -420,7 +433,7 @@
   function syncToolbar() {
     if (!isListPage) return;
     const selected = selectedRows();
-    const ids = selected.map((row) => row.dataset.uuid).filter(Boolean);
+    const ids = selected.flatMap(rowObjectIds);
     if (openBtn) openBtn.disabled = ids.length !== 1;
     if (historyBtn) historyBtn.disabled = ids.length !== 1;
     if (checkoutBtn) checkoutBtn.disabled = !selected.some((row) => row.dataset.canCheckout === "1");
@@ -429,14 +442,14 @@
     if (checkinBtn) checkinBtn.disabled = checkinable.length === 0 && queued === 0;
     if (undoBtn) undoBtn.disabled = !selected.some((row) => row.dataset.owned === "1");
     if (workspaceBtn) workspaceBtn.disabled = !selected.some((row) => row.dataset.inWorkspace !== "1");
-    if (purgeBtn) purgeBtn.disabled = !selected.some((row) => row.dataset.inWorkspace === "1");
+    if (purgeBtn) purgeBtn.disabled = !selected.some((row) => row.dataset.inWorkspace !== "0");
     if (removeBtn) removeBtn.disabled = ids.length === 0;
     const filtering = metricButtons().some((btn) => metricMode(btn) === "filter");
     const summary = $("#selection-summary");
     if (summary) {
       summary.textContent = ids.length
         ? `${ids.length} selected${filtering ? ". The list is filtered" : ""}. Copy to Workspace is for files that are not already in the workspace.`
-        : "Click a count to select a group. Click a row to select it; Shift-click a range; Ctrl-click to add or remove. Click a filename to open it. Double-click a row for history. Click or double-click a folder to open it.";
+        : "Click a count to select a group. Click a row to select it; Shift-click a range; Ctrl-click to add or remove. Click a filename to open it. Click a folder name to open the folder. Double-click a file for history.";
     }
   }
 
@@ -645,12 +658,13 @@
 
   document.querySelector("#object-table")?.addEventListener("click", (event) => {
     const folder = event.target.closest(".folder-row");
-    if (folder) {
+    const folderLink = event.target.closest(".folder-open");
+    if (folderLink && folder && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
       openFolderRow(folder);
       return;
     }
-    const row = event.target.closest(".object-row");
+    const row = event.target.closest(".object-row, .folder-row");
     if (!row) return;
     const openLink = event.target.closest(".object-open");
     if (openLink) event.preventDefault();
@@ -665,17 +679,19 @@
       return;
     }
     selectOnly(row);
+    if (row.classList.contains("folder-row")) return;
     if (!openLink?.dataset.uuid || event.detail > 1) return;
     void postAction("/api/creo/open", { object_id: openLink.dataset.uuid }, "POST", "");
   });
 
   document.querySelector("#object-table")?.addEventListener("dblclick", (event) => {
-    const folder = event.target.closest(".folder-row");
-    if (folder) {
+    if (event.target.closest(".folder-open")) {
       event.preventDefault();
-      openFolderRow(folder);
+      const folder = event.target.closest(".folder-row");
+      if (folder) openFolderRow(folder);
       return;
     }
+    if (event.target.closest(".folder-row")) return;
     if (event.target.closest(".object-open")) return;
     const row = event.target.closest(".object-row");
     if (!row?.dataset.detail) return;
@@ -741,7 +757,7 @@
   });
 
   checkoutBtn?.addEventListener("click", async () => {
-    const ids = selectedRows().filter((row) => row.dataset.canCheckout === "1").map((row) => row.dataset.uuid);
+    const ids = selectedRows().filter((row) => row.dataset.canCheckout === "1").flatMap(rowObjectIds);
     const fallback = selectedIds();
     const objectIds = ids.length ? ids : fallback;
     if (!objectIds.length) return;
@@ -776,7 +792,7 @@
   });
 
   undoBtn?.addEventListener("click", async () => {
-    const ids = selectedRows().filter((row) => row.dataset.owned === "1").map((row) => row.dataset.uuid);
+    const ids = selectedRows().filter((row) => row.dataset.owned === "1").flatMap(rowObjectIds);
     const fallback = selectedIds();
     const objectIds = ids.length ? ids : fallback;
     if (!objectIds.length) return;

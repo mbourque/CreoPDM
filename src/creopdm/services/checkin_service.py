@@ -28,6 +28,7 @@ from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.storage.base import VersionStore
+from creopdm.utils.creo_header import creo_release_for
 from creopdm.utils.files import copy_file, set_file_readonly
 from creopdm.utils.hashing import calculate_sha256
 from creopdm.utils.identity import CurrentUserProvider
@@ -135,6 +136,7 @@ class CheckinService:
             workspace_file = self._workspaces.locate_content(project.uuid, obj)
             content_hash = calculate_sha256(workspace_file)
             file_size = workspace_file.stat().st_size
+            creo_release = creo_release_for(workspace_file, workspace_file.name)
             old_relative = obj.relative_path.replace("\\", "/")
             new_relative = self._workspaces.sibling_relative(obj, workspace_file)
             clash = self._objects.existing_logical(session, project.id, new_relative, exclude_id=obj.id)
@@ -176,6 +178,7 @@ class CheckinService:
                 file_size=file_size,
                 filename=obj.filename,
                 relative_path=new_relative,
+                creo_release=creo_release,
                 created_by=user.user_name,
                 created_at=now,
                 comment=message,

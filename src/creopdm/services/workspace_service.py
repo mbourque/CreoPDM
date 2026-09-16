@@ -615,6 +615,47 @@ class WorkspaceService:
                     )
         return removed
 
+    def purge_local_many(
+        self,
+        project: Project,
+        objects: list[EngineeringObject],
+        *,
+        ignore_locked: bool = False,
+    ) -> list[str]:
+        """Delete workspace copies for many objects with one directory walk."""
+        if not objects:
+            return []
+        extras = self._cad_extensions()
+        wanted = {
+            CreoFileManager.logical_repo_path(obj.relative_path, extras).lower()
+            for obj in objects
+        }
+        root = self.root_for(project.uuid)
+        if not root.is_dir():
+            return []
+        skip = {".git", ".creopdm", "__pycache__"}
+        removed: list[str] = []
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [name for name in dirnames if name.lower() not in skip]
+            rel_dir = os.path.relpath(dirpath, root).replace("\\", "/")
+            for name in filenames:
+                rel = name if rel_dir == "." else f"{rel_dir}/{name}"
+                logical = CreoFileManager.logical_repo_path(rel, extras).lower()
+                if logical not in wanted:
+                    continue
+                path = Path(dirpath) / name
+                try:
+                    set_file_writable(path)
+                    path.unlink()
+                    removed.append(str(path))
+                except OSError:
+                    if not ignore_locked:
+                        raise PathValidationError(
+                            f"Could not delete the workspace copy of {name}.",
+                            details={"path": str(path)},
+                        )
+        return removed
+
     def mark_readonly(self, path: Path) -> None:
         try:
             set_file_readonly(path)

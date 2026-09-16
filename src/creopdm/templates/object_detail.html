@@ -68,6 +68,9 @@
       <dt>Number</dt><dd>{{ object.number or "—" }}</dd>
       <dt>Name</dt><dd>{{ object.name }}</dd>
       <dt>Revision</dt><dd>{{ object.display_revision }}</dd>
+      {% if object.creo_release %}
+      <dt>Creo</dt><dd>{{ object.creo_release }}</dd>
+      {% endif %}
       <dt>Lifecycle</dt><dd>{{ object.lifecycle_state.replace('_', ' ').title() }}</dd>
       <dt>Checkout</dt><dd>{{ object.checkout_status }}</dd>
       <dt>Content hash</dt><dd class="mono">{{ object.current_version.content_hash if object.current_version else "—" }}</dd>
@@ -97,6 +100,7 @@
           <tr>
             <th data-sort="rev" aria-sort="none" title="Sort by revision. Click again to reverse.">Rev</th>
             <th data-sort="filename" aria-sort="none" title="Sort by filename. Click again to reverse.">Filename</th>
+            <th data-sort="creo" aria-sort="none" title="Sort by Creo release. Click again to reverse.">Creo</th>
             <th data-sort="size" aria-sort="none" title="Sort by size. Click again to reverse.">Size</th>
             <th data-sort="user" aria-sort="none" title="Sort by user. Click again to reverse.">User</th>
             <th data-sort="date" aria-sort="none" title="Sort by date. Click again to reverse.">Date</th>
@@ -114,6 +118,7 @@
               <div class="muted small">modified in workspace</div>
               {% endif %}
             </td>
+            <td></td>
             <td>{{ workspace_pending.file_size }} bytes</td>
             <td>workspace</td>
             <td>{{ workspace_pending.saved_at }}</td>
@@ -123,13 +128,14 @@
           <tr {% if loop.first and not workspace_pending %}class="is-latest"{% endif %}>
             <td>{{ version.revision }}.{{ version.iteration }}{% if loop.first and not workspace_pending %} · latest{% endif %}</td>
             <td class="filename-cell">{% if not loop.last %}{{ version_file_label(version, history[loop.index0 + 1]) }}{% else %}{{ version_file_label(version) }}{% endif %}</td>
+            <td>{{ version.creo_release or "" }}</td>
             <td>{{ version.file_size }} bytes</td>
             <td>{{ version.created_by }}</td>
             <td>{% if version.created_at %}{{ version.created_at.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
           </tr>
           {% else %}
           {% if not workspace_pending %}
-          <tr><td colspan="5">No file history yet.</td></tr>
+          <tr><td colspan="6">No file history yet.</td></tr>
           {% endif %}
           {% endfor %}
         </tbody>

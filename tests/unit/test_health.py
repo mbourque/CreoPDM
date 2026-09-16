@@ -263,7 +263,7 @@ def test_custom_type_labels_are_not_migrated(tmp_path):
 def test_previous_type_labels_gain_new_defaults(tmp_path):
     manager = ConfigManager(tmp_path / "appdata")
     manager.ensure_layout()
-    added = {"reviewref.inf", ".mrd", "mw_settings.xml", "mc_error.log", ".tmp"}
+    added = {"reviewref.inf", ".mrd", "mw_settings.xml", "mc_error.log", ".tmp", ".crc"}
     settings = AppSettings()
     settings.cad.type_labels = [
         item
@@ -280,3 +280,4 @@ def test_previous_type_labels_gain_new_defaults(tmp_path):
     assert {"extension": "mw_settings.xml", "label": "Module Works Settings"} in labels
     assert {"extension": "mc_error.log", "label": "ModelCHECK Error Log"} in labels
     assert {"extension": ".tmp", "label": "Temp File"} in labels
+    assert {"extension": ".crc", "label": "Circular Reference File"} in labels

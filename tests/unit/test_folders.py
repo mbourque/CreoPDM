@@ -114,10 +114,26 @@ def test_folder_index_counts_without_loading_files():
     assert files == ["shaft.prt"]
     incoming = next(item for item in folders if item["path"] == "Incoming")
     assert incoming["count"] == 3
+    assert incoming["object_ids"] == []
     nested, nested_files = folder_index(rows, "Incoming")
     assert nested_files == ["Incoming/arm.asm", "Incoming/notes.pdf"]
     assert nested[0]["name"] == "lib"
     assert nested[0]["count"] == 1
+
+
+def test_folder_index_collects_descendant_object_ids():
+    rows = [
+        ("shaft.prt", None, "root-file"),
+        ("Incoming/arm.asm", None, "arm-id"),
+        ("Incoming/lib/pin.prt", None, "pin-id"),
+        ("Incoming/notes.pdf", None, "notes-id"),
+    ]
+    folders, files = folder_index(rows, "")
+    assert files == ["shaft.prt"]
+    incoming = next(item for item in folders if item["path"] == "Incoming")
+    assert incoming["object_ids"] == ["arm-id", "pin-id", "notes-id"]
+    nested, _ = folder_index(rows, "Incoming")
+    assert nested[0]["object_ids"] == ["pin-id"]
 
 
 def test_folder_index_folder_only_catalog_has_no_file_rows():

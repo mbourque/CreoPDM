@@ -60,6 +60,7 @@ def test_import_creo_and_document_files(client, repo_parent, tmp_path):
     assert first["iteration"] == 1
     assert first["filename"] == "shaft.prt.3"
     assert first["relative_path"] == "shaft.prt.3"
+    assert first.get("creo_release") in {None, ""}
 
     detail = client.get(f"/api/objects/{part['uuid']}")
     assert detail.status_code == 200
@@ -207,6 +208,7 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data
     page = client.get(f"/?project={project['uuid']}")
     assert page.status_code == 200, page.text
     assert 'class="folder-row"' in page.text
+    assert 'class="folder-open"' in page.text
     assert 'data-folder="Incoming"' in page.text
     assert 'data-folder="Incoming/lib"' not in page.text
     assert "pin.prt" not in page.text
@@ -654,7 +656,7 @@ def test_cannot_remove_file_checked_out_by_someone_else(client, repo_parent, ide
 
 
 @requires_git
-def test_batch_remove_from_project(client, repo_parent):
+def test_batch_remove_from_project(client, repo_parent, data_dir):
     project, location = _create_project(client, repo_parent)
     (location / "arm.prt").write_bytes(b"part")
     (location / "notes.txt").write_bytes(b"hello")
@@ -676,3 +678,58 @@ def test_batch_remove_from_project(client, repo_parent):
     assert listing == []
     assert (location / "arm.prt").is_file()
     assert (location / "notes.txt").is_file()
+    from creopdm.services.git_service import GitService
+
+    vault = data_dir / "workspaces" / project["uuid"]
+    messages = [entry.message for entry in GitService().get_history(vault)]
+    unregister = [item for item in messages if item.startswith("Unregister")]
+    assert unregister == ["Unregister 2 files"]
+
+
+_CREO_UGC_HEADER = (
+    "#UGC:2 ASSEMBLY 2784 2280 800 1 1 15 4400 2026163 000002d0 \\\n"
+    "#- VERS 0 0                                                          \\\n"
+    "#- CMNM 00ebridgeport.asm                                            \\\n"
+    "#-END_OF_UGC_HEADER\n"
+    "#Creo  TM  13  (c) 2026 by PTC Inc.  All Rights Reserved. 13.4.1.0\n"
+    "#UGC_TOC 2 32 81 17#############################################################"
+).encode("ascii") + b"\x00binary"
+
+
+@requires_git
+def test_creo_release_stored_for_prt_asm_drw_only(client, repo_parent):
+    project, _location = _create_project(client, repo_parent)
+    asm = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("bridgeport.asm.1", _CREO_UGC_HEADER, "application/octet-stream")},
+        data={"comment": "Add mill assembly"},
+    )
+    assert asm.status_code == 201, asm.text
+    body = asm.json()
+    assert body["creo_release"] == "13.4.1.0"
+    assert body["current_version"]["creo_release"] == "13.4.1.0"
+
+    frm = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("a0.frm", _CREO_UGC_HEADER, "application/octet-stream")},
+        data={"comment": "Drawing format"},
+    )
+    assert frm.status_code == 201, frm.text
+    assert frm.json()["creo_release"] is None
+
+    pdf = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("spec.pdf", _CREO_UGC_HEADER, "application/pdf")},
+        data={"comment": "Not a model"},
+    )
+    assert pdf.status_code == 201, pdf.text
+    assert pdf.json()["creo_release"] is None
+
+    files_page = client.get(f"/?project={project['uuid']}")
+    assert files_page.status_code == 200
+    assert "13.4.1.0" in files_page.text
+    detail = client.get(f"/projects/{project['uuid']}/objects/{body['uuid']}")
+    assert detail.status_code == 200
+    assert "13.4.1.0" in detail.text
+    history = client.get(f"/api/objects/{body['uuid']}/history").json()
+    assert history[0]["creo_release"] == "13.4.1.0"

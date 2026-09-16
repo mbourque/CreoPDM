@@ -72,6 +72,7 @@ class ObjectVersionResponse(BaseModel):
     display: str
     filename: str | None = None
     relative_path: str | None = None
+    creo_release: str | None = None
     content_hash: str
     file_size: int
     created_by: str
@@ -92,6 +93,7 @@ class ObjectResponse(BaseModel):
     revision: str
     iteration: int
     display_revision: str
+    creo_release: str | None = None
     lifecycle_state: str
     checkout_status: str = "Available"
     checkout_user: str | None = None

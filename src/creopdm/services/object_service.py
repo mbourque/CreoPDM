@@ -44,6 +44,7 @@ from creopdm.services.activity_service import ActivityService
 from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.storage.base import VersionStore
 from creopdm.utils.classify import classify_filename
+from creopdm.utils.creo_header import creo_release_for
 from creopdm.utils.files import copy_file, set_file_readonly, set_file_writable
 from creopdm.utils.hashing import calculate_sha256
 from creopdm.utils.identity import CurrentUserProvider
@@ -152,6 +153,26 @@ class ObjectService:
             raise ObjectNotFoundError("Object not found.", details={"uuid": object_uuid})
         return obj
 
+    def get_objects(self, session: Session, object_uuids: list[str]) -> list[EngineeringObject]:
+        """Load objects by uuid, preserving request order and skipping unknown ids."""
+        wanted = [item for item in object_uuids if item]
+        if not wanted:
+            return []
+        found: dict[str, EngineeringObject] = {}
+        for start in range(0, len(wanted), 400):
+            chunk = wanted[start : start + 400]
+            rows = session.scalars(
+                select(EngineeringObject)
+                .options(
+                    joinedload(EngineeringObject.project),
+                    joinedload(EngineeringObject.current_version),
+                )
+                .where(EngineeringObject.uuid.in_(chunk))
+            ).unique()
+            for obj in rows:
+                found[obj.uuid] = obj
+        return [found[item] for item in wanted if item in found]
+
     def delete_object(self, session: Session, object_uuid: str) -> dict[str, str]:
         """Unregister the object from the project. Never deletes the original file.
 
@@ -204,6 +225,81 @@ class ObjectService:
         logger.info("Unregistered object %s (%s); original file left in place", uuid_value, relative)
         return {"uuid": uuid_value, "filename": filename, "relative_path": relative}
 
+    def delete_objects(self, session: Session, objects: list[EngineeringObject]) -> list[dict[str, str]]:
+        """Unregister many objects with one Git untrack and one commit per project."""
+        if not objects:
+            return []
+        if len(objects) == 1:
+            return [self.delete_object(session, objects[0].uuid)]
+        grouped: dict[int, list[EngineeringObject]] = {}
+        for obj in objects:
+            grouped.setdefault(obj.project_id, []).append(obj)
+        removed: list[dict[str, str]] = []
+        for group in grouped.values():
+            removed.extend(self._delete_objects_in_project(session, group))
+        return removed
+
+    def _delete_objects_in_project(
+        self,
+        session: Session,
+        objects: list[EngineeringObject],
+    ) -> list[dict[str, str]]:
+        project = objects[0].project
+        user = self._users.get_current_user()
+        relatives = [obj.relative_path.replace("\\", "/") for obj in objects]
+        repo = self._vault(project)
+        count = len(objects)
+        message = f"Unregister {count} files"
+        summaries = [
+            {"uuid": obj.uuid, "filename": obj.filename, "relative_path": obj.relative_path}
+            for obj in objects
+        ]
+        with self._locks.acquire(project.uuid):
+            captured = self._store.capture_checkpoint(repo)
+            try:
+                self._store.remove_files(
+                    repo,
+                    relatives,
+                    message,
+                    user,
+                    keep_working_copy=True,
+                )
+            except Exception:
+                if (repo / ".git").exists():
+                    logger.exception("Git untrack failed for %s files", count)
+                    raise RepositoryError(
+                        f"Could not unregister {count} files from project history.",
+                        details={"count": count},
+                    )
+                logger.warning(
+                    "Git history missing; unregistering %s files from the project list only",
+                    count,
+                )
+            try:
+                self._delete_metadata_many(session, objects)
+                self._activities.record(
+                    session,
+                    ActivityAction.OBJECT_REMOVED,
+                    user,
+                    project_id=project.id,
+                    object_id=None,
+                    details={
+                        "count": count,
+                        "filenames": [item["filename"] for item in summaries[:20]],
+                    },
+                )
+            except Exception as exc:
+                logger.exception("Metadata failed after unregistering %s files", count)
+                if captured:
+                    self._store.restore_checkpoint(repo, captured)
+                raise RepositoryError(
+                    "The files were untracked but project metadata could not be updated. "
+                    "The repository was restored and the files were not removed from the list.",
+                    details={"count": count},
+                ) from exc
+        logger.info("Unregistered %s objects; original files left in place", count)
+        return summaries
+
     def _delete_metadata(self, session: Session, obj: EngineeringObject) -> None:
         object_id = obj.id
         current = obj.current_version
@@ -226,6 +322,31 @@ class ObjectService:
         session.expire(obj, ["versions", "current_version", "checkouts", "parameters"])
         session.execute(delete(ObjectVersion).where(ObjectVersion.object_id == object_id))
         session.delete(obj)
+        session.flush()
+
+    def _delete_metadata_many(self, session: Session, objects: list[EngineeringObject]) -> None:
+        ids = [obj.id for obj in objects]
+        if not ids:
+            return
+        for obj in objects:
+            obj.current_version = None
+            obj.current_version_id = None
+        session.flush()
+        for start in range(0, len(ids), 400):
+            chunk = ids[start : start + 400]
+            session.execute(delete(Parameter).where(Parameter.object_id.in_(chunk)))
+            session.execute(delete(Checkout).where(Checkout.object_id.in_(chunk)))
+            session.execute(
+                delete(Dependency).where(
+                    or_(
+                        Dependency.parent_object_id.in_(chunk),
+                        Dependency.child_object_id.in_(chunk),
+                    )
+                )
+            )
+            session.execute(update(Activity).where(Activity.object_id.in_(chunk)).values(object_id=None))
+            session.execute(delete(ObjectVersion).where(ObjectVersion.object_id.in_(chunk)))
+            session.execute(delete(EngineeringObject).where(EngineeringObject.id.in_(chunk)))
         session.flush()
 
     def import_file(
@@ -300,6 +421,7 @@ class ObjectService:
         user = self._users.get_current_user()
         content_hash = calculate_sha256(source_path)
         file_size = source_path.stat().st_size
+        creo_release = creo_release_for(source_path, stored_name)
         message = (comment or f"Add {stored_name}").strip()
         if not message:
             raise ValidationAppError("A comment is required when adding a file.")
@@ -351,6 +473,7 @@ class ObjectService:
                 file_size=file_size,
                 filename=stored_name,
                 relative_path=relative,
+                creo_release=creo_release,
                 created_by=user.user_name,
                 created_at=now,
                 comment=message,
@@ -423,6 +546,7 @@ class ObjectService:
         destination = ensure_within(repo, repo / Path(relative))
         content_hash = calculate_sha256(source_path)
         file_size = source_path.stat().st_size
+        creo_release = creo_release_for(source_path, stored_name)
         message = (comment or f"Add {stored_name}").strip()
         if not message:
             raise ValidationAppError("A comment is required when adding a file.")
@@ -457,6 +581,7 @@ class ObjectService:
                 file_size=file_size,
                 filename=stored_name,
                 relative_path=relative,
+                creo_release=creo_release,
                 created_by=user.user_name,
                 created_at=now,
                 comment=message,
@@ -596,9 +721,11 @@ class ObjectService:
         from creopdm.utils.folders import folder_index, normalize_folder_query
 
         current = normalize_folder_query(current_folder)
-        stmt = select(EngineeringObject.relative_path, EngineeringObject.updated_at).where(
-            EngineeringObject.project_id == project_id
-        )
+        stmt = select(
+            EngineeringObject.relative_path,
+            EngineeringObject.updated_at,
+            EngineeringObject.uuid,
+        ).where(EngineeringObject.project_id == project_id)
         if current:
             stmt = stmt.where(EngineeringObject.relative_path.startswith(f"{current}/"))
         rows = session.execute(stmt).all()

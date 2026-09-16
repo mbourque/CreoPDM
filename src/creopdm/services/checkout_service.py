@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from creopdm.constants import CheckoutStatus, LifecycleState, ActivityAction
@@ -244,6 +244,25 @@ class CheckoutService:
                 details={"user": record.user_name, "machine": record.machine_name},
             )
         record.status = CheckoutStatus.CANCELLED.value
+        session.flush()
+
+    def release_mine_many(self, session: Session, objects: list[EngineeringObject]) -> None:
+        """Drop my active checkouts on these objects without restoring files."""
+        ids = [obj.id for obj in objects]
+        if not ids:
+            return
+        user = self._users.get_current_user()
+        for start in range(0, len(ids), 400):
+            chunk = ids[start : start + 400]
+            session.execute(
+                update(Checkout)
+                .where(
+                    Checkout.object_id.in_(chunk),
+                    Checkout.status == CheckoutStatus.ACTIVE.value,
+                    Checkout.user_name == user.user_name,
+                )
+                .values(status=CheckoutStatus.CANCELLED.value)
+            )
         session.flush()
 
     def heartbeat(self, session: Session, object_uuid: str) -> None:

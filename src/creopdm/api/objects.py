@@ -88,18 +88,59 @@ def remove_batch(
 ) -> BatchOperationResponse:
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
-    for object_uuid in payload.object_ids:
-        filename = object_uuid
-        try:
-            obj = ctx.objects.get_object(db, object_uuid)
-            filename = obj.filename
-            _purge_and_release(ctx, db, obj, ignore_locked=True)
-            ctx.objects.delete_object(db, object_uuid)
-            ok.append(BatchItemResult(uuid=object_uuid, filename=filename, status="removed"))
-        except CreoPDMError as exc:
+    requested = list(dict.fromkeys(payload.object_ids))
+    found = ctx.objects.get_objects(db, requested)
+    by_uuid = {obj.uuid: obj for obj in found}
+    checkouts = ctx.checkouts.active_map(db, [obj.id for obj in found])
+    user = ctx.users.get_current_user()
+    to_remove: list = []
+    for object_uuid in requested:
+        obj = by_uuid.get(object_uuid)
+        if obj is None:
             failed.append(
-                BatchItemResult(uuid=object_uuid, filename=filename, code=exc.code, message=exc.message)
+                BatchItemResult(
+                    uuid=object_uuid,
+                    filename=object_uuid,
+                    code="OBJECT_NOT_FOUND",
+                    message="Object not found.",
+                )
             )
+            continue
+        checkout = checkouts.get(obj.id)
+        if checkout is not None and checkout.user_name != user.user_name:
+            failed.append(
+                BatchItemResult(
+                    uuid=object_uuid,
+                    filename=obj.filename,
+                    code="CHECKOUT_OWNERSHIP",
+                    message=f"{obj.filename} is checked out by {checkout.user_name}.",
+                )
+            )
+            continue
+        to_remove.append(obj)
+    grouped: dict[int, list] = {}
+    for obj in to_remove:
+        grouped.setdefault(obj.project_id, []).append(obj)
+    for group in grouped.values():
+        summaries = [{"uuid": obj.uuid, "filename": obj.filename} for obj in group]
+        try:
+            ctx.workspaces.purge_local_many(group[0].project, group, ignore_locked=True)
+            ctx.checkouts.release_mine_many(db, group)
+            ctx.objects.delete_objects(db, group)
+            for item in summaries:
+                ok.append(
+                    BatchItemResult(uuid=item["uuid"], filename=item["filename"], status="removed")
+                )
+        except CreoPDMError as exc:
+            for item in summaries:
+                failed.append(
+                    BatchItemResult(
+                        uuid=item["uuid"],
+                        filename=item["filename"],
+                        code=exc.code,
+                        message=exc.message,
+                    )
+                )
     return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.config.workspace_root()))
 
 

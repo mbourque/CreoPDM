@@ -380,6 +380,7 @@ DEFAULT_TYPE_LABELS: tuple[dict[str, str], ...] = (
     {"extension": ".mrd", "label": "Material Removal Data"},
     {"extension": ".tpm", "label": "Tool Parameters"},
     {"extension": ".tph", "label": "Toolpath"},
+    {"extension": ".crc", "label": "Circular Reference File"},
     {"extension": "reviewref.inf", "label": "Reference Info"},
     {"extension": ".zip, .rar, .7z, .tar, .gz, .tgz, .bz2, .tbz", "label": "Archive"},
     {

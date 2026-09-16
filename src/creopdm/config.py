@@ -167,7 +167,14 @@ class AppSettings(BaseModel):
     ignore: IgnoreConfig = Field(default_factory=IgnoreConfig)
 
 
-_ADDED_DEFAULT_TYPE_LABELS = ("reviewref.inf", ".mrd", "mw_settings.xml", "mc_error.log", ".tmp")
+_ADDED_DEFAULT_TYPE_LABELS = (
+    "reviewref.inf",
+    ".mrd",
+    "mw_settings.xml",
+    "mc_error.log",
+    ".tmp",
+    ".crc",
+)
 
 
 def _type_label_fingerprint(values: object) -> tuple[tuple[str, str], ...]:
