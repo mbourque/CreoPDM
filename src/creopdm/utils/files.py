@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import stat
@@ -30,22 +31,52 @@ def set_file_writable(path: Path) -> None:
     path.chmod(mode | stat.S_IWRITE | stat.S_IREAD)
 
 
+def _path_id(path: Path) -> str:
+    return os.path.normcase(os.path.abspath(path))
+
+
 def copy_file(source: Path, destination: Path) -> bool:
     """Copy source to destination.
 
     Returns True only when this call created a new file. Same-path copies and
     overwrites return False so callers must not delete destination on rollback.
     """
+    created, _digest, _size = copy_file_hashed(source, destination)
+    return created
+
+
+def copy_file_hashed(source: Path, destination: Path) -> tuple[bool, str, int]:
+    """Copy source to destination while hashing. One read of the source."""
     destination.parent.mkdir(parents=True, exist_ok=True)
-    src = source.resolve()
-    dest = destination.resolve()
-    if src == dest:
-        return False
+    if _path_id(source) == _path_id(destination):
+        digest = hashlib.sha256()
+        size = 0
+        with destination.open("rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+                size += len(chunk)
+        return False, digest.hexdigest(), size
     created = not destination.exists()
     if destination.exists():
         set_file_writable(destination)
-    shutil.copy2(source, destination)
-    return created
+    digest = hashlib.sha256()
+    size = 0
+    with source.open("rb") as src, destination.open("wb") as dest:
+        while True:
+            chunk = src.read(1024 * 1024)
+            if not chunk:
+                break
+            dest.write(chunk)
+            digest.update(chunk)
+            size += len(chunk)
+    try:
+        shutil.copystat(source, destination, follow_symlinks=True)
+    except OSError:
+        logger.debug("Could not copy timestamps from %s", source)
+    return created, digest.hexdigest(), size
 
 
 def is_writable(path: Path) -> bool:

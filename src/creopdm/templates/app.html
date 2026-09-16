@@ -36,7 +36,7 @@
           <button type="button" class="btn btn-small btn-danger" id="forget-project-btn"
                   data-project="{{ selected.uuid }}"
                   data-name="{{ selected.name }}"
-                  title="Remove Git and CreoPDM registration. CAD files on disk are not deleted.">Forget project</button>
+                  title="Delete the CreoPDM workspace (working copies and Git) and unregister the project. Original files you imported from are not deleted.">Forget project</button>
         </div>
         {% if selected.description %}
         <p class="muted">{{ selected.description }}</p>
@@ -307,8 +307,8 @@
 <dialog id="forget-dialog" class="dialog">
   <form method="dialog" id="forget-form">
     <h2>Forget this project</h2>
-    <p>This deletes the workspace (including Git history) and unregisters the project.</p>
-    <p><strong>CAD files on disk are not deleted.</strong></p>
+    <p>This deletes the CreoPDM workspace, including working copies and Git history, and unregisters the project.</p>
+    <p><strong>Original files you imported from are not deleted.</strong></p>
     <label>Type the project name to confirm
       <input name="confirm_name" id="forget-confirm" required maxlength="255" autocomplete="off">
     </label>

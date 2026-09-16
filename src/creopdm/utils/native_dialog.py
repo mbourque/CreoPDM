@@ -90,8 +90,9 @@ def pick_folder(initial_dir: Path, title: str = "Choose project folder") -> Path
         start = start.parent if start.parent.is_dir() else Path.home()
     if os.name != "nt":
         return None
+    hwnd = _dialog_owner_hwnd()
     try:
-        return run_on_sta(lambda: _windows_folder_dialog(start, title))
+        return run_on_sta(lambda: _windows_folder_dialog(start, title, hwnd))
     except OSError as exc:
         if is_user_cancelled(exc):
             return None
@@ -205,7 +206,7 @@ def _winforms_folder_dialog(initial_dir: Path, title: str) -> Path | None:
     return chosen if chosen.is_dir() else None
 
 
-def _windows_folder_dialog(initial_dir: Path, title: str) -> Path | None:
+def _windows_folder_dialog(initial_dir: Path, title: str, hwnd: int | None = None) -> Path | None:
     """Vista-style folder picker (IFileOpenDialog with FOS_PICKFOLDERS)."""
     import ctypes
     from ctypes import HRESULT, POINTER, byref, c_void_p
@@ -281,7 +282,7 @@ def _windows_folder_dialog(initial_dir: Path, title: str) -> Path | None:
     set_title = method(17, HRESULT, LPCWSTR)
     get_result = method(20, HRESULT, POINTER(c_void_p))
 
-    hwnd = _dialog_owner_hwnd()
+    owner = hwnd if hwnd is not None else _dialog_owner_hwnd()
 
     try:
         set_options(dialog, fos_pickfolders | fos_forcefilesystem | fos_nochangedir | fos_pathmustexist)
@@ -297,7 +298,7 @@ def _windows_folder_dialog(initial_dir: Path, title: str) -> Path | None:
             folder_vtbl = ctypes.cast(folder_item, POINTER(POINTER(c_void_p))).contents
             ctypes.WINFUNCTYPE(ctypes.c_ulong, c_void_p)(folder_vtbl[2])(folder_item)
         try:
-            hr = show(dialog, hwnd)
+            hr = show(dialog, owner)
         except OSError as exc:
             if is_user_cancelled(exc):
                 return None

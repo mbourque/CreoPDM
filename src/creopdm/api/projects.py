@@ -10,7 +10,8 @@ from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import project_to_response
 from creopdm.context import AppContext
 from creopdm.creo.file_manager import CreoFileManager
-from creopdm.exceptions import PathValidationError
+from creopdm.exceptions import PathValidationError, ValidationAppError
+from creopdm.logging_setup import get_logger
 from creopdm.schemas.common import (
     BatchItemResult,
     BatchOperationResponse,
@@ -31,6 +32,7 @@ from creopdm.utils.launch import open_windows_folder
 from creopdm.utils.native_dialog import pick_files, pick_folder
 
 router = APIRouter()
+logger = get_logger("projects")
 
 
 @router.get("/api/projects", response_model=list[ProjectResponse])
@@ -236,21 +238,17 @@ def choose_workspace_folder(
     start.mkdir(parents=True, exist_ok=True)
     chosen = pick_folder(start, title="Add a folder to the project")
     if chosen is None:
+        logger.info("Folder picker cancelled")
         return WorkspacePickerResponse(
             workspace_root=str(ctx.workspaces.root_for(project.uuid)),
             initial_directory=str(start),
             cancelled=True,
         )
-    extras = ctx.config.all_cad_extensions()
-    ignored = ctx.config.ignore_patterns()
-    selected = [
-        str(path)
-        for path in CreoFileManager.list_latest_in_folder(chosen, extras, ignored)
-    ]
+    logger.info("Chose folder %s", chosen)
     return WorkspacePickerResponse(
         workspace_root=str(ctx.workspaces.root_for(project.uuid)),
         initial_directory=str(chosen),
-        selected=selected,
+        selected=[],
         folder=str(chosen),
     )
 
@@ -287,14 +285,30 @@ def import_from_disk(
     ignored = ctx.config.ignore_patterns()
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
-    raw_paths = [Path(raw) for raw in payload.paths]
-    missing = [path for path in raw_paths if not path.is_file()]
-    present = [
-        path
-        for path in raw_paths
-        if path.is_file() and not CreoFileManager.is_ignored(path.name, ignored)
-    ]
-    selected = CreoFileManager.filter_to_latest_saves(present, extras)
+    folder = Path(payload.folder) if (payload.folder or "").strip() else None
+    if folder is not None and not folder.is_dir():
+        raise PathValidationError(
+            "The selected folder was not found.",
+            details={"path": str(folder)},
+        )
+    if folder is not None:
+        logger.info("Scanning folder %s", folder)
+        selected = CreoFileManager.list_latest_in_folder(folder, extras, ignored)
+        base_folder = payload.base_folder or str(folder)
+        logger.info("Adding %s file(s) from folder %s", len(selected), folder)
+        missing: list[Path] = []
+    else:
+        raw_paths = [Path(raw) for raw in payload.paths]
+        if not raw_paths:
+            raise ValidationAppError("Choose files or a folder first.")
+        missing = [path for path in raw_paths if not path.is_file()]
+        present = [
+            path
+            for path in raw_paths
+            if path.is_file() and not CreoFileManager.is_ignored(path.name, ignored)
+        ]
+        selected = CreoFileManager.filter_to_latest_saves(present, extras)
+        base_folder = payload.base_folder
     for path in missing:
         failed.append(
             BatchItemResult(
@@ -305,9 +319,14 @@ def import_from_disk(
             )
         )
     jobs = [
-        (path, path.name, ctx.workspaces.import_relative_path(project, path, payload.base_folder))
+        (path, path.name, ctx.workspaces.import_relative_path(project, path, base_folder))
         for path in selected
     ]
+    if folder is not None and not jobs:
+        raise ValidationAppError(
+            "No files to add were found in that folder.",
+            details={"folder": str(folder)},
+        )
     if jobs:
         for outcome in ctx.objects.import_files(db, project, jobs, comment):
             if outcome.error is not None:

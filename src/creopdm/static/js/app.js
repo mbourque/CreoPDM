@@ -288,6 +288,11 @@
     const list = $("#chosen-file-list");
     if (list) {
       list.innerHTML = "";
+      if (!chosenPaths.length && chosenBaseFolder) {
+        const item = document.createElement("li");
+        item.textContent = chosenBaseFolder;
+        list.appendChild(item);
+      }
       chosenPaths.forEach((path) => {
         const item = document.createElement("li");
         item.textContent = chosenDisplayName(path, chosenBaseFolder);
@@ -331,27 +336,21 @@
     if (!projectId) return;
     showError($("#add-error"), "");
     await withHtmlDialogClosed(addDialog, async () => {
-      const response = await fetch(`/api/projects/${projectId}/workspace/choose-folder`, { method: "POST" });
+      const response = await withBusy("Choosing folder…", () =>
+        fetch(`/api/projects/${projectId}/workspace/choose-folder`, { method: "POST" })
+      );
       if (!response.ok) {
         showError($("#add-error"), await readError(response));
         return;
       }
       const data = await response.json();
       if (data.cancelled) return;
-      if (data.warning) {
-        applyChosenPaths([], data.initial_directory ? `Opens in: ${data.initial_directory}` : "");
-        showError($("#add-error"), data.warning);
+      const folder = data.folder || "";
+      if (!folder) {
+        showError($("#add-error"), "No folder was selected.");
         return;
       }
-      const folder = data.folder || data.initial_directory;
-      applyChosenPaths(
-        data.selected || [],
-        folder ? `${(data.selected || []).length} file(s) from ${folder}` : "",
-        folder
-      );
-      if (!(data.selected || []).length) {
-        showError($("#add-error"), "No files to add were found in that folder.");
-      }
+      applyChosenPaths([], `Folder: ${folder}`, folder);
     });
   });
 
@@ -359,20 +358,19 @@
     event.preventDefault();
     const projectId = addForm.dataset.project;
     if (!projectId) return;
-    if (!chosenPaths.length) {
+    if (!chosenPaths.length && !chosenBaseFolder) {
       showError($("#add-error"), "Choose files or a folder first.");
       return;
     }
     const comment = String(new FormData(addForm).get("comment") || "").trim();
-    const result = await withBusy("Adding files…", async () => {
+    const payload = chosenBaseFolder
+      ? { folder: chosenBaseFolder, base_folder: chosenBaseFolder, comment: comment || null }
+      : { paths: chosenPaths, comment: comment || null };
+    const result = await withBusy(chosenBaseFolder ? "Adding folder…" : "Adding files…", async () => {
       const response = await fetch(`/api/projects/${projectId}/objects/from-disk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paths: chosenPaths,
-          comment: comment || null,
-          base_folder: chosenBaseFolder,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         showError($("#add-error"), await readError(response));

@@ -194,7 +194,8 @@ class ProjectStatusResponse(BaseModel):
 
 
 class ImportLocalRequest(BaseModel):
-    paths: list[str] = Field(min_length=1)
+    paths: list[str] = Field(default_factory=list)
+    folder: str | None = None
     comment: str | None = None
     base_folder: str | None = None
 

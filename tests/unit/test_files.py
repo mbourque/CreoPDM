@@ -34,6 +34,24 @@ def test_copy_file_skips_same_path(tmp_path: Path):
     assert path.read_bytes() == b"same"
 
 
+def test_copy_file_hashed_matches_sha256(tmp_path: Path):
+    from creopdm.utils.files import copy_file_hashed
+    from creopdm.utils.hashing import calculate_sha256
+
+    source = tmp_path / "part.prt.3"
+    dest = tmp_path / "CAD" / "part.prt.3"
+    source.write_bytes(b"creo-model-bytes")
+    created, digest, size = copy_file_hashed(source, dest)
+    assert created is True
+    assert dest.read_bytes() == b"creo-model-bytes"
+    assert size == len(b"creo-model-bytes")
+    assert digest == calculate_sha256(dest)
+    created_again, digest_again, size_again = copy_file_hashed(source, dest)
+    assert created_again is False
+    assert digest_again == digest
+    assert size_again == size
+
+
 def test_copy_file_reports_new_file(tmp_path: Path):
     from creopdm.utils.files import copy_file
 

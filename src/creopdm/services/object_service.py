@@ -46,7 +46,7 @@ from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.storage.base import VersionStore
 from creopdm.utils.classify import classify_filename
 from creopdm.utils.creo_header import creo_release_for
-from creopdm.utils.files import copy_file, set_file_readonly, set_file_writable
+from creopdm.utils.files import copy_file, copy_file_hashed, set_file_readonly, set_file_writable
 from creopdm.utils.hashing import calculate_sha256
 from creopdm.utils.identity import CurrentUserProvider
 from creopdm.utils.paths import (
@@ -485,11 +485,17 @@ class ObjectService:
                     self._mark_result(results, plan, error=RepositoryError(str(exc)))
             captured_head = self._store.capture_checkpoint(repo) if git_plans else None
             try:
-                for plan in git_plans:
+                total = len(git_plans)
+                for index, plan in enumerate(git_plans, start=1):
                     destination = ensure_within(repo, repo / Path(plan.relative))
-                    created_copy = copy_file(plan.source, destination)
+                    created_copy, digest, size = copy_file_hashed(plan.source, destination)
+                    plan.content_hash = digest
+                    plan.file_size = size
+                    plan.creo_release = creo_release_for(destination, plan.stored_name)
                     if created_copy:
                         created.append(destination)
+                    if index == 1 or index == total or index % 25 == 0:
+                        logger.info("Copied %s/%s from source", index, total)
                 if git_plans:
                     add_paths = [plan.relative for plan in git_plans]
                     remove_paths = list(
@@ -635,9 +641,9 @@ class ObjectService:
                         f"{stored_name} is already in this project as {existing.filename}.",
                         details={"relative_path": existing.relative_path, "existing": existing.filename},
                     )
-            content_hash = calculate_sha256(source_path)
-            file_size = source_path.stat().st_size
-            creo_release = creo_release_for(source_path, stored_name)
+            content_hash = ""
+            file_size = 0
+            creo_release = None
             return (
                 _ImportPlan(
                     source=source_path,

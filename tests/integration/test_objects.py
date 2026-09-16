@@ -195,11 +195,11 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["cancelled"] is False
-    names = {Path(path).name for path in body["selected"]}
-    assert names == {"shaft.prt.4", "pin.prt"}
+    assert body["folder"] == str(picked)
+    assert body["selected"] == []
     imported = client.post(
         f"/api/projects/{project['uuid']}/objects/from-disk",
-        json={"paths": body["selected"], "comment": "Folder add", "base_folder": str(picked)},
+        json={"folder": str(picked), "comment": "Folder add", "base_folder": str(picked)},
     )
     assert imported.status_code == 200, imported.text
     listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
@@ -257,6 +257,41 @@ def test_choose_folder_cancel_keeps_empty_selection(client, repo_parent, monkeyp
 
 
 @requires_git
+def test_choose_folder_does_not_scan_files(client, repo_parent, monkeypatch, tmp_path):
+    project, _location = _create_project(client, repo_parent)
+    picked = tmp_path / "BigUpload"
+    picked.mkdir()
+    (picked / "shaft.prt.1").write_bytes(b"model")
+    scanned = []
+    monkeypatch.setattr(
+        "creopdm.api.projects.pick_folder",
+        lambda initial_dir, title="Add a folder to the project": picked,
+    )
+    monkeypatch.setattr(
+        "creopdm.api.projects.CreoFileManager.list_latest_in_folder",
+        lambda *args, **kwargs: scanned.append(True) or [],
+    )
+    response = client.post(f"/api/projects/{project['uuid']}/workspace/choose-folder")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["folder"] == str(picked)
+    assert body["selected"] == []
+    assert scanned == []
+
+
+@requires_git
+def test_from_disk_folder_rejects_empty_directory(client, repo_parent, tmp_path):
+    project, _location = _create_project(client, repo_parent)
+    empty = tmp_path / "EmptyBox"
+    empty.mkdir()
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"folder": str(empty), "comment": "Nothing here"},
+    )
+    assert imported.status_code == 400, imported.text
+
+
+@requires_git
 def test_choose_folder_from_outside_location(client, repo_parent, tmp_path, monkeypatch, data_dir):
     project, _location = _create_project(client, repo_parent)
     outside = tmp_path / "Elsewhere"
@@ -272,11 +307,10 @@ def test_choose_folder_from_outside_location(client, repo_parent, tmp_path, monk
     assert response.status_code == 200, response.text
     body = response.json()
     assert not body["warning"]
-    names = {Path(path).name for path in body["selected"]}
-    assert names == {"pin.prt", "bushing.prt"}
+    assert body["folder"] == str(outside)
     imported = client.post(
         f"/api/projects/{project['uuid']}/objects/from-disk",
-        json={"paths": body["selected"], "comment": "Outside folder", "base_folder": str(outside)},
+        json={"folder": str(outside), "comment": "Outside folder", "base_folder": str(outside)},
     )
     assert imported.status_code == 200, imported.text
     assert imported.json()["failed"] == []
@@ -322,7 +356,7 @@ def test_choose_folder_inside_project_keeps_repo_relative_path(client, repo_pare
     imported = client.post(
         f"/api/projects/{project['uuid']}/objects/from-disk",
         json={
-            "paths": chosen.json()["selected"],
+            "folder": str(lib),
             "comment": "Existing lib",
             "base_folder": str(lib),
         },

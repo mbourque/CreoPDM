@@ -231,39 +231,45 @@ class CreoFileManager:
         cls,
         paths: list[Path],
         extra_extensions: Iterable[str] | None = None,
+        scan_disk_siblings: bool = True,
     ) -> list[Path]:
         """Keep one file per CAD family: the highest .ext.N. Unnumbered is older."""
         grouped: dict[str, list[Path]] = {}
         order: list[str] = []
         seen: dict[str, set[str]] = {}
 
+        def path_id(path: Path) -> str:
+            return os.path.normcase(os.path.abspath(path))
+
         def group_key(path: Path) -> str:
-            parent = path.resolve().parent.as_posix().lower()
+            parent = os.path.normcase(os.path.abspath(path.parent))
             logical = cls.logical_filename(path.name, extra_extensions).lower()
             return f"{parent}/{logical}"
 
-        def add(key: str, path: Path) -> None:
-            if not path.is_file():
+        def add(key: str, path: Path, check_exists: bool) -> None:
+            if check_exists and not path.is_file():
                 return
-            ident = str(path.resolve()).lower()
+            ident = path_id(path)
             bucket = seen.setdefault(key, set())
             if ident in bucket:
                 return
             bucket.add(ident)
-            grouped.setdefault(key, []).append(path.resolve())
+            grouped.setdefault(key, []).append(path)
 
         for path in paths:
             key = group_key(path)
             if key not in grouped:
                 grouped[key] = []
                 order.append(key)
-            add(key, path)
+            add(key, path, check_exists=scan_disk_siblings)
+            if not scan_disk_siblings:
+                continue
             parent = path.parent
             if parent.is_dir() and cls.is_cad_save_family(path.name, extra_extensions):
                 logical = cls.logical_filename(path.name, extra_extensions).lower()
                 for sibling in parent.iterdir():
                     if sibling.is_file() and cls.logical_filename(sibling.name, extra_extensions).lower() == logical:
-                        add(key, sibling)
+                        add(key, sibling, check_exists=False)
 
         chosen: list[Path] = []
         for key in order:
@@ -294,8 +300,6 @@ class CreoFileManager:
                 if cls.is_ignored(name, ignore_patterns):
                     continue
                 path = current / name
-                if not path.is_file():
-                    continue
                 suffix = path.suffix.lower()
                 numbered = cls.normalize_creo_filename(name, extra_extensions)
                 check = Path(numbered).suffix.lower() if numbered != name else suffix
@@ -313,4 +317,5 @@ class CreoFileManager:
         return cls.filter_to_latest_saves(
             list(cls.iter_importable_files(root, extra_extensions, ignore_patterns)),
             extra_extensions,
+            scan_disk_siblings=False,
         )
