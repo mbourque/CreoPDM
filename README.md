@@ -32,14 +32,25 @@ pip install -e ".[dev]"
 
 ## Run
 
-Start from a **normal** (not Run as administrator) PowerShell in the project folder:
+Start from a **normal** (not Run as administrator) PowerShell in the project folder, with the venv active (same as `pytest`):
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+creopdm
+```
+
+That command is on `PATH` from the venv (not a script in the repo, so you do not type `.\creopdm`). It starts the server on port **52113** and does not open a browser, which is the usual setup for Creo's built-in browser.
+
+After `pip install -e .` (or `pip install -e ".[dev]"`), do that install once more if `creopdm` is missing or still ignores those flags.
+
+To start without those defaults, use the module:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 python -m creopdm
 ```
 
-The server uses the **Port** in Settings (`%LOCALAPPDATA%\CreoPDM\config\settings.json`). **0** (the default) picks a free port each start. A specific value such as `8765` is reused until Windows blocks it.
+The module form uses the **Port** in Settings (`%LOCALAPPDATA%\CreoPDM\config\settings.json`). **0** (the default) picks a free port each start. A specific value such as `8765` is reused until Windows blocks it.
 
 Command-line flags override Settings for that start only:
 
