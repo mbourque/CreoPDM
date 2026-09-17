@@ -36,6 +36,10 @@ def test_home_page(client):
     assert 'href="/settings"' in text
     assert '<dialog id="busy-overlay"' in text
     assert 'type="text/creojs"' in text
+    assert "function setWorkingDirectory" in text
+    assert 'id="set-creo-dir-btn"' in text
+    assert 'id="add-files-btn"' in text
+    assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/static/js/app.js' in text
     assert 'id="project-menu-btn"' in text
 

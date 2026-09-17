@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-nav1">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-cwd2">
 </head>
 <body>
   <header class="topbar">
@@ -71,7 +71,17 @@ function openModel(directory, filename) {
     }
     return filename;
 }
+function setWorkingDirectory(directory) {
+    var session = (typeof pfcGetCurrentSession === "function")
+      ? pfcGetCurrentSession()
+      : pfcGetProESession();
+    if (!directory) {
+        throw new Error("No project workspace is selected.");
+    }
+    session.ChangeDirectory(directory);
+    return directory;
+}
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-nav1"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-cwd2"></script>
 </body>
 </html>

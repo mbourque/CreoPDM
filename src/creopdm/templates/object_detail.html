@@ -31,6 +31,9 @@
   </header>
 
   <div class="toolbar-actions detail-actions">
+    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this project's workspace.">
+      <button type="button" class="btn" id="set-creo-dir-btn" data-workspace="{{ workspace_path }}">Set Working Directory</button>
+    </span>
     <button type="button" class="btn" id="open-btn" data-uuid="{{ object.uuid }}">Open</button>
     <span class="toolbar-tip" title="Open this file's folder in Explorer.">
       <button type="button" class="btn" id="open-workspace-btn" data-project="{{ project.uuid }}" data-folder="{{ workspace_folder }}">Open Workspace</button>

@@ -254,6 +254,11 @@
 
 <footer class="toolbar">
   <div class="toolbar-actions">
+    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this project's workspace.">
+      <button type="button" class="btn" id="set-creo-dir-btn"
+              {% if workspace_path %}data-workspace="{{ workspace_path }}"{% endif %}
+              {% if not workspace_path %}disabled{% endif %}>Set Working Directory</button>
+    </span>
     <button type="button" class="btn" id="add-files-btn" {% if not selected %}disabled{% endif %}>Add Files</button>
     <span class="toolbar-tip" title="Copy selected files into the CreoPDM workspace if they are not already there. Does not check them out.">
       <button type="button" class="btn" id="workspace-btn" disabled>Copy to Workspace</button>
@@ -268,7 +273,7 @@
     <span class="toolbar-tip" title="Check in selected files, or add new workspace files to the project.">
       <button type="button" class="btn" id="checkin-btn"
               {% if selected %}data-project="{{ selected.uuid }}"{% endif %}
-              {% if not selected %}disabled{% endif %}>Check In</button>
+              disabled>Check In</button>
     </span>
     <span class="toolbar-tip" title="Release your checkout lock. Does not delete the workspace file or record a new version. A Creo save still on disk can be checked in afterward.">
       <button type="button" class="btn" id="undo-btn" disabled>Undo Checkout</button>

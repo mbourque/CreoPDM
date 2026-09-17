@@ -790,6 +790,7 @@
   const undoBtn = $("#undo-btn");
   const workspaceBtn = $("#workspace-btn");
   const openWorkspaceBtn = $("#open-workspace-btn");
+  const setCreoDirBtn = $("#set-creo-dir-btn");
   const purgeBtn = $("#purge-workspace-btn");
   const removeBtn = $("#remove-project-btn");
 
@@ -1179,6 +1180,37 @@
       }
     });
   }
+
+  function showCreoSessionControls() {
+    document.querySelectorAll(".creo-session-only").forEach((el) => {
+      el.hidden = !hostedCreoJS();
+    });
+  }
+  void creoJSReady.then(showCreoSessionControls);
+
+  async function setCreoWorkingDirectory() {
+    const directory = setCreoDirBtn?.dataset.workspace || "";
+    if (!directory) {
+      showError($("#toolbar-error"), "No project workspace is selected.");
+      return;
+    }
+    try {
+      await creoJSReady;
+      if (!hostedCreoJS()) {
+        showError($("#toolbar-error"), "Open this page in Creo's built-in browser to set the working directory.");
+        return;
+      }
+      await whenCreoJSReady();
+      await window.CreoJS.setWorkingDirectory(directory);
+      showOk("Creo working directory set to this project.");
+    } catch (err) {
+      const message = err && err.message ? err.message : String(err);
+      showError($("#toolbar-error"), message || "Creo could not change directory.");
+    }
+  }
+  setCreoDirBtn?.addEventListener("click", () => {
+    void setCreoWorkingDirectory();
+  });
 
   async function openPdmObject(objectId) {
     await creoJSReady;

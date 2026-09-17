@@ -323,9 +323,10 @@ button.object-open:hover { text-decoration: underline; }
   flex-shrink: 0; display: flex; flex-direction: column; align-items: stretch;
   gap: 0.35rem; padding: 0.6rem 1rem; background: #f0f3f6; border-top: 1px solid var(--line);
 }
-.toolbar-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+.toolbar-actions { display: flex; gap: 0.4rem; flex-wrap: nowrap; align-items: center; overflow-x: auto; }
 .toolbar-tip { display: inline-flex; }
-.toolbar-tip .btn:disabled { pointer-events: none; }
+.toolbar-actions .btn:disabled,
+.toolbar-actions .toolbar-tip:has(.btn:disabled) { display: none; }
 .toolbar-messages { width: 100%; min-width: 0; }
 .toolbar-messages .error, .toolbar-messages .ok { overflow-wrap: anywhere; }
 .toolbar-note { color: var(--muted); font-size: 0.8rem; }
