@@ -16,6 +16,7 @@ from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.utils.classify import is_creo_openable, is_extra_cad
+from creopdm.utils.creo_header import creo_release_for
 from creopdm.utils.launch import open_windows_file, working_directory_for
 
 logger = get_logger("creo-service")
@@ -84,6 +85,9 @@ class CreoService:
             path.name, models, all_cad
         )
         logical = CreoFileManager.normalize_creo_filename(path.name, (*models, *all_cad))
+        file_release = creo_release_for(path, path.name)
+        if not file_release and obj.current_version is not None:
+            file_release = obj.current_version.creo_release
         if launch:
             if creo_object and self._connector.cad_open_mode() == "embedded":
                 raise ValidationAppError(
@@ -101,6 +105,7 @@ class CreoService:
             "filename": logical,
             "working_directory": str(workdir),
             "creo_object": creo_object,
+            "creo_release": file_release or "",
         }
 
     def _open_path(self, path: Path, creo_object: bool) -> str:

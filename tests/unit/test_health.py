@@ -39,6 +39,11 @@ def test_home_page(client):
     assert "function setWorkingDirectory" in text
     assert "session.OpenFile" in text
     assert "pfcModelType.MDL_MFG" in text
+    assert "function creoCannotOpenNewerMessage" in text
+    assert "Older Creo versions cannot open it." in text
+    assert "CREOPDM_ERROR:" in text
+    assert "catch (errAll)" in text
+    assert "throw new Error" not in text.split("function openModel")[1].split("function setWorkingDirectory")[0]
     assert 'id="set-creo-dir-btn"' in text
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
@@ -48,6 +53,16 @@ def test_home_page(client):
     assert 'class="workspace"' in text
     assert "is-sidebar-collapsed" not in text
     assert "Workspace:" not in text
+
+
+def test_app_js_strips_creo_error_details(client):
+    response = client.get("/static/js/app.js")
+    assert response.status_code == 200
+    text = response.text
+    assert "function userFacingError" in text
+    assert r"Uncaught Error:" in text
+    assert r"SCRIPT" in text
+    assert r"Object.execute" in text
 
 
 def test_config_layout(data_dir):

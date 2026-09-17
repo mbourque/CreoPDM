@@ -74,8 +74,40 @@ def test_open_prepare_does_not_launch(data_dir, repo_parent, identity: StaticUse
         assert body["method"] == "prepared"
         assert body["creo_object"] is True
         assert body["filename"] == "hub.prt"
+        assert body.get("creo_release") in {None, ""}
         assert Path(body["path"]).name == "hub.prt"
         assert recorder.opened == []
+
+
+@requires_git
+def test_open_prepare_includes_creo_release(data_dir, repo_parent, identity: StaticUserProvider):
+    ctx = build_context(ConfigManager(), users=identity)
+    with TestClient(create_app(ctx)) as client:
+        project = client.post("/api/projects", json={"name": "Release Open"}).json()
+        created = client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={
+                "file": (
+                    "shaft.prt.1",
+                    (
+                        "#UGC:2 PART 1 1 1 1 1 1 1 1 1 1 \\\n"
+                        "#-END_OF_UGC_HEADER\n"
+                        "#Creo  TM  13  (c) 2026 by PTC Inc.  All Rights Reserved. 13.4.1.0\n"
+                        "#UGC_TOC 2 32 81 17#############################################################"
+                    ).encode("ascii")
+                    + b"\x00bin",
+                    "application/octet-stream",
+                )
+            },
+            data={"comment": "Creo 13 part"},
+        )
+        assert created.status_code == 201, created.text
+        prepared = client.post(
+            "/api/creo/open",
+            json={"object_id": created.json()["uuid"], "launch": False},
+        )
+        assert prepared.status_code == 200, prepared.text
+        assert prepared.json()["creo_release"] == "13.4.1.0"
 
 
 @requires_git

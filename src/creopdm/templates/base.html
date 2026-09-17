@@ -79,45 +79,111 @@ function openAsmAsMfg(session, filename) {
     } catch (err) {}
     return true;
 }
-function openModel(directory, filename) {
-    var session = (typeof pfcGetCurrentSession === "function")
-      ? pfcGetCurrentSession()
-      : pfcGetProESession();
-    if (directory) {
-        session.ChangeDirectory(directory);
-    }
-    try {
-        if (openAsmAsMfg(session, filename)) {
-            return filename;
+function creoMajorRelease(release) {
+    var text = String(release || "");
+    var digits = "";
+    var i = 0;
+    while (i < text.length) {
+        var ch = text.charAt(i);
+        if (ch < "0" || ch > "9") {
+            break;
         }
-    } catch (errMfg) {}
-    var descr = pfcModelDescriptor.CreateFromFileName(filename);
-    var model = null;
-    try {
-        model = session.RetrieveModel(descr);
-    } catch (err) {
-        model = session.GetModelFromFileName(filename);
+        digits += ch;
+        i += 1;
     }
-    if (!model) {
-        throw new Error("Creo could not retrieve " + filename);
+    if (!digits) {
+        return 0;
     }
+    return parseInt(digits, 10);
+}
+function creoSessionRelease(session) {
+    var value = "";
     try {
-        model.Display();
+        if (typeof session.GetRelease === "function") {
+            value = String(session.GetRelease());
+        }
     } catch (err) {}
-    try {
-        var win = session.GetModelWindow(model);
-        if (!win) {
-            win = session.CreateModelWindow(model);
-        }
-        if (win) {
-            win.Activate();
-        }
-    } catch (err) {
+    if (!value) {
         try {
-            session.CurrentWindow.Activate();
+            if (typeof session.GetVersion === "function") {
+                value = String(session.GetVersion());
+            }
         } catch (err2) {}
     }
-    return filename;
+    return value;
+}
+function creoNewerThanSession(fileRelease, sessionRelease) {
+    var fileMajor = creoMajorRelease(fileRelease);
+    var sessionMajor = creoMajorRelease(sessionRelease);
+    return fileMajor > 0 && sessionMajor > 0 && fileMajor > sessionMajor;
+}
+function creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease) {
+    var name = String(filename || "This model");
+    if (fileRelease && sessionRelease) {
+        return name + " was saved in Creo " + fileRelease
+            + ". This session is Creo " + sessionRelease
+            + " and cannot open a newer model.";
+    }
+    if (fileRelease) {
+        return name + " was saved in Creo " + fileRelease
+            + ". Older Creo versions cannot open it.";
+    }
+    return "Creo could not retrieve " + name;
+}
+function creoOpenFailed(message) {
+    return "CREOPDM_ERROR:" + message;
+}
+function openModel(directory, filename, fileRelease) {
+    try {
+        var session = (typeof pfcGetCurrentSession === "function")
+          ? pfcGetCurrentSession()
+          : pfcGetProESession();
+        if (directory) {
+            session.ChangeDirectory(directory);
+        }
+        var sessionRelease = creoSessionRelease(session);
+        if (creoNewerThanSession(fileRelease, sessionRelease)) {
+            return creoOpenFailed(creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease));
+        }
+        try {
+            if (openAsmAsMfg(session, filename)) {
+                return filename;
+            }
+        } catch (errMfg) {}
+        var descr = pfcModelDescriptor.CreateFromFileName(filename);
+        var model = null;
+        try {
+            model = session.RetrieveModel(descr);
+        } catch (err) {
+            try {
+                model = session.GetModelFromFileName(filename);
+            } catch (err2) {
+                model = null;
+            }
+        }
+        if (!model) {
+            return creoOpenFailed(creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease));
+        }
+        try {
+            model.Display();
+        } catch (err) {}
+        try {
+            var win = session.GetModelWindow(model);
+            if (!win) {
+                win = session.CreateModelWindow(model);
+            }
+            if (win) {
+                win.Activate();
+            }
+        } catch (err) {
+            try {
+                session.CurrentWindow.Activate();
+            } catch (err2) {}
+        }
+        return filename;
+    } catch (errAll) {
+        return creoOpenFailed(creoCannotOpenNewerMessage(filename, fileRelease, ""));
+    }
 }
 function setWorkingDirectory(directory) {
     var session = (typeof pfcGetCurrentSession === "function")
@@ -130,6 +196,6 @@ function setWorkingDirectory(directory) {
     return directory;
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-nav9"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open4"></script>
 </body>
 </html>

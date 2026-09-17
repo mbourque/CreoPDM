@@ -171,6 +171,7 @@ class CreoOpenResponse(BaseModel):
     method: str
     working_directory: str
     creo_object: bool = False
+    creo_release: str | None = None
 
 
 class CreoStatusResponse(BaseModel):

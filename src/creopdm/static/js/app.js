@@ -31,10 +31,20 @@
     });
   })();
 
+  function userFacingError(message) {
+    let text = String(message || "").replace(/^\s*Uncaught Error:\s*/i, "").trim();
+    const detail = text.search(/\s+\d+\)\s*(SCRIPT|Object\.execute)/i);
+    if (detail >= 0) text = text.slice(0, detail).trim();
+    const newline = text.search(/\r?\n/);
+    if (newline >= 0) text = text.slice(0, newline).trim();
+    return text;
+  }
+
   function showError(el, message) {
     if (!el) return;
-    el.hidden = !message;
-    el.textContent = message || "";
+    const text = userFacingError(message);
+    el.hidden = !text;
+    el.textContent = text;
   }
 
   function showOk(message) {
@@ -1253,7 +1263,16 @@
       if (prepared.creo_object) {
         try {
           await whenCreoJSReady();
-          await window.CreoJS.openModel(prepared.working_directory, prepared.filename);
+          const opened = await window.CreoJS.openModel(
+            prepared.working_directory,
+            prepared.filename,
+            prepared.creo_release || ""
+          );
+          const openedText = opened == null ? "" : String(opened);
+          if (openedText.indexOf("CREOPDM_ERROR:") === 0) {
+            showError($("#toolbar-error"), openedText.slice("CREOPDM_ERROR:".length));
+            return null;
+          }
         } catch (err) {
           const message = err && err.message ? err.message : String(err);
           showError(
