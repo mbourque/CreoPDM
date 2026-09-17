@@ -53,10 +53,27 @@ def test_folder_view_counts_cad_models_follows_extension_list():
     ]
     defaulted = folder_view_counts(objects, "")
     assert defaulted["cad_models"] == 2
+    assert defaulted["other"] == 1
     only_prt = folder_view_counts(objects, "", [".prt"])
     assert only_prt["cad_models"] == 1
+    assert only_prt["other"] == 2
     with_mfg = folder_view_counts(objects, "", [".prt", ".asm", ".mfg"])
     assert with_mfg["cad_models"] == 3
+    assert with_mfg["other"] == 0
+
+
+def test_folder_view_counts_documents_follows_extension_list():
+    objects = [
+        SimpleNamespace(filename="notes.pdf", relative_path="notes.pdf", object_type="PDF", extension=".pdf"),
+        SimpleNamespace(filename="letter.odt", relative_path="letter.odt", object_type="DOCUMENT", extension=".odt"),
+        SimpleNamespace(filename="shaft.prt", relative_path="shaft.prt", object_type="CREO_PART", extension=".prt"),
+    ]
+    defaulted = folder_view_counts(objects, "")
+    assert defaulted["documents"] == 2
+    only_pdf = folder_view_counts(objects, "", document_extensions=[".pdf"])
+    assert only_pdf["documents"] == 1
+    none = folder_view_counts(objects, "", document_extensions=[])
+    assert none["documents"] == 0
 
 
 def test_folder_view_counts_checked_out():

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from creopdm.constants import (
     DEFAULT_CREO_MODEL_EXTENSIONS,
+    DEFAULT_DOCUMENT_EXTENSIONS,
     DEFAULT_EXTRA_CAD_EXTENSIONS,
     DEFAULT_OPENABLE_CAD_EXTENSIONS,
 )
@@ -58,6 +59,11 @@ def cad_dialog_filter_patterns() -> str:
         if ext in openable:
             patterns.append(f"*.*{ext}")
     return ";".join(patterns)
+
+
+def document_dialog_filter_patterns() -> str:
+    """Glob list for the Documents group in the native file picker."""
+    return ";".join(f"*{ext}" for ext in DEFAULT_DOCUMENT_EXTENSIONS)
 
 
 def pick_files(initial_dir: Path, title: str = "Add files to the project") -> list[Path]:
@@ -147,7 +153,7 @@ def _winforms_open_dialog(initial_dir: Path, title: str) -> list[Path]:
         "$d.InitialDirectory = $env:CREOPDM_DIALOG_DIR; "
         "$d.Title = $env:CREOPDM_DIALOG_TITLE; "
         "$d.Multiselect = $true; "
-        f"$d.Filter = 'All files (*.*)|*.*|CAD files|{cad_dialog_filter_patterns()}|Documents|*.pdf;*.docx;*.doc;*.xlsx;*.xls;*.txt'; "
+        f"$d.Filter = 'All files (*.*)|*.*|CAD files|{cad_dialog_filter_patterns()}|Documents|{document_dialog_filter_patterns()}'; "
         "$d.CheckFileExists = $true; "
         "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { "
         "$d.FileNames | ForEach-Object { $_ } }"
@@ -373,10 +379,11 @@ def _windows_open_dialog(initial_dir: Path, title: str) -> list[Path]:
     buffer_chars = 32768
     file_buf = ctypes.create_unicode_buffer(buffer_chars)
     cad_patterns = cad_dialog_filter_patterns()
+    document_patterns = document_dialog_filter_patterns()
     filter_text = (
         "All files\0*.*\0"
         f"CAD files\0{cad_patterns}\0"
-        "Documents\0*.pdf;*.docx;*.doc;*.xlsx;*.xls;*.txt\0\0"
+        f"Documents\0{document_patterns}\0\0"
     )
     filter_buf = ctypes.create_unicode_buffer(len(filter_text) + 2)
     for index, char in enumerate(filter_text):

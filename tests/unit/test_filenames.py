@@ -1,6 +1,6 @@
 from creopdm.constants import APP_NAME, APP_VERSION
 from creopdm.creo.file_manager import CreoFileManager
-from creopdm.utils.native_dialog import cad_dialog_filter_patterns
+from creopdm.utils.native_dialog import cad_dialog_filter_patterns, document_dialog_filter_patterns
 
 
 def test_normalize_creo_numbered_files():
@@ -215,6 +215,19 @@ def test_cad_dialog_filter_includes_numbered_defaults():
     assert "*.idx;*.idx.*;*.*.idx" in patterns
     assert "*.3mf;*.3mf.*;*.*.3mf" in patterns
     assert "*.x_t;*.x_t.*;*.*.x_t" in patterns
+
+
+def test_document_dialog_filter_includes_known_documents():
+    patterns = document_dialog_filter_patterns()
+    assert "*.pdf" in patterns
+    assert "*.docx" in patterns
+    assert "*.xlsx" in patterns
+    assert "*.odt" in patterns
+    assert "*.vsdx" in patterns
+    assert "*.msg" in patterns
+    assert "*.psd" in patterns
+    assert "*.md" not in patterns
+    assert "*.png" not in patterns
 
 
 def test_sync_gitignore_rewrites_managed_block(tmp_path):

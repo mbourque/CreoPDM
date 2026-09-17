@@ -84,7 +84,8 @@ class GitService:
                 command,
                 cwd=str(cwd),
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=False,
                 shell=False,
                 env=extra_env,
@@ -105,7 +106,8 @@ class GitService:
             result = subprocess.run(
                 [self.executable, "--version"],
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=False,
                 shell=False,
             )

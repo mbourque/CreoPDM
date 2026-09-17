@@ -9,6 +9,7 @@ from creopdm.config import AppSettings
 from creopdm.constants import (
     DEFAULT_CAD_MODELS_EXTENSIONS,
     DEFAULT_CREO_MODEL_EXTENSIONS,
+    DEFAULT_DOCUMENT_EXTENSIONS,
     DEFAULT_EXTRA_CAD_EXTENSIONS,
     DEFAULT_IGNORE_PATTERNS,
     DEFAULT_OPENABLE_CAD_EXTENSIONS,
@@ -41,6 +42,8 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         default_cad_model_extensions=list(DEFAULT_CREO_MODEL_EXTENSIONS),
         cad_models_extensions=ctx.config.cad_models_extensions(),
         default_cad_models_extensions=list(DEFAULT_CAD_MODELS_EXTENSIONS),
+        document_extensions=ctx.config.document_extensions(),
+        default_document_extensions=list(DEFAULT_DOCUMENT_EXTENSIONS),
         type_labels=ctx.config.type_labels(),
         ignore_patterns=ctx.config.ignore_patterns(),
         default_ignore_patterns=list(DEFAULT_IGNORE_PATTERNS),
@@ -102,6 +105,10 @@ def update_settings(
     if payload.cad_models_extensions is not None:
         current.cad.cad_models_extensions = payload.cad_models_extensions or list(
             DEFAULT_CAD_MODELS_EXTENSIONS
+        )
+    if payload.document_extensions is not None:
+        current.cad.document_extensions = payload.document_extensions or list(
+            DEFAULT_DOCUMENT_EXTENSIONS
         )
     if payload.cad_openable_extensions is not None:
         current.cad.openable_extensions = payload.cad_openable_extensions

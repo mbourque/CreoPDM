@@ -16,12 +16,14 @@ from creopdm.constants import (
     APP_NAME,
     DEFAULT_CAD_MODELS_EXTENSIONS,
     DEFAULT_CREO_MODEL_EXTENSIONS,
+    DEFAULT_DOCUMENT_EXTENSIONS,
     DEFAULT_EXTRA_CAD_EXTENSIONS,
     DEFAULT_IGNORE_PATTERNS,
     DEFAULT_LFS_PATTERNS,
     DEFAULT_OPENABLE_CAD_EXTENSIONS,
     DEFAULT_TYPE_LABELS,
     PREVIOUS_DEFAULT_CREO_MODEL_SETS,
+    PREVIOUS_DEFAULT_DOCUMENT_SETS,
     PREVIOUS_DEFAULT_EXTRA_CAD_SETS,
     PREVIOUS_DEFAULT_IGNORE_SETS,
     PREVIOUS_DEFAULT_TYPE_LABEL_SETS,
@@ -114,6 +116,7 @@ class CadConfig(BaseModel):
 
     model_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_CREO_MODEL_EXTENSIONS))
     cad_models_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_CAD_MODELS_EXTENSIONS))
+    document_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_DOCUMENT_EXTENSIONS))
     openable_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_OPENABLE_CAD_EXTENSIONS))
     extra_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_EXTRA_CAD_EXTENSIONS))
     type_labels: list[dict[str, str]] = Field(
@@ -129,6 +132,11 @@ class CadConfig(BaseModel):
     @classmethod
     def normalize_cad_models_extensions(cls, value: object) -> list[str]:
         return _normalize_extension_list(value, DEFAULT_CAD_MODELS_EXTENSIONS)
+
+    @field_validator("document_extensions", mode="before")
+    @classmethod
+    def normalize_document_extensions(cls, value: object) -> list[str]:
+        return _normalize_extension_list(value, DEFAULT_DOCUMENT_EXTENSIONS)
 
     @field_validator("openable_extensions", mode="before")
     @classmethod
@@ -212,6 +220,28 @@ _ADDED_DEFAULT_TYPE_LABELS = (
     ".shd",
     ".sit",
     ".smt",
+    ".docm, .dot, .dotx, .dotm",
+    ".odt, .ott, .pages, .wpd",
+    ".xlsm, .xlsb, .xlt, .xltx, .xltm",
+    ".ods, .numbers",
+    ".pptm, .pps, .ppsx, .pot, .potx",
+    ".odp, .key",
+    ".vsd, .vsdx, .vss, .vstx",
+    ".msg, .eml, .oft",
+    ".epub, .mobi",
+    ".xps, .oxps",
+    ".ps",
+    ".yaml, .yml",
+    ".toml",
+    ".markdown, .rst, .adoc",
+    ".xhtml, .mhtml",
+    ".tsv",
+    ".pub",
+    ".one, .onepkg",
+    ".mpt",
+    ".tex, .ltx, .bib",
+    ".odg",
+    ".psd",
 )
 
 
@@ -306,6 +336,17 @@ class ConfigManager:
         if not isinstance(cad_raw, dict) or "cad_models_extensions" not in cad_raw:
             settings.cad.cad_models_extensions = list(DEFAULT_CAD_MODELS_EXTENSIONS)
             dirty = True
+        if not isinstance(cad_raw, dict) or "document_extensions" not in cad_raw:
+            settings.cad.document_extensions = list(DEFAULT_DOCUMENT_EXTENSIONS)
+            dirty = True
+        raw_docs = (
+            extra_cad_set((cad_raw or {}).get("document_extensions"))
+            if isinstance(cad_raw, dict)
+            else extra_cad_set()
+        )
+        if raw_docs in PREVIOUS_DEFAULT_DOCUMENT_SETS:
+            settings.cad.document_extensions = list(DEFAULT_DOCUMENT_EXTENSIONS)
+            dirty = True
         stripped_openable = exclude_extensions(settings.cad.openable_extensions, settings.cad.model_extensions)
         if stripped_openable != unique_extensions(settings.cad.openable_extensions):
             settings.cad.openable_extensions = stripped_openable
@@ -386,6 +427,12 @@ class ConfigManager:
         configured = self.settings.cad.cad_models_extensions
         if not configured:
             return list(DEFAULT_CAD_MODELS_EXTENSIONS)
+        return unique_extensions(configured)
+
+    def document_extensions(self) -> list[str]:
+        configured = self.settings.cad.document_extensions
+        if not configured:
+            return list(DEFAULT_DOCUMENT_EXTENSIONS)
         return unique_extensions(configured)
 
     def openable_cad_extensions(self) -> list[str]:

@@ -7,10 +7,12 @@ from creopdm.constants import (
     APP_VERSION,
     DEFAULT_CAD_MODELS_EXTENSIONS,
     DEFAULT_CREO_MODEL_EXTENSIONS,
+    DEFAULT_DOCUMENT_EXTENSIONS,
     DEFAULT_EXTRA_CAD_EXTENSIONS,
     DEFAULT_IGNORE_PATTERNS,
     DEFAULT_OPENABLE_CAD_EXTENSIONS,
     DEFAULT_TYPE_LABELS,
+    PREVIOUS_DEFAULT_DOCUMENT_SETS,
 )
 from creopdm.utils.classify import extra_cad_set, unique_type_labels
 
@@ -32,6 +34,7 @@ def test_home_page(client):
     assert f"Version {APP_VERSION}" in text
     assert "Status: Running" in text
     assert 'href="/settings"' in text
+    assert '<dialog id="busy-overlay"' in text
 
 
 def test_config_layout(data_dir):
@@ -46,6 +49,7 @@ def test_config_layout(data_dir):
     assert extra_cad_set(settings.cad.openable_extensions) == extra_cad_set(DEFAULT_OPENABLE_CAD_EXTENSIONS)
     assert extra_cad_set(settings.cad.model_extensions) == extra_cad_set(DEFAULT_CREO_MODEL_EXTENSIONS)
     assert extra_cad_set(settings.cad.cad_models_extensions) == extra_cad_set(DEFAULT_CAD_MODELS_EXTENSIONS)
+    assert extra_cad_set(settings.cad.document_extensions) == extra_cad_set(DEFAULT_DOCUMENT_EXTENSIONS)
     assert ".m_p" in settings.cad.extra_extensions
     assert ".dat" in settings.cad.extra_extensions
     assert ".sym" in settings.cad.extra_extensions
@@ -249,6 +253,45 @@ def test_missing_cad_models_extensions_migrate_to_defaults(tmp_path):
     assert extra_cad_set(loaded.cad.cad_models_extensions) == extra_cad_set(DEFAULT_CAD_MODELS_EXTENSIONS)
 
 
+def test_missing_document_extensions_migrate_to_defaults(tmp_path):
+    manager = ConfigManager(tmp_path / "appdata")
+    manager.ensure_layout()
+    settings = AppSettings()
+    manager.save(settings)
+    raw = json.loads(manager.settings_path.read_text(encoding="utf-8"))
+    del raw["cad"]["document_extensions"]
+    manager.settings_path.write_text(json.dumps(raw), encoding="utf-8")
+    manager._settings = None
+    loaded = manager.load()
+    assert extra_cad_set(loaded.cad.document_extensions) == extra_cad_set(DEFAULT_DOCUMENT_EXTENSIONS)
+
+
+def test_previous_document_defaults_shrink_to_office_list(tmp_path):
+    manager = ConfigManager(tmp_path / "appdata")
+    manager.ensure_layout()
+    settings = AppSettings()
+    settings.cad.document_extensions = sorted(PREVIOUS_DEFAULT_DOCUMENT_SETS[0])
+    manager.save(settings)
+    manager._settings = None
+    loaded = manager.load()
+    assert extra_cad_set(loaded.cad.document_extensions) == extra_cad_set(DEFAULT_DOCUMENT_EXTENSIONS)
+    assert ".md" not in loaded.cad.document_extensions
+    assert ".png" not in loaded.cad.document_extensions
+    assert ".psd" in loaded.cad.document_extensions
+
+
+def test_office_document_defaults_gain_psd(tmp_path):
+    manager = ConfigManager(tmp_path / "appdata")
+    manager.ensure_layout()
+    settings = AppSettings()
+    settings.cad.document_extensions = sorted(PREVIOUS_DEFAULT_DOCUMENT_SETS[-1])
+    manager.save(settings)
+    manager._settings = None
+    loaded = manager.load()
+    assert extra_cad_set(loaded.cad.document_extensions) == extra_cad_set(DEFAULT_DOCUMENT_EXTENSIONS)
+    assert ".psd" in loaded.cad.document_extensions
+
+
 def test_app_settings_dump_has_no_pydantic_serializer_warnings():
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -326,6 +369,28 @@ def test_previous_type_labels_gain_new_defaults(tmp_path):
         ".shd",
         ".sit",
         ".smt",
+        ".docm, .dot, .dotx, .dotm",
+        ".odt, .ott, .pages, .wpd",
+        ".xlsm, .xlsb, .xlt, .xltx, .xltm",
+        ".ods, .numbers",
+        ".pptm, .pps, .ppsx, .pot, .potx",
+        ".odp, .key",
+        ".vsd, .vsdx, .vss, .vstx",
+        ".msg, .eml, .oft",
+        ".epub, .mobi",
+        ".xps, .oxps",
+        ".ps",
+        ".yaml, .yml",
+        ".toml",
+        ".markdown, .rst, .adoc",
+        ".xhtml, .mhtml",
+        ".tsv",
+        ".pub",
+        ".one, .onepkg",
+        ".mpt",
+        ".tex, .ltx, .bib",
+        ".odg",
+        ".psd",
     }
     settings = AppSettings()
     settings.cad.type_labels = [
@@ -368,3 +433,9 @@ def test_previous_type_labels_gain_new_defaults(tmp_path):
     assert {"extension": ".shd", "label": "Shade Display"} in labels
     assert {"extension": ".sit", "label": "Site Parameters"} in labels
     assert {"extension": ".smt", "label": "Punch Parameters"} in labels
+    assert {"extension": ".odt, .ott, .pages, .wpd", "label": "Word Document"} in labels
+    assert {"extension": ".vsd, .vsdx, .vss, .vstx", "label": "Visio Drawing"} in labels
+    assert {"extension": ".msg, .eml, .oft", "label": "Email"} in labels
+    assert {"extension": ".xps, .oxps", "label": "XPS Document"} in labels
+    assert {"extension": ".yaml, .yml", "label": "YAML"} in labels
+    assert {"extension": ".psd", "label": "Photoshop"} in labels

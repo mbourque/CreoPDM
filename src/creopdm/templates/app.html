@@ -52,14 +52,14 @@
     </div>
 
     {% if status and status.files %}
-    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}">
+    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}">
       <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Select all files and clear type chips. Click again to clear."><strong>{{ status.files }}</strong> Files</button></li>
-      <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Select CAD models. Click again to filter. Click a third time to clear."><strong>{{ status.cad_models }}</strong> CAD Models</button></li>
-      <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Select Creo parts. Click again to filter. Click a third time to clear."><strong>{{ status.creo_parts }}</strong> Creo Parts</button></li>
+      <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Select Creo models. Click again to filter. Click a third time to clear."><strong>{{ status.cad_models }}</strong> Creo Models</button></li>
+      <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Select parts. Click again to filter. Click a third time to clear."><strong>{{ status.creo_parts }}</strong> Parts</button></li>
       <li><button type="button" class="metric" data-filter="assemblies" data-mode="off" title="Select assemblies. Click again to filter. Click a third time to clear."><strong>{{ status.assemblies }}</strong> Assemblies</button></li>
       <li><button type="button" class="metric" data-filter="drawings" data-mode="off" title="Select drawings. Click again to filter. Click a third time to clear."><strong>{{ status.drawings }}</strong> Drawings</button></li>
       <li><button type="button" class="metric" data-filter="documents" data-mode="off" title="Select documents. Click again to filter. Click a third time to clear."><strong>{{ status.documents }}</strong> Documents</button></li>
-      <li><button type="button" class="metric" data-filter="other" data-mode="off" title="Select non-CAD files. Click again to filter. Click a third time to clear."><strong>{{ status.other }}</strong> Other</button></li>
+      <li><button type="button" class="metric" data-filter="other" data-mode="off" title="Select files that are not Creo models. Click again to filter. Click a third time to clear."><strong>{{ status.other }}</strong> Other</button></li>
       <li><button type="button" class="metric" data-filter="checked_out" data-mode="off" title="Select checked out files in the current group. Click again to hide the rest. Click a third time to clear."><strong>{{ status.checked_out }}</strong> Checked out</button></li>
     </ul>
     <p class="muted small" id="selection-summary">Drop files, folders, or file links here to add them. Click a count to select a group. Click a row to select it; Shift-click a range; Ctrl-click to add or remove. Click a filename to open it. Click a folder name to open the folder. Double-click a file for history.</p>
@@ -69,7 +69,7 @@
 
     <div class="tabs" role="tablist">
       <button type="button" class="tab is-active" data-tab="files">Files</button>
-      <button type="button" class="tab" data-tab="changes">Would check in</button>
+      <button type="button" class="tab" data-tab="changes">Files to check in</button>
     </div>
 
     <section class="tab-panel" id="panel-files" data-folder="{{ current_folder }}">
@@ -189,7 +189,7 @@
     </section>
 
     <section class="tab-panel" id="panel-changes" hidden>
-      <p class="muted small">Workspace files that are not in the last checked-in version. Check in a listed object to record its save; checked new files are added with that check-in.</p>
+      <p class="muted small">Workspace files that are not in the last checked-in version. Check In records listed saves and can add new files to the project. You do not need to select a file on the Files tab first.</p>
       <div class="table-wrap">
         <table class="grid" id="changes-table">
           <thead>
@@ -222,7 +222,7 @@
               <td class="filename-cell">{{ item.filename }}
                 <div class="muted small">{{ item.relative_path }}</div>
               </td>
-              <td>Not in the project yet. Offered when you check in a nearby file.</td>
+              <td>Not in the project yet. Use Check In to add it.</td>
               <td>{{ item.size }} bytes</td>
               <td>—</td>
             </tr>
@@ -260,7 +260,7 @@
       <button type="button" class="btn" id="open-btn" disabled>Open</button>
     </span>
     <button type="button" class="btn" id="checkout-btn" disabled>Checkout</button>
-    <span class="toolbar-tip" title="Check in selected files, or add new files Creo saved in the workspace.">
+    <span class="toolbar-tip" title="Check in selected files, or add new workspace files to the project.">
       <button type="button" class="btn" id="checkin-btn"
               {% if selected %}data-project="{{ selected.uuid }}"{% endif %}
               {% if not selected %}disabled{% endif %}>Check In</button>

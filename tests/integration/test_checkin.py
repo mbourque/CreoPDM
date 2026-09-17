@@ -340,8 +340,8 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     (workspace / "bushing.prt").write_bytes(b"new-bushing")
     page = client.get(f"/?project={project['uuid']}")
     assert page.status_code == 200, page.text
-    assert "Would check in" in page.text
-    assert "Would check in · 2" not in page.text
+    assert "Files to check in" in page.text
+    assert "Files to check in · 2" not in page.text
     assert "Newer Creo save" not in page.text
     match = re.search(r'<button[^>]*id="checkin-btn"[^>]*>', page.text)
     assert match, page.text

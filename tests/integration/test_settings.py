@@ -29,6 +29,37 @@ def test_get_and_update_settings(client, tmp_path):
     assert extra_cad_set(payload["cad_extensions"]) == extra_cad_set(defaults)
     assert extra_cad_set(payload["cad_models_extensions"]) == extra_cad_set([".prt", ".asm", ".drw"])
     assert extra_cad_set(payload["default_cad_models_extensions"]) == extra_cad_set([".prt", ".asm", ".drw"])
+    assert extra_cad_set(payload["document_extensions"]) == extra_cad_set(payload["default_document_extensions"])
+    assert extra_cad_set(payload["document_extensions"]) == extra_cad_set(
+        [
+            ".pdf",
+            ".xps",
+            ".doc",
+            ".docx",
+            ".rtf",
+            ".txt",
+            ".odt",
+            ".xls",
+            ".xlsx",
+            ".csv",
+            ".ppt",
+            ".pptx",
+            ".pps",
+            ".ppsx",
+            ".mpp",
+            ".vsd",
+            ".vsdx",
+            ".pub",
+            ".one",
+            ".html",
+            ".htm",
+            ".eml",
+            ".msg",
+            ".psd",
+        ]
+    )
+    assert ".md" not in payload["document_extensions"]
+    assert ".png" not in payload["document_extensions"]
     openable = payload["cad_openable_extensions"]
     assert ".ncl" in openable
     assert ".tap" in openable
@@ -110,25 +141,47 @@ def test_get_and_update_settings(client, tmp_path):
     assert extra_cad_set(models_filter.json()["cad_models_extensions"]) == extra_cad_set([".prt", ".asm"])
     kept_models = client.put("/api/settings", json={"creo_open_mode": "association"})
     assert extra_cad_set(kept_models.json()["cad_models_extensions"]) == extra_cad_set([".prt", ".asm"])
+    docs_filter = client.put(
+        "/api/settings",
+        json={"creo_open_mode": "association", "document_extensions": [".pdf", "DOCX", ".odt"]},
+    )
+    assert docs_filter.status_code == 200, docs_filter.text
+    assert extra_cad_set(docs_filter.json()["document_extensions"]) == extra_cad_set(
+        [".pdf", ".docx", ".odt"]
+    )
+    kept_docs = client.put("/api/settings", json={"creo_open_mode": "association"})
+    assert extra_cad_set(kept_docs.json()["document_extensions"]) == extra_cad_set(
+        [".pdf", ".docx", ".odt"]
+    )
     rejected = client.put("/api/settings", json={"creo_open_mode": "association", "port": 70000})
     assert rejected.status_code == 422, rejected.text
     assert client.get("/api/settings").json()["port"] == 8765
 
     page = client.get("/settings")
     assert page.status_code == 200
-    assert "Open Creo models with" in page.text
-    assert "Workspace" in page.text
-    assert "CAD Models" in page.text
-    assert "Creo-openable models" in page.text
+    headings = [
+        "Open Creo models with",
+        "Workspace",
+        "Creo Models",
+        "Documents",
+        "Creo-openable models",
+        "Text files",
+        "Non openable CAD data",
+        "File type names",
+        "Ignored files",
+        "Network",
+        "Database",
+    ]
+    positions = [page.text.find(title) for title in headings]
+    assert all(index >= 0 for index in positions)
+    assert positions == sorted(positions)
     assert 'name="cad_models_extensions"' in page.text
-    assert "Text files" in page.text
-    assert "Non openable CAD data" in page.text
-    assert "Ignored files" in page.text
-    assert "Database" in page.text
-    assert "Network" in page.text
+    assert 'name="document_extensions"' in page.text
+    assert "Comma-separated, with or without the dot." in page.text
+    assert "notes.pdf.2" not in page.text
+    assert "Default: .pdf, .xps" not in page.text
     assert 'name="port"' in page.text
     assert 'value="8765"' in page.text
-    assert "File type names" in page.text
     assert 'href="/settings/types"' in page.text
     assert payload["type_labels"] == unique_type_labels(DEFAULT_TYPE_LABELS)
 

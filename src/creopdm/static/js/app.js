@@ -22,20 +22,28 @@
   }
 
   let busyDepth = 0;
+  const busyOverlay = $("#busy-overlay");
+  busyOverlay?.addEventListener("cancel", (event) => event.preventDefault());
+  function showBusyOverlay() {
+    if (!(busyOverlay instanceof HTMLDialogElement)) return;
+    if (!busyOverlay.open) busyOverlay.showModal();
+  }
+  function hideBusyOverlay() {
+    if (!(busyOverlay instanceof HTMLDialogElement)) return;
+    if (busyOverlay.open) busyOverlay.close();
+  }
   function setBusy(message) {
     busyDepth += 1;
-    const overlay = $("#busy-overlay");
     const text = $("#busy-message");
     if (text) text.textContent = message || "Working…";
-    if (overlay) overlay.hidden = false;
+    showBusyOverlay();
     document.body.classList.add("is-busy");
     document.body.setAttribute("aria-busy", "true");
   }
   function clearBusy() {
     busyDepth = Math.max(0, busyDepth - 1);
     if (busyDepth > 0) return;
-    const overlay = $("#busy-overlay");
-    if (overlay) overlay.hidden = true;
+    hideBusyOverlay();
     document.body.classList.remove("is-busy");
     document.body.removeAttribute("aria-busy");
   }
@@ -83,12 +91,12 @@
   const CAD_MODEL_CHILD_FILTERS = new Set(["creo_parts", "assemblies", "drawings"]);
   const METRIC_LABELS = {
     files: "all files",
-    cad_models: "CAD models",
-    creo_parts: "Creo parts",
+    cad_models: "Creo models",
+    creo_parts: "parts",
     assemblies: "assemblies",
     drawings: "drawings",
     documents: "documents",
-    other: "non-CAD files",
+    other: "files that are not Creo models",
     checked_out: "checked out files",
   };
 
@@ -111,7 +119,15 @@
   }
 
   function cadModelsExtensions() {
-    const raw = document.querySelector("#metric-filters")?.dataset.cadModels || "";
+    return listedExtensions("cadModels");
+  }
+
+  function documentExtensions() {
+    return listedExtensions("documents");
+  }
+
+  function listedExtensions(datasetKey) {
+    const raw = document.querySelector("#metric-filters")?.dataset[datasetKey] || "";
     return raw.split(/[\s,;]+/).map((item) => {
       const ext = item.trim().toLowerCase();
       if (!ext) return "";
@@ -128,6 +144,8 @@
   function rowMatchesMetric(row, key) {
     if (key === "checked_out") return row.dataset.checkedOut === "1";
     if (key === "cad_models") return cadModelsExtensions().includes(rowExtension(row));
+    if (key === "documents") return documentExtensions().includes(rowExtension(row));
+    if (key === "other") return !cadModelsExtensions().includes(rowExtension(row));
     const types = FILTERS[key];
     return types === null || types.includes(row.dataset.objectType);
   }
@@ -765,6 +783,13 @@
     }
   }
 
+  function setCheckinQueueCounts(pendingSaves, newFiles) {
+    if (!checkinBtn) return;
+    checkinBtn.dataset.pendingSaves = String(pendingSaves || 0);
+    checkinBtn.dataset.newFiles = String(newFiles || 0);
+    syncToolbar();
+  }
+
   function toggleRow(row) {
     row.classList.toggle("is-selected");
     lastSelectRow = row;
@@ -1386,7 +1411,8 @@
       const saves = data.saves || [];
       const created = data.new_files || [];
       const pending = saves.length + created.length;
-      if (tab) tab.textContent = pending ? `Would check in · ${pending}` : "Would check in";
+      if (tab) tab.textContent = pending ? `Files to check in · ${pending}` : "Files to check in";
+      setCheckinQueueCounts(saves.length, created.length);
       body.replaceChildren();
       if (!pending) {
         const row = document.createElement("tr");
@@ -1424,7 +1450,7 @@
         addRow([
           "New file",
           item.filename || "",
-          "Not in the project yet. Offered when you check in a nearby file.",
+          "Not in the project yet. Use Check In to add it.",
           item.size != null ? `${item.size} bytes` : "",
           "—",
         ]);
@@ -1493,6 +1519,10 @@
         .map((item) => item.trim())
         .filter(Boolean),
       cad_models_extensions: String(data.get("cad_models_extensions") || "")
+        .split(/[\s,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+      document_extensions: String(data.get("document_extensions") || "")
         .split(/[\s,;]+/)
         .map((item) => item.trim())
         .filter(Boolean),
@@ -1655,7 +1685,9 @@
     try {
       const response = await fetch(`/api/projects/${watchProjectId}/workspace-watch`);
       if (!response.ok) return;
-      const next = (await response.json()).stamp || "";
+      const data = await response.json();
+      setCheckinQueueCounts(data.pending_saves, data.new_files);
+      const next = data.stamp || "";
       if (watchStamp === null) {
         watchStamp = next;
         return;

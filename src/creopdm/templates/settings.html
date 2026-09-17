@@ -28,12 +28,30 @@
     </section>
 
     <section class="settings-card">
-      <h2>CAD Models</h2>
-      <p class="muted small">Extensions counted and filtered by the CAD Models chip on the file list. Numbered saves such as <code>shaft.prt.3</code> count as <code>.prt</code>.</p>
-      <label>CAD Models extensions
+      <h2>Workspace</h2>
+      <p class="muted small">Checked-out and downloaded files are copied here, one folder per project, with every file in that folder. The default is shown; choose another folder if you want a different workspace.</p>
+      <label>Workspace folder
+        <input name="workspace_root" type="text" value="{{ settings.workspace_root }}" placeholder="{{ settings.default_workspace_root }}">
+      </label>
+      <p class="muted small">Default: {{ settings.default_workspace_root }}</p>
+    </section>
+
+    <section class="settings-card">
+      <h2>Creo Models</h2>
+      <p class="muted small">Extensions counted and filtered by the Creo Models chip. The Other chip is everything else on the file list. Numbered saves such as <code>shaft.prt.3</code> count as <code>.prt</code>.</p>
+      <label>Creo Models extensions
         <textarea name="cad_models_extensions" rows="2" placeholder=".prt, .asm, .drw">{{ settings.cad_models_extensions | join(', ') }}</textarea>
       </label>
-      <p class="muted small">Default: {{ settings.default_cad_models_extensions | join(', ') }}</p>
+      <p class="muted small">Comma-separated, with or without the dot. Default: {{ settings.default_cad_models_extensions | join(', ') }}</p>
+    </section>
+
+    <section class="settings-card">
+      <h2>Documents</h2>
+      <p class="muted small">Extensions counted and filtered by the Documents chip.</p>
+      <label>Document extensions
+        <textarea name="document_extensions" rows="4" placeholder=".pdf, .docx, .xlsx">{{ settings.document_extensions | join(', ') }}</textarea>
+      </label>
+      <p class="muted small">Comma-separated, with or without the dot.</p>
     </section>
 
     <section class="settings-card">
@@ -76,15 +94,6 @@
         <textarea name="ignore_patterns" rows="3" placeholder="*.tst, trail.txt*, std.out">{{ settings.ignore_patterns | join(', ') }}</textarea>
       </label>
       <p class="muted small">Comma-separated gitignore patterns.</p>
-    </section>
-
-    <section class="settings-card">
-      <h2>Workspace</h2>
-      <p class="muted small">Checked-out and downloaded files are copied here, one folder per project, with every file in that folder. The default is shown; choose another folder if you want a different workspace.</p>
-      <label>Workspace folder
-        <input name="workspace_root" type="text" value="{{ settings.workspace_root }}" placeholder="{{ settings.default_workspace_root }}">
-      </label>
-      <p class="muted small">Default: {{ settings.default_workspace_root }}</p>
     </section>
 
     <section class="settings-card">

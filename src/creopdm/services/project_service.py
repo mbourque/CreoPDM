@@ -10,9 +10,7 @@ from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session
 
 from creopdm.constants import (
-    CAD_OBJECT_TYPES,
     DEFAULT_BRANCH,
-    DOCUMENT_OBJECT_TYPES,
     PROJECT_JSON_NAME,
     PROJECT_MARKER_DIR,
     ActivityAction,
@@ -39,7 +37,7 @@ from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.utils.files import remove_tree
 from creopdm.utils.identity import CurrentUserProvider
-from creopdm.utils.classify import matches_cad_models
+from creopdm.utils.classify import matches_cad_models, matches_document
 from creopdm.utils.native_dialog import default_project_location_start
 
 logger = get_logger("projects")
@@ -295,6 +293,7 @@ class ProjectService:
         )
         mine = sum(1 for row in active if row.user_name == user.user_name)
         models = self._workspaces._config.cad_models_extensions()
+        documents = self._workspaces._config.document_extensions()
         counts: dict[str, int | str] = {
             "files": len(objects),
             "cad_models": sum(
@@ -304,10 +303,12 @@ class ProjectService:
             "assemblies": sum(1 for obj in objects if obj.object_type == "CREO_ASSEMBLY"),
             "drawings": sum(1 for obj in objects if obj.object_type == "CREO_DRAWING"),
             "documents": sum(
-                1 for obj in objects if obj.object_type in {item.value for item in DOCUMENT_OBJECT_TYPES}
+                1 for obj in objects if matches_document(obj.filename, documents, obj.extension)
             ),
             "other": sum(
-                1 for obj in objects if obj.object_type not in {item.value for item in CAD_OBJECT_TYPES}
+                1
+                for obj in objects
+                if not matches_cad_models(obj.filename, models, obj.extension)
             ),
             "checked_out": len(active),
             "checked_out_by_me": mine,

@@ -6,6 +6,7 @@ from creopdm.utils.classify import (
     is_creo_openable,
     is_extra_cad,
     matches_cad_models,
+    matches_document,
     unique_type_labels,
 )
 
@@ -35,6 +36,17 @@ def test_classify_known_extensions():
     assert classify_filename("family.ptd") == ObjectType.CAD
     assert classify_filename("op10.lst") == ObjectType.CAD
     assert classify_filename("op10.ncl.tl1") == ObjectType.CAD
+    assert classify_filename("slides.pptx") == ObjectType.DOCUMENT
+    assert classify_filename("notes.odt") == ObjectType.DOCUMENT
+    assert classify_filename("photo.gif") == ObjectType.IMAGE
+    assert classify_filename("readme.md") == ObjectType.TEXT
+    assert classify_filename("mail.msg") == ObjectType.DOCUMENT
+    assert classify_filename("chart.vsdx") == ObjectType.DOCUMENT
+    assert classify_filename("spec.rtf") == ObjectType.DOCUMENT
+    assert classify_filename("art.psd") == ObjectType.IMAGE
+    assert classify_filename("data.json") == ObjectType.TEXT
+    assert classify_filename("custom.xyz", document_extensions=[".xyz"]) == ObjectType.DOCUMENT
+    assert classify_filename("spec.pdf", extra_cad_extensions=[".pdf"]) == ObjectType.CAD
 
 
 def test_classify_unknown_is_other():
@@ -51,6 +63,17 @@ def test_matches_cad_models_uses_logical_suffix():
     assert not matches_cad_models("cut.mfg", models)
     assert matches_cad_models("cut.mfg", [".mfg"])
     assert not matches_cad_models("shaft.prt", [])
+
+
+def test_matches_document_uses_logical_suffix():
+    docs = [".pdf", ".docx", ".odt"]
+    assert matches_document("notes.pdf", docs)
+    assert matches_document("notes.pdf.2", docs)
+    assert classify_filename("notes.pdf.2") == ObjectType.PDF
+    assert matches_document("spec.docx", docs, ".docx")
+    assert matches_document("letter.odt", docs)
+    assert not matches_document("shaft.prt", docs)
+    assert not matches_document("notes.pdf", [])
 
 
 def test_default_extra_cad_extensions():
@@ -235,3 +258,9 @@ def test_display_type_label_defaults_and_overrides():
     assert display_type_label("op10.ncl.tl1", "CAD", defaults) == "Intermediate CL File"
     assert display_type_label("OP10.NCL.TL12", "CAD", defaults) == "Intermediate CL File"
     assert display_type_label("rough.ncl", "CAD", defaults) == "CL Data"
+    assert display_type_label("notes.odt", "DOCUMENT", defaults) == "Word Document"
+    assert display_type_label("chart.vsdx", "DOCUMENT", defaults) == "Visio Drawing"
+    assert display_type_label("mail.msg", "DOCUMENT", defaults) == "Email"
+    assert display_type_label("spec.xps", "PDF", defaults) == "XPS Document"
+    assert display_type_label("config.yaml", "TEXT", defaults) == "YAML"
+    assert display_type_label("art.psd", "IMAGE", defaults) == "Photoshop"

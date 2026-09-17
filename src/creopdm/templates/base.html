@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-dnd5">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-dnd11">
 </head>
 <body>
   <header class="topbar">
@@ -26,15 +26,15 @@
   <main class="shell">
     {% block content %}{% endblock %}
   </main>
-  <div id="busy-overlay" class="busy-overlay" hidden>
+  <dialog id="busy-overlay" class="busy-overlay">
     <div class="busy-panel" role="status" aria-live="polite">
       <span class="busy-spinner" aria-hidden="true"></span>
       <p id="busy-message">Working…</p>
     </div>
-  </div>
+  </dialog>
   <div id="file-drop-overlay" hidden>
     <p>Drop files, folders, or file links to add them</p>
   </div>
-  <script src="/static/js/app.js?v={{ app_version }}-dnd5"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-dnd11"></script>
 </body>
 </html>

@@ -9,9 +9,11 @@ from pathlib import Path
 from creopdm.constants import (
     CREO_FILE_EXTENSIONS,
     DEFAULT_CREO_MODEL_EXTENSIONS,
+    DEFAULT_DOCUMENT_EXTENSIONS,
     DEFAULT_EXTRA_CAD_EXTENSIONS,
     DEFAULT_FOLDER_BY_TYPE,
     DEFAULT_OPENABLE_CAD_EXTENSIONS,
+    DOCUMENT_OBJECT_TYPES,
     OBJECT_TYPE_BY_EXTENSION,
     ObjectType,
 )
@@ -50,14 +52,31 @@ def matches_cad_models(
     extensions: Iterable[str] | None,
     stored_extension: str | None = None,
 ) -> bool:
-    """True when the file's logical suffix is in the CAD Models chip list."""
+    """True when the file's logical suffix is in the Creo Models chip list."""
+    return matches_extension_list(filename, extensions, stored_extension)
+
+
+def matches_document(
+    filename: str,
+    extensions: Iterable[str] | None,
+    stored_extension: str | None = None,
+) -> bool:
+    """True when the file's logical suffix is in the Documents chip list."""
+    return matches_extension_list(filename, extensions, stored_extension)
+
+
+def matches_extension_list(
+    filename: str,
+    extensions: Iterable[str] | None,
+    stored_extension: str | None = None,
+) -> bool:
     wanted = extra_cad_set(extensions)
     if not wanted:
         return False
     stored = normalize_extension(stored_extension or "")
     if stored in wanted:
         return True
-    canonical = CreoFileManager.normalize_creo_filename(filename)
+    canonical = CreoFileManager.normalize_creo_filename(filename, wanted)
     return Path(canonical).suffix.lower() in wanted
 
 
@@ -121,12 +140,13 @@ def classify_filename(
     filename: str,
     extra_cad_extensions: Iterable[str] | None = None,
     model_extensions: Iterable[str] | None = None,
+    document_extensions: Iterable[str] | None = None,
 ) -> ObjectType:
     """Map a filename to an object type. Unknown extensions become OTHER.
 
     Creo models always stay Creo types. Files Creo can open, and extra CAD
-    extensions from Settings, are classified as CAD. Built-in document types
-    stay documents unless listed as extra CAD extensions.
+    extensions from Settings, are classified as CAD. Document extensions from
+    Settings stay documents unless listed as extra CAD extensions.
     """
     models = unique_extensions(
         DEFAULT_CREO_MODEL_EXTENSIONS if model_extensions is None else model_extensions
@@ -134,7 +154,10 @@ def classify_filename(
     extras = unique_extensions(
         default_data_cad_extensions() if extra_cad_extensions is None else extra_cad_extensions
     )
-    canonical = CreoFileManager.normalize_creo_filename(filename, (*models, *extras))
+    documents = unique_extensions(
+        DEFAULT_DOCUMENT_EXTENSIONS if document_extensions is None else document_extensions
+    )
+    canonical = CreoFileManager.normalize_creo_filename(filename, (*models, *extras, *documents))
     suffix = Path(canonical).suffix.lower()
     mapped = OBJECT_TYPE_BY_EXTENSION.get(suffix)
     if mapped is not None and mapped.value.startswith("CREO_"):
@@ -143,6 +166,10 @@ def classify_filename(
         return ObjectType.CAD
     if _is_intermediate_cl(filename):
         return ObjectType.CAD
+    if suffix in extra_cad_set(documents):
+        if mapped in DOCUMENT_OBJECT_TYPES:
+            return mapped
+        return ObjectType.DOCUMENT
     return OBJECT_TYPE_BY_EXTENSION.get(suffix, ObjectType.OTHER)
 
 

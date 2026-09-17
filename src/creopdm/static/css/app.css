@@ -322,11 +322,14 @@ button.object-open:hover { text-decoration: underline; }
 .path-picker .btn { flex-shrink: 0; }
 .dialog label .muted { font-weight: 400; }
 .busy-overlay {
-  position: fixed; inset: 0; z-index: 2000;
-  display: flex; align-items: center; justify-content: center;
+  border: none;
+  padding: 0;
+  background: transparent;
+  max-width: none;
+}
+.busy-overlay::backdrop {
   background: rgba(18, 25, 32, 0.45);
 }
-.busy-overlay[hidden] { display: none !important; }
 .busy-panel {
   display: flex; align-items: center; gap: 0.8rem;
   min-width: 16rem; max-width: 28rem;

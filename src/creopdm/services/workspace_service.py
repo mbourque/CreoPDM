@@ -589,6 +589,7 @@ class WorkspaceService:
                         Path(relative).name,
                         extra_cad_extensions=self._config.data_cad_extensions(),
                         model_extensions=self._config.model_cad_extensions(),
+                        document_extensions=self._config.document_extensions(),
                     ).value,
                 }
             )

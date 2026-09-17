@@ -6,9 +6,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from creopdm.constants import CAD_OBJECT_TYPES, DEFAULT_CAD_MODELS_EXTENSIONS, DOCUMENT_OBJECT_TYPES
+from creopdm.constants import DEFAULT_CAD_MODELS_EXTENSIONS, DEFAULT_DOCUMENT_EXTENSIONS
 from creopdm.exceptions import PathValidationError
-from creopdm.utils.classify import matches_cad_models
+from creopdm.utils.classify import matches_cad_models, matches_document
 from creopdm.utils.paths import assert_safe_relative_path
 
 
@@ -27,28 +27,35 @@ def folder_view_counts(
     objects: list[Any],
     current: str = "",
     cad_models_extensions: list[str] | None = None,
+    document_extensions: list[str] | None = None,
 ) -> dict[str, int]:
     """Metric chip counts for the current folder view."""
     view = objects_in_folder_view(objects, current)
-    cad = {item.value for item in CAD_OBJECT_TYPES}
     models = cad_models_extensions if cad_models_extensions is not None else list(DEFAULT_CAD_MODELS_EXTENSIONS)
-    docs = {item.value for item in DOCUMENT_OBJECT_TYPES}
+    docs = document_extensions if document_extensions is not None else list(DEFAULT_DOCUMENT_EXTENSIONS)
+
+    def is_creo_model(obj: Any) -> bool:
+        return matches_cad_models(
+            str(getattr(obj, "filename", "") or ""),
+            models,
+            str(getattr(obj, "extension", "") or ""),
+        )
+
+    def is_document(obj: Any) -> bool:
+        return matches_document(
+            str(getattr(obj, "filename", "") or ""),
+            docs,
+            str(getattr(obj, "extension", "") or ""),
+        )
+
     return {
         "files": len(view),
-        "cad_models": sum(
-            1
-            for obj in view
-            if matches_cad_models(
-                str(getattr(obj, "filename", "") or ""),
-                models,
-                str(getattr(obj, "extension", "") or ""),
-            )
-        ),
+        "cad_models": sum(1 for obj in view if is_creo_model(obj)),
         "creo_parts": sum(1 for obj in view if getattr(obj, "object_type", "") == "CREO_PART"),
         "assemblies": sum(1 for obj in view if getattr(obj, "object_type", "") == "CREO_ASSEMBLY"),
         "drawings": sum(1 for obj in view if getattr(obj, "object_type", "") == "CREO_DRAWING"),
-        "documents": sum(1 for obj in view if getattr(obj, "object_type", "") in docs),
-        "other": sum(1 for obj in view if getattr(obj, "object_type", "") not in cad),
+        "documents": sum(1 for obj in view if is_document(obj)),
+        "other": sum(1 for obj in view if not is_creo_model(obj)),
         "checked_out": sum(
             1
             for obj in view

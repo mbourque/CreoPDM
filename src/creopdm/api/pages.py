@@ -131,6 +131,7 @@ def home(
             objects,
             current_folder,
             ctx.config.cad_models_extensions(),
+            ctx.config.document_extensions(),
         )
 
     return render(
@@ -148,6 +149,7 @@ def home(
             "list_entries": list_entries,
             "status": status,
             "cad_models_extensions": ctx.config.cad_models_extensions(),
+            "document_extensions": ctx.config.document_extensions(),
             "checkin_queue": checkin_queue,
             "workspace_path": str(ctx.config.workspace_for_project(selected.uuid)) if selected else None,
             "object_types": [item.value for item in ObjectType],

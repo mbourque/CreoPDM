@@ -585,6 +585,7 @@ class ObjectService:
                 stored_name,
                 extra_cad_extensions=data_extras,
                 model_extensions=models,
+                document_extensions=self._config.document_extensions() if self._config else None,
             )
             extension = Path(logical_name).suffix.lower() or Path(stored_name).suffix.lower()
             stem = Path(logical_name).stem
