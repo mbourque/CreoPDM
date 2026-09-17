@@ -26,7 +26,7 @@ dev = [
 ]
 
 [project.scripts]
-creopdm = "creopdm.main:main"
+creopdm = "creopdm.main:run_cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]

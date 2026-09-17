@@ -107,15 +107,25 @@ def main(argv: list[str] | None = None) -> None:
     uvicorn.run(app, host=host, port=port, log_level="info", log_config=None)
 
 
-def run() -> None:
+def run(argv: list[str] | None = None) -> None:
     try:
-        main()
+        main(argv)
     except KeyboardInterrupt:
         logging.getLogger("creopdm").info("Shutdown requested")
         sys.exit(0)
     except ConfigurationError as exc:
         print(exc.message, file=sys.stderr)
         sys.exit(1)
+
+
+def run_cli() -> None:
+    """Installed `creopdm` command: same as pytest, on PATH after the venv is active."""
+    argv = list(sys.argv[1:])
+    if "--port" not in argv:
+        argv = ["--port", "52113", *argv]
+    if "--no-browser" not in argv:
+        argv = ["--no-browser", *argv]
+    run(argv)
 
 
 if __name__ == "__main__":
