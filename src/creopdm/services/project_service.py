@@ -17,6 +17,7 @@ from creopdm.constants import (
     CheckoutStatus,
 )
 from creopdm.exceptions import (
+    DuplicateProjectError,
     PathValidationError,
     ProjectNotFoundError,
     RepositoryError,
@@ -78,6 +79,24 @@ class ProjectService:
         self._workspaces.ensure_vault(project)
         return project
 
+    def _require_unique_name(
+        self,
+        session: Session,
+        name: str,
+        *,
+        exclude_uuid: str | None = None,
+    ) -> None:
+        wanted = name.strip().casefold()
+        stmt = select(Project).where(Project.active.is_(True))
+        for existing in session.scalars(stmt):
+            if exclude_uuid and existing.uuid == exclude_uuid:
+                continue
+            if existing.name.strip().casefold() == wanted:
+                raise DuplicateProjectError(
+                    f'A project named "{existing.name}" already exists.',
+                    details={"name": existing.name},
+                )
+
     def create_project(
         self,
         session: Session,
@@ -87,6 +106,7 @@ class ProjectService:
     ) -> Project:
         if not name.strip():
             raise PathValidationError("A project name is required.")
+        self._require_unique_name(session, name)
 
         project_uuid = str(uuid.uuid4())
         user = self._users.get_current_user()
@@ -133,6 +153,7 @@ class ProjectService:
         new_name = name.strip()
         if not new_name:
             raise ValidationAppError("A project name is required.")
+        self._require_unique_name(session, new_name, exclude_uuid=project.uuid)
         new_number = (number or "").strip() or None
         new_description = (description or "").strip() or None
         user = self._users.get_current_user()

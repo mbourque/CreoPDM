@@ -6,8 +6,8 @@ from pathlib import Path
 import time
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -62,6 +62,17 @@ def _creo_label(ctx: AppContext) -> str:
     return "Not Connected"
 
 
+def _creojs_library(ctx: AppContext) -> Path | None:
+    finder = getattr(ctx.creo, "find_creojs_library", None)
+    if not callable(finder):
+        return None
+    found = finder()
+    if found is None:
+        return None
+    path = Path(found)
+    return path if path.is_file() else None
+
+
 def _creo_executable(ctx: AppContext) -> str | None:
     finder = getattr(ctx.creo, "find_executable", None)
     if not callable(finder):
@@ -85,6 +96,18 @@ def _creo_page(ctx: AppContext) -> dict[str, str | None]:
     }
     _CREO_PAGE_CACHE = (now, payload)
     return payload
+
+
+@router.get("/creojs.js")
+def creojs_library(ctx: AppContext = Depends(get_context)) -> FileResponse:
+    """Serve Creo's Creo.JS bridge so the embedded browser can talk to this session."""
+    path = _creojs_library(ctx)
+    if path is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Creo.JS was not found next to the Creo executable in Settings.",
+        )
+    return FileResponse(path, media_type="application/javascript")
 
 
 @router.get("/", response_class=HTMLResponse)

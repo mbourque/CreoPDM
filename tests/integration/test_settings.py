@@ -9,7 +9,7 @@ def test_get_and_update_settings(client, tmp_path):
     response = client.get("/api/settings")
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["creo_open_mode"] in {"executable", "association"}
+    assert payload["creo_open_mode"] in {"executable", "association", "embedded"}
     assert payload["workspace_root"]
     assert payload["default_workspace_root"]
     defaults = payload["default_cad_extensions"]
@@ -114,6 +114,12 @@ def test_get_and_update_settings(client, tmp_path):
     assert Path(body["workspace_root"]) == workspace.resolve()
     assert workspace.is_dir()
 
+    embedded = client.put("/api/settings", json={"creo_open_mode": "embedded"})
+    assert embedded.status_code == 200, embedded.text
+    assert embedded.json()["creo_open_mode"] == "embedded"
+    restored = client.put("/api/settings", json={"creo_open_mode": "association"})
+    assert restored.status_code == 200, restored.text
+
     stored = client.put(
         "/api/settings",
         json={
@@ -159,6 +165,8 @@ def test_get_and_update_settings(client, tmp_path):
 
     page = client.get("/settings")
     assert page.status_code == 200
+    assert "Embedded Creo Browser" in page.text
+    assert 'value="embedded"' in page.text
     headings = [
         "Open Creo models with",
         "Workspace",

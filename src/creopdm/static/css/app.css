@@ -65,8 +65,45 @@ a.brand:hover { text-decoration: none; color: inherit; }
   display: flex; justify-content: space-between; align-items: center;
   padding: 0 0.9rem 0.6rem;
   flex-shrink: 0;
+  gap: 0.5rem;
 }
-.sidebar h2 { margin: 0; font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: #93a4b5; }
+.sidebar-title { margin: 0; font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: #93a4b5; }
+.sidebar-menu-btn {
+  display: none;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.2rem 0.15rem;
+  font: inherit;
+  text-align: left;
+}
+.sidebar-menu-btn:hover { color: #fff; }
+.hamburger {
+  width: 1.05rem;
+  height: 0.82rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.hamburger span {
+  display: block;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+}
+.sidebar-current {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .project-list { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow: auto; }
 .project-item {
   display: flex; flex-direction: column; gap: 0.1rem;
@@ -148,9 +185,11 @@ a.brand:hover { text-decoration: none; color: inherit; }
 }
 .settings-form label { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.55rem 0; font-weight: 600; }
 .settings-form input[type="text"],
+.settings-form select,
 .settings-form textarea {
   font: inherit; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 4px; font-weight: 400;
 }
+.settings-form select { width: max-content; min-width: 8rem; }
 .settings-form textarea {
   width: 100%;
   resize: vertical;
@@ -398,7 +437,28 @@ body.is-file-drag #file-drop-overlay {
 
 @media (max-width: 860px) {
   .workspace { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
-  .sidebar { max-height: 11rem; }
+  .sidebar {
+    position: relative;
+    z-index: 8;
+    overflow: visible;
+    padding: 0.45rem 0;
+  }
+  .sidebar-title { display: none; }
+  .sidebar-menu-btn { display: flex; }
+  .sidebar-head { padding: 0 0.75rem; }
+  .project-list {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex: none;
+    max-height: min(20rem, 60vh);
+    background: #16202b;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+    border-bottom: 1px solid #314252;
+  }
+  .sidebar.is-open .project-list { display: block; }
   .content-head, .detail-head { flex-direction: column; }
   .search-form input[type="search"] { width: 100%; }
 }

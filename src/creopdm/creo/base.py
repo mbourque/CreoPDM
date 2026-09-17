@@ -69,6 +69,10 @@ class CreoConnector(ABC):
     def open_model(self, path: Path) -> None:
         """Ask Creo to open a model from disk."""
 
+    def cad_open_mode(self) -> str:
+        """How CAD models are opened: executable, association, or embedded."""
+        return "executable"
+
     def scan_model(self, path: Path) -> dict[str, Any]:
         """Optional combined scan used by later milestones."""
         raise NotImplementedError

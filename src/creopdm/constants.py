@@ -7,6 +7,7 @@ from enum import StrEnum
 APP_NAME = "CreoPDM"
 APP_VERSION = "0.1.0"
 APP_SCHEMA_VERSION = 1
+CREO_OPEN_MODES = ("executable", "association", "embedded")
 
 DEFAULT_BRANCH = "main"
 DEFAULT_REVISION = "A"

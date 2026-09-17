@@ -35,6 +35,9 @@ def test_home_page(client):
     assert "Status: Running" in text
     assert 'href="/settings"' in text
     assert '<dialog id="busy-overlay"' in text
+    assert 'type="text/creojs"' in text
+    assert 'src="/static/js/app.js' in text
+    assert 'id="project-menu-btn"' in text
 
 
 def test_config_layout(data_dir):

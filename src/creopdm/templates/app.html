@@ -4,7 +4,12 @@
 <section class="workspace">
   <aside class="sidebar">
     <div class="sidebar-head">
-      <h2>Projects</h2>
+      <button type="button" class="sidebar-menu-btn" id="project-menu-btn"
+              aria-expanded="false" aria-controls="project-list" aria-label="Projects">
+        <span class="hamburger" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="sidebar-current">{{ selected.name if selected else "Projects" }}</span>
+      </button>
+      <h2 class="sidebar-title">Projects</h2>
       <button type="button" class="btn btn-small" id="new-project-btn">New</button>
     </div>
     <ul class="project-list" id="project-list">

@@ -14,7 +14,7 @@
     <section class="settings-card">
       <h2>Open Creo models with</h2>
       <label class="choice">
-        <input type="radio" name="creo_open_mode" value="executable" {% if settings.creo_open_mode != 'association' %}checked{% endif %}>
+        <input type="radio" name="creo_open_mode" value="executable" {% if settings.creo_open_mode == 'executable' %}checked{% endif %}>
         Specific application
       </label>
       <label>Application
@@ -24,7 +24,11 @@
         <input type="radio" name="creo_open_mode" value="association" {% if settings.creo_open_mode == 'association' %}checked{% endif %}>
         Windows file association
       </label>
-      <p class="muted small">Word, Excel, PDF, text, and other non-CAD files always open with their Windows association.</p>
+      <label class="choice">
+        <input type="radio" name="creo_open_mode" value="embedded" {% if settings.creo_open_mode == 'embedded' %}checked{% endif %}>
+        Embedded Creo Browser
+      </label>
+      <p class="muted small">Embedded Creo Browser opens CAD in the Creo session showing this page and does not start the application above. Word, Excel, PDF, text, and other non-CAD files always open with their Windows association.</p>
     </section>
 
     <section class="settings-card">

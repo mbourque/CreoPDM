@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from creopdm.constants import APP_NAME, APP_VERSION
+from creopdm.constants import APP_NAME, APP_VERSION, CREO_OPEN_MODES
 
 
 class HealthResponse(BaseModel):
@@ -162,6 +162,7 @@ class CheckinPreviewResponse(BaseModel):
 
 class CreoOpenRequest(BaseModel):
     object_id: str
+    launch: bool = True
 
 
 class CreoOpenResponse(BaseModel):
@@ -169,6 +170,7 @@ class CreoOpenResponse(BaseModel):
     path: str
     method: str
     working_directory: str
+    creo_object: bool = False
 
 
 class CreoStatusResponse(BaseModel):
@@ -284,8 +286,8 @@ class SettingsUpdateRequest(BaseModel):
     @classmethod
     def valid_open_mode(cls, value: str) -> str:
         key = (value or "executable").strip().lower()
-        if key not in {"executable", "association"}:
-            raise ValueError("Open mode must be 'executable' or 'association'.")
+        if key not in CREO_OPEN_MODES:
+            raise ValueError("Open mode must be 'executable', 'association', or 'embedded'.")
         return key
 
     @field_validator("cad_extensions")

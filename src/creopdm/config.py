@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from creopdm.constants import (
     APP_NAME,
+    CREO_OPEN_MODES,
     DEFAULT_CAD_MODELS_EXTENSIONS,
     DEFAULT_CREO_MODEL_EXTENSIONS,
     DEFAULT_DOCUMENT_EXTENSIONS,
@@ -70,7 +71,7 @@ class CreoConfig(BaseModel):
     @classmethod
     def valid_open_mode(cls, value: str) -> str:
         key = (value or "executable").strip().lower()
-        if key not in {"executable", "association"}:
+        if key not in CREO_OPEN_MODES:
             return "executable"
         return key
 

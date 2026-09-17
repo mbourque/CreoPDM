@@ -1,6 +1,36 @@
 (() => {
   const $ = (sel, root = document) => root.querySelector(sel);
 
+  function inCreoBrowser() {
+    try {
+      return Boolean(window.external && window.external.ptc);
+    } catch {
+      return false;
+    }
+  }
+
+  const creoJSReady = (function loadHostedCreoJS() {
+    if (!inCreoBrowser()) return Promise.resolve(false);
+    if (window.CreoJS) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = "/creojs.js";
+      script.onload = () => {
+        try {
+          if (document.readyState === "complete" && window.CreoJS && typeof window.CreoJS.$INITIALIZE === "function") {
+            window.CreoJS.$INITIALIZE();
+          }
+        } catch {
+          resolve(false);
+          return;
+        }
+        resolve(true);
+      };
+      script.onerror = () => resolve(false);
+      document.head.appendChild(script);
+    });
+  })();
+
   function showError(el, message) {
     if (!el) return;
     el.hidden = !message;
@@ -243,7 +273,31 @@
   const checkinForm = $("#checkin-form");
   const settingsForm = $("#settings-form");
 
-  $("#new-project-btn")?.addEventListener("click", () => showProjectDialog("create"));
+  const projectSidebar = document.querySelector(".sidebar");
+  const projectMenuBtn = $("#project-menu-btn");
+  function closeProjectMenu() {
+    projectSidebar?.classList.remove("is-open");
+    projectMenuBtn?.setAttribute("aria-expanded", "false");
+  }
+  function toggleProjectMenu(event) {
+    event.stopPropagation();
+    const open = projectSidebar?.classList.toggle("is-open");
+    projectMenuBtn?.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  projectMenuBtn?.addEventListener("click", toggleProjectMenu);
+  document.addEventListener("click", (event) => {
+    if (!projectSidebar?.classList.contains("is-open")) return;
+    if (projectSidebar.contains(event.target)) return;
+    closeProjectMenu();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeProjectMenu();
+  });
+
+  $("#new-project-btn")?.addEventListener("click", () => {
+    closeProjectMenu();
+    showProjectDialog("create");
+  });
   $("#rename-project-btn")?.addEventListener("click", () => showProjectDialog("rename"));
   $("#project-cancel")?.addEventListener("click", () => projectDialog?.close());
 
@@ -1027,7 +1081,7 @@
     selectOnly(row);
     if (row.classList.contains("folder-row")) return;
     if (!openLink?.dataset.uuid || event.detail > 1) return;
-    void postAction("/api/creo/open", { object_id: openLink.dataset.uuid }, "POST", "");
+    void openPdmObject(openLink.dataset.uuid);
   });
 
   document.querySelector("#object-table")?.addEventListener("dblclick", (event) => {
@@ -1100,13 +1154,69 @@
     return failed.map((item) => `${item.filename || item.uuid}: ${item.message}`).join(" ");
   }
 
+  function hostedCreoJS() {
+    try {
+      return Boolean(
+        window.CreoJS &&
+          typeof window.CreoJS.isAvailable === "function" &&
+          window.CreoJS.isAvailable()
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function whenCreoJSReady() {
+    return new Promise((resolve, reject) => {
+      try {
+        if (typeof window.CreoJS.$ADD_ON_LOAD === "function") {
+          window.CreoJS.$ADD_ON_LOAD(resolve);
+          return;
+        }
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async function openPdmObject(objectId) {
+    await creoJSReady;
+    if (hostedCreoJS()) {
+      const prepared = await postAction(
+        "/api/creo/open",
+        { object_id: objectId, launch: false },
+        "POST",
+        ""
+      );
+      if (!prepared) return null;
+      if (prepared.creo_object) {
+        try {
+          await whenCreoJSReady();
+          await window.CreoJS.openModel(prepared.working_directory, prepared.filename);
+        } catch (err) {
+          const message = err && err.message ? err.message : String(err);
+          showError(
+            $("#toolbar-error"),
+            message || "Creo could not open the model in this session."
+          );
+          return null;
+        }
+      } else {
+        return postAction("/api/creo/open", { object_id: objectId }, "POST", "");
+      }
+      return prepared;
+    }
+    return postAction("/api/creo/open", { object_id: objectId }, "POST", "");
+  }
+
   openBtn?.addEventListener("click", async () => {
     const ids = selectedIds();
     if (ids.length !== 1) {
       showError($("#toolbar-error"), "Select one file to open.");
       return;
     }
-    await postAction("/api/creo/open", { object_id: ids[0] }, "POST", "");
+    await openPdmObject(ids[0]);
   });
 
   checkoutBtn?.addEventListener("click", async () => {
@@ -1716,7 +1826,7 @@
   document.querySelector(".detail-head .object-open")?.addEventListener("click", async (event) => {
     event.preventDefault();
     const id = event.currentTarget.dataset.uuid;
-    if (id) await postAction("/api/creo/open", { object_id: id }, "POST", "");
+    if (id) await openPdmObject(id);
   });
 
   restoreStoredFilters();

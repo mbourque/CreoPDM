@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from creopdm.creo.base import CreoConnector
+from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import CreoUnavailableError, PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.services.checkout_service import CheckoutService
@@ -36,7 +37,7 @@ class CreoService:
     def set_connector(self, connector: CreoConnector) -> None:
         self._connector = connector
 
-    def open_object(self, session: Session, object_uuid: str) -> dict[str, str]:
+    def open_object(self, session: Session, object_uuid: str, launch: bool = True) -> dict[str, str | bool]:
         obj = self._objects.get_object(session, object_uuid)
         project = obj.project
         checkout = self._checkouts.active_for(session, obj.id)
@@ -79,17 +80,27 @@ class CreoService:
                 f"{path.name} cannot be opened. This file type is not opened by Creo.",
                 details={"path": str(path), "filename": path.name},
             )
-        method = self._open_path(
-            path,
-            creo_object=obj.object_type.startswith("CREO_")
-            or is_creo_openable(path.name, models, all_cad),
+        creo_object = obj.object_type.startswith("CREO_") or is_creo_openable(
+            path.name, models, all_cad
         )
-        logger.info("Opened %s via %s from %s", path, method, workdir)
+        logical = CreoFileManager.normalize_creo_filename(path.name, (*models, *all_cad))
+        if launch:
+            if creo_object and self._connector.cad_open_mode() == "embedded":
+                raise ValidationAppError(
+                    "Open this model from Creo's built-in browser.",
+                    details={"path": str(path), "filename": path.name},
+                )
+            method = self._open_path(path, creo_object=creo_object)
+            logger.info("Opened %s via %s from %s", path, method, workdir)
+        else:
+            method = "prepared"
+            logger.info("Prepared %s for Creo session open from %s", path, workdir)
         return {
             "path": str(path),
             "method": method,
-            "filename": obj.filename,
+            "filename": logical,
             "working_directory": str(workdir),
+            "creo_object": creo_object,
         }
 
     def _open_path(self, path: Path, creo_object: bool) -> str:

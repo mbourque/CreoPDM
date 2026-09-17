@@ -21,6 +21,33 @@ from creopdm.utils.launch import open_windows_file, start_executable, working_di
 logger = get_logger("creo")
 
 _PROCESS_NAMES = ("xtop.exe", "parametric.exe")
+_CREOJS_LIBRARY = Path("Common Files") / "apps" / "creojs" / "creojsweb" / "creojs.js"
+
+
+def locate_creojs_library(executable: Path | str | None) -> Path | None:
+    """Find Creo.JS next to parametric.exe / parametric.bat (Creo loadpoint)."""
+    if not executable:
+        return None
+    start = Path(executable).expanduser()
+    try:
+        start = start.resolve()
+    except OSError:
+        pass
+    current = start.parent if start.is_file() or start.suffix else start
+    roots = [current, *current.parents]
+    seen: set[Path] = set()
+    for root in roots:
+        try:
+            key = root.resolve()
+        except OSError:
+            key = root
+        if key in seen:
+            continue
+        seen.add(key)
+        candidate = root / _CREOJS_LIBRARY
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 class WindowsCreoConnector(CreoConnector):
@@ -72,6 +99,11 @@ class WindowsCreoConnector(CreoConnector):
                 details={"path": str(target)},
             )
         workdir = working_directory_for(target)
+        if self._open_mode == "embedded":
+            raise CreoUnavailableError(
+                "Open this model from Creo's built-in browser.",
+                details={"path": str(target)},
+            )
         parametric = self.find_executable()
         if self._open_mode == "association" or parametric is None:
             if os.name == "nt":
@@ -90,6 +122,12 @@ class WindowsCreoConnector(CreoConnector):
             if candidate.is_file():
                 return candidate
         return None
+
+    def cad_open_mode(self) -> str:
+        return self._open_mode
+
+    def find_creojs_library(self) -> Path | None:
+        return locate_creojs_library(self.find_executable())
 
     def _candidates(self) -> list[Path]:
         found: list[Path] = []

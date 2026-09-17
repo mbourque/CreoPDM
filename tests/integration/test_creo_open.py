@@ -6,6 +6,7 @@ from creopdm.app import build_context, create_app
 from creopdm.config import ConfigManager
 from creopdm.creo.null_connector import NullCreoConnector
 from creopdm.creo.windows_connector import WindowsCreoConnector
+from creopdm.exceptions import CreoUnavailableError
 from creopdm.services.creo_service import CreoService
 from creopdm.utils.identity import StaticUserProvider
 from tests.conftest import requires_git
@@ -48,6 +49,33 @@ def test_open_in_creo_uses_connector(data_dir, repo_parent, identity: StaticUser
         assert recorder.opened
         assert recorder.opened[0].name == "base.prt"
         assert recorder.opened[0].parent.name == project["uuid"]
+
+
+@requires_git
+def test_open_prepare_does_not_launch(data_dir, repo_parent, identity: StaticUserProvider):
+    recorder = RecordingConnector()
+    ctx = build_context(ConfigManager(), users=identity)
+    ctx.creo = recorder
+    ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
+    with TestClient(create_app(ctx)) as client:
+        project = client.post("/api/projects", json={"name": "Prepare"}).json()
+        created = client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={"file": ("hub.prt", b"solid", "application/octet-stream")},
+            data={"comment": "Add hub"},
+        )
+        assert created.status_code == 201, created.text
+        prepared = client.post(
+            "/api/creo/open",
+            json={"object_id": created.json()["uuid"], "launch": False},
+        )
+        assert prepared.status_code == 200, prepared.text
+        body = prepared.json()
+        assert body["method"] == "prepared"
+        assert body["creo_object"] is True
+        assert body["filename"] == "hub.prt"
+        assert Path(body["path"]).name == "hub.prt"
+        assert recorder.opened == []
 
 
 @requires_git
@@ -110,6 +138,28 @@ def test_windows_connector_association_uses_startfile(tmp_path: Path, monkeypatc
     connector = WindowsCreoConnector(open_mode="association")
     connector.open_model(model)
     assert opened[0] == model.resolve()
+
+
+def test_windows_connector_embedded_does_not_launch(tmp_path: Path, monkeypatch):
+    fake = tmp_path / "parametric.exe"
+    fake.write_bytes(b"fake")
+    model = tmp_path / "CAD" / "shaft.prt"
+    model.parent.mkdir(parents=True)
+    model.write_bytes(b"solid")
+    launched: list[object] = []
+
+    def fake_popen(*args, **kwargs):
+        launched.append(args)
+        raise AssertionError("embedded mode must not start Creo")
+
+    monkeypatch.setattr("creopdm.utils.launch.subprocess.Popen", fake_popen)
+    connector = WindowsCreoConnector(executable=str(fake), open_mode="embedded")
+    try:
+        connector.open_model(model)
+        raise AssertionError("embedded open_model should refuse to launch")
+    except CreoUnavailableError as exc:
+        assert "built-in browser" in exc.message.lower()
+    assert launched == []
 
 
 def test_windows_connector_starts_in_model_directory(tmp_path: Path, monkeypatch):
@@ -250,3 +300,67 @@ def test_open_openable_cad_uses_windows_association(
         assert opened_resp.json()["method"] == "shell"
         assert opened
         assert opened[0].name == "rough.ncl"
+
+
+class EmbeddedConnector(RecordingConnector):
+    def cad_open_mode(self) -> str:
+        return "embedded"
+
+
+@requires_git
+def test_open_embedded_does_not_launch_cad(data_dir, repo_parent, identity: StaticUserProvider):
+    recorder = EmbeddedConnector()
+    ctx = build_context(ConfigManager(), users=identity)
+    ctx.creo = recorder
+    ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
+    with TestClient(create_app(ctx)) as client:
+        project = client.post("/api/projects", json={"name": "Embedded"}).json()
+        created = client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={"file": ("cover.prt", b"solid", "application/octet-stream")},
+            data={"comment": "Add cover"},
+        )
+        assert created.status_code == 201, created.text
+        object_id = created.json()["uuid"]
+        opened = client.post("/api/creo/open", json={"object_id": object_id})
+        assert opened.status_code == 400, opened.text
+        assert "built-in browser" in opened.json()["error"]["message"].lower()
+        assert recorder.opened == []
+        prepared = client.post(
+            "/api/creo/open",
+            json={"object_id": object_id, "launch": False},
+        )
+        assert prepared.status_code == 200, prepared.text
+        assert prepared.json()["method"] == "prepared"
+        assert prepared.json()["creo_object"] is True
+        assert recorder.opened == []
+
+
+@requires_git
+def test_open_embedded_still_opens_documents(data_dir, repo_parent, identity, monkeypatch):
+    opened: list[Path] = []
+    monkeypatch.setattr("creopdm.services.creo_service.os.name", "nt")
+    monkeypatch.setattr("creopdm.utils.launch.os.name", "nt")
+
+    def fake_start(path: Path, workdir: Path) -> None:
+        opened.append(Path(path))
+
+    monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
+    recorder = EmbeddedConnector()
+    ctx = build_context(ConfigManager(), users=identity)
+    ctx.creo = recorder
+    ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
+    with TestClient(create_app(ctx)) as client:
+        project = client.post("/api/projects", json={"name": "EmbeddedDocs"}).json()
+        created = client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={"file": ("notes.txt", b"hello", "text/plain")},
+            data={"comment": "Notes"},
+        )
+        assert created.status_code == 201, created.text
+        opened_resp = client.post("/api/creo/open", json={"object_id": created.json()["uuid"]})
+        assert opened_resp.status_code == 200, opened_resp.text
+        assert opened_resp.json()["method"] == "shell"
+        assert recorder.opened == []
+        assert opened
+        assert opened[0].name == "notes.txt"

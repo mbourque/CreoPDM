@@ -93,6 +93,45 @@ def test_create_project_requires_name(client):
 
 
 @requires_git
+def test_create_project_rejects_duplicate_name_case_insensitive(client, repo_parent):
+    first, _ = _create_project(client, repo_parent, name="Robot Arm")
+    same = client.post("/api/projects", json={"name": "Robot Arm"})
+    assert same.status_code == 409, same.text
+    assert "already exists" in same.json()["error"]["message"].lower()
+    folded = client.post("/api/projects", json={"name": "robot arm"})
+    assert folded.status_code == 409, folded.text
+    listing = client.get("/api/projects").json()
+    names = [item["name"] for item in listing]
+    assert names.count("Robot Arm") == 1
+    assert "robot arm" not in names
+
+
+@requires_git
+def test_rename_project_rejects_duplicate_name_case_insensitive(client, repo_parent):
+    first, _ = _create_project(client, repo_parent, name="Alpha Cell")
+    second, _ = _create_project(client, repo_parent, name="Beta Cell")
+    taken = client.patch(
+        f"/api/projects/{second['uuid']}",
+        json={"name": "alpha cell"},
+    )
+    assert taken.status_code == 409, taken.text
+    assert "already exists" in taken.json()["error"]["message"].lower()
+    kept = client.patch(
+        f"/api/projects/{second['uuid']}",
+        json={"name": "Beta Cell"},
+    )
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["name"] == "Beta Cell"
+    renamed = client.patch(
+        f"/api/projects/{second['uuid']}",
+        json={"name": "Gamma Cell"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["name"] == "Gamma Cell"
+    assert first["name"] == "Alpha Cell"
+
+
+@requires_git
 def test_rename_project_keeps_folder(client, repo_parent, data_dir):
     payload, location = _create_project(client, repo_parent)
     renamed = client.patch(
@@ -126,6 +165,8 @@ def test_home_remembers_last_opened_project(client, repo_parent):
     assert "<h1>Second Arm</h1>" in home.text
     assert first["name"] in home.text
     assert f'href="/?project={second["uuid"]}"' in home.text
+    assert 'id="project-menu-btn"' in home.text
+    assert "sidebar-menu-btn" in home.text
 
 
 @requires_git

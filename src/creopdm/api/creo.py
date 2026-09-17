@@ -34,5 +34,5 @@ def open_in_creo(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> CreoOpenResponse:
-    result = ctx.creo_service.open_object(db, payload.object_id)
+    result = ctx.creo_service.open_object(db, payload.object_id, launch=payload.launch)
     return CreoOpenResponse.model_validate(result)
