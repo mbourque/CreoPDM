@@ -15,7 +15,7 @@ from creopdm.logging_setup import get_logger
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
-from creopdm.utils.classify import is_creo_openable, is_extra_cad
+from creopdm.utils.classify import is_creo_openable, is_creo_view, is_extra_cad
 from creopdm.utils.creo_header import creo_release_for
 from creopdm.utils.launch import open_windows_file, working_directory_for
 
@@ -81,20 +81,27 @@ class CreoService:
                 f"{path.name} cannot be opened. This file type is not opened by Creo.",
                 details={"path": str(path), "filename": path.name},
             )
-        creo_object = obj.object_type.startswith("CREO_") or is_creo_openable(
+        is_model = obj.object_type.startswith("CREO_") or is_creo_openable(
             path.name, models, all_cad
         )
+        view_object = is_creo_view(path.name)
+        open_mode = self._connector.cad_open_mode()
+        use_view = view_object or (open_mode == "view" and is_model)
+        creo_object = (not use_view) and is_model
         logical = CreoFileManager.normalize_creo_filename(path.name, (*models, *all_cad))
         file_release = creo_release_for(path, path.name)
         if not file_release and obj.current_version is not None:
             file_release = obj.current_version.creo_release
         if launch:
-            if creo_object and self._connector.cad_open_mode() == "embedded":
+            if use_view:
+                method = self._open_view_path(path)
+            elif creo_object and open_mode == "embedded":
                 raise ValidationAppError(
                     "Open this model from Creo's built-in browser.",
                     details={"path": str(path), "filename": path.name},
                 )
-            method = self._open_path(path, creo_object=creo_object)
+            else:
+                method = self._open_path(path, creo_object=creo_object)
             logger.info("Opened %s via %s from %s", path, method, workdir)
         else:
             method = "prepared"
@@ -115,6 +122,14 @@ class CreoService:
                 return "creo"
             except CreoUnavailableError:
                 logger.info("Creo connector unavailable; falling back to the system opener")
+        return self._open_with_shell(path)
+
+    def _open_view_path(self, path: Path) -> str:
+        try:
+            self._connector.open_view(path)
+            return "creo_view"
+        except CreoUnavailableError:
+            logger.info("Creo View connector unavailable; falling back to the system opener")
         return self._open_with_shell(path)
 
     @staticmethod

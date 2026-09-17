@@ -129,15 +129,21 @@ def open_windows_folder(path: Path) -> None:
     )
 
 
-def start_executable(executable: Path, path: Path, cwd: Path | None = None) -> None:
+def start_executable(
+    executable: Path,
+    path: Path,
+    cwd: Path | None = None,
+    *,
+    logical_name: bool = True,
+) -> None:
     """Start an application with cwd set to the model's workspace folder.
 
-    The model is passed as a relative filename so Creo uses that folder as
-    its working directory for related parts, assemblies, and search paths.
+    Parametric gets the logical name (``shaft.prt``) so it finds numbered
+    saves. Creo View needs the on-disk name (``shaft.prt.1``).
     """
     target = path.resolve()
     workdir = (cwd or working_directory_for(target)).resolve()
-    name = CreoFileManager.normalize_creo_filename(target.name)
+    name = CreoFileManager.normalize_creo_filename(target.name) if logical_name else target.name
     subprocess.Popen(  # noqa: S603 — argument list, no shell
         [str(executable), name],
         cwd=str(workdir),

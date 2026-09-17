@@ -26,7 +26,7 @@ def test_get_and_update_settings(client, tmp_path):
     response = client.get("/api/settings")
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["creo_open_mode"] in {"executable", "association", "embedded"}
+    assert payload["creo_open_mode"] in {"executable", "association", "embedded", "view"}
     assert payload["workspace_root"]
     assert payload["default_workspace_root"]
     defaults = payload["default_cad_extensions"]
@@ -115,21 +115,29 @@ def test_get_and_update_settings(client, tmp_path):
 
     fake_creo = tmp_path / "parametric.exe"
     fake_creo.write_bytes(b"fake")
+    fake_view = tmp_path / "pview.exe"
+    fake_view.write_bytes(b"fake-view")
     workspace = tmp_path / "MyWorkspace"
     updated = client.put(
         "/api/settings",
         json={
-            "creo_open_mode": "association",
+            "creo_open_mode": "view",
             "creo_executable": str(fake_creo),
+            "creo_view_executable": str(fake_view),
             "workspace_root": str(workspace),
         },
     )
     assert updated.status_code == 200, updated.text
     body = updated.json()
-    assert body["creo_open_mode"] == "association"
+    assert body["creo_open_mode"] == "view"
     assert Path(body["creo_executable"]) == fake_creo
+    assert Path(body["creo_view_executable"]) == fake_view
     assert Path(body["workspace_root"]) == workspace.resolve()
     assert workspace.is_dir()
+
+    kept_view = client.put("/api/settings", json={"creo_open_mode": "embedded"})
+    assert kept_view.status_code == 200, kept_view.text
+    assert Path(kept_view.json()["creo_view_executable"]) == fake_view
 
     embedded = client.put("/api/settings", json={"creo_open_mode": "embedded"})
     assert embedded.status_code == 200, embedded.text
@@ -183,7 +191,14 @@ def test_get_and_update_settings(client, tmp_path):
     page = client.get("/settings")
     assert page.status_code == 200
     assert "Embedded Creo Browser" in page.text
+    assert "Creo Parametric" in page.text
+    assert "Creo View" in page.text
+    assert "Specific application" not in page.text
+    assert "Application" not in page.text
+    assert 'class="open-choice"' in page.text
+    assert "Open Creo View with" not in page.text
     assert 'value="embedded"' in page.text
+    assert 'value="view"' in page.text
     headings = [
         "Open Creo models with",
         "Workspace",
@@ -207,6 +222,8 @@ def test_get_and_update_settings(client, tmp_path):
     assert "Default: .pdf, .xps" not in page.text
     assert 'name="port"' in page.text
     assert 'value="8765"' in page.text
+    assert 'name="creo_view_executable"' in page.text
+    assert r"C:\Program Files\PTC\Creo 13.0.0.0\View\bin\pview.exe" in page.text
     assert 'href="/settings/types"' in page.text
     assert payload["type_labels"] == unique_type_labels(DEFAULT_TYPE_LABELS)
 

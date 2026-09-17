@@ -1702,6 +1702,7 @@
     const body = {
       creo_open_mode: String(data.get("creo_open_mode") || "executable"),
       creo_executable: String(data.get("creo_executable") || "").trim() || null,
+      creo_view_executable: String(data.get("creo_view_executable") || "").trim() || null,
       workspace_root: String(data.get("workspace_root") || "").trim() || null,
       cad_model_extensions: String(data.get("cad_model_extensions") || "")
         .split(/[\s,;]+/)

@@ -54,6 +54,8 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         app_settings.creo.connector,
         app_settings.creo.executable,
         app_settings.creo.open_mode,
+        app_settings.creo.view_executable,
+        app_settings.creo.view_open_mode,
     )
     checkins = CheckinService(
         objects,

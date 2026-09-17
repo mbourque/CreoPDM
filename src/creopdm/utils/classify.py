@@ -9,6 +9,7 @@ from pathlib import Path
 from creopdm.constants import (
     CREO_FILE_EXTENSIONS,
     DEFAULT_CREO_MODEL_EXTENSIONS,
+    DEFAULT_CREO_VIEW_EXTENSIONS,
     DEFAULT_DOCUMENT_EXTENSIONS,
     DEFAULT_EXTRA_CAD_EXTENSIONS,
     DEFAULT_FOLDER_BY_TYPE,
@@ -201,6 +202,13 @@ def is_creo_openable(
     )
     canonical = CreoFileManager.normalize_creo_filename(filename, (*models, *extras))
     return Path(canonical).suffix.lower() in extra_cad_set(models)
+
+
+def is_creo_view(filename: str) -> bool:
+    """True for Creo View packages such as .pvz, including numbered saves."""
+    views = unique_extensions(DEFAULT_CREO_VIEW_EXTENSIONS)
+    canonical = CreoFileManager.normalize_creo_filename(filename, views)
+    return Path(canonical).suffix.lower() in extra_cad_set(views)
 
 
 def is_extra_cad(

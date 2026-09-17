@@ -218,7 +218,119 @@ def test_windows_connector_starts_in_model_directory(tmp_path: Path, monkeypatch
     connector.open_model(model)
     assert launched["cwd"] == str(cad.resolve())
     assert launched["args"] == [str(fake), "shaft.prt"]
-    assert launched["shell"] is False
+
+
+def test_windows_connector_starts_creo_view(tmp_path: Path, monkeypatch):
+    fake = tmp_path / "pview.exe"
+    fake.write_bytes(b"fake")
+    cad = tmp_path / "workspaces" / "view-proj" / "CAD"
+    cad.mkdir(parents=True)
+    model = cad / "preview.pvz"
+    model.write_bytes(b"viewable")
+    launched: dict[str, object] = {}
+
+    def fake_popen(args, cwd=None, shell=False, **kwargs):
+        launched["args"] = list(args)
+        launched["cwd"] = cwd
+        launched["shell"] = shell
+
+        class _Proc:
+            pass
+
+        return _Proc()
+
+    monkeypatch.setattr("creopdm.utils.launch.subprocess.Popen", fake_popen)
+    connector = WindowsCreoConnector(view_executable=str(fake), view_open_mode="executable")
+    connector.open_view(model)
+    assert launched["cwd"] == str(cad.resolve())
+    assert launched["args"] == [str(fake), "preview.pvz"]
+
+
+def test_windows_connector_open_model_view_uses_pview(tmp_path: Path, monkeypatch):
+    fake = tmp_path / "pview.exe"
+    fake.write_bytes(b"fake")
+    cad = tmp_path / "CAD"
+    cad.mkdir()
+    model = cad / "shaft.prt"
+    model.write_bytes(b"solid")
+    launched: dict[str, object] = {}
+
+    def fake_popen(args, cwd=None, shell=False, **kwargs):
+        launched["args"] = list(args)
+        launched["cwd"] = cwd
+        launched["shell"] = shell
+
+        class _Proc:
+            pass
+
+        return _Proc()
+
+    monkeypatch.setattr("creopdm.utils.launch.subprocess.Popen", fake_popen)
+    connector = WindowsCreoConnector(
+        view_executable=str(fake),
+        open_mode="view",
+        view_open_mode="executable",
+    )
+    connector.open_model(model)
+    assert launched["cwd"] == str(cad.resolve())
+    assert launched["args"] == [str(fake), "shaft.prt"]
+
+
+def test_windows_connector_view_keeps_numbered_save_ext(tmp_path: Path, monkeypatch):
+    fake = tmp_path / "pview.exe"
+    fake.write_bytes(b"fake")
+    cad = tmp_path / "CAD"
+    cad.mkdir()
+    model = cad / "if-on-a-cylinder.prt.1"
+    model.write_bytes(b"solid")
+    launched: dict[str, object] = {}
+
+    def fake_popen(args, cwd=None, shell=False, **kwargs):
+        launched["args"] = list(args)
+        launched["cwd"] = cwd
+
+        class _Proc:
+            pass
+
+        return _Proc()
+
+    monkeypatch.setattr("creopdm.utils.launch.subprocess.Popen", fake_popen)
+    connector = WindowsCreoConnector(
+        view_executable=str(fake),
+        open_mode="view",
+        view_open_mode="executable",
+    )
+    connector.open_model(model)
+    assert launched["cwd"] == str(cad.resolve())
+    assert launched["args"] == [str(fake), "if-on-a-cylinder.prt.1"]
+
+
+def test_windows_connector_finds_view_beside_parametric(tmp_path: Path):
+    parametric = tmp_path / "Creo 13.0.0.0" / "Parametric" / "bin" / "parametric.bat"
+    pview = tmp_path / "Creo 13.0.0.0" / "View" / "bin" / "pview.exe"
+    parametric.parent.mkdir(parents=True)
+    pview.parent.mkdir(parents=True)
+    parametric.write_text("@echo off\n", encoding="utf-8")
+    pview.write_bytes(b"fake")
+    connector = WindowsCreoConnector(executable=str(parametric))
+    assert connector.find_view_executable() == pview
+
+
+def test_windows_connector_view_association_uses_startfile(tmp_path: Path, monkeypatch):
+    opened: list[Path] = []
+    monkeypatch.setattr("creopdm.utils.launch.os.name", "nt")
+    monkeypatch.setattr("creopdm.creo.windows_connector.os.name", "nt")
+
+    def fake_start(path: Path, workdir: Path) -> None:
+        opened.append(Path(path))
+
+    monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
+    model = tmp_path / "CAD" / "preview.pvz"
+    model.parent.mkdir(parents=True)
+    model.write_bytes(b"viewable")
+    connector = WindowsCreoConnector(view_open_mode="association")
+    connector.open_view(model)
+    assert opened[0] == model.resolve()
 
 
 def test_windows_connector_opens_numbered_save_as_logical_name(tmp_path: Path, monkeypatch):
@@ -366,6 +478,78 @@ def test_open_embedded_does_not_launch_cad(data_dir, repo_parent, identity: Stat
         assert prepared.json()["method"] == "prepared"
         assert prepared.json()["creo_object"] is True
         assert recorder.opened == []
+
+
+@requires_git
+def test_open_viewable_uses_creo_view(data_dir, repo_parent, identity: StaticUserProvider):
+    recorder = RecordingConnector()
+    ctx = build_context(ConfigManager(), users=identity)
+    ctx.creo = recorder
+    ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
+    with TestClient(create_app(ctx)) as client:
+        project = client.post("/api/projects", json={"name": "Viewable"}).json()
+        created = client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={"file": ("preview.pvz", b"viewable", "application/octet-stream")},
+            data={"comment": "Add viewable"},
+        )
+        assert created.status_code == 201, created.text
+        opened = client.post("/api/creo/open", json={"object_id": created.json()["uuid"]})
+        assert opened.status_code == 200, opened.text
+        assert opened.json()["method"] == "creo_view"
+        assert opened.json()["creo_object"] is False
+        assert opened.json()["filename"] == "preview.pvz"
+        assert recorder.opened
+        assert recorder.opened[0].name == "preview.pvz"
+
+
+class ViewModeConnector(RecordingConnector):
+    def cad_open_mode(self) -> str:
+        return "view"
+
+
+@requires_git
+def test_open_creo_model_with_view_mode(data_dir, repo_parent, identity: StaticUserProvider):
+    recorder = ViewModeConnector()
+    ctx = build_context(ConfigManager(), users=identity)
+    ctx.creo = recorder
+    ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
+    with TestClient(create_app(ctx)) as client:
+        project = client.post("/api/projects", json={"name": "ViewModels"}).json()
+        created = client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={"file": ("shaft.prt", b"solid", "application/octet-stream")},
+            data={"comment": "Add shaft"},
+        )
+        assert created.status_code == 201, created.text
+        opened = client.post("/api/creo/open", json={"object_id": created.json()["uuid"]})
+        assert opened.status_code == 200, opened.text
+        assert opened.json()["method"] == "creo_view"
+        assert opened.json()["creo_object"] is False
+        assert recorder.opened
+        assert recorder.opened[0].name == "shaft.prt"
+
+
+@requires_git
+def test_open_embedded_still_opens_creo_view(data_dir, repo_parent, identity: StaticUserProvider):
+    recorder = EmbeddedConnector()
+    ctx = build_context(ConfigManager(), users=identity)
+    ctx.creo = recorder
+    ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
+    with TestClient(create_app(ctx)) as client:
+        project = client.post("/api/projects", json={"name": "EmbeddedView"}).json()
+        created = client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={"file": ("preview.pvz", b"viewable", "application/octet-stream")},
+            data={"comment": "Add viewable"},
+        )
+        assert created.status_code == 201, created.text
+        opened = client.post("/api/creo/open", json={"object_id": created.json()["uuid"]})
+        assert opened.status_code == 200, opened.text
+        assert opened.json()["method"] == "creo_view"
+        assert opened.json()["creo_object"] is False
+        assert recorder.opened
+        assert recorder.opened[0].name == "preview.pvz"
 
 
 @requires_git

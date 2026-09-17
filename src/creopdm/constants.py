@@ -7,7 +7,8 @@ from enum import StrEnum
 APP_NAME = "CreoPDM"
 APP_VERSION = "0.1.0"
 APP_SCHEMA_VERSION = 1
-CREO_OPEN_MODES = ("executable", "association", "embedded")
+CREO_OPEN_MODES = ("executable", "association", "embedded", "view")
+CREO_VIEW_OPEN_MODES = ("executable", "association")
 SIDEBAR_COLLAPSED_COOKIE = "creopdm_sidebar"
 
 DEFAULT_BRANCH = "main"
@@ -338,6 +339,14 @@ DEFAULT_CREO_MODEL_EXTENSIONS = (
     ".psm",
     ".3mf",
     ".she",
+)
+
+DEFAULT_CREO_VIEW_EXTENSIONS = (
+    ".pvz",
+    ".pvs",
+    ".ol",
+    ".ed",
+    ".edz",
 )
 
 OBJECT_TYPE_BY_EXTENSION: dict[str, ObjectType] = {

@@ -73,6 +73,9 @@ def test_config_layout(data_dir):
     assert manager.logs_dir.exists()
     assert settings.server.host == "0.0.0.0"
     assert settings.creo.connector == "auto"
+    assert settings.creo.open_mode == "executable"
+    assert settings.creo.view_open_mode == "executable"
+    assert settings.creo.view_executable is None
     assert extra_cad_set(settings.cad.extra_extensions) == extra_cad_set(DEFAULT_EXTRA_CAD_EXTENSIONS)
     assert extra_cad_set(settings.cad.openable_extensions) == extra_cad_set(DEFAULT_OPENABLE_CAD_EXTENSIONS)
     assert extra_cad_set(settings.cad.model_extensions) == extra_cad_set(DEFAULT_CREO_MODEL_EXTENSIONS)

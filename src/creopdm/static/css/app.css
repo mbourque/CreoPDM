@@ -258,6 +258,19 @@ a.brand:hover { text-decoration: none; color: inherit; }
 }
 .settings-form .muted.small { overflow-wrap: anywhere; }
 .choice { flex-direction: row !important; align-items: center; gap: 0.45rem !important; font-weight: 500 !important; }
+.open-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.15rem 0 0.55rem;
+}
+.open-choice .choice { margin: 0; }
+.open-choice input[type="text"] {
+  margin-left: 1.4rem;
+  width: calc(100% - 1.4rem);
+  box-sizing: border-box;
+}
+.settings-card > .choice { margin: 0.2rem 0; }
 #checkin-new-files { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.4rem 0 0.2rem; }
 #checkin-new-files label { font-weight: 500; }
 .ok { color: var(--ok); margin: 0; }

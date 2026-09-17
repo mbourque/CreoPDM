@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from creopdm.constants import APP_NAME, APP_VERSION, CREO_OPEN_MODES
+from creopdm.constants import APP_NAME, APP_VERSION, CREO_OPEN_MODES, CREO_VIEW_OPEN_MODES
 
 
 class HealthResponse(BaseModel):
@@ -247,6 +247,8 @@ class BatchOperationResponse(BaseModel):
 class SettingsResponse(BaseModel):
     creo_open_mode: str
     creo_executable: str | None
+    creo_view_open_mode: str
+    creo_view_executable: str | None
     workspace_root: str
     default_workspace_root: str
     open_browser_on_start: bool
@@ -271,6 +273,8 @@ class SettingsResponse(BaseModel):
 class SettingsUpdateRequest(BaseModel):
     creo_open_mode: str = "executable"
     creo_executable: str | None = None
+    creo_view_open_mode: str | None = None
+    creo_view_executable: str | None = None
     workspace_root: str | None = None
     open_browser_on_start: bool | None = None
     cad_extensions: list[str] | None = None
@@ -288,7 +292,17 @@ class SettingsUpdateRequest(BaseModel):
     def valid_open_mode(cls, value: str) -> str:
         key = (value or "executable").strip().lower()
         if key not in CREO_OPEN_MODES:
-            raise ValueError("Open mode must be 'executable', 'association', or 'embedded'.")
+            raise ValueError("Open mode must be 'executable', 'association', 'embedded', or 'view'.")
+        return key
+
+    @field_validator("creo_view_open_mode")
+    @classmethod
+    def valid_view_open_mode(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        key = value.strip().lower()
+        if key not in CREO_VIEW_OPEN_MODES:
+            raise ValueError("Creo View open mode must be 'executable' or 'association'.")
         return key
 
     @field_validator("cad_extensions")

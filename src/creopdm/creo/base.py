@@ -69,8 +69,16 @@ class CreoConnector(ABC):
     def open_model(self, path: Path) -> None:
         """Ask Creo to open a model from disk."""
 
+    def open_view(self, path: Path) -> None:
+        """Open a Creo View viewable. Default: same as opening a CAD model."""
+        self.open_model(path)
+
     def cad_open_mode(self) -> str:
-        """How CAD models are opened: executable, association, or embedded."""
+        """How CAD models are opened: executable, association, embedded, or view."""
+        return "executable"
+
+    def view_open_mode(self) -> str:
+        """How Creo View files are opened: executable or association."""
         return "executable"
 
     def scan_model(self, path: Path) -> dict[str, Any]:

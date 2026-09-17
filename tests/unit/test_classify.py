@@ -4,6 +4,7 @@ from creopdm.utils.classify import (
     default_folder_for,
     display_type_label,
     is_creo_openable,
+    is_creo_view,
     is_extra_cad,
     matches_cad_models,
     matches_document,
@@ -140,6 +141,14 @@ def test_creo_openable_models():
     assert not is_creo_openable("cutter.tmu.2")
     assert is_creo_openable("preview.pvz.3")
     assert is_creo_openable("preview.3.pvz")
+    assert is_creo_view("preview.pvz")
+    assert is_creo_view("preview.pvz.3")
+    assert is_creo_view("preview.3.pvz")
+    assert is_creo_view("session.pvs")
+    assert is_creo_view("view.ol")
+    assert is_creo_view("product.edz")
+    assert not is_creo_view("shaft.prt")
+    assert not is_creo_view("notes.pdf")
     assert not is_creo_openable("session.tmz")
     assert is_creo_openable("world.wrl")
     assert is_creo_openable("board.idx")

@@ -31,6 +31,8 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
     return SettingsResponse(
         creo_open_mode=settings.creo.open_mode,
         creo_executable=settings.creo.executable,
+        creo_view_open_mode=settings.creo.view_open_mode,
+        creo_view_executable=settings.creo.view_executable,
         workspace_root=str(current_root),
         default_workspace_root=str(default_root),
         open_browser_on_start=settings.ui.open_browser_on_start,
@@ -60,6 +62,8 @@ def apply_settings(ctx: AppContext, settings: AppSettings) -> None:
         settings.creo.connector,
         settings.creo.executable,
         settings.creo.open_mode,
+        settings.creo.view_executable,
+        settings.creo.view_open_mode,
     )
     ctx.creo_service.set_connector(ctx.creo)
     ctx.checkins.set_connector(ctx.creo)
@@ -90,6 +94,20 @@ def update_settings(
         current.creo.executable = str(path)
     else:
         current.creo.executable = None
+    if payload.creo_view_open_mode is not None:
+        current.creo.view_open_mode = payload.creo_view_open_mode
+    if "creo_view_executable" in payload.model_fields_set:
+        view_executable = (payload.creo_view_executable or "").strip() or None
+        if view_executable:
+            view_path = Path(view_executable).expanduser()
+            if not view_path.exists():
+                raise PathValidationError(
+                    "The Creo View application path does not exist.",
+                    details={"path": str(view_path)},
+                )
+            current.creo.view_executable = str(view_path)
+        else:
+            current.creo.view_executable = None
     root = (payload.workspace_root or "").strip()
     if root:
         location = validate_project_location(root)

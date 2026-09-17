@@ -53,9 +53,17 @@ def locate_creojs_library(executable: Path | str | None) -> Path | None:
 class WindowsCreoConnector(CreoConnector):
     """Detect a local Creo install and open models via parametric.exe or the shell."""
 
-    def __init__(self, executable: str | None = None, open_mode: str = "executable") -> None:
+    def __init__(
+        self,
+        executable: str | None = None,
+        open_mode: str = "executable",
+        view_executable: str | None = None,
+        view_open_mode: str = "executable",
+    ) -> None:
         self._executable_override = executable
         self._open_mode = (open_mode or "executable").strip().lower()
+        self._view_executable_override = view_executable
+        self._view_open_mode = (view_open_mode or "executable").strip().lower()
 
     def is_available(self) -> bool:
         return self.find_executable() is not None
@@ -99,6 +107,9 @@ class WindowsCreoConnector(CreoConnector):
                 details={"path": str(target)},
             )
         workdir = working_directory_for(target)
+        if self._open_mode == "view":
+            self.open_view(target)
+            return
         if self._open_mode == "embedded":
             raise CreoUnavailableError(
                 "Open this model from Creo's built-in browser.",
@@ -117,14 +128,44 @@ class WindowsCreoConnector(CreoConnector):
         logger.info("Opening %s with %s from %s", target.name, parametric, workdir)
         start_executable(parametric, target, cwd=workdir)
 
+    def open_view(self, path: Path) -> None:
+        target = Path(path)
+        if not target.is_file():
+            raise CreoUnavailableError(
+                "The file to open in Creo View was not found.",
+                details={"path": str(target)},
+            )
+        workdir = working_directory_for(target)
+        viewer = self.find_view_executable()
+        if self._view_open_mode == "association" or viewer is None:
+            if os.name == "nt":
+                logger.info("Opening %s from working directory %s", target.name, workdir)
+                open_windows_file(target, cwd=workdir)
+                return
+            raise CreoUnavailableError(
+                "Creo View is not installed and no file association is available.",
+                details={"path": str(target)},
+            )
+        logger.info("Opening %s with %s from %s", target.name, viewer, workdir)
+        start_executable(viewer, target, cwd=workdir, logical_name=False)
+
     def find_executable(self) -> Path | None:
         for candidate in self._candidates():
             if candidate.is_file():
                 return candidate
         return None
 
+    def find_view_executable(self) -> Path | None:
+        for candidate in self._view_candidates():
+            if candidate.is_file():
+                return candidate
+        return None
+
     def cad_open_mode(self) -> str:
         return self._open_mode
+
+    def view_open_mode(self) -> str:
+        return self._view_open_mode
 
     def find_creojs_library(self) -> Path | None:
         return locate_creojs_library(self.find_executable())
@@ -164,4 +205,39 @@ class WindowsCreoConnector(CreoConnector):
             for creo_dir in sorted(ptc.glob("Creo *"), reverse=True):
                 found.extend(creo_dir.glob("Parametric/bin/parametric.exe"))
                 found.extend(creo_dir.glob("*/Parametric/bin/parametric.exe"))
+        return found
+
+    def _view_candidates(self) -> list[Path]:
+        found: list[Path] = []
+        if self._view_executable_override:
+            found.append(Path(self._view_executable_override))
+        raw = os.environ.get("CREOPDM_CREO_VIEW")
+        if raw:
+            path = Path(raw)
+            if path.is_file():
+                found.append(path)
+            else:
+                found.extend([path / "pview.exe", path / "bin" / "pview.exe"])
+        which = shutil.which("pview") or shutil.which("pview.exe")
+        if which:
+            found.append(Path(which))
+        for parametric in self._candidates():
+            start = parametric.parent if parametric.suffix else parametric
+            for root in [start, *start.parents]:
+                found.append(root / "View" / "bin" / "pview.exe")
+        roots = [
+            Path(os.environ.get("ProgramFiles", r"C:\Program Files")),
+            Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")),
+            Path(r"C:\ptc"),
+        ]
+        for root in roots:
+            if not root or not root.is_dir():
+                continue
+            ptc = root / "PTC" if (root / "PTC").is_dir() else root
+            if not ptc.is_dir():
+                continue
+            for creo_dir in sorted(ptc.glob("Creo *"), reverse=True):
+                found.append(creo_dir / "View" / "bin" / "pview.exe")
+            for view_dir in sorted(ptc.glob("Creo View*"), reverse=True):
+                found.append(view_dir / "bin" / "pview.exe")
         return found
