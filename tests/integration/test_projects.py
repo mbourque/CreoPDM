@@ -159,14 +159,19 @@ def test_home_remembers_last_opened_project(client, repo_parent):
     second, _other = _create_project(client, repo_parent, name="Second Arm")
     opened = client.get(f"/?project={second['uuid']}")
     assert opened.status_code == 200, opened.text
-    assert "<h1>Second Arm</h1>" in opened.text
+    assert f'<h1 title="' in opened.text
+    assert ">Second Arm</h1>" in opened.text
+    assert second["uuid"] in opened.text[opened.text.index("<h1 title="):opened.text.index(">Second Arm</h1>")]
     home = client.get("/")
     assert home.status_code == 200, home.text
-    assert "<h1>Second Arm</h1>" in home.text
+    assert ">Second Arm</h1>" in home.text
     assert first["name"] in home.text
     assert f'href="/?project={second["uuid"]}"' in home.text
     assert 'id="project-menu-btn"' in home.text
     assert "sidebar-menu-btn" in home.text
+    assert 'id="sidebar-collapse-btn"' in home.text
+    assert 'id="search-input"' in home.text
+    assert "Workspace:" not in home.text
 
 
 @requires_git

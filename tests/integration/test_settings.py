@@ -1,8 +1,25 @@
 from pathlib import Path
 
 from creopdm.utils.classify import extra_cad_set, unique_type_labels
-from creopdm.constants import DEFAULT_TYPE_LABELS
+from creopdm.constants import DEFAULT_TYPE_LABELS, SIDEBAR_COLLAPSED_COOKIE
 from tests.conftest import requires_git
+
+
+def test_sidebar_collapse_cookie_is_applied(client):
+    home = client.get("/")
+    assert home.status_code == 200
+    assert 'id="sidebar-collapse-btn"' in home.text
+    assert 'class="workspace"' in home.text
+    assert "is-sidebar-collapsed" not in home.text
+
+    collapsed = client.get("/", cookies={SIDEBAR_COLLAPSED_COOKIE: "1"})
+    assert collapsed.status_code == 200
+    assert 'class="workspace is-sidebar-collapsed"' in collapsed.text
+    assert 'aria-pressed="true"' in collapsed.text
+
+    restored = client.get("/", cookies={SIDEBAR_COLLAPSED_COOKIE: "0"})
+    assert restored.status_code == 200
+    assert "is-sidebar-collapsed" not in restored.text
 
 
 def test_get_and_update_settings(client, tmp_path):

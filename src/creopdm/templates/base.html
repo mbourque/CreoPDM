@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-cwd2">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-nav9">
 </head>
 <body>
   <header class="topbar">
@@ -36,6 +36,49 @@
     <p>Drop files, folders, or file links to add them</p>
   </div>
   <script type="text/creojs" id="creopdm-open.creojs">
+function creoLogicalFileName(filename) {
+    var base = String(filename || "");
+    var slash = Math.max(base.lastIndexOf("/"), base.lastIndexOf("\\"));
+    if (slash >= 0) {
+        base = base.substring(slash + 1);
+    }
+    var lower = base.toLowerCase();
+    var dot = lower.lastIndexOf(".");
+    if (dot > 0) {
+        var tail = lower.substring(dot + 1);
+        var asNumber = parseInt(tail, 10);
+        if (String(asNumber) === tail) {
+            base = base.substring(0, dot);
+        }
+    }
+    return base;
+}
+function creoModelRoot(logical) {
+    var dot = String(logical || "").lastIndexOf(".");
+    return dot > 0 ? logical.substring(0, dot) : logical;
+}
+function openAsmAsMfg(session, filename) {
+    var logical = creoLogicalFileName(filename);
+    var lower = logical.toLowerCase();
+    var dot = lower.lastIndexOf(".");
+    var suffix = dot >= 0 ? lower.substring(dot) : "";
+    if (suffix !== ".asm") {
+        return false;
+    }
+    var root = creoModelRoot(logical);
+    if (!root || typeof pfcModelType === "undefined") {
+        return false;
+    }
+    var descr = pfcModelDescriptor.Create(pfcModelType.MDL_MFG, root, "");
+    var win = session.OpenFile(descr);
+    if (!win) {
+        return false;
+    }
+    try {
+        win.Activate();
+    } catch (err) {}
+    return true;
+}
 function openModel(directory, filename) {
     var session = (typeof pfcGetCurrentSession === "function")
       ? pfcGetCurrentSession()
@@ -43,6 +86,11 @@ function openModel(directory, filename) {
     if (directory) {
         session.ChangeDirectory(directory);
     }
+    try {
+        if (openAsmAsMfg(session, filename)) {
+            return filename;
+        }
+    } catch (errMfg) {}
     var descr = pfcModelDescriptor.CreateFromFileName(filename);
     var model = null;
     try {
@@ -82,6 +130,6 @@ function setWorkingDirectory(directory) {
     return directory;
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-cwd2"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-nav9"></script>
 </body>
 </html>

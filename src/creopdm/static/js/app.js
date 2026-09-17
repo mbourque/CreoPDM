@@ -273,12 +273,36 @@
   const checkinForm = $("#checkin-form");
   const settingsForm = $("#settings-form");
 
+  const workspaceEl = document.querySelector(".workspace");
   const projectSidebar = document.querySelector(".sidebar");
   const projectMenuBtn = $("#project-menu-btn");
+  const sidebarCollapseBtn = $("#sidebar-collapse-btn");
   function closeProjectMenu() {
     projectSidebar?.classList.remove("is-open");
     projectMenuBtn?.setAttribute("aria-expanded", "false");
   }
+  function sidebarCollapsed() {
+    return Boolean(workspaceEl?.classList.contains("is-sidebar-collapsed"));
+  }
+  function syncSidebarCollapse() {
+    const collapsed = sidebarCollapsed();
+    const label = collapsed ? "Show project list" : "Collapse project list";
+    if (!sidebarCollapseBtn) return;
+    sidebarCollapseBtn.title = label;
+    sidebarCollapseBtn.setAttribute("aria-label", label);
+    sidebarCollapseBtn.setAttribute("aria-pressed", collapsed ? "true" : "false");
+  }
+  function rememberSidebarCollapse(collapsed) {
+    document.cookie = "creopdm_sidebar=" + (collapsed ? "1" : "0")
+      + "; Path=/; Max-Age=31536000; SameSite=Lax";
+  }
+  sidebarCollapseBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    workspaceEl?.classList.toggle("is-sidebar-collapsed");
+    closeProjectMenu();
+    syncSidebarCollapse();
+    rememberSidebarCollapse(sidebarCollapsed());
+  });
   function toggleProjectMenu(event) {
     event.stopPropagation();
     const open = projectSidebar?.classList.toggle("is-open");
@@ -832,9 +856,13 @@
     const filtering = metricButtons().some((btn) => metricMode(btn) === "filter");
     const summary = $("#selection-summary");
     if (summary) {
-      summary.textContent = ids.length
-        ? `${ids.length} selected${filtering ? ". The list is filtered" : ""}. Copy to Workspace is for files that are not already in the workspace.`
-        : "Click a count to select a group. Click a row to select it; Shift-click a range; Ctrl-click to add or remove. Click a filename to open it. Click a folder name to open the folder. Double-click a file for history.";
+      if (ids.length) {
+        summary.hidden = false;
+        summary.textContent = `${ids.length} selected${filtering ? ". The list is filtered" : ""}.`;
+      } else {
+        summary.hidden = true;
+        summary.textContent = "";
+      }
     }
   }
 

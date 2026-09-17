@@ -1,15 +1,23 @@
 {% extends "base.html" %}
 {% block title %}{{ app_name }}{% if selected %} — {{ selected.name }}{% endif %}{% endblock %}
 {% block content %}
-<section class="workspace">
+<section class="workspace{% if sidebar_collapsed %} is-sidebar-collapsed{% endif %}">
   <aside class="sidebar">
     <div class="sidebar-head">
-      <button type="button" class="sidebar-menu-btn" id="project-menu-btn"
-              aria-expanded="false" aria-controls="project-list" aria-label="Projects">
-        <span class="hamburger" aria-hidden="true"><span></span><span></span><span></span></span>
-        <span class="sidebar-current">{{ selected.name if selected else "Projects" }}</span>
-      </button>
-      <h2 class="sidebar-title">Projects</h2>
+      <div class="sidebar-head-start">
+        <button type="button" class="sidebar-menu-btn" id="project-menu-btn"
+                aria-expanded="false" aria-controls="project-list" aria-label="Projects">
+          <span class="hamburger" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span class="sidebar-current">{{ selected.name if selected else "Projects" }}</span>
+        </button>
+        <h2 class="sidebar-title">Projects</h2>
+        <button type="button" class="sidebar-collapse-btn" id="sidebar-collapse-btn"
+                title="{% if sidebar_collapsed %}Show project list{% else %}Collapse project list{% endif %}"
+                aria-label="{% if sidebar_collapsed %}Show project list{% else %}Collapse project list{% endif %}"
+                aria-pressed="{% if sidebar_collapsed %}true{% else %}false{% endif %}">
+          <span class="sidebar-collapse-icon" aria-hidden="true"></span>
+        </button>
+      </div>
       <button type="button" class="btn btn-small" id="new-project-btn">New</button>
     </div>
     <ul class="project-list" id="project-list">
@@ -30,30 +38,25 @@
   <section class="content">
     {% if selected %}
     <div class="content-head">
-      <div>
-        <div class="title-row">
-          <h1>{{ selected.name }}</h1>
-          <button type="button" class="btn btn-small" id="rename-project-btn"
-                  data-project="{{ selected.uuid }}"
-                  data-name="{{ selected.name }}"
-                  data-number="{{ selected.number or '' }}"
-                  data-description="{{ selected.description or '' }}">Rename</button>
-          <button type="button" class="btn btn-small btn-danger" id="forget-project-btn"
-                  data-project="{{ selected.uuid }}"
-                  data-name="{{ selected.name }}"
-                  title="Delete the CreoPDM workspace (working copies and Git) and unregister the project. Original files you imported from are not deleted.">Forget project</button>
-        </div>
-        {% if selected.description %}
-        <p class="muted">{{ selected.description }}</p>
-        {% endif %}
-        {% if workspace_path %}
-        <p class="muted small">Workspace: {{ workspace_path }}</p>
-        {% endif %}
+      <div class="title-row">
+        <h1{% if workspace_path %} title="{{ workspace_path }}"{% endif %}>{{ selected.name }}</h1>
+        <button type="button" class="btn btn-small" id="rename-project-btn"
+                data-project="{{ selected.uuid }}"
+                data-name="{{ selected.name }}"
+                data-number="{{ selected.number or '' }}"
+                data-description="{{ selected.description or '' }}">Rename</button>
+        <button type="button" class="btn btn-small btn-danger" id="forget-project-btn"
+                data-project="{{ selected.uuid }}"
+                data-name="{{ selected.name }}"
+                title="Delete the CreoPDM workspace (working copies and Git) and unregister the project. Original files you imported from are not deleted.">Forget project</button>
+        <form class="search-form" id="search-form">
+          <label class="sr-only" for="search-input">Search</label>
+          <input id="search-input" name="q" type="search" placeholder="Search number, name, filename, type…">
+        </form>
       </div>
-      <form class="search-form" id="search-form">
-        <label class="sr-only" for="search-input">Search</label>
-        <input id="search-input" name="q" type="search" placeholder="Search number, name, filename, type…">
-      </form>
+      {% if selected.description %}
+      <p class="muted">{{ selected.description }}</p>
+      {% endif %}
     </div>
 
     {% if status and status.files %}
@@ -67,10 +70,8 @@
       <li><button type="button" class="metric" data-filter="other" data-mode="off" title="Select files that are not Creo models. Click again to filter. Click a third time to clear."><strong>{{ status.other }}</strong> Other</button></li>
       <li><button type="button" class="metric" data-filter="checked_out" data-mode="off" title="Select checked out files in the current group. Click again to hide the rest. Click a third time to clear."><strong>{{ status.checked_out }}</strong> Checked out</button></li>
     </ul>
-    <p class="muted small" id="selection-summary">Drop files, folders, or file links here to add them. Click a count to select a group. Click a row to select it; Shift-click a range; Ctrl-click to add or remove. Click a filename to open it. Click a folder name to open the folder. Double-click a file for history.</p>
-    {% elif status %}
-    <p class="muted small" id="selection-summary">Drop files, folders, or file links here to add them. Click a row to select a folder and the files in it. Click the folder name to open it.</p>
     {% endif %}
+    <p class="muted small" id="selection-summary" hidden></p>
 
     <div class="tabs" role="tablist">
       <button type="button" class="tab is-active" data-tab="files">Files</button>

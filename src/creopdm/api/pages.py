@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from creopdm.api.checkout import present_object, present_objects
 from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import project_to_response, revision_display
-from creopdm.constants import APP_NAME, APP_VERSION, ObjectType
+from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPSED_COOKIE
 from creopdm.context import AppContext
 from creopdm.exceptions import ProjectNotFoundError
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
@@ -98,6 +98,11 @@ def _creo_page(ctx: AppContext) -> dict[str, str | None]:
     return payload
 
 
+def _sidebar_collapsed(request: Request) -> bool:
+    raw = (request.cookies.get(SIDEBAR_COLLAPSED_COOKIE) or "").strip().lower()
+    return raw in {"1", "true", "yes"}
+
+
 @router.get("/creojs.js")
 def creojs_library(ctx: AppContext = Depends(get_context)) -> FileResponse:
     """Serve Creo's Creo.JS bridge so the embedded browser can talk to this session."""
@@ -175,6 +180,7 @@ def home(
             "document_extensions": ctx.config.document_extensions(),
             "checkin_queue": checkin_queue,
             "workspace_path": str(ctx.config.workspace_for_project(selected.uuid)) if selected else None,
+            "sidebar_collapsed": _sidebar_collapsed(request),
             "object_types": [item.value for item in ObjectType],
             "revision_display": revision_display,
         },
