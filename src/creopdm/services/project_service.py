@@ -39,6 +39,7 @@ from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.utils.files import remove_tree
 from creopdm.utils.identity import CurrentUserProvider
+from creopdm.utils.classify import matches_cad_models
 from creopdm.utils.native_dialog import default_project_location_start
 
 logger = get_logger("projects")
@@ -293,8 +294,12 @@ class ProjectService:
             )
         )
         mine = sum(1 for row in active if row.user_name == user.user_name)
+        models = self._workspaces._config.cad_models_extensions()
         counts: dict[str, int | str] = {
             "files": len(objects),
+            "cad_models": sum(
+                1 for obj in objects if matches_cad_models(obj.filename, models, obj.extension)
+            ),
             "creo_parts": sum(1 for obj in objects if obj.object_type == "CREO_PART"),
             "assemblies": sum(1 for obj in objects if obj.object_type == "CREO_ASSEMBLY"),
             "drawings": sum(1 for obj in objects if obj.object_type == "CREO_DRAWING"),

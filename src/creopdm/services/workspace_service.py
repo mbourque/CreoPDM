@@ -596,7 +596,7 @@ class WorkspaceService:
 
     def _iter_workspace_files(self, root: Path):
         skip_dirs = {".git", ".creopdm", "__pycache__"}
-        skip_suffixes = {".lst", ".bak", ".tmp"}
+        skip_suffixes = {".bak", ".tmp"}
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [name for name in dirnames if name.lower() not in skip_dirs]
             folder = Path(dirpath)

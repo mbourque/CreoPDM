@@ -32,19 +32,43 @@ pip install -e ".[dev]"
 
 ## Run
 
+Start from a **normal** (not Run as administrator) PowerShell in the project folder:
+
 ```powershell
+.\.venv\Scripts\Activate.ps1
 python -m creopdm
 ```
 
-The application binds to `0.0.0.0`, chooses a free port, and opens a browser on this PC. The console prints a `Phone:` URL you can open on another device on the same Wi-Fi. Allow CreoPDM in Windows Firewall if prompted.
+The server uses the **Port** in Settings (`%LOCALAPPDATA%\CreoPDM\config\settings.json`). **0** (the default) picks a free port each start. A specific value such as `8765` is reused until Windows blocks it.
+
+Command-line flags override Settings for that start only:
+
+| Flag | Meaning |
+| --- | --- |
+| `--port 0` | Pick a free port this start (use this if the Settings port is blocked and you cannot open the UI) |
+| `--port 8765` | Bind that TCP port this start |
+| `--host 0.0.0.0` | Bind address (default is all interfaces, so phones on the LAN can connect) |
+| `--no-browser` | Do not open the default browser |
+| `--data-dir PATH` | Override `%LOCALAPPDATA%\CreoPDM` |
+
+Example when Settings still has a blocked port:
+
+```powershell
+python -m creopdm --port 0
+```
+
+The console prints the URL to use:
 
 ```
-CreoPDM
-Version 0.1.0
+CreoPDM 0.1.0
 Status: Running
+This PC: http://127.0.0.1:54321
+Phone:   http://192.168.x.x:54321
 ```
 
-Health check: `GET /api/health`
+Allow CreoPDM in Windows Firewall if prompted. Health check: `GET /api/health`
+
+A saved port that Windows refuses (`WinError 10013`) stops startup. Use `--port 0`, then set Port to **0** (or another free port) in Settings so the next start works without the flag.
 
 ## Tests
 

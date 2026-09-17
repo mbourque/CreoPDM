@@ -13,17 +13,30 @@ import uvicorn
 from creopdm.app import build_context, create_app
 from creopdm.config import ConfigManager
 from creopdm.constants import APP_NAME, APP_VERSION
+from creopdm.exceptions import ConfigurationError
 from creopdm.logging_setup import get_logger
 
 logger = get_logger("startup")
 
 
-def find_available_port(host: str, preferred: int = 0) -> int:
-    """Bind a socket to discover a free TCP port."""
+def _bind_port(host: str, port: int) -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind((host, preferred))
+        sock.bind((host, port))
         return int(sock.getsockname()[1])
+
+
+def find_available_port(host: str, preferred: int = 0) -> int:
+    """Bind the port from Settings, or let the OS pick one when that setting is 0."""
+    try:
+        return _bind_port(host, preferred)
+    except OSError as exc:
+        if preferred:
+            raise ConfigurationError(
+                f"Port {preferred} is not available on this PC. "
+                "Choose a different port in Settings."
+            ) from exc
+        raise
 
 
 def lan_addresses() -> list[str]:
@@ -100,6 +113,9 @@ def run() -> None:
     except KeyboardInterrupt:
         logging.getLogger("creopdm").info("Shutdown requested")
         sys.exit(0)
+    except ConfigurationError as exc:
+        print(exc.message, file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

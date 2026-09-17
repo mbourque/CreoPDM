@@ -116,15 +116,6 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .metric:hover {
   border-color: var(--accent-2);
 }
-.metric:disabled,
-.metric:disabled:hover {
-  cursor: default;
-  opacity: 1;
-  color: inherit;
-  background: white;
-  border-color: var(--line);
-  box-shadow: var(--shadow);
-}
 .metric.is-selected {
   border-color: #2f6f8f;
   background: #d7ebf5;
@@ -349,14 +340,31 @@ button.object-open:hover { text-decoration: underline; }
   border-radius: 50%; animation: busy-spin 0.7s linear infinite;
 }
 @keyframes busy-spin { to { transform: rotate(360deg); } }
-body.is-busy, body.is-busy * { cursor: wait !important; }
+body.is-file-drag #file-drop-overlay {
+  display: flex !important;
+}
+#file-drop-overlay {
+  position: fixed; inset: 0; z-index: 4000;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(22, 56, 74, 0.62); color: white;
+  font-size: 1.35rem; font-weight: 650; pointer-events: none; text-align: center;
+  padding: 2rem;
+}
+#file-drop-overlay p { margin: 0; }
 .dropzone {
   border: 1px dashed #7f93a6; border-radius: 6px; padding: 1.2rem; text-align: center;
   background: #f4f7fa; font-weight: 500;
 }
+.dropzone.is-dragover,
+#panel-files.is-dragover {
+  border-color: var(--accent);
+  background: #e7f1f6;
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
 .dropzone-actions { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-bottom: 0.5rem; }
 .dropzone .btn { margin-bottom: 0; }
-#chosen-file-list { text-align: left; max-height: 8rem; overflow: auto; }
+#chosen-file-summary { text-align: left; margin: 0.35rem 0 0; }
 
 .detail { padding: 1.2rem 1.4rem 2rem; flex: 1; min-height: 0; overflow: auto; }
 .crumb { display: flex; gap: 0.4rem; color: var(--muted); margin-bottom: 0.8rem; }

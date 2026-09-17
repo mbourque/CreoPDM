@@ -19,7 +19,7 @@ _UUIDISH_STEM = re.compile(
     re.IGNORECASE,
 )
 _SKIP_IMPORT_DIRS = {".git", ".creopdm", "__pycache__"}
-_SKIP_IMPORT_SUFFIXES = {".lst", ".bak", ".tmp"}
+_SKIP_IMPORT_SUFFIXES = {".bak", ".tmp"}
 
 
 def _dot_ext(value: str) -> str:

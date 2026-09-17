@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object, present_objects
@@ -219,11 +220,27 @@ def choose_workspace_files(
     project = ctx.projects.get_project(db, project_id)
     start = ctx.projects.preferred_import_directory(project)
     start.mkdir(parents=True, exist_ok=True)
-    selected = [str(path) for path in pick_files(start, title="Add files to the project")]
+    picked = pick_files(start, title="Add files to the project")
+    ignored = ctx.config.ignore_patterns()
+    extras = ctx.config.all_cad_extensions()
+    ignored_count = 0
+    present: list[Path] = []
+    for path in picked:
+        if CreoFileManager.is_ignored(path.name, ignored):
+            ignored_count += 1
+            continue
+        if path.is_file():
+            present.append(path)
+    selected = CreoFileManager.filter_to_latest_saves(
+        present,
+        extras,
+        scan_disk_siblings=False,
+    )
     return WorkspacePickerResponse(
         workspace_root=str(ctx.workspaces.root_for(project.uuid)),
         initial_directory=str(start),
-        selected=selected,
+        selected=[str(path) for path in selected],
+        ignored_count=ignored_count,
     )
 
 
@@ -356,4 +373,89 @@ def import_from_disk(
                         message="The file was not added.",
                     )
                 )
+    return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.workspaces.root_for(project.uuid)))
+
+
+@router.post("/api/projects/{project_id}/objects/from-uploads", response_model=BatchOperationResponse)
+async def import_from_uploads(
+    project_id: str,
+    files: list[UploadFile] = File(...),
+    relative_paths: list[str] | None = Form(default=None),
+    comment: str | None = Form(default=None),
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BatchOperationResponse:
+    project = ctx.projects.get_project(db, project_id)
+    note = (comment or "").strip() or None
+    rels = list(relative_paths or [])
+    temps: list[Path] = []
+    jobs: list[tuple[Path, str | None, str | None]] = []
+    ok: list[BatchItemResult] = []
+    failed: list[BatchItemResult] = []
+    try:
+        for index, uploaded in enumerate(files):
+            filename = Path(uploaded.filename or "untitled").name
+            if not filename:
+                failed.append(
+                    BatchItemResult(
+                        uuid="",
+                        filename="untitled",
+                        code="VALIDATION_ERROR",
+                        message="A filename is required.",
+                    )
+                )
+                continue
+            data = await uploaded.read()
+            if not data:
+                failed.append(
+                    BatchItemResult(
+                        uuid="",
+                        filename=filename,
+                        code="VALIDATION_ERROR",
+                        message="The uploaded file is empty.",
+                    )
+                )
+                continue
+            handle = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}")
+            try:
+                handle.write(data)
+            finally:
+                handle.close()
+            temp_path = Path(handle.name)
+            temps.append(temp_path)
+            relative = rels[index] if index < len(rels) else None
+            jobs.append((temp_path, filename, relative or None))
+        if jobs:
+            for outcome in ctx.objects.import_files(db, project, jobs, note):
+                if outcome.error is not None:
+                    failed.append(
+                        BatchItemResult(
+                            uuid="",
+                            filename=outcome.filename,
+                            code=outcome.error.code,
+                            message=outcome.error.message,
+                        )
+                    )
+                elif outcome.obj is not None:
+                    ok.append(
+                        BatchItemResult(
+                            uuid=outcome.obj.uuid,
+                            filename=outcome.filename,
+                            status="added",
+                        )
+                    )
+                else:
+                    failed.append(
+                        BatchItemResult(
+                            uuid="",
+                            filename=outcome.filename,
+                            code="APPLICATION_ERROR",
+                            message="The file was not added.",
+                        )
+                    )
+    finally:
+        for path in temps:
+            path.unlink(missing_ok=True)
+    if not jobs and not failed:
+        raise ValidationAppError("Drop files or a folder first.")
     return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.workspaces.root_for(project.uuid)))

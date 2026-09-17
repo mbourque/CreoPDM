@@ -28,7 +28,16 @@
     </section>
 
     <section class="settings-card">
-      <h2>CAD models</h2>
+      <h2>CAD Models</h2>
+      <p class="muted small">Extensions counted and filtered by the CAD Models chip on the file list. Numbered saves such as <code>shaft.prt.3</code> count as <code>.prt</code>.</p>
+      <label>CAD Models extensions
+        <textarea name="cad_models_extensions" rows="2" placeholder=".prt, .asm, .drw">{{ settings.cad_models_extensions | join(', ') }}</textarea>
+      </label>
+      <p class="muted small">Default: {{ settings.default_cad_models_extensions | join(', ') }}</p>
+    </section>
+
+    <section class="settings-card">
+      <h2>Creo-openable models</h2>
       <p class="muted small">Types Creo can open. Click-to-open uses Creo for these files. Numbered saves such as <code>shaft.prt.3</code> and <code>outline.dxf.4</code> count as those extensions.</p>
       <label>Creo-openable extensions
         <textarea name="cad_model_extensions" rows="3" placeholder=".prt, .asm, .drw">{{ settings.cad_model_extensions | join(', ') }}</textarea>
@@ -37,9 +46,9 @@
     </section>
 
     <section class="settings-card">
-      <h2>Openable CAD data</h2>
-      <p class="muted small">CAD-like files Creo does not open. They still count as CAD and open with the default Windows application.</p>
-      <label>Openable CAD extensions
+      <h2>Text files</h2>
+      <p class="muted small">CAD-like files that open with the Windows text editor, not Creo. They still count as CAD in the project.</p>
+      <label>Text file extensions
         <textarea name="cad_openable_extensions" rows="3" placeholder=".ncl, .tap, .xml, .log">{{ settings.cad_openable_extensions | join(', ') }}</textarea>
       </label>
       <p class="muted small">Comma-separated, with or without the dot.</p>
@@ -76,6 +85,15 @@
         <input name="workspace_root" type="text" value="{{ settings.workspace_root }}" placeholder="{{ settings.default_workspace_root }}">
       </label>
       <p class="muted small">Default: {{ settings.default_workspace_root }}</p>
+    </section>
+
+    <section class="settings-card">
+      <h2>Network</h2>
+      <p class="muted small">TCP port for this PC and phones on the LAN. 0 picks a free port each start. A specific port such as 8765 stays the same until it is already in use. Takes effect the next time CreoPDM starts.</p>
+      <label>Port
+        <input name="port" type="number" min="0" max="65535" step="1" value="{{ settings.port }}" placeholder="0">
+      </label>
+      <p class="muted small">0 = automatic.</p>
     </section>
 
     <section class="settings-card">

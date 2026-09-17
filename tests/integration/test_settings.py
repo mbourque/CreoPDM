@@ -22,21 +22,30 @@ def test_get_and_update_settings(client, tmp_path):
     assert ".mrd" in defaults
     assert ".xpr" in defaults
     assert ".mtl" in defaults
+    assert ".rcp" in defaults
+    assert ".mbx" in defaults
+    assert ".aux" in defaults
+    assert ".smt" in defaults
     assert extra_cad_set(payload["cad_extensions"]) == extra_cad_set(defaults)
+    assert extra_cad_set(payload["cad_models_extensions"]) == extra_cad_set([".prt", ".asm", ".drw"])
+    assert extra_cad_set(payload["default_cad_models_extensions"]) == extra_cad_set([".prt", ".asm", ".drw"])
     openable = payload["cad_openable_extensions"]
     assert ".ncl" in openable
     assert ".tap" in openable
     assert ".xml" in openable
     assert ".log" in openable
+    assert ".lst" in openable
     assert extra_cad_set(openable) == extra_cad_set(payload["default_cad_openable_extensions"])
     models = payload["cad_model_extensions"]
     assert ".prt" in models
     assert ".dxf" in models
     assert ".sldprt" in models
     assert ".catpart" in models
-    assert ".tmu" in models
+    assert ".tmu" not in models
+    assert ".tmz" not in models
+    assert ".tmu" in defaults
+    assert ".tmz" in defaults
     assert ".pvz" in models
-    assert ".tmz" in models
     assert ".ol" in models
     assert ".wrl" in models
     assert ".idx" in models
@@ -54,6 +63,7 @@ def test_get_and_update_settings(client, tmp_path):
     assert ".exe" in payload["ignore_patterns"]
     assert payload["database_url"].startswith("sqlite:///")
     assert payload["default_database_url"].startswith("sqlite:///")
+    assert payload["port"] == 0
 
     fake_creo = tmp_path / "parametric.exe"
     fake_creo.write_bytes(b"fake")
@@ -83,15 +93,41 @@ def test_get_and_update_settings(client, tmp_path):
     assert stored.status_code == 200, stored.text
     assert stored.json()["database_url"] == "postgresql+psycopg://creopdm@localhost:5432/creopdm"
 
+    ported = client.put(
+        "/api/settings",
+        json={"creo_open_mode": "association", "port": 8765},
+    )
+    assert ported.status_code == 200, ported.text
+    assert ported.json()["port"] == 8765
+    kept_port = client.put("/api/settings", json={"creo_open_mode": "association"})
+    assert kept_port.status_code == 200, kept_port.text
+    assert kept_port.json()["port"] == 8765
+    models_filter = client.put(
+        "/api/settings",
+        json={"creo_open_mode": "association", "cad_models_extensions": [".prt", "ASM"]},
+    )
+    assert models_filter.status_code == 200, models_filter.text
+    assert extra_cad_set(models_filter.json()["cad_models_extensions"]) == extra_cad_set([".prt", ".asm"])
+    kept_models = client.put("/api/settings", json={"creo_open_mode": "association"})
+    assert extra_cad_set(kept_models.json()["cad_models_extensions"]) == extra_cad_set([".prt", ".asm"])
+    rejected = client.put("/api/settings", json={"creo_open_mode": "association", "port": 70000})
+    assert rejected.status_code == 422, rejected.text
+    assert client.get("/api/settings").json()["port"] == 8765
+
     page = client.get("/settings")
     assert page.status_code == 200
     assert "Open Creo models with" in page.text
     assert "Workspace" in page.text
-    assert "CAD models" in page.text
-    assert "Openable CAD data" in page.text
+    assert "CAD Models" in page.text
+    assert "Creo-openable models" in page.text
+    assert 'name="cad_models_extensions"' in page.text
+    assert "Text files" in page.text
     assert "Non openable CAD data" in page.text
     assert "Ignored files" in page.text
     assert "Database" in page.text
+    assert "Network" in page.text
+    assert 'name="port"' in page.text
+    assert 'value="8765"' in page.text
     assert "File type names" in page.text
     assert 'href="/settings/types"' in page.text
     assert payload["type_labels"] == unique_type_labels(DEFAULT_TYPE_LABELS)

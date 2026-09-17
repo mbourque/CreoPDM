@@ -5,6 +5,7 @@ from creopdm.utils.classify import (
     display_type_label,
     is_creo_openable,
     is_extra_cad,
+    matches_cad_models,
     unique_type_labels,
 )
 
@@ -27,10 +28,29 @@ def test_classify_known_extensions():
     assert classify_filename("board.eda") == ObjectType.CAD
     assert classify_filename("calc.mcdx") == ObjectType.DOCUMENT
     assert classify_filename("duct.spro") == ObjectType.CAD
+    assert classify_filename("setup.rcp") == ObjectType.CAD
+    assert classify_filename("cut.mbx") == ObjectType.CAD
+    assert classify_filename("press.smt") == ObjectType.CAD
+    assert classify_filename("site.sit") == ObjectType.CAD
+    assert classify_filename("family.ptd") == ObjectType.CAD
+    assert classify_filename("op10.lst") == ObjectType.CAD
+    assert classify_filename("op10.ncl.tl1") == ObjectType.CAD
 
 
 def test_classify_unknown_is_other():
     assert classify_filename("weird.xyz") == ObjectType.OTHER
+
+
+def test_matches_cad_models_uses_logical_suffix():
+    models = [".prt", ".asm", ".drw"]
+    assert matches_cad_models("shaft.prt", models)
+    assert matches_cad_models("shaft.prt.3", models)
+    assert matches_cad_models("arm.asm", models, ".asm")
+    assert matches_cad_models("sheet.drw.2", models)
+    assert not matches_cad_models("notes.pdf", models)
+    assert not matches_cad_models("cut.mfg", models)
+    assert matches_cad_models("cut.mfg", [".mfg"])
+    assert not matches_cad_models("shaft.prt", [])
 
 
 def test_default_extra_cad_extensions():
@@ -70,6 +90,16 @@ def test_default_extra_cad_extensions():
     assert classify_filename("print.3mf") == ObjectType.CAD
     assert classify_filename("board.eda") == ObjectType.CAD
     assert classify_filename("duct.spro") == ObjectType.CAD
+    assert classify_filename("setup.rcp") == ObjectType.CAD
+    assert classify_filename("setup.rcp.1") == ObjectType.CAD
+    assert classify_filename("cut.mbx") == ObjectType.CAD
+    assert classify_filename("press.smt") == ObjectType.CAD
+    assert classify_filename("alias.ncd") == ObjectType.CAD
+    assert classify_filename("check.nck") == ObjectType.CAD
+    assert classify_filename("op10.lst") == ObjectType.CAD
+    assert classify_filename("op10.lst.2") == ObjectType.CAD
+    assert classify_filename("op10.ncl.tl1") == ObjectType.CAD
+    assert classify_filename("OP10.NCL.TL12") == ObjectType.CAD
     assert default_folder_for(ObjectType.CAD) == "CAD"
     assert default_folder_for(ObjectType.CREO_MANUFACTURING) == "CAD"
 
@@ -84,10 +114,10 @@ def test_creo_openable_models():
     assert is_creo_openable("shaft.prt")
     assert is_creo_openable("outline.dxf.4")
     assert is_creo_openable("body.CATPart")
-    assert is_creo_openable("cutter.tmu.2")
+    assert not is_creo_openable("cutter.tmu.2")
     assert is_creo_openable("preview.pvz.3")
     assert is_creo_openable("preview.3.pvz")
-    assert is_creo_openable("session.tmz")
+    assert not is_creo_openable("session.tmz")
     assert is_creo_openable("world.wrl")
     assert is_creo_openable("board.idx")
     assert is_creo_openable("print.3mf")
@@ -101,6 +131,18 @@ def test_creo_openable_models():
     assert is_extra_cad("1-inch.xpr")
     assert is_extra_cad("board.eda")
     assert is_extra_cad("duct.spro")
+    assert is_extra_cad("setup.rcp")
+    assert is_extra_cad("setup.rcp.2")
+    assert is_extra_cad("cut.mbx")
+    assert is_extra_cad("cutter.tmu")
+    assert is_extra_cad("cutter.tmu.2")
+    assert is_extra_cad("session.tmz")
+    assert not is_creo_openable("cutter.tmu")
+    assert is_extra_cad("press.smt")
+    assert is_extra_cad("family.ptd.1")
+    assert not is_creo_openable("press.smt")
+    assert not is_extra_cad("op10.lst")
+    assert not is_extra_cad("op10.ncl.tl1")
     assert not is_extra_cad("rough.ncl")
     assert not is_extra_cad("session.log")
     assert not is_extra_cad("shaft.prt")
@@ -109,6 +151,7 @@ def test_creo_openable_models():
     assert not is_extra_cad("calc.mcdx")
     assert not is_creo_openable("board.eda")
     assert not is_creo_openable("duct.spro")
+    assert not is_creo_openable("setup.rcp")
 
 
 def test_default_folders():
@@ -173,3 +216,22 @@ def test_display_type_label_defaults_and_overrides():
     assert display_type_label("board.eda", "CAD", defaults) == "ECAD data"
     assert display_type_label("calc.mcdx", "DOCUMENT", defaults) == "Mathcad"
     assert display_type_label("duct.spro", "CAD", defaults) == "Creo Flow Analysis"
+    assert display_type_label("setup.rcp", "CAD", defaults) == "Recipe/configuration"
+    assert display_type_label("setup.rcp.1", "CAD", defaults) == "Recipe/configuration"
+    assert display_type_label("cut.mbx", "CAD", defaults) == "Toolpath"
+    assert display_type_label("setup.inf", "CAD", defaults) == "Information"
+    assert display_type_label("reviewref.inf", "CAD", defaults) == "Reference Info"
+    assert display_type_label("press.smt", "CAD", defaults) == "Punch Parameters"
+    assert display_type_label("family.ptd.2", "CAD", defaults) == "Family Table"
+    assert display_type_label("check.nck", "CAD", defaults) == "NC Check Image"
+    assert display_type_label("alias.ncd", "CAD", defaults) == "CL Alias"
+    assert display_type_label("sheet.plt", "CAD", defaults) == "Plot"
+    assert display_type_label("op10.lst", "CAD", defaults) == "Post-list"
+    assert display_type_label("op10.lst.2", "CAD", defaults) == "Post-list"
+    assert unique_type_labels([{"extension": ".ncl.tl*", "label": "Intermediate CL File"}]) == [
+        {"extension": ".ncl.tl*", "label": "Intermediate CL File"}
+    ]
+    assert display_type_label("op010.ncl.tl1", "OTHER", defaults) == "Intermediate CL File"
+    assert display_type_label("op10.ncl.tl1", "CAD", defaults) == "Intermediate CL File"
+    assert display_type_label("OP10.NCL.TL12", "CAD", defaults) == "Intermediate CL File"
+    assert display_type_label("rough.ncl", "CAD", defaults) == "CL Data"

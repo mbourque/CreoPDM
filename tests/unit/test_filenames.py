@@ -22,7 +22,7 @@ def test_normalize_creo_numbered_files():
     assert CreoFileManager.normalize_creo_filename("preview.4.pvz") == "preview.pvz"
     assert CreoFileManager.normalize_creo_filename("shaft.1.prt") == "shaft.prt"
     assert CreoFileManager.normalize_creo_filename("outline.4.dxf") == "outline.dxf"
-    assert CreoFileManager.normalize_creo_filename("cutter.3.tmu") == "cutter.tmu"
+    assert CreoFileManager.normalize_creo_filename("cutter.3.tmu") == "cutter.3.tmu"
     assert CreoFileManager.normalize_creo_filename("setup.1.inf") == "setup.1.inf"
     assert CreoFileManager.save_number("shaft.prt") == 0
     assert CreoFileManager.save_number("shaft.prt.4") == 4
@@ -153,11 +153,13 @@ def test_list_latest_in_folder_skips_older_transients_and_git(tmp_path):
     (root / "scratch.tst").write_bytes(b"tst")
     (root / "regen_backup_model.mrd.2").write_bytes(b"bak")
     (root / "notes.bak").write_bytes(b"bak")
+    (root / "op10.lst").write_bytes(b"post")
+    (root / "cut.mbx").write_bytes(b"mbx")
     git = root / ".git"
     git.mkdir()
     (git / "config").write_bytes(b"git")
     chosen = {path.name for path in CreoFileManager.list_latest_in_folder(root)}
-    assert chosen == {"parallels.prt.3", "bushing.prt.2"}
+    assert chosen == {"parallels.prt.3", "bushing.prt.2", "op10.lst", "cut.mbx"}
 
 
 def test_filter_to_latest_saves_uses_disk_siblings_when_only_old_selected(tmp_path):
@@ -196,11 +198,19 @@ def test_cad_dialog_filter_includes_numbered_defaults():
     assert "*.mrd;*.mrd.*" in patterns
     assert "*.xpr;*.xpr.*" in patterns
     assert "*.mtl;*.mtl.*" in patterns
+    assert "*.rcp;*.rcp.*" in patterns
+    assert "*.mbx;*.mbx.*" in patterns
+    assert "*.aux;*.aux.*" in patterns
+    assert "*.smt;*.smt.*" in patterns
+    assert "*.ptd;*.ptd.*" in patterns
+    assert "*.lst;*.lst.*" in patterns
     assert "*.sldprt;*.sldprt.*;*.*.sldprt" in patterns
     assert "*.catpart;*.catpart.*;*.*.catpart" in patterns
-    assert "*.tmu;*.tmu.*;*.*.tmu" in patterns
+    assert "*.tmu;*.tmu.*" in patterns
+    assert "*.tmz;*.tmz.*" in patterns
+    assert "*.*.tmu" not in patterns
+    assert "*.*.tmz" not in patterns
     assert "*.pvz;*.pvz.*;*.*.pvz" in patterns
-    assert "*.tmz;*.tmz.*;*.*.tmz" in patterns
     assert "*.wrl;*.wrl.*;*.*.wrl" in patterns
     assert "*.idx;*.idx.*;*.*.idx" in patterns
     assert "*.3mf;*.3mf.*;*.*.3mf" in patterns

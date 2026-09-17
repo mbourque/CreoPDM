@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from creopdm.api.deps import get_context
 from creopdm.config import AppSettings
 from creopdm.constants import (
+    DEFAULT_CAD_MODELS_EXTENSIONS,
     DEFAULT_CREO_MODEL_EXTENSIONS,
     DEFAULT_EXTRA_CAD_EXTENSIONS,
     DEFAULT_IGNORE_PATTERNS,
@@ -38,11 +39,14 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         default_cad_openable_extensions=list(DEFAULT_OPENABLE_CAD_EXTENSIONS),
         cad_model_extensions=ctx.config.model_cad_extensions(),
         default_cad_model_extensions=list(DEFAULT_CREO_MODEL_EXTENSIONS),
+        cad_models_extensions=ctx.config.cad_models_extensions(),
+        default_cad_models_extensions=list(DEFAULT_CAD_MODELS_EXTENSIONS),
         type_labels=ctx.config.type_labels(),
         ignore_patterns=ctx.config.ignore_patterns(),
         default_ignore_patterns=list(DEFAULT_IGNORE_PATTERNS),
         database_url=ctx.config.database_url(),
         default_database_url=ctx.config.default_sqlite_url(),
+        port=settings.server.port,
     )
 
 
@@ -95,6 +99,10 @@ def update_settings(
         current.ui.open_browser_on_start = payload.open_browser_on_start
     if payload.cad_model_extensions is not None:
         current.cad.model_extensions = payload.cad_model_extensions
+    if payload.cad_models_extensions is not None:
+        current.cad.cad_models_extensions = payload.cad_models_extensions or list(
+            DEFAULT_CAD_MODELS_EXTENSIONS
+        )
     if payload.cad_openable_extensions is not None:
         current.cad.openable_extensions = payload.cad_openable_extensions
     if payload.cad_extensions is not None:
@@ -115,5 +123,7 @@ def update_settings(
         text = payload.database_url.strip()
         default = ctx.config.default_sqlite_url()
         current.database.url = "" if not text or text == default else text
+    if payload.port is not None:
+        current.server.port = payload.port
     apply_settings(ctx, current)
     return settings_to_response(ctx)

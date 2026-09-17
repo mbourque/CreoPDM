@@ -54,6 +54,26 @@ def test_import_creo_and_document_files(client, repo_parent, tmp_path):
     names = {item["filename"] for item in listing.json()}
     assert names == {"shaft.prt.3", "spec.pdf"}
 
+
+@requires_git
+def test_import_from_uploads_keeps_relative_paths(client, repo_parent):
+    project, _location = _create_project(client, repo_parent)
+    added = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-uploads",
+        files=[
+            ("files", ("shaft.prt", b"part-bytes", "application/octet-stream")),
+            ("files", ("notes.txt", b"hello", "text/plain")),
+        ],
+        data={"relative_paths": ["CAD/shaft.prt", "notes.txt"], "comment": "Dropped"},
+    )
+    assert added.status_code == 200, added.text
+    body = added.json()
+    assert {item["filename"] for item in body["ok"]} == {"shaft.prt", "notes.txt"}
+    assert body["failed"] == []
+    listing = {item["filename"]: item["relative_path"] for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
+    assert listing["shaft.prt"] == "CAD/shaft.prt"
+    assert listing["notes.txt"] == "notes.txt"
+
     history = client.get(f"/api/objects/{part['uuid']}/history")
     assert history.status_code == 200
     first = history.json()[0]
@@ -175,6 +195,33 @@ def test_choose_files_starts_in_project_folder(client, repo_parent):
     assert any(item["filename"] == "pin.prt.6" and item["relative_path"] == "pin.prt.6" for item in listing)
     assert pin.is_file()
     assert pin.read_bytes() == b"vault-pin"
+    page = client.get(f"/?project={project['uuid']}")
+    assert page.status_code == 200
+    assert 'id="chosen-file-summary"' in page.text
+    assert 'id="chosen-file-list"' not in page.text
+
+
+@requires_git
+def test_choose_files_omits_ignored_and_older_saves(client, repo_parent, monkeypatch):
+    project, location = _create_project(client, repo_parent)
+    pin = location / "pin.prt"
+    trail = location / "trail.txt"
+    older = location / "shaft.prt.1"
+    newer = location / "shaft.prt.4"
+    pin.write_bytes(b"pin")
+    trail.write_bytes(b"nope")
+    older.write_bytes(b"1")
+    newer.write_bytes(b"4")
+    monkeypatch.setattr(
+        "creopdm.api.projects.pick_files",
+        lambda initial_dir, title="Add files to the project": [pin, trail, older, newer],
+    )
+    response = client.post(f"/api/projects/{project['uuid']}/workspace/choose-files")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    names = {Path(path).name for path in body["selected"]}
+    assert names == {"pin.prt", "shaft.prt.4"}
+    assert body["ignored_count"] == 1
 
 
 @requires_git
@@ -218,10 +265,16 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data
     assert 'data-folder="Incoming/lib"' in inside.text
     assert "shaft.prt.4" in inside.text
     assert 'id="metric-filters"' in inside.text
+    assert 'data-filter="cad_models"' in inside.text
+    assert "disabled" not in inside.text.split('data-filter="cad_models"')[1].split("</button>")[0]
+    assert 'data-cad-models="' in inside.text
+    assert ".prt" in inside.text.split('data-cad-models="')[1].split('"')[0]
+    assert 'data-extension=".prt"' in inside.text
     assert 'data-filter="creo_parts"' in inside.text
     assert "disabled" not in inside.text.split('data-filter="creo_parts"')[1].split("</button>")[0]
-    assert "disabled" in inside.text.split('data-filter="assemblies"')[1].split("</button>")[0]
-    assert "disabled" in inside.text.split('data-filter="drawings"')[1].split("</button>")[0]
+    assert "disabled" not in inside.text.split('data-filter="assemblies"')[1].split("</button>")[0]
+    assert "disabled" not in inside.text.split('data-filter="drawings"')[1].split("</button>")[0]
+    assert "disabled" not in inside.text.split('data-filter="checked_out"')[1].split("</button>")[0]
     nested = client.get(f"/?project={project['uuid']}&folder=Incoming/lib")
     assert nested.status_code == 200, nested.text
     assert "pin.prt" in nested.text
@@ -561,6 +614,7 @@ def test_project_status_counts(client, repo_parent, tmp_path):
     assert status.status_code == 200
     body = status.json()
     assert body["files"] == 1
+    assert body["cad_models"] == 1
     assert body["assemblies"] == 1
 
 

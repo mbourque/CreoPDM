@@ -180,6 +180,7 @@ class CreoStatusResponse(BaseModel):
 
 class ProjectStatusResponse(BaseModel):
     files: int
+    cad_models: int = 0
     creo_parts: int
     assemblies: int
     drawings: int
@@ -212,6 +213,7 @@ class WorkspacePickerResponse(BaseModel):
     selected: list[str] = Field(default_factory=list)
     cancelled: bool = False
     folder: str | None = None
+    ignored_count: int = 0
     warning: str = ""
 
 
@@ -251,11 +253,14 @@ class SettingsResponse(BaseModel):
     default_cad_openable_extensions: list[str] = Field(default_factory=list)
     cad_model_extensions: list[str] = Field(default_factory=list)
     default_cad_model_extensions: list[str] = Field(default_factory=list)
+    cad_models_extensions: list[str] = Field(default_factory=list)
+    default_cad_models_extensions: list[str] = Field(default_factory=list)
     type_labels: list[dict[str, str]] = Field(default_factory=list)
     ignore_patterns: list[str] = Field(default_factory=list)
     default_ignore_patterns: list[str] = Field(default_factory=list)
     database_url: str = ""
     default_database_url: str = ""
+    port: int = 0
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -266,9 +271,11 @@ class SettingsUpdateRequest(BaseModel):
     cad_extensions: list[str] | None = None
     cad_openable_extensions: list[str] | None = None
     cad_model_extensions: list[str] | None = None
+    cad_models_extensions: list[str] | None = None
     type_labels: list[dict[str, str]] | None = None
     ignore_patterns: list[str] | None = None
     database_url: str | None = None
+    port: int | None = None
 
     @field_validator("creo_open_mode")
     @classmethod
@@ -299,6 +306,15 @@ class SettingsUpdateRequest(BaseModel):
     @field_validator("cad_model_extensions")
     @classmethod
     def valid_cad_model_extensions(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        from creopdm.utils.classify import unique_extensions
+
+        return unique_extensions(value)
+
+    @field_validator("cad_models_extensions")
+    @classmethod
+    def valid_cad_models_extensions(cls, value: list[str] | None) -> list[str] | None:
         if value is None:
             return None
         from creopdm.utils.classify import unique_extensions
@@ -336,3 +352,12 @@ class SettingsUpdateRequest(BaseModel):
                 "Database URL must look like sqlite:///path or postgresql+psycopg://user@host/db"
             )
         return text
+
+    @field_validator("port")
+    @classmethod
+    def valid_port(cls, value: int | None) -> int | None:
+        if value is None:
+            return None
+        if not 0 <= int(value) <= 65535:
+            raise ValueError("Port must be 0 (automatic) or 1–65535.")
+        return int(value)

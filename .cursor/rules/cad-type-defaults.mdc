@@ -1,0 +1,18 @@
+---
+description: When adding a CAD/file type or Type-column label, always update built-in defaults as well as this workstation's settings.
+alwaysApply: true
+---
+
+# CAD types go in defaults first
+
+When the user maps an extension, name, or pattern to a Type label (for example `.mbx = Toolpath`), do **both** of these every time. Do not update only `%LOCALAPPDATA%\CreoPDM\config\settings.json`.
+
+1. **Built-in defaults** in `src/creopdm/constants.py`:
+   - `DEFAULT_TYPE_LABELS`
+   - the matching extension list: `DEFAULT_CREO_MODEL_EXTENSIONS` (Creo opens), `DEFAULT_OPENABLE_CAD_EXTENSIONS` (Windows opens), or `DEFAULT_EXTRA_CAD_EXTENSIONS` (CAD, not opened)
+   - if folder-add currently skips the suffix (see `_SKIP_IMPORT_SUFFIXES`), stop skipping it when they want the type stored
+2. **Migration so existing installs pick it up**: add the new type-label key to `_ADDED_DEFAULT_TYPE_LABELS` in `src/creopdm/config.py`. If extras/openable/models changed, append the previous default set to `PREVIOUS_DEFAULT_*` in `constants.py`.
+3. **This workstation**: the same label and extension in `C:\Users\micha\AppData\Local\CreoPDM\config\settings.json`.
+4. **Tests** for classify, type label, dialog filters, and settings defaults.
+
+Compound names such as `.ncl.tl*` are type-label patterns, not a suffix in the extension lists.

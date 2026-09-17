@@ -52,20 +52,19 @@
     </div>
 
     {% if status and status.files %}
-    <ul class="metrics" id="metric-filters">
-      <li><button type="button" class="metric" data-filter="files" data-mode="off"{% if not status.files %} disabled{% endif %} title="{% if status.files %}Select all files. Click again to filter. Click a third time to clear.{% else %}No files in this folder.{% endif %}"><strong>{{ status.files }}</strong> Files</button></li>
-      <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off"{% if not status.creo_parts %} disabled{% endif %} title="{% if status.creo_parts %}Select Creo parts. Click again to filter. Click a third time to clear.{% else %}No Creo parts in this folder.{% endif %}"><strong>{{ status.creo_parts }}</strong> Creo Parts</button></li>
-      <li><button type="button" class="metric" data-filter="assemblies" data-mode="off"{% if not status.assemblies %} disabled{% endif %} title="{% if status.assemblies %}Select assemblies. Click again to filter. Click a third time to clear.{% else %}No assemblies in this folder.{% endif %}"><strong>{{ status.assemblies }}</strong> Assemblies</button></li>
-      <li><button type="button" class="metric" data-filter="drawings" data-mode="off"{% if not status.drawings %} disabled{% endif %} title="{% if status.drawings %}Select drawings. Click again to filter. Click a third time to clear.{% else %}No drawings in this folder.{% endif %}"><strong>{{ status.drawings }}</strong> Drawings</button></li>
-      <li><button type="button" class="metric" data-filter="documents" data-mode="off"{% if not status.documents %} disabled{% endif %} title="{% if status.documents %}Select documents. Click again to filter. Click a third time to clear.{% else %}No documents in this folder.{% endif %}"><strong>{{ status.documents }}</strong> Documents</button></li>
-      <li><button type="button" class="metric" data-filter="other" data-mode="off"{% if not status.other %} disabled{% endif %} title="{% if status.other %}Select non-CAD files. Click again to filter. Click a third time to clear.{% else %}No other files in this folder.{% endif %}"><strong>{{ status.other }}</strong> Other</button></li>
-      {% if status.checked_out %}
-      <li><button type="button" class="metric" data-filter="checked_out" data-mode="off" title="Select checked out files. Click again to filter. Click a third time to clear."><strong>{{ status.checked_out }}</strong> Checked out</button></li>
-      {% endif %}
+    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}">
+      <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Select all files and clear type chips. Click again to clear."><strong>{{ status.files }}</strong> Files</button></li>
+      <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Select CAD models. Click again to filter. Click a third time to clear."><strong>{{ status.cad_models }}</strong> CAD Models</button></li>
+      <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Select Creo parts. Click again to filter. Click a third time to clear."><strong>{{ status.creo_parts }}</strong> Creo Parts</button></li>
+      <li><button type="button" class="metric" data-filter="assemblies" data-mode="off" title="Select assemblies. Click again to filter. Click a third time to clear."><strong>{{ status.assemblies }}</strong> Assemblies</button></li>
+      <li><button type="button" class="metric" data-filter="drawings" data-mode="off" title="Select drawings. Click again to filter. Click a third time to clear."><strong>{{ status.drawings }}</strong> Drawings</button></li>
+      <li><button type="button" class="metric" data-filter="documents" data-mode="off" title="Select documents. Click again to filter. Click a third time to clear."><strong>{{ status.documents }}</strong> Documents</button></li>
+      <li><button type="button" class="metric" data-filter="other" data-mode="off" title="Select non-CAD files. Click again to filter. Click a third time to clear."><strong>{{ status.other }}</strong> Other</button></li>
+      <li><button type="button" class="metric" data-filter="checked_out" data-mode="off" title="Select checked out files in the current group. Click again to hide the rest. Click a third time to clear."><strong>{{ status.checked_out }}</strong> Checked out</button></li>
     </ul>
-    <p class="muted small" id="selection-summary">Click a count to select a group. Click a row to select it; Shift-click a range; Ctrl-click to add or remove. Click a filename to open it. Click a folder name to open the folder. Double-click a file for history.</p>
+    <p class="muted small" id="selection-summary">Drop files, folders, or file links here to add them. Click a count to select a group. Click a row to select it; Shift-click a range; Ctrl-click to add or remove. Click a filename to open it. Click a folder name to open the folder. Double-click a file for history.</p>
     {% elif status %}
-    <p class="muted small" id="selection-summary">Click a row to select a folder and the files in it. Click the folder name to open it.</p>
+    <p class="muted small" id="selection-summary">Drop files, folders, or file links here to add them. Click a row to select a folder and the files in it. Click the folder name to open it.</p>
     {% endif %}
 
     <div class="tabs" role="tablist">
@@ -144,6 +143,7 @@
           {% set obj = entry.object %}
           <tr data-uuid="{{ obj.uuid }}"
               data-object-type="{{ obj.object_type }}"
+              data-extension="{{ obj.extension }}"
               data-can-checkout="{{ '1' if obj.can_checkout else '0' }}"
               data-can-checkin="{{ '1' if obj.can_checkin else '0' }}"
               data-owned="{{ '1' if obj.owned_by_me else '0' }}"
@@ -330,8 +330,8 @@
         <button type="button" class="btn" id="choose-workspace-files">Choose Files</button>
         <button type="button" class="btn" id="choose-workspace-folder">Choose Folder</button>
       </div>
-      <ul id="chosen-file-list" class="detect-list"></ul>
-      <span class="muted small">Choose files or a folder from anywhere. Copies go into the workspace.</span>
+      <p id="chosen-file-summary" class="muted small"></p>
+      <span class="muted small">Drop files, folders, or file links here, or choose them. Copies go into the workspace.</span>
     </div>
     <label>Comment
       <input name="comment" placeholder="Initial models">

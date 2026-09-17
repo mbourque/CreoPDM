@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from creopdm.constants import (
     APP_NAME,
+    DEFAULT_CAD_MODELS_EXTENSIONS,
     DEFAULT_CREO_MODEL_EXTENSIONS,
     DEFAULT_EXTRA_CAD_EXTENSIONS,
     DEFAULT_IGNORE_PATTERNS,
@@ -44,6 +45,13 @@ class ServerConfig(BaseModel):
     @classmethod
     def default_all_interfaces(cls, value: str) -> str:
         return value.strip() or "0.0.0.0"
+
+    @field_validator("port")
+    @classmethod
+    def valid_port(cls, value: int) -> int:
+        if not 0 <= int(value) <= 65535:
+            raise ValueError("Port must be 0 (automatic) or 1–65535.")
+        return int(value)
 
 
 class GitConfig(BaseModel):
@@ -105,6 +113,7 @@ class CadConfig(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
     model_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_CREO_MODEL_EXTENSIONS))
+    cad_models_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_CAD_MODELS_EXTENSIONS))
     openable_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_OPENABLE_CAD_EXTENSIONS))
     extra_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_EXTRA_CAD_EXTENSIONS))
     type_labels: list[dict[str, str]] = Field(
@@ -115,6 +124,11 @@ class CadConfig(BaseModel):
     @classmethod
     def normalize_model_extensions(cls, value: object) -> list[str]:
         return _normalize_extension_list(value, DEFAULT_CREO_MODEL_EXTENSIONS)
+
+    @field_validator("cad_models_extensions", mode="before")
+    @classmethod
+    def normalize_cad_models_extensions(cls, value: object) -> list[str]:
+        return _normalize_extension_list(value, DEFAULT_CAD_MODELS_EXTENSIONS)
 
     @field_validator("openable_extensions", mode="before")
     @classmethod
@@ -179,6 +193,25 @@ _ADDED_DEFAULT_TYPE_LABELS = (
     ".eda",
     ".mcdx",
     ".spro",
+    ".rcp",
+    ".mbx",
+    ".lst",
+    ".ncl.tl*",
+    ".aux",
+    ".cel",
+    ".dat",
+    ".edm",
+    ".inf",
+    ".memb",
+    ".mtn",
+    ".ncd",
+    ".nck",
+    ".plt",
+    ".ppl",
+    ".ptd",
+    ".shd",
+    ".sit",
+    ".smt",
 )
 
 
@@ -260,16 +293,18 @@ class ConfigManager:
             settings.cad.extra_extensions = list(DEFAULT_EXTRA_CAD_EXTENSIONS)
             settings.cad.openable_extensions = list(DEFAULT_OPENABLE_CAD_EXTENSIONS)
             dirty = True
+        raw_models = extra_cad_set((cad_raw or {}).get("model_extensions")) if isinstance(cad_raw, dict) else extra_cad_set()
+        if raw_models in PREVIOUS_DEFAULT_CREO_MODEL_SETS:
+            settings.cad.model_extensions = list(DEFAULT_CREO_MODEL_EXTENSIONS)
+            dirty = True
         if not isinstance(cad_raw, dict) or "openable_extensions" not in cad_raw:
             settings.cad.openable_extensions = list(DEFAULT_OPENABLE_CAD_EXTENSIONS)
             dirty = True
-        raw_models = extra_cad_set((cad_raw or {}).get("model_extensions")) if isinstance(cad_raw, dict) else extra_cad_set()
-        if (
-            not isinstance(cad_raw, dict)
-            or "model_extensions" not in cad_raw
-            or raw_models in PREVIOUS_DEFAULT_CREO_MODEL_SETS
-        ):
+        if not isinstance(cad_raw, dict) or "model_extensions" not in cad_raw:
             settings.cad.model_extensions = list(DEFAULT_CREO_MODEL_EXTENSIONS)
+            dirty = True
+        if not isinstance(cad_raw, dict) or "cad_models_extensions" not in cad_raw:
+            settings.cad.cad_models_extensions = list(DEFAULT_CAD_MODELS_EXTENSIONS)
             dirty = True
         stripped_openable = exclude_extensions(settings.cad.openable_extensions, settings.cad.model_extensions)
         if stripped_openable != unique_extensions(settings.cad.openable_extensions):
@@ -346,6 +381,12 @@ class ConfigManager:
 
     def model_cad_extensions(self) -> list[str]:
         return unique_extensions(self.settings.cad.model_extensions or DEFAULT_CREO_MODEL_EXTENSIONS)
+
+    def cad_models_extensions(self) -> list[str]:
+        configured = self.settings.cad.cad_models_extensions
+        if not configured:
+            return list(DEFAULT_CAD_MODELS_EXTENSIONS)
+        return unique_extensions(configured)
 
     def openable_cad_extensions(self) -> list[str]:
         return exclude_extensions(self.settings.cad.openable_extensions, self.model_cad_extensions())

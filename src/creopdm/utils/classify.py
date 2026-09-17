@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -42,6 +43,22 @@ def unique_extensions(values: Iterable[str] | None) -> list[str]:
 
 def extra_cad_set(values: Iterable[str] | None) -> frozenset[str]:
     return frozenset(unique_extensions(values))
+
+
+def matches_cad_models(
+    filename: str,
+    extensions: Iterable[str] | None,
+    stored_extension: str | None = None,
+) -> bool:
+    """True when the file's logical suffix is in the CAD Models chip list."""
+    wanted = extra_cad_set(extensions)
+    if not wanted:
+        return False
+    stored = normalize_extension(stored_extension or "")
+    if stored in wanted:
+        return True
+    canonical = CreoFileManager.normalize_creo_filename(filename)
+    return Path(canonical).suffix.lower() in wanted
 
 
 def default_data_cad_extensions() -> list[str]:
@@ -89,9 +106,12 @@ def _normalize_type_label_token(value: str) -> str:
     text = str(value or "").strip().lower().replace("\\", "/")
     if not text or text in {".", ".."}:
         return ""
-    text = Path(text).name
-    if not text or any(ch in text for ch in ':*?"<>|'):
+    if "/" in text:
+        text = text.rsplit("/", 1)[-1]
+    if not text or any(ch in text for ch in '/:"<>|'):
         return ""
+    if "*" in text or "?" in text:
+        return text
     if "." in text and not text.startswith("."):
         return text
     return normalize_extension(text)
@@ -121,7 +141,15 @@ def classify_filename(
         return mapped
     if suffix in CREO_FILE_EXTENSIONS or suffix in extra_cad_set(models) or suffix in extra_cad_set(extras):
         return ObjectType.CAD
+    if _is_intermediate_cl(filename):
+        return ObjectType.CAD
     return OBJECT_TYPE_BY_EXTENSION.get(suffix, ObjectType.OTHER)
+
+
+def _is_intermediate_cl(filename: str) -> bool:
+    """True for Creo intermediate CL files such as op10.ncl.tl1."""
+    name = Path(str(filename).replace("\\", "/")).name.lower()
+    return fnmatch.fnmatch(name, "*.ncl.tl*")
 
 
 def default_folder_for(object_type: ObjectType | str) -> str:
@@ -234,11 +262,28 @@ def display_type_label(
     if names or extensions:
         canonical = CreoFileManager.normalize_creo_filename(filename)
         basename = Path(canonical).name.lower()
-        custom = names.get(basename)
+        original = Path(str(filename).replace("\\", "/")).name.lower()
+        custom = names.get(basename) or names.get(original)
         if custom:
             return custom
         suffix = Path(canonical).suffix.lower()
         custom = extensions.get(suffix)
         if custom:
             return custom
+        for token, label in names.items():
+            if _matches_type_label_pattern(basename, original, token):
+                return label
+        for token, label in extensions.items():
+            if _matches_type_label_pattern(basename, original, token):
+                return label
     return default_type_label(object_type)
+
+
+def _matches_type_label_pattern(basename: str, original: str, token: str) -> bool:
+    if "*" not in token and "?" not in token:
+        return False
+    patterns = [token]
+    if token.startswith(".") and not token.startswith("*"):
+        patterns.append(f"*{token}")
+    names = (basename, original)
+    return any(fnmatch.fnmatch(name, pattern) for name in names for pattern in patterns)

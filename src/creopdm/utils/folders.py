@@ -6,8 +6,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from creopdm.constants import CAD_OBJECT_TYPES, DOCUMENT_OBJECT_TYPES
+from creopdm.constants import CAD_OBJECT_TYPES, DEFAULT_CAD_MODELS_EXTENSIONS, DOCUMENT_OBJECT_TYPES
 from creopdm.exceptions import PathValidationError
+from creopdm.utils.classify import matches_cad_models
 from creopdm.utils.paths import assert_safe_relative_path
 
 
@@ -22,13 +23,27 @@ def objects_in_folder_view(objects: list[Any], current: str = "") -> list[Any]:
     return found
 
 
-def folder_view_counts(objects: list[Any], current: str = "") -> dict[str, int]:
+def folder_view_counts(
+    objects: list[Any],
+    current: str = "",
+    cad_models_extensions: list[str] | None = None,
+) -> dict[str, int]:
     """Metric chip counts for the current folder view."""
     view = objects_in_folder_view(objects, current)
     cad = {item.value for item in CAD_OBJECT_TYPES}
+    models = cad_models_extensions if cad_models_extensions is not None else list(DEFAULT_CAD_MODELS_EXTENSIONS)
     docs = {item.value for item in DOCUMENT_OBJECT_TYPES}
     return {
         "files": len(view),
+        "cad_models": sum(
+            1
+            for obj in view
+            if matches_cad_models(
+                str(getattr(obj, "filename", "") or ""),
+                models,
+                str(getattr(obj, "extension", "") or ""),
+            )
+        ),
         "creo_parts": sum(1 for obj in view if getattr(obj, "object_type", "") == "CREO_PART"),
         "assemblies": sum(1 for obj in view if getattr(obj, "object_type", "") == "CREO_ASSEMBLY"),
         "drawings": sum(1 for obj in view if getattr(obj, "object_type", "") == "CREO_DRAWING"),

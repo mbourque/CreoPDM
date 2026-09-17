@@ -95,6 +95,12 @@ CREO_FILE_EXTENSIONS = frozenset(
     }
 )
 
+DEFAULT_CAD_MODELS_EXTENSIONS = (
+    ".prt",
+    ".asm",
+    ".drw",
+)
+
 DEFAULT_CREO_MODEL_EXTENSIONS = (
     ".prt",
     ".asm",
@@ -109,8 +115,6 @@ DEFAULT_CREO_MODEL_EXTENSIONS = (
     ".int",
     ".g",
     ".cem",
-    ".tmu",
-    ".tmz",
     ".apr",
     ".pvz",
     ".ol",
@@ -179,52 +183,6 @@ DEFAULT_CREO_MODEL_EXTENSIONS = (
     ".psm",
     ".3mf",
     ".she",
-)
-
-_PREVIOUS_CREO_MODELS_BASE = frozenset(
-    {
-        ".prt",
-        ".asm",
-        ".drw",
-        ".frm",
-        ".mfg",
-        ".lay",
-        ".sec",
-        ".dgm",
-        ".rep",
-        ".mrk",
-        ".int",
-        ".g",
-        ".cem",
-        ".stp",
-        ".step",
-        ".igs",
-        ".iges",
-        ".dxf",
-        ".dwg",
-        ".stl",
-        ".vda",
-        ".ipt",
-        ".iam",
-        ".catpart",
-        ".catproduct",
-        ".model",
-        ".exp",
-        ".sldprt",
-        ".sldasm",
-        ".bdl",
-        ".pkg",
-        ".sdp",
-        ".sda",
-        ".sdac",
-        ".sdpc",
-    }
-)
-
-PREVIOUS_DEFAULT_CREO_MODEL_SETS = (
-    _PREVIOUS_CREO_MODELS_BASE,
-    _PREVIOUS_CREO_MODELS_BASE | {".tmu"},
-    _PREVIOUS_CREO_MODELS_BASE | {".tmu", ".pvz"},
 )
 
 OBJECT_TYPE_BY_EXTENSION: dict[str, ObjectType] = {
@@ -329,6 +287,7 @@ DEFAULT_OPENABLE_CAD_EXTENSIONS = (
     ".tap",
     ".xml",
     ".log",
+    ".lst",
 )
 
 DEFAULT_EXTRA_CAD_EXTENSIONS = (
@@ -350,6 +309,23 @@ DEFAULT_EXTRA_CAD_EXTENSIONS = (
     ".mtl",
     ".eda",
     ".spro",
+    ".rcp",
+    ".mbx",
+    ".aux",
+    ".cel",
+    ".edm",
+    ".memb",
+    ".mtn",
+    ".ncd",
+    ".nck",
+    ".plt",
+    ".ppl",
+    ".ptd",
+    ".shd",
+    ".sit",
+    ".smt",
+    ".tmu",
+    ".tmz",
 )
 
 DEFAULT_TYPE_LABELS: tuple[dict[str, str], ...] = (
@@ -396,10 +372,29 @@ DEFAULT_TYPE_LABELS: tuple[dict[str, str], ...] = (
     {"extension": ".mrd", "label": "Material Removal Data"},
     {"extension": ".tpm", "label": "Tool Parameters"},
     {"extension": ".tph", "label": "Toolpath"},
+    {"extension": ".mbx", "label": "Toolpath"},
+    {"extension": ".lst", "label": "Post-list"},
+    {"extension": ".ncl.tl*", "label": "Intermediate CL File"},
+    {"extension": ".aux", "label": "Auxiliary Data"},
+    {"extension": ".cel", "label": "Machine Parameters"},
+    {"extension": ".dat", "label": "Edit Data"},
+    {"extension": ".edm", "label": "Contour Parameters"},
+    {"extension": ".inf", "label": "Information"},
+    {"extension": ".memb", "label": "Assembly Member"},
+    {"extension": ".mtn", "label": "Tool Motion"},
+    {"extension": ".ncd", "label": "CL Alias"},
+    {"extension": ".nck", "label": "NC Check Image"},
+    {"extension": ".plt", "label": "Plot"},
+    {"extension": ".ppl", "label": "Route Sheet"},
+    {"extension": ".ptd", "label": "Family Table"},
+    {"extension": ".shd", "label": "Shade Display"},
+    {"extension": ".sit", "label": "Site Parameters"},
+    {"extension": ".smt", "label": "Punch Parameters"},
     {"extension": ".crc", "label": "Circular Reference File"},
     {"extension": ".eda", "label": "ECAD data"},
     {"extension": ".mcdx", "label": "Mathcad"},
     {"extension": ".spro", "label": "Creo Flow Analysis"},
+    {"extension": ".rcp", "label": "Recipe/configuration"},
     {"extension": "reviewref.inf", "label": "Reference Info"},
     {"extension": ".zip, .rar, .7z, .tar, .gz, .tgz, .bz2, .tbz", "label": "Archive"},
     {
@@ -460,6 +455,10 @@ DEFAULT_TYPE_LABELS: tuple[dict[str, str], ...] = (
 
 PREVIOUS_DEFAULT_TYPE_LABEL_SETS = (
     (),
+)
+
+PREVIOUS_DEFAULT_CREO_MODEL_SETS = (
+    frozenset((*DEFAULT_CREO_MODEL_EXTENSIONS, ".tmu", ".tmz")),
 )
 
 DEFAULT_IGNORE_PATTERNS = (
@@ -703,6 +702,112 @@ PREVIOUS_DEFAULT_EXTRA_CAD_SETS = (
             ".mrd",
             ".xpr",
             ".mtl",
+        }
+    ),
+    frozenset(
+        {
+            ".tph",
+            ".inf",
+            ".out",
+            ".tool",
+            ".crc",
+            ".dat",
+            ".m_p",
+            ".bom",
+            ".tbl",
+            ".xch",
+            ".sym",
+            ".bin",
+            ".stk",
+            ".mrd",
+            ".xpr",
+            ".mtl",
+            ".eda",
+            ".spro",
+        }
+    ),
+    frozenset(
+        {
+            ".tph",
+            ".inf",
+            ".out",
+            ".tool",
+            ".crc",
+            ".dat",
+            ".m_p",
+            ".bom",
+            ".tbl",
+            ".xch",
+            ".sym",
+            ".bin",
+            ".stk",
+            ".mrd",
+            ".xpr",
+            ".mtl",
+            ".eda",
+            ".spro",
+            ".rcp",
+        }
+    ),
+    frozenset(
+        {
+            ".tph",
+            ".inf",
+            ".out",
+            ".tool",
+            ".crc",
+            ".dat",
+            ".m_p",
+            ".bom",
+            ".tbl",
+            ".xch",
+            ".sym",
+            ".bin",
+            ".stk",
+            ".mrd",
+            ".xpr",
+            ".mtl",
+            ".eda",
+            ".spro",
+            ".rcp",
+            ".mbx",
+        }
+    ),
+    frozenset(
+        {
+            ".tph",
+            ".inf",
+            ".out",
+            ".tool",
+            ".crc",
+            ".dat",
+            ".m_p",
+            ".bom",
+            ".tbl",
+            ".xch",
+            ".sym",
+            ".bin",
+            ".stk",
+            ".mrd",
+            ".xpr",
+            ".mtl",
+            ".eda",
+            ".spro",
+            ".rcp",
+            ".mbx",
+            ".aux",
+            ".cel",
+            ".edm",
+            ".memb",
+            ".mtn",
+            ".ncd",
+            ".nck",
+            ".plt",
+            ".ppl",
+            ".ptd",
+            ".shd",
+            ".sit",
+            ".smt",
         }
     ),
 )

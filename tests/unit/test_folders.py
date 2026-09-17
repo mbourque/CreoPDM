@@ -20,11 +20,13 @@ def test_folder_view_counts_uses_immediate_files_only():
     ]
     root = folder_view_counts(objects, "")
     assert root["files"] == 1
+    assert root["cad_models"] == 1
     assert root["creo_parts"] == 1
     assert root["assemblies"] == 0
     incoming = folder_view_counts(objects, "Incoming")
     assert incoming == {
         "files": 2,
+        "cad_models": 1,
         "creo_parts": 0,
         "assemblies": 1,
         "drawings": 0,
@@ -34,12 +36,27 @@ def test_folder_view_counts_uses_immediate_files_only():
     }
     nested = folder_view_counts(objects, "Incoming/lib")
     assert nested["files"] == 1
+    assert nested["cad_models"] == 1
     assert nested["creo_parts"] == 1
     only_nested = [
         SimpleNamespace(filename="pin.prt", relative_path="ribbed2/pin.prt", object_type="CREO_PART"),
         SimpleNamespace(filename="notes.pdf", relative_path="ribbed2/notes.pdf", object_type="PDF"),
     ]
     assert folder_view_counts(only_nested, "")["files"] == 0
+
+
+def test_folder_view_counts_cad_models_follows_extension_list():
+    objects = [
+        SimpleNamespace(filename="shaft.prt", relative_path="shaft.prt", object_type="CREO_PART", extension=".prt"),
+        SimpleNamespace(filename="arm.asm", relative_path="arm.asm", object_type="CREO_ASSEMBLY", extension=".asm"),
+        SimpleNamespace(filename="cut.mfg", relative_path="cut.mfg", object_type="CREO_MANUFACTURING", extension=".mfg"),
+    ]
+    defaulted = folder_view_counts(objects, "")
+    assert defaulted["cad_models"] == 2
+    only_prt = folder_view_counts(objects, "", [".prt"])
+    assert only_prt["cad_models"] == 1
+    with_mfg = folder_view_counts(objects, "", [".prt", ".asm", ".mfg"])
+    assert with_mfg["cad_models"] == 3
 
 
 def test_folder_view_counts_checked_out():

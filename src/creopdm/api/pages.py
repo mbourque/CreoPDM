@@ -127,7 +127,11 @@ def home(
     if project is not None:
         objects, list_entries = _folder_page(ctx, db, project.id, current_folder)
     if objects or list_entries:
-        status = folder_view_counts(objects, current_folder)
+        status = folder_view_counts(
+            objects,
+            current_folder,
+            ctx.config.cad_models_extensions(),
+        )
 
     return render(
         request,
@@ -143,6 +147,7 @@ def home(
             "folder_crumbs": folder_crumbs(current_folder),
             "list_entries": list_entries,
             "status": status,
+            "cad_models_extensions": ctx.config.cad_models_extensions(),
             "checkin_queue": checkin_queue,
             "workspace_path": str(ctx.config.workspace_for_project(selected.uuid)) if selected else None,
             "object_types": [item.value for item in ObjectType],

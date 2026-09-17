@@ -80,8 +80,10 @@
     documents: ["PDF", "DOCUMENT", "SPREADSHEET", "TEXT", "IMAGE"],
     other: ["PDF", "DOCUMENT", "SPREADSHEET", "TEXT", "IMAGE", "OTHER"],
   };
+  const CAD_MODEL_CHILD_FILTERS = new Set(["creo_parts", "assemblies", "drawings"]);
   const METRIC_LABELS = {
     files: "all files",
+    cad_models: "CAD models",
     creo_parts: "Creo parts",
     assemblies: "assemblies",
     drawings: "drawings",
@@ -98,8 +100,34 @@
     return btn.dataset.mode || "off";
   }
 
+  function isParentMetric(key) {
+    return key === "files" || key === "cad_models";
+  }
+
+  function clearMetricFilters(keys) {
+    metricButtons().forEach((item) => {
+      if (keys.has(item.dataset.filter) && metricMode(item) !== "off") setMetricMode(item, "off");
+    });
+  }
+
+  function cadModelsExtensions() {
+    const raw = document.querySelector("#metric-filters")?.dataset.cadModels || "";
+    return raw.split(/[\s,;]+/).map((item) => {
+      const ext = item.trim().toLowerCase();
+      if (!ext) return "";
+      return ext.startsWith(".") ? ext : `.${ext}`;
+    }).filter(Boolean);
+  }
+
+  function rowExtension(row) {
+    const ext = String(row.dataset.extension || "").trim().toLowerCase();
+    if (!ext) return "";
+    return ext.startsWith(".") ? ext : `.${ext}`;
+  }
+
   function rowMatchesMetric(row, key) {
     if (key === "checked_out") return row.dataset.checkedOut === "1";
+    if (key === "cad_models") return cadModelsExtensions().includes(rowExtension(row));
     const types = FILTERS[key];
     return types === null || types.includes(row.dataset.objectType);
   }
@@ -108,7 +136,24 @@
     btn.dataset.mode = mode;
     btn.classList.toggle("is-selected", mode === "select");
     btn.classList.toggle("is-filtered", mode === "filter");
-    const label = METRIC_LABELS[btn.dataset.filter] || btn.dataset.filter;
+    const key = btn.dataset.filter;
+    const label = METRIC_LABELS[key] || key;
+    if (key === "files") {
+      btn.title = mode === "off"
+        ? "Select all files and clear type chips. Click again to clear."
+        : "Showing all files. Click to clear.";
+      return;
+    }
+    if (key === "checked_out") {
+      if (mode === "off") {
+        btn.title = "Select checked out files in the current group. Click again to hide the rest. Click a third time to clear.";
+      } else if (mode === "select") {
+        btn.title = "Selected checked out files in the current group. Click to hide files that are not checked out.";
+      } else {
+        btn.title = "Showing checked out files in the current group. Click to clear.";
+      }
+      return;
+    }
     if (mode === "off") {
       btn.title = `Select ${label}. Click again to filter. Click a third time to clear.`;
     } else if (mode === "select") {
@@ -118,13 +163,25 @@
     }
   }
 
+  function isCheckoutMetric(key) {
+    return key === "checked_out";
+  }
+
   function applyMetricVisibility() {
     const metrics = metricButtons();
-    const filterBtns = metrics.filter((btn) => metricMode(btn) === "filter");
+    const typeFilterBtns = metrics.filter((btn) => {
+      return !isCheckoutMetric(btn.dataset.filter) && metricMode(btn) === "filter";
+    });
+    const checkoutFiltering = metrics.some((btn) => {
+      return isCheckoutMetric(btn.dataset.filter) && metricMode(btn) === "filter";
+    });
+    const typeRestricts = typeFilterBtns.length > 0 || checkoutFiltering;
     const viewBtns = metrics.filter((btn) => {
+      const key = btn.dataset.filter;
+      if (isCheckoutMetric(key)) return false;
       const mode = metricMode(btn);
-      if (mode === "off" || !filterBtns.length) return false;
-      if (mode === "select" && FILTERS[btn.dataset.filter] === null) return false;
+      if (mode === "off" || !typeRestricts) return false;
+      if (mode === "select" && isParentMetric(key) && typeFilterBtns.length) return false;
       return true;
     });
     const q = searchInput?.value.trim().toLowerCase() || "";
@@ -136,12 +193,15 @@
       }
       const matchesSearch = !q || row.textContent.toLowerCase().includes(q);
       const matchesView = !viewBtns.length || viewBtns.some((btn) => rowMatchesMetric(row, btn.dataset.filter));
-      row.hidden = !(matchesSearch && matchesView);
+      const matchesCheckout = !checkoutFiltering || rowMatchesMetric(row, "checked_out");
+      row.hidden = !(matchesSearch && matchesView && matchesCheckout);
     });
   }
 
   function applyMetricSelection() {
     const active = metricButtons().filter((btn) => metricMode(btn) !== "off");
+    const typeActive = active.filter((btn) => !isCheckoutMetric(btn.dataset.filter));
+    const checkoutOn = active.some((btn) => isCheckoutMetric(btn.dataset.filter));
     rows().forEach((row) => {
       if (row.classList.contains("folder-row")) {
         if (!active.length) row.classList.remove("is-selected");
@@ -151,8 +211,9 @@
         row.classList.remove("is-selected");
         return;
       }
-      const matchesActive = active.some((btn) => rowMatchesMetric(row, btn.dataset.filter));
-      row.classList.toggle("is-selected", !row.hidden && matchesActive);
+      const matchesType = !typeActive.length || typeActive.some((btn) => rowMatchesMetric(row, btn.dataset.filter));
+      const matchesCheckout = !checkoutOn || rowMatchesMetric(row, "checked_out");
+      row.classList.toggle("is-selected", !row.hidden && matchesType && matchesCheckout);
     });
   }
 
@@ -258,6 +319,7 @@
 
   let chosenPaths = [];
   let chosenBaseFolder = null;
+  let chosenUploads = [];
 
   async function loadAddFolder() {
     const projectId = addForm?.dataset.project;
@@ -269,44 +331,209 @@
     label.textContent = `Opens in: ${data.initial_directory}`;
   }
 
-  function chosenDisplayName(path, folder) {
-    if (!folder) return path.split(/[/\\]/).pop() || path;
-    const norm = String(path).replace(/\\/g, "/");
-    const root = String(folder).replace(/\\/g, "/").replace(/\/$/, "");
-    const prefix = root.toLowerCase() + "/";
-    if (norm.toLowerCase().startsWith(prefix)) {
-      return `${root.split("/").pop()}/${norm.slice(root.length + 1)}`;
-    }
-    return path.split(/[/\\]/).pop() || path;
+  function fileCountLabel(count) {
+    return count === 1 ? "1 file" : `${count} files`;
   }
 
-  function applyChosenPaths(paths, labelText, baseFolder) {
+  function applyChosenPaths(paths, labelText, baseFolder, ignoredCount) {
+    chosenUploads = [];
     chosenPaths = paths || [];
     chosenBaseFolder = baseFolder || null;
     const label = $("#add-folder-label");
     if (label && labelText) label.textContent = labelText;
-    const list = $("#chosen-file-list");
-    if (list) {
-      list.innerHTML = "";
-      if (!chosenPaths.length && chosenBaseFolder) {
-        const item = document.createElement("li");
-        item.textContent = chosenBaseFolder;
-        list.appendChild(item);
-      }
-      chosenPaths.forEach((path) => {
-        const item = document.createElement("li");
-        item.textContent = chosenDisplayName(path, chosenBaseFolder);
-        list.appendChild(item);
-      });
+    const summary = $("#chosen-file-summary");
+    if (!summary) return;
+    const ignored = Number(ignoredCount) || 0;
+    const omitted = ignored
+      ? ` ${ignored} ignored ${ignored === 1 ? "file" : "files"} omitted.`
+      : "";
+    if (chosenBaseFolder) {
+      summary.textContent = `Folder: ${chosenBaseFolder}.${omitted}`;
+    } else if (chosenPaths.length) {
+      summary.textContent = `${fileCountLabel(chosenPaths.length)} selected.${omitted}`;
+    } else if (ignored) {
+      summary.textContent = `No files to add.${omitted}`;
+    } else {
+      summary.textContent = "";
     }
+  }
+
+  function fileDiskPath(file) {
+    return String(file.path || file.mozFullPath || "").trim();
+  }
+
+  function fileUrlToPath(value) {
+    let text = String(value || "").trim().replace(/^["']|["']$/g, "");
+    if (!text || text.startsWith("#")) return "";
+    if (/^https?:/i.test(text)) {
+      try {
+        if (new URL(text).origin === window.location.origin) return "";
+      } catch {
+        return "";
+      }
+      return "";
+    }
+    if (/^file:/i.test(text)) {
+      let path = text.replace(/^file:\/\//i, "");
+      try {
+        path = decodeURIComponent(path);
+      } catch {
+        /* keep raw */
+      }
+      path = path.replace(/^\/+/, "");
+      if (/^[A-Za-z]:/.test(path)) return path.replace(/\//g, "\\");
+      return `\\\\${path.replace(/\//g, "\\")}`;
+    }
+    if (/^[A-Za-z]:[\\/]/.test(text) || text.startsWith("\\\\")) {
+      return text.replace(/\//g, "\\");
+    }
+    return "";
+  }
+
+  function pathsFromDrop(dataTransfer) {
+    const chunks = [
+      dataTransfer.getData("text/uri-list"),
+      dataTransfer.getData("text/plain"),
+      dataTransfer.getData("text/html"),
+      dataTransfer.getData("URL"),
+      dataTransfer.getData("text/x-moz-url"),
+    ];
+    const html = dataTransfer.getData("text/html") || "";
+    for (const match of html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)) {
+      chunks.push(match[1]);
+    }
+    const found = [];
+    const seen = new Set();
+    for (const chunk of chunks) {
+      for (const line of String(chunk || "").split(/\r?\n/)) {
+        const path = fileUrlToPath(line);
+        if (!path) continue;
+        const key = path.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        found.push(path);
+      }
+    }
+    return found;
+  }
+
+  function transferCanDrop(dataTransfer) {
+    if (!dataTransfer) return false;
+    const types = [...(dataTransfer.types || [])];
+    if (types.includes("Files") || (dataTransfer.files && dataTransfer.files.length)) return true;
+    return types.some((type) =>
+      ["text/uri-list", "text/plain", "text/html", "URL", "text/x-moz-url"].includes(type)
+    );
+  }
+
+  function readAllDirectoryEntries(reader) {
+    const entries = [];
+    return new Promise((resolve, reject) => {
+      const next = () => {
+        reader.readEntries((batch) => {
+          if (!batch.length) {
+            resolve(entries);
+            return;
+          }
+          entries.push(...batch);
+          next();
+        }, reject);
+      };
+      next();
+    });
+  }
+
+  async function walkDropEntry(entry, prefix) {
+    if (!entry) return [];
+    if (entry.isFile) {
+      const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+      const relativePath = prefix ? `${prefix}/${file.name}` : file.name;
+      return [{ file, relativePath, path: fileDiskPath(file) }];
+    }
+    if (!entry.isDirectory) return [];
+    const children = await readAllDirectoryEntries(entry.createReader());
+    const next = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const found = [];
+    for (const child of children) {
+      found.push(...(await walkDropEntry(child, next)));
+    }
+    return found;
+  }
+
+  async function droppedItems(dataTransfer) {
+    const items = [...(dataTransfer.items || [])];
+    const entries = items.map((item) => item.webkitGetAsEntry?.()).filter(Boolean);
+    if (entries.length) {
+      const found = [];
+      for (const entry of entries) {
+        found.push(...(await walkDropEntry(entry, "")));
+      }
+      if (found.length) return found;
+    }
+    return [...(dataTransfer.files || [])].map((file) => ({
+      file,
+      relativePath: file.webkitRelativePath || file.name,
+      path: fileDiskPath(file),
+    }));
+  }
+
+  function applyDroppedFiles(items, uriPaths) {
+    const uploads = (items || []).filter((item) => item?.file);
+    const diskPaths = [
+      ...(uriPaths || []),
+      ...uploads.map((item) => item.path).filter(Boolean),
+    ];
+    const uniquePaths = [...new Set(diskPaths)];
+    if (uniquePaths.length && uniquePaths.length >= uploads.length) {
+      applyChosenPaths(uniquePaths, "", null, 0);
+      return;
+    }
+    chosenPaths = [];
+    chosenBaseFolder = null;
+    chosenUploads = uploads;
+    const summary = $("#chosen-file-summary");
+    if (summary) {
+      summary.textContent = uploads.length
+        ? `${fileCountLabel(uploads.length)} dropped.`
+        : "";
+    }
+  }
+
+  function bindDropTarget(node, onFiles) {
+    if (!node) return;
+    let depth = 0;
+    const mark = (active) => node.classList.toggle("is-dragover", active);
+    node.addEventListener("dragenter", (event) => {
+      event.preventDefault();
+      depth += 1;
+      mark(true);
+    });
+    node.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    });
+    node.addEventListener("dragleave", () => {
+      depth -= 1;
+      if (depth <= 0) {
+        depth = 0;
+        mark(false);
+      }
+    });
+    node.addEventListener("drop", (event) => {
+      event.preventDefault();
+      depth = 0;
+      mark(false);
+      onFiles(event.dataTransfer);
+    });
   }
 
   $("#add-files-btn")?.addEventListener("click", () => {
     showError($("#add-error"), "");
     chosenPaths = [];
     chosenBaseFolder = null;
-    const list = $("#chosen-file-list");
-    if (list) list.innerHTML = "";
+    chosenUploads = [];
+    const summary = $("#chosen-file-summary");
+    if (summary) summary.textContent = "";
     loadAddFolder();
     addDialog?.showModal();
   });
@@ -325,7 +552,9 @@
       const data = await response.json();
       applyChosenPaths(
         data.selected || [],
-        data.initial_directory ? `Opens in: ${data.initial_directory}` : ""
+        data.initial_directory ? `Opens in: ${data.initial_directory}` : "",
+        null,
+        data.ignored_count || 0
       );
       if (data.warning) showError($("#add-error"), data.warning);
     });
@@ -354,19 +583,104 @@
     });
   });
 
+  async function handleDroppedTransfer(dataTransfer) {
+    showError($("#add-error"), "");
+    const uriPaths = pathsFromDrop(dataTransfer);
+    const items = await droppedItems(dataTransfer);
+    if (!items.length && !uriPaths.length) {
+      showError($("#add-error"), "Drop a file, folder, or a link to a local file.");
+      return;
+    }
+    applyDroppedFiles(items, uriPaths);
+  }
+
+  function showPageDrop(active) {
+    document.body.classList.toggle("is-file-drag", active);
+    const overlay = $("#file-drop-overlay");
+    if (overlay) overlay.hidden = !active;
+  }
+
+  function canAcceptDrops() {
+    const btn = $("#add-files-btn");
+    return Boolean(btn && !btn.disabled && addForm?.dataset.project);
+  }
+
+  async function acceptPageDrop(dataTransfer) {
+    if (!canAcceptDrops()) return;
+    if (!addDialog?.open) {
+      chosenPaths = [];
+      chosenBaseFolder = null;
+      chosenUploads = [];
+      const summary = $("#chosen-file-summary");
+      if (summary) summary.textContent = "";
+      loadAddFolder();
+      addDialog?.showModal();
+    }
+    await handleDroppedTransfer(dataTransfer);
+  }
+
+  let hidePageDropTimer = 0;
+  window.addEventListener("dragenter", (event) => {
+    if (!transferCanDrop(event.dataTransfer) || !canAcceptDrops()) return;
+    event.preventDefault();
+    window.clearTimeout(hidePageDropTimer);
+    showPageDrop(true);
+  }, true);
+  window.addEventListener("dragover", (event) => {
+    if (!transferCanDrop(event.dataTransfer) || !canAcceptDrops()) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    window.clearTimeout(hidePageDropTimer);
+    showPageDrop(true);
+  }, true);
+  window.addEventListener("dragleave", () => {
+    window.clearTimeout(hidePageDropTimer);
+    hidePageDropTimer = window.setTimeout(() => showPageDrop(false), 80);
+  }, true);
+  window.addEventListener("drop", (event) => {
+    window.clearTimeout(hidePageDropTimer);
+    showPageDrop(false);
+    if (!transferCanDrop(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!canAcceptDrops()) return;
+    acceptPageDrop(event.dataTransfer);
+  }, true);
+
+  bindDropTarget($("#dropzone"), (transfer) => {
+    handleDroppedTransfer(transfer);
+  });
+
   addForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const projectId = addForm.dataset.project;
     if (!projectId) return;
-    if (!chosenPaths.length && !chosenBaseFolder) {
+    if (!chosenPaths.length && !chosenBaseFolder && !chosenUploads.length) {
       showError($("#add-error"), "Choose files or a folder first.");
       return;
     }
     const comment = String(new FormData(addForm).get("comment") || "").trim();
-    const payload = chosenBaseFolder
-      ? { folder: chosenBaseFolder, base_folder: chosenBaseFolder, comment: comment || null }
-      : { paths: chosenPaths, comment: comment || null };
     const result = await withBusy(chosenBaseFolder ? "Adding folder…" : "Adding files…", async () => {
+      if (chosenUploads.length) {
+        const data = new FormData();
+        if (comment) data.append("comment", comment);
+        chosenUploads.forEach((item) => {
+          data.append("files", item.file, item.file.name);
+          data.append("relative_paths", item.relativePath || item.file.name);
+        });
+        const response = await fetch(`/api/projects/${projectId}/objects/from-uploads`, {
+          method: "POST",
+          body: data,
+        });
+        if (!response.ok) {
+          showError($("#add-error"), await readError(response));
+          return null;
+        }
+        return response.json();
+      }
+      const payload = chosenBaseFolder
+        ? { folder: chosenBaseFolder, base_folder: chosenBaseFolder, comment: comment || null }
+        : { paths: chosenPaths, comment: comment || null };
       const response = await fetch(`/api/projects/${projectId}/objects/from-disk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -566,15 +880,20 @@
     if (!saved) return;
     let applied = false;
     metricButtons().forEach((btn) => {
-      const mode = saved[btn.dataset.filter];
+      let mode = saved[btn.dataset.filter];
+      if (btn.dataset.filter === "files" && mode === "select") mode = "filter";
       if (mode !== "select" && mode !== "filter" && mode !== "off") return;
-      if (btn.disabled) {
-        setMetricMode(btn, "off");
-        return;
-      }
       setMetricMode(btn, mode);
       applied = true;
     });
+    const files = metricButtons().find((btn) => btn.dataset.filter === "files");
+    if (files && metricMode(files) !== "off") {
+      metricButtons().forEach((item) => {
+        if (item !== files && !isCheckoutMetric(item.dataset.filter)) setMetricMode(item, "off");
+      });
+    }
+    const cadModels = metricButtons().find((btn) => btn.dataset.filter === "cad_models");
+    if (cadModels && metricMode(cadModels) !== "off") clearMetricFilters(CAD_MODEL_CHILD_FILTERS);
     if (!applied) return;
     applyMetricVisibility();
     applyMetricSelection();
@@ -705,17 +1024,24 @@
     const btn = event.target.closest(".metric");
     if (!btn || btn.disabled) return;
     const current = metricMode(btn);
-    const next = current === "off" ? "select" : current === "select" ? "filter" : "off";
+    const key = btn.dataset.filter;
+    const next = key === "files"
+      ? (current === "filter" ? "off" : "filter")
+      : (current === "off" ? "select" : current === "select" ? "filter" : "off");
     setMetricMode(btn, next);
-    if (next === "filter" && btn.dataset.filter !== "files") {
+    if (key === "files" && next !== "off") {
       metricButtons().forEach((item) => {
-        if (item.dataset.filter === "files" && metricMode(item) !== "off") setMetricMode(item, "off");
+        if (item !== btn && !isCheckoutMetric(item.dataset.filter)) setMetricMode(item, "off");
       });
     }
-    if (btn.dataset.filter === "files" && next !== "off") {
-      metricButtons().forEach((item) => {
-        if (item !== btn && metricMode(item) === "filter") setMetricMode(item, "select");
-      });
+    if (key !== "files" && !isCheckoutMetric(key) && next !== "off") {
+      clearMetricFilters(new Set(["files"]));
+    }
+    if (key === "cad_models" && next !== "off") {
+      clearMetricFilters(CAD_MODEL_CHILD_FILTERS);
+    }
+    if (next !== "off" && CAD_MODEL_CHILD_FILTERS.has(key)) {
+      clearMetricFilters(new Set(["cad_models"]));
     }
     applyMetricVisibility();
     applyMetricSelection();
@@ -1166,6 +1492,10 @@
         .split(/[\s,;]+/)
         .map((item) => item.trim())
         .filter(Boolean),
+      cad_models_extensions: String(data.get("cad_models_extensions") || "")
+        .split(/[\s,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean),
       cad_openable_extensions: String(data.get("cad_openable_extensions") || "")
         .split(/[\s,;]+/)
         .map((item) => item.trim())
@@ -1179,6 +1509,12 @@
         .map((item) => item.trim())
         .filter(Boolean),
       database_url: String(data.get("database_url") || "").trim(),
+      port: (() => {
+        const raw = String(data.get("port") || "").trim();
+        if (!raw) return 0;
+        const parsed = Number.parseInt(raw, 10);
+        return Number.isFinite(parsed) ? parsed : 0;
+      })(),
     };
     const response = await fetch("/api/settings", {
       method: "PUT",
