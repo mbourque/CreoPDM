@@ -305,10 +305,7 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .object-row { cursor: pointer; user-select: none; }
 .grid tr.is-selected td,
 .grid tr[data-selected="1"] td {
-  background: #d7ebf5 !important;
-  box-shadow: inset 3px 0 0 #2f6f8f !important;
-  print-color-adjust: exact;
-  -webkit-print-color-adjust: exact;
+  background: #e7f1f6;
 }
 tr[hidden],
 tr.is-row-hidden { display: none !important; }
@@ -318,8 +315,7 @@ tr.is-row-hidden { display: none !important; }
 .grid tr.is-pending.is-selected:hover td,
 .grid tr.is-selected:hover td,
 .grid tr[data-selected="1"]:hover td {
-  background: #d7ebf5 !important;
-  box-shadow: inset 3px 0 0 #2f6f8f !important;
+  background: #e7f1f6;
 }
 #object-table {
   table-layout: auto;
@@ -356,8 +352,7 @@ tr.is-row-hidden { display: none !important; }
 .folder-row { background: transparent; cursor: pointer; user-select: none; }
 .folder-row:hover td { background: #f6f8fa; }
 .folder-row.is-selected td {
-  background: #d7ebf5;
-  box-shadow: inset 3px 0 0 #2f6f8f;
+  background: #e7f1f6;
 }
 .folder-label { font-weight: 650; display: inline-flex; align-items: center; gap: 0.45rem; margin-right: 0.45rem; }
 .folder-icon {
