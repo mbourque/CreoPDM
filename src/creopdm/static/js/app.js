@@ -346,12 +346,13 @@
   }
 
   function setRowHidden(row, hide) {
-    row.hidden = hide;
     row.classList.toggle("is-row-hidden", hide);
+    if (hide) row.setAttribute("hidden", "");
+    else row.removeAttribute("hidden");
   }
 
   function rowIsHidden(row) {
-    return Boolean(row.hidden || row.classList.contains("is-row-hidden"));
+    return row.classList.contains("is-row-hidden");
   }
 
   function applyMetricVisibility() {

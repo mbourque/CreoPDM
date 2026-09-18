@@ -219,6 +219,7 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert ".tabs .tab.is-active" in script.text
     assert "function rowFilename" in script.text
     assert "function setRowHidden" in script.text
+    assert 'return row.classList.contains("is-row-hidden")' in script.text
     assert "/checkouts" in script.text
     assert "queue-row" in script.text
     assert "#changes-table" in script.text
@@ -227,9 +228,9 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "dataset.relativePath" in script.text
     css = client.get("/static/css/app.css")
     assert css.status_code == 200
-    assert ".queue-row.is-selected" in css.text
+    assert ".grid tr.is-selected td" in css.text
+    assert "tr.is-row-hidden" in css.text
     assert "dialog:not([open])" in css.text
     assert ".tab-panel:not([hidden])" in css.text
-    assert "tr.is-row-hidden" in css.text
 
 
