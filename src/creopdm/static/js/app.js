@@ -174,8 +174,12 @@
     return [...document.querySelectorAll(".metric")];
   }
 
+  function metricKey(btn) {
+    return String(btn?.getAttribute("data-filter") || btn?.dataset.filter || "").trim();
+  }
+
   function metricMode(btn) {
-    return btn.dataset.mode || "off";
+    return String(btn?.getAttribute("data-mode") || btn?.dataset.mode || "off").trim() || "off";
   }
 
   function isParentMetric(key) {
@@ -184,7 +188,7 @@
 
   function clearMetricFilters(keys) {
     metricButtons().forEach((item) => {
-      if (keys.has(item.dataset.filter) && metricMode(item) !== "off") setMetricMode(item, "off");
+      if (keys.has(metricKey(item)) && metricMode(item) !== "off") setMetricMode(item, "off");
     });
   }
 
@@ -312,9 +316,10 @@
 
   function setMetricMode(btn, mode) {
     btn.dataset.mode = mode;
+    btn.setAttribute("data-mode", mode);
     btn.classList.toggle("is-selected", mode === "select");
     btn.classList.toggle("is-filtered", mode === "filter");
-    const key = btn.dataset.filter;
+    const key = metricKey(btn);
     const label = METRIC_LABELS[key] || key;
     if (key === "files") {
       btn.title = mode === "off"
