@@ -1,6 +1,12 @@
 (() => {
   const $ = (sel, root = document) => root.querySelector(sel);
 
+  function eventEl(event) {
+    const node = event?.target;
+    if (!node) return null;
+    return node.nodeType === 1 ? node : node.parentElement;
+  }
+
   function inCreoBrowser() {
     try {
       return Boolean(window.external && window.external.ptc);
@@ -55,10 +61,14 @@
     el.textContent = message || "";
   }
 
-  const storedNotice = sessionStorage.getItem("creopdmNotice");
-  if (storedNotice) {
-    sessionStorage.removeItem("creopdmNotice");
-    showError($("#toolbar-error"), storedNotice);
+  try {
+    const storedNotice = sessionStorage.getItem("creopdmNotice");
+    if (storedNotice) {
+      sessionStorage.removeItem("creopdmNotice");
+      showError($("#toolbar-error"), storedNotice);
+    }
+  } catch {
+    /* private mode / blocked storage */
   }
 
   let busyDepth = 0;
@@ -187,7 +197,9 @@
   }
 
   function listedExtensions(datasetKey) {
-    const raw = document.querySelector("#metric-filters")?.dataset[datasetKey] || "";
+    const root = document.querySelector("#metric-filters");
+    const attr = String(datasetKey || "").replace(/[A-Z]/g, (ch) => `-${ch.toLowerCase()}`);
+    const raw = root?.getAttribute(`data-${attr}`) || root?.dataset[datasetKey] || "";
     return raw.split(/[\s,;]+/).map((item) => {
       const ext = item.trim().toLowerCase();
       if (!ext) return "";
@@ -195,19 +207,39 @@
     }).filter(Boolean);
   }
 
+  function rowAttr(row, name) {
+    return String(row?.getAttribute(name) || "").trim();
+  }
+
+  function rowFilename(row) {
+    const named = rowAttr(row, "data-filename") || rowAttr(row, "data-sort-name");
+    if (named) return named.replace(/\\/g, "/").split("/").pop() || named;
+    return row?.querySelector(".object-open")?.textContent || "";
+  }
+
   function rowExtension(row) {
-    const ext = String(row.dataset.extension || "").trim().toLowerCase();
-    if (!ext) return "";
+    const fromName = filenameExtension(rowFilename(row));
+    if (fromName) return fromName;
+    const ext = rowAttr(row, "data-extension").toLowerCase();
+    if (!ext || /^\.\d+$/.test(ext.startsWith(".") ? ext : `.${ext}`)) return "";
     return ext.startsWith(".") ? ext : `.${ext}`;
   }
 
+  function rowObjectType(row) {
+    return rowAttr(row, "data-object-type").toUpperCase();
+  }
+
   function rowMatchesMetric(row, key) {
-    if (key === "checked_out") return row.dataset.checkedOut === "1";
+    if (key === "checked_out") {
+      return rowAttr(row, "data-checked-out") === "1" || row.dataset.checkedOut === "1";
+    }
     if (key === "cad_models") return cadModelsExtensions().includes(rowExtension(row));
     if (key === "documents") return documentExtensions().includes(rowExtension(row));
     if (key === "other") return !cadModelsExtensions().includes(rowExtension(row));
     const types = FILTERS[key];
-    return types === null || types.includes(row.dataset.objectType);
+    if (types === null) return true;
+    if (!types) return false;
+    return types.includes(rowObjectType(row));
   }
 
   function rememberMetricCounts() {
@@ -313,6 +345,15 @@
     return key === "checked_out";
   }
 
+  function setRowHidden(row, hide) {
+    row.hidden = hide;
+    row.classList.toggle("is-row-hidden", hide);
+  }
+
+  function rowIsHidden(row) {
+    return Boolean(row.hidden || row.classList.contains("is-row-hidden"));
+  }
+
   function applyMetricVisibility() {
     const metrics = metricButtons();
     const typeFilterBtns = metrics.filter((btn) => {
@@ -335,13 +376,13 @@
     rows().forEach((row) => {
       if (row.classList.contains("folder-row")) {
         const matchesSearch = searchingAll ? false : (!q || row.textContent.toLowerCase().includes(q));
-        row.hidden = Boolean(q) && !matchesSearch;
+        setRowHidden(row, Boolean(q) && !matchesSearch);
         return;
       }
       const matchesSearch = searchingAll || !q || row.textContent.toLowerCase().includes(q);
       const matchesView = !viewBtns.length || viewBtns.some((btn) => rowMatchesMetric(row, btn.dataset.filter));
       const matchesCheckout = !checkoutFiltering || rowMatchesMetric(row, "checked_out");
-      row.hidden = !(matchesSearch && matchesView && matchesCheckout);
+      setRowHidden(row, !(matchesSearch && matchesView && matchesCheckout));
     });
   }
 
@@ -360,7 +401,7 @@
       }
       const matchesType = !typeActive.length || typeActive.some((btn) => rowMatchesMetric(row, btn.dataset.filter));
       const matchesCheckout = !checkoutOn || rowMatchesMetric(row, "checked_out");
-      row.classList.toggle("is-selected", !row.hidden && matchesType && matchesCheckout);
+      row.classList.toggle("is-selected", !rowIsHidden(row) && matchesType && matchesCheckout);
     });
   }
 
@@ -947,9 +988,8 @@
 
   const searchInput = $("#search-input");
   const fileListRoot = () => {
-    const panels = ["panel-checked-out", "panel-changes", "panel-files"];
-    const open = panels.map((id) => document.getElementById(id)).find((el) => el && !el.hidden);
-    return open || $("#panel-files") || document;
+    const tab = document.querySelector(".tabs .tab.is-active")?.getAttribute("data-tab") || "files";
+    return document.getElementById(`panel-${tab}`) || document.getElementById("panel-files") || document;
   };
   const rows = () => [...fileListRoot().querySelectorAll(".object-row, .folder-row, .queue-row")];
   const isListPage = Boolean(document.querySelector("#object-table"));
@@ -1016,6 +1056,7 @@
     return `<tr data-uuid="${escapeHtml(obj.uuid)}"
               data-object-type="${escapeHtml(obj.object_type || "")}"
               data-extension="${escapeHtml(obj.extension || "")}"
+              data-filename="${escapeHtml(obj.filename || "")}"
               data-can-checkout="${obj.can_checkout ? "1" : "0"}"
               data-can-checkin="${obj.can_checkin ? "1" : "0"}"
               data-owned="${obj.owned_by_me ? "1" : "0"}"
@@ -1147,7 +1188,7 @@
   }
 
   function selectedRows() {
-    const picked = rows().filter((row) => row.classList.contains("is-selected") && !row.hidden);
+    const picked = rows().filter((row) => row.classList.contains("is-selected") && !rowIsHidden(row));
     if (picked.length) return picked;
     if (checkoutBtn?.dataset.uuid) return [];
     return [];
@@ -1236,7 +1277,7 @@
   }
 
   function selectRange(toRow, additive = false) {
-    const visible = rows().filter((row) => !row.hidden);
+    const visible = rows().filter((row) => !rowIsHidden(row));
     const end = visible.indexOf(toRow);
     const start = lastSelectRow ? visible.indexOf(lastSelectRow) : end;
     if (end < 0) return;
@@ -1399,11 +1440,14 @@
       (row) => !row.classList.contains("is-pending") && !row.classList.contains("empty-row")
     );
     sortable.sort((a, b) => {
-      const cmp = sortValue(a, key, columnIndex).localeCompare(
-        sortValue(b, key, columnIndex),
-        undefined,
-        { numeric: true, sensitivity: "base" }
-      );
+      const left = sortValue(a, key, columnIndex);
+      const right = sortValue(b, key, columnIndex);
+      let cmp = 0;
+      try {
+        cmp = left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+      } catch {
+        cmp = left.localeCompare(right);
+      }
       return dir === "asc" ? cmp : -cmp;
     });
     [...pending, ...sortable, ...empty].forEach((row) => tbody.appendChild(row));
@@ -1413,7 +1457,7 @@
     const heads = [...table.querySelectorAll("th[data-sort]")];
     if (!heads.length) return;
     table.tHead?.addEventListener("click", (event) => {
-      const th = event.target.closest("th[data-sort]");
+      const th = eventEl(event)?.closest("th[data-sort]");
       if (!th || !table.contains(th)) return;
       event.preventDefault();
       const key = th.dataset.sort;
@@ -1436,16 +1480,17 @@
   }
 
   function onFileTableClick(event) {
-    const folder = event.target.closest(".folder-row");
-    const folderLink = event.target.closest(".folder-open");
+    const target = eventEl(event);
+    const folder = target?.closest(".folder-row");
+    const folderLink = target?.closest(".folder-open");
     if (folderLink && folder && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
       openFolderRow(folder);
       return;
     }
-    const row = event.target.closest(".object-row, .folder-row, .queue-row");
+    const row = target?.closest(".object-row, .folder-row, .queue-row");
     if (!row) return;
-    const openLink = event.target.closest(".object-open");
+    const openLink = target?.closest(".object-open");
     if (openLink) event.preventDefault();
     if (event.shiftKey) {
       event.preventDefault();
@@ -1470,15 +1515,16 @@
   }
 
   function onFileTableDblclick(event) {
-    if (event.target.closest(".folder-open")) {
+    const target = eventEl(event);
+    if (target?.closest(".folder-open")) {
       event.preventDefault();
-      const folder = event.target.closest(".folder-row");
+      const folder = target.closest(".folder-row");
       if (folder) openFolderRow(folder);
       return;
     }
-    if (event.target.closest(".folder-row")) return;
-    if (event.target.closest(".object-open")) return;
-    const row = event.target.closest(".object-row");
+    if (target?.closest(".folder-row")) return;
+    if (target?.closest(".object-open")) return;
+    const row = target?.closest(".object-row");
     if (!row?.dataset.detail) return;
     event.preventDefault();
     window.location.href = row.dataset.detail;
@@ -1491,8 +1537,9 @@
   document.querySelector("#changes-table")?.addEventListener("click", onFileTableClick);
 
   document.querySelector("#metric-filters")?.addEventListener("click", (event) => {
-    const btn = event.target.closest(".metric");
+    const btn = eventEl(event)?.closest(".metric");
     if (!btn || btn.disabled) return;
+    event.preventDefault();
     const current = metricMode(btn);
     const key = btn.dataset.filter;
     const next = key === "files"
@@ -2001,6 +2048,7 @@
         row.classList.add("queue-row");
         const filename = meta.filename || values[1] || "";
         const ext = filenameExtension(filename);
+        row.dataset.filename = filename;
         row.dataset.extension = ext;
         row.dataset.objectType = meta.objectType || typeFromExtension(ext);
         row.dataset.checkedOut = meta.checkedOut || "0";
@@ -2277,7 +2325,7 @@
     typeLabelRows?.appendChild(typeLabelRow());
   });
   typeLabelRows?.addEventListener("click", (event) => {
-    const button = event.target.closest(".type-label-remove");
+    const button = eventEl(event)?.closest(".type-label-remove");
     if (!button) return;
     button.closest("tr")?.remove();
     if (typeLabelRows && !typeLabelRows.querySelector("tr")) {

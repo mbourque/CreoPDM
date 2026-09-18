@@ -214,6 +214,11 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function setCheckedOutTabCount" in script.text
     assert "function listedMetricRows" in script.text
     assert "function refreshTabMetrics" in script.text
+    assert "function eventEl" in script.text
+    assert "eventEl(event)?.closest(\".metric\")" in script.text
+    assert ".tabs .tab.is-active" in script.text
+    assert "function rowFilename" in script.text
+    assert "function setRowHidden" in script.text
     assert "/checkouts" in script.text
     assert "queue-row" in script.text
     assert "#changes-table" in script.text
@@ -223,5 +228,8 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     css = client.get("/static/css/app.css")
     assert css.status_code == 200
     assert ".queue-row.is-selected" in css.text
+    assert "dialog:not([open])" in css.text
+    assert ".tab-panel:not([hidden])" in css.text
+    assert "tr.is-row-hidden" in css.text
 
 

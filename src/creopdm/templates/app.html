@@ -152,6 +152,7 @@
           <tr data-uuid="{{ obj.uuid }}"
               data-object-type="{{ obj.object_type }}"
               data-extension="{{ obj.extension }}"
+              data-filename="{{ obj.filename }}"
               data-can-checkout="{{ '1' if obj.can_checkout else '0' }}"
               data-can-checkin="{{ '1' if obj.can_checkin else '0' }}"
               data-owned="{{ '1' if obj.owned_by_me else '0' }}"
@@ -236,7 +237,7 @@
           <tbody>
             {% for item in checkin_queue.saves %}
             <tr class="queue-row is-pending" data-uuid="{{ item.uuid }}" data-can-checkin="1" data-checked-out="1"
-                data-object-type="{{ item.object_type or '' }}" data-extension="">
+                data-object-type="{{ item.object_type or '' }}" data-extension="" data-filename="{{ item.filename }}">
               <td>{% if item.newer_save %}Newer Creo save{% else %}Modified{% endif %}</td>
               <td class="filename-cell">
                 <button type="button" class="object-open" data-uuid="{{ item.uuid }}" title="{{ item.filename }}">{{ item.filename }}</button>
@@ -251,7 +252,7 @@
             {% endfor %}
             {% for item in checkin_queue.new_files %}
             <tr class="queue-row" data-relative-path="{{ item.relative_path }}" data-can-checkin="1"
-                data-object-type="{{ item.object_type or '' }}" data-extension="">
+                data-object-type="{{ item.object_type or '' }}" data-extension="" data-filename="{{ item.filename }}">
               <td>New file</td>
               <td class="filename-cell">
                 <button type="button" class="object-open" data-relative-path="{{ item.relative_path }}" title="{{ item.filename }}">{{ item.filename }}</button>

@@ -118,6 +118,8 @@ def test_search_objects_includes_nested_folders(client, repo_parent):
     assert "function searchAllFolders" in script.text
     assert "function updateMetricCounts" in script.text
     assert "function listedMetricRows" in script.text
+    assert "function eventEl" in script.text
+    assert "function rowFilename" in script.text
     assert "/objects?q=" in script.text
 
 
@@ -309,6 +311,7 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data
     assert 'data-cad-models="' in inside.text
     assert ".prt" in inside.text.split('data-cad-models="')[1].split('"')[0]
     assert 'data-extension=".prt"' in inside.text
+    assert 'data-filename="shaft.prt.4"' in inside.text
     assert 'data-filter="creo_parts"' in inside.text
     assert "disabled" not in inside.text.split('data-filter="creo_parts"')[1].split("</button>")[0]
     assert "disabled" not in inside.text.split('data-filter="assemblies"')[1].split("</button>")[0]

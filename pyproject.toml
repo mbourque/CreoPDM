@@ -41,7 +41,8 @@ creopdm = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-q"
+addopts = "-q --basetemp=pytest-tmp"
+cache_dir = "pytest-cache"
 filterwarnings = [
     "ignore:Using `httpx` with `starlette.testclient` is deprecated",
     "ignore:The anyio.abc.BlockingPortal alias is deprecated",

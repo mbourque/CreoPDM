@@ -142,7 +142,7 @@ def _creo_open_title(ctx: AppContext, mode: str) -> str:
 
 
 _CREO_PAGE_TTL = 20.0
-_CREO_PAGE_CACHE: tuple[float, dict[str, str | None]] | None = None
+_CREO_PAGE_CACHE: tuple[float, str, dict[str, str | None]] | None = None
 
 
 def clear_creo_page_cache() -> None:
@@ -153,8 +153,13 @@ def clear_creo_page_cache() -> None:
 def _creo_page(ctx: AppContext) -> dict[str, str | None]:
     global _CREO_PAGE_CACHE
     now = time.monotonic()
-    if _CREO_PAGE_CACHE is not None and now - _CREO_PAGE_CACHE[0] < _CREO_PAGE_TTL:
-        return _CREO_PAGE_CACHE[1]
+    stamp = str(ctx.config.settings_path)
+    if (
+        _CREO_PAGE_CACHE is not None
+        and now - _CREO_PAGE_CACHE[0] < _CREO_PAGE_TTL
+        and _CREO_PAGE_CACHE[1] == stamp
+    ):
+        return _CREO_PAGE_CACHE[2]
     mode = _creo_open_mode(ctx)
     payload = {
         "creo_label": _creo_label(ctx),
@@ -162,7 +167,7 @@ def _creo_page(ctx: AppContext) -> dict[str, str | None]:
         "creo_open_name": _creo_open_name(mode),
         "creo_open_title": _creo_open_title(ctx, mode),
     }
-    _CREO_PAGE_CACHE = (now, payload)
+    _CREO_PAGE_CACHE = (now, stamp, payload)
     return payload
 
 

@@ -14,6 +14,22 @@ from creopdm.utils.identity import StaticUserProvider
 PYTEST_LAST_LOG = "pytest-last.log"
 
 
+def pytest_configure(config):
+    """Keep pytest temps in the repo. Windows often locks %TEMP%\\pytest-of-*."""
+    root = Path(config.rootpath)
+    if not getattr(config.option, "basetemp", None):
+        config.option.basetemp = str(root / "pytest-tmp")
+
+
+@pytest.fixture(autouse=True)
+def _reset_creo_page_cache():
+    from creopdm.api.pages import clear_creo_page_cache
+
+    clear_creo_page_cache()
+    yield
+    clear_creo_page_cache()
+
+
 @pytest.fixture()
 def data_dir(tmp_path, monkeypatch):
     root = tmp_path / "appdata"

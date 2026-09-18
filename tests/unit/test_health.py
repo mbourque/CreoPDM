@@ -1,6 +1,9 @@
 import json
 import warnings
 
+from fastapi.testclient import TestClient
+
+from creopdm.app import build_context, create_app
 from creopdm.config import AppSettings, ConfigManager
 from creopdm.constants import (
     APP_NAME,
@@ -56,6 +59,21 @@ def test_home_page(client):
     assert 'id="checkin-btn"' in text
     assert 'id="creo-status"' in text
     assert "· Parametric" in text
+
+
+def test_creo_open_name_cache_stays_with_settings_dir(tmp_path, identity):
+    first_dir = tmp_path / "one"
+    second_dir = tmp_path / "two"
+    with TestClient(create_app(build_context(ConfigManager(first_dir), users=identity))) as first:
+        changed = first.put("/api/settings", json={"creo_open_mode": "association"})
+        assert changed.status_code == 200, changed.text
+        assert "· Windows" in first.get("/").text
+    with TestClient(create_app(build_context(ConfigManager(second_dir), users=identity))) as second:
+        text = second.get("/").text
+        start = text.index('id="creo-status"')
+        pill = text[start : text.index("</span>", start)]
+        assert "· Parametric" in pill
+        assert "· Windows" not in pill
 
 
 def test_app_js_strips_creo_error_details(client):
