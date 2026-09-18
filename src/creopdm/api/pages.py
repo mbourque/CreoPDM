@@ -153,9 +153,15 @@ def home(
     objects: list = []
     list_entries: list = []
     checkout_count = 0
+    pending_saves = 0
+    new_workspace_files = 0
     if project is not None:
         objects, list_entries = _folder_page(ctx, db, project.id, current_folder)
         checkout_count = ctx.checkouts.count_for_project(db, project.id)
+        known = ctx.objects.list_path_index(db, project.id)
+        watch = ctx.workspaces.watch_stamp(project, known)
+        pending_saves = int(watch.get("pending_saves") or 0)
+        new_workspace_files = int(watch.get("new_files") or 0)
     status = folder_view_counts(
         objects,
         current_folder,
@@ -181,6 +187,8 @@ def home(
             "document_extensions": ctx.config.document_extensions(),
             "checkin_queue": checkin_queue,
             "checkout_count": checkout_count,
+            "pending_saves": pending_saves,
+            "new_workspace_files": new_workspace_files,
             "workspace_path": str(ctx.config.workspace_for_project(selected.uuid)) if selected else None,
             "sidebar_collapsed": _sidebar_collapsed(request),
             "object_types": [item.value for item in ObjectType],

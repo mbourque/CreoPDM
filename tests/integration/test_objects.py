@@ -54,6 +54,21 @@ def test_import_creo_and_document_files(client, repo_parent, tmp_path):
     names = {item["filename"] for item in listing.json()}
     assert names == {"shaft.prt.3", "spec.pdf"}
 
+    history = client.get(f"/api/objects/{part['uuid']}/history")
+    assert history.status_code == 200
+    first = history.json()[0]
+    assert first["iteration"] == 1
+    assert first["filename"] == "shaft.prt.3"
+    assert first["relative_path"] == "shaft.prt.3"
+    assert first.get("creo_release") in {None, ""}
+
+    detail = client.get(f"/api/objects/{part['uuid']}")
+    assert detail.status_code == 200
+    page = client.get(f"/projects/{project['uuid']}/objects/{part['uuid']}")
+    assert page.status_code == 200
+    assert "File History" in page.text
+    assert "shaft.prt.3" in page.text
+
 
 @requires_git
 def test_import_from_uploads_keeps_relative_paths(client, repo_parent):
@@ -73,21 +88,6 @@ def test_import_from_uploads_keeps_relative_paths(client, repo_parent):
     listing = {item["filename"]: item["relative_path"] for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
     assert listing["shaft.prt"] == "CAD/shaft.prt"
     assert listing["notes.txt"] == "notes.txt"
-
-    history = client.get(f"/api/objects/{part['uuid']}/history")
-    assert history.status_code == 200
-    first = history.json()[0]
-    assert first["iteration"] == 1
-    assert first["filename"] == "shaft.prt.3"
-    assert first["relative_path"] == "shaft.prt.3"
-    assert first.get("creo_release") in {None, ""}
-
-    detail = client.get(f"/api/objects/{part['uuid']}")
-    assert detail.status_code == 200
-    page = client.get(f"/projects/{project['uuid']}/objects/{part['uuid']}")
-    assert page.status_code == 200
-    assert "File History" in page.text
-    assert "shaft.prt.3" in page.text
 
 
 @requires_git

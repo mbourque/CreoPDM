@@ -299,8 +299,8 @@
     <button type="button" class="btn" id="checkout-btn" disabled>Checkout</button>
     <span class="toolbar-tip" title="Check in selected files, or add new workspace files to the project.">
       <button type="button" class="btn" id="checkin-btn"
-              {% if selected %}data-project="{{ selected.uuid }}"{% endif %}
-              disabled>Check In</button>
+              {% if selected %}data-project="{{ selected.uuid }}" data-pending-saves="{{ pending_saves }}" data-new-files="{{ new_workspace_files }}"{% endif %}
+              {% if not selected or (pending_saves + new_workspace_files) == 0 %}disabled{% endif %}>Check In</button>
     </span>
     <span class="toolbar-tip" title="Release your checkout lock. Does not delete the workspace file or record a new version. A Creo save still on disk can be checked in afterward.">
       <button type="button" class="btn" id="undo-btn" disabled>Undo Checkout</button>

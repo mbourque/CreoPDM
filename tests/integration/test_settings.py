@@ -12,12 +12,14 @@ def test_sidebar_collapse_cookie_is_applied(client):
     assert 'class="workspace"' in home.text
     assert "is-sidebar-collapsed" not in home.text
 
-    collapsed = client.get("/", cookies={SIDEBAR_COLLAPSED_COOKIE: "1"})
+    client.cookies.set(SIDEBAR_COLLAPSED_COOKIE, "1")
+    collapsed = client.get("/")
     assert collapsed.status_code == 200
     assert 'class="workspace is-sidebar-collapsed"' in collapsed.text
     assert 'aria-pressed="true"' in collapsed.text
 
-    restored = client.get("/", cookies={SIDEBAR_COLLAPSED_COOKIE: "0"})
+    client.cookies.set(SIDEBAR_COLLAPSED_COOKIE, "0")
+    restored = client.get("/")
     assert restored.status_code == 200
     assert "is-sidebar-collapsed" not in restored.text
 

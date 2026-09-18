@@ -62,7 +62,7 @@ def test_app_js_strips_creo_error_details(client):
     assert "function userFacingError" in text
     assert r"Uncaught Error:" in text
     assert r"SCRIPT" in text
-    assert r"Object.execute" in text
+    assert r"Object\.execute" in text
 
 
 def test_config_layout(data_dir):
