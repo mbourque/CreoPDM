@@ -235,10 +235,11 @@
           </thead>
           <tbody>
             {% for item in checkin_queue.saves %}
-            <tr class="is-pending">
+            <tr class="queue-row is-pending" data-uuid="{{ item.uuid }}" data-can-checkin="1" data-checked-out="1"
+                data-object-type="{{ item.object_type or '' }}" data-extension="">
               <td>{% if item.newer_save %}Newer Creo save{% else %}Modified{% endif %}</td>
               <td class="filename-cell">
-                <a href="/projects/{{ selected.uuid }}/objects/{{ item.uuid }}#history">{{ item.filename }}</a>
+                <button type="button" class="object-open" data-uuid="{{ item.uuid }}" title="{{ item.filename }}">{{ item.filename }}</button>
                 {% if item.newer_save %}
                 <div class="muted small">from {{ item.recorded_filename }}</div>
                 {% endif %}
@@ -249,10 +250,14 @@
             </tr>
             {% endfor %}
             {% for item in checkin_queue.new_files %}
-            <tr>
+            <tr class="queue-row" data-relative-path="{{ item.relative_path }}" data-can-checkin="1"
+                data-object-type="{{ item.object_type or '' }}" data-extension="">
               <td>New file</td>
-              <td class="filename-cell">{{ item.filename }}
+              <td class="filename-cell">
+                <button type="button" class="object-open" data-relative-path="{{ item.relative_path }}" title="{{ item.filename }}">{{ item.filename }}</button>
+                {% if item.relative_path and item.relative_path != item.filename %}
                 <div class="muted small">{{ item.relative_path }}</div>
+                {% endif %}
               </td>
               <td>Not in the project yet. Use Check In to add it.</td>
               <td>{{ item.size }} bytes</td>

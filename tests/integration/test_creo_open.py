@@ -52,6 +52,39 @@ def test_open_in_creo_uses_connector(data_dir, repo_parent, identity: StaticUser
 
 
 @requires_git
+def test_open_untracked_workspace_file_by_relative_path(
+    data_dir, repo_parent, identity: StaticUserProvider
+):
+    recorder = RecordingConnector()
+    ctx = build_context(ConfigManager(), users=identity)
+    ctx.creo = recorder
+    ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
+    with TestClient(create_app(ctx)) as client:
+        project = client.post("/api/projects", json={"name": "Queue Open"}).json()
+        workspace = data_dir / "workspaces" / project["uuid"]
+        nested = workspace / "Incoming"
+        nested.mkdir(parents=True, exist_ok=True)
+        (nested / "pin.prt").write_bytes(b"new-pin")
+        opened = client.post(
+            "/api/creo/open",
+            json={"project_id": project["uuid"], "relative_path": "Incoming/pin.prt"},
+        )
+        assert opened.status_code == 200, opened.text
+        assert opened.json()["method"] == "creo"
+        assert opened.json()["filename"] == "pin.prt"
+        assert recorder.opened
+        assert recorder.opened[-1].name == "pin.prt"
+        assert recorder.opened[-1].read_bytes() == b"new-pin"
+        missing = client.post(
+            "/api/creo/open",
+            json={"project_id": project["uuid"], "relative_path": "missing.prt"},
+        )
+        assert missing.status_code == 400
+        rejected = client.post("/api/creo/open", json={"launch": False})
+        assert rejected.status_code == 422
+
+
+@requires_git
 def test_open_prepare_does_not_launch(data_dir, repo_parent, identity: StaticUserProvider):
     recorder = RecordingConnector()
     ctx = build_context(ConfigManager(), users=identity)

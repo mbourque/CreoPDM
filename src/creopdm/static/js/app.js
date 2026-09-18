@@ -1093,11 +1093,27 @@
     return fallback ? [fallback] : [];
   }
 
+  function selectedOpenSpec() {
+    const selected = selectedRows();
+    if (selected.length === 1) {
+      const row = selected[0];
+      if (!row.classList.contains("folder-row")) {
+        if (row.dataset.uuid) return { objectId: row.dataset.uuid };
+        if (row.dataset.relativePath) {
+          return { relativePath: row.dataset.relativePath, projectId: currentProjectId() };
+        }
+      }
+    }
+    const ids = selectedIds();
+    if (ids.length === 1) return { objectId: ids[0] };
+    return null;
+  }
+
   function syncToolbar() {
     if (!isListPage) return;
     const selected = selectedRows();
     const ids = selected.flatMap(rowObjectIds);
-    if (openBtn) openBtn.disabled = ids.length !== 1;
+    if (openBtn) openBtn.disabled = !selectedOpenSpec();
     if (historyBtn) historyBtn.disabled = ids.length !== 1;
     if (checkoutBtn) checkoutBtn.disabled = !selected.some((row) => row.dataset.canCheckout === "1");
     const checkinable = selected.filter((row) => row.dataset.canCheckin === "1");
@@ -1375,9 +1391,15 @@
       return;
     }
     selectOnly(row);
-    if (row.classList.contains("folder-row") || row.classList.contains("queue-row")) return;
-    if (!openLink?.dataset.uuid || event.detail > 1) return;
-    void openPdmObject(openLink.dataset.uuid);
+    if (row.classList.contains("folder-row")) return;
+    if (!openLink || event.detail > 1) return;
+    const uuid = openLink.dataset.uuid || row.dataset.uuid;
+    if (uuid) {
+      void openPdmObject(uuid);
+      return;
+    }
+    const relativePath = openLink.dataset.relativePath || row.dataset.relativePath;
+    if (relativePath) void openPdmObject({ relativePath, projectId: currentProjectId() });
   }
 
   function onFileTableDblclick(event) {
@@ -1514,12 +1536,22 @@
     void setCreoWorkingDirectory();
   });
 
-  async function openPdmObject(objectId) {
+  function openRequestBody(target, launch) {
+    const spec = typeof target === "string" ? { objectId: target } : target || {};
+    if (spec.objectId) return { object_id: spec.objectId, launch };
+    return {
+      project_id: spec.projectId || currentProjectId(),
+      relative_path: spec.relativePath,
+      launch,
+    };
+  }
+
+  async function openPdmObject(target) {
     await creoJSReady;
     if (hostedCreoJS()) {
       const prepared = await postAction(
         "/api/creo/open",
-        { object_id: objectId, launch: false },
+        openRequestBody(target, false),
         "POST",
         ""
       );
@@ -1546,20 +1578,20 @@
           return null;
         }
       } else {
-        return postAction("/api/creo/open", { object_id: objectId }, "POST", "");
+        return postAction("/api/creo/open", openRequestBody(target, true), "POST", "");
       }
       return prepared;
     }
-    return postAction("/api/creo/open", { object_id: objectId }, "POST", "");
+    return postAction("/api/creo/open", openRequestBody(target, true), "POST", "");
   }
 
   openBtn?.addEventListener("click", async () => {
-    const ids = selectedIds();
-    if (ids.length !== 1) {
+    const spec = selectedOpenSpec();
+    if (!spec) {
       showError($("#toolbar-error"), "Select one file to open.");
       return;
     }
-    await openPdmObject(ids[0]);
+    await openPdmObject(spec);
   });
 
   checkoutBtn?.addEventListener("click", async () => {
@@ -1908,9 +1940,32 @@
         row.dataset.canCheckin = "1";
         if (meta.uuid) row.dataset.uuid = meta.uuid;
         if (meta.relativePath) row.dataset.relativePath = meta.relativePath;
-        values.forEach((text) => {
+        values.forEach((text, index) => {
           const cell = document.createElement("td");
-          cell.textContent = text;
+          if (index === 1) {
+            cell.className = "filename-cell";
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "object-open";
+            btn.textContent = filename;
+            btn.title = filename;
+            if (meta.uuid) btn.dataset.uuid = meta.uuid;
+            if (meta.relativePath) btn.dataset.relativePath = meta.relativePath;
+            cell.appendChild(btn);
+            const noteText = meta.recordedFilename
+              ? `from ${meta.recordedFilename}`
+              : meta.relativePath && meta.relativePath !== filename
+                ? meta.relativePath
+                : "";
+            if (noteText) {
+              const note = document.createElement("div");
+              note.className = "muted small";
+              note.textContent = noteText;
+              cell.appendChild(note);
+            }
+          } else {
+            cell.textContent = text;
+          }
           row.appendChild(cell);
         });
         body.appendChild(row);
@@ -1930,6 +1985,7 @@
             uuid: item.uuid,
             objectType: item.object_type,
             checkedOut: "1",
+            recordedFilename: item.newer_save ? item.recorded_filename : "",
           }
         );
       });

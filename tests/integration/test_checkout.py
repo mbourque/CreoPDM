@@ -218,6 +218,8 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "queue-row" in script.text
     assert "#changes-table" in script.text
     assert ".object-row, .folder-row, .queue-row" in script.text
+    assert 'btn.className = "object-open"' in script.text
+    assert "dataset.relativePath" in script.text
     css = client.get("/static/css/app.css")
     assert css.status_code == 200
     assert ".queue-row.is-selected" in css.text

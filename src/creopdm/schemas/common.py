@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from creopdm.constants import APP_NAME, APP_VERSION, CREO_OPEN_MODES, CREO_VIEW_OPEN_MODES
 
@@ -161,8 +161,24 @@ class CheckinPreviewResponse(BaseModel):
 
 
 class CreoOpenRequest(BaseModel):
-    object_id: str
+    object_id: str | None = None
+    project_id: str | None = None
+    relative_path: str | None = None
     launch: bool = True
+
+    @model_validator(mode="after")
+    def require_open_target(self) -> "CreoOpenRequest":
+        object_id = (self.object_id or "").strip()
+        project_id = (self.project_id or "").strip()
+        relative_path = (self.relative_path or "").strip().replace("\\", "/")
+        if object_id:
+            self.object_id = object_id
+            return self
+        if project_id and relative_path:
+            self.project_id = project_id
+            self.relative_path = relative_path
+            return self
+        raise ValueError("Select a file to open.")
 
 
 class CreoOpenResponse(BaseModel):

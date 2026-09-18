@@ -12,10 +12,11 @@ from creopdm.creo.base import CreoConnector
 from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import CreoUnavailableError, PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
+from creopdm.models.project import Project
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
-from creopdm.utils.classify import is_creo_openable, is_creo_view, is_extra_cad
+from creopdm.utils.classify import classify_filename, is_creo_openable, is_creo_view, is_extra_cad
 from creopdm.utils.creo_header import creo_release_for
 from creopdm.utils.launch import open_windows_file, working_directory_for
 
@@ -72,6 +73,44 @@ class CreoService:
                     writable=view.owned_by_me,
                     overwrite_modified=False,
                 )
+        file_release = creo_release_for(path, path.name)
+        if not file_release and obj.current_version is not None:
+            file_release = obj.current_version.creo_release
+        return self._open_resolved(
+            path,
+            launch=launch,
+            object_type=obj.object_type,
+            creo_release=file_release or "",
+        )
+
+    def open_workspace_file(self, project: Project, relative_path: str, launch: bool = True) -> dict[str, str | bool]:
+        path = self._workspaces.file_path(project.uuid, relative_path)
+        if not path.is_file():
+            raise PathValidationError(
+                f"Workspace file not found: {Path(relative_path).name}.",
+                details={"relative_path": relative_path},
+            )
+        kind = classify_filename(
+            path.name,
+            extra_cad_extensions=self._workspaces._config.data_cad_extensions(),
+            model_extensions=self._workspaces._config.model_cad_extensions(),
+            document_extensions=self._workspaces._config.document_extensions(),
+        )
+        return self._open_resolved(
+            path,
+            launch=launch,
+            object_type=kind.value,
+            creo_release=creo_release_for(path, path.name) or "",
+        )
+
+    def _open_resolved(
+        self,
+        path: Path,
+        *,
+        launch: bool,
+        object_type: str = "",
+        creo_release: str = "",
+    ) -> dict[str, str | bool]:
         workdir = working_directory_for(path)
         models = self._workspaces._config.model_cad_extensions()
         extras = self._workspaces._config.extra_cad_extensions()
@@ -81,7 +120,7 @@ class CreoService:
                 f"{path.name} cannot be opened. This file type is not opened by Creo.",
                 details={"path": str(path), "filename": path.name},
             )
-        is_model = obj.object_type.startswith("CREO_") or is_creo_openable(
+        is_model = object_type.startswith("CREO_") or is_creo_openable(
             path.name, models, all_cad
         )
         view_object = is_creo_view(path.name)
@@ -89,9 +128,6 @@ class CreoService:
         use_view = view_object or (open_mode == "view" and is_model)
         creo_object = (not use_view) and is_model
         logical = CreoFileManager.normalize_creo_filename(path.name, (*models, *all_cad))
-        file_release = creo_release_for(path, path.name)
-        if not file_release and obj.current_version is not None:
-            file_release = obj.current_version.creo_release
         if launch:
             if use_view:
                 method = self._open_view_path(path)
@@ -112,7 +148,7 @@ class CreoService:
             "filename": logical,
             "working_directory": str(workdir),
             "creo_object": creo_object,
-            "creo_release": file_release or "",
+            "creo_release": creo_release or "",
         }
 
     def _open_path(self, path: Path, creo_object: bool) -> str:

@@ -357,6 +357,10 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     created_names = {item["filename"] for item in body["new_files"]}
     assert "shaft.prt.4" in saves
     assert "bushing.prt" in created_names
+    script = client.get("/static/js/app.js")
+    assert script.status_code == 200
+    assert 'btn.className = "object-open"' in script.text
+    assert "relative_path: spec.relativePath" in script.text
 
 
 @requires_git
