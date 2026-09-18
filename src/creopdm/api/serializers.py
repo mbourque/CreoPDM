@@ -11,6 +11,7 @@ from creopdm.schemas.common import ObjectResponse, ObjectVersionResponse, Projec
 from creopdm.services.checkout_service import CheckoutView
 from creopdm.utils.classify import display_type_label
 from creopdm.utils.identity import UserIdentity
+from creopdm.utils.timefmt import as_utc
 
 
 def revision_display(revision: str, iteration: int) -> str:
@@ -27,8 +28,8 @@ def project_to_response(project: Project) -> ProjectResponse:
         repository_path=project.repository_path,
         default_branch=project.default_branch,
         remote_url=project.remote_url,
-        created_at=project.created_at,
-        updated_at=project.updated_at,
+        created_at=as_utc(project.created_at),
+        updated_at=as_utc(project.updated_at),
         active=project.active,
         remote_mode=remote_mode.value,
     )
@@ -53,7 +54,7 @@ def version_to_response(
         content_hash=version.content_hash,
         file_size=version.file_size,
         created_by=version.created_by,
-        created_at=version.created_at,
+        created_at=as_utc(version.created_at),
         comment=version.comment,
     )
 
@@ -90,14 +91,14 @@ def object_to_response(
         checkout_status=label,
         checkout_user=checkout.user_name if checkout else None,
         checkout_machine=checkout.machine_name if checkout else None,
-        checkout_since=checkout.checkout_time if checkout else None,
+        checkout_since=as_utc(checkout.checkout_time) if checkout else None,
         owned_by_me=view.owned_by_me if view else False,
         modified_locally=modified_locally,
         can_checkout=view.can_checkout if view else obj.lifecycle_state == "IN_WORK",
         can_checkin=can_checkin if can_checkin is not None else (view.can_checkin if view else False),
         in_workspace=in_workspace,
-        created_at=obj.created_at,
-        updated_at=obj.updated_at,
+        created_at=as_utc(obj.created_at),
+        updated_at=as_utc(obj.updated_at),
         current_version=version_to_response(
             obj.current_version,
             filename=obj.filename,

@@ -23,6 +23,7 @@ from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.utils.identity import CurrentUserProvider, UserIdentity
+from creopdm.utils.timefmt import format_local
 
 logger = get_logger("checkout")
 
@@ -129,7 +130,7 @@ class CheckoutService:
             existing = self.active_for(session, obj.id)
             if existing is not None:
                 since = existing.checkout_time
-                since_text = since.strftime("%Y-%m-%d %H:%M") if since else "unknown"
+                since_text = format_local(since) or "unknown"
                 raise ObjectAlreadyCheckedOutError(
                     f"{obj.filename} is checked out by {existing.user_name}.",
                     details={

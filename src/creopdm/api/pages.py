@@ -9,6 +9,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object, present_objects
@@ -18,9 +19,16 @@ from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPS
 from creopdm.context import AppContext
 from creopdm.exceptions import ProjectNotFoundError
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
+from creopdm.utils.timefmt import format_local
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
-templates = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
+_template_env = Environment(
+    loader=FileSystemLoader(str(PACKAGE_DIR / "templates")),
+    autoescape=select_autoescape(),
+)
+_template_env.filters["local_time"] = format_local
+_template_env.globals["local_time"] = format_local
+templates = Jinja2Templates(env=_template_env)
 router = APIRouter()
 
 
@@ -46,8 +54,19 @@ def _folder_page(
     return presented, list_entries
 
 
+_PAGE_DEFAULTS = {
+    "pending_saves": 0,
+    "new_workspace_files": 0,
+    "checkout_count": 0,
+    "checkin_queue": {"saves": [], "new_files": []},
+    "local_time": format_local,
+}
+
+
 def render(request: Request, name: str, context: dict) -> HTMLResponse:
-    payload = {"request": request, **context}
+    templates.env.filters["local_time"] = format_local
+    templates.env.globals["local_time"] = format_local
+    payload = {"request": request, **_PAGE_DEFAULTS, **context}
     try:
         return templates.TemplateResponse(request, name, payload)
     except TypeError:

@@ -917,7 +917,11 @@
 
   function formatStamp(iso) {
     if (!iso) return "";
-    const date = new Date(iso);
+    let raw = String(iso).trim();
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+      raw += "Z";
+    }
+    const date = new Date(raw);
     if (Number.isNaN(date.getTime())) return "";
     const pad = (n) => String(n).padStart(2, "0");
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -1115,6 +1119,18 @@
         summary.textContent = "";
       }
     }
+  }
+
+  function setCheckinQueueCounts(pendingSaves, newFiles) {
+    if (!checkinBtn) return;
+    checkinBtn.dataset.pendingSaves = String(pendingSaves || 0);
+    checkinBtn.dataset.newFiles = String(newFiles || 0);
+    const tab = document.querySelector('.tab[data-tab="changes"]');
+    if (tab) {
+      const pending = Number(pendingSaves || 0) + Number(newFiles || 0);
+      tab.textContent = pending ? `Files to check in · ${pending}` : "Files to check in";
+    }
+    syncToolbar();
   }
 
   function setCheckedOutTabCount(count) {
@@ -1845,17 +1861,11 @@
     if (result.ok?.length) window.location.reload();
   });
 
-  let changesLoaded = false;
   async function loadChangesTab() {
     const projectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
     const body = $("#changes-table tbody");
     const tab = document.querySelector('.tab[data-tab="changes"]');
     if (!projectId || !body) return;
-    if (changesLoaded) {
-      refreshTabMetrics();
-      return;
-    }
-    changesLoaded = true;
     body.replaceChildren();
     const loading = document.createElement("tr");
     loading.className = "empty-row";

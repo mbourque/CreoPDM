@@ -134,7 +134,7 @@
             <td>{{ version.creo_release or "" }}</td>
             <td>{{ version.file_size }} bytes</td>
             <td>{{ version.created_by }}</td>
-            <td>{% if version.created_at %}{{ version.created_at.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
+            <td>{% if version.created_at %}{{ local_time(version.created_at) }}{% else %}—{% endif %}</td>
           </tr>
           {% else %}
           {% if not workspace_pending %}
@@ -176,7 +176,7 @@
             <td>{{ version.revision }}.{{ version.iteration }}{% if loop.first and not workspace_pending %} · latest{% endif %}</td>
             <td class="filename-cell">{% if not loop.last %}{{ version_file_label(version, history[loop.index0 + 1]) }}{% else %}{{ version_file_label(version) }}{% endif %}</td>
             <td>{{ version.created_by }}</td>
-            <td>{% if version.created_at %}{{ version.created_at.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
+            <td>{% if version.created_at %}{{ local_time(version.created_at) }}{% else %}—{% endif %}</td>
             <td>{{ version.comment }}</td>
           </tr>
           {% else %}

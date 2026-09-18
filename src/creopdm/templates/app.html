@@ -75,7 +75,7 @@
 
     <div class="tabs" role="tablist">
       <button type="button" class="tab is-active" data-tab="files">Files</button>
-      <button type="button" class="tab" data-tab="checked-out">{% if checkout_count %}Files checked out · {{ checkout_count }}{% else %}Files checked out{% endif %}</button>
+      <button type="button" class="tab" data-tab="checked-out">{% if checkout_count|default(0) %}Files checked out · {{ checkout_count }}{% else %}Files checked out{% endif %}</button>
       <button type="button" class="tab" data-tab="changes">Files to check in</button>
     </div>
 
@@ -127,7 +127,7 @@
               data-sort-state="{{ entry.path }}/"
               data-sort-type="{{ entry.path }}/"
               data-sort-creo="{{ entry.path }}/"
-              data-sort-modified="{% if entry.modified %}{{ entry.modified.strftime('%Y%m%d%H%M%S') }}{% endif %}"
+              data-sort-modified="{% if entry.modified %}{{ local_time(entry.modified, '%Y%m%d%H%M%S') }}{% endif %}"
               data-sort-checkout="{{ entry.path }}/"
               style="--depth: {{ entry.depth }}"
               title="Click to select this folder and the files in it. Click the folder name to open it.">
@@ -144,7 +144,7 @@
             <td></td>
             <td title="Folder">Folder</td>
             <td></td>
-            <td title="{% if entry.modified %}{{ entry.modified.strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}">{% if entry.modified %}{{ entry.modified.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
+            <td title="{% if entry.modified %}{{ local_time(entry.modified) }}{% else %}—{% endif %}">{% if entry.modified %}{{ local_time(entry.modified) }}{% else %}—{% endif %}</td>
             <td></td>
           </tr>
           {% else %}
@@ -163,7 +163,7 @@
               data-sort-state="{{ entry.folder }}/{{ obj.lifecycle_state }}"
               data-sort-type="{{ entry.folder }}/{{ obj.type_label }}"
               data-sort-creo="{{ entry.folder }}/{{ obj.creo_release or '' }}"
-              data-sort-modified="{% if obj.updated_at %}{{ obj.updated_at.strftime('%Y%m%d%H%M%S') }}{% endif %}"
+              data-sort-modified="{% if obj.updated_at %}{{ local_time(obj.updated_at, '%Y%m%d%H%M%S') }}{% endif %}"
               data-sort-checkout="{{ entry.folder }}/{{ obj.checkout_status }}"
               data-detail="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}#history"
               class="object-row"
@@ -178,7 +178,7 @@
             <td title="{{ obj.lifecycle_state.replace('_', ' ').title() }}"><span class="state" data-state="{{ obj.lifecycle_state }}">{{ obj.lifecycle_state.replace('_', ' ').title() }}</span></td>
             <td title="{{ obj.type_label }}">{{ obj.type_label }}</td>
             <td title="{{ obj.creo_release or '' }}">{{ obj.creo_release or "" }}</td>
-            <td title="{% if obj.updated_at %}{{ obj.updated_at.strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}">{% if obj.updated_at %}{{ obj.updated_at.strftime("%Y-%m-%d %H:%M") }}{% else %}—{% endif %}</td>
+            <td title="{% if obj.updated_at %}{{ local_time(obj.updated_at) }}{% else %}—{% endif %}">{% if obj.updated_at %}{{ local_time(obj.updated_at) }}{% else %}—{% endif %}</td>
             <td title="{{ obj.checkout_status }}">
               <span class="checkout-state" data-state="{% if obj.owned_by_me %}mine{% elif obj.checkout_user %}other{% else %}available{% endif %}">
                 {{ obj.checkout_status }}
@@ -299,8 +299,8 @@
     <button type="button" class="btn" id="checkout-btn" disabled>Checkout</button>
     <span class="toolbar-tip" title="Check in selected files, or add new workspace files to the project.">
       <button type="button" class="btn" id="checkin-btn"
-              {% if selected %}data-project="{{ selected.uuid }}" data-pending-saves="{{ pending_saves }}" data-new-files="{{ new_workspace_files }}"{% endif %}
-              {% if not selected or (pending_saves + new_workspace_files) == 0 %}disabled{% endif %}>Check In</button>
+              {% if selected %}data-project="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
+              {% if not selected or (pending_saves|default(0) + new_workspace_files|default(0)) == 0 %}disabled{% endif %}>Check In</button>
     </span>
     <span class="toolbar-tip" title="Release your checkout lock. Does not delete the workspace file or record a new version. A Creo save still on disk can be checked in afterward.">
       <button type="button" class="btn" id="undo-btn" disabled>Undo Checkout</button>
