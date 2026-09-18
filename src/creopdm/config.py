@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -274,18 +275,115 @@ def _previous_type_label_fingerprints() -> set[tuple[tuple[str, str], ...]]:
     return found
 
 
+def user_home() -> Path:
+    return Path.home()
+
+
+def on_windows() -> bool:
+    return os.name == "nt"
+
+
+def linux_data_dir() -> Path:
+    xdg = (os.environ.get("XDG_DATA_HOME") or "").strip()
+    if xdg:
+        return Path(xdg).expanduser() / APP_NAME
+    return user_home() / ".local" / "share" / APP_NAME
+
+
+def legacy_linux_data_dir() -> Path:
+    return user_home() / "AppData" / "Local" / APP_NAME
+
+
+def _dir_has_entries(path: Path) -> bool:
+    try:
+        return path.is_dir() and any(path.iterdir())
+    except OSError:
+        return False
+
+
+def _store_has_projects(path: Path) -> bool:
+    if (path / "database" / "creopdm.db").is_file():
+        return True
+    return _dir_has_entries(path / "workspaces")
+
+
+def _store_looks_unused(path: Path) -> bool:
+    if not path.exists():
+        return True
+    if _dir_has_entries(path / "workspaces"):
+        return False
+    try:
+        for child in path.iterdir():
+            if child.is_dir() and (child / ".git").is_dir():
+                return False
+    except OSError:
+        return True
+    return True
+
+
+def adopt_legacy_linux_data_dir(target: Path) -> Path:
+    """Move ~/AppData/Local/CreoPDM into the Linux data dir when that is still the live store."""
+    if on_windows():
+        return target
+    legacy = legacy_linux_data_dir()
+    try:
+        chosen = target.expanduser().resolve()
+    except OSError:
+        return target
+    if not legacy.exists():
+        return chosen
+    try:
+        if chosen == legacy.resolve():
+            return chosen
+    except OSError:
+        return target
+    if not _store_has_projects(legacy):
+        return chosen
+    if not _store_looks_unused(chosen):
+        return chosen
+    backup: Path | None = None
+    try:
+        chosen.parent.mkdir(parents=True, exist_ok=True)
+        if chosen.exists():
+            backup = chosen.with_name(f"{chosen.name}.empty-backup")
+            if backup.exists():
+                shutil.rmtree(backup)
+            chosen.rename(backup)
+        shutil.move(str(legacy), str(chosen))
+        if backup is not None:
+            shutil.rmtree(backup, ignore_errors=True)
+        return chosen
+    except OSError:
+        if backup is not None and backup.exists() and not chosen.exists():
+            try:
+                backup.rename(chosen)
+            except OSError:
+                pass
+        return legacy if legacy.exists() else chosen
+
+
 def data_dir_from_environment() -> Path:
     """Resolve the application data directory.
 
-    Override with CREOPDM_DATA_DIR for tests. Default is %LOCALAPPDATA%\\CreoPDM\\.
+    Override with CREOPDM_DATA_DIR. Windows uses %LOCALAPPDATA%\\CreoPDM\\.
+    Linux uses ~/.local/share/CreoPDM and moves ~/AppData/Local/CreoPDM there once.
     """
     override = os.environ.get("CREOPDM_DATA_DIR")
     if override:
-        return Path(override).expanduser()
-    local_app = os.environ.get("LOCALAPPDATA")
-    if local_app:
-        return Path(local_app) / APP_NAME
-    return Path.home() / "AppData" / "Local" / APP_NAME
+        chosen = Path(override).expanduser()
+        if not on_windows():
+            try:
+                if chosen.expanduser().resolve() == linux_data_dir().resolve():
+                    return adopt_legacy_linux_data_dir(chosen)
+            except OSError:
+                return chosen
+        return chosen
+    if on_windows():
+        local_app = os.environ.get("LOCALAPPDATA")
+        if local_app:
+            return Path(local_app) / APP_NAME
+        return user_home() / "AppData" / "Local" / APP_NAME
+    return adopt_legacy_linux_data_dir(linux_data_dir())
 
 
 class ConfigManager:
@@ -393,6 +491,8 @@ class ConfigManager:
         if "ignore" not in raw or raw_ignore in PREVIOUS_DEFAULT_IGNORE_SETS:
             settings.ignore.patterns = list(DEFAULT_IGNORE_PATTERNS)
             dirty = True
+        if self._normalize_workspace_root(settings):
+            dirty = True
         if dirty:
             self.save(settings)
         self._settings = settings
@@ -426,10 +526,38 @@ class ConfigManager:
             return configured
         return self.default_sqlite_url()
 
+    def _normalize_workspace_root(self, settings: AppSettings) -> bool:
+        """Drop a workspace path that is the data dir or a moved Linux AppData folder."""
+        configured = (settings.workspace.root or "").strip()
+        if not configured:
+            return False
+        try:
+            location = Path(configured).expanduser().resolve()
+            default = self.workspaces_dir.resolve()
+            data = self.data_dir.resolve()
+        except OSError:
+            return False
+        if location in {default, data}:
+            settings.workspace.root = None
+            return True
+        if on_windows():
+            return False
+        legacy = legacy_linux_data_dir() / "workspaces"
+        try:
+            if location == legacy.resolve() and not _dir_has_entries(legacy):
+                settings.workspace.root = None
+                return True
+        except OSError:
+            return False
+        return False
+
     def workspace_root(self) -> Path:
         configured = (self.settings.workspace.root or "").strip()
         if configured:
-            return Path(configured).expanduser().resolve()
+            location = Path(configured).expanduser().resolve()
+            if location == self.data_dir.resolve():
+                return self.workspaces_dir
+            return location
         return self.workspaces_dir
 
     def model_cad_extensions(self) -> list[str]:

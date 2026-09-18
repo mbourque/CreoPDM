@@ -2334,6 +2334,11 @@
       return;
     }
     if (ok) ok.hidden = false;
+    const saved = await response.json().catch(() => null);
+    const workspaceInput = settingsForm.querySelector('[name="workspace_root"]');
+    if (workspaceInput && saved?.workspace_root) {
+      workspaceInput.value = saved.workspace_root;
+    }
     syncCreoStatusPill(
       body.creo_open_mode,
       body.creo_executable,

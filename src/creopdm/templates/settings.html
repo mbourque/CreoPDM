@@ -40,7 +40,7 @@
 
     <section class="settings-card">
       <h2>Workspace</h2>
-      <p class="muted small">Checked-out and downloaded files are copied here, one folder per project, with every file in that folder. The default is shown; choose another folder if you want a different workspace.</p>
+      <p class="muted small">Checked-out and downloaded files are copied here, one folder per project. On Linux the default is <code>~/.local/share/CreoPDM/workspaces</code>. Use that path, not <code>~/.local/share/CreoPDM</code> itself (that folder is the application data directory).</p>
       <label>Workspace folder
         <input name="workspace_root" type="text" value="{{ settings.workspace_root }}" placeholder="{{ settings.default_workspace_root }}">
       </label>

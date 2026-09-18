@@ -207,6 +207,25 @@ class WorkspaceService:
         root = self.vault_for(project)
         return ensure_within(root, root / relative)
 
+    @staticmethod
+    def _case_insensitive_file(path: Path) -> Path:
+        """Linux Git and uploads can differ only by case (.JPG vs .jpg)."""
+        if path.is_file():
+            return path
+        parent = path.parent
+        if not parent.is_dir():
+            return path
+        wanted = path.name.casefold()
+        try:
+            matches = [
+                child
+                for child in parent.iterdir()
+                if child.is_file() and child.name.casefold() == wanted
+            ]
+        except OSError:
+            return path
+        return matches[0] if len(matches) == 1 else path
+
     def materialize(
         self,
         project: Project,
@@ -217,7 +236,12 @@ class WorkspaceService:
     ) -> Path:
         source = self.repository_file(project, obj.relative_path)
         if not source.is_file():
+            source = self._case_insensitive_file(source)
+        if not source.is_file():
             self._restore_tracked(project, obj.relative_path)
+            source = self.repository_file(project, obj.relative_path)
+            if not source.is_file():
+                source = self._case_insensitive_file(source)
         if not source.is_file():
             raise PathValidationError(
                 f"Repository file is missing: {obj.filename}",

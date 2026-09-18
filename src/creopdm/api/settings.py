@@ -110,14 +110,18 @@ def update_settings(
             current.creo.view_executable = str(view_path)
         else:
             current.creo.view_executable = None
-    root = (payload.workspace_root or "").strip()
-    if root:
-        location = validate_project_location(root)
-        location.mkdir(parents=True, exist_ok=True)
-        default_root = ctx.config.workspaces_dir.resolve()
-        current.workspace.root = None if location == default_root else str(location)
-    else:
-        current.workspace.root = None
+    if "workspace_root" in payload.model_fields_set:
+        root = (payload.workspace_root or "").strip()
+        if root:
+            location = validate_project_location(root)
+            location.mkdir(parents=True, exist_ok=True)
+            default_root = ctx.config.workspaces_dir.resolve()
+            data_root = ctx.config.data_dir.resolve()
+            if location == data_root:
+                location = default_root
+            current.workspace.root = None if location == default_root else str(location)
+        else:
+            current.workspace.root = None
     if payload.open_browser_on_start is not None:
         current.ui.open_browser_on_start = payload.open_browser_on_start
     if payload.cad_model_extensions is not None:

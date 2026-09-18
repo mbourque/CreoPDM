@@ -92,7 +92,7 @@ Command-line flags override Settings for that start only:
 | `--port 8765` | Bind that TCP port this start |
 | `--host 0.0.0.0` | Bind address (default is all interfaces, so phones on the LAN can connect) |
 | `--no-browser` | Do not open the default browser |
-| `--data-dir PATH` | Override the application data directory (`%LOCALAPPDATA%\CreoPDM` on Windows) |
+| `--data-dir PATH` | Override the application data directory (`%LOCALAPPDATA%\CreoPDM` on Windows, `~/.local/share/CreoPDM` on Linux) |
 
 Example when Settings still has a blocked port:
 
@@ -129,10 +129,65 @@ Allow CreoPDM in Windows Firewall if prompted when the server itself runs on Win
 
 A saved port that Windows refuses (`WinError 10013`) stops startup. Use `--port 0`, then set Port to **0** (or another free port) in Settings so the next start works without the flag.
 
+## Linux systemd service
+
+Run CreoPDM in the background and start it at login (or at boot) with a **user** systemd unit. Stop any `creopdm` you already started in a terminal so port **52113** is free.
+
+Replace `/home/YOU/CreoPDM` if the clone lives somewhere else.
+
+```bash
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/creopdm.service << 'EOF'
+[Unit]
+Description=CreoPDM
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/CreoPDM
+Environment=PATH=%h/CreoPDM/.venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/CreoPDM/.venv/bin/creopdm
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+EOF
+systemctl --user daemon-reload
+systemctl --user enable --now creopdm
+systemctl --user status creopdm
+```
+
+`creopdm` already binds **52113** and does not open a browser. Git must stay on `PATH` (the unit sets that). On Linux the store is `~/.local/share/CreoPDM` (projects, SQLite, and `workspaces`). Do **not** add `--data-dir` unless you mean a different store.
+
+If an older run used `~/AppData/Local/CreoPDM`, the next start moves that folder into `~/.local/share/CreoPDM` when the new location does not already have projects. Restart the service after updating CreoPDM:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user restart creopdm
+```
+
+Useful commands:
+
+```bash
+systemctl --user status creopdm
+journalctl --user -u creopdm -f
+systemctl --user restart creopdm
+systemctl --user stop creopdm
+```
+
+The service runs only while you are logged in. To start it at boot without logging in:
+
+```bash
+sudo loginctl enable-linger "$USER"
+```
+
+Open `http://127.0.0.1:52113` on that PC, or the **Other PCs** LAN URL after allowing the port (see above).
+
 ## Tests
 
 With the venv active, run `pytest`. Tests use temporary directories. They never touch a real project repository.
 
 ## Data location
 
-On Windows, application data lives in `%LOCALAPPDATA%\CreoPDM\`. On Linux, pass `--data-dir ~/.local/share/CreoPDM` (or set `CREOPDM_DATA_DIR`) unless you want the default `~/AppData/Local/CreoPDM`. Git history and working copies live in the per-project workspace under that folder.
+On Windows, application data lives in `%LOCALAPPDATA%\CreoPDM\`. On Linux it lives in `~/.local/share/CreoPDM`. Git history and working copies live in the per-project folder under `workspaces` there. The Settings workspace field should be `~/.local/share/CreoPDM/workspaces`, not `~/.local/share/CreoPDM` itself. Pass `--data-dir` or set `CREOPDM_DATA_DIR` only when you want a different store.

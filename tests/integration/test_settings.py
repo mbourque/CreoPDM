@@ -140,6 +140,7 @@ def test_get_and_update_settings(client, tmp_path):
     kept_view = client.put("/api/settings", json={"creo_open_mode": "embedded"})
     assert kept_view.status_code == 200, kept_view.text
     assert Path(kept_view.json()["creo_view_executable"]) == fake_view
+    assert Path(kept_view.json()["workspace_root"]) == workspace.resolve()
 
     embedded = client.put("/api/settings", json={"creo_open_mode": "embedded"})
     assert embedded.status_code == 200, embedded.text
@@ -195,6 +196,7 @@ def test_get_and_update_settings(client, tmp_path):
     assert "Embedded Creo Browser" in page.text
     assert "Creo Parametric" in page.text
     assert "Creo View" in page.text
+    assert "~/.local/share/CreoPDM/workspaces" in page.text
     assert "Specific application" not in page.text
     assert "Application" not in page.text
     assert 'class="open-choice"' in page.text
@@ -287,6 +289,17 @@ def test_custom_workspace_used_on_checkout(client, repo_parent, tmp_path):
     copied = workspace / project["uuid"] / "shaft.prt"
     assert copied.is_file()
     assert copied.read_bytes() == b"original-content"
+
+
+def test_workspace_data_dir_uses_workspaces_subdir(client, data_dir):
+    saved = client.put(
+        "/api/settings",
+        json={"creo_open_mode": "executable", "workspace_root": str(data_dir)},
+    )
+    assert saved.status_code == 200, saved.text
+    assert Path(saved.json()["workspace_root"]) == (data_dir / "workspaces").resolve()
+    kept = client.put("/api/settings", json={"creo_open_mode": "association"})
+    assert Path(kept.json()["workspace_root"]) == (data_dir / "workspaces").resolve()
 
 
 def test_type_labels_persist_and_keep_when_omitted(client):
