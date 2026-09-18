@@ -66,6 +66,11 @@ def document_dialog_filter_patterns() -> str:
     return ";".join(f"*{ext}" for ext in DEFAULT_DOCUMENT_EXTENSIONS)
 
 
+def native_picker_available() -> bool:
+    """True when this process can show a Windows file/folder picker."""
+    return os.name == "nt"
+
+
 def pick_files(initial_dir: Path, title: str = "Add files to the project") -> list[Path]:
     """Open a native multi-select file dialog starting in initial_dir.
 
@@ -74,6 +79,7 @@ def pick_files(initial_dir: Path, title: str = "Add files to the project") -> li
     start = Path(initial_dir)
     start.mkdir(parents=True, exist_ok=True)
     if os.name != "nt":
+        logger.info("Native file picker is not available; use the browser file chooser")
         return []
     try:
         return run_on_sta(lambda: _windows_open_dialog(start, title))
@@ -95,6 +101,7 @@ def pick_folder(initial_dir: Path, title: str = "Choose project folder") -> Path
     if not start.is_dir():
         start = start.parent if start.parent.is_dir() else Path.home()
     if os.name != "nt":
+        logger.info("Native folder picker is not available; use the browser folder chooser")
         return None
     hwnd = _dialog_owner_hwnd()
     try:

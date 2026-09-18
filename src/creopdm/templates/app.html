@@ -363,7 +363,7 @@
 </dialog>
 
 <dialog id="add-dialog" class="dialog">
-  <form method="dialog" id="add-form" {% if selected %}data-project="{{ selected.uuid }}"{% endif %}>
+  <form method="dialog" id="add-form" {% if selected %}data-project="{{ selected.uuid }}"{% endif %} data-native-picker="{{ '1' if native_picker else '0' }}">
     <h2>Add files</h2>
     <p class="muted">Files are copied into the workspace. Numbered names such as <code>shaft.prt.3</code> keep only the latest save.</p>
     <p class="muted small" id="add-folder-label">{% if selected %}Project: {{ selected.name }}{% endif %}</p>
@@ -375,6 +375,8 @@
       <p id="chosen-file-summary" class="muted small"></p>
       <span class="muted small">Drop files, folders, or file links here, or choose them. Copies go into the workspace.</span>
     </div>
+    <input id="add-file-input" class="sr-file" type="file" multiple>
+    <input id="add-folder-input" class="sr-file" type="file" webkitdirectory multiple>
     <label>Comment
       <input name="comment" placeholder="Initial models">
     </label>

@@ -19,6 +19,7 @@ from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPS
 from creopdm.context import AppContext
 from creopdm.exceptions import ProjectNotFoundError
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
+from creopdm.utils.native_dialog import native_picker_available
 from creopdm.utils.timefmt import format_local
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
@@ -63,6 +64,7 @@ _PAGE_DEFAULTS = {
     "creo_label": "Not Connected",
     "creo_open_name": "Parametric",
     "creo_open_title": "Opens CAD with Creo Parametric",
+    "native_picker": False,
 }
 
 _CREO_OPEN_NAMES = {
@@ -259,6 +261,7 @@ def home(
             "sidebar_collapsed": _sidebar_collapsed(request),
             "object_types": [item.value for item in ObjectType],
             "revision_display": revision_display,
+            "native_picker": native_picker_available(),
         },
     )
 

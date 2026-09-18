@@ -518,6 +518,13 @@
     const response = await fetch(`/api/projects/${projectId}/workspace/add-folder`);
     if (!response.ok) return;
     const data = await response.json();
+    if (addForm && data.native_picker !== undefined) {
+      addForm.dataset.nativePicker = data.native_picker ? "1" : "0";
+    }
+    if (!data.native_picker) {
+      label.textContent = "Choose files or a folder in this browser. Copies go into the workspace.";
+      return;
+    }
     label.textContent = `Opens in: ${data.initial_directory}`;
   }
 
@@ -729,10 +736,46 @@
   });
   $("#add-cancel")?.addEventListener("click", () => addDialog?.close());
 
+  function useNativePicker() {
+    return addForm?.dataset.nativePicker !== "0";
+  }
+
+  function applyBrowserPickedFiles(fileList) {
+    const uploads = [...(fileList || [])].map((file) => ({
+      file,
+      relativePath: file.webkitRelativePath || file.name,
+      path: fileDiskPath(file),
+    }));
+    applyDroppedFiles(uploads, []);
+  }
+
+  function browseLocalFiles(input) {
+    if (!input) return;
+    let settled = false;
+    const finish = (files) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener("focus", onFocus);
+      if (files && files.length) applyBrowserPickedFiles(files);
+      if (addDialog && !addDialog.open) addDialog.showModal();
+    };
+    const onFocus = () => window.setTimeout(() => finish(input.files), 400);
+    input.addEventListener("change", () => finish(input.files), { once: true });
+    input.addEventListener("cancel", () => finish([]), { once: true });
+    window.addEventListener("focus", onFocus);
+    addDialog?.close();
+    input.value = "";
+    input.click();
+  }
+
   $("#choose-workspace-files")?.addEventListener("click", async () => {
     const projectId = addForm?.dataset.project;
     if (!projectId) return;
     showError($("#add-error"), "");
+    if (!useNativePicker()) {
+      browseLocalFiles($("#add-file-input"));
+      return;
+    }
     await withHtmlDialogClosed(addDialog, async () => {
       const response = await fetch(`/api/projects/${projectId}/workspace/choose-files`, { method: "POST" });
       if (!response.ok) {
@@ -754,6 +797,10 @@
     const projectId = addForm?.dataset.project;
     if (!projectId) return;
     showError($("#add-error"), "");
+    if (!useNativePicker()) {
+      browseLocalFiles($("#add-folder-input"));
+      return;
+    }
     await withHtmlDialogClosed(addDialog, async () => {
       const response = await withBusy("Choosing folder…", () =>
         fetch(`/api/projects/${projectId}/workspace/choose-folder`, { method: "POST" })

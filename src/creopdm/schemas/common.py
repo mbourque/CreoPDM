@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from creopdm.constants import APP_NAME, APP_VERSION, CREO_OPEN_MODES, CREO_VIEW_OPEN_MODES
+from creopdm.utils.native_dialog import native_picker_available
 
 
 class HealthResponse(BaseModel):
@@ -234,6 +235,7 @@ class WorkspacePickerResponse(BaseModel):
     folder: str | None = None
     ignored_count: int = 0
     warning: str = ""
+    native_picker: bool = Field(default_factory=native_picker_available)
 
 
 class FolderPickResponse(BaseModel):

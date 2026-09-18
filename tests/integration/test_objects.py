@@ -230,6 +230,12 @@ def test_choose_files_starts_in_project_folder(client, repo_parent):
     assert page.status_code == 200
     assert 'id="chosen-file-summary"' in page.text
     assert 'id="chosen-file-list"' not in page.text
+    assert 'id="add-file-input"' in page.text
+    assert 'id="add-folder-input"' in page.text
+    assert 'webkitdirectory' in page.text
+    script = client.get("/static/js/app.js")
+    assert "function browseLocalFiles" in script.text
+    assert "function useNativePicker" in script.text
 
 
 @requires_git

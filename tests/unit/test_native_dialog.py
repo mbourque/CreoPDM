@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from creopdm.utils.native_dialog import is_user_cancelled, pick_folder
+from creopdm.utils.native_dialog import is_user_cancelled, native_picker_available, pick_files, pick_folder
 
 
 def _winerror(code: int) -> OSError:
@@ -35,3 +35,10 @@ def test_pick_folder_cancel_does_not_open_winforms(monkeypatch, tmp_path: Path):
     )
     assert pick_folder(tmp_path, title="Add a folder to the project") is None
     assert called == []
+
+
+def test_native_picker_unavailable_on_posix(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr("creopdm.utils.native_dialog.os.name", "posix")
+    assert native_picker_available() is False
+    assert pick_files(tmp_path) == []
+    assert pick_folder(tmp_path) is None
