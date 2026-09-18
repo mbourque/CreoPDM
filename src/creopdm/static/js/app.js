@@ -254,6 +254,41 @@
     });
   }
 
+  function activeListTab() {
+    return document.querySelector(".tabs .tab.is-active")?.getAttribute("data-tab") || "files";
+  }
+
+  function fileListRoot() {
+    const tab = activeListTab();
+    if (tab === "changes") {
+      return document.getElementById("changes-table")
+        || document.getElementById("panel-changes")
+        || document;
+    }
+    if (tab === "checked-out") {
+      return document.getElementById("checked-out-table")
+        || document.getElementById("panel-checked-out")
+        || document;
+    }
+    return document.getElementById("object-table")
+      || document.getElementById("panel-files")
+      || document;
+  }
+
+  function rows() {
+    return [...fileListRoot().querySelectorAll(".object-row, .folder-row, .queue-row")];
+  }
+
+  function markRowSelected(row, on) {
+    if (on) {
+      row.classList.add("is-selected");
+      row.setAttribute("data-selected", "1");
+    } else {
+      row.classList.remove("is-selected");
+      row.removeAttribute("data-selected");
+    }
+  }
+
   function filenameExtension(filename) {
     const name = String(filename || "").toLowerCase();
     const match = name.match(/(\.[a-z0-9_+]+)(?:\.\d+)?$/i);
@@ -277,7 +312,7 @@
   function listedMetricRows() {
     const root = fileListRoot();
     if (!root) return [];
-    if (root.id === "panel-changes") {
+    if (root.id === "panel-changes" || root.id === "changes-table") {
       return [...root.querySelectorAll(".queue-row")];
     }
     return [...root.querySelectorAll(".object-row")];
@@ -286,7 +321,7 @@
   function updateMetricCounts() {
     rememberMetricCounts();
     const root = fileListRoot();
-    const filesTab = !root || root.id === "panel-files";
+    const filesTab = !root || root.id === "panel-files" || root.id === "object-table";
     const searching = $("#object-table")?.dataset.searching === "1";
     if (filesTab && !searching) {
       metricButtons().forEach((btn) => {
@@ -299,7 +334,7 @@
     metricButtons().forEach((btn) => {
       const strong = btn.querySelector("strong");
       if (!strong) return;
-      const key = btn.dataset.filter;
+      const key = metricKey(btn);
       const count = key === "files"
         ? files.length
         : files.filter((row) => rowMatchesMetric(row, key)).length;
@@ -363,21 +398,21 @@
   function applyMetricVisibility() {
     const metrics = metricButtons();
     const typeFilterBtns = metrics.filter((btn) => {
-      return !isCheckoutMetric(btn.dataset.filter) && metricMode(btn) === "filter";
+      return !isCheckoutMetric(metricKey(btn)) && metricMode(btn) === "filter";
     });
     const checkoutFiltering = metrics.some((btn) => {
-      return isCheckoutMetric(btn.dataset.filter) && metricMode(btn) === "filter";
+      return isCheckoutMetric(metricKey(btn)) && metricMode(btn) === "filter";
     });
     const typeRestricts = typeFilterBtns.length > 0 || checkoutFiltering;
     const viewBtns = metrics.filter((btn) => {
-      const key = btn.dataset.filter;
+      const key = metricKey(btn);
       if (isCheckoutMetric(key)) return false;
       const mode = metricMode(btn);
       if (mode === "off" || !typeRestricts) return false;
       if (mode === "select" && isParentMetric(key) && typeFilterBtns.length) return false;
       return true;
     });
-    const q = searchInput?.value.trim().toLowerCase() || "";
+    const q = ($("#search-input")?.value || "").trim().toLowerCase();
     const searchingAll = $("#object-table")?.dataset.searching === "1";
     rows().forEach((row) => {
       if (row.classList.contains("folder-row")) {
@@ -386,7 +421,7 @@
         return;
       }
       const matchesSearch = searchingAll || !q || row.textContent.toLowerCase().includes(q);
-      const matchesView = !viewBtns.length || viewBtns.some((btn) => rowMatchesMetric(row, btn.dataset.filter));
+      const matchesView = !viewBtns.length || viewBtns.some((btn) => rowMatchesMetric(row, metricKey(btn)));
       const matchesCheckout = !checkoutFiltering || rowMatchesMetric(row, "checked_out");
       setRowHidden(row, !(matchesSearch && matchesView && matchesCheckout));
     });
@@ -394,20 +429,20 @@
 
   function applyMetricSelection() {
     const active = metricButtons().filter((btn) => metricMode(btn) !== "off");
-    const typeActive = active.filter((btn) => !isCheckoutMetric(btn.dataset.filter));
-    const checkoutOn = active.some((btn) => isCheckoutMetric(btn.dataset.filter));
+    const typeActive = active.filter((btn) => !isCheckoutMetric(metricKey(btn)));
+    const checkoutOn = active.some((btn) => isCheckoutMetric(metricKey(btn)));
     rows().forEach((row) => {
       if (row.classList.contains("folder-row")) {
-        if (!active.length) row.classList.remove("is-selected");
+        if (!active.length) markRowSelected(row, false);
         return;
       }
       if (!active.length) {
-        row.classList.remove("is-selected");
+        markRowSelected(row, false);
         return;
       }
-      const matchesType = !typeActive.length || typeActive.some((btn) => rowMatchesMetric(row, btn.dataset.filter));
+      const matchesType = !typeActive.length || typeActive.some((btn) => rowMatchesMetric(row, metricKey(btn)));
       const matchesCheckout = !checkoutOn || rowMatchesMetric(row, "checked_out");
-      row.classList.toggle("is-selected", !rowIsHidden(row) && matchesType && matchesCheckout);
+      markRowSelected(row, matchesType && matchesCheckout && !rowIsHidden(row));
     });
   }
 
@@ -993,11 +1028,6 @@
   });
 
   const searchInput = $("#search-input");
-  const fileListRoot = () => {
-    const tab = document.querySelector(".tabs .tab.is-active")?.getAttribute("data-tab") || "files";
-    return document.getElementById(`panel-${tab}`) || document.getElementById("panel-files") || document;
-  };
-  const rows = () => [...fileListRoot().querySelectorAll(".object-row, .folder-row, .queue-row")];
   const isListPage = Boolean(document.querySelector("#object-table"));
   const objectTable = $("#object-table");
   const objectTbody = objectTable?.querySelector("tbody");
@@ -1242,10 +1272,12 @@
     if (summary) {
       const count = selected.length || ids.length;
       if (count) {
-        summary.hidden = false;
+        summary.removeAttribute("hidden");
+        summary.classList.add("is-active");
         summary.textContent = `${count} selected${filtering ? ". The list is filtered" : ""}.`;
       } else {
-        summary.hidden = true;
+        summary.setAttribute("hidden", "");
+        summary.classList.remove("is-active");
         summary.textContent = "";
       }
     }
@@ -1271,13 +1303,13 @@
   }
 
   function toggleRow(row) {
-    row.classList.toggle("is-selected");
+    markRowSelected(row, !row.classList.contains("is-selected"));
     lastSelectRow = row;
     syncToolbar();
   }
 
   function selectOnly(row) {
-    rows().forEach((item) => item.classList.toggle("is-selected", item === row));
+    rows().forEach((item) => markRowSelected(item, item === row));
     lastSelectRow = row;
     syncToolbar();
   }
@@ -1290,9 +1322,9 @@
     const from = start < 0 ? end : Math.min(start, end);
     const until = start < 0 ? end : Math.max(start, end);
     if (!additive) {
-      visible.forEach((row) => row.classList.remove("is-selected"));
+      visible.forEach((row) => markRowSelected(row, false));
     }
-    visible.slice(from, until + 1).forEach((row) => row.classList.add("is-selected"));
+    visible.slice(from, until + 1).forEach((row) => markRowSelected(row, true));
     lastSelectRow = toRow;
     syncToolbar();
   }
@@ -1367,7 +1399,7 @@
     if (!project) return;
     const modes = {};
     metricButtons().forEach((btn) => {
-      const name = btn.dataset.filter;
+      const name = metricKey(btn);
       const mode = metricMode(btn);
       if (name) modes[name] = mode;
     });
@@ -1385,19 +1417,19 @@
     if (!saved) return;
     let applied = false;
     metricButtons().forEach((btn) => {
-      let mode = saved[btn.dataset.filter];
-      if (btn.dataset.filter === "files" && mode === "select") mode = "filter";
+      let mode = saved[metricKey(btn)];
+      if (metricKey(btn) === "files" && mode === "select") mode = "filter";
       if (mode !== "select" && mode !== "filter" && mode !== "off") return;
       setMetricMode(btn, mode);
       applied = true;
     });
-    const files = metricButtons().find((btn) => btn.dataset.filter === "files");
+    const files = metricButtons().find((btn) => metricKey(btn) === "files");
     if (files && metricMode(files) !== "off") {
       metricButtons().forEach((item) => {
-        if (item !== files && !isCheckoutMetric(item.dataset.filter)) setMetricMode(item, "off");
+        if (item !== files && !isCheckoutMetric(metricKey(item))) setMetricMode(item, "off");
       });
     }
-    const cadModels = metricButtons().find((btn) => btn.dataset.filter === "cad_models");
+    const cadModels = metricButtons().find((btn) => metricKey(btn) === "cad_models");
     if (cadModels && metricMode(cadModels) !== "off") clearMetricFilters(CAD_MODEL_CHILD_FILTERS);
     if (!applied) return;
     applyMetricVisibility();
@@ -1542,19 +1574,21 @@
   document.querySelector("#checked-out-table")?.addEventListener("dblclick", onFileTableDblclick);
   document.querySelector("#changes-table")?.addEventListener("click", onFileTableClick);
 
-  document.querySelector("#metric-filters")?.addEventListener("click", (event) => {
+  function onMetricChip(event) {
     const btn = eventEl(event)?.closest(".metric");
     if (!btn || btn.disabled) return;
     event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
     const current = metricMode(btn);
-    const key = btn.dataset.filter;
+    const key = metricKey(btn);
     const next = key === "files"
       ? (current === "filter" ? "off" : "filter")
       : (current === "off" ? "select" : current === "select" ? "filter" : "off");
     setMetricMode(btn, next);
     if (key === "files" && next !== "off") {
       metricButtons().forEach((item) => {
-        if (item !== btn && !isCheckoutMetric(item.dataset.filter)) setMetricMode(item, "off");
+        if (item !== btn && !isCheckoutMetric(metricKey(item))) setMetricMode(item, "off");
       });
     }
     if (key !== "files" && !isCheckoutMetric(key) && next !== "off") {
@@ -1571,6 +1605,15 @@
     writeStoredFilters();
     updateMetricCounts();
     syncToolbar();
+  }
+
+  document.querySelector("#metric-filters")?.addEventListener("click", onMetricChip, true);
+  document.querySelector("#metric-filters")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const btn = eventEl(event)?.closest(".metric");
+    if (!btn) return;
+    event.preventDefault();
+    onMetricChip(event);
   });
 
   async function postAction(url, body, method = "POST", busyMessage = "Working…") {
@@ -2407,7 +2450,7 @@
     }
     const wanted = new Set(saved.ids || []);
     if (wanted.size) {
-      rows().forEach((row) => row.classList.toggle("is-selected", wanted.has(row.dataset.uuid)));
+      rows().forEach((row) => markRowSelected(row, wanted.has(row.dataset.uuid)));
       syncToolbar();
     }
   }

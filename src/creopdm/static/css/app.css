@@ -199,8 +199,8 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .search-form input[type="search"] {
   width: 100%; padding: 0.32rem 0.55rem; border: 1px solid var(--line); border-radius: 4px;
 }
-#selection-summary { margin: 0.15rem 0 0; }
-#selection-summary:empty { display: none; }
+#selection-summary { margin: 0.15rem 0 0; display: none; }
+#selection-summary.is-active { display: block !important; }
 
 .metrics {
   display: flex; gap: 0.4rem; list-style: none; padding: 0; margin: 0.4rem 0 0.1rem;
@@ -225,14 +225,14 @@ a.brand:hover { text-decoration: none; color: inherit; }
   border-color: var(--accent-2);
 }
 .metric.is-selected {
-  border-color: #2f6f8f;
-  background: #d7ebf5;
-  color: #16384a;
+  border-color: #2f6f8f !important;
+  background: #d7ebf5 !important;
+  color: #16384a !important;
 }
 .metric.is-filtered {
-  border-color: var(--accent);
-  background: #f4d2b8;
-  color: #6a2e0c;
+  border-color: var(--accent) !important;
+  background: #f4d2b8 !important;
+  color: #6a2e0c !important;
 }
 .settings-form { max-width: 40rem; display: flex; flex-direction: column; gap: 1.1rem; }
 .settings-form-wide { max-width: 48rem; }
@@ -303,9 +303,12 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .grid th[aria-sort="ascending"]::after { content: " \2191"; opacity: 1; color: var(--ink); }
 .grid th[aria-sort="descending"]::after { content: " \2193"; opacity: 1; color: var(--ink); }
 .object-row { cursor: pointer; user-select: none; }
-.grid tr.is-selected td {
-  background: #d7ebf5;
-  box-shadow: inset 3px 0 0 #2f6f8f;
+.grid tr.is-selected td,
+.grid tr[data-selected="1"] td {
+  background: #d7ebf5 !important;
+  box-shadow: inset 3px 0 0 #2f6f8f !important;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
 }
 tr[hidden],
 tr.is-row-hidden { display: none !important; }
@@ -313,9 +316,10 @@ tr.is-row-hidden { display: none !important; }
 .queue-row:hover td { background: #f6f8fa; }
 .grid tr.queue-row.is-selected:hover td,
 .grid tr.is-pending.is-selected:hover td,
-.grid tr.is-selected:hover td {
-  background: #d7ebf5;
-  box-shadow: inset 3px 0 0 #2f6f8f;
+.grid tr.is-selected:hover td,
+.grid tr[data-selected="1"]:hover td {
+  background: #d7ebf5 !important;
+  box-shadow: inset 3px 0 0 #2f6f8f !important;
 }
 #object-table {
   table-layout: auto;

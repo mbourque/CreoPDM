@@ -214,9 +214,10 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function setCheckedOutTabCount" in script.text
     assert "function listedMetricRows" in script.text
     assert "function refreshTabMetrics" in script.text
-    assert "function eventEl" in script.text
-    assert "eventEl(event)?.closest(\".metric\")" in script.text
-    assert ".tabs .tab.is-active" in script.text
+    assert "function metricKey" in script.text
+    assert "function markRowSelected" in script.text
+    assert "function onMetricChip" in script.text
+    assert "stopImmediatePropagation" in script.text
     assert "function rowFilename" in script.text
     assert "function setRowHidden" in script.text
     assert 'return row.classList.contains("is-row-hidden")' in script.text
