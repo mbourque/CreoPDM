@@ -384,6 +384,7 @@ def import_from_disk(
                         message="The file was not added.",
                     )
                 )
+    db.commit()
     return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.workspaces.root_for(project.uuid)))
 
 
@@ -469,4 +470,5 @@ async def import_from_uploads(
             path.unlink(missing_ok=True)
     if not jobs and not failed:
         raise ValidationAppError("Drop files or a folder first.")
+    db.commit()
     return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.workspaces.root_for(project.uuid)))

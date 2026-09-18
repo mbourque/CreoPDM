@@ -111,6 +111,11 @@
     window.location.href = url;
   }
 
+  function reloadPage() {
+    closeOpenDialogs();
+    window.location.reload();
+  }
+
   async function withHtmlDialogClosed(dialog, work) {
     const wasOpen = Boolean(dialog?.open);
     if (wasOpen) dialog.close();
@@ -937,7 +942,7 @@
       showError($("#add-error"), first + extra);
       return;
     }
-    window.location.reload();
+    reloadPage();
   });
 
   const searchInput = $("#search-input");
@@ -1663,14 +1668,14 @@
     if (!objectIds.length) return;
     if (objectIds.length === 1 && !selectedRows().length) {
       const result = await postAction(`/api/objects/${objectIds[0]}/checkout`, undefined, "POST", "Checking out…");
-      if (result) window.location.reload();
+      if (result) reloadPage();
       return;
     }
     const result = await postAction("/api/objects/batch/checkout", { object_ids: objectIds }, "POST", "Checking out…");
     if (!result) return;
     const warning = formatBatch(result);
     if (warning) showError($("#toolbar-error"), warning);
-    if (result.ok?.length) window.location.reload();
+    if (result.ok?.length) reloadPage();
   });
 
   workspaceBtn?.addEventListener("click", async () => {
@@ -1707,7 +1712,7 @@
       const result = await postAction(`/api/objects/${objectIds[0]}/undo-checkout`, undefined, "POST", "Cancelling checkout…");
       if (result) {
         rememberWatchView();
-        window.location.reload();
+        reloadPage();
       }
       return;
     }
@@ -1720,7 +1725,7 @@
     if (!result) return;
     const warning = formatBatch(result);
     if (warning) showError($("#toolbar-error"), warning);
-    if (result.ok?.length) window.location.reload();
+    if (result.ok?.length) reloadPage();
   });
 
   checkinBtn?.addEventListener("click", async () => {
@@ -1890,7 +1895,7 @@
     if (warning) showError($("#toolbar-error"), warning);
     if (result.ok ? result.ok.length : true) {
       rememberWatchView();
-      window.location.reload();
+      reloadPage();
     }
   });
 
@@ -1928,7 +1933,7 @@
     if (!confirmPurge(ids)) return;
     if (ids.length === 1 && !isListPage) {
       const result = await postAction(`/api/objects/${ids[0]}/purge-workspace`, undefined, "POST", "Removing from workspace…");
-      if (result) window.location.reload();
+      if (result) reloadPage();
       return;
     }
     const result = await postAction("/api/objects/batch/purge-workspace", { object_ids: ids }, "POST", "Removing from workspace…");
@@ -1936,7 +1941,7 @@
     const warning = formatBatch(result);
     if (warning) showError($("#toolbar-error"), warning);
     else showOk(`${result.ok?.length || 0} file(s) removed from the workspace.`);
-    if (result.ok?.length) window.location.reload();
+    if (result.ok?.length) reloadPage();
   });
 
   removeBtn?.addEventListener("click", async () => {
@@ -1952,7 +1957,7 @@
     if (!result) return;
     const warning = formatBatch(result);
     if (warning) showError($("#toolbar-error"), warning);
-    if (result.ok?.length) window.location.reload();
+    if (result.ok?.length) reloadPage();
   });
 
   async function loadChangesTab() {
@@ -2380,7 +2385,7 @@
       watchReloadTimer = window.setTimeout(() => {
         if (watchPaused()) return;
         rememberWatchView();
-        window.location.reload();
+        reloadPage();
       }, 400);
     } catch {
       /* ignore a missed poll */

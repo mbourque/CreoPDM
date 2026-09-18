@@ -236,6 +236,8 @@ def test_choose_files_starts_in_project_folder(client, repo_parent):
     script = client.get("/static/js/app.js")
     assert "function browseLocalFiles" in script.text
     assert "function useNativePicker" in script.text
+    assert "function reloadPage" in script.text
+    assert "reloadPage();" in script.text
 
 
 @requires_git
