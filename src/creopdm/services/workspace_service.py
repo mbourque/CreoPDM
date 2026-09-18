@@ -322,8 +322,8 @@ class WorkspaceService:
             return empty
         try:
             return self._git.status(vault)
-        except Exception:
-            logger.exception("git status failed for %s", project.uuid)
+        except Exception as exc:
+            logger.warning("git status failed for %s: %s", project.uuid, exc)
             return empty
 
     def _status_lookups(
@@ -431,6 +431,8 @@ class WorkspaceService:
                     **pending,
                     "uuid": obj.uuid,
                     "kind": "newer_save" if pending["newer_save"] else "modified",
+                    "object_type": obj.object_type,
+                    "extension": obj.extension,
                 }
             )
         return {"saves": saves, "new_files": self.list_untracked(project, objects, status)}

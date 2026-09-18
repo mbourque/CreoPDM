@@ -171,6 +171,7 @@ def test_home_remembers_last_opened_project(client, repo_parent):
     assert "sidebar-menu-btn" in home.text
     assert 'id="sidebar-collapse-btn"' in home.text
     assert 'id="search-input"' in home.text
+    assert "Search files in all folders" in home.text
     assert "Workspace:" not in home.text
 
 

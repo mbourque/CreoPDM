@@ -176,6 +176,17 @@ def project_checkin_queue_view(
     return ctx.workspaces.project_checkin_queue(project, objects)
 
 
+@router.get("/api/projects/{project_id}/checkouts", response_model=list[ObjectResponse])
+def list_project_checkouts(
+    project_id: str,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> list[ObjectResponse]:
+    project = ctx.projects.get_project(db, project_id)
+    objects = ctx.checkouts.list_for_project(db, project.id)
+    return present_objects(ctx, db, objects)
+
+
 @router.post("/api/projects/{project_id}/checkin-queue", response_model=BatchOperationResponse)
 def project_checkin_queue(
     project_id: str,

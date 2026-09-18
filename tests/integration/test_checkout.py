@@ -178,3 +178,48 @@ def test_workspace_keeps_project_folders(client, repo_parent, data_dir):
     assert not (workspace / "pin.prt").exists()
     assert item["in_workspace"] is True
 
+
+@requires_git
+def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
+    project, obj, _location = _create_part(client, repo_parent)
+    empty = client.get(f"/api/projects/{project['uuid']}/checkouts")
+    assert empty.status_code == 200, empty.text
+    assert empty.json() == []
+    assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
+    listed = client.get(f"/api/projects/{project['uuid']}/checkouts")
+    assert listed.status_code == 200, listed.text
+    body = listed.json()
+    assert len(body) == 1
+    assert body[0]["uuid"] == obj["uuid"]
+    assert body[0]["filename"] == "shaft.prt"
+    assert body[0]["owned_by_me"] is True
+    assert body[0]["checkout_user"] == "Alice"
+    home_out = client.get(f"/?project={project['uuid']}")
+    assert home_out.status_code == 200
+    assert "Files checked out · 1" in home_out.text
+    identity.become("Bob", "ENG-PC-18")
+    as_bob = client.get(f"/api/projects/{project['uuid']}/checkouts")
+    assert as_bob.status_code == 200, as_bob.text
+    assert as_bob.json()[0]["owned_by_me"] is False
+    assert as_bob.json()[0]["checkout_user"] == "Alice"
+    identity.become("Alice", "ENG-PC-17")
+    assert client.post(f"/api/objects/{obj['uuid']}/undo-checkout").status_code == 200
+    assert client.get(f"/api/projects/{project['uuid']}/checkouts").json() == []
+    home = client.get(f"/?project={project['uuid']}")
+    assert home.status_code == 200
+    assert 'id="checked-out-table"' in home.text
+    assert "Files checked out ·" not in home.text
+    script = client.get("/static/js/app.js")
+    assert "function loadCheckedOutTab" in script.text
+    assert "function setCheckedOutTabCount" in script.text
+    assert "function listedMetricRows" in script.text
+    assert "function refreshTabMetrics" in script.text
+    assert "/checkouts" in script.text
+    assert "queue-row" in script.text
+    assert "#changes-table" in script.text
+    assert ".object-row, .folder-row, .queue-row" in script.text
+    css = client.get("/static/css/app.css")
+    assert css.status_code == 200
+    assert ".queue-row.is-selected" in css.text
+
+

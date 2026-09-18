@@ -292,6 +292,10 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .grid th[aria-sort="descending"]::after { content: " \2193"; opacity: 1; color: var(--ink); }
 .object-row { cursor: pointer; user-select: none; }
 .object-row.is-selected { background: #e7f1f6; }
+.queue-row { cursor: pointer; user-select: none; }
+.queue-row:hover { background: #f6f8fa; }
+.queue-row.is-selected,
+.grid tr.is-pending.is-selected { background: #e7f1f6; }
 #object-table {
   table-layout: auto;
   width: 100%;
@@ -370,6 +374,10 @@ button.object-open:hover { text-decoration: underline; }
 .detail-head .object-open { font-size: inherit; color: inherit; }
 .grid tr.is-latest { background: #eef6f1; }
 .grid tr.is-pending { background: #fff6e8; }
+.grid tr.queue-row:hover:not(.is-selected) { background: #f6f8fa; }
+.grid tr.is-pending:hover:not(.is-selected) { background: #ffefd6; }
+.queue-row.is-selected,
+.grid tr.is-pending.is-selected { background: #e7f1f6; }
 .pending-note {
   margin: 0 0 0.75rem; padding: 0.55rem 0.75rem; background: #fff6e8;
   border: 1px solid #ead7b2; border-radius: 4px; color: var(--ink);

@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select, update
+from sqlalchemy.orm import Session, joinedload
 
 from creopdm.constants import CheckoutStatus, LifecycleState, ActivityAction
 from creopdm.exceptions import (
@@ -69,6 +69,36 @@ class CheckoutService:
             )
         )
         return {row.object_id: row for row in rows}
+
+    def list_for_project(self, session: Session, project_id: int) -> list[EngineeringObject]:
+        """Active checkouts in this project, including files other people hold."""
+        rows = session.scalars(
+            select(EngineeringObject)
+            .options(
+                joinedload(EngineeringObject.current_version),
+                joinedload(EngineeringObject.project),
+            )
+            .join(Checkout, Checkout.object_id == EngineeringObject.id)
+            .where(
+                EngineeringObject.project_id == project_id,
+                Checkout.status == CheckoutStatus.ACTIVE.value,
+            )
+            .order_by(EngineeringObject.filename.asc())
+        )
+        return list(rows.unique())
+
+    def count_for_project(self, session: Session, project_id: int) -> int:
+        """How many files currently have an active checkout in this project."""
+        value = session.scalar(
+            select(func.count())
+            .select_from(Checkout)
+            .join(EngineeringObject, Checkout.object_id == EngineeringObject.id)
+            .where(
+                EngineeringObject.project_id == project_id,
+                Checkout.status == CheckoutStatus.ACTIVE.value,
+            )
+        )
+        return int(value or 0)
 
     def describe(
         self,

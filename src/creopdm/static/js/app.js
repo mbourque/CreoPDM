@@ -190,6 +190,74 @@
     return types === null || types.includes(row.dataset.objectType);
   }
 
+  function rememberMetricCounts() {
+    metricButtons().forEach((btn) => {
+      const strong = btn.querySelector("strong");
+      if (!strong || btn.dataset.folderCount != null) return;
+      btn.dataset.folderCount = strong.textContent.trim();
+    });
+  }
+
+  function filenameExtension(filename) {
+    const name = String(filename || "").toLowerCase();
+    const match = name.match(/(\.[a-z0-9_+]+)(?:\.\d+)?$/i);
+    return match ? match[1] : "";
+  }
+
+  function typeFromExtension(ext) {
+    const key = String(ext || "").toLowerCase();
+    if (key === ".prt") return "CREO_PART";
+    if (key === ".asm") return "CREO_ASSEMBLY";
+    if (key === ".drw") return "CREO_DRAWING";
+    if (key === ".mfg") return "CREO_MANUFACTURING";
+    if (key === ".pdf") return "PDF";
+    if ([".doc", ".docx", ".odt", ".rtf", ".txt", ".md"].includes(key)) return "DOCUMENT";
+    if ([".xls", ".xlsx", ".xlsm", ".csv"].includes(key)) return "SPREADSHEET";
+    if ([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".svg"].includes(key)) return "IMAGE";
+    if ([".log", ".xml", ".ncl", ".lst"].includes(key)) return "TEXT";
+    return "CAD";
+  }
+
+  function listedMetricRows() {
+    const root = fileListRoot();
+    if (!root) return [];
+    if (root.id === "panel-changes") {
+      return [...root.querySelectorAll(".queue-row")];
+    }
+    return [...root.querySelectorAll(".object-row")];
+  }
+
+  function updateMetricCounts() {
+    rememberMetricCounts();
+    const root = fileListRoot();
+    const filesTab = !root || root.id === "panel-files";
+    const searching = $("#object-table")?.dataset.searching === "1";
+    if (filesTab && !searching) {
+      metricButtons().forEach((btn) => {
+        const strong = btn.querySelector("strong");
+        if (strong) strong.textContent = btn.dataset.folderCount || "0";
+      });
+      return;
+    }
+    const files = listedMetricRows();
+    metricButtons().forEach((btn) => {
+      const strong = btn.querySelector("strong");
+      if (!strong) return;
+      const key = btn.dataset.filter;
+      const count = key === "files"
+        ? files.length
+        : files.filter((row) => rowMatchesMetric(row, key)).length;
+      strong.textContent = String(count);
+    });
+  }
+
+  function refreshTabMetrics() {
+    applyMetricVisibility();
+    applyMetricSelection();
+    updateMetricCounts();
+    syncToolbar();
+  }
+
   function setMetricMode(btn, mode) {
     btn.dataset.mode = mode;
     btn.classList.toggle("is-selected", mode === "select");
@@ -243,13 +311,14 @@
       return true;
     });
     const q = searchInput?.value.trim().toLowerCase() || "";
+    const searchingAll = $("#object-table")?.dataset.searching === "1";
     rows().forEach((row) => {
       if (row.classList.contains("folder-row")) {
-        const matchesSearch = !q || row.textContent.toLowerCase().includes(q);
+        const matchesSearch = searchingAll ? false : (!q || row.textContent.toLowerCase().includes(q));
         row.hidden = Boolean(q) && !matchesSearch;
         return;
       }
-      const matchesSearch = !q || row.textContent.toLowerCase().includes(q);
+      const matchesSearch = searchingAll || !q || row.textContent.toLowerCase().includes(q);
       const matchesView = !viewBtns.length || viewBtns.some((btn) => rowMatchesMetric(row, btn.dataset.filter));
       const matchesCheckout = !checkoutFiltering || rowMatchesMetric(row, "checked_out");
       row.hidden = !(matchesSearch && matchesView && matchesCheckout);
@@ -810,11 +879,182 @@
   });
 
   const searchInput = $("#search-input");
-  const rows = () => [...document.querySelectorAll(".object-row, .folder-row")];
+  const fileListRoot = () => {
+    const panels = ["panel-checked-out", "panel-changes", "panel-files"];
+    const open = panels.map((id) => document.getElementById(id)).find((el) => el && !el.hidden);
+    return open || $("#panel-files") || document;
+  };
+  const rows = () => [...fileListRoot().querySelectorAll(".object-row, .folder-row, .queue-row")];
   const isListPage = Boolean(document.querySelector("#object-table"));
-  searchInput?.addEventListener("input", () => {
+  const objectTable = $("#object-table");
+  const objectTbody = objectTable?.querySelector("tbody");
+  const searchScope = $("#search-scope");
+  const folderCrumb = document.querySelector(".folder-crumb");
+  let folderTbodyHtml = objectTbody?.innerHTML ?? "";
+  let searchTimer = 0;
+  let searchSeq = 0;
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function folderOfPath(relative) {
+    const posix = String(relative || "").replace(/\\/g, "/");
+    const index = posix.lastIndexOf("/");
+    return index < 0 ? "" : posix.slice(0, index);
+  }
+
+  function titleCaseWords(value) {
+    return String(value || "")
+      .replace(/_/g, " ")
+      .toLowerCase()
+      .replace(/\b[a-z]/g, (ch) => ch.toUpperCase());
+  }
+
+  function formatStamp(iso) {
+    if (!iso) return "";
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function padIteration(value) {
+    return String(Number(value) || 0).padStart(6, "0");
+  }
+
+  function searchRowHtml(obj, projectId) {
+    const relative = String(obj.relative_path || obj.filename || "");
+    const folder = folderOfPath(relative);
+    const filename = String(obj.filename || "");
+    const stamp = formatStamp(obj.updated_at);
+    const state = String(obj.lifecycle_state || "");
+    const stateLabel = titleCaseWords(state);
+    const typeLabel = String(obj.type_label || "");
+    const creo = String(obj.creo_release || "");
+    const checkout = String(obj.checkout_status || "Available");
+    const checkoutKind = obj.owned_by_me ? "mine" : obj.checkout_user ? "other" : "available";
+    const rev = String(obj.display_revision || obj.revision || "");
+    const pathLine = relative && relative !== filename
+      ? `<div class="muted small">${escapeHtml(relative)}</div>`
+      : "";
+    return `<tr data-uuid="${escapeHtml(obj.uuid)}"
+              data-object-type="${escapeHtml(obj.object_type || "")}"
+              data-extension="${escapeHtml(obj.extension || "")}"
+              data-can-checkout="${obj.can_checkout ? "1" : "0"}"
+              data-can-checkin="${obj.can_checkin ? "1" : "0"}"
+              data-owned="${obj.owned_by_me ? "1" : "0"}"
+              data-checked-out="${obj.owned_by_me || obj.checkout_user ? "1" : "0"}"
+              data-in-workspace="${obj.in_workspace ? "1" : "0"}"
+              data-tree="${escapeHtml(folder)}"
+              data-sort-name="${escapeHtml(relative)}"
+              data-sort-rev="${escapeHtml(folder)}/${escapeHtml(obj.revision || "")}-${padIteration(obj.iteration)}"
+              data-sort-state="${escapeHtml(folder)}/${escapeHtml(state)}"
+              data-sort-type="${escapeHtml(folder)}/${escapeHtml(typeLabel)}"
+              data-sort-creo="${escapeHtml(folder)}/${escapeHtml(creo)}"
+              data-sort-modified="${stamp.replace(/[-: ]/g, "")}"
+              data-sort-checkout="${escapeHtml(folder)}/${escapeHtml(checkout)}"
+              data-detail="/projects/${escapeHtml(projectId)}/objects/${escapeHtml(obj.uuid)}#history"
+              class="object-row"
+              style="--depth: 0">
+            <td title="${escapeHtml(filename)}">
+              <button type="button" class="object-open" data-uuid="${escapeHtml(obj.uuid)}" title="${escapeHtml(filename)}">${escapeHtml(filename)}</button>
+              ${pathLine}
+            </td>
+            <td title="${escapeHtml(rev)}">${escapeHtml(rev)}</td>
+            <td title="${escapeHtml(stateLabel)}"><span class="state" data-state="${escapeHtml(state)}">${escapeHtml(stateLabel)}</span></td>
+            <td title="${escapeHtml(typeLabel)}">${escapeHtml(typeLabel)}</td>
+            <td title="${escapeHtml(creo)}">${escapeHtml(creo)}</td>
+            <td title="${escapeHtml(stamp || "—")}">${escapeHtml(stamp || "—")}</td>
+            <td title="${escapeHtml(checkout)}">
+              <span class="checkout-state" data-state="${checkoutKind}">${escapeHtml(checkout)}</span>
+            </td>
+          </tr>`;
+  }
+
+  function showFolderView() {
+    if (!objectTable || !objectTbody) return;
+    objectTable.dataset.searching = "";
+    objectTbody.innerHTML = folderTbodyHtml;
+    if (searchScope) searchScope.hidden = true;
+    if (folderCrumb) folderCrumb.hidden = false;
+    updateMetricCounts();
+  }
+
+  function showSearchMatches(items, projectId) {
+    if (!objectTable || !objectTbody) return;
+    objectTable.dataset.searching = "1";
+    if (searchScope) searchScope.hidden = false;
+    if (folderCrumb) folderCrumb.hidden = true;
+    if (!items.length) {
+      objectTbody.innerHTML = `<tr class="empty-row"><td colspan="7">No matching files in this project.</td></tr>`;
+      updateMetricCounts();
+      return;
+    }
+    objectTbody.innerHTML = items.map((item) => searchRowHtml(item, projectId)).join("");
+    updateMetricCounts();
+  }
+
+  async function searchAllFolders(query) {
+    const projectId = $("#rename-project-btn")?.dataset.project;
+    if (!objectTbody || !projectId) {
+      applyMetricVisibility();
+      syncToolbar();
+      return;
+    }
+    const seq = ++searchSeq;
+    const response = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/objects?q=${encodeURIComponent(query)}`
+    );
+    if (seq !== searchSeq) return;
+    if (!response.ok) {
+      showFolderView();
+      applyMetricVisibility();
+      syncToolbar();
+      return;
+    }
+    const items = await response.json();
+    if (seq !== searchSeq) return;
+    showSearchMatches(Array.isArray(items) ? items : [], projectId);
     applyMetricVisibility();
+    applyMetricSelection();
     syncToolbar();
+  }
+
+  function onSearchInput() {
+    const query = searchInput?.value.trim() || "";
+    window.clearTimeout(searchTimer);
+    if (!query) {
+      searchSeq += 1;
+      showFolderView();
+      applyMetricVisibility();
+      applyMetricSelection();
+      syncToolbar();
+      return;
+    }
+    searchTimer = window.setTimeout(() => {
+      void searchAllFolders(query);
+    }, 200);
+  }
+
+  searchInput?.addEventListener("input", onSearchInput);
+  $("#search-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    window.clearTimeout(searchTimer);
+    const query = searchInput?.value.trim() || "";
+    if (!query) {
+      searchSeq += 1;
+      showFolderView();
+      applyMetricVisibility();
+      applyMetricSelection();
+      syncToolbar();
+      return;
+    }
+    void searchAllFolders(query);
   });
 
   const historyBtn = $("#history-btn");
@@ -866,9 +1106,10 @@
     const filtering = metricButtons().some((btn) => metricMode(btn) === "filter");
     const summary = $("#selection-summary");
     if (summary) {
-      if (ids.length) {
+      const count = selected.length || ids.length;
+      if (count) {
         summary.hidden = false;
-        summary.textContent = `${ids.length} selected${filtering ? ". The list is filtered" : ""}.`;
+        summary.textContent = `${count} selected${filtering ? ". The list is filtered" : ""}.`;
       } else {
         summary.hidden = true;
         summary.textContent = "";
@@ -876,11 +1117,11 @@
     }
   }
 
-  function setCheckinQueueCounts(pendingSaves, newFiles) {
-    if (!checkinBtn) return;
-    checkinBtn.dataset.pendingSaves = String(pendingSaves || 0);
-    checkinBtn.dataset.newFiles = String(newFiles || 0);
-    syncToolbar();
+  function setCheckedOutTabCount(count) {
+    const tab = document.querySelector('.tab[data-tab="checked-out"]');
+    if (!tab) return;
+    const n = Number(count) || 0;
+    tab.textContent = n ? `Files checked out · ${n}` : "Files checked out";
   }
 
   function toggleRow(row) {
@@ -1095,7 +1336,7 @@
     }
   }
 
-  document.querySelector("#object-table")?.addEventListener("click", (event) => {
+  function onFileTableClick(event) {
     const folder = event.target.closest(".folder-row");
     const folderLink = event.target.closest(".folder-open");
     if (folderLink && folder && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
@@ -1103,7 +1344,7 @@
       openFolderRow(folder);
       return;
     }
-    const row = event.target.closest(".object-row, .folder-row");
+    const row = event.target.closest(".object-row, .folder-row, .queue-row");
     if (!row) return;
     const openLink = event.target.closest(".object-open");
     if (openLink) event.preventDefault();
@@ -1118,12 +1359,12 @@
       return;
     }
     selectOnly(row);
-    if (row.classList.contains("folder-row")) return;
+    if (row.classList.contains("folder-row") || row.classList.contains("queue-row")) return;
     if (!openLink?.dataset.uuid || event.detail > 1) return;
     void openPdmObject(openLink.dataset.uuid);
-  });
+  }
 
-  document.querySelector("#object-table")?.addEventListener("dblclick", (event) => {
+  function onFileTableDblclick(event) {
     if (event.target.closest(".folder-open")) {
       event.preventDefault();
       const folder = event.target.closest(".folder-row");
@@ -1136,7 +1377,13 @@
     if (!row?.dataset.detail) return;
     event.preventDefault();
     window.location.href = row.dataset.detail;
-  });
+  }
+
+  document.querySelector("#object-table")?.addEventListener("click", onFileTableClick);
+  document.querySelector("#object-table")?.addEventListener("dblclick", onFileTableDblclick);
+  document.querySelector("#checked-out-table")?.addEventListener("click", onFileTableClick);
+  document.querySelector("#checked-out-table")?.addEventListener("dblclick", onFileTableDblclick);
+  document.querySelector("#changes-table")?.addEventListener("click", onFileTableClick);
 
   document.querySelector("#metric-filters")?.addEventListener("click", (event) => {
     const btn = event.target.closest(".metric");
@@ -1164,6 +1411,7 @@
     applyMetricVisibility();
     applyMetricSelection();
     writeStoredFilters();
+    updateMetricCounts();
     syncToolbar();
   });
 
@@ -1366,14 +1614,17 @@
   });
 
   checkinBtn?.addEventListener("click", async () => {
-    const owned = selectedRows().filter((row) => row.dataset.canCheckin === "1");
+    const queued = selectedRows().filter((row) => row.classList.contains("queue-row"));
+    const owned = selectedRows().filter((row) => {
+      return row.dataset.canCheckin === "1" && !row.classList.contains("queue-row");
+    });
     const projectId = checkinBtn.dataset.project || openWorkspaceBtn?.dataset.project;
     if (!checkinDialog) return;
     const fallbackId = checkinBtn.dataset.uuid || "";
     let objectId = "";
-    if (owned.length === 1) {
+    if (!queued.length && owned.length === 1) {
       objectId = owned[0].dataset.uuid;
-    } else if (!owned.length && fallbackId) {
+    } else if (!queued.length && !owned.length && fallbackId) {
       objectId = fallbackId;
     }
     const useQueue = !objectId;
@@ -1403,7 +1654,9 @@
       checkinDialog.dataset.force = data.force_checkin ? "1" : "";
       checkinDialog.dataset.queue = useQueue ? "1" : "";
       checkinDialog.dataset.objectId = useQueue ? "" : objectId;
-      const selectedIdsForQueue = owned.map((row) => row.dataset.uuid);
+      const selectedIdsForQueue = queued
+        .map((row) => row.dataset.uuid)
+        .filter(Boolean);
       checkinDialog.dataset.objectIds = JSON.stringify(
         selectedIdsForQueue.length ? selectedIdsForQueue : data.object_ids || []
       );
@@ -1418,12 +1671,21 @@
     const list = $("#checkin-changes");
     list.innerHTML = "";
     if (useQueue) {
-      (data.pending_files || []).forEach((name) => {
+      const wantedIds = new Set(queued.map((row) => row.dataset.uuid).filter(Boolean));
+      const pendingNames = data.pending_files || [];
+      const pendingIds = data.object_ids || [];
+      const names = !queued.length
+        ? pendingNames
+        : pendingIds.map((id, index) => (wantedIds.has(id) ? pendingNames[index] : "")).filter(Boolean);
+      names.forEach((name) => {
         const item = document.createElement("li");
         item.textContent = `✓ Check in ${name}`;
         list.appendChild(item);
       });
-      if (!(data.pending_files || []).length && !(data.new_files || []).length) {
+      const newCount = queued.length
+        ? queued.filter((row) => row.dataset.relativePath).length
+        : (data.new_files || []).length;
+      if (!names.length && !newCount) {
         const item = document.createElement("li");
         item.textContent = "– Nothing to check in";
         list.appendChild(item);
@@ -1451,13 +1713,18 @@
       box.innerHTML = "";
       const news = data.new_files || [];
       wrap.hidden = news.length === 0;
+      const selectedNew = new Set(
+        queued.map((row) => row.dataset.relativePath).filter(Boolean)
+      );
       news.forEach((item) => {
         const label = document.createElement("label");
         label.className = "choice";
         const input = document.createElement("input");
         input.type = "checkbox";
         input.value = item.relative_path;
-        input.checked = Boolean(item.same_folder) || useQueue;
+        input.checked = queued.length
+          ? selectedNew.has(item.relative_path)
+          : Boolean(item.same_folder) || useQueue;
         label.appendChild(input);
         label.append(` ${item.filename}`);
         const hint = document.createElement("span");
@@ -1583,7 +1850,11 @@
     const projectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
     const body = $("#changes-table tbody");
     const tab = document.querySelector('.tab[data-tab="changes"]');
-    if (!projectId || !body || changesLoaded) return;
+    if (!projectId || !body) return;
+    if (changesLoaded) {
+      refreshTabMetrics();
+      return;
+    }
     changesLoaded = true;
     body.replaceChildren();
     const loading = document.createElement("tr");
@@ -1593,6 +1864,7 @@
     loadingCell.textContent = "Looking for workspace changes…";
     loading.appendChild(loadingCell);
     body.appendChild(loading);
+    refreshTabMetrics();
     try {
       const response = await fetch(`/api/projects/${projectId}/checkin-queue`);
       if (!response.ok) throw new Error("queue");
@@ -1611,11 +1883,21 @@
         cell.textContent = "Nothing in the workspace is waiting to be checked in.";
         row.appendChild(cell);
         body.appendChild(row);
+        refreshTabMetrics();
         return;
       }
-      const addRow = (values, className) => {
+      const addRow = (values, className, meta = {}) => {
         const row = document.createElement("tr");
         if (className) row.className = className;
+        row.classList.add("queue-row");
+        const filename = meta.filename || values[1] || "";
+        const ext = filenameExtension(filename);
+        row.dataset.extension = ext;
+        row.dataset.objectType = meta.objectType || typeFromExtension(ext);
+        row.dataset.checkedOut = meta.checkedOut || "0";
+        row.dataset.canCheckin = "1";
+        if (meta.uuid) row.dataset.uuid = meta.uuid;
+        if (meta.relativePath) row.dataset.relativePath = meta.relativePath;
         values.forEach((text) => {
           const cell = document.createElement("td");
           cell.textContent = text;
@@ -1632,18 +1914,29 @@
             item.file_size != null ? `${item.file_size} bytes` : "",
             item.saved_at || "",
           ],
-          "is-pending"
+          "is-pending",
+          {
+            filename: item.filename,
+            uuid: item.uuid,
+            objectType: item.object_type,
+            checkedOut: "1",
+          }
         );
       });
       created.forEach((item) => {
-        addRow([
-          "New file",
-          item.filename || "",
-          "Not in the project yet. Use Check In to add it.",
-          item.size != null ? `${item.size} bytes` : "",
-          "—",
-        ]);
+        addRow(
+          [
+            "New file",
+            item.filename || "",
+            "Not in the project yet. Use Check In to add it.",
+            item.size != null ? `${item.size} bytes` : "",
+            "—",
+          ],
+          "",
+          { filename: item.filename, objectType: item.object_type, relativePath: item.relative_path }
+        );
       });
+      refreshTabMetrics();
     } catch {
       body.replaceChildren();
       const row = document.createElement("tr");
@@ -1653,6 +1946,46 @@
       cell.textContent = "Could not load workspace changes.";
       row.appendChild(cell);
       body.appendChild(row);
+      refreshTabMetrics();
+    }
+  }
+
+  async function loadCheckedOutTab() {
+    const projectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
+    const body = $("#checked-out-table tbody");
+    if (!projectId || !body) return;
+    body.replaceChildren();
+    const loading = document.createElement("tr");
+    loading.className = "empty-row";
+    const loadingCell = document.createElement("td");
+    loadingCell.colSpan = 7;
+    loadingCell.textContent = "Looking for checked-out files…";
+    loading.appendChild(loadingCell);
+    body.appendChild(loading);
+    refreshTabMetrics();
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/checkouts`);
+      if (!response.ok) throw new Error("checkouts");
+      const items = await response.json();
+      const list = Array.isArray(items) ? items : [];
+      setCheckedOutTabCount(list.length);
+      if (!list.length) {
+        body.innerHTML = `<tr class="empty-row"><td colspan="7">No files are checked out.</td></tr>`;
+        refreshTabMetrics();
+        return;
+      }
+      body.innerHTML = list.map((item) => searchRowHtml(item, projectId)).join("");
+      refreshTabMetrics();
+    } catch {
+      body.replaceChildren();
+      const row = document.createElement("tr");
+      row.className = "empty-row";
+      const cell = document.createElement("td");
+      cell.colSpan = 7;
+      cell.textContent = "Could not load checked-out files.";
+      row.appendChild(cell);
+      body.appendChild(row);
+      refreshTabMetrics();
     }
   }
 
@@ -1674,6 +2007,8 @@
         panel.hidden = panel.id !== `panel-${name}`;
       });
       if (name === "changes") loadChangesTab();
+      else if (name === "checked-out") void loadCheckedOutTab();
+      else refreshTabMetrics();
     });
   });
 
@@ -1691,6 +2026,8 @@
     showHistorySubtab("versions");
   } else if (window.location.hash === "#changes") {
     document.querySelector('.tab[data-tab="changes"]')?.click();
+  } else if (window.location.hash === "#checked-out") {
+    document.querySelector('.tab[data-tab="checked-out"]')?.click();
   }
 
   settingsForm?.addEventListener("submit", async (event) => {

@@ -142,6 +142,7 @@ class ObjectService:
                     EngineeringObject.name.ilike(like),
                     EngineeringObject.number.ilike(like),
                     EngineeringObject.filename.ilike(like),
+                    EngineeringObject.relative_path.ilike(like),
                     EngineeringObject.object_type.ilike(like),
                     EngineeringObject.revision.ilike(like),
                     EngineeringObject.lifecycle_state.ilike(like),

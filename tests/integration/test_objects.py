@@ -91,6 +91,37 @@ def test_import_from_uploads_keeps_relative_paths(client, repo_parent):
 
 
 @requires_git
+def test_search_objects_includes_nested_folders(client, repo_parent):
+    project, _location = _create_project(client, repo_parent)
+    added = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-uploads",
+        files=[
+            ("files", ("shaft.prt", b"part-bytes", "application/octet-stream")),
+            ("files", ("pin.prt", b"pin-bytes", "application/octet-stream")),
+        ],
+        data={"relative_paths": ["CAD/shaft.prt", "Incoming/lib/pin.prt"], "comment": "Nested"},
+    )
+    assert added.status_code == 200, added.text
+    assert added.json()["failed"] == []
+    by_name = client.get(f"/api/projects/{project['uuid']}/objects", params={"q": "pin"})
+    assert by_name.status_code == 200, by_name.text
+    assert {item["relative_path"] for item in by_name.json()} == {"Incoming/lib/pin.prt"}
+    by_folder = client.get(f"/api/projects/{project['uuid']}/objects", params={"q": "Incoming"})
+    assert {item["relative_path"] for item in by_folder.json()} == {"Incoming/lib/pin.prt"}
+    home = client.get(f"/?project={project['uuid']}&folder=")
+    assert home.status_code == 200, home.text
+    assert ">pin.prt</button>" not in home.text
+    assert 'id="search-scope"' in home.text
+    assert "Showing matches from all folders." in home.text
+    script = client.get("/static/js/app.js")
+    assert script.status_code == 200
+    assert "function searchAllFolders" in script.text
+    assert "function updateMetricCounts" in script.text
+    assert "function listedMetricRows" in script.text
+    assert "/objects?q=" in script.text
+
+
+@requires_git
 def test_extra_cad_extensions_go_to_cad_folder(client, repo_parent, tmp_path):
     project, _location = _create_project(client, repo_parent)
     dxf = tmp_path / "outline.dxf"
@@ -259,7 +290,7 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data
     assert 'data-folder="Incoming"' in page.text
     assert 'data-folder="Incoming/lib"' not in page.text
     assert "pin.prt" not in page.text
-    assert 'id="metric-filters"' not in page.text
+    assert 'id="metric-filters"' in page.text
     inside = client.get(f"/?project={project['uuid']}&folder=Incoming")
     assert inside.status_code == 200, inside.text
     assert 'data-folder="Incoming/lib"' in inside.text

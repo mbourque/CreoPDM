@@ -152,15 +152,16 @@ def home(
         current_folder = normalize_folder_query(request.query_params.get("folder"))
     objects: list = []
     list_entries: list = []
+    checkout_count = 0
     if project is not None:
         objects, list_entries = _folder_page(ctx, db, project.id, current_folder)
-    if objects or list_entries:
-        status = folder_view_counts(
-            objects,
-            current_folder,
-            ctx.config.cad_models_extensions(),
-            ctx.config.document_extensions(),
-        )
+        checkout_count = ctx.checkouts.count_for_project(db, project.id)
+    status = folder_view_counts(
+        objects,
+        current_folder,
+        ctx.config.cad_models_extensions(),
+        ctx.config.document_extensions(),
+    )
 
     return render(
         request,
@@ -179,6 +180,7 @@ def home(
             "cad_models_extensions": ctx.config.cad_models_extensions(),
             "document_extensions": ctx.config.document_extensions(),
             "checkin_queue": checkin_queue,
+            "checkout_count": checkout_count,
             "workspace_path": str(ctx.config.workspace_for_project(selected.uuid)) if selected else None,
             "sidebar_collapsed": _sidebar_collapsed(request),
             "object_types": [item.value for item in ObjectType],

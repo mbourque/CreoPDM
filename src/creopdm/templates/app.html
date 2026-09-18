@@ -51,7 +51,7 @@
                 title="Delete the CreoPDM workspace (working copies and Git) and unregister the project. Original files you imported from are not deleted.">Forget project</button>
         <form class="search-form" id="search-form">
           <label class="sr-only" for="search-input">Search</label>
-          <input id="search-input" name="q" type="search" placeholder="Search number, name, filename, type…">
+          <input id="search-input" name="q" type="search" placeholder="Search files in all folders…" autocomplete="off">
         </form>
       </div>
       {% if selected.description %}
@@ -59,7 +59,7 @@
       {% endif %}
     </div>
 
-    {% if status and status.files %}
+    {% if selected and status %}
     <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}">
       <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Select all files and clear type chips. Click again to clear."><strong>{{ status.files }}</strong> Files</button></li>
       <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Select Creo models. Click again to filter. Click a third time to clear."><strong>{{ status.cad_models }}</strong> Creo Models</button></li>
@@ -75,6 +75,7 @@
 
     <div class="tabs" role="tablist">
       <button type="button" class="tab is-active" data-tab="files">Files</button>
+      <button type="button" class="tab" data-tab="checked-out">{% if checkout_count %}Files checked out · {{ checkout_count }}{% else %}Files checked out{% endif %}</button>
       <button type="button" class="tab" data-tab="changes">Files to check in</button>
     </div>
 
@@ -95,6 +96,7 @@
       {% endfor %}
     </nav>
     {% endif %}
+    <p class="muted small" id="search-scope" hidden>Showing matches from all folders.</p>
     <div class="table-wrap">
       <table class="grid" id="object-table">
         <thead>
@@ -192,6 +194,30 @@
         </tbody>
       </table>
     </div>
+    </section>
+
+    <section class="tab-panel" id="panel-checked-out" hidden>
+      <p class="muted small">Active checkout locks in this project, including files held by other people. Open, Check In, and Undo Checkout still apply to your files.</p>
+      <div class="table-wrap">
+        <table class="grid" id="checked-out-table">
+          <thead>
+            <tr>
+              <th data-sort="name" aria-sort="none" title="Sort by name. Click again to reverse.">Name</th>
+              <th data-sort="rev" aria-sort="none" title="Sort by revision. Click again to reverse.">Rev</th>
+              <th data-sort="state" aria-sort="none" title="Sort by state. Click again to reverse.">State</th>
+              <th data-sort="type" aria-sort="none" title="Sort by type. Click again to reverse.">Type</th>
+              <th data-sort="creo" aria-sort="none" title="Sort by Creo release. Click again to reverse.">Creo</th>
+              <th data-sort="modified" aria-sort="none" title="Sort by modified date. Click again to reverse.">Modified</th>
+              <th data-sort="checkout" aria-sort="none" title="Sort by checkout. Click again to reverse.">Checkout</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="empty-row">
+              <td colspan="7">No files are checked out.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="tab-panel" id="panel-changes" hidden>

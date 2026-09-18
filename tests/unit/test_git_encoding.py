@@ -7,15 +7,25 @@ from creopdm.services.git_service import GitService
 def test_git_run_decodes_output_as_utf8(monkeypatch, tmp_path: Path):
     captured: dict[str, object] = {}
 
-    def fake_run(*args, **kwargs):
+    def fake_run(args, **kwargs):
+        captured["args"] = args
         captured.update(kwargs)
-        return subprocess.CompletedProcess(args[0], 0, stdout="ok", stderr="")
+        return subprocess.CompletedProcess(args, 0, stdout="ok", stderr="")
 
     monkeypatch.setattr("creopdm.services.git_service.subprocess.run", fake_run)
     GitService()._run(["status"], tmp_path, check=False)
     assert captured["encoding"] == "utf-8"
     assert captured["errors"] == "replace"
     assert "text" not in captured
+    command = captured["args"]
+    assert command[0] == "git"
+    assert command[1:5] == [
+        "-c",
+        "safe.directory=*",
+        "-c",
+        f"safe.directory={tmp_path.resolve().as_posix()}",
+    ]
+    assert command[-1] == "status"
 
 
 def test_git_is_available_decodes_output_as_utf8(monkeypatch):

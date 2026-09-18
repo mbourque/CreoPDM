@@ -66,6 +66,18 @@ class GitService:
     def __init__(self, executable: str = "git") -> None:
         self.executable = executable or "git"
 
+    def _command(self, args: list[str], cwd: Path) -> list[str]:
+        """Trust this vault for this process only. Do not write git config."""
+        root = Path(cwd).resolve().as_posix()
+        return [
+            self.executable,
+            "-c",
+            "safe.directory=*",
+            "-c",
+            f"safe.directory={root}",
+            *args,
+        ]
+
     def _run(
         self,
         args: list[str],
@@ -74,7 +86,7 @@ class GitService:
         extra_env: dict[str, str] | None = None,
         quiet: bool = False,
     ) -> subprocess.CompletedProcess[str]:
-        command = [self.executable, *args]
+        command = self._command(args, cwd)
         if quiet:
             logger.debug("git %s", " ".join(args))
         else:
@@ -276,7 +288,7 @@ class GitService:
     def show_file(self, path: Path, relative_path: str, commit_hash: str) -> bytes:
         posix = relative_path.replace("\\", "/")
         result = subprocess.run(
-            [self.executable, "show", f"{commit_hash}:{posix}"],
+            self._command(["show", f"{commit_hash}:{posix}"], path),
             cwd=str(path),
             capture_output=True,
             check=False,
