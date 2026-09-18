@@ -60,6 +60,16 @@ _PAGE_DEFAULTS = {
     "checkout_count": 0,
     "checkin_queue": {"saves": [], "new_files": []},
     "local_time": format_local,
+    "creo_label": "Not Connected",
+    "creo_open_name": "Parametric",
+    "creo_open_title": "Opens CAD with Creo Parametric",
+}
+
+_CREO_OPEN_NAMES = {
+    "executable": "Parametric",
+    "view": "Creo View",
+    "association": "Windows",
+    "embedded": "Embedded",
 }
 
 
@@ -100,8 +110,42 @@ def _creo_executable(ctx: AppContext) -> str | None:
     return str(found) if found else None
 
 
+def _creo_open_mode(ctx: AppContext) -> str:
+    finder = getattr(ctx.creo, "cad_open_mode", None)
+    if callable(finder):
+        return (finder() or "executable").strip().lower()
+    return (ctx.settings.creo.open_mode or "executable").strip().lower()
+
+
+def _creo_view_executable(ctx: AppContext) -> str | None:
+    finder = getattr(ctx.creo, "find_view_executable", None)
+    if not callable(finder):
+        return None
+    found = finder()
+    return str(found) if found else None
+
+
+def _creo_open_name(mode: str) -> str:
+    return _CREO_OPEN_NAMES.get(mode, "Parametric")
+
+
+def _creo_open_title(ctx: AppContext, mode: str) -> str:
+    if mode == "embedded":
+        return "Opens CAD in the Creo session showing this page"
+    if mode == "association":
+        return "Opens CAD with the Windows file association"
+    if mode == "view":
+        return _creo_view_executable(ctx) or "Opens CAD with Creo View"
+    return _creo_executable(ctx) or "Opens CAD with Creo Parametric"
+
+
 _CREO_PAGE_TTL = 20.0
 _CREO_PAGE_CACHE: tuple[float, dict[str, str | None]] | None = None
+
+
+def clear_creo_page_cache() -> None:
+    global _CREO_PAGE_CACHE
+    _CREO_PAGE_CACHE = None
 
 
 def _creo_page(ctx: AppContext) -> dict[str, str | None]:
@@ -109,9 +153,12 @@ def _creo_page(ctx: AppContext) -> dict[str, str | None]:
     now = time.monotonic()
     if _CREO_PAGE_CACHE is not None and now - _CREO_PAGE_CACHE[0] < _CREO_PAGE_TTL:
         return _CREO_PAGE_CACHE[1]
+    mode = _creo_open_mode(ctx)
     payload = {
         "creo_label": _creo_label(ctx),
         "creo_executable": _creo_executable(ctx),
+        "creo_open_name": _creo_open_name(mode),
+        "creo_open_title": _creo_open_title(ctx, mode),
     }
     _CREO_PAGE_CACHE = (now, payload)
     return payload

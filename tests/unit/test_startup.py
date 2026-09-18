@@ -1,5 +1,5 @@
 from creopdm.exceptions import ConfigurationError
-from creopdm.main import find_available_port, lan_addresses
+from creopdm.main import find_available_port, lan_addresses, lan_firewall_hint
 
 
 def test_find_available_port_is_localhost_bindable():
@@ -19,6 +19,16 @@ def test_lan_addresses_are_ipv4_strings():
         parts = address.split(".")
         assert len(parts) == 4
         assert not address.startswith("127.")
+
+
+def test_lan_firewall_hint_is_linux_only(monkeypatch):
+    monkeypatch.setattr("creopdm.main.os.name", "posix")
+    hint = lan_firewall_hint(52113)
+    assert hint is not None
+    assert "52113" in hint
+    assert "ufw allow 52113/tcp" in hint
+    monkeypatch.setattr("creopdm.main.os.name", "nt")
+    assert lan_firewall_hint(52113) is None
 
 
 def test_find_available_port_keeps_the_settings_port(monkeypatch):

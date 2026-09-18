@@ -359,3 +359,30 @@ def test_type_labels_shown_in_file_list(client, repo_parent):
     detail = client.get(f"/projects/{project['uuid']}/objects/{created.json()['uuid']}")
     assert detail.status_code == 200
     assert "Machined part" in detail.text
+
+
+def test_creo_status_pill_shows_open_mode(client):
+    home = client.get("/")
+    assert home.status_code == 200
+    assert 'id="creo-status"' in home.text
+    assert "· Parametric" in home.text
+    embedded = client.put("/api/settings", json={"creo_open_mode": "embedded"})
+    assert embedded.status_code == 200, embedded.text
+    page = client.get("/settings")
+    assert page.status_code == 200
+    start = page.text.index('id="creo-status"')
+    pill = page.text[start : page.text.index("</span>", start)]
+    assert "· Embedded" in pill
+    assert "Opens CAD in the Creo session showing this page" in pill
+    assert "parametric.exe" not in pill.lower()
+    assert "Opens CAD with Creo Parametric" not in pill
+    windows = client.put("/api/settings", json={"creo_open_mode": "association"})
+    assert windows.status_code == 200, windows.text
+    listed = client.get("/")
+    assert listed.status_code == 200
+    start = listed.text.index('id="creo-status"')
+    pill = listed.text[start : listed.text.index("</span>", start)]
+    assert "· Windows" in pill
+    assert "Opens CAD with the Windows file association" in pill
+    script = client.get("/static/js/app.js")
+    assert "function syncCreoStatusPill" in script.text

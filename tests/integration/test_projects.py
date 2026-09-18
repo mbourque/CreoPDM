@@ -67,6 +67,14 @@ def test_create_list_and_get_project(client, repo_parent, data_dir):
     fetched = client.get(f"/api/projects/{payload['uuid']}")
     assert fetched.status_code == 200
     assert fetched.json()["repository_path"] == ""
+    home = client.get(f"/?project={payload['uuid']}")
+    assert home.status_code == 200
+    assert payload["name"] in home.text
+    assert payload["uuid"] in home.text
+    script = client.get("/static/js/app.js")
+    assert "function leavePage" in script.text
+    assert "function closeOpenDialogs" in script.text
+    assert "leavePage(`/?project=${encodeURIComponent(project.uuid)}`)" in script.text
 
 
 @requires_git

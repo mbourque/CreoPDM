@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import socket
 import sys
 import webbrowser
@@ -60,6 +61,16 @@ def lan_addresses() -> list[str]:
     return found
 
 
+def lan_firewall_hint(port: int) -> str | None:
+    """Linux often blocks inbound ports until ufw/firewalld allows them."""
+    if os.name == "nt":
+        return None
+    return (
+        f"If other computers cannot open the page, allow TCP {port} on this Linux host:\n"
+        f"  sudo ufw allow {port}/tcp && sudo ufw reload"
+    )
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog=APP_NAME)
     parser.add_argument("--host", help="Bind address (default: 0.0.0.0, reachable on your LAN)")
@@ -91,12 +102,15 @@ def main(argv: list[str] | None = None) -> None:
     logger.info("Starting %s %s at %s", APP_NAME, APP_VERSION, bind_url)
     print(f"{APP_NAME} {APP_VERSION}")
     print("Status: Running")
-    print(f"This PC: {local_url}")
+    print(f"This PC:    {local_url}")
     for url in phone_urls:
-        print(f"Phone:   {url}")
+        print(f"Other PCs:  {url}")
         logger.info("LAN URL %s", url)
     if not phone_urls and host in {"0.0.0.0", "::"}:
-        print("Phone:   use this PC's Wi-Fi IPv4 address and the port above")
+        print("Other PCs:  use this PC's LAN IPv4 address and the port above")
+    hint = lan_firewall_hint(port) if phone_urls or host in {"0.0.0.0", "::"} else None
+    if hint:
+        print(hint)
 
     if open_browser:
         try:

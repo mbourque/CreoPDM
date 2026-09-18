@@ -18,8 +18,8 @@
     <div class="status-cluster">
       <a class="status-pill" href="/settings">Settings</a>
       <span class="status-pill" data-state="running">Status: Running</span>
-      <span class="status-pill" data-state="{% if creo_label == 'Connected' %}ok{% else %}idle{% endif %}"{% if creo_executable %} title="{{ creo_executable }}"{% endif %}>
-        Creo: {{ creo_label }}
+      <span id="creo-status" class="status-pill" data-state="{% if creo_label == 'Connected' %}ok{% else %}idle{% endif %}" title="{{ creo_open_title }}">
+        Creo: {{ creo_label }} · {{ creo_open_name }}
       </span>
     </div>
   </header>
@@ -196,6 +196,6 @@ function setWorkingDirectory(directory) {
     return directory;
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open15"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open17"></script>
 </body>
 </html>

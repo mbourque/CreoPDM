@@ -54,6 +54,8 @@ def test_home_page(client):
     assert "is-sidebar-collapsed" not in text
     assert "Workspace:" not in text
     assert 'id="checkin-btn"' in text
+    assert 'id="creo-status"' in text
+    assert "· Parametric" in text
 
 
 def test_app_js_strips_creo_error_details(client):

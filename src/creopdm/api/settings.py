@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends
 
 from creopdm.api.deps import get_context
+from creopdm.api.pages import clear_creo_page_cache
 from creopdm.config import AppSettings
 from creopdm.constants import (
     DEFAULT_CAD_MODELS_EXTENSIONS,
@@ -68,6 +69,7 @@ def apply_settings(ctx: AppContext, settings: AppSettings) -> None:
     ctx.creo_service.set_connector(ctx.creo)
     ctx.checkins.set_connector(ctx.creo)
     ctx.workspaces.sync_gitignore()
+    clear_creo_page_cache()
 
 
 @router.get("/api/settings", response_model=SettingsResponse)

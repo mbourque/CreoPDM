@@ -139,6 +139,7 @@ class ProjectService:
             details={"workspace": str(vault), "name": project.name},
         )
         logger.info("Created project %s in workspace %s", project.uuid, vault)
+        session.commit()
         return project
 
     def update_project(
@@ -200,6 +201,7 @@ class ProjectService:
                     details={"name": new_name},
                 ) from exc
         logger.info("Renamed project %s to %s", project.uuid, new_name)
+        session.commit()
         return project
 
     def delete_project(self, session: Session, project_uuid: str) -> None:
@@ -242,6 +244,7 @@ class ProjectService:
                 )
             self._delete_project_records(session, project)
         logger.info("Forgot project %s", project_uuid)
+        session.commit()
         return {
             "uuid": project_uuid,
             "name": name,

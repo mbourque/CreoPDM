@@ -87,13 +87,28 @@
     document.body.classList.remove("is-busy");
     document.body.removeAttribute("aria-busy");
   }
-  async function withBusy(message, work) {
+    async function withBusy(message, work) {
     setBusy(message);
     try {
       return await work();
     } finally {
       clearBusy();
     }
+  }
+
+  function closeOpenDialogs() {
+    document.querySelectorAll("dialog[open]").forEach((dialog) => {
+      try {
+        dialog.close();
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  function leavePage(url) {
+    closeOpenDialogs();
+    window.location.href = url;
   }
 
   async function withHtmlDialogClosed(dialog, work) {
@@ -438,7 +453,7 @@
     const result = await response.json().catch(() => ({}));
     if (result.warning) sessionStorage.setItem("creopdmNotice", result.warning);
     clearProjectViewStorage(projectId);
-    window.location.href = "/";
+    leavePage("/");
   });
 
   function showProjectDialog(mode) {
@@ -489,7 +504,7 @@
       return;
     }
     const project = await response.json();
-    window.location.href = `/?project=${project.uuid}`;
+    leavePage(`/?project=${encodeURIComponent(project.uuid)}`);
   });
 
   let chosenPaths = [];
@@ -2096,6 +2111,27 @@
     document.querySelector('.tab[data-tab="checked-out"]')?.click();
   }
 
+  function syncCreoStatusPill(mode, parametricPath, viewPath) {
+    const pill = $("#creo-status");
+    if (!pill) return;
+    const names = {
+      executable: "Parametric",
+      view: "Creo View",
+      association: "Windows",
+      embedded: "Embedded",
+    };
+    const titles = {
+      executable: parametricPath || "Opens CAD with Creo Parametric",
+      view: viewPath || "Opens CAD with Creo View",
+      association: "Opens CAD with the Windows file association",
+      embedded: "Opens CAD in the Creo session showing this page",
+    };
+    const key = String(mode || "executable");
+    const status = (pill.textContent || "Creo:").split("·")[0].trim() || "Creo:";
+    pill.textContent = `${status} · ${names[key] || names.executable}`;
+    pill.title = titles[key] || titles.executable;
+  }
+
   settingsForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     showError($("#settings-error"), "");
@@ -2149,6 +2185,11 @@
       return;
     }
     if (ok) ok.hidden = false;
+    syncCreoStatusPill(
+      body.creo_open_mode,
+      body.creo_executable,
+      body.creo_view_executable
+    );
   });
 
   const typeLabelsForm = $("#type-labels-form");
@@ -2216,6 +2257,7 @@
       return;
     }
     if (ok) ok.hidden = false;
+    syncCreoStatusPill(body.creo_open_mode);
   });
 
   const ownedIds = rows()
