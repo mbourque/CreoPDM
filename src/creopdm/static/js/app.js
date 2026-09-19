@@ -1291,7 +1291,10 @@
     const selected = selectedRows();
     const ids = selected.flatMap(rowObjectIds);
     if (openBtn) openBtn.disabled = !selectedOpenSpec();
-    if (historyBtn) historyBtn.disabled = ids.length !== 1;
+    if (historyBtn) {
+      const one = selected.length === 1 ? selected[0] : null;
+      historyBtn.disabled = !rowHistoryHref(one);
+    }
     const canCheckout = selected.length > 0 && selected.every((row) => row.dataset.canCheckout === "1");
     const canCheckin = selected.length > 0 && selected.every((row) => row.dataset.canCheckin === "1");
     const canUndo = selected.length > 0 && selected.every((row) => row.dataset.owned === "1");
@@ -1609,10 +1612,21 @@
     }
     if (target?.closest(".folder-row")) return;
     if (target?.closest(".object-open")) return;
-    const row = target?.closest(".object-row");
-    if (!row?.dataset.detail) return;
+    const row = target?.closest(".object-row, .queue-row");
+    const href = rowHistoryHref(row);
+    if (!href) return;
     event.preventDefault();
-    window.location.href = row.dataset.detail;
+    window.location.href = href;
+  }
+
+  function rowHistoryHref(row) {
+    if (!row) return "";
+    if (row.dataset.detail) return row.dataset.detail;
+    const uuid = row.dataset.uuid;
+    if (!uuid) return "";
+    const projectId = currentProjectId();
+    if (!projectId) return "";
+    return `/projects/${projectId}/objects/${uuid}#history`;
   }
 
   document.querySelector("#object-table")?.addEventListener("click", onFileTableClick);
@@ -1620,6 +1634,7 @@
   document.querySelector("#checked-out-table")?.addEventListener("click", onFileTableClick);
   document.querySelector("#checked-out-table")?.addEventListener("dblclick", onFileTableDblclick);
   document.querySelector("#changes-table")?.addEventListener("click", onFileTableClick);
+  document.querySelector("#changes-table")?.addEventListener("dblclick", onFileTableDblclick);
 
   function onMetricChip(event) {
     const btn = eventEl(event)?.closest(".metric");
@@ -2142,8 +2157,7 @@
   });
 
   historyBtn?.addEventListener("click", () => {
-    const row = selectedRows()[0];
-    const href = row?.dataset.detail;
+    const href = rowHistoryHref(selectedRows()[0]);
     if (href) window.location.href = href;
   });
 
@@ -2344,6 +2358,9 @@
         row.dataset.inWorkspace = "1";
         if (meta.uuid) row.dataset.uuid = meta.uuid;
         if (meta.relativePath) row.dataset.relativePath = meta.relativePath;
+        if (meta.uuid && projectId) {
+          row.dataset.detail = `/projects/${projectId}/objects/${meta.uuid}#history`;
+        }
         values.forEach((text, index) => {
           const cell = document.createElement("td");
           if (index === 1) {

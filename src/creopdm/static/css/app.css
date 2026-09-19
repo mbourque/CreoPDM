@@ -299,7 +299,12 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .table-wrap { background: white; border: 1px solid var(--line); border-radius: 6px; overflow: auto; }
 .content .table-wrap { flex: 1 1 auto; min-height: 0; }
 .grid { width: 100%; border-collapse: collapse; }
-.grid th, .grid td { text-align: left; padding: 0.38rem 0.65rem; border-bottom: 1px solid #edf1f5; vertical-align: middle; }
+.grid th, .grid td {
+  text-align: left;
+  padding: 0.38rem 0.65rem;
+  border-bottom: 1px solid #edf1f5;
+  vertical-align: middle;
+}
 .grid th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); background: #f3f6f8; }
 .table-wrap .grid thead th {
   position: sticky; top: 0; z-index: 1;
@@ -315,28 +320,41 @@ tr[hidden],
 tr.is-row-hidden { display: none !important; }
 .queue-row { cursor: pointer; user-select: none; }
 .queue-row:hover:not(.is-selected) td { background: #f6f8fa; }
-#object-table {
+#object-table,
+#checked-out-table,
+#changes-table {
   table-layout: auto;
   width: 100%;
 }
 #object-table th,
-#object-table td {
+#object-table td,
+#checked-out-table th,
+#checked-out-table td,
+#changes-table th,
+#changes-table td {
   white-space: nowrap;
+  text-align: left;
 }
 #object-table th:first-child,
-#object-table td:first-child {
+#object-table td:first-child,
+#checked-out-table th:first-child,
+#checked-out-table td:first-child {
   width: auto;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 #object-table th:not(:first-child),
-#object-table td:not(:first-child) {
+#object-table td:not(:first-child),
+#checked-out-table th:not(:first-child),
+#checked-out-table td:not(:first-child) {
   width: 1%;
   overflow: visible;
   text-overflow: clip;
 }
 #object-table td:first-child .object-open,
-#object-table .object-row td:first-child .muted.small {
+#object-table .object-row td:first-child .muted.small,
+#checked-out-table td:first-child .object-open,
+#checked-out-table .object-row td:first-child .muted.small {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -346,6 +364,28 @@ tr.is-row-hidden { display: none !important; }
 }
 #object-table td:first-child .folder-label {
   max-width: calc(100% - 5.5rem);
+}
+/* New files: pack Change/Size/Date; Filename + Detail take remaining width. */
+#changes-table th:nth-child(1),
+#changes-table td:nth-child(1),
+#changes-table th:nth-child(4),
+#changes-table td:nth-child(4),
+#changes-table th:nth-child(5),
+#changes-table td:nth-child(5) {
+  width: 1%;
+}
+#changes-table th:nth-child(2),
+#changes-table td:nth-child(2),
+#changes-table th:nth-child(3),
+#changes-table td:nth-child(3) {
+  width: auto;
+  white-space: normal;
+}
+#changes-table .filename-cell,
+#changes-table .filename-cell .object-open,
+#changes-table .filename-cell .muted.small {
+  display: block;
+  text-align: left;
 }
 .folder-row { background: transparent; cursor: pointer; user-select: none; }
 .folder-row:hover td { background: #f6f8fa; }
@@ -546,6 +586,7 @@ body.is-file-drag #file-drop-overlay {
 .filename-cell {
   font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.88rem;
   white-space: normal; overflow-wrap: anywhere; word-break: break-all;
+  text-align: left;
 }
 .kv { display: grid; grid-template-columns: 160px 1fr; gap: 0.4rem 1rem; }
 .kv dt { color: var(--muted); }

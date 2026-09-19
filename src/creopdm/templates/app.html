@@ -237,7 +237,8 @@
           <tbody>
             {% for item in checkin_queue.saves %}
             <tr class="queue-row is-pending" data-uuid="{{ item.uuid }}" data-can-checkin="1" data-checked-out="1"
-                data-object-type="{{ item.object_type or '' }}" data-extension="" data-filename="{{ item.filename }}">
+                data-object-type="{{ item.object_type or '' }}" data-extension="" data-filename="{{ item.filename }}"
+                data-detail="/projects/{{ selected.uuid }}/objects/{{ item.uuid }}#history">
               <td>{% if item.newer_save %}Newer Creo save{% else %}Modified{% endif %}</td>
               <td class="filename-cell">
                 <button type="button" class="object-open" data-uuid="{{ item.uuid }}" title="{{ item.filename }}">{{ item.filename }}</button>

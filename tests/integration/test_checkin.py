@@ -386,6 +386,9 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     assert "relative_path: spec.relativePath" in script.text
     assert "confirmByProjectName" in script.text
     assert "Type the project name exactly to confirm." in script.text
+    assert "rowHistoryHref" in script.text
+    assert "objects/${meta.uuid}#history" in script.text
+    assert script.text.count('addEventListener("dblclick", onFileTableDblclick)') >= 3
 
 
 
