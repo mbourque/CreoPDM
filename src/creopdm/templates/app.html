@@ -42,15 +42,26 @@
     <div class="content-head">
       <div class="title-row">
         <h1{% if workspace_path %} title="{{ workspace_path }}"{% endif %}>{{ selected.name }}</h1>
-        <button type="button" class="btn btn-small" id="rename-project-btn"
-                data-project="{{ selected.uuid }}"
-                data-name="{{ selected.name }}"
-                data-number="{{ selected.number or '' }}"
-                data-description="{{ selected.description or '' }}">Rename</button>
-        <button type="button" class="btn btn-small btn-danger" id="delete-project-btn"
-                data-project="{{ selected.uuid }}"
-                data-name="{{ selected.name }}"
-                title="Delete the CreoPDM workspace (working copies and Git) and unregister the project. Original files you imported from are not deleted.">Delete project</button>
+        <div class="project-settings" id="project-settings">
+          <button type="button" class="project-settings-btn" id="project-settings-btn"
+                  title="Project settings" aria-label="Project settings"
+                  aria-expanded="false" aria-haspopup="menu" aria-controls="project-settings-menu">
+            <svg class="gear-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.55-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.77 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.89 14.52a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.43.34.68.22l2.39-.96c.5.39 1.04.7 1.63.94l.36 2.54c.05.24.26.42.5.42h3.84c.24 0 .45-.18.5-.42l.36-2.54c.59-.24 1.13-.55 1.63-.94l2.39.96c.25.12.54.02.68-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z"/>
+            </svg>
+          </button>
+          <div class="project-settings-menu" id="project-settings-menu" role="menu" hidden>
+            <button type="button" class="project-settings-item" role="menuitem" id="rename-project-btn"
+                    data-project="{{ selected.uuid }}"
+                    data-name="{{ selected.name }}"
+                    data-number="{{ selected.number or '' }}"
+                    data-description="{{ selected.description or '' }}">Rename</button>
+            <button type="button" class="project-settings-item is-danger" role="menuitem" id="delete-project-btn"
+                    data-project="{{ selected.uuid }}"
+                    data-name="{{ selected.name }}"
+                    title="Delete the CreoPDM workspace (working copies and Git) and unregister the project. Original files you imported from are not deleted.">Delete project</button>
+          </div>
+        </div>
         <form class="search-form" id="search-form">
           <label class="sr-only" for="search-input">Search</label>
           <input id="search-input" name="q" type="search" placeholder="Search all files in project" autocomplete="off">

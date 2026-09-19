@@ -517,12 +517,44 @@
     closeProjectMenu();
     showProjectDialog("create");
   });
-  $("#rename-project-btn")?.addEventListener("click", () => showProjectDialog("rename"));
+  const projectSettings = $("#project-settings");
+  const projectSettingsBtn = $("#project-settings-btn");
+  const projectSettingsMenu = $("#project-settings-menu");
+  function closeProjectSettings() {
+    projectSettings?.classList.remove("is-open");
+    if (projectSettingsMenu) projectSettingsMenu.hidden = true;
+    projectSettingsBtn?.setAttribute("aria-expanded", "false");
+  }
+  function toggleProjectSettings(event) {
+    event.stopPropagation();
+    const open = !projectSettings?.classList.contains("is-open");
+    if (open) {
+      projectSettings?.classList.add("is-open");
+      if (projectSettingsMenu) projectSettingsMenu.hidden = false;
+      projectSettingsBtn?.setAttribute("aria-expanded", "true");
+    } else {
+      closeProjectSettings();
+    }
+  }
+  projectSettingsBtn?.addEventListener("click", toggleProjectSettings);
+  document.addEventListener("click", (event) => {
+    if (!projectSettings?.classList.contains("is-open")) return;
+    if (projectSettings.contains(event.target)) return;
+    closeProjectSettings();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeProjectSettings();
+  });
+  $("#rename-project-btn")?.addEventListener("click", () => {
+    closeProjectSettings();
+    showProjectDialog("rename");
+  });
   $("#project-cancel")?.addEventListener("click", () => projectDialog?.close());
 
   const deleteProjectDialog = $("#delete-project-dialog");
   const deleteProjectForm = $("#delete-project-form");
   $("#delete-project-btn")?.addEventListener("click", () => {
+    closeProjectSettings();
     const btn = $("#delete-project-btn");
     showError($("#delete-project-error"), "");
     if (deleteProjectForm) deleteProjectForm.reset();

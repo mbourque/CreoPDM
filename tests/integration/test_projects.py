@@ -208,6 +208,10 @@ def test_home_remembers_last_opened_project(client, repo_parent):
     assert f'href="/?project={second["uuid"]}"' in home.text
     assert 'id="project-menu-btn"' in home.text
     assert "sidebar-menu-btn" in home.text
+    css = client.get("/static/css/app.css").text
+    media = css.split("@media (max-width: 860px)", 1)[-1]
+    assert ".workspace .sidebar-menu-btn { display: flex; }" in media
+    assert ".workspace .sidebar-collapse-btn { display: none; }" in media
     assert 'id="sidebar-collapse-btn"' in home.text
     assert 'id="search-input"' in home.text
     assert "Search all files in project" in home.text

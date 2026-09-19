@@ -366,8 +366,11 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     assert "disabled" in match.group(0)
     assert "Delete project" in page.text
     assert "Forget project" not in page.text
+    assert 'id="project-settings-btn"' in page.text
     assert 'id="delete-project-btn"' in page.text
+    assert 'id="rename-project-btn"' in page.text
     assert 'id="delete-project-dialog"' in page.text
+    assert "project-settings-menu" in page.text
     assert 'id="danger-confirm-dialog"' in page.text
     assert 'data-project-name="Queue Arm"' in page.text
     queue = client.get(f"/api/projects/{project['uuid']}/checkin-queue")

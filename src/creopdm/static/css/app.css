@@ -184,6 +184,65 @@ a.brand:hover { text-decoration: none; color: inherit; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .title-row .btn { flex-shrink: 0; }
+.project-settings {
+  position: relative;
+  flex-shrink: 0;
+}
+.project-settings-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: white;
+  color: var(--muted);
+  cursor: pointer;
+}
+.project-settings-btn:hover,
+.project-settings.is-open .project-settings-btn {
+  color: var(--ink);
+  border-color: #9eb0c0;
+  background: #f3f6f8;
+}
+.gear-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  fill: currentColor;
+}
+.project-settings-menu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 20;
+  min-width: 10.5rem;
+  padding: 0.25rem;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(16, 24, 32, 0.12);
+}
+.project-settings-item {
+  appearance: none;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.65rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.project-settings-item:hover { background: #eef3f7; }
+.project-settings-item.is-danger { color: #9b1c1c; }
+.project-settings-item.is-danger:hover { background: #f8e8e8; }
 .content-head { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .content-head .muted { margin: 0; }
 .content-head .project-meta-number { font-weight: 600; letter-spacing: 0.02em; }
@@ -622,6 +681,34 @@ body.is-file-drag #file-drop-overlay {
 .workspace.is-sidebar-collapsed .sidebar.is-open .project-list { display: block; }
 
 @media (max-width: 860px) {
+  /* Auto-collapse when the window is thin (same chrome as the toggle). */
+  .workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .workspace .sidebar {
+    position: relative;
+    z-index: 8;
+    overflow: visible;
+    padding: 0.45rem 0;
+  }
+  .workspace .sidebar-title { display: none; }
+  .workspace .sidebar-menu-btn { display: flex; }
+  .workspace .sidebar-collapse-btn { display: none; }
+  .workspace .sidebar-head { padding: 0 0.75rem; }
+  .workspace .project-list {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex: none;
+    max-height: min(20rem, 60vh);
+    background: #16202b;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+    border-bottom: 1px solid #314252;
+  }
+  .workspace .sidebar.is-open .project-list { display: block; }
   .detail-head { flex-direction: column; }
   .title-row { flex-wrap: wrap; }
   .search-form { flex: 1 1 12rem; }
