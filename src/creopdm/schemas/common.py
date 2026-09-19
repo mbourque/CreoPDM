@@ -29,17 +29,16 @@ class ErrorResponse(BaseModel):
 
 class ProjectCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    number: str | None = None
-    description: str | None = None
+    number: str | None = Field(default=None, max_length=25)
+    description: str | None = Field(default=None, max_length=256)
 
 
 class ProjectUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=255)
-    number: str | None = None
-    description: str | None = None
-
+    number: str | None = Field(default=None, max_length=25)
+    description: str | None = Field(default=None, max_length=256)
 
 class ForgetProjectRequest(BaseModel):
     confirm_name: str = Field(min_length=1, max_length=255)

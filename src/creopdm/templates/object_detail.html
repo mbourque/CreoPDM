@@ -13,7 +13,8 @@
 {% endmacro %}
 <article class="detail">
   <nav class="crumb">
-    <a href="/?project={{ project.uuid }}">{{ project.name }}</a>
+    <a href="/?project={{ project.uuid }}"
+       title="{% if project.number %}{{ project.number }}{% else %}Local{% endif %}{% if project.description %} — {{ project.description }}{% endif %}">{{ project.name }}</a>
     <span>/</span>
     <span>{{ object.filename }}</span>
   </nav>

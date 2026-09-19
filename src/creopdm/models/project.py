@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, Text, func
+from sqlalchemy import Boolean, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from creopdm.database.base import Base
@@ -16,8 +16,8 @@ class Project(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    number: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    number: Mapped[str | None] = mapped_column(String(25), nullable=True)
+    description: Mapped[str | None] = mapped_column(String(256), nullable=True)
     repository_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     default_branch: Mapped[str] = mapped_column(String(128), default="main")
     remote_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)

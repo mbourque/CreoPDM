@@ -71,6 +71,11 @@ def test_create_list_and_get_project(client, repo_parent, data_dir):
     assert home.status_code == 200
     assert payload["name"] in home.text
     assert payload["uuid"] in home.text
+    assert 'class="muted project-meta"' in home.text
+    assert "PRJ-0027" in home.text
+    assert "Prototype robotic arm" in home.text
+    assert 'title="PRJ-0027 — Prototype robotic arm"' in home.text
+    assert home.text.count('title="PRJ-0027 — Prototype robotic arm"') >= 2
     script = client.get("/static/js/app.js")
     assert "function leavePage" in script.text
     assert "function closeOpenDialogs" in script.text
@@ -98,6 +103,32 @@ def test_sync_gitignore_hides_existing_bookkeeping(client, app, repo_parent, dat
 def test_create_project_requires_name(client):
     blank = client.post("/api/projects", json={"name": "   "})
     assert blank.status_code in {400, 422}
+
+
+@requires_git
+def test_project_number_and_description_limits(client):
+    too_long_number = client.post(
+        "/api/projects",
+        json={"name": "Limits", "number": "X" * 26, "description": "ok"},
+    )
+    assert too_long_number.status_code == 422, too_long_number.text
+    too_long_description = client.post(
+        "/api/projects",
+        json={"name": "Limits", "number": "PRJ-1", "description": "d" * 257},
+    )
+    assert too_long_description.status_code == 422, too_long_description.text
+    ok = client.post(
+        "/api/projects",
+        json={"name": "Limits", "number": "N" * 25, "description": "d" * 256},
+    )
+    assert ok.status_code == 201, ok.text
+    body = ok.json()
+    assert body["number"] == "N" * 25
+    assert body["description"] == "d" * 256
+    home = client.get(f"/?project={body['uuid']}")
+    assert home.status_code == 200
+    assert 'maxlength="25"' in home.text
+    assert 'maxlength="256"' in home.text
 
 
 @requires_git
@@ -179,7 +210,7 @@ def test_home_remembers_last_opened_project(client, repo_parent):
     assert "sidebar-menu-btn" in home.text
     assert 'id="sidebar-collapse-btn"' in home.text
     assert 'id="search-input"' in home.text
-    assert "Search files in all folders" in home.text
+    assert "Search all files in project" in home.text
     assert "Workspace:" not in home.text
 
 

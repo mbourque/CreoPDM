@@ -186,6 +186,7 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .title-row .btn { flex-shrink: 0; }
 .content-head { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .content-head .muted { margin: 0; }
+.content-head .project-meta-number { font-weight: 600; letter-spacing: 0.02em; }
 .content h1, .hero h1 { margin: 0 0 0.2rem; font-size: 1.45rem; }
 .muted { color: var(--muted); }
 .small { font-size: 0.75rem; }
