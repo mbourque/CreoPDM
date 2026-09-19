@@ -71,7 +71,7 @@ def test_workspace_transients_are_ignored():
 
 def test_app_identity():
     assert APP_NAME == "CreoPDM"
-    assert APP_VERSION == "0.1.0"
+    assert APP_VERSION == "0.2.0"
 
 
 def test_canonical_name_keeps_creo_save_numbers():

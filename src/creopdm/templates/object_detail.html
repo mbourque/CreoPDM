@@ -42,10 +42,10 @@
     <button type="button" class="btn" id="checkin-btn" data-uuid="{{ object.uuid }}" data-project="{{ project.uuid }}" {% if not object.can_checkin %}disabled{% endif %}>Check In</button>
     <button type="button" class="btn" id="undo-btn" data-uuid="{{ object.uuid }}" {% if not object.owned_by_me %}disabled{% endif %}>Undo Checkout</button>
     <span class="toolbar-tip" title="Delete CreoPDM working copies of this file. The original in your project folder is not deleted. If you have it checked out, that checkout is cancelled.">
-      <button type="button" class="btn" id="purge-workspace-btn" data-uuid="{{ object.uuid }}">Remove from Workspace</button>
+      <button type="button" class="btn" id="purge-workspace-btn" data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}">Remove from Workspace</button>
     </span>
     <span class="toolbar-tip" title="Remove this file from the project list and delete CreoPDM workspace copies. The original in your project folder is not deleted.">
-      <button type="button" class="btn btn-danger" id="remove-project-btn" data-uuid="{{ object.uuid }}">Remove from Project</button>
+      <button type="button" class="btn btn-danger" id="remove-project-btn" data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}">Remove from Project</button>
     </span>
   </div>
   <div class="toolbar-messages">
@@ -77,7 +77,7 @@
       <dt>Lifecycle</dt><dd>{{ object.lifecycle_state.replace('_', ' ').title() }}</dd>
       <dt>Checkout</dt><dd>{{ object.checkout_status }}</dd>
       <dt>Content hash</dt><dd class="mono">{{ object.current_version.content_hash if object.current_version else "—" }}</dd>
-      <dt>Size</dt><dd>{% if object.current_version %}{{ object.current_version.file_size }} bytes{% else %}—{% endif %}</dd>
+      <dt>Size</dt><dd>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</dd>
     </dl>
   </section>
 
@@ -122,7 +122,7 @@
               {% endif %}
             </td>
             <td></td>
-            <td>{{ workspace_pending.file_size }} bytes</td>
+            <td>{{ workspace_pending.file_size | byte_size }}</td>
             <td>workspace</td>
             <td>{{ workspace_pending.saved_at }}</td>
           </tr>
@@ -132,7 +132,7 @@
             <td>{{ version.revision }}.{{ version.iteration }}{% if loop.first and not workspace_pending %} · latest{% endif %}</td>
             <td class="filename-cell">{% if not loop.last %}{{ version_file_label(version, history[loop.index0 + 1]) }}{% else %}{{ version_file_label(version) }}{% endif %}</td>
             <td>{{ version.creo_release or "" }}</td>
-            <td>{{ version.file_size }} bytes</td>
+            <td>{{ version.file_size | byte_size }}</td>
             <td>{{ version.created_by }}</td>
             <td>{% if version.created_at %}{{ local_time(version.created_at) }}{% else %}—{% endif %}</td>
           </tr>
@@ -192,7 +192,7 @@
 
 <dialog id="checkin-dialog" class="dialog">
   <form method="dialog" id="checkin-form">
-    <h2>Check In</h2>
+    <h2 id="checkin-dialog-title">Check In</h2>
     <dl class="kv">
       <dt>Object</dt><dd id="checkin-filename">—</dd>
       <dt>Current</dt><dd id="checkin-current">—</dd>
@@ -203,7 +203,12 @@
     </label>
     <ul class="detect-list" id="checkin-changes"></ul>
     <div id="checkin-new-wrap" hidden>
-      <p class="muted small">New files found in the workspace. These are models Creo saved next to the checked-out file. Checked items are added to the project with this check-in.</p>
+      <p class="muted small" id="checkin-new-help">New files in the workspace. They are not added unless you check them.</p>
+      <div class="checkin-new-pick" id="checkin-new-pick" hidden>
+        <span class="muted small">Add to project:</span>
+        <label class="choice"><input type="radio" name="checkin-new-pick" value="none" checked> None</label>
+        <label class="choice"><input type="radio" name="checkin-new-pick" value="all"> All</label>
+      </div>
       <div id="checkin-new-files"></div>
     </div>
     <p class="pending-note" id="checkin-force-warn" hidden></p>

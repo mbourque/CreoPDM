@@ -285,6 +285,14 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .settings-card > .choice { margin: 0.2rem 0; }
 #checkin-new-files { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.4rem 0 0.2rem; }
 #checkin-new-files label { font-weight: 500; }
+.checkin-new-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0.45rem 0 0.15rem;
+}
+.checkin-new-pick .choice { margin: 0; }
 .ok { color: var(--ok); margin: 0; }
 .error { color: #9b1c1c; margin: 0; }
 

@@ -10,8 +10,9 @@ from creopdm.api.checkout import present_object, present_objects
 from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import project_to_response
 from creopdm.context import AppContext
+from creopdm.constants import ActivityAction
 from creopdm.creo.file_manager import CreoFileManager
-from creopdm.exceptions import PathValidationError, ValidationAppError
+from creopdm.exceptions import CreoPDMError, PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.schemas.common import (
     BatchItemResult,
@@ -25,6 +26,7 @@ from creopdm.schemas.common import (
     ProjectResponse,
     ProjectStatusResponse,
     ProjectUpdateRequest,
+    PurgeWorkspacePathsRequest,
     QueueCheckinRequest,
     WorkspacePickerResponse,
     WorkspaceWatchResponse,
@@ -204,6 +206,56 @@ def project_checkin_queue(
     )
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.workspaces.root_for(project.uuid))}
+    )
+
+
+@router.post(
+    "/api/projects/{project_id}/workspace/purge-paths",
+    response_model=BatchOperationResponse,
+)
+def purge_workspace_paths(
+    project_id: str,
+    payload: PurgeWorkspacePathsRequest,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BatchOperationResponse:
+    project = ctx.projects.get_project(db, project_id)
+    objects = ctx.objects.list_objects(db, project.id)
+    ok: list[BatchItemResult] = []
+    failed: list[BatchItemResult] = []
+    try:
+        removed = ctx.workspaces.purge_untracked_paths(project, payload.relative_paths, objects)
+        user = ctx.users.get_current_user()
+        for item in removed:
+            ctx.activities.record(
+                db,
+                ActivityAction.WORKSPACE_CLEARED,
+                user,
+                project_id=project.id,
+                details={"filename": item["filename"], "relative_path": item["relative_path"]},
+            )
+            ok.append(
+                BatchItemResult(
+                    uuid=item["relative_path"],
+                    filename=item["filename"],
+                    status="purged",
+                    path=item["relative_path"],
+                )
+            )
+    except CreoPDMError as exc:
+        for relative in payload.relative_paths:
+            failed.append(
+                BatchItemResult(
+                    uuid=relative,
+                    filename=Path(relative).name,
+                    code=exc.code,
+                    message=exc.message,
+                )
+            )
+    return BatchOperationResponse(
+        ok=ok,
+        failed=failed,
+        workspace_root=str(ctx.workspaces.root_for(project.uuid)),
     )
 
 

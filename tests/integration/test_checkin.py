@@ -96,6 +96,18 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     pin = next(item for item in preview.json()["new_files"] if item["filename"] == "pin.prt")
     assert pin["same_folder"] is True
     assert pin["relative_path"] == "pin.prt"
+    home = client.get(f"/?project={project['uuid']}")
+    assert 'id="checkin-new-pick"' in home.text
+    assert 'value="none"' in home.text
+    assert 'value="all"' in home.text
+    script = client.get("/static/js/app.js")
+    assert 'input.checked = selectedNew.has(item.relative_path);' in script.text
+    assert "function applyNewFilePick" in script.text
+    assert "function syncNewFilePick" in script.text
+    assert "function selectionIsAddOnly" in script.text
+    assert 'checkinBtn.textContent = addOnly ? "Add" : "Check In";' in script.text
+    assert 'title.textContent = addOnly ? "Add files" : "Check In";' in script.text
+    assert "dataset.addPaths" in script.text
 
     checked_in = client.post(
         f"/api/objects/{obj['uuid']}/checkin",
@@ -341,15 +353,23 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     page = client.get(f"/?project={project['uuid']}")
     assert page.status_code == 200, page.text
     assert "Files checked out · 1" in page.text
-    assert "Files to check in" in page.text
-    assert page.text.index("Files checked out") < page.text.index("Files to check in")
+    assert "New files" in page.text
+    assert "Files checked out" in page.text
+    assert page.text.index("Files checked out") < page.text.index("New files")
     assert 'data-tab="checked-out"' in page.text
     assert 'id="checked-out-table"' in page.text
-    assert "Files to check in · 2" not in page.text
+    assert "New files · 2" not in page.text
     assert "Newer Creo save" not in page.text
     match = re.search(r'<button[^>]*id="checkin-btn"[^>]*>', page.text)
     assert match, page.text
-    assert "disabled" not in match.group(0)
+    assert "hidden" in match.group(0)
+    assert "disabled" in match.group(0)
+    assert "Delete project" in page.text
+    assert "Forget project" not in page.text
+    assert 'id="delete-project-btn"' in page.text
+    assert 'id="delete-project-dialog"' in page.text
+    assert 'id="danger-confirm-dialog"' in page.text
+    assert 'data-project-name="Queue Arm"' in page.text
     queue = client.get(f"/api/projects/{project['uuid']}/checkin-queue")
     assert queue.status_code == 200, queue.text
     body = queue.json()
@@ -357,10 +377,16 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     created_names = {item["filename"] for item in body["new_files"]}
     assert "shaft.prt.4" in saves
     assert "bushing.prt" in created_names
+    bushing = next(item for item in body["new_files"] if item["filename"] == "bushing.prt")
+    assert bushing.get("saved_at")
+    assert re.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", str(bushing["saved_at"]))
     script = client.get("/static/js/app.js")
     assert script.status_code == 200
     assert 'btn.className = "object-open"' in script.text
     assert "relative_path: spec.relativePath" in script.text
+    assert "confirmByProjectName" in script.text
+    assert "Type the project name exactly to confirm." in script.text
+
 
 
 @requires_git
@@ -383,7 +409,8 @@ def test_project_checkin_queue_adds_new_workspace_file_without_checkout(client, 
     assert page.status_code == 200, page.text
     match = re.search(r'<button[^>]*id="checkin-btn"[^>]*>', page.text)
     assert match, page.text
-    assert "disabled" not in match.group(0)
+    assert "hidden" in match.group(0)
+    assert "disabled" in match.group(0)
     preview = client.get(f"/api/projects/{project['uuid']}/checkin-preview")
     assert preview.status_code == 200, preview.text
     body = preview.json()
@@ -405,6 +432,59 @@ def test_project_checkin_queue_adds_new_workspace_file_without_checkout(client, 
     assert "bushing.prt" in listed
     assert "shaft.prt" in listed
     assert (workspace / "bushing.prt").read_bytes() == b"new-bushing"
+
+
+@requires_git
+def test_purge_workspace_paths_removes_new_files(client, repo_parent, data_dir):
+    project = client.post(
+        "/api/projects",
+        json={"name": "Purge New Files"},
+    ).json()
+    created = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("shaft.prt", b"v1", "application/octet-stream")},
+        data={"comment": "Initial"},
+    )
+    assert created.status_code == 201, created.text
+    workspace = data_dir / "workspaces" / project["uuid"]
+    (workspace / "bushing.prt").write_bytes(b"new-bushing")
+    (workspace / "bushing.prt.2").write_bytes(b"newer-bushing")
+    (workspace / "pin.prt").write_bytes(b"new-pin")
+
+    queue = client.get(f"/api/projects/{project['uuid']}/checkin-queue")
+    assert queue.status_code == 200, queue.text
+    names = {item["filename"] for item in queue.json()["new_files"]}
+    assert "bushing.prt.2" in names
+    assert "pin.prt" in names
+
+    purged = client.post(
+        f"/api/projects/{project['uuid']}/workspace/purge-paths",
+        json={"relative_paths": ["bushing.prt.2"]},
+    )
+    assert purged.status_code == 200, purged.text
+    body = purged.json()
+    assert body["failed"] == []
+    removed = {item["filename"] for item in body["ok"]}
+    assert "bushing.prt" in removed
+    assert "bushing.prt.2" in removed
+    assert not (workspace / "bushing.prt").exists()
+    assert not (workspace / "bushing.prt.2").exists()
+    assert (workspace / "pin.prt").is_file()
+    assert (workspace / "shaft.prt").is_file()
+
+    denied = client.post(
+        f"/api/projects/{project['uuid']}/workspace/purge-paths",
+        json={"relative_paths": ["shaft.prt"]},
+    )
+    assert denied.status_code == 200, denied.text
+    assert denied.json()["ok"] == []
+    assert denied.json()["failed"]
+    assert (workspace / "shaft.prt").is_file()
+
+    script = client.get("/static/js/app.js")
+    assert script.status_code == 200
+    assert "workspace/purge-paths" in script.text
+    assert "isNewFileQueueRow" in script.text
 
 
 @requires_git

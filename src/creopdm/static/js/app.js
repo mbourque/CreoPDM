@@ -1,6 +1,20 @@
 (() => {
   const $ = (sel, root = document) => root.querySelector(sel);
 
+  function formatByteSize(value) {
+    const size = Number(value);
+    if (!Number.isFinite(size) || size < 0) return "—";
+    if (size < 1024) return `${Math.round(size)} B`;
+    if (size < 1024 * 1024) {
+      const kb = size / 1024;
+      const text = kb >= 10 ? String(Math.round(kb)) : String(Math.round(kb * 10) / 10);
+      return `${text} KB`;
+    }
+    const mb = size / (1024 * 1024);
+    const text = mb >= 10 ? String(Math.round(mb)) : String(Math.round(mb * 10) / 10);
+    return `${text} MB`;
+  }
+
   function eventEl(event) {
     const node = event?.target;
     if (!node) return null;
@@ -506,27 +520,27 @@
   $("#rename-project-btn")?.addEventListener("click", () => showProjectDialog("rename"));
   $("#project-cancel")?.addEventListener("click", () => projectDialog?.close());
 
-  const forgetDialog = $("#forget-dialog");
-  const forgetForm = $("#forget-form");
-  $("#forget-project-btn")?.addEventListener("click", () => {
-    const btn = $("#forget-project-btn");
-    showError($("#forget-error"), "");
-    if (forgetForm) forgetForm.reset();
-    forgetDialog?.showModal();
+  const deleteProjectDialog = $("#delete-project-dialog");
+  const deleteProjectForm = $("#delete-project-form");
+  $("#delete-project-btn")?.addEventListener("click", () => {
+    const btn = $("#delete-project-btn");
+    showError($("#delete-project-error"), "");
+    if (deleteProjectForm) deleteProjectForm.reset();
+    deleteProjectDialog?.showModal();
   });
-  $("#forget-cancel")?.addEventListener("click", () => forgetDialog?.close());
-  forgetForm?.addEventListener("submit", async (event) => {
+  $("#delete-project-cancel")?.addEventListener("click", () => deleteProjectDialog?.close());
+  deleteProjectForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const btn = $("#forget-project-btn");
+    const btn = $("#delete-project-btn");
     const projectId = btn?.dataset.project;
     const expected = (btn?.dataset.name || "").trim();
     if (!projectId) return;
-    const typed = String(new FormData(forgetForm).get("confirm_name") || "").trim();
+    const typed = String(new FormData(deleteProjectForm).get("confirm_name") || "").trim();
     if (typed !== expected) {
-      showError($("#forget-error"), "Type the project name exactly to forget it.");
+      showError($("#delete-project-error"), "Type the project name exactly to delete it.");
       return;
     }
-    const response = await withBusy("Forgetting project…", () =>
+    const response = await withBusy("Deleting project…", () =>
       fetch(`/api/projects/${projectId}/forget`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -534,7 +548,7 @@
       })
     );
     if (!response.ok) {
-      showError($("#forget-error"), await readError(response));
+      showError($("#delete-project-error"), await readError(response));
       return;
     }
     const result = await response.json().catch(() => ({}));
@@ -1253,17 +1267,50 @@
     return null;
   }
 
+  function setToolbarActionVisible(button, visible) {
+    if (!button) return;
+    button.hidden = !visible;
+    const tip = button.closest(".toolbar-tip");
+    if (tip) tip.hidden = !visible;
+  }
+
+  function isNewFileQueueRow(row) {
+    return (
+      row.classList.contains("queue-row")
+      && Boolean(row.dataset.relativePath)
+      && !row.dataset.uuid
+    );
+  }
+
+  function selectionIsAddOnly(rows) {
+    return rows.length > 0 && rows.every(isNewFileQueueRow);
+  }
+
   function syncToolbar() {
     if (!isListPage) return;
     const selected = selectedRows();
     const ids = selected.flatMap(rowObjectIds);
     if (openBtn) openBtn.disabled = !selectedOpenSpec();
     if (historyBtn) historyBtn.disabled = ids.length !== 1;
-    if (checkoutBtn) checkoutBtn.disabled = !selected.some((row) => row.dataset.canCheckout === "1");
-    const checkinable = selected.filter((row) => row.dataset.canCheckin === "1");
-    const queued = Number(checkinBtn?.dataset.newFiles || 0) + Number(checkinBtn?.dataset.pendingSaves || 0);
-    if (checkinBtn) checkinBtn.disabled = checkinable.length === 0 && queued === 0;
-    if (undoBtn) undoBtn.disabled = !selected.some((row) => row.dataset.owned === "1");
+    const canCheckout = selected.length > 0 && selected.every((row) => row.dataset.canCheckout === "1");
+    const canCheckin = selected.length > 0 && selected.every((row) => row.dataset.canCheckin === "1");
+    const canUndo = selected.length > 0 && selected.every((row) => row.dataset.owned === "1");
+    const addOnly = selectionIsAddOnly(selected);
+    if (checkoutBtn) checkoutBtn.disabled = !canCheckout;
+    setToolbarActionVisible(checkoutBtn, canCheckout);
+    if (checkinBtn) {
+      checkinBtn.disabled = !canCheckin;
+      checkinBtn.textContent = addOnly ? "Add" : "Check In";
+      const tip = checkinBtn.closest(".toolbar-tip");
+      if (tip) {
+        tip.title = addOnly
+          ? "Add selected workspace files to the project."
+          : "Check in selected files.";
+      }
+    }
+    setToolbarActionVisible(checkinBtn, canCheckin);
+    if (undoBtn) undoBtn.disabled = !canUndo;
+    setToolbarActionVisible(undoBtn, canUndo);
     if (workspaceBtn) workspaceBtn.disabled = !selected.some((row) => row.dataset.inWorkspace !== "1");
     if (purgeBtn) purgeBtn.disabled = !selected.some((row) => row.dataset.inWorkspace !== "0");
     if (removeBtn) removeBtn.disabled = ids.length === 0;
@@ -1290,7 +1337,7 @@
     const tab = document.querySelector('.tab[data-tab="changes"]');
     if (tab) {
       const pending = Number(pendingSaves || 0) + Number(newFiles || 0);
-      tab.textContent = pending ? `Files to check in · ${pending}` : "Files to check in";
+      tab.textContent = pending ? `New files · ${pending}` : "New files";
     }
     syncToolbar();
   }
@@ -1342,7 +1389,7 @@
   function currentProjectId() {
     return (
       $("#rename-project-btn")?.dataset.project ||
-      $("#forget-project-btn")?.dataset.project ||
+      $("#delete-project-btn")?.dataset.project ||
       $("#open-workspace-btn")?.dataset.project ||
       new URLSearchParams(window.location.search).get("project") ||
       ""
@@ -1829,6 +1876,7 @@
     const owned = selectedRows().filter((row) => {
       return row.dataset.canCheckin === "1" && !row.classList.contains("queue-row");
     });
+    const addOnly = selectionIsAddOnly(selectedRows());
     const projectId = checkinBtn.dataset.project || openWorkspaceBtn?.dataset.project;
     if (!checkinDialog) return;
     const fallbackId = checkinBtn.dataset.uuid || "";
@@ -1841,7 +1889,7 @@
     const useQueue = !objectId;
     if (useQueue && !projectId) return;
     showError($("#checkin-error"), "");
-    const preview = await withBusy("Preparing check-in…", () =>
+    const preview = await withBusy(addOnly ? "Preparing…" : "Preparing check-in…", () =>
       fetch(
         useQueue
           ? `/api/projects/${projectId}/checkin-preview`
@@ -1853,41 +1901,62 @@
       return;
     }
     const data = await preview.json();
-    $("#checkin-filename").textContent = data.filename;
+    const title = $("#checkin-dialog-title");
+    if (title) title.textContent = addOnly ? "Add files" : "Check In";
+    $("#checkin-filename").textContent = addOnly
+      ? (queued.length === 1 ? queued[0].dataset.filename || data.filename : `${queued.length || (data.new_files || []).length} files`)
+      : data.filename;
     $("#checkin-current").textContent = data.current_display;
     $("#checkin-next").textContent = data.next_display;
     ["checkin-current", "checkin-next", "checkin-current-label", "checkin-next-label"].forEach((itemId) => {
       const el = $("#" + itemId);
       if (el) el.hidden = useQueue;
     });
+    const objectLabel = [...document.querySelectorAll("#checkin-dialog .kv dt")].find(
+      (el) => el.textContent.trim() === "Object"
+    );
+    if (objectLabel) {
+      objectLabel.hidden = Boolean(addOnly);
+      const objectValue = objectLabel.nextElementSibling;
+      if (objectValue) objectValue.hidden = Boolean(addOnly);
+    }
     $("#checkin-comment").value = "";
     if (checkinDialog) {
       checkinDialog.dataset.force = data.force_checkin ? "1" : "";
       checkinDialog.dataset.queue = useQueue ? "1" : "";
+      checkinDialog.dataset.addOnly = addOnly ? "1" : "";
       checkinDialog.dataset.objectId = useQueue ? "" : objectId;
       const selectedIdsForQueue = queued
         .map((row) => row.dataset.uuid)
         .filter(Boolean);
       checkinDialog.dataset.objectIds = JSON.stringify(
-        selectedIdsForQueue.length ? selectedIdsForQueue : data.object_ids || []
+        addOnly ? [] : selectedIdsForQueue.length ? selectedIdsForQueue : data.object_ids || []
       );
     }
     const forceWarn = $("#checkin-force-warn");
     if (forceWarn) {
-      forceWarn.hidden = !data.warning;
+      forceWarn.hidden = !data.warning || addOnly;
       forceWarn.textContent = data.warning || "";
     }
     const submitBtn = checkinForm?.querySelector("button[type='submit']");
-    if (submitBtn) submitBtn.textContent = data.force_checkin ? "Check In anyway" : "Check In";
+    if (submitBtn) {
+      submitBtn.textContent = addOnly
+        ? "Add"
+        : data.force_checkin
+          ? "Check In anyway"
+          : "Check In";
+    }
     const list = $("#checkin-changes");
     list.innerHTML = "";
     if (useQueue) {
       const wantedIds = new Set(queued.map((row) => row.dataset.uuid).filter(Boolean));
       const pendingNames = data.pending_files || [];
       const pendingIds = data.object_ids || [];
-      const names = !queued.length
-        ? pendingNames
-        : pendingIds.map((id, index) => (wantedIds.has(id) ? pendingNames[index] : "")).filter(Boolean);
+      const names = addOnly
+        ? []
+        : !queued.length
+          ? pendingNames
+          : pendingIds.map((id, index) => (wantedIds.has(id) ? pendingNames[index] : "")).filter(Boolean);
       names.forEach((name) => {
         const item = document.createElement("li");
         item.textContent = `✓ Check in ${name}`;
@@ -1896,7 +1965,22 @@
       const newCount = queued.length
         ? queued.filter((row) => row.dataset.relativePath).length
         : (data.new_files || []).length;
-      if (!names.length && !newCount) {
+      if (addOnly) {
+        const selectedPaths = queued
+          .map((row) => row.dataset.relativePath)
+          .filter(Boolean);
+        selectedPaths.forEach((path) => {
+          const item = document.createElement("li");
+          const name = path.includes("/") ? path.slice(path.lastIndexOf("/") + 1) : path;
+          item.textContent = `✓ Add ${name}`;
+          list.appendChild(item);
+        });
+        if (!selectedPaths.length) {
+          const item = document.createElement("li");
+          item.textContent = "– No files selected";
+          list.appendChild(item);
+        }
+      } else if (!names.length && !newCount) {
         const item = document.createElement("li");
         item.textContent = "– Nothing to check in";
         list.appendChild(item);
@@ -1915,35 +1999,82 @@
     const wrap = $("#checkin-new-wrap");
     const box = $("#checkin-new-files");
     const help = $("#checkin-new-help");
+    const pick = $("#checkin-new-pick");
     if (help) {
       help.textContent = useQueue
-        ? "New files found in the workspace. Checked items are added to the project with this check-in."
-        : "New files found in the workspace. These are models Creo saved next to the checked-out file. Checked items are added to the project with this check-in.";
+        ? "New files in the workspace. They are not added unless you check them."
+        : "New files Creo saved next to this model. They are not added unless you check them.";
+    }
+    function syncNewFilePick() {
+      if (!box || !pick) return;
+      const boxes = [...box.querySelectorAll('input[type="checkbox"]')];
+      if (!boxes.length) return;
+      const checked = boxes.filter((item) => item.checked).length;
+      const none = pick.querySelector('input[value="none"]');
+      const all = pick.querySelector('input[value="all"]');
+      if (checked === 0 && none) none.checked = true;
+      else if (checked === boxes.length && all) all.checked = true;
+      else {
+        if (none) none.checked = false;
+        if (all) all.checked = false;
+      }
+    }
+    function applyNewFilePick(mode) {
+      if (!box) return;
+      const on = mode === "all";
+      box.querySelectorAll('input[type="checkbox"]').forEach((item) => {
+        item.checked = on;
+      });
+    }
+    const selectedNew = new Set(
+      queued.map((row) => row.dataset.relativePath).filter(Boolean)
+    );
+    if (checkinDialog) {
+      checkinDialog.dataset.addPaths = JSON.stringify(
+        addOnly ? [...selectedNew] : []
+      );
     }
     if (wrap && box) {
       box.innerHTML = "";
-      const news = data.new_files || [];
-      wrap.hidden = news.length === 0;
-      const selectedNew = new Set(
-        queued.map((row) => row.dataset.relativePath).filter(Boolean)
-      );
-      news.forEach((item) => {
-        const label = document.createElement("label");
-        label.className = "choice";
-        const input = document.createElement("input");
-        input.type = "checkbox";
-        input.value = item.relative_path;
-        input.checked = queued.length
-          ? selectedNew.has(item.relative_path)
-          : Boolean(item.same_folder) || useQueue;
-        label.appendChild(input);
-        label.append(` ${item.filename}`);
-        const hint = document.createElement("span");
-        hint.className = "muted small";
-        hint.textContent = ` ${item.relative_path}`;
-        label.appendChild(hint);
-        box.appendChild(label);
-      });
+      if (addOnly) {
+        wrap.hidden = true;
+        if (pick) pick.hidden = true;
+      } else {
+        const news = data.new_files || [];
+        wrap.hidden = news.length === 0;
+        if (pick) pick.hidden = news.length === 0;
+        news.forEach((item) => {
+          const label = document.createElement("label");
+          label.className = "choice";
+          const input = document.createElement("input");
+          input.type = "checkbox";
+          input.value = item.relative_path;
+          input.checked = selectedNew.has(item.relative_path);
+          input.addEventListener("change", syncNewFilePick);
+          label.appendChild(input);
+          label.append(` ${item.filename}`);
+          const hint = document.createElement("span");
+          hint.className = "muted small";
+          hint.textContent = ` ${item.relative_path}`;
+          label.appendChild(hint);
+          box.appendChild(label);
+        });
+        if (pick) {
+          const none = pick.querySelector('input[value="none"]');
+          const all = pick.querySelector('input[value="all"]');
+          if (none) none.checked = selectedNew.size === 0;
+          if (all) all.checked = news.length > 0 && selectedNew.size === news.length;
+          if (!pick.dataset.bound) {
+            pick.dataset.bound = "1";
+            pick.addEventListener("change", (event) => {
+              const radio = eventEl(event)?.closest('input[type="radio"]');
+              if (!radio || radio.name !== "checkin-new-pick") return;
+              applyNewFilePick(radio.value);
+            });
+          }
+        }
+        syncNewFilePick();
+      }
     }
     checkinDialog.showModal();
   });
@@ -1954,17 +2085,32 @@
     const id = checkinDialog?.dataset.objectId || "";
     const comment = String($("#checkin-comment")?.value || "").trim();
     if (!comment) {
-      showError($("#checkin-error"), "A check-in comment is required.");
+      showError(
+        $("#checkin-error"),
+        checkinDialog?.dataset.addOnly === "1" ? "A comment is required." : "A check-in comment is required."
+      );
       return;
     }
     if (checkinDialog?.dataset.force === "1") {
       const name = $("#checkin-filename")?.textContent || "This file";
       if (!window.confirm(`${name} is not checked out. Check in the workspace save anyway?`)) return;
     }
-    const added = [...document.querySelectorAll("#checkin-new-files input:checked")].map(
+    let added = [...document.querySelectorAll("#checkin-new-files input:checked")].map(
       (input) => input.value
     );
+    if (checkinDialog?.dataset.addOnly === "1") {
+      try {
+        added = JSON.parse(checkinDialog.dataset.addPaths || "[]");
+      } catch {
+        added = [];
+      }
+      if (!added.length) {
+        showError($("#checkin-error"), "Select at least one file to add.");
+        return;
+      }
+    }
     let result;
+    const busyLabel = checkinDialog?.dataset.addOnly === "1" ? "Adding…" : "Checking in…";
     if (checkinDialog?.dataset.queue === "1") {
       const projectId = checkinBtn?.dataset.project;
       if (!projectId) return;
@@ -1978,13 +2124,13 @@
         comment,
         object_ids: objectIds,
         add_relative_paths: added,
-      }, "POST", "Checking in…");
+      }, "POST", busyLabel);
     } else {
       if (!id) return;
       result = await postAction(`/api/objects/${id}/checkin`, {
         comment,
         add_relative_paths: added,
-      }, "POST", "Checking in…");
+      }, "POST", busyLabel);
     }
     if (!result) return;
     const warning = formatBatch(result);
@@ -2001,22 +2147,60 @@
     if (href) window.location.href = href;
   });
 
-  function confirmPurge(ids) {
-    const n = ids.length;
-    return window.confirm(
-      n === 1
-        ? "Remove this file from the workspace? Only the CreoPDM working copy is deleted. The original in your project folder stays. If you have it checked out, that checkout is cancelled."
-        : `Remove ${n} files from the workspace? Only CreoPDM working copies are deleted. Originals in your project folder stay. Your checkouts on those files are cancelled.`
-    );
+  function expectedProjectName() {
+    return (
+      $("#delete-project-btn")?.dataset.name
+      || purgeBtn?.dataset.projectName
+      || removeBtn?.dataset.projectName
+      || ""
+    ).trim();
   }
 
-  function confirmRemove(ids) {
-    const n = ids.length;
-    return window.confirm(
-      n === 1
-        ? "Remove this file from the project? CreoPDM workspace copies are deleted. The original in your project folder is not deleted."
-        : `Remove ${n} files from the project? CreoPDM workspace copies are deleted. Originals in your project folder are not deleted.`
-    );
+  function confirmByProjectName({ title, lead, note, submitLabel }) {
+    const dialog = $("#danger-confirm-dialog");
+    const form = $("#danger-confirm-form");
+    const expected = expectedProjectName();
+    if (!dialog || !form || !expected) return Promise.resolve(false);
+    const titleEl = $("#danger-confirm-title");
+    const leadEl = $("#danger-confirm-lead");
+    const noteEl = $("#danger-confirm-note");
+    const noteStrong = noteEl?.querySelector("strong");
+    const submitBtn = $("#danger-confirm-submit");
+    if (titleEl) titleEl.textContent = title;
+    if (leadEl) leadEl.textContent = lead;
+    if (noteStrong) noteStrong.textContent = note || "";
+    if (noteEl) noteEl.hidden = !note;
+    if (submitBtn) submitBtn.textContent = submitLabel;
+    showError($("#danger-confirm-error"), "");
+    form.reset();
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (ok) => {
+        if (settled) return;
+        settled = true;
+        form.removeEventListener("submit", onSubmit);
+        $("#danger-confirm-cancel")?.removeEventListener("click", onCancel);
+        dialog.removeEventListener("close", onClose);
+        if (dialog.open) dialog.close();
+        resolve(ok);
+      };
+      const onCancel = () => finish(false);
+      const onClose = () => finish(false);
+      const onSubmit = (event) => {
+        event.preventDefault();
+        const typed = String(new FormData(form).get("confirm_name") || "").trim();
+        if (typed !== expected) {
+          showError($("#danger-confirm-error"), "Type the project name exactly to confirm.");
+          return;
+        }
+        finish(true);
+      };
+      form.addEventListener("submit", onSubmit);
+      $("#danger-confirm-cancel")?.addEventListener("click", onCancel);
+      dialog.addEventListener("close", onClose);
+      dialog.showModal();
+      $("#danger-confirm-input")?.focus();
+    });
   }
 
   function projectHome() {
@@ -2024,26 +2208,81 @@
   }
 
   purgeBtn?.addEventListener("click", async () => {
-    const ids = selectedIds();
-    if (!ids.length) return;
-    if (!confirmPurge(ids)) return;
-    if (ids.length === 1 && !isListPage) {
-      const result = await postAction(`/api/objects/${ids[0]}/purge-workspace`, undefined, "POST", "Removing from workspace…");
-      if (result) reloadPage();
-      return;
+    const selected = selectedRows();
+    const pathRows = selected.filter(isNewFileQueueRow);
+    const objectRows = selected.filter((row) => !isNewFileQueueRow(row));
+    let ids = objectRows.flatMap(rowObjectIds);
+    if (!ids.length && !pathRows.length) ids = selectedIds();
+    const paths = [
+      ...new Set(pathRows.map((row) => row.dataset.relativePath).filter(Boolean)),
+    ];
+    const total = ids.length + paths.length;
+    if (!total) return;
+    const confirmed = await confirmByProjectName({
+      title: total === 1 ? "Remove from workspace" : `Remove ${total} files from workspace`,
+      lead:
+        total === 1
+          ? "Only the CreoPDM working copy is deleted. The original in your project folder stays. If you have it checked out, that checkout is cancelled."
+          : "Only CreoPDM working copies are deleted. Originals in your project folder stay. Your checkouts on those files are cancelled.",
+      note: "This cannot be undone from CreoPDM.",
+      submitLabel: "Remove from Workspace",
+    });
+    if (!confirmed) return;
+
+    let okCount = 0;
+    let warning = "";
+    if (paths.length) {
+      const projectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
+      if (!projectId) return;
+      const result = await postAction(
+        `/api/projects/${projectId}/workspace/purge-paths`,
+        { relative_paths: paths },
+        "POST",
+        "Removing from workspace…"
+      );
+      if (!result) return;
+      okCount += result.ok?.length || 0;
+      warning = formatBatch(result) || warning;
     }
-    const result = await postAction("/api/objects/batch/purge-workspace", { object_ids: ids }, "POST", "Removing from workspace…");
-    if (!result) return;
-    const warning = formatBatch(result);
+    if (ids.length) {
+      if (ids.length === 1 && !isListPage && !paths.length) {
+        const result = await postAction(
+          `/api/objects/${ids[0]}/purge-workspace`,
+          undefined,
+          "POST",
+          "Removing from workspace…"
+        );
+        if (result) reloadPage();
+        return;
+      }
+      const result = await postAction(
+        "/api/objects/batch/purge-workspace",
+        { object_ids: ids },
+        "POST",
+        "Removing from workspace…"
+      );
+      if (!result) return;
+      okCount += result.ok?.length || 0;
+      warning = formatBatch(result) || warning;
+    }
     if (warning) showError($("#toolbar-error"), warning);
-    else showOk(`${result.ok?.length || 0} file(s) removed from the workspace.`);
-    if (result.ok?.length) reloadPage();
+    else if (okCount) showOk(`${okCount} file(s) removed from the workspace.`);
+    if (okCount) reloadPage();
   });
 
   removeBtn?.addEventListener("click", async () => {
     const ids = selectedIds();
     if (!ids.length) return;
-    if (!confirmRemove(ids)) return;
+    const confirmed = await confirmByProjectName({
+      title: ids.length === 1 ? "Remove from project" : `Remove ${ids.length} files from project`,
+      lead:
+        ids.length === 1
+          ? "CreoPDM workspace copies are deleted. The original in your project folder is not deleted."
+          : "CreoPDM workspace copies are deleted. Originals in your project folder are not deleted.",
+      note: "The file is removed from this project list. This cannot be undone from CreoPDM.",
+      submitLabel: "Remove from Project",
+    });
+    if (!confirmed) return;
     if (ids.length === 1 && !isListPage) {
       const result = await postAction(`/api/objects/${ids[0]}`, null, "DELETE", "Removing from project…");
       if (result) window.location.href = projectHome();
@@ -2077,7 +2316,7 @@
       const saves = data.saves || [];
       const created = data.new_files || [];
       const pending = saves.length + created.length;
-      if (tab) tab.textContent = pending ? `Files to check in · ${pending}` : "Files to check in";
+      if (tab) tab.textContent = pending ? `New files · ${pending}` : "New files";
       setCheckinQueueCounts(saves.length, created.length);
       body.replaceChildren();
       if (!pending) {
@@ -2085,7 +2324,7 @@
         row.className = "empty-row";
         const cell = document.createElement("td");
         cell.colSpan = 5;
-        cell.textContent = "Nothing in the workspace is waiting to be checked in.";
+        cell.textContent = "No new or changed workspace files.";
         row.appendChild(cell);
         body.appendChild(row);
         refreshTabMetrics();
@@ -2102,6 +2341,7 @@
         row.dataset.objectType = meta.objectType || typeFromExtension(ext);
         row.dataset.checkedOut = meta.checkedOut || "0";
         row.dataset.canCheckin = "1";
+        row.dataset.inWorkspace = "1";
         if (meta.uuid) row.dataset.uuid = meta.uuid;
         if (meta.relativePath) row.dataset.relativePath = meta.relativePath;
         values.forEach((text, index) => {
@@ -2140,7 +2380,7 @@
             item.newer_save ? "Newer Creo save" : "Modified",
             item.filename || "",
             `${item.next_display || "—"} · not checked in`,
-            item.file_size != null ? `${item.file_size} bytes` : "",
+            item.file_size != null ? formatByteSize(item.file_size) : "",
             item.saved_at || "",
           ],
           "is-pending",
@@ -2158,9 +2398,9 @@
           [
             "New file",
             item.filename || "",
-            "Not in the project yet. Use Check In to add it.",
-            item.size != null ? `${item.size} bytes` : "",
-            "—",
+            "Not in the project yet. Select and click Add.",
+            item.size != null ? formatByteSize(item.size) : "",
+            item.saved_at || "—",
           ],
           "",
           { filename: item.filename, objectType: item.object_type, relativePath: item.relative_path }

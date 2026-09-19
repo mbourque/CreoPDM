@@ -45,10 +45,10 @@
                 data-name="{{ selected.name }}"
                 data-number="{{ selected.number or '' }}"
                 data-description="{{ selected.description or '' }}">Rename</button>
-        <button type="button" class="btn btn-small btn-danger" id="forget-project-btn"
+        <button type="button" class="btn btn-small btn-danger" id="delete-project-btn"
                 data-project="{{ selected.uuid }}"
                 data-name="{{ selected.name }}"
-                title="Delete the CreoPDM workspace (working copies and Git) and unregister the project. Original files you imported from are not deleted.">Forget project</button>
+                title="Delete the CreoPDM workspace (working copies and Git) and unregister the project. Original files you imported from are not deleted.">Delete project</button>
         <form class="search-form" id="search-form">
           <label class="sr-only" for="search-input">Search</label>
           <input id="search-input" name="q" type="search" placeholder="Search files in all folders…" autocomplete="off">
@@ -76,7 +76,7 @@
     <div class="tabs" role="tablist">
       <button type="button" class="tab is-active" data-tab="files">Files</button>
       <button type="button" class="tab" data-tab="checked-out">{% if checkout_count|default(0) %}Files checked out · {{ checkout_count }}{% else %}Files checked out{% endif %}</button>
-      <button type="button" class="tab" data-tab="changes">Files to check in</button>
+      <button type="button" class="tab" data-tab="changes">New files</button>
     </div>
 
     <section class="tab-panel" id="panel-files" data-folder="{{ current_folder }}">
@@ -222,7 +222,7 @@
     </section>
 
     <section class="tab-panel" id="panel-changes" hidden>
-      <p class="muted small">Workspace files that are not in the last checked-in version. Check In records listed saves and can add new files to the project. You do not need to select a file on the Files tab first.</p>
+      <p class="muted small">New workspace files and files that differ from the last checked-in version (modified or a newer Creo save). Use <strong>Add</strong> for new files and <strong>Check In</strong> for modified saves. Checkout locks are on the Files checked out tab.</p>
       <div class="table-wrap">
         <table class="grid" id="changes-table">
           <thead>
@@ -246,7 +246,7 @@
                 {% endif %}
               </td>
               <td>{{ item.next_display }} · not checked in</td>
-              <td>{{ item.file_size }} bytes</td>
+              <td title="{{ item.file_size }} bytes">{{ item.file_size | byte_size }}</td>
               <td>{{ item.saved_at }}</td>
             </tr>
             {% endfor %}
@@ -260,14 +260,14 @@
                 <div class="muted small">{{ item.relative_path }}</div>
                 {% endif %}
               </td>
-              <td>Not in the project yet. Use Check In to add it.</td>
-              <td>{{ item.size }} bytes</td>
-              <td>—</td>
+              <td>Not in the project yet. Select and click Add.</td>
+              <td title="{{ item.size }} bytes">{{ item.size | byte_size }}</td>
+              <td>{{ item.saved_at or "—" }}</td>
             </tr>
             {% endfor %}
             {% if not checkin_queue.saves and not checkin_queue.new_files %}
             <tr class="empty-row">
-              <td colspan="5">Nothing in the workspace is waiting to be checked in.</td>
+              <td colspan="5">No new or changed workspace files.</td>
             </tr>
             {% endif %}
           </tbody>
@@ -302,23 +302,23 @@
     <span class="toolbar-tip" title="Open the selected file in Creo or its Windows associated program.">
       <button type="button" class="btn" id="open-btn" disabled>Open</button>
     </span>
-    <button type="button" class="btn" id="checkout-btn" disabled>Checkout</button>
-    <span class="toolbar-tip" title="Check in selected files, or add new workspace files to the project.">
+    <button type="button" class="btn" id="checkout-btn" hidden disabled>Checkout</button>
+    <span class="toolbar-tip" title="Check in selected files." hidden>
       <button type="button" class="btn" id="checkin-btn"
               {% if selected %}data-project="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
-              {% if not selected or (pending_saves|default(0) + new_workspace_files|default(0)) == 0 %}disabled{% endif %}>Check In</button>
+              hidden disabled>Check In</button>
     </span>
-    <span class="toolbar-tip" title="Release your checkout lock. Does not delete the workspace file or record a new version. A Creo save still on disk can be checked in afterward.">
-      <button type="button" class="btn" id="undo-btn" disabled>Undo Checkout</button>
+    <span class="toolbar-tip" title="Release your checkout lock. Does not delete the workspace file or record a new version. A Creo save still on disk can be checked in afterward." hidden>
+      <button type="button" class="btn" id="undo-btn" hidden disabled>Undo Checkout</button>
     </span>
     <span class="toolbar-tip" title="Open version history and details for the selected file.">
       <button type="button" class="btn" id="history-btn" disabled>History</button>
     </span>
     <span class="toolbar-tip" title="Delete CreoPDM working copies of the selected files only. Files in your original project folder are not deleted. Checkouts on those files are cancelled.">
-      <button type="button" class="btn" id="purge-workspace-btn" disabled>Remove from Workspace</button>
+      <button type="button" class="btn" id="purge-workspace-btn" {% if selected %}data-project-name="{{ selected.name }}"{% endif %} disabled>Remove from Workspace</button>
     </span>
     <span class="toolbar-tip" title="Remove the selected files from this project list and delete CreoPDM workspace copies. Files in your original project folder are not deleted.">
-      <button type="button" class="btn btn-danger" id="remove-project-btn" disabled>Remove from Project</button>
+      <button type="button" class="btn btn-danger" id="remove-project-btn" {% if selected %}data-project-name="{{ selected.name }}"{% endif %} disabled>Remove from Project</button>
     </span>
   </div>
   <div class="toolbar-messages">
@@ -347,18 +347,18 @@
   </form>
 </dialog>
 
-<dialog id="forget-dialog" class="dialog">
-  <form method="dialog" id="forget-form">
-    <h2>Forget this project</h2>
+<dialog id="delete-project-dialog" class="dialog">
+  <form method="dialog" id="delete-project-form">
+    <h2>Delete this project</h2>
     <p>This deletes the CreoPDM workspace, including working copies and Git history, and unregisters the project.</p>
     <p><strong>Original files you imported from are not deleted.</strong></p>
     <label>Type the project name to confirm
-      <input name="confirm_name" id="forget-confirm" required maxlength="255" autocomplete="off">
+      <input name="confirm_name" id="delete-project-confirm" required maxlength="255" autocomplete="off">
     </label>
-    <p class="error" id="forget-error" hidden></p>
+    <p class="error" id="delete-project-error" hidden></p>
     <div class="dialog-actions">
-      <button type="button" class="btn" id="forget-cancel">Cancel</button>
-      <button type="submit" class="btn btn-danger">Forget project</button>
+      <button type="button" class="btn" id="delete-project-cancel">Cancel</button>
+      <button type="submit" class="btn btn-danger">Delete project</button>
     </div>
   </form>
 </dialog>
@@ -391,7 +391,7 @@
 
 <dialog id="checkin-dialog" class="dialog">
   <form method="dialog" id="checkin-form">
-    <h2>Check In</h2>
+    <h2 id="checkin-dialog-title">Check In</h2>
     <dl class="kv">
       <dt>Object</dt><dd id="checkin-filename">—</dd>
       <dt id="checkin-current-label">Current</dt><dd id="checkin-current">—</dd>
@@ -402,7 +402,12 @@
     </label>
     <ul class="detect-list" id="checkin-changes"></ul>
     <div id="checkin-new-wrap" hidden>
-      <p class="muted small" id="checkin-new-help">New files found in the workspace. Checked items are added to the project with this check-in.</p>
+      <p class="muted small" id="checkin-new-help">New files in the workspace. They are not added unless you check them.</p>
+      <div class="checkin-new-pick" id="checkin-new-pick" hidden>
+        <span class="muted small">Add to project:</span>
+        <label class="choice"><input type="radio" name="checkin-new-pick" value="none" checked> None</label>
+        <label class="choice"><input type="radio" name="checkin-new-pick" value="all"> All</label>
+      </div>
       <div id="checkin-new-files"></div>
     </div>
     <p class="pending-note" id="checkin-force-warn" hidden></p>

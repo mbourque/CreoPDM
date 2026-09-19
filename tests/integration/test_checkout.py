@@ -220,6 +220,10 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "stopImmediatePropagation" in script.text
     assert "function rowFilename" in script.text
     assert "function setRowHidden" in script.text
+    assert "function setToolbarActionVisible" in script.text
+    assert 'selected.every((row) => row.dataset.canCheckout === "1")' in script.text
+    assert 'selected.every((row) => row.dataset.canCheckin === "1")' in script.text
+    assert 'selected.every((row) => row.dataset.owned === "1")' in script.text
     assert 'return row.classList.contains("is-row-hidden")' in script.text
     assert "/checkouts" in script.text
     assert "queue-row" in script.text

@@ -305,6 +305,7 @@ def test_forget_project_strips_git_and_keeps_models(client, app, repo_parent, da
         json={"confirm_name": "wrong"},
     )
     assert denied.status_code == 400
+    assert "delete" in denied.json()["error"]["message"].lower()
     assert not (location / ".git").exists()
     assert model.is_file()
 

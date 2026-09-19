@@ -15,6 +15,27 @@ from creopdm.logging_setup import get_logger
 logger = get_logger("files")
 
 
+def format_byte_size(value: object) -> str:
+    """Short size label for the UI: 873 B, 269 KB, 1.2 MB."""
+    if value is None or value == "":
+        return "—"
+    try:
+        size = int(value)
+    except (TypeError, ValueError):
+        return "—"
+    if size < 0:
+        return "—"
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        kb = size / 1024
+        text = f"{kb:.0f}" if kb >= 10 else f"{kb:.1f}".rstrip("0").rstrip(".")
+        return f"{text} KB"
+    mb = size / (1024 * 1024)
+    text = f"{mb:.0f}" if mb >= 10 else f"{mb:.1f}".rstrip("0").rstrip(".")
+    return f"{text} MB"
+
+
 def set_file_readonly(path: Path) -> None:
     """Best-effort read-only attribute. Database locks remain authoritative."""
     if not path.exists():

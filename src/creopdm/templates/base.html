@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-nav18">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-nav19">
 </head>
 <body>
   <header class="topbar">
@@ -26,6 +26,21 @@
   <main class="shell">
     {% block content %}{% endblock %}
   </main>
+  <dialog id="danger-confirm-dialog" class="dialog">
+    <form method="dialog" id="danger-confirm-form">
+      <h2 id="danger-confirm-title">Confirm</h2>
+      <p id="danger-confirm-lead"></p>
+      <p id="danger-confirm-note"><strong></strong></p>
+      <label>Type the project name to confirm
+        <input name="confirm_name" id="danger-confirm-input" required maxlength="255" autocomplete="off">
+      </label>
+      <p class="error" id="danger-confirm-error" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn" id="danger-confirm-cancel">Cancel</button>
+        <button type="submit" class="btn btn-danger" id="danger-confirm-submit">Confirm</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="busy-overlay" class="busy-overlay">
     <div class="busy-panel" role="status" aria-live="polite">
       <span class="busy-spinner" aria-hidden="true"></span>
@@ -196,6 +211,6 @@ function setWorkingDirectory(directory) {
     return directory;
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open23"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open37"></script>
 </body>
 </html>

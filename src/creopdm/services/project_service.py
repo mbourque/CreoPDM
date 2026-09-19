@@ -224,7 +224,7 @@ class ProjectService:
         expected = project.name.strip()
         if confirm_name.strip() != expected:
             raise ValidationAppError(
-                "Type the project name exactly to forget it.",
+                "Type the project name exactly to delete it.",
                 details={"name": expected},
             )
         leftover = self._workspaces.leftover_source(project)
@@ -243,7 +243,7 @@ class ProjectService:
                     "Close that window and delete the leftover workspace folder if you want it gone."
                 )
             self._delete_project_records(session, project)
-        logger.info("Forgot project %s", project_uuid)
+        logger.info("Deleted project %s", project_uuid)
         session.commit()
         return {
             "uuid": project_uuid,

@@ -2,7 +2,18 @@ import os
 import stat
 from pathlib import Path
 
-from creopdm.utils.files import set_file_readonly, set_file_writable
+from creopdm.utils.files import format_byte_size, set_file_readonly, set_file_writable
+
+
+def test_format_byte_size():
+    assert format_byte_size(0) == "0 B"
+    assert format_byte_size(873) == "873 B"
+    assert format_byte_size(1024) == "1 KB"
+    assert format_byte_size(275543) == "269 KB"
+    assert format_byte_size(164362) == "161 KB"
+    assert format_byte_size(5 * 1024 * 1024) == "5 MB"
+    assert format_byte_size(1536 * 1024) == "1.5 MB"
+    assert format_byte_size(None) == "—"
 
 
 def test_readonly_and_writable_roundtrip(tmp_path: Path):

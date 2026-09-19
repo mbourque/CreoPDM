@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 
 APP_NAME = "CreoPDM"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 APP_SCHEMA_VERSION = 1
 CREO_OPEN_MODES = ("executable", "association", "embedded", "view")
 CREO_VIEW_OPEN_MODES = ("executable", "association")

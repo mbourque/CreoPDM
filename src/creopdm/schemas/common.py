@@ -247,6 +247,10 @@ class BatchObjectRequest(BaseModel):
     object_ids: list[str] = Field(min_length=1)
 
 
+class PurgeWorkspacePathsRequest(BaseModel):
+    relative_paths: list[str] = Field(min_length=1)
+
+
 class BatchItemResult(BaseModel):
     uuid: str
     filename: str

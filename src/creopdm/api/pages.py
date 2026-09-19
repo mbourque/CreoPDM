@@ -18,6 +18,7 @@ from creopdm.api.serializers import project_to_response, revision_display
 from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPSED_COOKIE
 from creopdm.context import AppContext
 from creopdm.exceptions import ProjectNotFoundError
+from creopdm.utils.files import format_byte_size
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
 from creopdm.utils.native_dialog import native_picker_available
 from creopdm.utils.timefmt import format_local
@@ -28,7 +29,9 @@ _template_env = Environment(
     autoescape=select_autoescape(),
 )
 _template_env.filters["local_time"] = format_local
+_template_env.filters["byte_size"] = format_byte_size
 _template_env.globals["local_time"] = format_local
+_template_env.globals["byte_size"] = format_byte_size
 templates = Jinja2Templates(env=_template_env)
 router = APIRouter()
 
@@ -77,7 +80,9 @@ _CREO_OPEN_NAMES = {
 
 def render(request: Request, name: str, context: dict) -> HTMLResponse:
     templates.env.filters["local_time"] = format_local
+    templates.env.filters["byte_size"] = format_byte_size
     templates.env.globals["local_time"] = format_local
+    templates.env.globals["byte_size"] = format_byte_size
     payload = {"request": request, **_PAGE_DEFAULTS, **context}
     try:
         return templates.TemplateResponse(request, name, payload)

@@ -605,12 +605,21 @@ class WorkspaceService:
                 continue
             chosen = CreoFileManager.select_latest_creo_version(paths, extras) or paths[0]
             relative = chosen.resolve().relative_to(vault.resolve()).as_posix()
+            size = 0
+            stamp = ""
+            try:
+                info = chosen.stat()
+                size = info.st_size
+                stamp = datetime.fromtimestamp(info.st_mtime).strftime("%Y-%m-%d %H:%M")
+            except OSError:
+                pass
             found.append(
                 {
                     "filename": Path(relative).name,
                     "relative_path": relative,
                     "path": str(chosen),
-                    "size": chosen.stat().st_size if chosen.is_file() else 0,
+                    "size": size,
+                    "saved_at": stamp,
                     "object_type": classify_filename(
                         Path(relative).name,
                         extra_cad_extensions=self._config.data_cad_extensions(),
@@ -657,6 +666,69 @@ class WorkspaceService:
         if parent.as_posix() == ".":
             return canonical_name
         return (parent / canonical_name).as_posix()
+
+    def purge_untracked_paths(
+        self,
+        project: Project,
+        relative_paths: list[str],
+        objects: list[EngineeringObject],
+    ) -> list[dict[str, str]]:
+        """Delete untracked New Files rows from the workspace vault."""
+        extras = self._cad_extensions()
+        known = {
+            CreoFileManager.logical_repo_path(obj.relative_path, extras).lower()
+            for obj in objects
+        }
+        vault = self.vault_for(project)
+        targets: set[str] = set()
+        requested: list[str] = []
+        for raw in relative_paths:
+            relative = assert_safe_relative_path(str(raw).replace("\\", "/")).as_posix()
+            logical = CreoFileManager.logical_repo_path(relative, extras).lower()
+            if logical in known:
+                raise PathValidationError(
+                    "That file is already in the project. Use Remove from Workspace on the Files tab.",
+                    details={"relative_path": relative},
+                )
+            path = ensure_within(vault, vault / relative)
+            if not path.is_file():
+                raise PathValidationError(
+                    f"Workspace file not found: {relative}",
+                    details={"relative_path": relative},
+                )
+            targets.add(logical)
+            requested.append(relative)
+
+        removed: list[dict[str, str]] = []
+        removed_paths: list[str] = []
+        skip = _RESERVED_WORKSPACE_DIRS
+        for dirpath, dirnames, filenames in os.walk(vault):
+            dirnames[:] = [name for name in dirnames if name.lower() not in skip]
+            rel_dir = os.path.relpath(dirpath, vault).replace("\\", "/")
+            for name in filenames:
+                rel = name if rel_dir == "." else f"{rel_dir}/{name}"
+                logical = CreoFileManager.logical_repo_path(rel, extras).lower()
+                if logical not in targets:
+                    continue
+                path = Path(dirpath) / name
+                try:
+                    set_file_writable(path)
+                    path.unlink()
+                except OSError:
+                    raise PathValidationError(
+                        f"Could not delete the workspace copy of {name}.",
+                        details={"path": str(path)},
+                    )
+                removed_paths.append(str(path))
+                removed.append({"relative_path": rel.replace("\\", "/"), "filename": name})
+
+        if not removed and requested:
+            raise PathValidationError(
+                "No matching workspace files were removed.",
+                details={"relative_paths": requested},
+            )
+        self._prune_empty_workspace_dirs(vault, removed_paths)
+        return removed
 
     def purge_local(self, project: Project, obj: EngineeringObject) -> list[str]:
         """Delete workspace copies only. Never touches the project repository."""
