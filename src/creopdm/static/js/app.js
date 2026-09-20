@@ -2136,15 +2136,67 @@
           );
           return null;
         }
+      } else if (prepared.open_with_creo) {
+        // Multi-CAD (SolidWorks, …): Creo.JS OpenFile is unsupported by PTC for
+        // Multi-CAD. Do not start a second Parametric. Materialize, set WD in the
+        // running session, retry OpenFile, then tell the user to File > Open.
+        if (!hostedCreoJS()) {
+          showError(
+            $("#toolbar-error"),
+            "Open SolidWorks / Multi-CAD files from Creo's built-in browser so the running session can use the local cache."
+          );
+          return null;
+        }
+        try {
+          await whenCreoJSReady();
+          let openSpec = prepared;
+          const agent = await probeCreoAgent();
+          if (agent) {
+            openSpec = await materializeViaAgent(prepared);
+          }
+          const directory = openSpec.working_directory || "";
+          const diskName = openSpec.disk_name || openSpec.filename || prepared.filename;
+          if (directory && typeof window.CreoJS.setWorkingDirectory === "function") {
+            const wdResult = await window.CreoJS.setWorkingDirectory(directory);
+            const wdText = wdResult == null ? "" : String(wdResult);
+            if (wdText.indexOf("CREOPDM_ERROR:") === 0) {
+              showError($("#toolbar-error"), wdText.slice("CREOPDM_ERROR:".length));
+              return null;
+            }
+          }
+          const opened = await window.CreoJS.openModel(
+            directory,
+            openSpec.filename || prepared.filename,
+            "",
+            diskName,
+            openSpec.path || ""
+          );
+          const openedText = opened == null ? "" : String(opened);
+          if (openedText.indexOf("CREOPDM_ERROR:") === 0) {
+            showError(
+              $("#toolbar-error"),
+              (diskName || "File")
+                + " is in the Creo working directory. Creo.JS cannot open SolidWorks/Multi-CAD in-session — use File > Open and select "
+                + (diskName || "the file")
+                + "."
+            );
+            return null;
+          }
+        } catch (err) {
+          const message = err && err.message ? err.message : String(err);
+          showError(
+            $("#toolbar-error"),
+            message || "Could not prepare the Multi-CAD file in this Creo session."
+          );
+          return null;
+        }
       } else {
-        // Multi-CAD: Creo.JS cannot OpenFile these — materialize then start Parametric.
-        // Other non-Creo files: Windows association.
+        // Documents / images / Windows-openable CAD: association (or browser download).
         try {
           const agent = await probeCreoAgent();
           if (agent) {
             const openSpec = await materializeViaAgent(prepared);
-            const mode = prepared.open_with_creo ? "creo" : "association";
-            await openViaAgent(openSpec.path, mode);
+            await openViaAgent(openSpec.path, "association");
             return prepared;
           }
         } catch (err) {
