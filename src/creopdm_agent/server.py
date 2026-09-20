@@ -17,6 +17,14 @@ from creopdm_agent.config import AgentConfig
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9._\-]+")
 
 
+class MaterializeItem(BaseModel):
+    object_id: str | None = None
+    project_id: str | None = None
+    relative_path: str | None = None
+    filename: str | None = None
+    disk_name: str | None = None
+
+
 class MaterializeRequest(BaseModel):
     pdm_url: str = ""
     object_id: str | None = None
@@ -25,6 +33,7 @@ class MaterializeRequest(BaseModel):
     filename: str | None = None
     disk_name: str | None = None
     token: str | None = None
+    companions: list[MaterializeItem] = Field(default_factory=list)
 
 
 class MaterializeResponse(BaseModel):
@@ -33,6 +42,7 @@ class MaterializeResponse(BaseModel):
     filename: str
     disk_name: str
     bytes_written: int = 0
+    companions_written: int = 0
 
 
 def _safe_segment(value: str, fallback: str = "file") -> str:
@@ -50,21 +60,51 @@ def _normalize_base(url: str) -> str:
     return text
 
 
-def _content_url(base: str, payload: MaterializeRequest) -> tuple[str, str]:
-    if payload.object_id:
-        name = payload.disk_name or payload.filename or f"{payload.object_id}.bin"
-        return f"{base}/api/objects/{quote(payload.object_id)}/content", name
-    if payload.project_id and payload.relative_path:
-        rel = payload.relative_path.replace("\\", "/").lstrip("/")
-        name = payload.disk_name or payload.filename or Path(rel).name
+def _content_url(base: str, item: MaterializeItem) -> tuple[str, str]:
+    if item.object_id:
+        name = item.disk_name or item.filename or f"{item.object_id}.bin"
+        return f"{base}/api/objects/{quote(item.object_id)}/content", name
+    if item.project_id and item.relative_path:
+        rel = item.relative_path.replace("\\", "/").lstrip("/")
+        name = item.disk_name or item.filename or Path(rel).name
         return (
-            f"{base}/api/projects/{quote(payload.project_id)}/workspace/content?path={quote(rel)}",
+            f"{base}/api/projects/{quote(item.project_id)}/workspace/content?path={quote(rel)}",
             name,
         )
     raise HTTPException(
         status_code=400,
         detail="Provide object_id, or project_id with relative_path.",
     )
+
+
+def _download(
+    client: httpx.Client,
+    base: str,
+    item: MaterializeItem,
+    target_dir: Path,
+    headers: dict[str, str],
+) -> tuple[Path, str, str, int]:
+    url, suggested_name = _content_url(base, item)
+    disk_name = _safe_segment(item.disk_name or suggested_name, "model.bin")
+    logical = _safe_segment(
+        item.filename or Path(disk_name).stem + Path(disk_name).suffix,
+        disk_name,
+    )
+    target = target_dir / disk_name
+    try:
+        response = client.get(url, headers=headers)
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not reach CreoPDM at {base}: {exc}",
+        ) from exc
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail=f"CreoPDM returned {response.status_code} for {url}",
+        )
+    target.write_bytes(response.content)
+    return target, logical, disk_name, len(response.content)
 
 
 def create_agent_app(settings: AgentConfig) -> FastAPI:
@@ -92,37 +132,37 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
     @app.post("/materialize", response_model=MaterializeResponse)
     def materialize(payload: MaterializeRequest) -> MaterializeResponse:
         base = _normalize_base(payload.pdm_url or settings.pdm_url)
-        url, suggested_name = _content_url(base, payload)
-        disk_name = _safe_segment(payload.disk_name or suggested_name, "model.bin")
-        logical = _safe_segment(payload.filename or Path(disk_name).stem + Path(disk_name).suffix, disk_name)
+        primary = MaterializeItem(
+            object_id=payload.object_id,
+            project_id=payload.project_id,
+            relative_path=payload.relative_path,
+            filename=payload.filename,
+            disk_name=payload.disk_name,
+        )
         project_key = _safe_segment(payload.project_id or payload.object_id or "local", "local")
         target_dir = root / project_key
         target_dir.mkdir(parents=True, exist_ok=True)
-        target = target_dir / disk_name
-        headers = {}
+        headers: dict[str, str] = {}
         token = (payload.token or settings.token or "").strip()
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        try:
-            with httpx.Client(timeout=120.0, follow_redirects=True) as client:
-                response = client.get(url, headers=headers)
-        except httpx.HTTPError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Could not reach CreoPDM at {base}: {exc}",
-            ) from exc
-        if response.status_code >= 400:
-            raise HTTPException(
-                status_code=502,
-                detail=f"CreoPDM returned {response.status_code} for {url}",
+        with httpx.Client(timeout=120.0, follow_redirects=True) as client:
+            target, logical, disk_name, nbytes = _download(
+                client, base, primary, target_dir, headers
             )
-        target.write_bytes(response.content)
+            companions_written = 0
+            for item in payload.companions:
+                if not item.object_id and not (item.project_id and item.relative_path):
+                    continue
+                _download(client, base, item, target_dir, headers)
+                companions_written += 1
         return MaterializeResponse(
             path=str(target.resolve()),
             working_directory=str(target_dir.resolve()),
             filename=logical,
             disk_name=disk_name,
-            bytes_written=len(response.content),
+            bytes_written=nbytes,
+            companions_written=companions_written,
         )
 
     return app

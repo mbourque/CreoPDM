@@ -8,6 +8,7 @@ import threading
 import webbrowser
 from pathlib import Path
 
+import httpx
 import uvicorn
 
 from creopdm_agent import __version__
@@ -29,6 +30,42 @@ def hide_console_window() -> None:
         devnull = open(os.devnull, "w", encoding="utf-8")
         sys.stdout = devnull
         sys.stderr = devnull
+    except Exception:
+        return
+
+
+def _message_box(title: str, text: str) -> None:
+    """Show status in a *separate* process so OK cannot deadlock the tray menu."""
+    if sys.platform != "win32":
+        return
+    try:
+        import subprocess
+        import tempfile
+
+        path = Path(tempfile.gettempdir()) / "creopdm-agent-status.txt"
+        path.write_text(text, encoding="utf-8")
+        title_ps = title.replace("'", "''")
+        path_ps = str(path).replace("'", "''")
+        cmd = (
+            "Add-Type -AssemblyName System.Windows.Forms; "
+            f"$t = Get-Content -Raw -Encoding UTF8 '{path_ps}'; "
+            f"[System.Windows.Forms.MessageBox]::Show($t, '{title_ps}', "
+            "'OK', 'Information') | Out-Null; "
+            f"Remove-Item -LiteralPath '{path_ps}' -Force -ErrorAction SilentlyContinue"
+        )
+        subprocess.Popen(
+            [
+                "powershell",
+                "-NoProfile",
+                "-STA",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                cmd,
+            ],
+            close_fds=True,
+            creationflags=0x08000000,  # CREATE_NO_WINDOW
+        )
     except Exception:
         return
 
@@ -85,8 +122,43 @@ def run_tray(settings: AgentConfig) -> int:
     url = f"http://{settings.host}:{settings.port}"
     root = settings.resolved_root()
 
-    def on_open_health(icon: object, item: object) -> None:
-        webbrowser.open(f"{url}/health")
+    def _status_lines() -> tuple[bool, str]:
+        # Prefer a quick local summary so the menu never feels dead if HTTP stalls.
+        lines = [
+            "Status: running",
+            f"Port: {settings.port}",
+            f"Version: {__version__}",
+            f"Cache: {root}",
+        ]
+        if settings.pdm_url:
+            lines.append(f"PDM: {settings.pdm_url}")
+        try:
+            response = httpx.get(f"{url}/health", timeout=0.75)
+            data = response.json()
+            if response.status_code == 200 and data.get("ok"):
+                lines[0] = "Status: OK (HTTP responding)"
+                if data.get("local_root"):
+                    lines[3] = f"Cache: {data['local_root']}"
+                return True, "\n".join(lines)
+            lines[0] = f"Status: unexpected HTTP {response.status_code}"
+            return False, "\n".join(lines)
+        except Exception as exc:
+            lines[0] = "Status: tray running (HTTP check failed)"
+            lines.append(str(exc))
+            return True, "\n".join(lines)
+
+    def on_show_status(icon: object, item: object) -> None:
+        # Defer past the tray menu callback — a modal MessageBox here can ignore OK.
+        def show() -> None:
+            ok, text = _status_lines()
+            title = "CreoPDM agent" if ok else "CreoPDM agent — problem"
+            try:
+                icon.title = f"CreoPDM agent — {'OK' if ok else 'Error'} (:{settings.port})"
+            except Exception:
+                pass
+            _message_box(title, text)
+
+        threading.Timer(0.2, show).start()
 
     def on_open_cache(icon: object, item: object) -> None:
         path = Path(root)
@@ -101,7 +173,7 @@ def run_tray(settings: AgentConfig) -> int:
         Item(f"CreoPDM agent {__version__}", None, enabled=False),
         Item(f"Listening on {settings.port}", None, enabled=False),
         pystray.Menu.SEPARATOR,
-        Item("Open health page", on_open_health),
+        Item("Show status", on_show_status),
         Item("Open cache folder", on_open_cache),
         pystray.Menu.SEPARATOR,
         Item("Quit", on_quit),

@@ -16,6 +16,7 @@ from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.utils.classify import classify_filename, is_creo_openable, is_creo_view
+from creopdm.utils.creo_companions import needs_open_companions, select_companion_objects
 from creopdm.utils.creo_header import creo_release_for
 from creopdm.utils.launch import working_directory_for
 
@@ -38,7 +39,7 @@ class CreoService:
     def set_connector(self, connector: CreoConnector) -> None:
         self._connector = connector
 
-    def open_object(self, session: Session, object_uuid: str, launch: bool = True) -> dict[str, str | bool]:
+    def open_object(self, session: Session, object_uuid: str, launch: bool = True) -> dict:
         obj = self._objects.get_object(session, object_uuid)
         project = obj.project
         checkout = self._checkouts.active_for(session, obj.id)
@@ -75,6 +76,15 @@ class CreoService:
         file_release = creo_release_for(path, path.name)
         if not file_release and obj.current_version is not None:
             file_release = obj.current_version.creo_release
+        companions = self._companions_for(
+            session,
+            project,
+            path=path,
+            object_type=obj.object_type,
+            relative_path=obj.relative_path,
+            filename=obj.filename,
+            skip_object_id=obj.id,
+        )
         return self._open_resolved(
             path,
             launch=launch,
@@ -84,9 +94,16 @@ class CreoService:
             object_id=object_uuid,
             project_id=str(project.uuid),
             relative_path=obj.relative_path,
+            companions=companions,
         )
 
-    def open_workspace_file(self, project: Project, relative_path: str, launch: bool = True) -> dict[str, str | bool]:
+    def open_workspace_file(
+        self,
+        session: Session,
+        project: Project,
+        relative_path: str,
+        launch: bool = True,
+    ) -> dict:
         path = self._workspaces.file_path(project.uuid, relative_path)
         if not path.is_file():
             raise PathValidationError(
@@ -100,6 +117,15 @@ class CreoService:
             document_extensions=self._workspaces._config.document_extensions(),
         )
         rel = str(relative_path).replace("\\", "/")
+        companions = self._companions_for(
+            session,
+            project,
+            path=path,
+            object_type=kind.value,
+            relative_path=rel,
+            filename=path.name,
+            skip_object_id=None,
+        )
         return self._open_resolved(
             path,
             launch=launch,
@@ -108,7 +134,68 @@ class CreoService:
             browser_url=f"/api/projects/{project.uuid}/workspace/content?path={quote(rel)}",
             project_id=str(project.uuid),
             relative_path=rel,
+            companions=companions,
         )
+
+    def _companions_for(
+        self,
+        session: Session,
+        project: Project,
+        *,
+        path: Path,
+        object_type: str,
+        relative_path: str,
+        filename: str,
+        skip_object_id: int | None,
+    ) -> list[dict[str, str | None]]:
+        if not needs_open_companions(object_type, filename):
+            return []
+        models = self._workspaces._config.model_cad_extensions()
+        all_cad = self._workspaces._cad_extensions()
+        siblings = self._objects.list_objects(session, project.id)
+        chosen = select_companion_objects(
+            primary_relative=relative_path,
+            primary_filename=filename,
+            object_type=object_type,
+            siblings=siblings,
+            model_path=path,
+            model_extensions=models,
+            all_cad_extensions=all_cad,
+        )
+        out: list[dict[str, str | None]] = []
+        for obj in chosen:
+            if skip_object_id is not None and obj.id == skip_object_id:
+                continue
+            try:
+                companion_path = self._workspaces.locate_content(project.uuid, obj)
+            except PathValidationError:
+                companion_path = self._workspaces.materialize(
+                    project,
+                    obj,
+                    writable=False,
+                    overwrite_modified=True,
+                )
+            if not companion_path.is_file():
+                continue
+            logical = CreoFileManager.normalize_creo_filename(
+                companion_path.name, (*models, *all_cad)
+            )
+            out.append(
+                {
+                    "object_id": str(obj.uuid),
+                    "project_id": str(project.uuid),
+                    "relative_path": str(obj.relative_path).replace("\\", "/"),
+                    "filename": logical,
+                    "disk_name": companion_path.name,
+                }
+            )
+        if out:
+            logger.info(
+                "Prepared %s open companions for %s",
+                len(out),
+                Path(filename).name,
+            )
+        return out
 
     def _open_resolved(
         self,
@@ -121,7 +208,8 @@ class CreoService:
         object_id: str = "",
         project_id: str = "",
         relative_path: str = "",
-    ) -> dict[str, str | bool | None]:
+        companions: list[dict[str, str | None]] | None = None,
+    ) -> dict:
         workdir = working_directory_for(path)
         models = self._workspaces._config.model_cad_extensions()
         all_cad = self._workspaces._cad_extensions()
@@ -173,6 +261,7 @@ class CreoService:
             "creo_object": creo_object,
             "creo_release": creo_release or "",
             "url": url,
+            "companions": companions or [],
         }
 
     def _open_path(self, path: Path, *, browser_url: str = "") -> str:

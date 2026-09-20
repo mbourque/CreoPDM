@@ -1864,6 +1864,7 @@
   }
 
   async function materializeViaAgent(prepared) {
+    const companions = Array.isArray(prepared.companions) ? prepared.companions : [];
     const response = await fetch(`${agentBase()}/materialize`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1874,6 +1875,13 @@
         relative_path: prepared.relative_path || null,
         filename: prepared.filename || null,
         disk_name: prepared.disk_name || prepared.filename || null,
+        companions: companions.map((item) => ({
+          object_id: item.object_id || null,
+          project_id: item.project_id || prepared.project_id || currentProjectId() || null,
+          relative_path: item.relative_path || null,
+          filename: item.filename || null,
+          disk_name: item.disk_name || item.filename || null,
+        })),
       }),
     });
     if (!response.ok) {

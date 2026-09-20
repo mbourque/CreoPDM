@@ -181,6 +181,14 @@ class CreoOpenRequest(BaseModel):
         raise ValueError("Select a file to open.")
 
 
+class CreoOpenCompanion(BaseModel):
+    object_id: str | None = None
+    project_id: str | None = None
+    relative_path: str | None = None
+    filename: str | None = None
+    disk_name: str | None = None
+
+
 class CreoOpenResponse(BaseModel):
     filename: str
     path: str
@@ -193,6 +201,7 @@ class CreoOpenResponse(BaseModel):
     creo_object: bool = False
     creo_release: str | None = None
     url: str | None = None
+    companions: list[CreoOpenCompanion] = Field(default_factory=list)
 
 
 class CreoStatusResponse(BaseModel):
