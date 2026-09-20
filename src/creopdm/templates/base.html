@@ -242,12 +242,15 @@ function creoTrailEscapePath(path) {
     // Trail Inputname expects Windows separators; backslashes are doubled.
     return String(path || "").replace(/\//g, "\\").replace(/\\/g, "\\\\");
 }
+function creoTrailEscapePath(path) {
+    // Trail Inputname expects Windows separators; backslashes are doubled.
+    return String(path || "").replace(/\//g, "\\").replace(/\\/g, "\\\\");
+}
 function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
     /**
-     * Drive File > Open in the current Creo session (trail / mapkey body).
-     * Learned from a working mapkey: DLG_PREVIEW_POST with empty Trail args,
-     * ProFileSelPushOpen_Standard@context_dlg_open_cmd (not …_browser),
-     * type filter All Files, then Inputname + Open.
+     * Drive File > Open using the trail shape recorded from a working mapkey:
+     *   ProCmdModelOpen → wait for file_open → Type db_-1 (All Files) →
+     *   Input/Update Inputname → ProFileSelPushOpen_Standard@context_dlg_open_cmd
      */
     if (!session || typeof session.RunMacro !== "function") {
         return false;
@@ -256,23 +259,21 @@ function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
     var absolute = fullPath
         ? String(fullPath)
         : (directory && diskName ? creoJoinPath(directory, diskName) : "");
-    // WD is the cache folder — short name is enough once Type is All Files.
-    var input = shortName || absolute;
+    // WD is the agent cache folder — use the on-disk name only (e.g. bolt_sw.SLDPRT).
+    var input = shortName || (absolute ? absolute.replace(/^.*[\\\/]/, "") : "");
     if (!input) {
         return false;
     }
     var inputTrail = creoTrailEscapePath(input);
     var macro =
-        "~ Select `main_dlg_cur` `appl_casc`;"
-        + "~ Close `main_dlg_cur` `appl_casc`;"
-        + "~ Command `ProCmdModelOpen`;"
+        "~ Command `ProCmdModelOpen`;"
         + "~ Trail `` `` `DLG_PREVIEW_POST` `file_open`;"
-        // Show every extension so .SLDPRT is listed / accepted.
         + "~ Open `file_open` `Type`;"
         + "~ Close `file_open` `Type`;"
-        + "~ Select `file_open` `Type` 1 `db_all`;"
+        + "~ Select `file_open` `Type` 1 `db_-1`;"
+        + "~ Trail `` `` `PREVIEW_POPUP_TIMER` `file_open:Ph_list.Filelist:<NULL>`;"
+        + "~ Input `file_open` `Inputname` `" + inputTrail + "`;"
         + "~ Update `file_open` `Inputname` `" + inputTrail + "`;"
-        + "~ Select `file_open` `Ph_list.Filelist` 1 `" + inputTrail + "`;"
         + "~ Command `ProFileSelPushOpen_Standard@context_dlg_open_cmd`;";
     try {
         session.RunMacro(macro);
@@ -391,6 +392,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open68"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open69"></script>
 </body>
 </html>
