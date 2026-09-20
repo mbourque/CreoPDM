@@ -237,7 +237,6 @@ _ADDED_DEFAULT_TYPE_LABELS = (
     ".docm, .dot, .dotx, .dotm",
     ".odt, .ott, .pages, .wpd",
     ".xlsm, .xlsb, .xlt, .xltx, .xltm",
-    ".creo",
     ".ods, .numbers",
     ".pptm, .pps, .ppsx, .pot, .potx",
     ".odp, .key",
