@@ -21,7 +21,7 @@
         <input type="radio" name="creo_open_mode" value="embedded" {% if settings.creo_open_mode == 'embedded' %}checked{% endif %}>
         Embedded Creo Browser
       </label>
-      <p class="muted small">This setting applies to models Creo.JS can open in-session (parts, assemblies, drawings, STEP, …). SolidWorks, CATIA, Inventor, and similar Multi-CAD files are fetched into the local agent cache; CreoPDM sets the working directory and drives <strong>File > Open</strong> in the running session via a Creo trail (same idea as a mapkey body — not a named mapkey). Trail UI names can vary by Creo datecode; if open fails, use File > Open on the file in the working directory. Images, PDFs, and other non-Creo files use the Windows association.</p>
+      <p class="muted small">This setting applies to models Creo.JS can open in-session (parts, assemblies, drawings, STEP, …). SolidWorks, CATIA, Inventor, and similar Multi-CAD files are fetched into the local agent cache; CreoPDM drives <strong>File > Open</strong> in the running session and navigates that dialog to the cache folder (your Creo working directory is not changed). Images, PDFs, and other non-Creo files use the Windows association.</p>
       <label>Creo.JS library or Creo install folder
         <input name="creo_js_library" type="text" value="{{ settings.creo_js_library or '' }}" placeholder="/opt/ptc/Creo … or …/creojs.js">
       </label>

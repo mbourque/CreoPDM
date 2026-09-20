@@ -244,34 +244,39 @@ function creoTrailEscapePath(path) {
 }
 function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
     /**
-     * Drive File > Open using the trail shape recorded from a working mapkey:
-     *   appl_casc → ProCmdModelOpen → Type db_-1 (All Files) →
-     *   Input/Update Inputname → ProFileSelPushOpen_Standard@context_dlg_open_cmd
+     * Drive File > Open without changing Creo's session working directory.
+     * Navigates the dialog address bar to the agent cache folder, sets Type to
+     * All Files (db_-1), then opens the short file name.
      */
     if (!session || typeof session.RunMacro !== "function") {
         return false;
     }
-    var shortName = diskName || "";
     var absolute = fullPath
         ? String(fullPath)
         : (directory && diskName ? creoJoinPath(directory, diskName) : "");
-    // WD is the agent cache folder — use the on-disk name only (e.g. bolt_sw.SLDPRT).
-    var input = shortName || (absolute ? absolute.replace(/^.*[\\\/]/, "") : "");
-    if (!input) {
+    var shortName = diskName || (absolute ? absolute.replace(/^.*[\\\/]/, "") : "");
+    var folder = directory ? String(directory) : "";
+    if (!folder && absolute) {
+        folder = absolute.replace(/[\\\/][^\\\/]+$/, "");
+    }
+    if (!folder || !shortName) {
         return false;
     }
-    var inputTrail = creoTrailEscapePath(input);
+    var folderTrail = creoTrailEscapePath(folder);
+    var nameTrail = creoTrailEscapePath(shortName);
     var macro =
-        "~ Select `main_dlg_cur` `appl_casc`;"
-        + "~ Close `main_dlg_cur` `appl_casc`;"
-        + "~ Command `ProCmdModelOpen`;"
+        "~ Command `ProCmdModelOpen`;"
         + "~ Trail `` `` `DLG_PREVIEW_POST` `file_open`;"
+        // Navigate the File Open embedded-browser address bar to the cache folder.
+        + "~ Input `file_open` `opt_EMBED_BROWSER_TB_SAB_LAYOUT` `" + folderTrail + "`;"
+        + "~ Update `file_open` `opt_EMBED_BROWSER_TB_SAB_LAYOUT` `" + folderTrail + "`;"
+        + "~ Activate `file_open` `opt_EMBED_BROWSER_TB_SAB_LAYOUT`;"
         + "~ Open `file_open` `Type`;"
         + "~ Close `file_open` `Type`;"
         + "~ Select `file_open` `Type` 1 `db_-1`;"
         + "~ Trail `` `` `PREVIEW_POPUP_TIMER` `file_open:Ph_list.Filelist:<NULL>`;"
-        + "~ Input `file_open` `Inputname` `" + inputTrail + "`;"
-        + "~ Update `file_open` `Inputname` `" + inputTrail + "`;"
+        + "~ Input `file_open` `Inputname` `" + nameTrail + "`;"
+        + "~ Update `file_open` `Inputname` `" + nameTrail + "`;"
         + "~ Command `ProFileSelPushOpen_Standard@context_dlg_open_cmd`;";
     try {
         session.RunMacro(macro);
@@ -286,7 +291,10 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
         var session = (typeof pfcGetCurrentSession === "function")
           ? pfcGetCurrentSession()
           : pfcGetProESession();
-        if (directory) {
+        var versionName = diskName || filename;
+        // Only change the session WD for native Creo models. Multi-CAD trails
+        // navigate the File Open dialog to the cache folder instead.
+        if (directory && creoIsNativeVersioned(versionName)) {
             try {
                 session.ChangeDirectory(creoNormalizePath(directory));
             } catch (errDir) {
@@ -294,7 +302,6 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
             }
         }
         var sessionRelease = creoSessionRelease(session);
-        var versionName = diskName || filename;
         if (creoIsNativeVersioned(versionName)
             && creoNewerThanSession(fileRelease, sessionRelease)) {
             return creoOpenFailed(creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease));
@@ -315,7 +322,6 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
             model = creoTryOpenName(session, directory, filename);
         }
         if (!model) {
-            // Multi-CAD: OpenFile cannot load SolidWorks/etc. Queue File > Open via trail.
             var preparedPath = fullPath || creoJoinPath(directory, diskName || filename);
             if (!creoIsNativeVersioned(versionName)
                 && creoTryOpenViaTrail(session, directory, diskName || filename, preparedPath)) {
@@ -390,6 +396,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open70"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open71"></script>
 </body>
 </html>

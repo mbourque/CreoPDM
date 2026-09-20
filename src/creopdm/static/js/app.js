@@ -2168,14 +2168,8 @@
           await whenCreoJSReady();
           const directory = openSpec.working_directory || "";
           const diskName = openSpec.disk_name || openSpec.filename || prepared.filename;
-          if (directory && typeof window.CreoJS.setWorkingDirectory === "function") {
-            const wdResult = await window.CreoJS.setWorkingDirectory(directory);
-            const wdText = wdResult == null ? "" : String(wdResult);
-            if (wdText.indexOf("CREOPDM_ERROR:") === 0) {
-              showError($("#toolbar-error"), wdText.slice("CREOPDM_ERROR:".length));
-              return null;
-            }
-          }
+          // Do not set Creo session WD — the File > Open trail navigates to the
+          // agent cache folder via opt_EMBED_BROWSER_TB_SAB_LAYOUT.
           const opened = await window.CreoJS.openModel(
             directory,
             openSpec.filename || prepared.filename,
