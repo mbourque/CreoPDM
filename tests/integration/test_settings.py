@@ -149,6 +149,9 @@ def test_get_and_update_settings(client, tmp_path):
     embedded = client.put("/api/settings", json={"creo_open_mode": "embedded"})
     assert embedded.status_code == 200, embedded.text
     assert embedded.json()["creo_open_mode"] == "embedded"
+    # Saving again must refresh the connector without AttributeError.
+    again = client.put("/api/settings", json={"creo_open_mode": "embedded"})
+    assert again.status_code == 200, again.text
     restored = client.put("/api/settings", json={"creo_open_mode": "association"})
     assert restored.status_code == 200, restored.text
 

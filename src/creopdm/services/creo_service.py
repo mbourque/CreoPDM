@@ -35,6 +35,9 @@ class CreoService:
         self._workspaces = workspaces
         self._connector = connector
 
+    def set_connector(self, connector: CreoConnector) -> None:
+        self._connector = connector
+
     def open_object(self, session: Session, object_uuid: str, launch: bool = True) -> dict[str, str | bool]:
         obj = self._objects.get_object(session, object_uuid)
         project = obj.project
