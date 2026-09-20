@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import threading
@@ -13,7 +14,11 @@ import uvicorn
 
 from creopdm_agent import __version__
 from creopdm_agent.config import AgentConfig
+from creopdm_agent.logbuf import LogBuffer, install_log_buffer
+from creopdm_agent.logui import open_log_window
 from creopdm_agent.server import create_agent_app
+
+logger = logging.getLogger("creopdm_agent")
 
 
 def hide_console_window() -> None:
@@ -101,19 +106,28 @@ def run_tray(settings: AgentConfig) -> int:
     if settings.host not in {"127.0.0.1", "localhost", "::1"}:
         raise SystemExit("Refusing non-loopback host for tray agent.")
 
+    log_buffer = LogBuffer()
+    install_log_buffer(log_buffer)
+
     settings.ensure_dirs()
     app = create_agent_app(settings)
     config = uvicorn.Config(
         app,
         host=settings.host,
         port=settings.port,
-        log_level="critical",
-        access_log=False,
+        log_level="info",
+        access_log=True,
         log_config=None,
     )
     server = uvicorn.Server(config)
 
     def serve() -> None:
+        logger.info(
+            "Listening on http://%s:%s (cache %s)",
+            settings.host,
+            settings.port,
+            settings.resolved_root(),
+        )
         server.run()
 
     thread = threading.Thread(target=serve, name="creopdm-agent", daemon=True)
@@ -160,6 +174,9 @@ def run_tray(settings: AgentConfig) -> int:
 
         threading.Timer(0.2, show).start()
 
+    def on_show_logs(icon: object, item: object) -> None:
+        open_log_window(log_buffer, title=f"CreoPDM agent log (:{settings.port})")
+
     def on_open_cache(icon: object, item: object) -> None:
         path = Path(root)
         path.mkdir(parents=True, exist_ok=True)
@@ -167,6 +184,7 @@ def run_tray(settings: AgentConfig) -> int:
 
     def on_quit(icon: object, item: object) -> None:
         server.should_exit = True
+        logger.info("Stopping agent")
         icon.stop()
 
     menu = pystray.Menu(
@@ -174,6 +192,7 @@ def run_tray(settings: AgentConfig) -> int:
         Item(f"Listening on {settings.port}", None, enabled=False),
         pystray.Menu.SEPARATOR,
         Item("Show status", on_show_status),
+        Item("Show logs", on_show_logs),
         Item("Open cache folder", on_open_cache),
         pystray.Menu.SEPARATOR,
         Item("Quit", on_quit),

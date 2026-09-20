@@ -184,9 +184,9 @@ sudo loginctl enable-linger "$USER"
 
 Open `http://127.0.0.1:52113` on that PC, or the **Other PCs** LAN URL after allowing the port (see above).
 
-## Local Creo agent (Windows tray)
+## Creo agent (Windows tray)
 
-When CreoPDM runs on another machine (for example Linux) and Creo runs on Windows, Embedded open needs a small **local agent** on the Creo PC. It downloads CAD into a local cache so Creo.JS can open files by path.
+Use the agent on the PC using CreoPDM. It downloads CAD into a local cache so Creo.JS can open files by path.
 
 The agent is separate from the CreoPDM server. Do **not** run it on the Linux host for a Windows Creo setup — run it on the PC that runs Creo.
 
@@ -215,12 +215,13 @@ creopdm-agent-tray
 That starts in the system tray (no console). Menu items:
 
 - **Show status** — port, version, and cache folder
+- **Show logs** — live agent log window (requests, materialize, errors)
 - **Open cache folder** — Explorer on the local download cache
 - **Quit** — stop the agent
 
 Cache default: `%LOCALAPPDATA%\CreoPDM-agent\workspaces`.
 
-Console form (logs in the terminal):
+Optional console form (same logs in a terminal instead of the tray window):
 
 ```powershell
 creopdm-agent

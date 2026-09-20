@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from urllib.parse import quote, urlparse
@@ -13,6 +14,8 @@ from pydantic import BaseModel, Field
 
 from creopdm_agent import __version__
 from creopdm_agent.config import AgentConfig
+
+logger = logging.getLogger("creopdm_agent")
 
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9._\-]+")
 
@@ -171,6 +174,14 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     continue
                 _download(client, base, item, target_dir, headers)
                 companions_written += 1
+        logger.info(
+            "Materialized %s (%s bytes, %s companion%s) → %s",
+            disk_name,
+            nbytes,
+            companions_written,
+            "" if companions_written == 1 else "s",
+            target_dir,
+        )
         return MaterializeResponse(
             path=str(target.resolve()),
             working_directory=str(target_dir.resolve()),
