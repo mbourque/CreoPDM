@@ -96,20 +96,13 @@ function openAsmAsMfg(session, filename) {
 }
 function creoMajorRelease(release) {
     var text = String(release || "");
-    var digits = "";
-    var i = 0;
-    while (i < text.length) {
-        var ch = text.charAt(i);
-        if (ch < "0" || ch > "9") {
-            break;
-        }
-        digits += ch;
-        i += 1;
-    }
-    if (!digits) {
+    var match = text.match(/^(\d+)/)
+        || text.match(/(?:Creo|Parametric)\s+(\d+)/i)
+        || text.match(/(\d+)\.\d+/);
+    if (!match) {
         return 0;
     }
-    return parseInt(digits, 10);
+    return parseInt(match[1], 10);
 }
 function creoSessionRelease(session) {
     var value = "";
@@ -145,6 +138,23 @@ function creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease) {
     }
     return "Creo could not retrieve " + name;
 }
+function creoOpenFailedMessage(filename, fileRelease, sessionRelease) {
+    if (creoNewerThanSession(fileRelease, sessionRelease)) {
+        return creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease);
+    }
+    var name = String(filename || "This model");
+    if (fileRelease && sessionRelease) {
+        return "Creo could not open " + name
+            + " (file Creo " + fileRelease + ", session Creo " + sessionRelease
+            + "). Check the working directory and that the file exists.";
+    }
+    if (fileRelease) {
+        return "Creo could not open " + name
+            + " (saved in Creo " + fileRelease
+            + "). Check the working directory and that the file exists.";
+    }
+    return "Creo could not open " + name + ".";
+}
 function creoOpenFailed(message) {
     return "CREOPDM_ERROR:" + message;
 }
@@ -177,7 +187,7 @@ function openModel(directory, filename, fileRelease) {
             }
         }
         if (!model) {
-            return creoOpenFailed(creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease));
+            return creoOpenFailed(creoOpenFailedMessage(filename, fileRelease, sessionRelease));
         }
         try {
             model.Display();
