@@ -129,6 +129,21 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             "port": settings.port,
         }
 
+    @app.get("/workdir")
+    def workdir(project_id: str = "") -> dict[str, str]:
+        """Return (and create) the local cache folder Creo should use as WD."""
+        base = settings.ensure_dirs()
+        key = (project_id or "").strip()
+        if key:
+            path = base / _safe_segment(key, "local")
+            path.mkdir(parents=True, exist_ok=True)
+        else:
+            path = base
+        return {
+            "path": str(path.resolve()),
+            "local_root": str(base.resolve()),
+        }
+
     @app.post("/materialize", response_model=MaterializeResponse)
     def materialize(payload: MaterializeRequest) -> MaterializeResponse:
         base = _normalize_base(payload.pdm_url or settings.pdm_url)

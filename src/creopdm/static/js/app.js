@@ -1814,23 +1814,62 @@
   }
   void creoJSReady.then(showCreoSessionControls);
 
-  async function setCreoWorkingDirectory() {
-    const directory = setCreoDirBtn?.dataset.workspace || "";
-    if (!directory) {
-      showError($("#toolbar-error"), "No project workspace is selected.");
-      return;
+  async function agentWorkdir(projectId) {
+    const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+    const response = await fetch(`${agentBase()}/workdir${query}`, { method: "GET" });
+    if (!response.ok) {
+      throw new Error("Local CreoPDM agent could not provide a cache folder.");
     }
+    const body = await response.json();
+    if (!body || !body.path) {
+      throw new Error("Local CreoPDM agent returned no cache path.");
+    }
+    return String(body.path);
+  }
+
+  async function setCreoWorkingDirectory() {
     try {
       await creoJSReady;
       if (!hostedCreoJS()) {
         showError($("#toolbar-error"), "Open this page in Creo's built-in browser to set the working directory.");
         return;
       }
+      if (window.CreoJS && typeof window.CreoJS === "object") {
+        window.CreoJS.$ONEXCEPTION = function (exc) {
+          const raw = exc && exc.message ? String(exc.message) : "";
+          const text =
+            raw && raw !== "{}" && raw !== "[object Object]"
+              ? raw
+              : "Creo could not complete that command.";
+          showError($("#toolbar-error"), text);
+        };
+      }
+      const agent = await probeCreoAgent();
+      if (!agent) {
+        showError(
+          $("#toolbar-error"),
+          "Start creopdm-agent on this Creo PC, then try Set Working Directory again."
+        );
+        return;
+      }
+      const directory = await agentWorkdir(currentProjectId());
       await whenCreoJSReady();
-      await window.CreoJS.setWorkingDirectory(directory);
-      showOk("Creo working directory set to this project.");
+      const result = await window.CreoJS.setWorkingDirectory(directory);
+      const text = result == null ? "" : String(result);
+      if (text.indexOf("CREOPDM_ERROR:") === 0) {
+        showError($("#toolbar-error"), text.slice("CREOPDM_ERROR:".length));
+        return;
+      }
+      showOk("Creo working directory set to the local agent cache.");
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
+      if (!message || message === "[object Object]" || message === "{}") {
+        showError(
+          $("#toolbar-error"),
+          "Creo could not change the working directory. Check that creopdm-agent is running."
+        );
+        return;
+      }
       showError($("#toolbar-error"), message || "Creo could not change directory.");
     }
   }

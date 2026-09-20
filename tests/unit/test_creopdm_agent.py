@@ -67,3 +67,6 @@ def test_agent_health_and_materialize(tmp_path, monkeypatch):
         assert Path(body["path"]).read_bytes() == b"asm-bytes"
         assert (Path(body["working_directory"]) / "pin.prt.1").read_bytes() == b"prt-bytes"
         assert any("/api/objects/pin/content" in url for url in seen)
+        workdir = client.get("/workdir", params={"project_id": "proj1"})
+        assert workdir.status_code == 200
+        assert workdir.json()["path"].endswith("proj1")

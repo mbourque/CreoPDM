@@ -301,7 +301,7 @@
 
 <footer class="toolbar">
   <div class="toolbar-actions">
-    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this project's workspace.">
+    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to the local creopdm-agent cache for this project.">
       <button type="button" class="btn" id="set-creo-dir-btn"
               {% if workspace_path %}data-workspace="{{ workspace_path }}"{% endif %}
               {% if not workspace_path %}disabled{% endif %}>Set Working Directory</button>

@@ -40,6 +40,8 @@ def test_home_page(client):
     assert '<dialog id="busy-overlay"' in text
     assert 'type="text/creojs"' in text
     assert "function setWorkingDirectory" in text
+    assert "CREOPDM_ERROR:No project workspace is selected." in text
+    assert "creopdm-agent cache when CreoPDM is remote" in text
     assert "session.OpenFile" in text
     assert "pfcModelType.MDL_MFG" in text
     assert "function creoCannotOpenNewerMessage" in text

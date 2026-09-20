@@ -269,16 +269,43 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
     }
 }
 function setWorkingDirectory(directory) {
-    var session = (typeof pfcGetCurrentSession === "function")
-      ? pfcGetCurrentSession()
-      : pfcGetProESession();
-    if (!directory) {
-        throw new Error("No project workspace is selected.");
+    try {
+        var session = (typeof pfcGetCurrentSession === "function")
+          ? pfcGetCurrentSession()
+          : pfcGetProESession();
+        if (!directory) {
+            return "CREOPDM_ERROR:No project workspace is selected.";
+        }
+        try {
+            session.ChangeDirectory(directory);
+        } catch (errDir) {
+            var detail = "";
+            try {
+                detail = errDir && errDir.message ? String(errDir.message) : "";
+            } catch (errMsg) {
+                detail = "";
+            }
+            if (!detail || detail === "[object Object]" || detail === "{}") {
+                detail = "Creo could not change to:\n" + directory
+                    + "\nUse a folder on this Creo PC (creopdm-agent cache when CreoPDM is remote).";
+            }
+            return "CREOPDM_ERROR:" + detail;
+        }
+        return String(directory);
+    } catch (errAll) {
+        var fallback = "";
+        try {
+            fallback = errAll && errAll.message ? String(errAll.message) : "";
+        } catch (errMsg2) {
+            fallback = "";
+        }
+        if (!fallback || fallback === "[object Object]" || fallback === "{}") {
+            fallback = "Creo could not set the working directory.";
+        }
+        return "CREOPDM_ERROR:" + fallback;
     }
-    session.ChangeDirectory(directory);
-    return directory;
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open54"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open57"></script>
 </body>
 </html>
