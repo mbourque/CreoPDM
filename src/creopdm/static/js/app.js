@@ -1920,22 +1920,42 @@
     });
   }
 
-  function showCreoSessionControls() {
+  async function refreshCreoStatusPill() {
     document.querySelectorAll(".creo-session-only").forEach((el) => {
       el.hidden = !hostedCreoJS();
     });
-    if (!hostedCreoJS()) return;
     const pill = $("#creo-status");
-    if (!pill) return;
+    if (!pill || !hostedCreoJS()) return;
     const modeKey = creoOpenMode() || "association";
     const modeName = modeKey === "embedded" ? "Embedded" : modeKey === "association" ? "OS" : modeKey;
+    if (modeKey === "embedded") {
+      const agent = await probeCreoAgent();
+      if (agent) {
+        pill.textContent = `Creo: Connected · ${modeName}`;
+        pill.dataset.state = "ok";
+        pill.title = "Creo session connected. Local creopdm-agent is running.";
+      } else {
+        pill.textContent = `Creo: Agent offline · ${modeName}`;
+        pill.dataset.state = "idle";
+        pill.title =
+          "Creo session is open, but creopdm-agent is not running on this PC. Start creopdm-agent-tray for Embedded open.";
+      }
+      return;
+    }
     pill.textContent = `Creo: Connected · ${modeName}`;
     pill.dataset.state = "ok";
-    pill.title = modeKey === "embedded"
-      ? "Opens CAD in the Creo session showing this page"
-      : (pill.title || "");
+    pill.title = "Opens Creo models as a browser download for the OS association";
   }
-  void creoJSReady.then(showCreoSessionControls);
+
+  function showCreoSessionControls() {
+    void refreshCreoStatusPill();
+  }
+  void creoJSReady.then(() => {
+    void refreshCreoStatusPill();
+    window.setInterval(() => {
+      void refreshCreoStatusPill();
+    }, 5000);
+  });
 
   async function agentWorkdir(projectId) {
     const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
@@ -2839,19 +2859,9 @@
   function syncCreoStatusPill(mode, parametricPath, viewPath) {
     const pill = $("#creo-status");
     if (!pill) return;
-    const names = {
-      association: "OS",
-      embedded: "Embedded",
-    };
-    const titles = {
-      association: "Opens Creo models as a browser download for the OS association",
-      embedded: "Opens CAD in the Creo session showing this page",
-    };
     const key = String(mode || "association");
-    const status = (pill.textContent || "Creo:").split("·")[0].trim() || "Creo:";
-    pill.textContent = `${status} · ${names[key] || names.association}`;
-    pill.title = titles[key] || titles.association;
     pill.dataset.creoOpenMode = key;
+    void refreshCreoStatusPill();
   }
 
   settingsForm?.addEventListener("submit", async (event) => {
