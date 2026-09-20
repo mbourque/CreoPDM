@@ -2561,7 +2561,7 @@
     const titles = {
       executable: parametricPath || "Opens CAD with Creo Parametric",
       view: viewPath || "Opens CAD with Creo View",
-      association: "Opens CAD with the Windows file association",
+      association: "Opens Creo models with the Windows file association",
       embedded: "Opens CAD in the Creo session showing this page",
     };
     const key = String(mode || "executable");

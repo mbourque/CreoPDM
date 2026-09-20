@@ -424,7 +424,7 @@ def test_open_document_uses_windows_association(data_dir, repo_parent, identity,
 
 
 @requires_git
-def test_open_extra_cad_does_not_launch_association(
+def test_open_extra_cad_uses_windows_association(
     data_dir, repo_parent, identity, monkeypatch
 ):
     opened: list[Path] = []
@@ -437,6 +437,8 @@ def test_open_extra_cad_does_not_launch_association(
     monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
+        # Creo open mode must not affect non-Creo files.
+        assert client.put("/api/settings", json={"creo_open_mode": "executable"}).status_code == 200
         project = client.post("/api/projects", json={"name": "ExtraCad"}).json()
         created = client.post(
             f"/api/projects/{project['uuid']}/objects",
@@ -445,10 +447,37 @@ def test_open_extra_cad_does_not_launch_association(
         )
         assert created.status_code == 201, created.text
         opened_resp = client.post("/api/creo/open", json={"object_id": created.json()["uuid"]})
-        assert opened_resp.status_code == 400, opened_resp.text
-        payload = opened_resp.json()["error"]
-        assert "cannot be opened" in payload["message"].lower()
-        assert not opened
+        assert opened_resp.status_code == 200, opened_resp.text
+        assert opened_resp.json()["method"] == "shell"
+        assert opened
+        assert opened[0].name == "setup.inf"
+
+
+@requires_git
+def test_open_image_uses_windows_association(data_dir, repo_parent, identity, monkeypatch):
+    opened: list[Path] = []
+    monkeypatch.setattr("creopdm.services.creo_service.os.name", "nt")
+    monkeypatch.setattr("creopdm.utils.launch.os.name", "nt")
+
+    def fake_start(path: Path, workdir: Path) -> None:
+        opened.append(Path(path))
+
+    monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
+    ctx = build_context(ConfigManager(), users=identity)
+    with TestClient(create_app(ctx)) as client:
+        assert client.put("/api/settings", json={"creo_open_mode": "embedded"}).status_code == 200
+        project = client.post("/api/projects", json={"name": "Images"}).json()
+        created = client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={"file": ("photo.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+            data={"comment": "Photo"},
+        )
+        assert created.status_code == 201, created.text
+        opened_resp = client.post("/api/creo/open", json={"object_id": created.json()["uuid"]})
+        assert opened_resp.status_code == 200, opened_resp.text
+        assert opened_resp.json()["method"] == "shell"
+        assert opened
+        assert opened[0].name == "photo.png"
 
 
 @requires_git

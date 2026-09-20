@@ -140,7 +140,7 @@ def _creo_open_title(ctx: AppContext, mode: str) -> str:
     if mode == "embedded":
         return "Opens CAD in the Creo session showing this page"
     if mode == "association":
-        return "Opens CAD with the Windows file association"
+        return "Opens Creo models with the Windows file association"
     if mode == "view":
         return _creo_view_executable(ctx) or "Opens CAD with Creo View"
     return _creo_executable(ctx) or "Opens CAD with Creo Parametric"

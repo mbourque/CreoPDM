@@ -16,7 +16,7 @@ from creopdm.models.project import Project
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
-from creopdm.utils.classify import classify_filename, is_creo_openable, is_creo_view, is_extra_cad
+from creopdm.utils.classify import classify_filename, is_creo_openable, is_creo_view
 from creopdm.utils.creo_header import creo_release_for
 from creopdm.utils.launch import open_windows_file, working_directory_for
 
@@ -113,13 +113,7 @@ class CreoService:
     ) -> dict[str, str | bool]:
         workdir = working_directory_for(path)
         models = self._workspaces._config.model_cad_extensions()
-        extras = self._workspaces._config.extra_cad_extensions()
         all_cad = self._workspaces._cad_extensions()
-        if is_extra_cad(path.name, extras, models):
-            raise ValidationAppError(
-                f"{path.name} cannot be opened. This file type is not opened by Creo.",
-                details={"path": str(path), "filename": path.name},
-            )
         is_model = object_type.startswith("CREO_") or is_creo_openable(
             path.name, models, all_cad
         )
@@ -129,15 +123,20 @@ class CreoService:
         creo_object = (not use_view) and is_model
         logical = CreoFileManager.normalize_creo_filename(path.name, (*models, *all_cad))
         if launch:
-            if use_view:
+            if not creo_object and not use_view:
+                # Images, PDFs, docs, extra CAD — always OS association.
+                method = self._open_with_shell(path)
+            elif use_view:
                 method = self._open_view_path(path)
-            elif creo_object and open_mode == "embedded":
+            elif open_mode == "embedded":
                 raise ValidationAppError(
                     "Open this model from Creo's built-in browser.",
                     details={"path": str(path), "filename": path.name},
                 )
+            elif open_mode == "association":
+                method = self._open_with_shell(path)
             else:
-                method = self._open_path(path, creo_object=creo_object)
+                method = self._open_path(path, creo_object=True)
             logger.info("Opened %s via %s from %s", path, method, workdir)
         else:
             method = "prepared"

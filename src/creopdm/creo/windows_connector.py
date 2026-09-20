@@ -117,14 +117,24 @@ class WindowsCreoConnector(CreoConnector):
             )
         parametric = self.find_executable()
         if self._open_mode == "association" or parametric is None:
+            logger.info("Opening %s from working directory %s", target.name, workdir)
             if os.name == "nt":
-                logger.info("Opening %s from working directory %s", target.name, workdir)
                 open_windows_file(target, cwd=workdir)
                 return
-            raise CreoUnavailableError(
-                "Creo is not installed and no file association is available.",
-                details={"path": str(target)},
+            opener = "xdg-open" if os.name == "posix" else "open"
+            result = subprocess.run(
+                [opener, str(target)],
+                cwd=str(workdir) if workdir.is_dir() else None,
+                check=False,
+                capture_output=True,
+                shell=False,
             )
+            if result.returncode != 0:
+                raise CreoUnavailableError(
+                    "Unable to open the file with the system viewer.",
+                    details={"path": str(target)},
+                )
+            return
         logger.info("Opening %s with %s from %s", target.name, parametric, workdir)
         start_executable(parametric, target, cwd=workdir)
 
@@ -138,14 +148,24 @@ class WindowsCreoConnector(CreoConnector):
         workdir = working_directory_for(target)
         viewer = self.find_view_executable()
         if self._view_open_mode == "association" or viewer is None:
+            logger.info("Opening %s from working directory %s", target.name, workdir)
             if os.name == "nt":
-                logger.info("Opening %s from working directory %s", target.name, workdir)
                 open_windows_file(target, cwd=workdir)
                 return
-            raise CreoUnavailableError(
-                "Creo View is not installed and no file association is available.",
-                details={"path": str(target)},
+            opener = "xdg-open" if os.name == "posix" else "open"
+            result = subprocess.run(
+                [opener, str(target)],
+                cwd=str(workdir) if workdir.is_dir() else None,
+                check=False,
+                capture_output=True,
+                shell=False,
             )
+            if result.returncode != 0:
+                raise CreoUnavailableError(
+                    "Unable to open the file with the system viewer.",
+                    details={"path": str(target)},
+                )
+            return
         logger.info("Opening %s with %s from %s", target.name, viewer, workdir)
         start_executable(viewer, target, cwd=workdir, logical_name=False)
 
