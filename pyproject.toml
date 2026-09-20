@@ -25,10 +25,17 @@ dev = [
     "pytest>=8.3.0",
     "httpx>=0.28.0",
 ]
+agent-tray = [
+    "pystray>=0.19.5",
+    "Pillow>=10.0.0",
+]
 
 [project.scripts]
 creopdm = "creopdm.main:run_cli"
 creopdm-agent = "creopdm_agent.main:run_cli"
+
+[project.gui-scripts]
+creopdm-agent-tray = "creopdm_agent.main:run_tray_cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
 import sys
+from pathlib import Path
 
 import uvicorn
 
 from creopdm_agent import __version__
 from creopdm_agent.config import DEFAULT_PORT, load_config, save_config
 from creopdm_agent.server import create_agent_app
+
+# Windows: spawn without attaching a console window.
+_CREATE_NO_WINDOW = 0x08000000
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -52,12 +58,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write the resolved settings to the agent config file and exit.",
     )
+    parser.add_argument(
+        "--tray",
+        action="store_true",
+        help="Run in the system tray (hides the console on Windows).",
+    )
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    settings = load_config()
+def _apply_args(settings, args) -> None:
     if args.host is not None:
         settings.host = args.host.strip() or "127.0.0.1"
     if args.port is not None:
@@ -68,6 +77,36 @@ def main(argv: list[str] | None = None) -> int:
         settings.local_root = args.root.strip()
     if args.token is not None:
         settings.token = args.token.strip()
+
+
+def _windows_tray_without_console(argv: list[str] | None) -> bool:
+    """If started with python.exe --tray, re-launch via pythonw and exit parent."""
+    if sys.platform != "win32":
+        return False
+    if Path(sys.executable).name.lower() == "pythonw.exe":
+        return False
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    if not pythonw.is_file():
+        return False
+    forwarded = list(argv) if argv is not None else list(sys.argv[1:])
+    if "--tray" not in forwarded:
+        forwarded = ["--tray", *forwarded]
+    cmd = [str(pythonw), "-m", "creopdm_agent", *forwarded]
+    subprocess.Popen(
+        cmd,
+        env=os.environ.copy(),
+        close_fds=True,
+        creationflags=_CREATE_NO_WINDOW,
+    )
+    return True
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.tray and _windows_tray_without_console(argv):
+        return 0
+    settings = load_config()
+    _apply_args(settings, args)
     settings.ensure_dirs()
     if args.save_config:
         save_config(settings)
@@ -79,6 +118,11 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    if args.tray:
+        from creopdm_agent.tray import hide_console_window, run_tray
+
+        hide_console_window()
+        return run_tray(settings)
     app = create_agent_app(settings)
     print(
         f"CreoPDM agent {__version__} on http://{settings.host}:{settings.port} "
@@ -90,6 +134,14 @@ def main(argv: list[str] | None = None) -> int:
 
 def run_cli() -> None:
     raise SystemExit(main())
+
+
+def run_tray_cli() -> None:
+    """gui-scripts entry: same as ``creopdm-agent --tray``."""
+    from creopdm_agent.tray import hide_console_window
+
+    hide_console_window()
+    raise SystemExit(main(["--tray", *sys.argv[1:]]))
 
 
 if __name__ == "__main__":
