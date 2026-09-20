@@ -166,6 +166,7 @@ def test_open_prepare_skips_creo_release_for_foreign_openable(
         assert prepared.status_code == 200, prepared.text
         body = prepared.json()
         assert body["creo_object"] is False
+        assert body.get("open_with_creo") is True
         assert body.get("creo_release") in {None, ""}
         assert body["filename"].lower().endswith(".sldprt")
 

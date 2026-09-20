@@ -2073,11 +2073,11 @@
     return response.json();
   }
 
-  async function openViaAgent(localPath) {
+  async function openViaAgent(localPath, mode) {
     const response = await fetch(`${agentBase()}/open`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: localPath }),
+      body: JSON.stringify({ path: localPath, mode: mode || "association" }),
     });
     if (!response.ok) {
       const message = await readError(response);
@@ -2137,13 +2137,14 @@
           return null;
         }
       } else {
-        // Multi-CAD (SolidWorks, …) and non-Creo files: Creo.JS cannot open them.
-        // Materialize on the Creo PC then ShellExecute the local path.
+        // Multi-CAD: Creo.JS cannot OpenFile these — materialize then start Parametric.
+        // Other non-Creo files: Windows association.
         try {
           const agent = await probeCreoAgent();
           if (agent) {
             const openSpec = await materializeViaAgent(prepared);
-            await openViaAgent(openSpec.path);
+            const mode = prepared.open_with_creo ? "creo" : "association";
+            await openViaAgent(openSpec.path, mode);
             return prepared;
           }
         } catch (err) {

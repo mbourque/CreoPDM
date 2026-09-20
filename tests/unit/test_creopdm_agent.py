@@ -88,6 +88,37 @@ def test_agent_open_local_association(tmp_path, monkeypatch):
     with TestClient(app) as client:
         ok = client.post("/open", json={"path": str(target)})
         assert ok.status_code == 200, ok.text
+        assert ok.json()["mode"] == "association"
         assert opened and Path(opened[0]).name == "bolt_sw.SLDPRT"
         denied = client.post("/open", json={"path": str(tmp_path / "outside.bin")})
         assert denied.status_code == 403
+
+
+def test_agent_open_local_creo(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    root.mkdir()
+    target = root / "bolt_sw.SLDPRT"
+    target.write_bytes(b"sw")
+    parametric = tmp_path / "parametric.exe"
+    parametric.write_bytes(b"")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    started: list[tuple[str, str, bool]] = []
+
+    class FakeConnector:
+        def find_executable(self):
+            return parametric
+
+    def fake_start(executable, path, cwd=None, *, logical_name=True):
+        started.append((str(executable), str(path), logical_name))
+
+    monkeypatch.setattr(
+        "creopdm.creo.windows_connector.WindowsCreoConnector",
+        FakeConnector,
+    )
+    monkeypatch.setattr("creopdm.utils.launch.start_executable", fake_start)
+    with TestClient(app) as client:
+        ok = client.post("/open", json={"path": str(target), "mode": "creo"})
+        assert ok.status_code == 200, ok.text
+        assert ok.json()["mode"] == "creo"
+        assert started == [(str(parametric), str(target.resolve()), False)]

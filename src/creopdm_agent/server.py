@@ -50,11 +50,14 @@ class MaterializeResponse(BaseModel):
 
 class OpenLocalRequest(BaseModel):
     path: str
+    # association = Windows default app; creo = launch Parametric with the file.
+    mode: str = "association"
 
 
 class OpenLocalResponse(BaseModel):
     ok: bool = True
     path: str
+    mode: str = "association"
 
 
 def _safe_segment(value: str, fallback: str = "file") -> str:
@@ -202,8 +205,9 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
 
     @app.post("/open", response_model=OpenLocalResponse)
     def open_local(payload: OpenLocalRequest) -> OpenLocalResponse:
-        """Open a file already under the agent cache with the Windows association."""
-        from creopdm.utils.launch import open_windows_file
+        """Open a cache file with Creo Parametric or the Windows association."""
+        from creopdm.creo.windows_connector import WindowsCreoConnector
+        from creopdm.utils.launch import open_windows_file, start_executable, working_directory_for
 
         try:
             target = Path(payload.path).resolve()
@@ -219,11 +223,35 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             ) from exc
         if not target.is_file():
             raise HTTPException(status_code=404, detail=f"File not found: {target}")
+
+        mode = (payload.mode or "association").strip().lower()
+        if mode not in {"association", "creo"}:
+            raise HTTPException(status_code=400, detail="mode must be 'association' or 'creo'.")
+
+        workdir = working_directory_for(target)
         try:
-            open_windows_file(target)
+            if mode == "creo":
+                parametric = WindowsCreoConnector().find_executable()
+                if parametric is None:
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Creo Parametric was not found on this PC.",
+                    )
+                # Keep the real disk name (.sldprt); do not normalize to Creo .prt.
+                start_executable(
+                    parametric,
+                    target,
+                    cwd=workdir,
+                    logical_name=False,
+                )
+                logger.info("Opened %s with %s", target, parametric)
+            else:
+                open_windows_file(target, cwd=workdir)
+                logger.info("Opened %s via Windows association", target)
+        except HTTPException:
+            raise
         except OSError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
-        logger.info("Opened %s via Windows association", target)
-        return OpenLocalResponse(path=str(target))
+        return OpenLocalResponse(path=str(target), mode=mode)
 
     return app

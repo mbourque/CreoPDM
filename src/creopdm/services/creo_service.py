@@ -227,10 +227,11 @@ class CreoService:
         open_mode = self._connector.cad_open_mode()
         use_view = view_object or (open_mode == "view" and is_model)
         # Multi-CAD (SolidWorks, CATIA, …) is Creo-openable in File > Open, but
-        # Creo.JS ModelDescriptor cannot open it — use OS association / agent.
-        creo_object = (not use_view) and is_model and is_creo_js_openable(
-            path.name, models, all_cad
-        )
+        # Creo.JS ModelDescriptor cannot open it — agent launches Parametric instead.
+        js_openable = is_creo_js_openable(path.name, models, all_cad)
+        creo_object = (not use_view) and is_model and js_openable
+        # True when the agent should start parametric.exe with this file (Unite).
+        open_with_creo = (not use_view) and is_model and not js_openable
         logical = CreoFileManager.normalize_creo_filename(path.name, (*models, *all_cad))
         url: str | None = None
         if launch:
@@ -270,6 +271,7 @@ class CreoService:
             "project_id": project_id or None,
             "relative_path": relative_path or None,
             "creo_object": creo_object,
+            "open_with_creo": open_with_creo,
             "creo_release": creo_release or "",
             "url": url,
             "companions": companions or [],
