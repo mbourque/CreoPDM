@@ -1872,7 +1872,9 @@
           const opened = await window.CreoJS.openModel(
             prepared.working_directory,
             prepared.filename,
-            prepared.creo_release || ""
+            prepared.creo_release || "",
+            prepared.disk_name || prepared.filename,
+            prepared.path || ""
           );
           const openedText = opened == null ? "" : String(opened);
           if (openedText.indexOf("CREOPDM_ERROR:") === 0) {

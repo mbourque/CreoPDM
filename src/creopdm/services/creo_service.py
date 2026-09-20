@@ -147,12 +147,18 @@ class CreoService:
             logger.info("Opened %s via %s from %s", path, method, workdir)
         else:
             method = "prepared"
+            if not path.is_file():
+                raise PathValidationError(
+                    f"Workspace file not found for Creo open: {path.name}.",
+                    details={"path": str(path)},
+                )
             logger.info("Prepared %s for Creo session open from %s", path, workdir)
         return {
-            "path": str(path),
+            "path": str(path.resolve()),
             "method": method,
             "filename": logical,
-            "working_directory": str(workdir),
+            "disk_name": path.name,
+            "working_directory": str(workdir.resolve()),
             "creo_object": creo_object,
             "creo_release": creo_release or "",
             "url": url,

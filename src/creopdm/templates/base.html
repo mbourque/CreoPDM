@@ -138,56 +138,113 @@ function creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease) {
     }
     return "Creo could not retrieve " + name;
 }
-function creoOpenFailedMessage(filename, fileRelease, sessionRelease) {
+function creoOpenFailedMessage(filename, fileRelease, sessionRelease, detail) {
     if (creoNewerThanSession(fileRelease, sessionRelease)) {
         return creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease);
     }
     var name = String(filename || "This model");
+    var extra = detail ? (" " + String(detail)) : "";
     if (fileRelease && sessionRelease) {
         return "Creo could not open " + name
             + " (file Creo " + fileRelease + ", session Creo " + sessionRelease
-            + "). Check the working directory and that the file exists.";
+            + ")." + extra;
     }
     if (fileRelease) {
         return "Creo could not open " + name
-            + " (saved in Creo " + fileRelease
-            + "). Check the working directory and that the file exists.";
+            + " (saved in Creo " + fileRelease + ")." + extra;
     }
-    return "Creo could not open " + name + ".";
+    return "Creo could not open " + name + "." + extra;
 }
 function creoOpenFailed(message) {
     return "CREOPDM_ERROR:" + message;
 }
-function openModel(directory, filename, fileRelease) {
+function creoJoinPath(directory, name) {
+    var dir = String(directory || "").replace(/[\\\/]+$/, "");
+    var file = String(name || "");
+    if (!dir) return file;
+    if (!file) return dir;
+    return dir + "/" + file;
+}
+function creoTryOpenName(session, directory, name) {
+    if (!name) {
+        return null;
+    }
+    var model = null;
+    var fullPath = directory ? creoJoinPath(directory, name) : name;
+    try {
+        var descrPath = pfcModelDescriptor.CreateFromFileName(fullPath);
+        if (typeof session.OpenFile === "function") {
+            var win = session.OpenFile(descrPath);
+            if (win) {
+                try { win.Activate(); } catch (errAct) {}
+                try {
+                    if (typeof win.Model !== "undefined" && win.Model) {
+                        return win.Model;
+                    }
+                } catch (errModel) {}
+                try {
+                    if (typeof win.GetModel === "function") {
+                        model = win.GetModel();
+                        if (model) return model;
+                    }
+                } catch (errGet) {}
+            }
+        }
+        model = session.RetrieveModel(descrPath);
+        if (model) return model;
+    } catch (errPath) {}
+    try {
+        var descr = pfcModelDescriptor.CreateFromFileName(name);
+        model = session.RetrieveModel(descr);
+        if (model) return model;
+    } catch (errName) {}
+    try {
+        model = session.GetModelFromFileName(name);
+    } catch (errGetName) {
+        model = null;
+    }
+    return model;
+}
+function openModel(directory, filename, fileRelease, diskName, fullPath) {
+    var openDetail = "";
     try {
         var session = (typeof pfcGetCurrentSession === "function")
           ? pfcGetCurrentSession()
           : pfcGetProESession();
         if (directory) {
-            session.ChangeDirectory(directory);
+            try {
+                session.ChangeDirectory(directory);
+            } catch (errDir) {
+                openDetail = "ChangeDirectory failed for " + directory + ".";
+            }
         }
         var sessionRelease = creoSessionRelease(session);
         if (creoNewerThanSession(fileRelease, sessionRelease)) {
             return creoOpenFailed(creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease));
         }
         try {
-            if (openAsmAsMfg(session, filename)) {
+            if (openAsmAsMfg(session, diskName || filename)) {
                 return filename;
             }
         } catch (errMfg) {}
-        var descr = pfcModelDescriptor.CreateFromFileName(filename);
         var model = null;
-        try {
-            model = session.RetrieveModel(descr);
-        } catch (err) {
-            try {
-                model = session.GetModelFromFileName(filename);
-            } catch (err2) {
-                model = null;
-            }
+        if (fullPath) {
+            model = creoTryOpenName(session, "", fullPath);
+        }
+        if (!model && diskName && diskName !== filename) {
+            model = creoTryOpenName(session, directory, diskName);
         }
         if (!model) {
-            return creoOpenFailed(creoOpenFailedMessage(filename, fileRelease, sessionRelease));
+            model = creoTryOpenName(session, directory, filename);
+        }
+        if (!model) {
+            if (!openDetail) {
+                var prepared = fullPath || creoJoinPath(directory, diskName || filename);
+                openDetail = "CreoPDM prepared " + prepared
+                    + ". Creo must read that path on the machine running Creo "
+                    + "(same computer or shared folder as CreoPDM).";
+            }
+            return creoOpenFailed(creoOpenFailedMessage(filename, fileRelease, sessionRelease, openDetail));
         }
         try {
             model.Display();
@@ -207,7 +264,8 @@ function openModel(directory, filename, fileRelease) {
         }
         return filename;
     } catch (errAll) {
-        return creoOpenFailed(creoOpenFailedMessage(filename, fileRelease, ""));
+        var detail = errAll && errAll.message ? String(errAll.message) : String(errAll || "");
+        return creoOpenFailed(creoOpenFailedMessage(filename, fileRelease, "", detail));
     }
 }
 function setWorkingDirectory(directory) {
@@ -221,6 +279,6 @@ function setWorkingDirectory(directory) {
     return directory;
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open50"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open52"></script>
 </body>
 </html>
