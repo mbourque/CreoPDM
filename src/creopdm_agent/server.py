@@ -1,0 +1,128 @@
+"""Localhost HTTP API used by the CreoPDM page inside Creo's browser."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from urllib.parse import quote, urlparse
+
+import httpx
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+from creopdm_agent import __version__
+from creopdm_agent.config import AgentConfig
+
+_SAFE_NAME = re.compile(r"[^A-Za-z0-9._\-]+")
+
+
+class MaterializeRequest(BaseModel):
+    pdm_url: str = ""
+    object_id: str | None = None
+    project_id: str | None = None
+    relative_path: str | None = None
+    filename: str | None = None
+    disk_name: str | None = None
+    token: str | None = None
+
+
+class MaterializeResponse(BaseModel):
+    path: str
+    working_directory: str
+    filename: str
+    disk_name: str
+    bytes_written: int = 0
+
+
+def _safe_segment(value: str, fallback: str = "file") -> str:
+    text = _SAFE_NAME.sub("_", (value or "").strip()) or fallback
+    return text[:180]
+
+
+def _normalize_base(url: str) -> str:
+    text = (url or "").strip().rstrip("/")
+    if not text:
+        raise HTTPException(status_code=400, detail="pdm_url is required.")
+    parsed = urlparse(text)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="pdm_url must be an http(s) URL.")
+    return text
+
+
+def _content_url(base: str, payload: MaterializeRequest) -> tuple[str, str]:
+    if payload.object_id:
+        name = payload.disk_name or payload.filename or f"{payload.object_id}.bin"
+        return f"{base}/api/objects/{quote(payload.object_id)}/content", name
+    if payload.project_id and payload.relative_path:
+        rel = payload.relative_path.replace("\\", "/").lstrip("/")
+        name = payload.disk_name or payload.filename or Path(rel).name
+        return (
+            f"{base}/api/projects/{quote(payload.project_id)}/workspace/content?path={quote(rel)}",
+            name,
+        )
+    raise HTTPException(
+        status_code=400,
+        detail="Provide object_id, or project_id with relative_path.",
+    )
+
+
+def create_agent_app(settings: AgentConfig) -> FastAPI:
+    app = FastAPI(title="CreoPDM Agent", version=__version__)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    root = settings.ensure_dirs()
+
+    @app.get("/health")
+    def health() -> dict[str, object]:
+        return {
+            "ok": True,
+            "app": "creopdm-agent",
+            "version": __version__,
+            "pdm_url": settings.pdm_url or None,
+            "local_root": str(root),
+            "port": settings.port,
+        }
+
+    @app.post("/materialize", response_model=MaterializeResponse)
+    def materialize(payload: MaterializeRequest) -> MaterializeResponse:
+        base = _normalize_base(payload.pdm_url or settings.pdm_url)
+        url, suggested_name = _content_url(base, payload)
+        disk_name = _safe_segment(payload.disk_name or suggested_name, "model.bin")
+        logical = _safe_segment(payload.filename or Path(disk_name).stem + Path(disk_name).suffix, disk_name)
+        project_key = _safe_segment(payload.project_id or payload.object_id or "local", "local")
+        target_dir = root / project_key
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / disk_name
+        headers = {}
+        token = (payload.token or settings.token or "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        try:
+            with httpx.Client(timeout=120.0, follow_redirects=True) as client:
+                response = client.get(url, headers=headers)
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not reach CreoPDM at {base}: {exc}",
+            ) from exc
+        if response.status_code >= 400:
+            raise HTTPException(
+                status_code=502,
+                detail=f"CreoPDM returned {response.status_code} for {url}",
+            )
+        target.write_bytes(response.content)
+        return MaterializeResponse(
+            path=str(target.resolve()),
+            working_directory=str(target_dir.resolve()),
+            filename=logical,
+            disk_name=disk_name,
+            bytes_written=len(response.content),
+        )
+
+    return app

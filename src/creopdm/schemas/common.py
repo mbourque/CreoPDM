@@ -187,6 +187,9 @@ class CreoOpenResponse(BaseModel):
     method: str
     working_directory: str
     disk_name: str | None = None
+    object_id: str | None = None
+    project_id: str | None = None
+    relative_path: str | None = None
     creo_object: bool = False
     creo_release: str | None = None
     url: str | None = None

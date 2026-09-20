@@ -1848,6 +1848,41 @@
     };
   }
 
+  function agentBase() {
+    return "http://127.0.0.1:8766";
+  }
+
+  async function probeCreoAgent() {
+    try {
+      const response = await fetch(`${agentBase()}/health`, { method: "GET" });
+      if (!response.ok) return null;
+      const body = await response.json().catch(() => null);
+      return body && body.ok ? body : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function materializeViaAgent(prepared) {
+    const response = await fetch(`${agentBase()}/materialize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pdm_url: window.location.origin,
+        object_id: prepared.object_id || null,
+        project_id: prepared.project_id || currentProjectId() || null,
+        relative_path: prepared.relative_path || null,
+        filename: prepared.filename || null,
+        disk_name: prepared.disk_name || prepared.filename || null,
+      }),
+    });
+    if (!response.ok) {
+      const message = await readError(response);
+      throw new Error(message || "Local CreoPDM agent could not fetch the file.");
+    }
+    return response.json();
+  }
+
   async function openPdmObject(target) {
     await creoJSReady;
     const useCreoSession = hostedCreoJS() || creoOpenMode() === "embedded";
@@ -1869,16 +1904,25 @@
         }
         try {
           await whenCreoJSReady();
+          let openSpec = prepared;
+          const agent = await probeCreoAgent();
+          if (agent) {
+            openSpec = await materializeViaAgent(prepared);
+          }
           const opened = await window.CreoJS.openModel(
-            prepared.working_directory,
-            prepared.filename,
+            openSpec.working_directory,
+            openSpec.filename || prepared.filename,
             prepared.creo_release || "",
-            prepared.disk_name || prepared.filename,
-            prepared.path || ""
+            openSpec.disk_name || openSpec.filename || prepared.filename,
+            openSpec.path || ""
           );
           const openedText = opened == null ? "" : String(opened);
           if (openedText.indexOf("CREOPDM_ERROR:") === 0) {
-            showError($("#toolbar-error"), openedText.slice("CREOPDM_ERROR:".length));
+            const detail = openedText.slice("CREOPDM_ERROR:".length);
+            const hint = agent
+              ? ""
+              : " Start creopdm-agent on this Creo machine if CreoPDM is remote.";
+            showError($("#toolbar-error"), detail + hint);
             return null;
           }
         } catch (err) {

@@ -81,6 +81,9 @@ class CreoService:
             object_type=obj.object_type,
             creo_release=file_release or "",
             browser_url=f"/api/objects/{object_uuid}/content",
+            object_id=object_uuid,
+            project_id=str(project.uuid),
+            relative_path=obj.relative_path,
         )
 
     def open_workspace_file(self, project: Project, relative_path: str, launch: bool = True) -> dict[str, str | bool]:
@@ -103,6 +106,8 @@ class CreoService:
             object_type=kind.value,
             creo_release=creo_release_for(path, path.name) or "",
             browser_url=f"/api/projects/{project.uuid}/workspace/content?path={quote(rel)}",
+            project_id=str(project.uuid),
+            relative_path=rel,
         )
 
     def _open_resolved(
@@ -113,6 +118,9 @@ class CreoService:
         object_type: str = "",
         creo_release: str = "",
         browser_url: str = "",
+        object_id: str = "",
+        project_id: str = "",
+        relative_path: str = "",
     ) -> dict[str, str | bool | None]:
         workdir = working_directory_for(path)
         models = self._workspaces._config.model_cad_extensions()
@@ -159,6 +167,9 @@ class CreoService:
             "filename": logical,
             "disk_name": path.name,
             "working_directory": str(workdir.resolve()),
+            "object_id": object_id or None,
+            "project_id": project_id or None,
+            "relative_path": relative_path or None,
             "creo_object": creo_object,
             "creo_release": creo_release or "",
             "url": url,

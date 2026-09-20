@@ -21,7 +21,7 @@
         <input type="radio" name="creo_open_mode" value="embedded" {% if settings.creo_open_mode == 'embedded' %}checked{% endif %}>
         Embedded Creo Browser
       </label>
-      <p class="muted small">This setting applies only to Creo models. OS file association downloads the file in your browser so the desktop can open it with the usual app. Embedded Creo Browser opens CAD in the Creo session showing this page — CreoPDM and Creo must share a filesystem (same machine or mounted workspace), because Creo opens the prepared file by local path. Images, PDFs, and other non-Creo files always download the same way.</p>
+      <p class="muted small">This setting applies only to Creo models. OS file association downloads the file in your browser so the desktop can open it with the usual app. Embedded Creo Browser opens CAD in the Creo session. If CreoPDM is remote, run <code>creopdm-agent</code> on the Creo machine so files are fetched locally before open. Images, PDFs, and other non-Creo files always download the same way.</p>
       <label>Creo.JS library or Creo install folder
         <input name="creo_js_library" type="text" value="{{ settings.creo_js_library or '' }}" placeholder="/opt/ptc/Creo … or …/creojs.js">
       </label>
