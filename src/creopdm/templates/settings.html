@@ -25,7 +25,7 @@
       <label>Creo.JS library or Creo install folder
         <input name="creo_js_library" type="text" value="{{ settings.creo_js_library or '' }}" placeholder="/opt/ptc/Creo … or …/creojs.js">
       </label>
-      <p class="muted small">Required for Embedded Creo Browser. Creo.JS is part of your Creo install (not bundled with CreoPDM). Paste the path to <code>creojs.js</code>, or the Creo folder that contains <code>Common Files/apps/creojs/…</code>.{% if settings.creo_js_library_resolved %} Currently serving: <code>{{ settings.creo_js_library_resolved }}</code>.{% elif not settings.creo_js_library %} Not found yet — <code>/creojs.js</code> will 404 until this is set.{% endif %}</p>
+      <p class="muted small">Needed for Embedded Creo Browser. Creo.JS comes from your Creo install (not bundled with CreoPDM). Enter <code>creojs.js</code> or the Creo folder that contains <code>Common Files/apps/creojs/…</code>. The path must be readable by the machine running CreoPDM (a Windows path will not work if CreoPDM is on Linux).{% if settings.creo_js_library_resolved %} Currently serving: <code>{{ settings.creo_js_library_resolved }}</code>.{% elif settings.creo_js_library %} Saved, but not found on this server — <code>/creojs.js</code> will 404 until the file is visible here.{% else %} Not set — <code>/creojs.js</code> will 404.{% endif %}</p>
     </section>
 
     <section class="settings-card">

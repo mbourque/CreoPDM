@@ -107,13 +107,9 @@ def update_settings(
             from creopdm.creo.windows_connector import resolve_creojs_setting
 
             js_path = Path(js_library).expanduser()
-            if not js_path.exists():
-                raise PathValidationError(
-                    "The Creo.JS path does not exist.",
-                    details={"path": str(js_path)},
-                )
-            resolved = resolve_creojs_setting(js_path)
-            if resolved is None:
+            # Path must be readable by this CreoPDM process to serve /creojs.js.
+            # Still allow saving a path from another OS so the value is not rejected.
+            if js_path.exists() and resolve_creojs_setting(js_path) is None:
                 raise PathValidationError(
                     "Creo.JS was not found at that path. Point to creojs.js or a Creo install folder that contains Common Files/apps/creojs/creojsweb/creojs.js.",
                     details={"path": str(js_path)},
