@@ -95,6 +95,8 @@ def test_creojs_route_serves_library_from_settings(tmp_path, data_dir, identity:
         assert response.content == library.read_bytes()
 
 
-def test_creojs_route_404_without_install(client):
+def test_creojs_route_serves_bundled_library(client):
     response = client.get("/creojs.js")
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/javascript")
+    assert b"CreoJS" in response.content

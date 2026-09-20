@@ -25,12 +25,17 @@ from creopdm.utils.paths import validate_project_location
 router = APIRouter()
 
 
+def _resolved_creojs(ctx: AppContext) -> Path | None:
+    from creopdm.api.pages import _creojs_library
+
+    return _creojs_library(ctx)
+
+
 def settings_to_response(ctx: AppContext) -> SettingsResponse:
     settings = ctx.settings
     default_root = ctx.config.workspaces_dir
     current_root = ctx.config.workspace_root()
-    finder = getattr(ctx.creo, "find_creojs_library", None)
-    resolved = finder() if callable(finder) else None
+    resolved = _resolved_creojs(ctx)
     return SettingsResponse(
         creo_open_mode=settings.creo.open_mode,
         creo_executable=settings.creo.executable,

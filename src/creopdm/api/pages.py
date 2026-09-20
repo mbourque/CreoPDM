@@ -97,15 +97,23 @@ def _creo_label(ctx: AppContext) -> str:
     return "Not Connected"
 
 
-def _creojs_library(ctx: AppContext) -> Path | None:
-    finder = getattr(ctx.creo, "find_creojs_library", None)
-    if not callable(finder):
-        return None
-    found = finder()
-    if found is None:
-        return None
-    path = Path(found)
+def _bundled_creojs_library() -> Path | None:
+    path = PACKAGE_DIR / "static" / "vendor" / "creojs.js"
     return path if path.is_file() else None
+
+
+def _creojs_library(ctx: AppContext) -> Path | None:
+    local = ctx.config.config_dir / "creojs.js"
+    if local.is_file():
+        return local
+    finder = getattr(ctx.creo, "find_creojs_library", None)
+    if callable(finder):
+        found = finder()
+        if found is not None:
+            path = Path(found)
+            if path.is_file():
+                return path
+    return _bundled_creojs_library()
 
 
 def _creo_executable(ctx: AppContext) -> str | None:
@@ -184,7 +192,10 @@ def creojs_library(ctx: AppContext = Depends(get_context)) -> FileResponse:
     if path is None:
         raise HTTPException(
             status_code=404,
-            detail="Creo.JS was not found next to the Creo executable in Settings.",
+            detail=(
+                "Creo.JS was not found. Expected the bundled copy at "
+                "static/vendor/creojs.js, a Settings path, or config/creojs.js."
+            ),
         )
     return FileResponse(path, media_type="application/javascript")
 

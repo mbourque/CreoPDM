@@ -1853,7 +1853,7 @@
         if (!hostedCreoJS()) {
           showError(
             $("#toolbar-error"),
-            "Creo.JS is not available. In Settings, set Creo.JS library (path to creojs.js or your Creo install folder), save, then reload this page in Creo's browser."
+            "Creo.JS is not available in this browser session. Reload the page inside Creo's embedded browser after confirming /creojs.js loads."
           );
           return null;
         }
