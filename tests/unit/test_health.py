@@ -43,9 +43,11 @@ def test_home_page(client):
     assert "session.OpenFile" in text
     assert "pfcModelType.MDL_MFG" in text
     assert "function creoCannotOpenNewerMessage" in text
+    assert "function creoOpenFailedMessage" in text
     assert "Older Creo versions cannot open it." in text
     assert "CREOPDM_ERROR:" in text
     assert "catch (errAll)" in text
+    assert "creoOpenFailedMessage(filename, fileRelease, \"\")" in text
     assert "throw new Error" not in text.split("function openModel")[1].split("function setWorkingDirectory")[0]
     assert 'id="set-creo-dir-btn"' in text
     assert 'id="add-files-btn"' in text

@@ -146,23 +146,47 @@ class WindowsCreoConnector(CreoConnector):
         return self.find_executable() is not None
 
     def is_running(self) -> bool:
-        if os.name != "nt":
+        if os.name == "nt":
+            for name in _PROCESS_NAMES:
+                try:
+                    result = subprocess.run(
+                        ["tasklist", "/FI", f"IMAGENAME eq {name}", "/NH"],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        shell=False,
+                    )
+                except FileNotFoundError:
+                    return False
+                output = (result.stdout or "").lower()
+                if name.lower() in output and "no tasks" not in output:
+                    return True
             return False
-        for name in _PROCESS_NAMES:
+        for name in ("parametric", "xtop", "creo"):
             try:
                 result = subprocess.run(
-                    ["tasklist", "/FI", f"IMAGENAME eq {name}", "/NH"],
+                    ["pgrep", "-x", name],
                     capture_output=True,
                     text=True,
                     check=False,
                     shell=False,
                 )
             except FileNotFoundError:
-                return False
-            output = (result.stdout or "").lower()
-            if name.lower() in output and "no tasks" not in output:
+                break
+            if result.returncode == 0 and (result.stdout or "").strip():
                 return True
-        return False
+        try:
+            result = subprocess.run(
+                ["ps", "-eo", "comm="],
+                capture_output=True,
+                text=True,
+                check=False,
+                shell=False,
+            )
+        except FileNotFoundError:
+            return False
+        names = {(line or "").strip().lower() for line in (result.stdout or "").splitlines()}
+        return bool(names & {"parametric", "xtop", "creo"})
 
     def get_active_model(self) -> CreoModelRef | None:
         return None

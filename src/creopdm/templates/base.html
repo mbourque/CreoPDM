@@ -207,7 +207,7 @@ function openModel(directory, filename, fileRelease) {
         }
         return filename;
     } catch (errAll) {
-        return creoOpenFailed(creoCannotOpenNewerMessage(filename, fileRelease, ""));
+        return creoOpenFailed(creoOpenFailedMessage(filename, fileRelease, ""));
     }
 }
 function setWorkingDirectory(directory) {
@@ -221,6 +221,6 @@ function setWorkingDirectory(directory) {
     return directory;
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open49"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open50"></script>
 </body>
 </html>

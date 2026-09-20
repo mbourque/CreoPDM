@@ -1801,6 +1801,16 @@
     document.querySelectorAll(".creo-session-only").forEach((el) => {
       el.hidden = !hostedCreoJS();
     });
+    if (!hostedCreoJS()) return;
+    const pill = $("#creo-status");
+    if (!pill) return;
+    const modeKey = creoOpenMode() || "association";
+    const modeName = modeKey === "embedded" ? "Embedded" : modeKey === "association" ? "OS" : modeKey;
+    pill.textContent = `Creo: Connected · ${modeName}`;
+    pill.dataset.state = "ok";
+    pill.title = modeKey === "embedded"
+      ? "Opens CAD in the Creo session showing this page"
+      : (pill.title || "");
   }
   void creoJSReady.then(showCreoSessionControls);
 
