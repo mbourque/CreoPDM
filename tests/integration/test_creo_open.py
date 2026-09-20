@@ -619,10 +619,11 @@ def test_open_embedded_still_opens_creo_view(data_dir, repo_parent, identity: St
 def test_open_embedded_still_opens_documents(data_dir, repo_parent, identity, monkeypatch):
     opened: list[Path] = []
 
-    def fake_start(path: Path, workdir: Path) -> None:
+    def fake_shell(path: Path) -> str:
         opened.append(Path(path))
+        return "shell"
 
-    monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
+    monkeypatch.setattr(CreoService, "_open_with_shell", staticmethod(fake_shell))
     recorder = EmbeddedConnector()
     ctx = build_context(ConfigManager(), users=identity)
     ctx.creo = recorder
@@ -639,7 +640,7 @@ def test_open_embedded_still_opens_documents(data_dir, repo_parent, identity, mo
         opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
         body = opened_resp.json()
-        assert body["method"] == "browser"
-        assert body["url"] == f"/api/objects/{obj_id}/content"
+        assert body["method"] == "shell"
+        assert body.get("url") in (None, "")
         assert recorder.opened == []
-        assert not opened
+        assert opened and opened[0].name == "notes.txt"
