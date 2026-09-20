@@ -292,15 +292,8 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
           ? pfcGetCurrentSession()
           : pfcGetProESession();
         var versionName = diskName || filename;
-        // Only change the session WD for native Creo models. Multi-CAD trails
-        // navigate the File Open dialog to the cache folder instead.
-        if (directory && creoIsNativeVersioned(versionName)) {
-            try {
-                session.ChangeDirectory(creoNormalizePath(directory));
-            } catch (errDir) {
-                openDetail = "ChangeDirectory failed for " + directory + ".";
-            }
-        }
+        // Do not ChangeDirectory — the agent cache path is opened by full path
+        // (companions are materialized into the same folder).
         var sessionRelease = creoSessionRelease(session);
         if (creoIsNativeVersioned(versionName)
             && creoNewerThanSession(fileRelease, sessionRelease)) {
@@ -396,6 +389,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open71"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open72"></script>
 </body>
 </html>
