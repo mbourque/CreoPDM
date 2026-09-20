@@ -66,6 +66,7 @@ _PAGE_DEFAULTS = {
     "local_time": format_local,
     "creo_label": "Not Connected",
     "creo_open_name": "OS",
+    "creo_open_mode": "association",
     "creo_open_title": "Opens Creo models as a browser download for the OS association",
     "native_picker": False,
 }
@@ -163,6 +164,7 @@ def _creo_page(ctx: AppContext) -> dict[str, str | None]:
     payload = {
         "creo_label": _creo_label(ctx),
         "creo_executable": _creo_executable(ctx),
+        "creo_open_mode": mode,
         "creo_open_name": _creo_open_name(mode),
         "creo_open_title": _creo_open_title(ctx, mode),
     }

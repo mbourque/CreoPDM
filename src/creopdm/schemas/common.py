@@ -271,6 +271,8 @@ class SettingsResponse(BaseModel):
     creo_executable: str | None
     creo_view_open_mode: str
     creo_view_executable: str | None
+    creo_js_library: str | None = None
+    creo_js_library_resolved: str | None = None
     workspace_root: str
     default_workspace_root: str
     open_browser_on_start: bool
@@ -297,6 +299,7 @@ class SettingsUpdateRequest(BaseModel):
     creo_executable: str | None = None
     creo_view_open_mode: str | None = None
     creo_view_executable: str | None = None
+    creo_js_library: str | None = None
     workspace_root: str | None = None
     open_browser_on_start: bool | None = None
     cad_extensions: list[str] | None = None

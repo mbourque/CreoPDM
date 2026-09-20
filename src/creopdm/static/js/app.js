@@ -23,31 +23,61 @@
 
   function inCreoBrowser() {
     try {
-      return Boolean(window.external && window.external.ptc);
+      if (window.external && window.external.ptc) return true;
     } catch {
-      return false;
+      /* Chromium / Linux Creo may not expose window.external.ptc */
     }
+    try {
+      if (window.CreoJS) return true;
+    } catch {
+      /* ignore */
+    }
+    return false;
   }
 
   const creoJSReady = (function loadHostedCreoJS() {
-    if (!inCreoBrowser()) return Promise.resolve(false);
     if (window.CreoJS) return Promise.resolve(true);
     return new Promise((resolve) => {
-      const script = document.createElement("script");
-      script.src = "/creojs.js";
-      script.onload = () => {
+      let settled = false;
+      const done = (ok) => {
+        if (settled) return;
+        settled = true;
+        resolve(Boolean(ok));
+      };
+      const tryInit = () => {
         try {
-          if (document.readyState === "complete" && window.CreoJS && typeof window.CreoJS.$INITIALIZE === "function") {
+          if (
+            document.readyState === "complete" &&
+            window.CreoJS &&
+            typeof window.CreoJS.$INITIALIZE === "function"
+          ) {
             window.CreoJS.$INITIALIZE();
           }
         } catch {
-          resolve(false);
+          /* keep going; Creo may still expose CreoJS */
+        }
+      };
+      // Creo may inject CreoJS after scanning text/creojs scripts.
+      let tries = 0;
+      const poll = setInterval(() => {
+        tries += 1;
+        if (window.CreoJS) {
+          clearInterval(poll);
+          tryInit();
+          done(true);
           return;
         }
-        resolve(true);
-      };
-      script.onerror = () => resolve(false);
-      document.head.appendChild(script);
+        if (tries < 40) return;
+        clearInterval(poll);
+        const script = document.createElement("script");
+        script.src = "/creojs.js";
+        script.onload = () => {
+          tryInit();
+          done(Boolean(window.CreoJS));
+        };
+        script.onerror = () => done(Boolean(window.CreoJS));
+        document.head.appendChild(script);
+      }, 50);
     });
   })();
 
@@ -1736,13 +1766,18 @@
     return failed.map((item) => `${item.filename || item.uuid}: ${item.message}`).join(" ");
   }
 
+  function creoOpenMode() {
+    const el = $("#creo-status");
+    return String(el?.dataset?.creoOpenMode || "").trim().toLowerCase();
+  }
+
   function hostedCreoJS() {
     try {
-      return Boolean(
-        window.CreoJS &&
-          typeof window.CreoJS.isAvailable === "function" &&
-          window.CreoJS.isAvailable()
-      );
+      if (!window.CreoJS) return false;
+      if (typeof window.CreoJS.isAvailable === "function") {
+        return Boolean(window.CreoJS.isAvailable());
+      }
+      return typeof window.CreoJS.openModel === "function";
     } catch {
       return false;
     }
@@ -1805,7 +1840,8 @@
 
   async function openPdmObject(target) {
     await creoJSReady;
-    if (hostedCreoJS()) {
+    const useCreoSession = hostedCreoJS() || creoOpenMode() === "embedded";
+    if (useCreoSession) {
       const prepared = await postAction(
         "/api/creo/open",
         openRequestBody(target, false),
@@ -1814,6 +1850,13 @@
       );
       if (!prepared) return null;
       if (prepared.creo_object) {
+        if (!hostedCreoJS()) {
+          showError(
+            $("#toolbar-error"),
+            "Creo.JS is not available. In Settings, set Creo.JS library (path to creojs.js or your Creo install folder), save, then reload this page in Creo's browser."
+          );
+          return null;
+        }
         try {
           await whenCreoJSReady();
           const opened = await window.CreoJS.openModel(
@@ -2582,6 +2625,7 @@
     const status = (pill.textContent || "Creo:").split("·")[0].trim() || "Creo:";
     pill.textContent = `${status} · ${names[key] || names.association}`;
     pill.title = titles[key] || titles.association;
+    pill.dataset.creoOpenMode = key;
   }
 
   settingsForm?.addEventListener("submit", async (event) => {
@@ -2594,6 +2638,7 @@
       creo_open_mode: String(data.get("creo_open_mode") || "association"),
       creo_executable: null,
       creo_view_executable: null,
+      creo_js_library: String(data.get("creo_js_library") || "").trim() || null,
       workspace_root: String(data.get("workspace_root") || "").trim() || null,
       cad_model_extensions: String(data.get("cad_model_extensions") || "")
         .split(/[\s,;]+/)

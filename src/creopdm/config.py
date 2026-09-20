@@ -70,6 +70,7 @@ class CreoConfig(BaseModel):
     open_mode: str = "association"
     view_executable: str | None = None
     view_open_mode: str = "association"
+    js_library: str | None = None
 
     @field_validator("open_mode")
     @classmethod

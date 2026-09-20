@@ -29,11 +29,15 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
     settings = ctx.settings
     default_root = ctx.config.workspaces_dir
     current_root = ctx.config.workspace_root()
+    finder = getattr(ctx.creo, "find_creojs_library", None)
+    resolved = finder() if callable(finder) else None
     return SettingsResponse(
         creo_open_mode=settings.creo.open_mode,
         creo_executable=settings.creo.executable,
         creo_view_open_mode=settings.creo.view_open_mode,
         creo_view_executable=settings.creo.view_executable,
+        creo_js_library=settings.creo.js_library,
+        creo_js_library_resolved=str(resolved) if resolved else None,
         workspace_root=str(current_root),
         default_workspace_root=str(default_root),
         open_browser_on_start=settings.ui.open_browser_on_start,
@@ -65,6 +69,7 @@ def apply_settings(ctx: AppContext, settings: AppSettings) -> None:
         settings.creo.open_mode,
         settings.creo.view_executable,
         settings.creo.view_open_mode,
+        settings.creo.js_library,
     )
     ctx.creo_service.set_connector(ctx.creo)
     ctx.checkins.set_connector(ctx.creo)
@@ -96,6 +101,26 @@ def update_settings(
         current.creo.executable = str(path)
     else:
         current.creo.executable = None
+    if "creo_js_library" in payload.model_fields_set:
+        js_library = (payload.creo_js_library or "").strip() or None
+        if js_library:
+            from creopdm.creo.windows_connector import resolve_creojs_setting
+
+            js_path = Path(js_library).expanduser()
+            if not js_path.exists():
+                raise PathValidationError(
+                    "The Creo.JS path does not exist.",
+                    details={"path": str(js_path)},
+                )
+            resolved = resolve_creojs_setting(js_path)
+            if resolved is None:
+                raise PathValidationError(
+                    "Creo.JS was not found at that path. Point to creojs.js or a Creo install folder that contains Common Files/apps/creojs/creojsweb/creojs.js.",
+                    details={"path": str(js_path)},
+                )
+            current.creo.js_library = str(js_path)
+        else:
+            current.creo.js_library = None
     if payload.creo_view_open_mode is not None:
         current.creo.view_open_mode = payload.creo_view_open_mode
     if "creo_view_executable" in payload.model_fields_set:

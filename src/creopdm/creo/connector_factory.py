@@ -14,6 +14,7 @@ def create_creo_connector(
     open_mode: str = "association",
     view_executable: str | None = None,
     view_open_mode: str = "association",
+    js_library: str | None = None,
 ) -> CreoConnector:
     key = (name or "auto").strip().lower()
     if key in {"null", "none", "off"}:
@@ -24,6 +25,7 @@ def create_creo_connector(
             open_mode=open_mode,
             view_executable=view_executable,
             view_open_mode=view_open_mode,
+            js_library=js_library,
         )
     raise ConfigurationError(
         f"Unknown Creo connector '{name}'.",
