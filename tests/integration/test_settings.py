@@ -91,6 +91,7 @@ def test_get_and_update_settings(client, tmp_path):
     assert ".prt" in models
     assert ".dxf" in models
     assert ".sldprt" in models
+    assert ".creo" in models
     assert ".catpart" in models
     assert ".tmu" not in models
     assert ".tmz" not in models

@@ -144,6 +144,30 @@ def test_open_prepare_includes_creo_release(data_dir, repo_parent, identity: Sta
 
 
 @requires_git
+def test_open_prepare_creo_ext_requires_agent_cache(
+    data_dir, repo_parent, identity: StaticUserProvider
+):
+    ctx = build_context(ConfigManager(), users=identity)
+    with TestClient(create_app(ctx)) as client:
+        project = client.post("/api/projects", json={"name": "Creo Ext"}).json()
+        created = client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={"file": ("bundle.creo", b"creo-bundle", "application/octet-stream")},
+            data={"comment": "Creo file"},
+        )
+        assert created.status_code == 201, created.text
+        prepared = client.post(
+            "/api/creo/open",
+            json={"object_id": created.json()["uuid"], "launch": False},
+        )
+        assert prepared.status_code == 200, prepared.text
+        body = prepared.json()
+        assert body["creo_object"] is True
+        assert body.get("requires_agent_cache") is True
+        assert body["filename"].lower().endswith(".creo")
+
+
+@requires_git
 def test_open_prepare_skips_creo_release_for_foreign_openable(
     data_dir, repo_parent, identity: StaticUserProvider
 ):
@@ -167,6 +191,7 @@ def test_open_prepare_skips_creo_release_for_foreign_openable(
         body = prepared.json()
         assert body["creo_object"] is False
         assert body.get("open_with_creo") is True
+        assert body.get("requires_agent_cache") is True
         assert body.get("creo_release") in {None, ""}
         assert body["filename"].lower().endswith(".sldprt")
 

@@ -232,6 +232,8 @@ class CreoService:
         creo_object = (not use_view) and is_model and js_openable
         # True when the agent should start parametric.exe with this file (Unite).
         open_with_creo = (not use_view) and is_model and not js_openable
+        # Embedded Creo browser must fetch every Creo-openable model into the agent cache.
+        requires_agent_cache = bool(is_model and not use_view)
         logical = CreoFileManager.normalize_creo_filename(path.name, (*models, *all_cad))
         url: str | None = None
         if launch:
@@ -272,6 +274,7 @@ class CreoService:
             "relative_path": relative_path or None,
             "creo_object": creo_object,
             "open_with_creo": open_with_creo,
+            "requires_agent_cache": requires_agent_cache,
             "creo_release": creo_release or "",
             "url": url,
             "companions": companions or [],

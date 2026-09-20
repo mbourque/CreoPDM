@@ -200,6 +200,7 @@ class CreoOpenResponse(BaseModel):
     relative_path: str | None = None
     creo_object: bool = False
     open_with_creo: bool = False
+    requires_agent_cache: bool = False
     creo_release: str | None = None
     url: str | None = None
     companions: list[CreoOpenCompanion] = Field(default_factory=list)

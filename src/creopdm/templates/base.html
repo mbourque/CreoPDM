@@ -242,14 +242,10 @@ function creoTrailEscapePath(path) {
     // Trail Inputname expects Windows separators; backslashes are doubled.
     return String(path || "").replace(/\//g, "\\").replace(/\\/g, "\\\\");
 }
-function creoTrailEscapePath(path) {
-    // Trail Inputname expects Windows separators; backslashes are doubled.
-    return String(path || "").replace(/\//g, "\\").replace(/\\/g, "\\\\");
-}
 function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
     /**
      * Drive File > Open using the trail shape recorded from a working mapkey:
-     *   ProCmdModelOpen → wait for file_open → Type db_-1 (All Files) →
+     *   appl_casc → ProCmdModelOpen → Type db_-1 (All Files) →
      *   Input/Update Inputname → ProFileSelPushOpen_Standard@context_dlg_open_cmd
      */
     if (!session || typeof session.RunMacro !== "function") {
@@ -266,7 +262,9 @@ function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
     }
     var inputTrail = creoTrailEscapePath(input);
     var macro =
-        "~ Command `ProCmdModelOpen`;"
+        "~ Select `main_dlg_cur` `appl_casc`;"
+        + "~ Close `main_dlg_cur` `appl_casc`;"
+        + "~ Command `ProCmdModelOpen`;"
         + "~ Trail `` `` `DLG_PREVIEW_POST` `file_open`;"
         + "~ Open `file_open` `Type`;"
         + "~ Close `file_open` `Type`;"
@@ -392,6 +390,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open69"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open70"></script>
 </body>
 </html>

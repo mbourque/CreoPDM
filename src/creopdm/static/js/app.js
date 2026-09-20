@@ -2097,6 +2097,32 @@
         ""
       );
       if (!prepared) return null;
+
+      // Every Creo-openable model must land in the local agent cache before open.
+      let openSpec = prepared;
+      const needsCache =
+        prepared.requires_agent_cache || prepared.creo_object || prepared.open_with_creo;
+      if (needsCache) {
+        const agent = await probeCreoAgent();
+        if (!agent) {
+          showError(
+            $("#toolbar-error"),
+            "Start creopdm-agent on this Creo PC so the file can download into the local cache before open."
+          );
+          return null;
+        }
+        try {
+          openSpec = await materializeViaAgent(prepared);
+        } catch (err) {
+          const message = err && err.message ? err.message : String(err);
+          showError(
+            $("#toolbar-error"),
+            message || "Local CreoPDM agent could not download the file into the cache."
+          );
+          return null;
+        }
+      }
+
       if (prepared.creo_object) {
         if (!hostedCreoJS()) {
           showError(
@@ -2107,11 +2133,6 @@
         }
         try {
           await whenCreoJSReady();
-          let openSpec = prepared;
-          const agent = await probeCreoAgent();
-          if (agent) {
-            openSpec = await materializeViaAgent(prepared);
-          }
           const opened = await window.CreoJS.openModel(
             openSpec.working_directory,
             openSpec.filename || prepared.filename,
@@ -2121,11 +2142,10 @@
           );
           const openedText = opened == null ? "" : String(opened);
           if (openedText.indexOf("CREOPDM_ERROR:") === 0) {
-            const detail = openedText.slice("CREOPDM_ERROR:".length);
-            const hint = agent
-              ? ""
-              : " Start creopdm-agent on this Creo machine if CreoPDM is remote.";
-            showError($("#toolbar-error"), detail + hint);
+            showError(
+              $("#toolbar-error"),
+              openedText.slice("CREOPDM_ERROR:".length)
+            );
             return null;
           }
         } catch (err) {
@@ -2137,7 +2157,6 @@
           return null;
         }
       } else if (prepared.open_with_creo) {
-        // Multi-CAD: materialize, set WD, OpenFile, then File > Open via trail (RunMacro).
         if (!hostedCreoJS()) {
           showError(
             $("#toolbar-error"),
@@ -2147,11 +2166,6 @@
         }
         try {
           await whenCreoJSReady();
-          let openSpec = prepared;
-          const agent = await probeCreoAgent();
-          if (agent) {
-            openSpec = await materializeViaAgent(prepared);
-          }
           const directory = openSpec.working_directory || "";
           const diskName = openSpec.disk_name || openSpec.filename || prepared.filename;
           if (directory && typeof window.CreoJS.setWorkingDirectory === "function") {
@@ -2193,7 +2207,9 @@
         try {
           const agent = await probeCreoAgent();
           if (agent) {
-            const openSpec = await materializeViaAgent(prepared);
+            if (!needsCache) {
+              openSpec = await materializeViaAgent(prepared);
+            }
             await openViaAgent(openSpec.path, "association");
             return prepared;
           }

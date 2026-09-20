@@ -339,6 +339,7 @@ DEFAULT_CREO_MODEL_EXTENSIONS = (
     ".psm",
     ".3mf",
     ".she",
+    ".creo",
 )
 
 DEFAULT_CREO_VIEW_EXTENSIONS = (
@@ -673,6 +674,7 @@ DEFAULT_TYPE_LABELS: tuple[dict[str, str], ...] = (
     {"extension": ".sldprt", "label": "SOLIDWORKS Part"},
     {"extension": ".sldasm", "label": "SOLIDWORKS Assembly"},
     {"extension": ".slddrw", "label": "SOLIDWORKS Drawing"},
+    {"extension": ".creo", "label": "Creo Model"},
     {"extension": ".3mf", "label": "3MF Model"},
     {"extension": ".obj", "label": "OBJ Model"},
     {"extension": ".ipt", "label": "Inventor Part"},
@@ -712,8 +714,12 @@ PREVIOUS_DEFAULT_TYPE_LABEL_SETS = (
     (),
 )
 
+_MODELS_BEFORE_CREO_EXT = frozenset(
+    ext for ext in DEFAULT_CREO_MODEL_EXTENSIONS if ext != ".creo"
+)
 PREVIOUS_DEFAULT_CREO_MODEL_SETS = (
-    frozenset((*DEFAULT_CREO_MODEL_EXTENSIONS, ".tmu", ".tmz")),
+    frozenset((*_MODELS_BEFORE_CREO_EXT, ".tmu", ".tmz")),
+    _MODELS_BEFORE_CREO_EXT,
 )
 
 DEFAULT_IGNORE_PATTERNS = (
