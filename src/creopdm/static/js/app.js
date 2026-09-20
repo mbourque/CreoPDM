@@ -2073,6 +2073,19 @@
     return response.json();
   }
 
+  async function openViaAgent(localPath) {
+    const response = await fetch(`${agentBase()}/open`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: localPath }),
+    });
+    if (!response.ok) {
+      const message = await readError(response);
+      throw new Error(message || "Local CreoPDM agent could not open the file.");
+    }
+    return response.json();
+  }
+
   async function openPdmObject(target) {
     await creoJSReady;
     const useCreoSession = hostedCreoJS() || creoOpenMode() === "embedded";
@@ -2124,6 +2137,23 @@
           return null;
         }
       } else {
+        // Multi-CAD (SolidWorks, …) and non-Creo files: Creo.JS cannot open them.
+        // Materialize on the Creo PC then ShellExecute the local path.
+        try {
+          const agent = await probeCreoAgent();
+          if (agent) {
+            const openSpec = await materializeViaAgent(prepared);
+            await openViaAgent(openSpec.path);
+            return prepared;
+          }
+        } catch (err) {
+          const message = err && err.message ? err.message : String(err);
+          showError(
+            $("#toolbar-error"),
+            message || "Could not open the file with the local agent."
+          );
+          return null;
+        }
         return openPdmLaunchResult(
           await postAction("/api/creo/open", openRequestBody(target, true), "POST", "")
         );

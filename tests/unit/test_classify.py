@@ -3,6 +3,7 @@ from creopdm.utils.classify import (
     classify_filename,
     default_folder_for,
     display_type_label,
+    is_creo_js_openable,
     is_creo_openable,
     is_creo_view,
     is_extra_cad,
@@ -184,6 +185,16 @@ def test_creo_openable_models():
     assert not is_creo_openable("board.eda")
     assert not is_creo_openable("duct.spro")
     assert not is_creo_openable("setup.rcp")
+
+
+def test_creo_js_skips_multicad_formats():
+    assert is_creo_js_openable("shaft.prt")
+    assert is_creo_js_openable("export.step")
+    assert is_creo_js_openable("outline.dxf")
+    assert not is_creo_js_openable("bolt_sw.SLDPRT")
+    assert not is_creo_js_openable("body.CATPart")
+    assert not is_creo_js_openable("block.ipt")
+    assert not is_creo_js_openable("rough.ncl")
 
 
 def test_default_folders():

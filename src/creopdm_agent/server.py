@@ -48,6 +48,15 @@ class MaterializeResponse(BaseModel):
     companions_written: int = 0
 
 
+class OpenLocalRequest(BaseModel):
+    path: str
+
+
+class OpenLocalResponse(BaseModel):
+    ok: bool = True
+    path: str
+
+
 def _safe_segment(value: str, fallback: str = "file") -> str:
     text = _SAFE_NAME.sub("_", (value or "").strip()) or fallback
     return text[:180]
@@ -190,5 +199,31 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             bytes_written=nbytes,
             companions_written=companions_written,
         )
+
+    @app.post("/open", response_model=OpenLocalResponse)
+    def open_local(payload: OpenLocalRequest) -> OpenLocalResponse:
+        """Open a file already under the agent cache with the Windows association."""
+        from creopdm.utils.launch import open_windows_file
+
+        try:
+            target = Path(payload.path).resolve()
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid path: {exc}") from exc
+        root_resolved = root.resolve()
+        try:
+            target.relative_to(root_resolved)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=403,
+                detail="Refusing to open a path outside the agent cache.",
+            ) from exc
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail=f"File not found: {target}")
+        try:
+            open_windows_file(target)
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.info("Opened %s via Windows association", target)
+        return OpenLocalResponse(path=str(target))
 
     return app

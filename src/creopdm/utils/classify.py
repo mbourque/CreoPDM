@@ -204,6 +204,41 @@ def is_creo_openable(
     return Path(canonical).suffix.lower() in extra_cad_set(models)
 
 
+# Creo File > Open can load these (Unite / Multi-CAD), but Creo.JS
+# pfcModelDescriptor.CreateFromFileName does not support Multi-CAD.
+CREO_JS_MULTICAD_EXTENSIONS = frozenset(
+    {
+        ".sldprt",
+        ".sldasm",
+        ".catpart",
+        ".catproduct",
+        ".cgr",
+        ".ipt",
+        ".iam",
+        ".par",
+        ".psm",
+    }
+)
+
+
+def is_creo_js_openable(
+    filename: str,
+    model_extensions: Iterable[str] | None = None,
+    extra_cad_extensions: Iterable[str] | None = None,
+) -> bool:
+    """True when Embedded Creo.JS OpenFile/RetrieveModel can open the file."""
+    if not is_creo_openable(filename, model_extensions, extra_cad_extensions):
+        return False
+    models = unique_extensions(
+        DEFAULT_CREO_MODEL_EXTENSIONS if model_extensions is None else model_extensions
+    )
+    extras = unique_extensions(
+        default_data_cad_extensions() if extra_cad_extensions is None else extra_cad_extensions
+    )
+    canonical = CreoFileManager.normalize_creo_filename(filename, (*models, *extras))
+    return Path(canonical).suffix.lower() not in CREO_JS_MULTICAD_EXTENSIONS
+
+
 def is_creo_view(filename: str) -> bool:
     """True for Creo View packages such as .pvz, including numbered saves."""
     views = unique_extensions(DEFAULT_CREO_VIEW_EXTENSIONS)

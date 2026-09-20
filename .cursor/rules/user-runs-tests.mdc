@@ -1,0 +1,30 @@
+---
+description: User runs pytest and scripts; agent must not depend on its own shell for verification
+alwaysApply: true
+---
+
+# User runs tests and scripts
+
+On this machine, the agent's shell often fails or is aborted. **Do not rely on running pytest, installers, tray launchers, or other project scripts yourself** to verify work.
+
+## What to do instead
+
+1. Make the code/test changes.
+2. Tell the user the exact command(s) to run (PowerShell-friendly).
+3. Wait for their result — they often paste output or point at `pytest-last.log` (repo root; written by `tests/conftest.py`).
+4. Treat `@pytest-last.log` / "passed" / a failure paste as the source of truth.
+
+## Examples
+
+```text
+# Ask the user to run:
+python -m pytest tests/unit/test_creopdm_agent_log.py -q --tb=short
+Get-Content .\pytest-last.log
+```
+
+```text
+# ❌ BAD — assume your shell pytest succeeded or block waiting on flaky agent terminals
+# ✅ GOOD — ship the fix, give the command, iterate from their pytest-last.log
+```
+
+Still use file tools freely. Prefer short, copy-pasteable commands over multi-step shell pipelines the agent would normally chain.

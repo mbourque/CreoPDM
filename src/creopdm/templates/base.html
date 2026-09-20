@@ -68,6 +68,12 @@ function creoLogicalFileName(filename) {
     }
     return base;
 }
+function creoIsNativeVersioned(filename) {
+    // Only native Creo .prt/.asm/.drw carry a save release for version gating.
+    // Other Creo-openable formats (STEP, SolidWorks, …) skip the check.
+    var logical = creoLogicalFileName(filename).toLowerCase();
+    return /\.(prt|asm|drw)$/.test(logical);
+}
 function creoModelRoot(logical) {
     var dot = String(logical || "").lastIndexOf(".");
     return dot > 0 ? logical.substring(0, dot) : logical;
@@ -165,12 +171,17 @@ function creoJoinPath(directory, name) {
     if (!file) return dir;
     return dir + "/" + file;
 }
+function creoNormalizePath(path) {
+    return String(path || "").replace(/\\/g, "/");
+}
 function creoTryOpenName(session, directory, name) {
     if (!name) {
         return null;
     }
     var model = null;
     var fullPath = directory ? creoJoinPath(directory, name) : name;
+    fullPath = creoNormalizePath(fullPath);
+    var shortName = creoNormalizePath(name);
     try {
         var descrPath = pfcModelDescriptor.CreateFromFileName(fullPath);
         if (typeof session.OpenFile === "function") {
@@ -190,16 +201,38 @@ function creoTryOpenName(session, directory, name) {
                 } catch (errGet) {}
             }
         }
+        // RetrieveModel ignores descriptor path; WithOpts uses the path (needed for
+        // non-search-path files such as the local agent cache).
+        if (typeof session.RetrieveModelWithOpts === "function"
+            && typeof pfcRetrieveModelOptions !== "undefined") {
+            try {
+                var opts = pfcRetrieveModelOptions.Create();
+                model = session.RetrieveModelWithOpts(descrPath, opts);
+                if (model) return model;
+            } catch (errOpts) {}
+        }
         model = session.RetrieveModel(descrPath);
         if (model) return model;
     } catch (errPath) {}
     try {
-        var descr = pfcModelDescriptor.CreateFromFileName(name);
+        var descr = pfcModelDescriptor.CreateFromFileName(shortName);
+        if (typeof session.RetrieveModelWithOpts === "function"
+            && typeof pfcRetrieveModelOptions !== "undefined"
+            && directory) {
+            try {
+                var descrDir = pfcModelDescriptor.CreateFromFileName(
+                    creoNormalizePath(creoJoinPath(directory, shortName))
+                );
+                var opts2 = pfcRetrieveModelOptions.Create();
+                model = session.RetrieveModelWithOpts(descrDir, opts2);
+                if (model) return model;
+            } catch (errOpts2) {}
+        }
         model = session.RetrieveModel(descr);
         if (model) return model;
     } catch (errName) {}
     try {
-        model = session.GetModelFromFileName(name);
+        model = session.GetModelFromFileName(shortName);
     } catch (errGetName) {
         model = null;
     }
@@ -213,13 +246,15 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
           : pfcGetProESession();
         if (directory) {
             try {
-                session.ChangeDirectory(directory);
+                session.ChangeDirectory(creoNormalizePath(directory));
             } catch (errDir) {
                 openDetail = "ChangeDirectory failed for " + directory + ".";
             }
         }
         var sessionRelease = creoSessionRelease(session);
-        if (creoNewerThanSession(fileRelease, sessionRelease)) {
+        var versionName = diskName || filename;
+        if (creoIsNativeVersioned(versionName)
+            && creoNewerThanSession(fileRelease, sessionRelease)) {
             return creoOpenFailed(creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease));
         }
         try {
@@ -244,7 +279,9 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
                     + ". Creo must read that path on the machine running Creo "
                     + "(same computer or shared folder as CreoPDM).";
             }
-            return creoOpenFailed(creoOpenFailedMessage(filename, fileRelease, sessionRelease, openDetail));
+            // Never attach Creo release wording for non-native Creo-openable files.
+            var releaseForMsg = creoIsNativeVersioned(versionName) ? fileRelease : "";
+            return creoOpenFailed(creoOpenFailedMessage(filename, releaseForMsg, sessionRelease, openDetail));
         }
         try {
             model.Display();
@@ -265,7 +302,8 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
         return filename;
     } catch (errAll) {
         var detail = errAll && errAll.message ? String(errAll.message) : String(errAll || "");
-        return creoOpenFailed(creoOpenFailedMessage(filename, fileRelease, "", detail));
+        var releaseCatch = creoIsNativeVersioned(diskName || filename) ? fileRelease : "";
+        return creoOpenFailed(creoOpenFailedMessage(filename, releaseCatch, "", detail));
     }
 }
 function setWorkingDirectory(directory) {
@@ -306,6 +344,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open61"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open63"></script>
 </body>
 </html>

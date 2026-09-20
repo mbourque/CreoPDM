@@ -215,7 +215,7 @@ creopdm-agent-tray
 That starts in the system tray (no console). Menu items:
 
 - **Show status** — port, version, and cache folder
-- **Show logs** — live agent log window (requests, materialize, errors)
+- **Show logs** — opens a live log window (also written to `%LOCALAPPDATA%\CreoPDM-agent\logs\agent.log`)
 - **Open cache folder** — Explorer on the local download cache
 - **Quit** — stop the agent
 
@@ -235,7 +235,7 @@ Or: `python -m creopdm_agent` / `python -m creopdm_agent --tray`.
 2. Keep `creopdm-agent-tray` running on the Creo PC.
 3. In CreoPDM Settings, set open mode to **Embedded Creo Browser**.
 4. In Creo's built-in browser, open the CreoPDM URL (the Linux **Other PCs** address).
-5. Open a model — the page calls the agent at `http://127.0.0.1:8766`, which fetches the file (and same-folder assembly companions) into the local cache, then Creo opens it.
+5. Open a model — the page calls the agent at `http://127.0.0.1:8766`, which fetches the file (and same-folder assembly companions) into the local cache, then Creo.JS opens native Creo-openable files. SolidWorks / CATIA / Inventor Multi-CAD files are opened with the Windows association instead (Creo.JS cannot open Multi-CAD in-session).
 6. **Set Working Directory** uses the agent cache folder for the current project (not the remote server path).
 
 Quick check that the agent is up: open `http://127.0.0.1:8766/health` in a normal browser on the Creo PC.

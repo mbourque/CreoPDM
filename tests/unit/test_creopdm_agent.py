@@ -70,3 +70,24 @@ def test_agent_health_and_materialize(tmp_path, monkeypatch):
         workdir = client.get("/workdir", params={"project_id": "proj1"})
         assert workdir.status_code == 200
         assert workdir.json()["path"].endswith("proj1")
+
+
+def test_agent_open_local_association(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    root.mkdir()
+    target = root / "bolt_sw.SLDPRT"
+    target.write_bytes(b"sw")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    opened: list[str] = []
+
+    def fake_open(path, cwd=None):
+        opened.append(str(path))
+
+    monkeypatch.setattr("creopdm.utils.launch.open_windows_file", fake_open)
+    with TestClient(app) as client:
+        ok = client.post("/open", json={"path": str(target)})
+        assert ok.status_code == 200, ok.text
+        assert opened and Path(opened[0]).name == "bolt_sw.SLDPRT"
+        denied = client.post("/open", json={"path": str(tmp_path / "outside.bin")})
+        assert denied.status_code == 403

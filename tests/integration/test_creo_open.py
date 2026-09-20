@@ -144,6 +144,33 @@ def test_open_prepare_includes_creo_release(data_dir, repo_parent, identity: Sta
 
 
 @requires_git
+def test_open_prepare_skips_creo_release_for_foreign_openable(
+    data_dir, repo_parent, identity: StaticUserProvider
+):
+    """SolidWorks is Creo-openable in File > Open, but Creo.JS cannot open Multi-CAD."""
+    ctx = build_context(ConfigManager(), users=identity)
+    with TestClient(create_app(ctx)) as client:
+        project = client.post("/api/projects", json={"name": "SW Open"}).json()
+        created = client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={
+                "file": ("bolt_sw.SLDPRT", b"solidworks-part", "application/octet-stream")
+            },
+            data={"comment": "SW part"},
+        )
+        assert created.status_code == 201, created.text
+        prepared = client.post(
+            "/api/creo/open",
+            json={"object_id": created.json()["uuid"], "launch": False},
+        )
+        assert prepared.status_code == 200, prepared.text
+        body = prepared.json()
+        assert body["creo_object"] is False
+        assert body.get("creo_release") in {None, ""}
+        assert body["filename"].lower().endswith(".sldprt")
+
+
+@requires_git
 def test_open_after_checkin_despite_creo_numbered_workspace_file(
     data_dir, repo_parent, identity: StaticUserProvider
 ):

@@ -13,8 +13,8 @@ import httpx
 import uvicorn
 
 from creopdm_agent import __version__
-from creopdm_agent.config import AgentConfig
-from creopdm_agent.logbuf import LogBuffer, install_log_buffer
+from creopdm_agent.config import AgentConfig, default_data_dir
+from creopdm_agent.logbuf import LogBuffer, install_log_buffer, uvicorn_log_config
 from creopdm_agent.logui import open_log_window
 from creopdm_agent.server import create_agent_app
 
@@ -106,10 +106,12 @@ def run_tray(settings: AgentConfig) -> int:
     if settings.host not in {"127.0.0.1", "localhost", "::1"}:
         raise SystemExit("Refusing non-loopback host for tray agent.")
 
-    log_buffer = LogBuffer()
+    settings.ensure_dirs()
+    log_path = default_data_dir() / "logs" / "agent.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_buffer = LogBuffer(log_path=log_path)
     install_log_buffer(log_buffer)
 
-    settings.ensure_dirs()
     app = create_agent_app(settings)
     config = uvicorn.Config(
         app,
@@ -117,17 +119,20 @@ def run_tray(settings: AgentConfig) -> int:
         port=settings.port,
         log_level="info",
         access_log=True,
-        log_config=None,
+        log_config=uvicorn_log_config(),
     )
     server = uvicorn.Server(config)
 
     def serve() -> None:
+        # dictConfig may replace handlers — keep our buffer attached.
+        install_log_buffer(log_buffer)
         logger.info(
             "Listening on http://%s:%s (cache %s)",
             settings.host,
             settings.port,
             settings.resolved_root(),
         )
+        logger.info("Log file %s", log_path)
         server.run()
 
     thread = threading.Thread(target=serve, name="creopdm-agent", daemon=True)
@@ -175,7 +180,14 @@ def run_tray(settings: AgentConfig) -> int:
         threading.Timer(0.2, show).start()
 
     def on_show_logs(icon: object, item: object) -> None:
-        open_log_window(log_buffer, title=f"CreoPDM agent log (:{settings.port})")
+        try:
+            open_log_window(log_path, title=f"CreoPDM agent log (:{settings.port})")
+        except Exception as exc:
+            logger.exception("Could not open log window")
+            _message_box(
+                "CreoPDM agent log",
+                f"Could not open the log window.\n{exc}\n\nLog file:\n{log_path}",
+            )
 
     def on_open_cache(icon: object, item: object) -> None:
         path = Path(root)

@@ -15,9 +15,9 @@ from creopdm.models.project import Project
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
-from creopdm.utils.classify import classify_filename, is_creo_openable, is_creo_view
+from creopdm.utils.classify import classify_filename, is_creo_js_openable, is_creo_openable, is_creo_view
 from creopdm.utils.creo_companions import needs_open_companions, select_companion_objects
-from creopdm.utils.creo_header import creo_release_for
+from creopdm.utils.creo_header import creo_release_for, is_creo_native_model
 from creopdm.utils.launch import working_directory_for
 
 logger = get_logger("creo-service")
@@ -73,9 +73,13 @@ class CreoService:
                     writable=view.owned_by_me,
                     overwrite_modified=False,
                 )
-        file_release = creo_release_for(path, path.name)
-        if not file_release and obj.current_version is not None:
-            file_release = obj.current_version.creo_release
+        # Version gating is only for native Creo .prt/.asm/.drw. Other Creo-openable
+        # formats (STEP, SolidWorks, …) have no Creo save release to compare.
+        file_release = ""
+        if is_creo_native_model(path.name):
+            file_release = creo_release_for(path, path.name) or ""
+            if not file_release and obj.current_version is not None:
+                file_release = obj.current_version.creo_release or ""
         companions = self._companions_for(
             session,
             project,
@@ -126,11 +130,14 @@ class CreoService:
             filename=path.name,
             skip_object_id=None,
         )
+        release = ""
+        if is_creo_native_model(path.name):
+            release = creo_release_for(path, path.name) or ""
         return self._open_resolved(
             path,
             launch=launch,
             object_type=kind.value,
-            creo_release=creo_release_for(path, path.name) or "",
+            creo_release=release,
             browser_url=f"/api/projects/{project.uuid}/workspace/content?path={quote(rel)}",
             project_id=str(project.uuid),
             relative_path=rel,
@@ -219,7 +226,11 @@ class CreoService:
         view_object = is_creo_view(path.name)
         open_mode = self._connector.cad_open_mode()
         use_view = view_object or (open_mode == "view" and is_model)
-        creo_object = (not use_view) and is_model
+        # Multi-CAD (SolidWorks, CATIA, …) is Creo-openable in File > Open, but
+        # Creo.JS ModelDescriptor cannot open it — use OS association / agent.
+        creo_object = (not use_view) and is_model and is_creo_js_openable(
+            path.name, models, all_cad
+        )
         logical = CreoFileManager.normalize_creo_filename(path.name, (*models, *all_cad))
         url: str | None = None
         if launch:
