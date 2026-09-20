@@ -238,6 +238,53 @@ function creoTryOpenName(session, directory, name) {
     }
     return model;
 }
+function creoTrailEscapePath(path) {
+    // Trail Inputname expects Windows separators; backslashes are doubled.
+    return String(path || "").replace(/\//g, "\\").replace(/\\/g, "\\\\");
+}
+function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
+    /**
+     * Drive File > Open in the *current* Creo session (same mechanism as a trail /
+     * mapkey body — not a named mapkey). Used for Multi-CAD that OpenFile cannot load.
+     * The macro runs when Creo.JS returns control to Parametric.
+     */
+    if (!session || typeof session.RunMacro !== "function") {
+        return false;
+    }
+    var absolute = fullPath
+        ? String(fullPath)
+        : (directory && diskName ? creoJoinPath(directory, diskName) : diskName || "");
+    if (!absolute) {
+        return false;
+    }
+    var input = creoTrailEscapePath(absolute);
+    var shortInput = diskName ? creoTrailEscapePath(diskName) : "";
+    // Absolute path first; short name second (WD already set). Only one is queued —
+    // RunMacro is LIFO, so queue a single best attempt.
+    var chosen = input;
+    var macro =
+        "~ Command `ProCmdModelOpen`;"
+        + "~ Update `file_open` `Inputname` `" + chosen + "`;"
+        + "~ Activate `file_open` `Open`;";
+    try {
+        session.RunMacro(macro);
+        return true;
+    } catch (errAbs) {
+        if (!shortInput || shortInput === chosen) {
+            return false;
+        }
+        try {
+            session.RunMacro(
+                "~ Command `ProCmdModelOpen`;"
+                + "~ Update `file_open` `Inputname` `" + shortInput + "`;"
+                + "~ Activate `file_open` `Open`;"
+            );
+            return true;
+        } catch (errShort) {
+            return false;
+        }
+    }
+}
 function openModel(directory, filename, fileRelease, diskName, fullPath) {
     var openDetail = "";
     try {
@@ -273,13 +320,17 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
             model = creoTryOpenName(session, directory, filename);
         }
         if (!model) {
+            // Multi-CAD: OpenFile cannot load SolidWorks/etc. Queue File > Open via trail.
+            var preparedPath = fullPath || creoJoinPath(directory, diskName || filename);
+            if (!creoIsNativeVersioned(versionName)
+                && creoTryOpenViaTrail(session, directory, diskName || filename, preparedPath)) {
+                return filename;
+            }
             if (!openDetail) {
-                var prepared = fullPath || creoJoinPath(directory, diskName || filename);
-                openDetail = "CreoPDM prepared " + prepared
+                openDetail = "CreoPDM prepared " + preparedPath
                     + ". Creo must read that path on the machine running Creo "
                     + "(same computer or shared folder as CreoPDM).";
             }
-            // Never attach Creo release wording for non-native Creo-openable files.
             var releaseForMsg = creoIsNativeVersioned(versionName) ? fileRelease : "";
             return creoOpenFailed(creoOpenFailedMessage(filename, releaseForMsg, sessionRelease, openDetail));
         }
@@ -344,6 +395,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open65"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open66"></script>
 </body>
 </html>

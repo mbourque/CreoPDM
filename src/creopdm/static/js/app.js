@@ -2137,9 +2137,7 @@
           return null;
         }
       } else if (prepared.open_with_creo) {
-        // Multi-CAD (SolidWorks, …): Creo.JS OpenFile is unsupported by PTC for
-        // Multi-CAD. Do not start a second Parametric. Materialize, set WD in the
-        // running session, retry OpenFile, then tell the user to File > Open.
+        // Multi-CAD: materialize, set WD, OpenFile, then File > Open via trail (RunMacro).
         if (!hostedCreoJS()) {
           showError(
             $("#toolbar-error"),
@@ -2176,7 +2174,7 @@
             showError(
               $("#toolbar-error"),
               (diskName || "File")
-                + " is in the Creo working directory. Creo.JS cannot open SolidWorks/Multi-CAD in-session — use File > Open and select "
+                + " is in the Creo working directory, but File > Open could not be driven automatically. Use File > Open and select "
                 + (diskName || "the file")
                 + "."
             );
