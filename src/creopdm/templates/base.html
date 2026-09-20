@@ -244,45 +244,34 @@ function creoTrailEscapePath(path) {
 }
 function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
     /**
-     * Drive File > Open in the *current* Creo session (same mechanism as a trail /
-     * mapkey body — not a named mapkey). Used for Multi-CAD that OpenFile cannot load.
-     * The macro runs when Creo.JS returns control to Parametric.
+     * Drive File > Open in the current Creo session (trail / mapkey body).
+     * OpenFile cannot load Multi-CAD; this fills file_open and pushes Open.
      */
     if (!session || typeof session.RunMacro !== "function") {
         return false;
     }
     var absolute = fullPath
         ? String(fullPath)
-        : (directory && diskName ? creoJoinPath(directory, diskName) : diskName || "");
-    if (!absolute) {
+        : (directory && diskName ? creoJoinPath(directory, diskName) : "");
+    var shortName = diskName || "";
+    // WD is already the cache folder — short name in the file list is most reliable.
+    var input = shortName || absolute;
+    if (!input) {
         return false;
     }
-    var input = creoTrailEscapePath(absolute);
-    var shortInput = diskName ? creoTrailEscapePath(diskName) : "";
-    // Absolute path first; short name second (WD already set). Only one is queued —
-    // RunMacro is LIFO, so queue a single best attempt.
-    var chosen = input;
+    var inputTrail = creoTrailEscapePath(input);
+    // Activate `Open` often only focuses the dialog; ProFileSelPushOpen_Standard confirms.
     var macro =
         "~ Command `ProCmdModelOpen`;"
-        + "~ Update `file_open` `Inputname` `" + chosen + "`;"
-        + "~ Activate `file_open` `Open`;";
+        + "~ Trail `UI Desktop` `UI Desktop` `DLG_PREVIEW_POST` `file_open`;"
+        + "~ Update `file_open` `Inputname` `" + inputTrail + "`;"
+        + "~ Select `file_open` `Ph_list.Filelist` 1 `" + inputTrail + "`;"
+        + "~ Command `ProFileSelPushOpen_Standard@context_dlg_open_browser`;";
     try {
         session.RunMacro(macro);
         return true;
-    } catch (errAbs) {
-        if (!shortInput || shortInput === chosen) {
-            return false;
-        }
-        try {
-            session.RunMacro(
-                "~ Command `ProCmdModelOpen`;"
-                + "~ Update `file_open` `Inputname` `" + shortInput + "`;"
-                + "~ Activate `file_open` `Open`;"
-            );
-            return true;
-        } catch (errShort) {
-            return false;
-        }
+    } catch (err) {
+        return false;
     }
 }
 function openModel(directory, filename, fileRelease, diskName, fullPath) {
@@ -395,6 +384,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open66"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open67"></script>
 </body>
 </html>
