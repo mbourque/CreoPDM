@@ -394,13 +394,6 @@ def test_windows_connector_opens_numbered_save_as_logical_name(tmp_path: Path, m
 
 @requires_git
 def test_open_document_uses_windows_association(data_dir, repo_parent, identity, monkeypatch):
-    opened: list[Path] = []
-
-    def fake_shell(path: Path) -> str:
-        opened.append(Path(path))
-        return "shell"
-
-    monkeypatch.setattr(CreoService, "_open_with_shell", staticmethod(fake_shell))
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
         project = client.post(
@@ -417,22 +410,18 @@ def test_open_document_uses_windows_association(data_dir, repo_parent, identity,
         opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
         body = opened_resp.json()
-        assert body["method"] == "shell"
-        assert body.get("url") in (None, "")
-        assert opened and opened[0].name == "notes.txt"
+        assert body["method"] == "browser"
+        assert body["url"] == f"/api/objects/{obj_id}/content"
+        content = client.get(body["url"])
+        assert content.status_code == 200, content.text
+        assert content.headers.get("content-disposition", "").startswith("attachment")
+        assert content.content == b"hello"
 
 
 @requires_git
 def test_open_extra_cad_uses_windows_association(
     data_dir, repo_parent, identity, monkeypatch
 ):
-    opened: list[Path] = []
-
-    def fake_shell(path: Path) -> str:
-        opened.append(Path(path))
-        return "shell"
-
-    monkeypatch.setattr(CreoService, "_open_with_shell", staticmethod(fake_shell))
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
         assert client.put("/api/settings", json={"creo_open_mode": "association"}).status_code == 200
@@ -447,20 +436,12 @@ def test_open_extra_cad_uses_windows_association(
         opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
         body = opened_resp.json()
-        assert body["method"] == "shell"
-        assert body.get("url") in (None, "")
-        assert opened and opened[0].name == "setup.inf"
+        assert body["method"] == "browser"
+        assert body["url"] == f"/api/objects/{obj_id}/content"
 
 
 @requires_git
 def test_open_image_uses_windows_association(data_dir, repo_parent, identity, monkeypatch):
-    opened: list[Path] = []
-
-    def fake_shell(path: Path) -> str:
-        opened.append(Path(path))
-        return "shell"
-
-    monkeypatch.setattr(CreoService, "_open_with_shell", staticmethod(fake_shell))
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
         assert client.put("/api/settings", json={"creo_open_mode": "embedded"}).status_code == 200
@@ -475,22 +456,18 @@ def test_open_image_uses_windows_association(data_dir, repo_parent, identity, mo
         opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
         body = opened_resp.json()
-        assert body["method"] == "shell"
-        assert body.get("url") in (None, "")
-        assert opened and opened[0].name == "photo.png"
+        assert body["method"] == "browser"
+        assert body["url"] == f"/api/objects/{obj_id}/content"
+        content = client.get(body["url"])
+        assert content.status_code == 200
+        assert content.headers.get("content-disposition", "").startswith("attachment")
+        assert content.content.startswith(b"\x89PNG")
 
 
 @requires_git
 def test_open_openable_cad_uses_windows_association(
     data_dir, repo_parent, identity, monkeypatch
 ):
-    opened: list[Path] = []
-
-    def fake_shell(path: Path) -> str:
-        opened.append(Path(path))
-        return "shell"
-
-    monkeypatch.setattr(CreoService, "_open_with_shell", staticmethod(fake_shell))
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
         project = client.post("/api/projects", json={"name": "OpenableCad"}).json()
@@ -504,9 +481,8 @@ def test_open_openable_cad_uses_windows_association(
         opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
         body = opened_resp.json()
-        assert body["method"] == "shell"
-        assert body.get("url") in (None, "")
-        assert opened and opened[0].name == "rough.ncl"
+        assert body["method"] == "browser"
+        assert body["url"] == f"/api/objects/{obj_id}/content"
 
 
 class EmbeddedConnector(RecordingConnector):
@@ -617,13 +593,6 @@ def test_open_embedded_still_opens_creo_view(data_dir, repo_parent, identity: St
 
 @requires_git
 def test_open_embedded_still_opens_documents(data_dir, repo_parent, identity, monkeypatch):
-    opened: list[Path] = []
-
-    def fake_shell(path: Path) -> str:
-        opened.append(Path(path))
-        return "shell"
-
-    monkeypatch.setattr(CreoService, "_open_with_shell", staticmethod(fake_shell))
     recorder = EmbeddedConnector()
     ctx = build_context(ConfigManager(), users=identity)
     ctx.creo = recorder
@@ -640,7 +609,6 @@ def test_open_embedded_still_opens_documents(data_dir, repo_parent, identity, mo
         opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
         body = opened_resp.json()
-        assert body["method"] == "shell"
-        assert body.get("url") in (None, "")
+        assert body["method"] == "browser"
+        assert body["url"] == f"/api/objects/{obj_id}/content"
         assert recorder.opened == []
-        assert opened and opened[0].name == "notes.txt"

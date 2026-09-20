@@ -1849,7 +1849,13 @@
   function openPdmLaunchResult(result) {
     if (!result) return null;
     if (result.method === "browser" && result.url) {
-      window.open(result.url, "_blank", "noopener");
+      const link = document.createElement("a");
+      link.href = result.url;
+      link.download = result.filename || "";
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
     }
     return result;
   }
@@ -2569,7 +2575,7 @@
       embedded: "Embedded",
     };
     const titles = {
-      association: "Opens Creo models with the OS file association",
+      association: "Opens Creo models as a browser download for the OS association",
       embedded: "Opens CAD in the Creo session showing this page",
     };
     const key = String(mode || "association");

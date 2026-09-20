@@ -26,12 +26,12 @@ router = APIRouter()
 
 def _file_response(path, filename: str) -> FileResponse:
     media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    disposition = f"inline; filename*=UTF-8''{quote(filename)}"
+    disposition = f"attachment; filename*=UTF-8''{quote(filename)}"
     return FileResponse(
         path,
         media_type=media_type,
         filename=filename,
-        content_disposition_type="inline",
+        content_disposition_type="attachment",
         headers={"Content-Disposition": disposition},
     )
 

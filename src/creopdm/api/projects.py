@@ -370,12 +370,12 @@ def workspace_file_content(
             details={"relative_path": path},
         )
     media_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-    disposition = f"inline; filename*=UTF-8''{quote(target.name)}"
+    disposition = f"attachment; filename*=UTF-8''{quote(target.name)}"
     return FileResponse(
         target,
         media_type=media_type,
         filename=target.name,
-        content_disposition_type="inline",
+        content_disposition_type="attachment",
         headers={"Content-Disposition": disposition},
     )
 
