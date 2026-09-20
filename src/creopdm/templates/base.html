@@ -245,28 +245,35 @@ function creoTrailEscapePath(path) {
 function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
     /**
      * Drive File > Open in the current Creo session (trail / mapkey body).
-     * OpenFile cannot load Multi-CAD; this fills file_open and pushes Open.
+     * Learned from a working mapkey: DLG_PREVIEW_POST with empty Trail args,
+     * ProFileSelPushOpen_Standard@context_dlg_open_cmd (not …_browser),
+     * type filter All Files, then Inputname + Open.
      */
     if (!session || typeof session.RunMacro !== "function") {
         return false;
     }
+    var shortName = diskName || "";
     var absolute = fullPath
         ? String(fullPath)
         : (directory && diskName ? creoJoinPath(directory, diskName) : "");
-    var shortName = diskName || "";
-    // WD is already the cache folder — short name in the file list is most reliable.
+    // WD is the cache folder — short name is enough once Type is All Files.
     var input = shortName || absolute;
     if (!input) {
         return false;
     }
     var inputTrail = creoTrailEscapePath(input);
-    // Activate `Open` often only focuses the dialog; ProFileSelPushOpen_Standard confirms.
     var macro =
-        "~ Command `ProCmdModelOpen`;"
-        + "~ Trail `UI Desktop` `UI Desktop` `DLG_PREVIEW_POST` `file_open`;"
+        "~ Select `main_dlg_cur` `appl_casc`;"
+        + "~ Close `main_dlg_cur` `appl_casc`;"
+        + "~ Command `ProCmdModelOpen`;"
+        + "~ Trail `` `` `DLG_PREVIEW_POST` `file_open`;"
+        // Show every extension so .SLDPRT is listed / accepted.
+        + "~ Open `file_open` `Type`;"
+        + "~ Close `file_open` `Type`;"
+        + "~ Select `file_open` `Type` 1 `db_all`;"
         + "~ Update `file_open` `Inputname` `" + inputTrail + "`;"
         + "~ Select `file_open` `Ph_list.Filelist` 1 `" + inputTrail + "`;"
-        + "~ Command `ProFileSelPushOpen_Standard@context_dlg_open_browser`;";
+        + "~ Command `ProFileSelPushOpen_Standard@context_dlg_open_cmd`;";
     try {
         session.RunMacro(macro);
         return true;
@@ -384,6 +391,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open67"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open68"></script>
 </body>
 </html>
