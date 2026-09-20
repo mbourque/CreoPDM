@@ -184,6 +184,61 @@ sudo loginctl enable-linger "$USER"
 
 Open `http://127.0.0.1:52113` on that PC, or the **Other PCs** LAN URL after allowing the port (see above).
 
+## Local Creo agent (Windows tray)
+
+When CreoPDM runs on another machine (for example Linux) and Creo runs on Windows, Embedded open needs a small **local agent** on the Creo PC. It downloads CAD into a local cache so Creo.JS can open files by path.
+
+The agent is separate from the CreoPDM server. Do **not** run it on the Linux host for a Windows Creo setup — run it on the PC that runs Creo.
+
+### Install tray extras
+
+With the venv active on the Creo PC:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[agent-tray]"
+```
+
+If `pip` fails because `creopdm.exe` is locked, stop any local `creopdm` on that PC and retry. You can also build the tray launcher without reinstalling the main app:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_agent_tray_launcher.py
+```
+
+### Start the tray agent
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+creopdm-agent-tray
+```
+
+That starts in the system tray (no console). Menu items:
+
+- **Show status** — port, version, and cache folder
+- **Open cache folder** — Explorer on the local download cache
+- **Quit** — stop the agent
+
+Cache default: `%LOCALAPPDATA%\CreoPDM-agent\workspaces`.
+
+Console form (logs in the terminal):
+
+```powershell
+creopdm-agent
+```
+
+Or: `python -m creopdm_agent` / `python -m creopdm_agent --tray`.
+
+### Use with Embedded Creo
+
+1. Keep CreoPDM running on the server (for example `systemctl --user` on Linux).
+2. Keep `creopdm-agent-tray` running on the Creo PC.
+3. In CreoPDM Settings, set open mode to **Embedded Creo Browser**.
+4. In Creo's built-in browser, open the CreoPDM URL (the Linux **Other PCs** address).
+5. Open a model — the page calls the agent at `http://127.0.0.1:8766`, which fetches the file (and same-folder assembly companions) into the local cache, then Creo opens it.
+6. **Set Working Directory** uses the agent cache folder for the current project (not the remote server path).
+
+Quick check that the agent is up: open `http://127.0.0.1:8766/health` in a normal browser on the Creo PC.
+
 ## Tests
 
 With the venv active, run `pytest`. Tests use temporary directories. They never touch a real project repository.

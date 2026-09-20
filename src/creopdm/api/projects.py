@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -262,6 +262,31 @@ def purge_workspace_paths(
     )
 
 
+def _picker_filters(ctx: AppContext) -> dict[str, list[str]]:
+    extensions = [
+        *ctx.config.model_cad_extensions(),
+        *ctx.config.openable_cad_extensions(),
+        *ctx.config.data_cad_extensions(),
+        *ctx.config.document_extensions(),
+    ]
+    seen: set[str] = set()
+    unique: list[str] = []
+    for raw in extensions:
+        ext = str(raw or "").strip().lower()
+        if not ext:
+            continue
+        if not ext.startswith("."):
+            ext = f".{ext}"
+        if ext in seen:
+            continue
+        seen.add(ext)
+        unique.append(ext)
+    return {
+        "ignore_patterns": list(ctx.config.ignore_patterns()),
+        "import_extensions": unique,
+    }
+
+
 @router.get("/api/projects/{project_id}/workspace/add-folder", response_model=WorkspacePickerResponse)
 def workspace_add_folder(
     project_id: str,
@@ -271,9 +296,12 @@ def workspace_add_folder(
     project = ctx.projects.get_project(db, project_id)
     start = ctx.projects.preferred_import_directory(project)
     start.mkdir(parents=True, exist_ok=True)
+    filters = _picker_filters(ctx)
     return WorkspacePickerResponse(
         workspace_root=str(ctx.workspaces.root_for(project.uuid)),
         initial_directory=str(start),
+        ignore_patterns=filters["ignore_patterns"],
+        import_extensions=filters["import_extensions"],
     )
 
 
@@ -471,22 +499,26 @@ def import_from_disk(
 @router.post("/api/projects/{project_id}/objects/from-uploads", response_model=BatchOperationResponse)
 async def import_from_uploads(
     project_id: str,
-    files: list[UploadFile] = File(...),
-    relative_paths: list[str] | None = Form(default=None),
-    comment: str | None = Form(default=None),
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
+    # Browser folder picks send many parts; Starlette defaults to 1000 files/fields.
+    form = await request.form(max_files=20000, max_fields=40000)
+    uploaded_files = form.getlist("files")
+    rels = [str(item) for item in form.getlist("relative_paths")]
+    comment_raw = form.get("comment")
+    note = str(comment_raw).strip() if comment_raw not in (None, "") else None
     project = ctx.projects.get_project(db, project_id)
-    note = (comment or "").strip() or None
-    rels = list(relative_paths or [])
     temps: list[Path] = []
     jobs: list[tuple[Path, str | None, str | None]] = []
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
     try:
-        for index, uploaded in enumerate(files):
-            filename = Path(uploaded.filename or "untitled").name
+        for index, uploaded in enumerate(uploaded_files):
+            if not hasattr(uploaded, "read"):
+                continue
+            filename = Path(getattr(uploaded, "filename", None) or "untitled").name
             if not filename:
                 failed.append(
                     BatchItemResult(
@@ -548,6 +580,10 @@ async def import_from_uploads(
     finally:
         for path in temps:
             path.unlink(missing_ok=True)
+        try:
+            await form.close()
+        except Exception:
+            pass
     if not jobs and not failed:
         raise ValidationAppError("Drop files or a folder first.")
     db.commit()

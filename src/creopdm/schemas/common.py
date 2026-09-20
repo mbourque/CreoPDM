@@ -249,6 +249,8 @@ class WorkspacePickerResponse(BaseModel):
     ignored_count: int = 0
     warning: str = ""
     native_picker: bool = Field(default_factory=native_picker_available)
+    ignore_patterns: list[str] = Field(default_factory=list)
+    import_extensions: list[str] = Field(default_factory=list)
 
 
 class FolderPickResponse(BaseModel):

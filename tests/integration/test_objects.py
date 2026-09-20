@@ -207,6 +207,8 @@ def test_choose_files_starts_in_project_folder(client, repo_parent):
     payload = folder.json()
     assert payload["initial_directory"]
     assert Path(payload["initial_directory"]).is_dir()
+    assert isinstance(payload.get("import_extensions"), list)
+    assert isinstance(payload.get("ignore_patterns"), list)
 
     leftover = location / "CAD"
     leftover.mkdir()
@@ -237,6 +239,8 @@ def test_choose_files_starts_in_project_folder(client, repo_parent):
     assert 'webkitdirectory' in page.text
     script = client.get("/static/js/app.js")
     assert "function browseLocalFiles" in script.text
+    assert "function browseLocalFolder" in script.text
+    assert "function filterUploadItems" in script.text
     assert "function useNativePicker" in script.text
     assert "function reloadPage" in script.text
     assert "reloadPage();" in script.text

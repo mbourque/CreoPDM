@@ -673,6 +673,9 @@
   let chosenPaths = [];
   let chosenBaseFolder = null;
   let chosenUploads = [];
+  let importIgnorePatterns = [];
+  let importExtensions = [];
+  const UPLOAD_CHUNK = 400;
 
   async function loadAddFolder() {
     const projectId = addForm?.dataset.project;
@@ -684,6 +687,10 @@
     if (addForm && data.native_picker !== undefined) {
       addForm.dataset.nativePicker = data.native_picker ? "1" : "0";
     }
+    importIgnorePatterns = Array.isArray(data.ignore_patterns) ? data.ignore_patterns : [];
+    importExtensions = Array.isArray(data.import_extensions)
+      ? data.import_extensions.map((item) => String(item || "").toLowerCase())
+      : [];
     if (!data.native_picker) {
       label.textContent = "Choose files or a folder in this browser. Copies go into the workspace.";
       return;
@@ -693,6 +700,61 @@
 
   function fileCountLabel(count) {
     return count === 1 ? "1 file" : `${count} files`;
+  }
+
+  function logicalUploadName(name) {
+    const text = String(name || "");
+    const match = text.match(/^(.*?)(?:\.\d+)?$/);
+    return match ? match[1] : text;
+  }
+
+  function uploadExtension(name) {
+    const logical = logicalUploadName(PathBasename(name)).toLowerCase();
+    const dot = logical.lastIndexOf(".");
+    return dot >= 0 ? logical.slice(dot) : "";
+  }
+
+  function PathBasename(value) {
+    const text = String(value || "").replace(/\\/g, "/");
+    const parts = text.split("/");
+    return parts[parts.length - 1] || text;
+  }
+
+  function matchesIgnorePattern(name, pattern) {
+    const target = PathBasename(name).toLowerCase();
+    const logical = logicalUploadName(target).toLowerCase();
+    const pat = String(pattern || "").toLowerCase();
+    if (!pat) return false;
+    const toRegex = (glob) =>
+      new RegExp(
+        `^${glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`,
+        "i"
+      );
+    const re = toRegex(pat);
+    return re.test(target) || re.test(logical);
+  }
+
+  function isIgnoredUploadName(name) {
+    return importIgnorePatterns.some((pattern) => matchesIgnorePattern(name, pattern));
+  }
+
+  function isImportableUploadName(name) {
+    // Skip configured ignore patterns only — allow CAD, documents, HTML, etc.
+    return !isIgnoredUploadName(name);
+  }
+
+  function filterUploadItems(items) {
+    const kept = [];
+    let skipped = 0;
+    for (const item of items || []) {
+      const name = item?.relativePath || item?.file?.name || "";
+      if (!item?.file || !isImportableUploadName(name)) {
+        skipped += 1;
+        continue;
+      }
+      kept.push(item);
+    }
+    return { kept, skipped };
   }
 
   function applyChosenPaths(paths, labelText, baseFolder, ignoredCount) {
@@ -848,15 +910,60 @@
       applyChosenPaths(uniquePaths, "", null, 0);
       return;
     }
+    const { kept, skipped } = filterUploadItems(uploads);
     chosenPaths = [];
     chosenBaseFolder = null;
-    chosenUploads = uploads;
+    chosenUploads = kept;
     const summary = $("#chosen-file-summary");
     if (summary) {
-      summary.textContent = uploads.length
-        ? `${fileCountLabel(uploads.length)} dropped.`
+      const omitted = skipped
+        ? ` ${skipped} ignored ${skipped === 1 ? "file" : "files"} skipped.`
         : "";
+      summary.textContent = kept.length
+        ? `${fileCountLabel(kept.length)} ready to add.${omitted}`
+        : skipped
+          ? `No files to add.${omitted}`
+          : "";
     }
+  }
+
+  function applyBrowserPickedFiles(fileList) {
+    const uploads = [...(fileList || [])].map((file) => ({
+      file,
+      relativePath: file.webkitRelativePath || file.name,
+      path: fileDiskPath(file),
+    }));
+    applyDroppedFiles(uploads, []);
+  }
+
+  async function walkDirectoryHandle(dirHandle, prefix) {
+    const found = [];
+    for await (const [name, handle] of dirHandle.entries()) {
+      const relativePath = prefix ? `${prefix}/${name}` : name;
+      if (handle.kind === "directory") {
+        found.push(...(await walkDirectoryHandle(handle, relativePath)));
+      } else if (handle.kind === "file") {
+        const file = await handle.getFile();
+        found.push({ file, relativePath, path: "" });
+      }
+    }
+    return found;
+  }
+
+  async function browseLocalFolder() {
+    if (typeof window.showDirectoryPicker === "function") {
+      try {
+        const handle = await window.showDirectoryPicker({ mode: "read" });
+        const items = await withBusy("Reading folder…", () => walkDirectoryHandle(handle, handle.name || ""));
+        applyDroppedFiles(items, []);
+        if (addDialog && !addDialog.open) addDialog.showModal();
+        return;
+      } catch (err) {
+        if (err && (err.name === "AbortError" || err.name === "NotAllowedError")) return;
+        // Fall through to the older folder input.
+      }
+    }
+    browseLocalFiles($("#add-folder-input"));
   }
 
   function bindDropTarget(node, onFiles) {
@@ -901,15 +1008,6 @@
 
   function useNativePicker() {
     return addForm?.dataset.nativePicker !== "0";
-  }
-
-  function applyBrowserPickedFiles(fileList) {
-    const uploads = [...(fileList || [])].map((file) => ({
-      file,
-      relativePath: file.webkitRelativePath || file.name,
-      path: fileDiskPath(file),
-    }));
-    applyDroppedFiles(uploads, []);
   }
 
   function browseLocalFiles(input) {
@@ -961,7 +1059,7 @@
     if (!projectId) return;
     showError($("#add-error"), "");
     if (!useNativePicker()) {
-      browseLocalFiles($("#add-folder-input"));
+      await browseLocalFolder();
       return;
     }
     await withHtmlDialogClosed(addDialog, async () => {
@@ -1062,21 +1160,28 @@
     const comment = String(new FormData(addForm).get("comment") || "").trim();
     const result = await withBusy(chosenBaseFolder ? "Adding folder…" : "Adding files…", async () => {
       if (chosenUploads.length) {
-        const data = new FormData();
-        if (comment) data.append("comment", comment);
-        chosenUploads.forEach((item) => {
-          data.append("files", item.file, item.file.name);
-          data.append("relative_paths", item.relativePath || item.file.name);
-        });
-        const response = await fetch(`/api/projects/${projectId}/objects/from-uploads`, {
-          method: "POST",
-          body: data,
-        });
-        if (!response.ok) {
-          showError($("#add-error"), await readError(response));
-          return null;
+        const combined = { ok: [], failed: [] };
+        for (let offset = 0; offset < chosenUploads.length; offset += UPLOAD_CHUNK) {
+          const chunk = chosenUploads.slice(offset, offset + UPLOAD_CHUNK);
+          const data = new FormData();
+          if (comment && offset === 0) data.append("comment", comment);
+          chunk.forEach((item) => {
+            data.append("files", item.file, item.file.name);
+            data.append("relative_paths", item.relativePath || item.file.name);
+          });
+          const response = await fetch(`/api/projects/${projectId}/objects/from-uploads`, {
+            method: "POST",
+            body: data,
+          });
+          if (!response.ok) {
+            showError($("#add-error"), await readError(response));
+            return null;
+          }
+          const body = await response.json();
+          combined.ok.push(...(body.ok || []));
+          combined.failed.push(...(body.failed || []));
         }
-        return response.json();
+        return combined;
       }
       const payload = chosenBaseFolder
         ? { folder: chosenBaseFolder, base_folder: chosenBaseFolder, comment: comment || null }
