@@ -148,10 +148,10 @@
               <button type="button" class="folder-open" data-folder="{{ entry.path }}" title="Open {{ entry.name }}">
                 <span class="folder-label">
                   <svg class="folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.2A2.2 2.2 0 0 1 5.7 5h4.1c.4 0 .8.2 1 .5l1.3 1.4c.3.3.6.5 1 .5h5.2A2.2 2.2 0 0 1 20.5 9.6v8.2a2.2 2.2 0 0 1-2.2 2.2H5.7A2.2 2.2 0 0 1 3.5 17.8V7.2Z"/></svg>
-                  {{ entry.name }}
+                  <span class="folder-name">{{ entry.name }}</span>
                 </span>
               </button>
-              <span class="muted small">{{ entry.count }} file{% if entry.count != 1 %}s{% endif %}</span>
+              <div class="muted small folder-count">{{ entry.count }} file{% if entry.count != 1 %}s{% endif %}</div>
             </td>
             <td></td>
             <td></td>
@@ -388,7 +388,7 @@
         <button type="button" class="btn" id="choose-workspace-folder">Choose Folder</button>
       </div>
       <p id="chosen-file-summary" class="muted small"></p>
-      <span class="muted small">Drop files, folders, or file links here, or choose them. Copies go into the workspace.</span>
+      <span class="muted small">Drop files or folders here, or choose them. Copies go into the workspace. On a LAN http:// address, drop folders instead of Choose Folder to avoid Chrome’s upload warning.</span>
     </div>
     <input id="add-file-input" class="sr-file" type="file" multiple>
     <input id="add-folder-input" class="sr-file" type="file" webkitdirectory multiple>

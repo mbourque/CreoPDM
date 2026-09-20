@@ -950,20 +950,38 @@
     return found;
   }
 
+  function canUseDirectoryPicker() {
+    return (
+      typeof window.showDirectoryPicker === "function" &&
+      window.isSecureContext === true
+    );
+  }
+
   async function browseLocalFolder() {
-    if (typeof window.showDirectoryPicker === "function") {
+    if (canUseDirectoryPicker()) {
       try {
         const handle = await window.showDirectoryPicker({ mode: "read" });
-        const items = await withBusy("Reading folder…", () => walkDirectoryHandle(handle, handle.name || ""));
+        const items = await withBusy("Reading folder…", () =>
+          walkDirectoryHandle(handle, handle.name || "")
+        );
         applyDroppedFiles(items, []);
         if (addDialog && !addDialog.open) addDialog.showModal();
         return;
       } catch (err) {
         if (err && (err.name === "AbortError" || err.name === "NotAllowedError")) return;
-        // Fall through to the older folder input.
+        showError(
+          $("#add-error"),
+          "Could not open the folder picker. Drag the folder onto the drop zone instead."
+        );
+        return;
       }
     }
-    browseLocalFiles($("#add-folder-input"));
+    // webkitdirectory always triggers Chrome's "Upload N files to this site?" prompt.
+    // Prefer drag-and-drop on http://LAN addresses (not a secure context).
+    showError(
+      $("#add-error"),
+      "Folder pick needs https:// or http://127.0.0.1. Drag the folder onto the drop zone instead — that skips Chrome's upload warning."
+    );
   }
 
   function bindDropTarget(node, onFiles) {

@@ -413,6 +413,8 @@ tr.is-row-hidden { display: none !important; }
 }
 #object-table td:first-child .object-open,
 #object-table .object-row td:first-child .muted.small,
+#object-table .folder-row td:first-child .folder-count,
+#object-table .folder-row td:first-child .muted.small,
 #checked-out-table td:first-child .object-open,
 #checked-out-table .object-row td:first-child .muted.small {
   display: block;
@@ -422,8 +424,33 @@ tr.is-row-hidden { display: none !important; }
   max-width: 100%;
   text-align: left;
 }
-#object-table td:first-child .folder-label {
-  max-width: calc(100% - 5.5rem);
+#object-table .folder-row td:first-child {
+  white-space: normal;
+}
+#object-table .folder-row td:first-child .folder-open {
+  display: block;
+  max-width: 100%;
+  margin: 0 0 0.15rem;
+}
+#object-table .folder-row td:first-child .folder-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+}
+#object-table .folder-row td:first-child .folder-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#object-table .folder-row td:first-child .folder-count {
+  display: block;
+  clear: both;
+  margin: 0;
+  line-height: 1.25;
 }
 /* New files: pack Change/Size/Date; Filename + Detail take remaining width. */
 #changes-table th:nth-child(1),
@@ -452,7 +479,7 @@ tr.is-row-hidden { display: none !important; }
 .folder-row.is-selected td {
   background: #e7f1f6;
 }
-.folder-label { font-weight: 650; display: inline-flex; align-items: center; gap: 0.45rem; margin-right: 0.45rem; }
+.folder-label { font-weight: 650; display: inline-flex; align-items: center; gap: 0.45rem; margin-right: 0; }
 .folder-icon {
   width: 1.15rem; height: 1.15rem; flex-shrink: 0;
   fill: #e0a04a; stroke: #b4531e; stroke-width: 1.1;
@@ -465,11 +492,12 @@ button.folder-open {
   font: inherit;
   color: inherit;
   cursor: pointer;
-  display: inline-flex;
-  max-width: calc(100% - 5.5rem);
-  vertical-align: middle;
+  display: block;
+  max-width: 100%;
+  text-align: left;
 }
 button.folder-open:hover .folder-label { text-decoration: underline; }
+button.folder-open:hover .folder-name { text-decoration: underline; }
 .folder-crumb {
   display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center;
   margin: 0 0 0.65rem; font-size: 0.88rem;
