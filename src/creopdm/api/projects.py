@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import mimetypes
 import tempfile
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object, present_objects
@@ -350,6 +353,31 @@ def open_workspace_folder(
             details={"path": str(opened)},
         ) from exc
     return Response(status_code=204)
+
+
+@router.get("/api/projects/{project_id}/workspace/content")
+def workspace_file_content(
+    project_id: str,
+    path: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> FileResponse:
+    project = ctx.projects.get_project(db, project_id)
+    target = ctx.workspaces.file_path(project.uuid, path)
+    if not target.is_file():
+        raise PathValidationError(
+            f"Workspace file not found: {Path(path).name}.",
+            details={"relative_path": path},
+        )
+    media_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+    disposition = f"inline; filename*=UTF-8''{quote(target.name)}"
+    return FileResponse(
+        target,
+        media_type=media_type,
+        filename=target.name,
+        content_disposition_type="inline",
+        headers={"Content-Disposition": disposition},
+    )
 
 
 @router.post("/api/projects/{project_id}/objects/from-disk", response_model=BatchOperationResponse)

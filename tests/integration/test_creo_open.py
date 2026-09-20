@@ -395,8 +395,6 @@ def test_windows_connector_opens_numbered_save_as_logical_name(tmp_path: Path, m
 @requires_git
 def test_open_document_uses_windows_association(data_dir, repo_parent, identity, monkeypatch):
     opened: list[Path] = []
-    monkeypatch.setattr("creopdm.services.creo_service.os.name", "nt")
-    monkeypatch.setattr("creopdm.utils.launch.os.name", "nt")
 
     def fake_start(path: Path, workdir: Path) -> None:
         opened.append(Path(path))
@@ -404,7 +402,6 @@ def test_open_document_uses_windows_association(data_dir, repo_parent, identity,
     monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
-        location = repo_parent / "DocsProj"
         project = client.post(
             "/api/projects",
             json={"name": "Docs"},
@@ -415,12 +412,16 @@ def test_open_document_uses_windows_association(data_dir, repo_parent, identity,
             data={"comment": "Notes"},
         )
         assert created.status_code == 201, created.text
-        opened_resp = client.post("/api/creo/open", json={"object_id": created.json()["uuid"]})
+        obj_id = created.json()["uuid"]
+        opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
-        assert opened_resp.json()["method"] == "shell"
-        assert opened
-        assert opened[0].name == "notes.txt"
-        assert opened[0].parent.name == project["uuid"]
+        body = opened_resp.json()
+        assert body["method"] == "browser"
+        assert body["url"] == f"/api/objects/{obj_id}/content"
+        assert not opened
+        content = client.get(body["url"])
+        assert content.status_code == 200, content.text
+        assert content.content == b"hello"
 
 
 @requires_git
@@ -428,8 +429,6 @@ def test_open_extra_cad_uses_windows_association(
     data_dir, repo_parent, identity, monkeypatch
 ):
     opened: list[Path] = []
-    monkeypatch.setattr("creopdm.services.creo_service.os.name", "nt")
-    monkeypatch.setattr("creopdm.utils.launch.os.name", "nt")
 
     def fake_start(path: Path, workdir: Path) -> None:
         opened.append(Path(path))
@@ -437,8 +436,7 @@ def test_open_extra_cad_uses_windows_association(
     monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
-        # Creo open mode must not affect non-Creo files.
-        assert client.put("/api/settings", json={"creo_open_mode": "executable"}).status_code == 200
+        assert client.put("/api/settings", json={"creo_open_mode": "association"}).status_code == 200
         project = client.post("/api/projects", json={"name": "ExtraCad"}).json()
         created = client.post(
             f"/api/projects/{project['uuid']}/objects",
@@ -446,18 +444,18 @@ def test_open_extra_cad_uses_windows_association(
             data={"comment": "Extra CAD"},
         )
         assert created.status_code == 201, created.text
-        opened_resp = client.post("/api/creo/open", json={"object_id": created.json()["uuid"]})
+        obj_id = created.json()["uuid"]
+        opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
-        assert opened_resp.json()["method"] == "shell"
-        assert opened
-        assert opened[0].name == "setup.inf"
+        body = opened_resp.json()
+        assert body["method"] == "browser"
+        assert body["url"] == f"/api/objects/{obj_id}/content"
+        assert not opened
 
 
 @requires_git
 def test_open_image_uses_windows_association(data_dir, repo_parent, identity, monkeypatch):
     opened: list[Path] = []
-    monkeypatch.setattr("creopdm.services.creo_service.os.name", "nt")
-    monkeypatch.setattr("creopdm.utils.launch.os.name", "nt")
 
     def fake_start(path: Path, workdir: Path) -> None:
         opened.append(Path(path))
@@ -473,11 +471,16 @@ def test_open_image_uses_windows_association(data_dir, repo_parent, identity, mo
             data={"comment": "Photo"},
         )
         assert created.status_code == 201, created.text
-        opened_resp = client.post("/api/creo/open", json={"object_id": created.json()["uuid"]})
+        obj_id = created.json()["uuid"]
+        opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
-        assert opened_resp.json()["method"] == "shell"
-        assert opened
-        assert opened[0].name == "photo.png"
+        body = opened_resp.json()
+        assert body["method"] == "browser"
+        assert body["url"] == f"/api/objects/{obj_id}/content"
+        assert not opened
+        content = client.get(body["url"])
+        assert content.status_code == 200
+        assert content.content.startswith(b"\x89PNG")
 
 
 @requires_git
@@ -485,8 +488,6 @@ def test_open_openable_cad_uses_windows_association(
     data_dir, repo_parent, identity, monkeypatch
 ):
     opened: list[Path] = []
-    monkeypatch.setattr("creopdm.services.creo_service.os.name", "nt")
-    monkeypatch.setattr("creopdm.utils.launch.os.name", "nt")
 
     def fake_start(path: Path, workdir: Path) -> None:
         opened.append(Path(path))
@@ -501,11 +502,13 @@ def test_open_openable_cad_uses_windows_association(
             data={"comment": "Openable CAD"},
         )
         assert created.status_code == 201, created.text
-        opened_resp = client.post("/api/creo/open", json={"object_id": created.json()["uuid"]})
+        obj_id = created.json()["uuid"]
+        opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
-        assert opened_resp.json()["method"] == "shell"
-        assert opened
-        assert opened[0].name == "rough.ncl"
+        body = opened_resp.json()
+        assert body["method"] == "browser"
+        assert body["url"] == f"/api/objects/{obj_id}/content"
+        assert not opened
 
 
 class EmbeddedConnector(RecordingConnector):
@@ -617,8 +620,6 @@ def test_open_embedded_still_opens_creo_view(data_dir, repo_parent, identity: St
 @requires_git
 def test_open_embedded_still_opens_documents(data_dir, repo_parent, identity, monkeypatch):
     opened: list[Path] = []
-    monkeypatch.setattr("creopdm.services.creo_service.os.name", "nt")
-    monkeypatch.setattr("creopdm.utils.launch.os.name", "nt")
 
     def fake_start(path: Path, workdir: Path) -> None:
         opened.append(Path(path))
@@ -636,9 +637,11 @@ def test_open_embedded_still_opens_documents(data_dir, repo_parent, identity, mo
             data={"comment": "Notes"},
         )
         assert created.status_code == 201, created.text
-        opened_resp = client.post("/api/creo/open", json={"object_id": created.json()["uuid"]})
+        obj_id = created.json()["uuid"]
+        opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
-        assert opened_resp.json()["method"] == "shell"
+        body = opened_resp.json()
+        assert body["method"] == "browser"
+        assert body["url"] == f"/api/objects/{obj_id}/content"
         assert recorder.opened == []
-        assert opened
-        assert opened[0].name == "notes.txt"
+        assert not opened

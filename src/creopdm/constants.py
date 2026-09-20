@@ -7,8 +7,8 @@ from enum import StrEnum
 APP_NAME = "CreoPDM"
 APP_VERSION = "0.2.0"
 APP_SCHEMA_VERSION = 1
-CREO_OPEN_MODES = ("executable", "association", "embedded", "view")
-CREO_VIEW_OPEN_MODES = ("executable", "association")
+CREO_OPEN_MODES = ("association", "embedded")
+CREO_VIEW_OPEN_MODES = ("association",)
 SIDEBAR_COLLAPSED_COOKIE = "creopdm_sidebar"
 
 DEFAULT_BRANCH = "main"

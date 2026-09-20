@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
+import mimetypes
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object
@@ -18,6 +22,43 @@ from creopdm.schemas.common import (
 )
 
 router = APIRouter()
+
+
+def _file_response(path, filename: str) -> FileResponse:
+    media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    disposition = f"inline; filename*=UTF-8''{quote(filename)}"
+    return FileResponse(
+        path,
+        media_type=media_type,
+        filename=filename,
+        content_disposition_type="inline",
+        headers={"Content-Disposition": disposition},
+    )
+
+
+@router.get("/api/objects/{object_id}/content")
+def object_content(
+    object_id: str,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> FileResponse:
+    obj = ctx.objects.get_object(db, object_id)
+    project = obj.project
+    try:
+        path = ctx.workspaces.locate_content(project.uuid, obj)
+    except PathValidationError:
+        path = ctx.workspaces.materialize(
+            project,
+            obj,
+            writable=False,
+            overwrite_modified=True,
+        )
+    if not path.is_file():
+        raise PathValidationError(
+            f"Workspace file not found: {obj.filename}.",
+            details={"object_id": object_id},
+        )
+    return _file_response(path, path.name)
 
 
 @router.post("/api/projects/{project_id}/objects", response_model=ObjectResponse, status_code=201)

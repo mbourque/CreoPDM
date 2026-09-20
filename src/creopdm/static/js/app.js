@@ -1835,11 +1835,23 @@
           return null;
         }
       } else {
-        return postAction("/api/creo/open", openRequestBody(target, true), "POST", "");
+        return openPdmLaunchResult(
+          await postAction("/api/creo/open", openRequestBody(target, true), "POST", "")
+        );
       }
       return prepared;
     }
-    return postAction("/api/creo/open", openRequestBody(target, true), "POST", "");
+    return openPdmLaunchResult(
+      await postAction("/api/creo/open", openRequestBody(target, true), "POST", "")
+    );
+  }
+
+  function openPdmLaunchResult(result) {
+    if (!result) return null;
+    if (result.method === "browser" && result.url) {
+      window.open(result.url, "_blank", "noopener");
+    }
+    return result;
   }
 
   openBtn?.addEventListener("click", async () => {
@@ -2553,21 +2565,17 @@
     const pill = $("#creo-status");
     if (!pill) return;
     const names = {
-      executable: "Parametric",
-      view: "Creo View",
-      association: "Windows",
+      association: "OS",
       embedded: "Embedded",
     };
     const titles = {
-      executable: parametricPath || "Opens CAD with Creo Parametric",
-      view: viewPath || "Opens CAD with Creo View",
-      association: "Opens Creo models with the Windows file association",
+      association: "Opens Creo models in the browser for the OS association",
       embedded: "Opens CAD in the Creo session showing this page",
     };
-    const key = String(mode || "executable");
+    const key = String(mode || "association");
     const status = (pill.textContent || "Creo:").split("·")[0].trim() || "Creo:";
-    pill.textContent = `${status} · ${names[key] || names.executable}`;
-    pill.title = titles[key] || titles.executable;
+    pill.textContent = `${status} · ${names[key] || names.association}`;
+    pill.title = titles[key] || titles.association;
   }
 
   settingsForm?.addEventListener("submit", async (event) => {
@@ -2577,9 +2585,9 @@
     if (ok) ok.hidden = true;
     const data = new FormData(settingsForm);
     const body = {
-      creo_open_mode: String(data.get("creo_open_mode") || "executable"),
-      creo_executable: String(data.get("creo_executable") || "").trim() || null,
-      creo_view_executable: String(data.get("creo_view_executable") || "").trim() || null,
+      creo_open_mode: String(data.get("creo_open_mode") || "association"),
+      creo_executable: null,
+      creo_view_executable: null,
       workspace_root: String(data.get("workspace_root") || "").trim() || null,
       cad_model_extensions: String(data.get("cad_model_extensions") || "")
         .split(/[\s,;]+/)
@@ -2687,7 +2695,7 @@
       }))
       .filter((item) => item.extension || item.label);
     const body = {
-      creo_open_mode: String(new FormData(typeLabelsForm).get("creo_open_mode") || "executable"),
+      creo_open_mode: String(new FormData(typeLabelsForm).get("creo_open_mode") || "association"),
       type_labels,
     };
     const response = await fetch("/api/settings", {

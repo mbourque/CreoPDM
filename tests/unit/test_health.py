@@ -58,22 +58,22 @@ def test_home_page(client):
     assert "Workspace:" not in text
     assert 'id="checkin-btn"' in text
     assert 'id="creo-status"' in text
-    assert "· Parametric" in text
+    assert "· OS" in text
 
 
 def test_creo_open_name_cache_stays_with_settings_dir(tmp_path, identity):
     first_dir = tmp_path / "one"
     second_dir = tmp_path / "two"
     with TestClient(create_app(build_context(ConfigManager(first_dir), users=identity))) as first:
-        changed = first.put("/api/settings", json={"creo_open_mode": "association"})
+        changed = first.put("/api/settings", json={"creo_open_mode": "embedded"})
         assert changed.status_code == 200, changed.text
-        assert "· Windows" in first.get("/").text
+        assert "· Embedded" in first.get("/").text
     with TestClient(create_app(build_context(ConfigManager(second_dir), users=identity))) as second:
         text = second.get("/").text
         start = text.index('id="creo-status"')
         pill = text[start : text.index("</span>", start)]
-        assert "· Parametric" in pill
-        assert "· Windows" not in pill
+        assert "· OS" in pill
+        assert "· Embedded" not in pill
 
 
 def test_app_js_strips_creo_error_details(client):
@@ -94,8 +94,8 @@ def test_config_layout(data_dir):
     assert manager.logs_dir.exists()
     assert settings.server.host == "0.0.0.0"
     assert settings.creo.connector == "auto"
-    assert settings.creo.open_mode == "executable"
-    assert settings.creo.view_open_mode == "executable"
+    assert settings.creo.open_mode == "association"
+    assert settings.creo.view_open_mode == "association"
     assert settings.creo.view_executable is None
     assert extra_cad_set(settings.cad.extra_extensions) == extra_cad_set(DEFAULT_EXTRA_CAD_EXTENSIONS)
     assert extra_cad_set(settings.cad.openable_extensions) == extra_cad_set(DEFAULT_OPENABLE_CAD_EXTENSIONS)

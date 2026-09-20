@@ -188,6 +188,7 @@ class CreoOpenResponse(BaseModel):
     working_directory: str
     creo_object: bool = False
     creo_release: str | None = None
+    url: str | None = None
 
 
 class CreoStatusResponse(BaseModel):
@@ -292,7 +293,7 @@ class SettingsResponse(BaseModel):
 
 
 class SettingsUpdateRequest(BaseModel):
-    creo_open_mode: str = "executable"
+    creo_open_mode: str = "association"
     creo_executable: str | None = None
     creo_view_open_mode: str | None = None
     creo_view_executable: str | None = None
@@ -311,9 +312,9 @@ class SettingsUpdateRequest(BaseModel):
     @field_validator("creo_open_mode")
     @classmethod
     def valid_open_mode(cls, value: str) -> str:
-        key = (value or "executable").strip().lower()
+        key = (value or "association").strip().lower()
         if key not in CREO_OPEN_MODES:
-            raise ValueError("Open mode must be 'executable', 'association', 'embedded', or 'view'.")
+            raise ValueError("Open mode must be 'association' or 'embedded'.")
         return key
 
     @field_validator("creo_view_open_mode")
@@ -323,7 +324,7 @@ class SettingsUpdateRequest(BaseModel):
             return None
         key = value.strip().lower()
         if key not in CREO_VIEW_OPEN_MODES:
-            raise ValueError("Creo View open mode must be 'executable' or 'association'.")
+            raise ValueError("Creo View open mode must be 'association'.")
         return key
 
     @field_validator("cad_extensions")

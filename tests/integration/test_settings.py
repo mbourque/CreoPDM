@@ -28,7 +28,8 @@ def test_get_and_update_settings(client, tmp_path):
     response = client.get("/api/settings")
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["creo_open_mode"] in {"executable", "association", "embedded", "view"}
+    assert payload["creo_open_mode"] == "association"
+    assert payload["creo_view_open_mode"] == "association"
     assert payload["workspace_root"]
     assert payload["default_workspace_root"]
     defaults = payload["default_cad_extensions"]
@@ -123,7 +124,7 @@ def test_get_and_update_settings(client, tmp_path):
     updated = client.put(
         "/api/settings",
         json={
-            "creo_open_mode": "view",
+            "creo_open_mode": "association",
             "creo_executable": str(fake_creo),
             "creo_view_executable": str(fake_view),
             "workspace_root": str(workspace),
@@ -131,11 +132,14 @@ def test_get_and_update_settings(client, tmp_path):
     )
     assert updated.status_code == 200, updated.text
     body = updated.json()
-    assert body["creo_open_mode"] == "view"
+    assert body["creo_open_mode"] == "association"
     assert Path(body["creo_executable"]) == fake_creo
     assert Path(body["creo_view_executable"]) == fake_view
     assert Path(body["workspace_root"]) == workspace.resolve()
     assert workspace.is_dir()
+
+    rejected_mode = client.put("/api/settings", json={"creo_open_mode": "executable"})
+    assert rejected_mode.status_code == 422, rejected_mode.text
 
     kept_view = client.put("/api/settings", json={"creo_open_mode": "embedded"})
     assert kept_view.status_code == 200, kept_view.text
@@ -194,15 +198,16 @@ def test_get_and_update_settings(client, tmp_path):
     page = client.get("/settings")
     assert page.status_code == 200
     assert "Embedded Creo Browser" in page.text
-    assert "Creo Parametric" in page.text
-    assert "Creo View" in page.text
+    assert "OS file association" in page.text
+    assert "Creo Parametric" not in page.text
+    assert "Creo View" not in page.text
     assert "~/.local/share/CreoPDM/workspaces" in page.text
     assert "Specific application" not in page.text
-    assert "Application" not in page.text
-    assert 'class="open-choice"' in page.text
     assert "Open Creo View with" not in page.text
     assert 'value="embedded"' in page.text
-    assert 'value="view"' in page.text
+    assert 'value="association"' in page.text
+    assert 'value="view"' not in page.text
+    assert 'value="executable"' not in page.text
     headings = [
         "Open Creo models with",
         "Workspace",
@@ -226,8 +231,8 @@ def test_get_and_update_settings(client, tmp_path):
     assert "Default: .pdf, .xps" not in page.text
     assert 'name="port"' in page.text
     assert 'value="8765"' in page.text
-    assert 'name="creo_view_executable"' in page.text
-    assert r"C:\Program Files\PTC\Creo 13.0.0.0\View\bin\pview.exe" in page.text
+    assert 'name="creo_view_executable"' not in page.text
+    assert 'name="creo_executable"' not in page.text
     assert 'href="/settings/types"' in page.text
     assert payload["type_labels"] == unique_type_labels(DEFAULT_TYPE_LABELS)
 
@@ -241,7 +246,7 @@ def test_get_and_update_settings(client, tmp_path):
 def test_cad_extensions_setting_changes_classification(client, repo_parent):
     saved = client.put(
         "/api/settings",
-        json={"creo_open_mode": "executable", "cad_extensions": [".xyz", "ABC"]},
+        json={"creo_open_mode": "association", "cad_extensions": [".xyz", "ABC"]},
     )
     assert saved.status_code == 200, saved.text
     assert ".xyz" in saved.json()["cad_extensions"]
@@ -268,7 +273,7 @@ def test_custom_workspace_used_on_checkout(client, repo_parent, tmp_path):
     workspace = tmp_path / "VaultCopies"
     saved = client.put(
         "/api/settings",
-        json={"creo_open_mode": "executable", "workspace_root": str(workspace)},
+        json={"creo_open_mode": "association", "workspace_root": str(workspace)},
     )
     assert saved.status_code == 200, saved.text
 
@@ -294,7 +299,7 @@ def test_custom_workspace_used_on_checkout(client, repo_parent, tmp_path):
 def test_workspace_data_dir_uses_workspaces_subdir(client, data_dir):
     saved = client.put(
         "/api/settings",
-        json={"creo_open_mode": "executable", "workspace_root": str(data_dir)},
+        json={"creo_open_mode": "association", "workspace_root": str(data_dir)},
     )
     assert saved.status_code == 200, saved.text
     assert Path(saved.json()["workspace_root"]) == (data_dir / "workspaces").resolve()
@@ -306,7 +311,7 @@ def test_type_labels_persist_and_keep_when_omitted(client):
     saved = client.put(
         "/api/settings",
         json={
-            "creo_open_mode": "executable",
+            "creo_open_mode": "association",
             "type_labels": [
                 {"extension": ".prt", "label": "Part file"},
                 {"extension": "", "label": "skip me"},
@@ -316,7 +321,7 @@ def test_type_labels_persist_and_keep_when_omitted(client):
     assert saved.status_code == 200, saved.text
     assert saved.json()["type_labels"] == [{"extension": ".prt", "label": "Part file"}]
 
-    kept = client.put("/api/settings", json={"creo_open_mode": "executable"})
+    kept = client.put("/api/settings", json={"creo_open_mode": "association"})
     assert kept.status_code == 200, kept.text
     assert kept.json()["type_labels"] == [{"extension": ".prt", "label": "Part file"}]
 
@@ -328,7 +333,7 @@ def test_type_labels_persist_and_keep_when_omitted(client):
     variants = client.put(
         "/api/settings",
         json={
-            "creo_open_mode": "executable",
+            "creo_open_mode": "association",
             "type_labels": [{"extension": ".stp, step; .STEP", "label": "STEP Model"}],
         },
     )
@@ -338,7 +343,7 @@ def test_type_labels_persist_and_keep_when_omitted(client):
 
     cleared = client.put(
         "/api/settings",
-        json={"creo_open_mode": "executable", "type_labels": []},
+        json={"creo_open_mode": "association", "type_labels": []},
     )
     assert cleared.status_code == 200, cleared.text
     assert cleared.json()["type_labels"] == []
@@ -349,7 +354,7 @@ def test_type_labels_shown_in_file_list(client, repo_parent):
     saved = client.put(
         "/api/settings",
         json={
-            "creo_open_mode": "executable",
+            "creo_open_mode": "association",
             "type_labels": [{"extension": ".prt", "label": "Machined part"}],
         },
     )
@@ -378,7 +383,7 @@ def test_creo_status_pill_shows_open_mode(client):
     home = client.get("/")
     assert home.status_code == 200
     assert 'id="creo-status"' in home.text
-    assert "· Parametric" in home.text
+    assert "· OS" in home.text
     embedded = client.put("/api/settings", json={"creo_open_mode": "embedded"})
     assert embedded.status_code == 200, embedded.text
     page = client.get("/settings")
@@ -395,7 +400,7 @@ def test_creo_status_pill_shows_open_mode(client):
     assert listed.status_code == 200
     start = listed.text.index('id="creo-status"')
     pill = listed.text[start : listed.text.index("</span>", start)]
-    assert "· Windows" in pill
-    assert "Opens Creo models with the Windows file association" in pill
+    assert "· OS" in pill
+    assert "Opens Creo models in the browser for the OS association" in pill
     script = client.get("/static/js/app.js")
     assert "function syncCreoStatusPill" in script.text

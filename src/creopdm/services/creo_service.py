@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from urllib.parse import quote
 
 from sqlalchemy.orm import Session
 
@@ -31,12 +32,9 @@ class CreoService:
         checkouts: CheckoutService,
         workspaces: WorkspaceService,
     ) -> None:
-        self._connector = connector
         self._objects = objects
         self._checkouts = checkouts
         self._workspaces = workspaces
-
-    def set_connector(self, connector: CreoConnector) -> None:
         self._connector = connector
 
     def open_object(self, session: Session, object_uuid: str, launch: bool = True) -> dict[str, str | bool]:
@@ -81,6 +79,7 @@ class CreoService:
             launch=launch,
             object_type=obj.object_type,
             creo_release=file_release or "",
+            browser_url=f"/api/objects/{object_uuid}/content",
         )
 
     def open_workspace_file(self, project: Project, relative_path: str, launch: bool = True) -> dict[str, str | bool]:
@@ -96,11 +95,13 @@ class CreoService:
             model_extensions=self._workspaces._config.model_cad_extensions(),
             document_extensions=self._workspaces._config.document_extensions(),
         )
+        rel = str(relative_path).replace("\\", "/")
         return self._open_resolved(
             path,
             launch=launch,
             object_type=kind.value,
             creo_release=creo_release_for(path, path.name) or "",
+            browser_url=f"/api/projects/{project.uuid}/workspace/content?path={quote(rel)}",
         )
 
     def _open_resolved(
@@ -110,7 +111,8 @@ class CreoService:
         launch: bool,
         object_type: str = "",
         creo_release: str = "",
-    ) -> dict[str, str | bool]:
+        browser_url: str = "",
+    ) -> dict[str, str | bool | None]:
         workdir = working_directory_for(path)
         models = self._workspaces._config.model_cad_extensions()
         all_cad = self._workspaces._cad_extensions()
@@ -122,21 +124,28 @@ class CreoService:
         use_view = view_object or (open_mode == "view" and is_model)
         creo_object = (not use_view) and is_model
         logical = CreoFileManager.normalize_creo_filename(path.name, (*models, *all_cad))
+        url: str | None = None
         if launch:
             if not creo_object and not use_view:
-                # Images, PDFs, docs, extra CAD — always OS association.
-                method = self._open_with_shell(path)
+                # Images, PDFs, docs, extra CAD — let the browser open locally.
+                method = "browser"
+                url = browser_url
             elif use_view:
-                method = self._open_view_path(path)
+                method = self._open_view_path(path, browser_url=browser_url)
+                if method == "browser":
+                    url = browser_url
             elif open_mode == "embedded":
                 raise ValidationAppError(
                     "Open this model from Creo's built-in browser.",
                     details={"path": str(path), "filename": path.name},
                 )
             elif open_mode == "association":
-                method = self._open_with_shell(path)
+                method = "browser"
+                url = browser_url
             else:
-                method = self._open_path(path, creo_object=True)
+                method = self._open_path(path, browser_url=browser_url)
+                if method == "browser":
+                    url = browser_url
             logger.info("Opened %s via %s from %s", path, method, workdir)
         else:
             method = "prepared"
@@ -148,24 +157,28 @@ class CreoService:
             "working_directory": str(workdir),
             "creo_object": creo_object,
             "creo_release": creo_release or "",
+            "url": url,
         }
 
-    def _open_path(self, path: Path, creo_object: bool) -> str:
-        if creo_object:
-            try:
-                self._connector.open_model(path)
-                return "creo"
-            except CreoUnavailableError:
-                logger.info("Creo connector unavailable; falling back to the system opener")
-        return self._open_with_shell(path)
+    def _open_path(self, path: Path, *, browser_url: str = "") -> str:
+        try:
+            self._connector.open_model(path)
+            return "creo"
+        except CreoUnavailableError:
+            logger.info("Creo connector unavailable; opening in the browser instead")
+            if browser_url:
+                return "browser"
+            return self._open_with_shell(path)
 
-    def _open_view_path(self, path: Path) -> str:
+    def _open_view_path(self, path: Path, *, browser_url: str = "") -> str:
         try:
             self._connector.open_view(path)
             return "creo_view"
         except CreoUnavailableError:
-            logger.info("Creo View connector unavailable; falling back to the system opener")
-        return self._open_with_shell(path)
+            logger.info("Creo View connector unavailable; opening in the browser instead")
+            if browser_url:
+                return "browser"
+            return self._open_with_shell(path)
 
     @staticmethod
     def _open_with_shell(path: Path) -> str:

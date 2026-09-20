@@ -11,9 +11,9 @@ from creopdm.exceptions import ConfigurationError
 def create_creo_connector(
     name: str,
     executable: str | None = None,
-    open_mode: str = "executable",
+    open_mode: str = "association",
     view_executable: str | None = None,
-    view_open_mode: str = "executable",
+    view_open_mode: str = "association",
 ) -> CreoConnector:
     key = (name or "auto").strip().lower()
     if key in {"null", "none", "off"}:

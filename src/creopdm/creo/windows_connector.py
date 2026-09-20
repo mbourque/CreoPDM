@@ -56,14 +56,14 @@ class WindowsCreoConnector(CreoConnector):
     def __init__(
         self,
         executable: str | None = None,
-        open_mode: str = "executable",
+        open_mode: str = "association",
         view_executable: str | None = None,
-        view_open_mode: str = "executable",
+        view_open_mode: str = "association",
     ) -> None:
         self._executable_override = executable
-        self._open_mode = (open_mode or "executable").strip().lower()
+        self._open_mode = (open_mode or "association").strip().lower()
         self._view_executable_override = view_executable
-        self._view_open_mode = (view_open_mode or "executable").strip().lower()
+        self._view_open_mode = (view_open_mode or "association").strip().lower()
 
     def is_available(self) -> bool:
         return self.find_executable() is not None

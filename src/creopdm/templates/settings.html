@@ -13,29 +13,15 @@
   <form id="settings-form" class="settings-form">
     <section class="settings-card">
       <h2>Open Creo models with</h2>
-      <div class="open-choice">
-        <label class="choice">
-          <input type="radio" name="creo_open_mode" value="executable" {% if settings.creo_open_mode == 'executable' %}checked{% endif %}>
-          Creo Parametric
-        </label>
-        <input name="creo_executable" type="text" value="{{ settings.creo_executable or '' }}" placeholder="C:\Program Files\PTC\Creo 10.0\Parametric\bin\parametric.exe" aria-label="Creo Parametric path">
-      </div>
-      <div class="open-choice">
-        <label class="choice">
-          <input type="radio" name="creo_open_mode" value="view" {% if settings.creo_open_mode == 'view' %}checked{% endif %}>
-          Creo View
-        </label>
-        <input name="creo_view_executable" type="text" value="{{ settings.creo_view_executable or '' }}" placeholder="C:\Program Files\PTC\Creo 13.0.0.0\View\bin\pview.exe" aria-label="Creo View path">
-      </div>
       <label class="choice">
         <input type="radio" name="creo_open_mode" value="association" {% if settings.creo_open_mode == 'association' %}checked{% endif %}>
-        Windows file association
+        OS file association
       </label>
       <label class="choice">
         <input type="radio" name="creo_open_mode" value="embedded" {% if settings.creo_open_mode == 'embedded' %}checked{% endif %}>
         Embedded Creo Browser
       </label>
-      <p class="muted small">This setting applies only to Creo models. Images, PDFs, documents, and other non-Creo files always open with the OS file association. Creo View can open Creo models and viewables such as .pvz. Embedded Creo Browser opens CAD in the Creo session showing this page and does not start Parametric or Creo View.</p>
+      <p class="muted small">This setting applies only to Creo models. OS file association opens them in your browser so the desktop can handle the file. Embedded Creo Browser opens CAD in the Creo session showing this page. Images, PDFs, and other non-Creo files always open in the browser.</p>
     </section>
 
     <section class="settings-card">

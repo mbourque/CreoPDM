@@ -65,15 +65,13 @@ _PAGE_DEFAULTS = {
     "checkin_queue": {"saves": [], "new_files": []},
     "local_time": format_local,
     "creo_label": "Not Connected",
-    "creo_open_name": "Parametric",
-    "creo_open_title": "Opens CAD with Creo Parametric",
+    "creo_open_name": "OS",
+    "creo_open_title": "Opens Creo models in the browser for the OS association",
     "native_picker": False,
 }
 
 _CREO_OPEN_NAMES = {
-    "executable": "Parametric",
-    "view": "Creo View",
-    "association": "Windows",
+    "association": "OS",
     "embedded": "Embedded",
 }
 
@@ -120,8 +118,8 @@ def _creo_executable(ctx: AppContext) -> str | None:
 def _creo_open_mode(ctx: AppContext) -> str:
     finder = getattr(ctx.creo, "cad_open_mode", None)
     if callable(finder):
-        return (finder() or "executable").strip().lower()
-    return (ctx.settings.creo.open_mode or "executable").strip().lower()
+        return (finder() or "association").strip().lower()
+    return (ctx.settings.creo.open_mode or "association").strip().lower()
 
 
 def _creo_view_executable(ctx: AppContext) -> str | None:
@@ -133,17 +131,13 @@ def _creo_view_executable(ctx: AppContext) -> str | None:
 
 
 def _creo_open_name(mode: str) -> str:
-    return _CREO_OPEN_NAMES.get(mode, "Parametric")
+    return _CREO_OPEN_NAMES.get(mode, "OS")
 
 
 def _creo_open_title(ctx: AppContext, mode: str) -> str:
     if mode == "embedded":
         return "Opens CAD in the Creo session showing this page"
-    if mode == "association":
-        return "Opens Creo models with the Windows file association"
-    if mode == "view":
-        return _creo_view_executable(ctx) or "Opens CAD with Creo View"
-    return _creo_executable(ctx) or "Opens CAD with Creo Parametric"
+    return "Opens Creo models in the browser for the OS association"
 
 
 _CREO_PAGE_TTL = 20.0

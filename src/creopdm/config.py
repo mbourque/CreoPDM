@@ -67,24 +67,24 @@ class GitConfig(BaseModel):
 class CreoConfig(BaseModel):
     connector: str = "auto"
     executable: str | None = None
-    open_mode: str = "executable"
+    open_mode: str = "association"
     view_executable: str | None = None
-    view_open_mode: str = "executable"
+    view_open_mode: str = "association"
 
     @field_validator("open_mode")
     @classmethod
     def valid_open_mode(cls, value: str) -> str:
-        key = (value or "executable").strip().lower()
+        key = (value or "association").strip().lower()
         if key not in CREO_OPEN_MODES:
-            return "executable"
+            return "association"
         return key
 
     @field_validator("view_open_mode")
     @classmethod
     def valid_view_open_mode(cls, value: str) -> str:
-        key = (value or "executable").strip().lower()
+        key = (value or "association").strip().lower()
         if key not in CREO_VIEW_OPEN_MODES:
-            return "executable"
+            return "association"
         return key
 
 
