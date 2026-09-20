@@ -401,6 +401,6 @@ def test_creo_status_pill_shows_open_mode(client):
     start = listed.text.index('id="creo-status"')
     pill = listed.text[start : listed.text.index("</span>", start)]
     assert "· OS" in pill
-    assert "Opens Creo models in the browser for the OS association" in pill
+    assert "Opens Creo models with the OS file association" in pill
     script = client.get("/static/js/app.js")
     assert "function syncCreoStatusPill" in script.text

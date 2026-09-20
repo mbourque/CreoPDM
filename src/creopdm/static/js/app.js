@@ -2569,7 +2569,7 @@
       embedded: "Embedded",
     };
     const titles = {
-      association: "Opens Creo models in the browser for the OS association",
+      association: "Opens Creo models with the OS file association",
       embedded: "Opens CAD in the Creo session showing this page",
     };
     const key = String(mode || "association");

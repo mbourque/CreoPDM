@@ -396,10 +396,11 @@ def test_windows_connector_opens_numbered_save_as_logical_name(tmp_path: Path, m
 def test_open_document_uses_windows_association(data_dir, repo_parent, identity, monkeypatch):
     opened: list[Path] = []
 
-    def fake_start(path: Path, workdir: Path) -> None:
+    def fake_shell(path: Path) -> str:
         opened.append(Path(path))
+        return "shell"
 
-    monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
+    monkeypatch.setattr(CreoService, "_open_with_shell", staticmethod(fake_shell))
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
         project = client.post(
@@ -416,12 +417,9 @@ def test_open_document_uses_windows_association(data_dir, repo_parent, identity,
         opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
         body = opened_resp.json()
-        assert body["method"] == "browser"
-        assert body["url"] == f"/api/objects/{obj_id}/content"
-        assert not opened
-        content = client.get(body["url"])
-        assert content.status_code == 200, content.text
-        assert content.content == b"hello"
+        assert body["method"] == "shell"
+        assert body.get("url") in (None, "")
+        assert opened and opened[0].name == "notes.txt"
 
 
 @requires_git
@@ -430,10 +428,11 @@ def test_open_extra_cad_uses_windows_association(
 ):
     opened: list[Path] = []
 
-    def fake_start(path: Path, workdir: Path) -> None:
+    def fake_shell(path: Path) -> str:
         opened.append(Path(path))
+        return "shell"
 
-    monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
+    monkeypatch.setattr(CreoService, "_open_with_shell", staticmethod(fake_shell))
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
         assert client.put("/api/settings", json={"creo_open_mode": "association"}).status_code == 200
@@ -448,19 +447,20 @@ def test_open_extra_cad_uses_windows_association(
         opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
         body = opened_resp.json()
-        assert body["method"] == "browser"
-        assert body["url"] == f"/api/objects/{obj_id}/content"
-        assert not opened
+        assert body["method"] == "shell"
+        assert body.get("url") in (None, "")
+        assert opened and opened[0].name == "setup.inf"
 
 
 @requires_git
 def test_open_image_uses_windows_association(data_dir, repo_parent, identity, monkeypatch):
     opened: list[Path] = []
 
-    def fake_start(path: Path, workdir: Path) -> None:
+    def fake_shell(path: Path) -> str:
         opened.append(Path(path))
+        return "shell"
 
-    monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
+    monkeypatch.setattr(CreoService, "_open_with_shell", staticmethod(fake_shell))
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
         assert client.put("/api/settings", json={"creo_open_mode": "embedded"}).status_code == 200
@@ -475,12 +475,9 @@ def test_open_image_uses_windows_association(data_dir, repo_parent, identity, mo
         opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
         body = opened_resp.json()
-        assert body["method"] == "browser"
-        assert body["url"] == f"/api/objects/{obj_id}/content"
-        assert not opened
-        content = client.get(body["url"])
-        assert content.status_code == 200
-        assert content.content.startswith(b"\x89PNG")
+        assert body["method"] == "shell"
+        assert body.get("url") in (None, "")
+        assert opened and opened[0].name == "photo.png"
 
 
 @requires_git
@@ -489,10 +486,11 @@ def test_open_openable_cad_uses_windows_association(
 ):
     opened: list[Path] = []
 
-    def fake_start(path: Path, workdir: Path) -> None:
+    def fake_shell(path: Path) -> str:
         opened.append(Path(path))
+        return "shell"
 
-    monkeypatch.setattr("creopdm.utils.launch._start_associated_file", fake_start)
+    monkeypatch.setattr(CreoService, "_open_with_shell", staticmethod(fake_shell))
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
         project = client.post("/api/projects", json={"name": "OpenableCad"}).json()
@@ -506,9 +504,9 @@ def test_open_openable_cad_uses_windows_association(
         opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
         assert opened_resp.status_code == 200, opened_resp.text
         body = opened_resp.json()
-        assert body["method"] == "browser"
-        assert body["url"] == f"/api/objects/{obj_id}/content"
-        assert not opened
+        assert body["method"] == "shell"
+        assert body.get("url") in (None, "")
+        assert opened and opened[0].name == "rough.ncl"
 
 
 class EmbeddedConnector(RecordingConnector):

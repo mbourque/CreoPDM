@@ -66,7 +66,7 @@ _PAGE_DEFAULTS = {
     "local_time": format_local,
     "creo_label": "Not Connected",
     "creo_open_name": "OS",
-    "creo_open_title": "Opens Creo models in the browser for the OS association",
+    "creo_open_title": "Opens Creo models with the OS file association",
     "native_picker": False,
 }
 
@@ -137,7 +137,7 @@ def _creo_open_name(mode: str) -> str:
 def _creo_open_title(ctx: AppContext, mode: str) -> str:
     if mode == "embedded":
         return "Opens CAD in the Creo session showing this page"
-    return "Opens Creo models in the browser for the OS association"
+    return "Opens Creo models with the OS file association"
 
 
 _CREO_PAGE_TTL = 20.0

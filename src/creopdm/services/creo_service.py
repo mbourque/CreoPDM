@@ -127,9 +127,8 @@ class CreoService:
         url: str | None = None
         if launch:
             if not creo_object and not use_view:
-                # Images, PDFs, docs, extra CAD — let the browser open locally.
-                method = "browser"
-                url = browser_url
+                # Images, PDFs, docs, extra CAD — OS file association (viewer app).
+                method, url = self._associate_or_browser(path, browser_url)
             elif use_view:
                 method = self._open_view_path(path, browser_url=browser_url)
                 if method == "browser":
@@ -140,8 +139,7 @@ class CreoService:
                     details={"path": str(path), "filename": path.name},
                 )
             elif open_mode == "association":
-                method = "browser"
-                url = browser_url
+                method, url = self._associate_or_browser(path, browser_url)
             else:
                 method = self._open_path(path, browser_url=browser_url)
                 if method == "browser":
@@ -159,6 +157,15 @@ class CreoService:
             "creo_release": creo_release or "",
             "url": url,
         }
+
+    def _associate_or_browser(self, path: Path, browser_url: str = "") -> tuple[str, str | None]:
+        try:
+            return self._open_with_shell(path), None
+        except CreoUnavailableError:
+            if browser_url:
+                logger.info("System association failed; opening in the browser instead")
+                return "browser", browser_url
+            raise
 
     def _open_path(self, path: Path, *, browser_url: str = "") -> str:
         try:
