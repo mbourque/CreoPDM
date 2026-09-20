@@ -287,13 +287,36 @@ function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
 }
 function openModel(directory, filename, fileRelease, diskName, fullPath) {
     var openDetail = "";
+    var session = null;
+    var previousWd = "";
+    var changedWd = false;
     try {
-        var session = (typeof pfcGetCurrentSession === "function")
+        session = (typeof pfcGetCurrentSession === "function")
           ? pfcGetCurrentSession()
           : pfcGetProESession();
         var versionName = diskName || filename;
-        // Do not ChangeDirectory — the agent cache path is opened by full path
-        // (companions are materialized into the same folder).
+        // Native assemblies need the session WD on the cache folder so Creo can
+        // resolve companions. Restore the prior WD after the open so the
+        // user's session directory is not left on the agent cache.
+        // Multi-CAD trails navigate the File Open dialog and must not ChangeDirectory.
+        if (directory && creoIsNativeVersioned(versionName)) {
+            try {
+                if (typeof session.GetCurrentDirectory === "function") {
+                    previousWd = String(session.GetCurrentDirectory() || "");
+                }
+            } catch (errGet) {
+                previousWd = "";
+            }
+            try {
+                var cacheDir = creoNormalizePath(directory);
+                if (!previousWd || creoNormalizePath(previousWd).toLowerCase() !== cacheDir.toLowerCase()) {
+                    session.ChangeDirectory(cacheDir);
+                    changedWd = true;
+                }
+            } catch (errDir) {
+                openDetail = "ChangeDirectory failed for " + directory + ".";
+            }
+        }
         var sessionRelease = creoSessionRelease(session);
         if (creoIsNativeVersioned(versionName)
             && creoNewerThanSession(fileRelease, sessionRelease)) {
@@ -349,6 +372,12 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
         var detail = errAll && errAll.message ? String(errAll.message) : String(errAll || "");
         var releaseCatch = creoIsNativeVersioned(diskName || filename) ? fileRelease : "";
         return creoOpenFailed(creoOpenFailedMessage(filename, releaseCatch, "", detail));
+    } finally {
+        if (changedWd && session && previousWd) {
+            try {
+                session.ChangeDirectory(previousWd);
+            } catch (errRestore) {}
+        }
     }
 }
 function setWorkingDirectory(directory) {
@@ -389,6 +418,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open72"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open74"></script>
 </body>
 </html>
