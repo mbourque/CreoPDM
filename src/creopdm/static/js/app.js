@@ -2071,6 +2071,29 @@
     }
   }
 
+  async function pushLocalWorkspaceToVault(projectId, items) {
+    const list = (items || []).filter((item) => item && item.object_id);
+    if (!projectId || !list.length) return { ok: [], failed: [], skipped: true };
+    const agent = await probeCreoAgent();
+    if (!agent) return null;
+    const response = await fetch(`${agentBase()}/push`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pdm_url: window.location.origin,
+        project_id: projectId,
+        items: list.map((item) => ({
+          object_id: String(item.object_id),
+          filename: String(item.filename || ""),
+        })),
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await readError(response));
+    }
+    return response.json();
+  }
+
   async function materializeViaAgent(prepared) {
     const companions = Array.isArray(prepared.companions) ? prepared.companions : [];
     const response = await fetch(`${agentBase()}/materialize`, {
@@ -2379,18 +2402,65 @@
     const useQueue = !objectId;
     if (useQueue && !projectId) return;
     showError($("#checkin-error"), "");
-    const preview = await withBusy(addOnly ? "Preparing…" : "Preparing check-in…", () =>
-      fetch(
+    showError($("#toolbar-error"), "");
+    const pushItems = [];
+    if (!addOnly) {
+      if (objectId) {
+        const name =
+          owned[0]?.dataset.filename ||
+          document.querySelector(".detail-head .object-open")?.textContent?.trim() ||
+          "";
+        pushItems.push({ object_id: objectId, filename: name });
+      } else {
+        owned.forEach((row) => {
+          if (row.dataset.uuid) {
+            pushItems.push({
+              object_id: row.dataset.uuid,
+              filename: row.dataset.filename || "",
+            });
+          }
+        });
+      }
+    }
+    let agentOffline = false;
+    const preview = await withBusy(addOnly ? "Preparing…" : "Preparing check-in…", async () => {
+      if (!addOnly && projectId && pushItems.length) {
+        try {
+          const pushed = await pushLocalWorkspaceToVault(projectId, pushItems);
+          if (pushed === null) {
+            agentOffline = true;
+          } else if (pushed.failed?.length && !pushed.ok?.length) {
+            const first = pushed.failed[0]?.message || "Could not sync local files to the vault.";
+            showError($("#toolbar-error"), first);
+          }
+        } catch (err) {
+          showError($("#toolbar-error"), err?.message || String(err));
+        }
+      }
+      return fetch(
         useQueue
           ? `/api/projects/${projectId}/checkin-preview`
           : `/api/objects/${objectId}/checkin-preview`
-      )
-    );
+      );
+    });
     if (!preview.ok) {
       showError($("#toolbar-error"), await readError(preview));
       return;
     }
     const data = await preview.json();
+    if (
+      !addOnly &&
+      agentOffline &&
+      pushItems.length &&
+      !(data.object_ids || []).length &&
+      !(data.new_files || []).length &&
+      !data.can_checkin
+    ) {
+      showError(
+        $("#toolbar-error"),
+        "Start creopdm-agent on this Creo PC to sync local workspace saves into the vault before check-in."
+      );
+    }
     const title = $("#checkin-dialog-title");
     if (title) title.textContent = addOnly ? "Add files" : "Check In";
     $("#checkin-filename").textContent = addOnly
@@ -2416,11 +2486,20 @@
       checkinDialog.dataset.queue = useQueue ? "1" : "";
       checkinDialog.dataset.addOnly = addOnly ? "1" : "";
       checkinDialog.dataset.objectId = useQueue ? "" : objectId;
+      checkinDialog.dataset.projectId = projectId || "";
+      checkinDialog.dataset.pushItems = JSON.stringify(pushItems);
       const selectedIdsForQueue = queued
         .map((row) => row.dataset.uuid)
         .filter(Boolean);
+      const ownedIds = owned.map((row) => row.dataset.uuid).filter(Boolean);
       checkinDialog.dataset.objectIds = JSON.stringify(
-        addOnly ? [] : selectedIdsForQueue.length ? selectedIdsForQueue : data.object_ids || []
+        addOnly
+          ? []
+          : selectedIdsForQueue.length
+            ? selectedIdsForQueue
+            : ownedIds.length
+              ? ownedIds
+              : data.object_ids || []
       );
     }
     const forceWarn = $("#checkin-force-warn");
@@ -2601,8 +2680,39 @@
     }
     let result;
     const busyLabel = checkinDialog?.dataset.addOnly === "1" ? "Adding…" : "Checking in…";
+    if (checkinDialog?.dataset.addOnly !== "1") {
+      let pushItems = [];
+      try {
+        pushItems = JSON.parse(checkinDialog?.dataset.pushItems || "[]");
+      } catch {
+        pushItems = [];
+      }
+      const projectId =
+        checkinDialog?.dataset.projectId ||
+        checkinBtn?.dataset.project ||
+        openWorkspaceBtn?.dataset.project ||
+        "";
+      if (projectId && pushItems.length) {
+        const synced = await withBusy("Syncing local workspace to vault…", async () => {
+          try {
+            return await pushLocalWorkspaceToVault(projectId, pushItems);
+          } catch (err) {
+            showError($("#checkin-error"), err?.message || String(err));
+            return false;
+          }
+        });
+        if (synced === false) return;
+        if (synced?.failed?.length && !synced.ok?.length) {
+          showError(
+            $("#checkin-error"),
+            synced.failed[0]?.message || "Could not sync local files to the vault."
+          );
+          return;
+        }
+      }
+    }
     if (checkinDialog?.dataset.queue === "1") {
-      const projectId = checkinBtn?.dataset.project;
+      const projectId = checkinBtn?.dataset.project || checkinDialog?.dataset.projectId;
       if (!projectId) return;
       let objectIds = [];
       try {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import mimetypes
+from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
@@ -19,6 +20,7 @@ from creopdm.schemas.common import (
     BatchOperationResponse,
     ObjectResponse,
     ObjectVersionResponse,
+    WorkspaceContentResponse,
 )
 
 router = APIRouter()
@@ -59,6 +61,29 @@ def object_content(
             details={"object_id": object_id},
         )
     return _file_response(path, path.name)
+
+
+@router.put("/api/objects/{object_id}/workspace-content", response_model=WorkspaceContentResponse)
+async def put_workspace_content(
+    object_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> WorkspaceContentResponse:
+    """Stage a local agent/browser file into the vault working copy (no new version)."""
+    obj = ctx.objects.get_object(db, object_id)
+    project = obj.project
+    user = ctx.users.get_current_user()
+    ctx.checkouts.require_owned(db, obj, user)
+    data = await file.read()
+    filename = Path(file.filename or obj.filename).name
+    path = ctx.workspaces.stage_workspace_upload(project, obj, filename, data)
+    return WorkspaceContentResponse(
+        object_id=object_id,
+        filename=path.name,
+        path=str(path),
+        bytes_written=len(data),
+    )
 
 
 @router.post("/api/projects/{project_id}/objects", response_model=ObjectResponse, status_code=201)

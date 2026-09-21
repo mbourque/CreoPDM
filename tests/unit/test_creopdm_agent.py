@@ -168,3 +168,83 @@ def test_agent_health_reports_status_poll_zero(tmp_path):
         assert body["ok"] is True
         assert body["health_interval_seconds"] == 0
         assert body["status_poll_interval_seconds"] == 0
+
+
+def test_agent_push_uploads_latest_cache_file(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    project_id = "proj-push"
+    cache = root / project_id
+    cache.mkdir(parents=True)
+    (cache / "shaft.prt.3").write_bytes(b"older")
+    (cache / "shaft.prt.4").write_bytes(b"agent-local-save")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), token="tok")
+    app = create_agent_app(settings)
+    puts: list[dict] = []
+
+    class FakeResponse:
+        def __init__(self, status_code: int = 200, payload: dict | None = None):
+            self.status_code = status_code
+            self._payload = payload or {}
+            self.text = ""
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def put(self, url, headers=None, files=None):
+            handle = files["file"][1]
+            body = handle.read()
+            puts.append(
+                {
+                    "url": url,
+                    "headers": headers or {},
+                    "filename": files["file"][0],
+                    "body": body,
+                }
+            )
+            return FakeResponse(
+                200,
+                {
+                    "ok": True,
+                    "object_id": "obj-1",
+                    "filename": files["file"][0],
+                    "path": "/vault/shaft.prt.4",
+                    "bytes_written": len(body),
+                },
+            )
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        response = client.post(
+            "/push",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "project_id": project_id,
+                "items": [
+                    {"object_id": "obj-1", "filename": "shaft.prt"},
+                    {"object_id": "missing", "filename": "ghost.prt"},
+                ],
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert len(body["ok"]) == 1
+        assert body["ok"][0]["object_id"] == "obj-1"
+        assert body["ok"][0]["filename"] == "shaft.prt.4"
+        assert body["ok"][0]["bytes_written"] == len(b"agent-local-save")
+        assert len(body["failed"]) == 1
+        assert body["failed"][0]["object_id"] == "missing"
+        assert len(puts) == 1
+        assert puts[0]["url"].endswith("/api/objects/obj-1/workspace-content")
+        assert puts[0]["filename"] == "shaft.prt.4"
+        assert puts[0]["body"] == b"agent-local-save"
+        assert puts[0]["headers"].get("Authorization") == "Bearer tok"

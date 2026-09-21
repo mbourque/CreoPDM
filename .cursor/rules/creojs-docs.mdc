@@ -1,0 +1,24 @@
+---
+description: Use PTC Creo.JS documentation when changing Creo.JS / Creo embedded-browser integration
+globs: "**/static/vendor/creojs.js,**/templates/base.html,**/static/js/app.js,**/creo/**,**/creopdm_agent/**"
+alwaysApply: false
+---
+# Creo.JS documentation
+
+When doing Creo.JS / Creo embedded-browser work in this repo, treat the official PTC Creo.JS help as the API source of truth:
+
+https://support.ptc.com/help/creo_toolkit/creojs_pma/r13/usascii/
+
+## What to do
+
+1. Before inventing or guessing Creo.JS APIs (`CreoJS.*`, `pfc*`, ToolkitJSBridge, `text/creojs` scripts), open or fetch the relevant topic from that guide.
+2. Prefer documented methods and patterns over copy/paste from outdated samples or assumptions.
+3. Match how CreoPDM already loads Creo.JS (`/creojs.js`, `text/creojs` in `base.html`, `app.js` session helpers); do not add a second bridge style without a reason.
+4. Outside Creo’s browser, Creo.JS is unavailable — fail gracefully (status pill / agent path); do not rely on `alert` for normal UX.
+
+## In this project
+
+- Bundled bridge: `src/creopdm/static/vendor/creojs.js` (served via `/creojs.js`)
+- Hosted open/WD scripts: `src/creopdm/templates/base.html` (`type="text/creojs"`)
+- Page orchestration: `src/creopdm/static/js/app.js`
+- Local open/materialize: `creopdm-agent` on the Creo PC

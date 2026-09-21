@@ -70,6 +70,32 @@ class OpenFolderResponse(BaseModel):
     path: str
 
 
+class PushItem(BaseModel):
+    object_id: str
+    filename: str = ""
+
+
+class PushRequest(BaseModel):
+    pdm_url: str = ""
+    project_id: str = ""
+    token: str | None = None
+    items: list[PushItem] = Field(default_factory=list)
+
+
+class PushItemResult(BaseModel):
+    object_id: str
+    filename: str = ""
+    ok: bool = False
+    path: str | None = None
+    bytes_written: int = 0
+    message: str = ""
+
+
+class PushResponse(BaseModel):
+    ok: list[PushItemResult] = Field(default_factory=list)
+    failed: list[PushItemResult] = Field(default_factory=list)
+
+
 def _safe_segment(value: str, fallback: str = "file") -> str:
     text = _SAFE_NAME.sub("_", (value or "").strip()) or fallback
     return text[:180]
@@ -130,6 +156,20 @@ def _download(
         )
     target.write_bytes(response.content)
     return target, logical, disk_name, len(response.content)
+
+
+def _find_cache_file(cache_dir: Path, filename: str) -> Path | None:
+    """Latest Creo save (or exact name) for filename under the project cache folder."""
+    from creopdm.creo.file_manager import CreoFileManager
+
+    name = Path(filename or "").name.strip()
+    if not name or not cache_dir.is_dir():
+        return None
+    latest = CreoFileManager.latest_in_directory(cache_dir, name, ())
+    if latest is not None and latest.is_file():
+        return latest
+    exact = cache_dir / name
+    return exact if exact.is_file() else None
 
 
 def create_agent_app(settings: AgentConfig) -> FastAPI:
@@ -202,6 +242,90 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         logger.info("Opened local workspace folder %s", target)
         return OpenFolderResponse(path=str(target))
+
+    @app.post("/push", response_model=PushResponse)
+    def push_to_vault(payload: PushRequest) -> PushResponse:
+        """Upload local agent-cache files into the CreoPDM vault working copies."""
+        base = _normalize_base(payload.pdm_url or settings.pdm_url)
+        project_key = _safe_segment(payload.project_id or "local", "local")
+        cache_dir = root / project_key
+        headers: dict[str, str] = {}
+        token = (payload.token or settings.token or "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        ok: list[PushItemResult] = []
+        failed: list[PushItemResult] = []
+        with httpx.Client(timeout=120.0, follow_redirects=True) as client:
+            for item in payload.items:
+                object_id = (item.object_id or "").strip()
+                filename = Path(item.filename or "").name
+                if not object_id:
+                    failed.append(
+                        PushItemResult(
+                            object_id="",
+                            filename=filename,
+                            message="object_id is required.",
+                        )
+                    )
+                    continue
+                local = _find_cache_file(cache_dir, filename) if filename else None
+                if local is None:
+                    failed.append(
+                        PushItemResult(
+                            object_id=object_id,
+                            filename=filename or object_id,
+                            message=f"No local cache file found for {filename or object_id}.",
+                        )
+                    )
+                    continue
+                url = f"{base}/api/objects/{quote(object_id)}/workspace-content"
+                try:
+                    with local.open("rb") as handle:
+                        response = client.put(
+                            url,
+                            headers=headers,
+                            files={"file": (local.name, handle, "application/octet-stream")},
+                        )
+                except httpx.HTTPError as exc:
+                    failed.append(
+                        PushItemResult(
+                            object_id=object_id,
+                            filename=local.name,
+                            message=f"Could not reach CreoPDM: {exc}",
+                        )
+                    )
+                    continue
+                if response.status_code >= 400:
+                    detail = ""
+                    try:
+                        body = response.json()
+                        detail = (
+                            body.get("error", {}).get("message")
+                            or body.get("detail")
+                            or response.text
+                        )
+                    except Exception:
+                        detail = response.text[:300]
+                    failed.append(
+                        PushItemResult(
+                            object_id=object_id,
+                            filename=local.name,
+                            message=detail or f"CreoPDM returned {response.status_code}",
+                        )
+                    )
+                    continue
+                nbytes = local.stat().st_size
+                ok.append(
+                    PushItemResult(
+                        object_id=object_id,
+                        filename=local.name,
+                        ok=True,
+                        path=str(local),
+                        bytes_written=nbytes,
+                    )
+                )
+                logger.info("Pushed %s → vault (%s bytes)", local.name, nbytes)
+        return PushResponse(ok=ok, failed=failed)
 
     @app.post("/materialize", response_model=MaterializeResponse)
     def materialize(payload: MaterializeRequest) -> MaterializeResponse:

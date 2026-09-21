@@ -108,6 +108,9 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     assert 'checkinBtn.textContent = addOnly ? "Add" : "Check In";' in script.text
     assert 'title.textContent = addOnly ? "Add files" : "Check In";' in script.text
     assert "dataset.addPaths" in script.text
+    assert "function pushLocalWorkspaceToVault" in script.text
+    assert "Syncing local workspace to vault…" in script.text
+    assert "${agentBase()}/push" in script.text
 
     checked_in = client.post(
         f"/api/objects/{obj['uuid']}/checkin",
@@ -570,3 +573,61 @@ def test_checkin_records_creo_release_from_workspace_file(client, repo_parent, d
     assert payload["current_version"]["creo_release"] == "13.4.2.0"
     history = client.get(f"/api/objects/{obj['uuid']}/history").json()
     assert [item["creo_release"] for item in history] == ["13.4.2.0", "13.4.1.0"]
+
+
+@requires_git
+def test_workspace_content_put_then_checkin(client, repo_parent, data_dir, identity):
+    project, obj = _create_part(client, repo_parent)
+    vault = data_dir / "vaults" / project["uuid"] / "shaft.prt"
+    assert vault.read_bytes() == b"v1-content"
+
+    denied = client.put(
+        f"/api/objects/{obj['uuid']}/workspace-content",
+        files={"file": ("shaft.prt", b"not-owned", "application/octet-stream")},
+    )
+    assert denied.status_code == 403, denied.text
+
+    assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
+    uploaded = client.put(
+        f"/api/objects/{obj['uuid']}/workspace-content",
+        files={"file": ("shaft.prt.4", b"from-agent-cache", "application/octet-stream")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    body = uploaded.json()
+    assert body["ok"] is True
+    assert body["object_id"] == obj["uuid"]
+    assert body["filename"] == "shaft.prt.4"
+    assert body["bytes_written"] == len(b"from-agent-cache")
+    staged = data_dir / "vaults" / project["uuid"] / "shaft.prt.4"
+    assert staged.read_bytes() == b"from-agent-cache"
+
+    wrong_name = client.put(
+        f"/api/objects/{obj['uuid']}/workspace-content",
+        files={"file": ("other.prt", b"nope", "application/octet-stream")},
+    )
+    assert wrong_name.status_code == 400, wrong_name.text
+
+    identity.become("Bob", "ENG-PC-18")
+    other_user = client.put(
+        f"/api/objects/{obj['uuid']}/workspace-content",
+        files={"file": ("shaft.prt", b"stolen", "application/octet-stream")},
+    )
+    assert other_user.status_code == 403, other_user.text
+    identity.become("Alice", "ENG-PC-17")
+
+    preview = client.get(f"/api/objects/{obj['uuid']}/checkin-preview")
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["file_modified"] is True
+    assert preview.json()["can_checkin"] is True
+
+    checked = client.post(
+        f"/api/objects/{obj['uuid']}/checkin",
+        json={"comment": "Synced agent workspace into vault"},
+    )
+    assert checked.status_code == 200, checked.text
+    payload = checked.json()
+    assert payload["iteration"] == 2
+    assert payload["owned_by_me"] is False
+    assert payload["current_version"]["content_hash"]
+    history = client.get(f"/api/objects/{obj['uuid']}/history").json()
+    assert history[0]["comment"] == "Synced agent workspace into vault"

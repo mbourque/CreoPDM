@@ -80,6 +80,14 @@ class ObjectVersionResponse(BaseModel):
     comment: str
 
 
+class WorkspaceContentResponse(BaseModel):
+    ok: bool = True
+    object_id: str
+    filename: str
+    path: str
+    bytes_written: int = 0
+
+
 class ObjectResponse(BaseModel):
     uuid: str
     project_uuid: str

@@ -306,6 +306,37 @@ class WorkspaceService:
             details={"workspace": str(destination)},
         )
 
+    def stage_workspace_upload(
+        self,
+        project: Project,
+        obj: EngineeringObject,
+        filename: str,
+        data: bytes,
+    ) -> Path:
+        """Write agent/browser bytes into the vault working copy (no version yet)."""
+        name = Path(filename or "").name.strip()
+        if not name:
+            raise PathValidationError("A filename is required.")
+        if not data:
+            raise PathValidationError("The uploaded file is empty.")
+        extras = self._cad_extensions()
+        logical_upload = CreoFileManager.logical_filename(name, extras)
+        logical_obj = CreoFileManager.logical_filename(obj.filename, extras)
+        if logical_upload.casefold() != logical_obj.casefold():
+            raise PathValidationError(
+                f"{name} does not match checked-out file {obj.filename}.",
+                details={"filename": name, "expected": obj.filename},
+            )
+        relative = self.sibling_relative(obj, Path(name))
+        destination = self.file_path(project.uuid, relative)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            set_file_writable(destination)
+        destination.write_bytes(data)
+        set_file_writable(destination)
+        logger.info("Staged vault working copy %s (%s bytes)", destination, len(data))
+        return destination
+
     def has_local_copy(self, project: Project, obj: EngineeringObject) -> bool:
         return self.workspace_file_path(project.uuid, obj).is_file()
 
