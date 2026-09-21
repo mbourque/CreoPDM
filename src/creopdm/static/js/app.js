@@ -167,22 +167,35 @@
 
   function reloadPage() {
     closeOpenDialogs();
-    // Creo's embedded browser often no-ops location.reload() and may drop a
-    // pending setTimeout after a <dialog> closes. Navigate synchronously.
-    let next = window.location.pathname + window.location.search + window.location.hash;
+    // Creo's embedded browser often ignores location.reload/replace and
+    // document.write. A real GET form submit reliably loads fresh HTML.
+    let pathname = window.location.pathname || "/";
+    let hash = window.location.hash || "";
+    const params = new URLSearchParams();
     try {
       const url = new URL(window.location.href);
-      url.searchParams.delete("r");
-      url.searchParams.set("r", String(Date.now()));
-      next = url.pathname + url.search + url.hash;
+      pathname = url.pathname || "/";
+      hash = url.hash || "";
+      url.searchParams.forEach((value, key) => {
+        if (key !== "r") params.append(key, value);
+      });
     } catch {
-      /* keep next */
+      /* keep defaults */
     }
-    try {
-      window.location.replace(next);
-    } catch {
-      window.location.href = next;
-    }
+    params.set("r", String(Date.now()));
+    const form = document.createElement("form");
+    form.method = "GET";
+    form.action = pathname + hash;
+    form.style.display = "none";
+    params.forEach((value, key) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = key;
+      input.value = value;
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
   }
 
   async function withHtmlDialogClosed(dialog, work) {

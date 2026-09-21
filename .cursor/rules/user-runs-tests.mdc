@@ -1,30 +1,47 @@
 ---
-description: User runs pytest and scripts; agent must not depend on its own shell for verification
+description: User always runs commands; agent never relies on its own shell for git, tests, services, or installs
 alwaysApply: true
 ---
 
-# User runs tests and scripts
+# User runs all commands
 
-On this machine, the agent's shell often fails or is aborted. **Do not rely on running pytest, installers, tray launchers, or other project scripts yourself** to verify work.
+The user **always** runs code and shell commands themselves (tests, git, service restarts, installs, app launches). Do **not** run these for them, and do **not** offer to create commits or push unless they explicitly ask in that message.
 
-## What to do instead
+## What the agent does
 
-1. Make the code/test changes.
-2. Tell the user the exact command(s) to run (PowerShell-friendly).
-3. Wait for their result — they often paste output or point at `pytest-last.log` (repo root; written by `tests/conftest.py`).
-4. Treat `@pytest-last.log` / "passed" / a failure paste as the source of truth.
+1. Make the code/test/rule file changes with file tools.
+2. Give short, copy-pasteable commands (PowerShell on Windows; bash on the Linux host when that is where they are working).
+3. Wait for their result — paste, “passed”, or `@pytest-last.log` (repo root; from `tests/conftest.py`).
+4. Treat their output as the source of truth.
+
+## Do not run yourself
+
+- `pytest` / test suites
+- `git commit`, `git push`, `git pull` (only run git when they explicitly ask you to commit/push/PR)
+- `systemctl`, installers, tray/agent launchers, `python -m creopdm`, etc.
+- Long verification pipelines in the agent shell (it is often flaky or aborted here)
 
 ## Examples
 
 ```text
-# Ask the user to run:
-python -m pytest tests/unit/test_creopdm_agent_log.py -q --tb=short
+# ✅ GOOD — after a fix:
+git add -A
+git commit -m "Fix Creo check-in page refresh"
+git push
+# On Linux host:
+git pull
+systemctl --user restart creopdm.service
+```
+
+```text
+# ✅ GOOD — tests:
+python -m pytest tests/unit/test_health.py -q --tb=short
 Get-Content .\pytest-last.log
 ```
 
 ```text
-# ❌ BAD — assume your shell pytest succeeded or block waiting on flaky agent terminals
-# ✅ GOOD — ship the fix, give the command, iterate from their pytest-last.log
+# ❌ BAD — agent runs pytest/git/systemctl and assumes success
+# ❌ BAD — "Want me to create the commit?" when they said they do that themselves
 ```
 
-Still use file tools freely. Prefer short, copy-pasteable commands over multi-step shell pipelines the agent would normally chain.
+Still use file tools freely. Prefer one-shot commands over multi-step agent shell chains.
