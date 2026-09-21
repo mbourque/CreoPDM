@@ -116,6 +116,7 @@
   }
 
   let busyDepth = 0;
+  const heartbeat = { ids: [], timer: 0 };
   const busyOverlay = $("#busy-overlay");
   busyOverlay?.addEventListener("cancel", (event) => event.preventDefault());
   function showBusyOverlay() {
@@ -196,6 +197,77 @@
     });
     document.body.appendChild(form);
     form.submit();
+  }
+
+  function reloadPageAfterDialog() {
+    // Submitting a navigation form from inside another form's submit handler
+    // (Check In dialog) is ignored by Creo; checkout works because it is a button click.
+    window.setTimeout(() => reloadPage(), 50);
+  }
+
+  function stopHeartbeats(clearIds) {
+    const wanted = clearIds?.length ? new Set(clearIds.map(String)) : null;
+    if (wanted) {
+      heartbeat.ids = heartbeat.ids.filter((id) => !wanted.has(String(id)));
+    } else {
+      heartbeat.ids = [];
+    }
+    if (!heartbeat.ids.length && heartbeat.timer) {
+      window.clearInterval(heartbeat.timer);
+      heartbeat.timer = 0;
+    }
+  }
+
+  function applyCheckedInResult(result) {
+    /** Update rows immediately when Creo ignores post-check-in navigation. */
+    const byId = new Map();
+    if (Array.isArray(result?.ok)) {
+      result.ok.forEach((item) => {
+        if (item?.uuid) byId.set(String(item.uuid), item);
+      });
+    } else if (result?.uuid) {
+      byId.set(String(result.uuid), result);
+    }
+    if (!byId.size) return;
+    stopHeartbeats([...byId.keys()]);
+    rows().forEach((row) => {
+      const id = row.dataset.uuid;
+      if (!id || !byId.has(id)) return;
+      const item = byId.get(id);
+      row.dataset.owned = "0";
+      row.dataset.checkedOut = "0";
+      row.dataset.canCheckin = "0";
+      row.dataset.canCheckout = "1";
+      if (item.filename) {
+        row.dataset.filename = item.filename;
+        const openBtn = row.querySelector("button.object-open");
+        if (openBtn) {
+          openBtn.textContent = item.filename;
+          openBtn.title = item.filename;
+        }
+      }
+      if (item.display_revision) {
+        const revTd = row.children[1];
+        if (revTd) {
+          revTd.textContent = item.display_revision;
+          revTd.title = item.display_revision;
+        }
+      }
+      const state = row.querySelector(".checkout-state");
+      if (state) {
+        const label = item.checkout_status || "Available";
+        state.dataset.state = "available";
+        state.textContent = label;
+        const td = state.closest("td");
+        if (td) td.title = label;
+      }
+    });
+    try {
+      syncToolbar();
+      updateMetricCounts();
+    } catch {
+      /* metrics helpers may not be ready on detail-only pages */
+    }
   }
 
   async function withHtmlDialogClosed(dialog, work) {
@@ -2771,9 +2843,10 @@
       } catch {
         /* ignore */
       }
-      // Checked-out / New files tabs are empty after a successful check-in.
+      // Always patch the table first — Creo often skips navigation from this dialog.
+      applyCheckedInResult(result);
       rememberWatchView({ tab: "files", ids: [] });
-      reloadPage();
+      reloadPageAfterDialog();
     }
   });
 
@@ -3287,13 +3360,16 @@
     syncCreoStatusPill(body.creo_open_mode);
   });
 
-  const ownedIds = rows()
+  heartbeat.ids = rows()
     .filter((row) => row.dataset.owned === "1")
-    .map((row) => row.dataset.uuid);
-  if (undoBtn?.dataset.uuid && !undoBtn.disabled) ownedIds.push(undoBtn.dataset.uuid);
-  if (ownedIds.length) {
-    setInterval(() => {
-      ownedIds.forEach((id) => {
+    .map((row) => row.dataset.uuid)
+    .filter(Boolean);
+  if (undoBtn?.dataset.uuid && !undoBtn.disabled) {
+    heartbeat.ids.push(undoBtn.dataset.uuid);
+  }
+  if (heartbeat.ids.length) {
+    heartbeat.timer = window.setInterval(() => {
+      heartbeat.ids.forEach((id) => {
         fetch(`/api/objects/${id}/heartbeat`, { method: "POST" });
       });
     }, 60000);

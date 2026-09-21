@@ -115,6 +115,10 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     assert 'rememberWatchView({ tab: "files", ids: [] })' in script.text
     assert 'form.method = "GET"' in script.text
     assert "form.submit()" in script.text
+    assert "function reloadPageAfterDialog" in script.text
+    assert "function applyCheckedInResult" in script.text
+    assert "applyCheckedInResult(result)" in script.text
+    assert "reloadPageAfterDialog()" in script.text
 
     checked_in = client.post(
         f"/api/objects/{obj['uuid']}/checkin",
