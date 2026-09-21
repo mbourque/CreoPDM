@@ -367,7 +367,7 @@ def choose_workspace_files(
     selected = CreoFileManager.filter_to_latest_saves(
         present,
         extras,
-        scan_disk_siblings=False,
+        scan_disk_siblings=True,
     )
     return WorkspacePickerResponse(
         workspace_root=str(ctx.workspaces.root_for(project.uuid)),

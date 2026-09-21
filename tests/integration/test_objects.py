@@ -71,7 +71,34 @@ def test_import_creo_and_document_files(client, repo_parent, tmp_path):
 
 
 @requires_git
-def test_import_from_uploads_keeps_relative_paths(client, repo_parent):
+def test_import_from_uploads_keeps_highest_creo_save(client, repo_parent):
+    project, _location = _create_project(client, repo_parent)
+    added = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-uploads",
+        files=[
+            ("files", ("base.prt.1", b"v1", "application/octet-stream")),
+            ("files", ("base.prt.3", b"v3-latest", "application/octet-stream")),
+            ("files", ("base.prt.2", b"v2", "application/octet-stream")),
+            ("files", ("cnc-router.asm.1", b"a1", "application/octet-stream")),
+            ("files", ("cnc-router.asm.8", b"a8-latest", "application/octet-stream")),
+        ],
+        data={
+            "relative_paths": [
+                "base.prt.1",
+                "base.prt.3",
+                "base.prt.2",
+                "cnc-router.asm.1",
+                "cnc-router.asm.8",
+            ],
+            "comment": "Add numbered family",
+        },
+    )
+    assert added.status_code == 200, added.text
+    body = added.json()
+    assert {item["filename"] for item in body["ok"]} == {"base.prt.3", "cnc-router.asm.8"}
+    assert body["failed"] == []
+    listing = {item["filename"] for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
+    assert listing == {"base.prt.3", "cnc-router.asm.8"}
     project, _location = _create_project(client, repo_parent)
     added = client.post(
         f"/api/projects/{project['uuid']}/objects/from-uploads",

@@ -116,6 +116,55 @@ class ObjectService:
             )
         return self._config.all_cad_extensions()
 
+    @staticmethod
+    def _import_job_logical(
+        source_path: Path,
+        original_name: str | None,
+        relative_path: str | None,
+        extras: list[str],
+    ) -> tuple[str, str, int]:
+        """Return (logical_repo_path, stored_name, save_number) for an import job."""
+        display_name = sanitize_filename(original_name or source_path.name)
+        stored_name = CreoFileManager.canonical_repository_name(display_name)
+        if relative_path:
+            rel = assert_safe_relative_path(relative_path)
+            if rel.name != stored_name:
+                rel = rel.parent / stored_name
+        else:
+            rel = Path(stored_name)
+        relative = assert_safe_relative_path(str(rel).replace("\\", "/")).as_posix()
+        logical = CreoFileManager.logical_repo_path(relative, extras)
+        number = CreoFileManager.save_number(stored_name, extras)
+        return logical, stored_name, number
+
+    def _prefer_latest_import_jobs(
+        self,
+        jobs: list[tuple[Path, str | None, str | None]],
+        extras: list[str],
+    ) -> list[tuple[Path, str | None, str | None]]:
+        """One job per Creo logical family — keep the highest numbered save."""
+        best: dict[str, tuple[int, int, tuple[Path, str | None, str | None]]] = {}
+        order: list[str] = []
+        for index, job in enumerate(jobs):
+            source_path, original_name, relative_path = job
+            try:
+                logical, _stored, number = self._import_job_logical(
+                    source_path, original_name, relative_path, extras
+                )
+            except CreoPDMError:
+                key = f"__raw__:{index}"
+                order.append(key)
+                best[key] = (0, index, job)
+                continue
+            if logical not in best:
+                order.append(logical)
+                best[logical] = (number, index, job)
+                continue
+            prev_number, prev_index, _prev_job = best[logical]
+            if number > prev_number or (number == prev_number and index > prev_index):
+                best[logical] = (number, index, job)
+        return [best[key][2] for key in order if key in best]
+
     def list_objects(
         self,
         session: Session,
@@ -415,6 +464,7 @@ class ObjectService:
         if not jobs:
             return []
         extras = self._cad_extensions()
+        jobs = self._prefer_latest_import_jobs(jobs, extras)
         ignore = self._config.ignore_patterns() if self._config else None
         user = self._users.get_current_user()
         index = self._logical_index(session, project.id)

@@ -2557,6 +2557,34 @@
     return response.json();
   }
 
+  async function materializeCheckedOutToAgentCache(objectIds) {
+    const ids = [...new Set((objectIds || []).filter(Boolean))];
+    if (!ids.length) return { agentOffline: false, ok: 0, failed: 0 };
+    const agent = await probeCreoAgent();
+    if (!agent) return { agentOffline: true, ok: 0, failed: 0 };
+    let ok = 0;
+    let failed = 0;
+    for (const objectId of ids) {
+      try {
+        const prepared = await postAction(
+          "/api/creo/open",
+          { object_id: objectId, launch: false },
+          "POST",
+          ""
+        );
+        if (!prepared) {
+          failed += 1;
+          continue;
+        }
+        await materializeViaAgent(prepared);
+        ok += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    return { agentOffline: false, ok, failed };
+  }
+
   async function openViaAgent(localPath, mode) {
     const response = await fetch(`${agentBase()}/open`, {
       method: "POST",
@@ -2738,16 +2766,57 @@
     const fallback = selectedIds();
     const objectIds = ids.length ? ids : fallback;
     if (!objectIds.length) return;
+    showError($("#toolbar-error"), "");
+    let checkoutResult = null;
     if (objectIds.length === 1 && !selectedRows().length) {
-      const result = await postAction(`/api/objects/${objectIds[0]}/checkout`, undefined, "POST", "Checking out…");
-      if (result) reloadPage();
-      return;
+      checkoutResult = await postAction(
+        `/api/objects/${objectIds[0]}/checkout`,
+        undefined,
+        "POST",
+        "Checking out…"
+      );
+      if (!checkoutResult) return;
+    } else {
+      checkoutResult = await postAction(
+        "/api/objects/batch/checkout",
+        { object_ids: objectIds },
+        "POST",
+        "Checking out…"
+      );
+      if (!checkoutResult) return;
+      const warning = formatBatch(checkoutResult);
+      if (warning) showError($("#toolbar-error"), warning);
+      if (!checkoutResult.ok?.length) return;
     }
-    const result = await postAction("/api/objects/batch/checkout", { object_ids: objectIds }, "POST", "Checking out…");
-    if (!result) return;
-    const warning = formatBatch(result);
-    if (warning) showError($("#toolbar-error"), warning);
-    if (result.ok?.length) reloadPage();
+    const syncedIds =
+      Array.isArray(checkoutResult.ok) && checkoutResult.ok.length
+        ? checkoutResult.ok.map((item) => item.uuid).filter(Boolean)
+        : objectIds;
+    const sync = await withBusy("Downloading checked-out files to local workspace…", async () => {
+      try {
+        return await materializeCheckedOutToAgentCache(syncedIds);
+      } catch (err) {
+        showError($("#toolbar-error"), err?.message || String(err));
+        return null;
+      }
+    });
+    if (sync?.agentOffline) {
+      showError(
+        $("#toolbar-error"),
+        "Checked out on the server, but creopdm-agent is not running — local workspace was not updated. Start the agent and open the files, or check out again."
+      );
+    } else if (sync && sync.failed && !sync.ok) {
+      showError(
+        $("#toolbar-error"),
+        "Checked out, but could not download files into the local workspace."
+      );
+    } else if (sync?.ok) {
+      const note = sync.failed
+        ? `${sync.ok} file(s) in local workspace (${sync.failed} failed).`
+        : `${sync.ok} file(s) downloaded to the local workspace.`;
+      showOk(note);
+    }
+    reloadPage();
   });
 
   workspaceBtn?.addEventListener("click", async () => {
