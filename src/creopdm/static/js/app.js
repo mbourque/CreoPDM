@@ -2747,7 +2747,8 @@
       } catch {
         /* ignore */
       }
-      rememberWatchView();
+      // Checked-out / New files tabs are empty after a successful check-in.
+      rememberWatchView({ tab: "files", ids: [] });
       reloadPage();
     }
   });
@@ -3275,13 +3276,17 @@
   }
 
   const WATCH_KEY = "creopdmWatchRestore";
-  function rememberWatchView() {
+  function rememberWatchView(overrides = {}) {
     try {
-      const activeTab = document.querySelector(".tabs .tab.is-active")?.dataset.tab || "";
+      const activeTab =
+        overrides.tab ??
+        document.querySelector(".tabs .tab.is-active")?.dataset.tab ??
+        "";
+      const ids = overrides.ids ?? selectedIds();
       sessionStorage.setItem(
         WATCH_KEY,
         JSON.stringify({
-          ids: selectedIds(),
+          ids,
           tab: activeTab,
         })
       );
