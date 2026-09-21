@@ -42,12 +42,19 @@
     <button type="button" class="btn" id="checkout-btn" data-uuid="{{ object.uuid }}" {% if not object.can_checkout %}disabled{% endif %}>Checkout</button>
     <button type="button" class="btn" id="checkin-btn" data-uuid="{{ object.uuid }}" data-project="{{ project.uuid }}" {% if not object.can_checkin %}disabled{% endif %}>Check In</button>
     <button type="button" class="btn" id="undo-btn" data-uuid="{{ object.uuid }}" {% if not object.owned_by_me %}disabled{% endif %}>Undo Checkout</button>
-    <span class="toolbar-tip" title="Delete CreoPDM vault copies of this file. The original in your project folder is not deleted. If you have it checked out, that checkout is cancelled.">
-      <button type="button" class="btn" id="purge-workspace-btn" data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}">Remove from Vault</button>
-    </span>
-    <span class="toolbar-tip" title="Remove this file from the project list and delete CreoPDM vault copies. The original in your project folder is not deleted.">
-      <button type="button" class="btn btn-danger" id="remove-project-btn" data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}">Remove from Project</button>
-    </span>
+    <div class="toolbar-menu" id="remove-menu">
+      <button type="button" class="btn btn-danger toolbar-menu-toggle" id="remove-menu-btn"
+              aria-haspopup="menu" aria-expanded="false"
+              title="Remove vault copies or remove this file from the project.">Remove ▾</button>
+      <div class="toolbar-menu-panel" role="menu" hidden>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn"
+                data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}"
+                title="Delete CreoPDM vault copies of this file. The original in your project folder is not deleted. If you have it checked out, that checkout is cancelled.">Remove from Vault</button>
+        <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-project-btn"
+                data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}"
+                title="Remove this file from the project list and delete CreoPDM vault copies. The original in your project folder is not deleted.">Remove from Project</button>
+      </div>
+    </div>
   </div>
   <div class="toolbar-messages">
     <p class="error" id="toolbar-error" hidden></p>

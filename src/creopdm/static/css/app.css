@@ -581,6 +581,41 @@ span.object-open:hover { text-decoration: underline; }
 }
 .toolbar-actions { display: flex; gap: 0.4rem; flex-wrap: nowrap; align-items: center; overflow-x: auto; }
 .toolbar-tip { display: inline-flex; }
+.toolbar-menu { position: relative; display: inline-flex; flex-shrink: 0; }
+.toolbar-menu-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.25rem);
+  min-width: 12.5rem;
+  padding: 0.25rem;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(16, 24, 32, 0.18);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.toolbar-menu.is-open .toolbar-menu-panel { display: flex; }
+.toolbar-menu-panel[hidden] { display: none !important; }
+.toolbar-menu-item {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  padding: 0.45rem 0.65rem;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.toolbar-menu-item:hover:not(:disabled) { background: #eef2f6; }
+.toolbar-menu-item:disabled { opacity: 0.45; cursor: not-allowed; }
+.toolbar-menu-item.is-danger { color: #9b1c1c; }
+.toolbar-menu-item.is-danger:hover:not(:disabled) { background: #fdf2f2; }
 /* Keep disabled actions in layout so enabling them does not shift neighbors. */
 .toolbar-messages { width: 100%; min-width: 0; }
 .toolbar-messages .error, .toolbar-messages .ok { overflow-wrap: anywhere; }

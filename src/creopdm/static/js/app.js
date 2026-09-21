@@ -1519,6 +1519,28 @@
   const setCreoDirBtn = $("#set-creo-dir-btn");
   const purgeBtn = $("#purge-workspace-btn");
   const removeBtn = $("#remove-project-btn");
+  const removeMenu = $("#remove-menu");
+  const removeMenuBtn = $("#remove-menu-btn");
+  const removeMenuPanel = removeMenu?.querySelector(".toolbar-menu-panel");
+
+  function closeRemoveMenu() {
+    if (!removeMenu || !removeMenuBtn || !removeMenuPanel) return;
+    removeMenu.classList.remove("is-open");
+    removeMenuPanel.hidden = true;
+    removeMenuBtn.setAttribute("aria-expanded", "false");
+  }
+
+  function openRemoveMenu() {
+    if (!removeMenu || !removeMenuBtn || !removeMenuPanel || removeMenuBtn.disabled) return;
+    removeMenu.classList.add("is-open");
+    removeMenuPanel.hidden = false;
+    removeMenuBtn.setAttribute("aria-expanded", "true");
+  }
+
+  function toggleRemoveMenu() {
+    if (removeMenu?.classList.contains("is-open")) closeRemoveMenu();
+    else openRemoveMenu();
+  }
 
   function rowObjectIds(row) {
     if (row.classList.contains("folder-row")) {
@@ -1605,8 +1627,14 @@
     setToolbarActionVisible(checkinBtn, canCheckin);
     setToolbarActionVisible(undoBtn, canUndo);
     if (workspaceBtn) workspaceBtn.disabled = !selected.some((row) => row.dataset.inWorkspace !== "1");
-    if (purgeBtn) purgeBtn.disabled = !selected.some((row) => row.dataset.inWorkspace !== "0");
-    if (removeBtn) removeBtn.disabled = ids.length === 0;
+    const canPurge = selected.some((row) => row.dataset.inWorkspace !== "0");
+    const canRemoveProject = ids.length > 0;
+    if (purgeBtn) purgeBtn.disabled = !canPurge;
+    if (removeBtn) removeBtn.disabled = !canRemoveProject;
+    if (removeMenuBtn) {
+      removeMenuBtn.disabled = !(canPurge || canRemoveProject);
+      if (removeMenuBtn.disabled) closeRemoveMenu();
+    }
     const filtering = metricButtons().some((btn) => metricMode(btn) === "filter");
     const summary = $("#selection-summary");
     if (summary) {
@@ -3144,6 +3172,24 @@
   function projectHome() {
     return document.querySelector(".crumb a")?.href || "/";
   }
+
+  removeMenuBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleRemoveMenu();
+  });
+  removeMenuPanel?.addEventListener("click", (event) => {
+    const item = eventEl(event)?.closest(".toolbar-menu-item");
+    if (item && !item.disabled) closeRemoveMenu();
+  });
+  document.addEventListener("click", (event) => {
+    if (!removeMenu?.classList.contains("is-open")) return;
+    if (removeMenu.contains(eventEl(event))) return;
+    closeRemoveMenu();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeRemoveMenu();
+  });
 
   purgeBtn?.addEventListener("click", async () => {
     const selected = selectedRows();

@@ -328,12 +328,21 @@
     <span class="toolbar-tip" title="Open version history and details for the selected file.">
       <button type="button" class="btn" id="history-btn" disabled>History</button>
     </span>
-    <span class="toolbar-tip" title="Delete CreoPDM vault copies of the selected files only. Files in your original project folder are not deleted. Checkouts on those files are cancelled.">
-      <button type="button" class="btn" id="purge-workspace-btn" {% if selected %}data-project-name="{{ selected.name }}"{% endif %} disabled>Remove from Vault</button>
-    </span>
-    <span class="toolbar-tip" title="Remove the selected files from this project list and delete CreoPDM vault copies. Files in your original project folder are not deleted.">
-      <button type="button" class="btn btn-danger" id="remove-project-btn" {% if selected %}data-project-name="{{ selected.name }}"{% endif %} disabled>Remove from Project</button>
-    </span>
+    <div class="toolbar-menu" id="remove-menu">
+      <button type="button" class="btn btn-danger toolbar-menu-toggle" id="remove-menu-btn"
+              aria-haspopup="menu" aria-expanded="false" disabled
+              title="Remove vault copies or remove files from the project.">Remove ▾</button>
+      <div class="toolbar-menu-panel" role="menu" hidden>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn"
+                {% if selected %}data-project-name="{{ selected.name }}"{% endif %}
+                disabled
+                title="Delete CreoPDM vault copies of the selected files only. Files in your original project folder are not deleted. Checkouts on those files are cancelled.">Remove from Vault</button>
+        <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-project-btn"
+                {% if selected %}data-project-name="{{ selected.name }}"{% endif %}
+                disabled
+                title="Remove the selected files from this project list and delete CreoPDM vault copies. Files in your original project folder are not deleted.">Remove from Project</button>
+      </div>
+    </div>
   </div>
   <div class="toolbar-messages">
     <p class="error" id="toolbar-error" hidden></p>
