@@ -111,6 +111,9 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     assert "function pushLocalWorkspaceToVault" in script.text
     assert "Syncing local workspace to vault…" in script.text
     assert "${agentBase()}/push" in script.text
+    assert "const succeeded = batchOk === null ? true : batchOk;" in script.text
+    assert "rememberWatchView();" in script.text
+    assert "/* private mode / blocked storage */" in script.text
 
     checked_in = client.post(
         f"/api/objects/{obj['uuid']}/checkin",

@@ -167,7 +167,11 @@
 
   function reloadPage() {
     closeOpenDialogs();
-    window.location.reload();
+    try {
+      window.location.reload();
+    } catch {
+      window.location.href = window.location.href;
+    }
   }
 
   async function withHtmlDialogClosed(dialog, work) {
@@ -2735,7 +2739,14 @@
     if (!result) return;
     const warning = formatBatch(result);
     if (warning) showError($("#toolbar-error"), warning);
-    if (result.ok ? result.ok.length : true) {
+    const batchOk = Array.isArray(result.ok) ? result.ok.length > 0 : null;
+    const succeeded = batchOk === null ? true : batchOk;
+    if (succeeded) {
+      try {
+        checkinDialog?.close();
+      } catch {
+        /* ignore */
+      }
       rememberWatchView();
       reloadPage();
     }
@@ -3265,19 +3276,28 @@
 
   const WATCH_KEY = "creopdmWatchRestore";
   function rememberWatchView() {
-    const activeTab = document.querySelector(".tabs .tab.is-active")?.dataset.tab || "";
-    sessionStorage.setItem(
-      WATCH_KEY,
-      JSON.stringify({
-        ids: selectedIds(),
-        tab: activeTab,
-      })
-    );
+    try {
+      const activeTab = document.querySelector(".tabs .tab.is-active")?.dataset.tab || "";
+      sessionStorage.setItem(
+        WATCH_KEY,
+        JSON.stringify({
+          ids: selectedIds(),
+          tab: activeTab,
+        })
+      );
+    } catch {
+      /* private mode / blocked storage */
+    }
   }
   function restoreWatchView() {
-    const raw = sessionStorage.getItem(WATCH_KEY);
+    let raw = null;
+    try {
+      raw = sessionStorage.getItem(WATCH_KEY);
+      if (raw) sessionStorage.removeItem(WATCH_KEY);
+    } catch {
+      return;
+    }
     if (!raw) return;
-    sessionStorage.removeItem(WATCH_KEY);
     let saved;
     try {
       saved = JSON.parse(raw);
