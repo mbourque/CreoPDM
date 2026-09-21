@@ -7,7 +7,7 @@ import time
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
@@ -189,8 +189,14 @@ def _sidebar_collapsed(request: Request) -> bool:
     return raw in {"1", "true", "yes"}
 
 
+_CREO_UNSUPPORTED_BROWSER_ALERT = (
+    "alert ('The page attempts to access Creo environment which is not supported "
+    "by your browser. Some functionalty may not be available')"
+)
+
+
 @router.get("/creojs.js")
-def creojs_library(ctx: AppContext = Depends(get_context)) -> FileResponse:
+def creojs_library(ctx: AppContext = Depends(get_context)) -> Response:
     """Serve Creo's Creo.JS bridge so the embedded browser can talk to this session."""
     path = _creojs_library(ctx)
     if path is None:
@@ -201,7 +207,15 @@ def creojs_library(ctx: AppContext = Depends(get_context)) -> FileResponse:
                 "static/vendor/creojs.js, a Settings path, or config/creojs.js."
             ),
         )
-    return FileResponse(path, media_type="application/javascript")
+    text = path.read_text(encoding="utf-8", errors="replace")
+    # Outside Creo's browser this alert is normal noise; suppress it for any served copy.
+    if _CREO_UNSUPPORTED_BROWSER_ALERT in text:
+        text = text.replace(_CREO_UNSUPPORTED_BROWSER_ALERT, "/* creo env alert suppressed */")
+    return Response(
+        content=text,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.get("/", response_class=HTMLResponse)

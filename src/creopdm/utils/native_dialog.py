@@ -90,7 +90,7 @@ def pick_files(initial_dir: Path, title: str = "Add files to the project") -> li
         except Exception as exc:
             logger.exception("Windows Forms picker also failed")
             raise ValidationAppError(
-                "The file picker could not be opened. Copy the files into the workspace folder and try again.",
+                "The file picker could not be opened. Copy the files into the vault folder and try again.",
                 details={"reason": str(exc)},
             ) from exc
 

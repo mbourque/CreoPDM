@@ -86,7 +86,7 @@ class CheckinService:
         if force_checkin:
             warning = (
                 f"{workspace_name} is not checked out. Checking in will record this "
-                "workspace save without a checkout lock."
+                "vault save without a checkout lock."
             )
         return {
             "filename": workspace_name,
@@ -244,7 +244,7 @@ class CheckinService:
             )
         pending = queue["saves"]
         names = [str(item["filename"]) for item in pending] + [str(item["filename"]) for item in new_files]
-        label = names[0] if len(names) == 1 else f"{len(names)} workspace files"
+        label = names[0] if len(names) == 1 else f"{len(names)} vault files"
         return {
             "filename": label,
             "current_display": "—",
@@ -308,7 +308,7 @@ class CheckinService:
                     }
                 )
         if not ok and not failed:
-            raise ValidationAppError("There are no workspace files to check in.")
+            raise ValidationAppError("There are no vault files to check in.")
         return {"ok": ok, "failed": failed}
 
     def _new_files_for(
@@ -356,13 +356,13 @@ class CheckinService:
             item = available.get(key)
             if item is None:
                 raise ValidationAppError(
-                    f"{Path(relative).name} is not a new file in the workspace.",
+                    f"{Path(relative).name} is not a new file in the vault.",
                     details={"relative_path": relative},
                 )
             source = Path(str(item["path"]))
             if not source.is_file():
                 raise ValidationAppError(
-                    f"{item['filename']} is no longer in the workspace.",
+                    f"{item['filename']} is no longer in the vault.",
                     details={"path": str(source)},
                 )
             jobs.append((source, source.name, relative))

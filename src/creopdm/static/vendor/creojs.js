@@ -550,9 +550,7 @@ var CreoJS = (function () {
             else {            
                 if (!checkedAvailability) {
                     checkedAvailability = true
-                    if (!isCreoAvailable) {
-                        alert ('The page attempts to access Creo environment which is not supported by your browser. Some functionalty may not be available')
-                    }
+                    // CreoPDM: skip alert outside Creo's browser (normal for Chrome/Edge).
                 }
                 if (isCreoAvailable) {
                     window.external.ptc ('ToolkitJSBridge=v8?' + message);

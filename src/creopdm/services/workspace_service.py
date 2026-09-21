@@ -140,7 +140,7 @@ class WorkspaceService:
             git.clone_into(location, vault)
             if not git.is_repository(vault):
                 raise RepositoryError(
-                    "Could not move Git history into the workspace.",
+                    "Could not move Git history into the vault.",
                     details={"location": str(location), "workspace": str(vault)},
                 )
             self.strip_location_git(location)
@@ -302,7 +302,7 @@ class WorkspaceService:
                 return latest
         destination = self.workspace_file_path(project_uuid, obj)
         raise PathValidationError(
-            f"Workspace file not found for {obj.filename}.",
+            f"Vault file not found for {obj.filename}.",
             details={"workspace": str(destination)},
         )
 
@@ -687,13 +687,13 @@ class WorkspaceService:
             logical = CreoFileManager.logical_repo_path(relative, extras).lower()
             if logical in known:
                 raise PathValidationError(
-                    "That file is already in the project. Use Remove from Workspace on the Files tab.",
+                    "That file is already in the project. Use Remove from Vault on the Files tab.",
                     details={"relative_path": relative},
                 )
             path = ensure_within(vault, vault / relative)
             if not path.is_file():
                 raise PathValidationError(
-                    f"Workspace file not found: {relative}",
+                    f"Vault file not found: {relative}",
                     details={"relative_path": relative},
                 )
             targets.add(logical)
@@ -716,7 +716,7 @@ class WorkspaceService:
                     path.unlink()
                 except OSError:
                     raise PathValidationError(
-                        f"Could not delete the workspace copy of {name}.",
+                        f"Could not delete the vault copy of {name}.",
                         details={"path": str(path)},
                     )
                 removed_paths.append(str(path))
@@ -724,7 +724,7 @@ class WorkspaceService:
 
         if not removed and requested:
             raise PathValidationError(
-                "No matching workspace files were removed.",
+                "No matching vault files were removed.",
                 details={"relative_paths": requested},
             )
         self._prune_empty_workspace_dirs(vault, removed_paths)
@@ -749,7 +749,7 @@ class WorkspaceService:
                     removed.append(str(path))
                 except OSError:
                     raise PathValidationError(
-                        f"Could not delete the workspace copy of {obj.filename}.",
+                        f"Could not delete the vault copy of {obj.filename}.",
                         details={"path": str(path)},
                     )
         self._prune_empty_workspace_dirs(self.root_for(project.uuid), removed)
@@ -791,7 +791,7 @@ class WorkspaceService:
                 except OSError:
                     if not ignore_locked:
                         raise PathValidationError(
-                            f"Could not delete the workspace copy of {name}.",
+                            f"Could not delete the vault copy of {name}.",
                             details={"path": str(path)},
                         )
         self._prune_empty_workspace_dirs(root, removed)

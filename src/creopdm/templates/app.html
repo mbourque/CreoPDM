@@ -59,7 +59,7 @@
             <button type="button" class="project-settings-item is-danger" role="menuitem" id="delete-project-btn"
                     data-project="{{ selected.uuid }}"
                     data-name="{{ selected.name }}"
-                    title="Delete the CreoPDM workspace (working copies and Git) and unregister the project. Original files you imported from are not deleted.">Delete project</button>
+                    title="Delete the CreoPDM vault (working copies and Git) and unregister the project. Original files you imported from are not deleted.">Delete project</button>
           </div>
         </div>
         <form class="search-form" id="search-form">
@@ -235,7 +235,7 @@
     </section>
 
     <section class="tab-panel" id="panel-changes" hidden>
-      <p class="muted small">New workspace files and files that differ from the last checked-in version (modified or a newer Creo save). Use <strong>Add</strong> for new files and <strong>Check In</strong> for modified saves. Checkout locks are on the Files checked out tab.</p>
+      <p class="muted small">New vault files and files that differ from the last checked-in version (modified or a newer Creo save). Use <strong>Add</strong> for new files and <strong>Check In</strong> for modified saves. Checkout locks are on the Files checked out tab.</p>
       <div class="table-wrap">
         <table class="grid" id="changes-table">
           <thead>
@@ -281,7 +281,7 @@
             {% endfor %}
             {% if not checkin_queue.saves and not checkin_queue.new_files %}
             <tr class="empty-row">
-              <td colspan="5">No new or changed workspace files.</td>
+              <td colspan="5">No new or changed vault files.</td>
             </tr>
             {% endif %}
           </tbody>
@@ -301,16 +301,16 @@
 
 <footer class="toolbar">
   <div class="toolbar-actions">
-    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to the local creopdm-agent cache for this project.">
+    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
       <button type="button" class="btn" id="set-creo-dir-btn"
               {% if workspace_path %}data-workspace="{{ workspace_path }}"{% endif %}
               {% if not workspace_path %}disabled{% endif %}>Set Working Directory</button>
     </span>
     <button type="button" class="btn" id="add-files-btn" {% if not selected %}disabled{% endif %}>Add Files</button>
-    <span class="toolbar-tip" title="Copy selected files into the CreoPDM workspace if they are not already there. Does not check them out.">
-      <button type="button" class="btn" id="workspace-btn" disabled>Copy to Workspace</button>
+    <span class="toolbar-tip" title="Copy selected files into the CreoPDM vault if they are not already there. Does not check them out.">
+      <button type="button" class="btn" id="workspace-btn" disabled>Copy to Vault</button>
     </span>
-    <span class="toolbar-tip" title="Open the current Files folder in Explorer. Opens the workspace root when you are at the top of the project.">
+    <span class="toolbar-tip" title="Open this project's local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">
       <button type="button" class="btn" id="open-workspace-btn" {% if selected %}data-project="{{ selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}>Open Workspace</button>
     </span>
     <span class="toolbar-tip" title="Open the selected file in Creo or its Windows associated program.">
@@ -322,16 +322,16 @@
               {% if selected %}data-project="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
               hidden disabled>Check In</button>
     </span>
-    <span class="toolbar-tip" title="Release your checkout lock. Does not delete the workspace file or record a new version. A Creo save still on disk can be checked in afterward." hidden>
+    <span class="toolbar-tip" title="Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward." hidden>
       <button type="button" class="btn" id="undo-btn" hidden disabled>Undo Checkout</button>
     </span>
     <span class="toolbar-tip" title="Open version history and details for the selected file.">
       <button type="button" class="btn" id="history-btn" disabled>History</button>
     </span>
-    <span class="toolbar-tip" title="Delete CreoPDM working copies of the selected files only. Files in your original project folder are not deleted. Checkouts on those files are cancelled.">
-      <button type="button" class="btn" id="purge-workspace-btn" {% if selected %}data-project-name="{{ selected.name }}"{% endif %} disabled>Remove from Workspace</button>
+    <span class="toolbar-tip" title="Delete CreoPDM vault copies of the selected files only. Files in your original project folder are not deleted. Checkouts on those files are cancelled.">
+      <button type="button" class="btn" id="purge-workspace-btn" {% if selected %}data-project-name="{{ selected.name }}"{% endif %} disabled>Remove from Vault</button>
     </span>
-    <span class="toolbar-tip" title="Remove the selected files from this project list and delete CreoPDM workspace copies. Files in your original project folder are not deleted.">
+    <span class="toolbar-tip" title="Remove the selected files from this project list and delete CreoPDM vault copies. Files in your original project folder are not deleted.">
       <button type="button" class="btn btn-danger" id="remove-project-btn" {% if selected %}data-project-name="{{ selected.name }}"{% endif %} disabled>Remove from Project</button>
     </span>
   </div>
@@ -364,7 +364,7 @@
 <dialog id="delete-project-dialog" class="dialog">
   <form method="dialog" id="delete-project-form">
     <h2>Delete this project</h2>
-    <p>This deletes the CreoPDM workspace, including working copies and Git history, and unregisters the project.</p>
+    <p>This deletes the CreoPDM vault, including working copies and Git history, and unregisters the project.</p>
     <p><strong>Original files you imported from are not deleted.</strong></p>
     <label>Type the project name to confirm
       <input name="confirm_name" id="delete-project-confirm" required maxlength="255" autocomplete="off">
@@ -380,7 +380,7 @@
 <dialog id="add-dialog" class="dialog">
   <form method="dialog" id="add-form" {% if selected %}data-project="{{ selected.uuid }}"{% endif %} data-native-picker="{{ '1' if native_picker else '0' }}">
     <h2>Add files</h2>
-    <p class="muted">Files are copied into the workspace. Numbered names such as <code>shaft.prt.3</code> keep only the latest save.</p>
+    <p class="muted">Files are copied into the vault. Numbered names such as <code>shaft.prt.3</code> keep only the latest save.</p>
     <p class="muted small" id="add-folder-label">{% if selected %}Project: {{ selected.name }}{% endif %}</p>
     <div class="dropzone" id="dropzone">
       <div class="dropzone-actions">
@@ -388,7 +388,7 @@
         <button type="button" class="btn" id="choose-workspace-folder">Choose Folder</button>
       </div>
       <p id="chosen-file-summary" class="muted small"></p>
-      <span class="muted small">Drop files or folders here, or choose them. Copies go into the workspace. On a LAN http:// address, drop folders instead of Choose Folder to avoid Chrome’s upload warning.</span>
+      <span class="muted small">Drop files or folders here, or choose them. Copies go into the vault. On a LAN http:// address, drop folders instead of Choose Folder to avoid Chrome’s upload warning.</span>
     </div>
     <input id="add-file-input" class="sr-file" type="file" multiple>
     <input id="add-folder-input" class="sr-file" type="file" webkitdirectory multiple>
@@ -416,7 +416,7 @@
     </label>
     <ul class="detect-list" id="checkin-changes"></ul>
     <div id="checkin-new-wrap" hidden>
-      <p class="muted small" id="checkin-new-help">New files in the workspace. They are not added unless you check them.</p>
+      <p class="muted small" id="checkin-new-help">New files in the vault. They are not added unless you check them.</p>
       <div class="checkin-new-pick" id="checkin-new-pick" hidden>
         <span class="muted small">Add to project:</span>
         <label class="choice"><input type="radio" name="checkin-new-pick" value="none" checked> None</label>

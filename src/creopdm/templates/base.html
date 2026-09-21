@@ -389,7 +389,7 @@ function setWorkingDirectory(directory) {
           ? pfcGetCurrentSession()
           : pfcGetProESession();
         if (!directory) {
-            return "CREOPDM_ERROR:No project workspace is selected.";
+            return "CREOPDM_ERROR:No project is selected.";
         }
         try {
             session.ChangeDirectory(directory);
@@ -421,6 +421,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-nopoll1"></script>
+  <script src="/client/app.js?v={{ app_version }}-vault1"></script>
 </body>
 </html>

@@ -60,6 +60,16 @@ class OpenLocalResponse(BaseModel):
     mode: str = "association"
 
 
+class OpenFolderRequest(BaseModel):
+    project_id: str = ""
+    folder: str = ""
+
+
+class OpenFolderResponse(BaseModel):
+    ok: bool = True
+    path: str
+
+
 def _safe_segment(value: str, fallback: str = "file") -> str:
     text = _SAFE_NAME.sub("_", (value or "").strip()) or fallback
     return text[:180]
@@ -160,6 +170,38 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             "path": str(path.resolve()),
             "local_root": str(base.resolve()),
         }
+
+    def _project_cache_dir(project_id: str = "", folder: str = "") -> Path:
+        base = settings.ensure_dirs().resolve()
+        key = (project_id or "").strip()
+        target = base / _safe_segment(key, "local") if key else base
+        target.mkdir(parents=True, exist_ok=True)
+        rel = (folder or "").replace("\\", "/").strip().strip("/")
+        if rel:
+            candidate = (target / Path(rel)).resolve()
+            try:
+                candidate.relative_to(target.resolve())
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Refusing to open a path outside the agent cache.",
+                ) from exc
+            if candidate.is_dir():
+                return candidate
+        return target.resolve()
+
+    @app.post("/open-folder", response_model=OpenFolderResponse)
+    def open_folder(payload: OpenFolderRequest) -> OpenFolderResponse:
+        """Open the local agent cache folder in Explorer (client PC, not CreoPDM server)."""
+        from creopdm.utils.launch import open_windows_folder
+
+        target = _project_cache_dir(payload.project_id, payload.folder)
+        try:
+            open_windows_folder(target)
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.info("Opened local workspace folder %s", target)
+        return OpenFolderResponse(path=str(target))
 
     @app.post("/materialize", response_model=MaterializeResponse)
     def materialize(payload: MaterializeRequest) -> MaterializeResponse:

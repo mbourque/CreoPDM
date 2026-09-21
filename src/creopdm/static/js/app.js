@@ -184,11 +184,16 @@
     try {
       const payload = await response.json();
       const err = payload?.error;
-      if (!err) return response.statusText;
-      const extra = err.details?.user
-        ? ` ${err.details.user} on ${err.details.machine || "unknown machine"} since ${err.details.since || "unknown"}.`
-        : "";
-      return `${err.message}${extra}`;
+      if (err) {
+        const extra = err.details?.user
+          ? ` ${err.details.user} on ${err.details.machine || "unknown machine"} since ${err.details.since || "unknown"}.`
+          : "";
+        return `${err.message}${extra}`;
+      }
+      if (typeof payload?.detail === "string" && payload.detail.trim()) {
+        return payload.detail.trim();
+      }
+      return response.statusText;
     } catch {
       return response.statusText;
     }
@@ -692,7 +697,7 @@
       ? data.import_extensions.map((item) => String(item || "").toLowerCase())
       : [];
     if (!data.native_picker) {
-      label.textContent = "Choose files or a folder in this browser. Copies go into the workspace.";
+      label.textContent = "Choose files or a folder in this browser. Copies go into the vault.";
       return;
     }
     label.textContent = `Opens in: ${data.initial_directory}`;
@@ -1492,7 +1497,7 @@
       const tip = checkinBtn.closest(".toolbar-tip");
       if (tip) {
         tip.title = addOnly
-          ? "Add selected workspace files to the project."
+          ? "Add selected vault files to the project."
           : "Check in selected files.";
       }
     }
@@ -2290,26 +2295,45 @@
   workspaceBtn?.addEventListener("click", async () => {
     const ids = selectedIds();
     if (!ids.length) return;
-    const result = await postAction("/api/objects/batch/workspace", { object_ids: ids }, "POST", "Copying to workspace…");
+    const result = await postAction("/api/objects/batch/workspace", { object_ids: ids }, "POST", "Copying to vault…");
     if (!result) return;
     const warning = formatBatch(result);
     const copied = result.ok?.length || 0;
     if (warning) showError($("#toolbar-error"), warning);
-    else showOk(`${copied} file(s) copied to the workspace.`);
+    else showOk(`${copied} file(s) copied to the vault.`);
   });
 
   openWorkspaceBtn?.addEventListener("click", async () => {
     const projectId = openWorkspaceBtn.dataset.project;
     if (!projectId) return;
     const folder = openWorkspaceBtn.dataset.folder || currentFolder() || "";
+    showError($("#toolbar-error"), "");
+    showOk("");
+    const agent = await probeCreoAgent();
+    if (agent) {
+      const opened = await withBusy("Opening local workspace…", async () => {
+        const response = await fetch(`${agentBase()}/open-folder`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project_id: projectId, folder }),
+        });
+        if (!response.ok) {
+          showError($("#toolbar-error"), await readError(response));
+          return null;
+        }
+        return response.json();
+      });
+      if (opened) showOk("Opened the local workspace folder.");
+      return;
+    }
     const query = folder ? `?folder=${encodeURIComponent(folder)}` : "";
     const result = await postAction(
       `/api/projects/${projectId}/workspace/open${query}`,
       undefined,
       "POST",
-      "Opening workspace…"
+      "Opening vault…"
     );
-    if (result) showOk("Opened the workspace folder.");
+    if (result) showOk("Opened the vault folder on the CreoPDM host.");
   });
 
   undoBtn?.addEventListener("click", async () => {
@@ -2468,7 +2492,7 @@
     const pick = $("#checkin-new-pick");
     if (help) {
       help.textContent = useQueue
-        ? "New files in the workspace. They are not added unless you check them."
+        ? "New files in the vault. They are not added unless you check them."
         : "New files Creo saved next to this model. They are not added unless you check them.";
     }
     function syncNewFilePick() {
@@ -2559,7 +2583,7 @@
     }
     if (checkinDialog?.dataset.force === "1") {
       const name = $("#checkin-filename")?.textContent || "This file";
-      if (!window.confirm(`${name} is not checked out. Check in the workspace save anyway?`)) return;
+      if (!window.confirm(`${name} is not checked out. Check in the vault save anyway?`)) return;
     }
     let added = [...document.querySelectorAll("#checkin-new-files input:checked")].map(
       (input) => input.value
@@ -2684,13 +2708,13 @@
     const total = ids.length + paths.length;
     if (!total) return;
     const confirmed = await confirmByProjectName({
-      title: total === 1 ? "Remove from workspace" : `Remove ${total} files from workspace`,
+      title: total === 1 ? "Remove from vault" : `Remove ${total} files from vault`,
       lead:
         total === 1
-          ? "Only the CreoPDM working copy is deleted. The original in your project folder stays. If you have it checked out, that checkout is cancelled."
-          : "Only CreoPDM working copies are deleted. Originals in your project folder stay. Your checkouts on those files are cancelled.",
+          ? "Only the CreoPDM vault copy is deleted. The original in your project folder stays. If you have it checked out, that checkout is cancelled."
+          : "Only CreoPDM vault copies are deleted. Originals in your project folder stay. Your checkouts on those files are cancelled.",
       note: "This cannot be undone from CreoPDM.",
-      submitLabel: "Remove from Workspace",
+      submitLabel: "Remove from Vault",
     });
     if (!confirmed) return;
 
@@ -2703,7 +2727,7 @@
         `/api/projects/${projectId}/workspace/purge-paths`,
         { relative_paths: paths },
         "POST",
-        "Removing from workspace…"
+        "Removing from vault…"
       );
       if (!result) return;
       okCount += result.ok?.length || 0;
@@ -2715,7 +2739,7 @@
           `/api/objects/${ids[0]}/purge-workspace`,
           undefined,
           "POST",
-          "Removing from workspace…"
+          "Removing from vault…"
         );
         if (result) reloadPage();
         return;
@@ -2724,14 +2748,14 @@
         "/api/objects/batch/purge-workspace",
         { object_ids: ids },
         "POST",
-        "Removing from workspace…"
+        "Removing from vault…"
       );
       if (!result) return;
       okCount += result.ok?.length || 0;
       warning = formatBatch(result) || warning;
     }
     if (warning) showError($("#toolbar-error"), warning);
-    else if (okCount) showOk(`${okCount} file(s) removed from the workspace.`);
+    else if (okCount) showOk(`${okCount} file(s) removed from the vault.`);
     if (okCount) reloadPage();
   });
 
@@ -2742,8 +2766,8 @@
       title: ids.length === 1 ? "Remove from project" : `Remove ${ids.length} files from project`,
       lead:
         ids.length === 1
-          ? "CreoPDM workspace copies are deleted. The original in your project folder is not deleted."
-          : "CreoPDM workspace copies are deleted. Originals in your project folder are not deleted.",
+          ? "CreoPDM vault copies are deleted. The original in your project folder is not deleted."
+          : "CreoPDM vault copies are deleted. Originals in your project folder are not deleted.",
       note: "The file is removed from this project list. This cannot be undone from CreoPDM.",
       submitLabel: "Remove from Project",
     });
@@ -2770,7 +2794,7 @@
     loading.className = "empty-row";
     const loadingCell = document.createElement("td");
     loadingCell.colSpan = 5;
-    loadingCell.textContent = "Looking for workspace changes…";
+    loadingCell.textContent = "Looking for vault changes…";
     loading.appendChild(loadingCell);
     body.appendChild(loading);
     refreshTabMetrics();
@@ -2789,7 +2813,7 @@
         row.className = "empty-row";
         const cell = document.createElement("td");
         cell.colSpan = 5;
-        cell.textContent = "No new or changed workspace files.";
+        cell.textContent = "No new or changed vault files.";
         row.appendChild(cell);
         body.appendChild(row);
         refreshTabMetrics();
@@ -2881,7 +2905,7 @@
       row.className = "empty-row";
       const cell = document.createElement("td");
       cell.colSpan = 5;
-      cell.textContent = "Could not load workspace changes.";
+      cell.textContent = "Could not load vault changes.";
       row.appendChild(cell);
       body.appendChild(row);
       refreshTabMetrics();

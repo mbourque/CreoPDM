@@ -377,7 +377,7 @@ def open_workspace_folder(
         open_windows_folder(opened)
     except OSError as exc:
         raise PathValidationError(
-            "Could not open the workspace folder in Explorer.",
+            "Could not open the vault folder in Explorer.",
             details={"path": str(opened)},
         ) from exc
     return Response(status_code=204)
@@ -394,7 +394,7 @@ def workspace_file_content(
     target = ctx.workspaces.file_path(project.uuid, path)
     if not target.is_file():
         raise PathValidationError(
-            f"Workspace file not found: {Path(path).name}.",
+            f"Vault file not found: {Path(path).name}.",
             details={"relative_path": path},
         )
     media_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"

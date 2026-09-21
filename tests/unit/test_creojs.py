@@ -100,3 +100,24 @@ def test_creojs_route_serves_bundled_library(client):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/javascript")
     assert b"CreoJS" in response.content
+    assert b"not supported by your browser" not in response.content
+
+
+def test_creojs_route_suppresses_unsupported_browser_alert(tmp_path, data_dir, identity: StaticUserProvider):
+    library = tmp_path / "creojs.js"
+    library.write_text(
+        "var CreoJS = {};\n"
+        "alert ('The page attempts to access Creo environment which is not supported "
+        "by your browser. Some functionalty may not be available')\n",
+        encoding="utf-8",
+    )
+    manager = ConfigManager()
+    settings = manager.load()
+    settings.creo.js_library = str(library)
+    manager.save(settings)
+    ctx = build_context(manager, users=identity)
+    with TestClient(create_app(ctx)) as client:
+        response = client.get("/creojs.js")
+        assert response.status_code == 200
+        assert b"not supported by your browser" not in response.content
+        assert b"creo env alert suppressed" in response.content

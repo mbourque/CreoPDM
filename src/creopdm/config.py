@@ -130,7 +130,7 @@ class UiConfig(BaseModel):
         try:
             ms = int(value)  # type: ignore[arg-type]
         except (TypeError, ValueError) as exc:
-            raise ValueError("Workspace poll interval must be an integer.") from exc
+            raise ValueError("File list refresh interval must be an integer.") from exc
         if ms < 500:
             return 500
         if ms > 120_000:
@@ -684,7 +684,7 @@ class ConfigManager:
 
     def workspace_for_project(self, project_uuid: str) -> Path:
         if not project_uuid or any(ch in project_uuid for ch in r"/\:"):
-            raise PathValidationError("Invalid project identifier for workspace path.")
+            raise PathValidationError("Invalid project identifier for vault path.")
         root = self.workspace_root()
         root.mkdir(parents=True, exist_ok=True)
         return root / project_uuid

@@ -55,7 +55,7 @@ def object_content(
         )
     if not path.is_file():
         raise PathValidationError(
-            f"Workspace file not found: {obj.filename}.",
+            f"Vault file not found: {obj.filename}.",
             details={"object_id": object_id},
         )
     return _file_response(path, path.name)

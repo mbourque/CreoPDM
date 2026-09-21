@@ -32,20 +32,20 @@
   </header>
 
   <div class="toolbar-actions detail-actions">
-    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to the local creopdm-agent cache for this project.">
+    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
       <button type="button" class="btn" id="set-creo-dir-btn" data-workspace="{{ workspace_path }}">Set Working Directory</button>
     </span>
     <button type="button" class="btn" id="open-btn" data-uuid="{{ object.uuid }}">Open</button>
-    <span class="toolbar-tip" title="Open this file's folder in Explorer.">
+    <span class="toolbar-tip" title="Open this project's local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">
       <button type="button" class="btn" id="open-workspace-btn" data-project="{{ project.uuid }}" data-folder="{{ workspace_folder }}">Open Workspace</button>
     </span>
     <button type="button" class="btn" id="checkout-btn" data-uuid="{{ object.uuid }}" {% if not object.can_checkout %}disabled{% endif %}>Checkout</button>
     <button type="button" class="btn" id="checkin-btn" data-uuid="{{ object.uuid }}" data-project="{{ project.uuid }}" {% if not object.can_checkin %}disabled{% endif %}>Check In</button>
     <button type="button" class="btn" id="undo-btn" data-uuid="{{ object.uuid }}" {% if not object.owned_by_me %}disabled{% endif %}>Undo Checkout</button>
-    <span class="toolbar-tip" title="Delete CreoPDM working copies of this file. The original in your project folder is not deleted. If you have it checked out, that checkout is cancelled.">
-      <button type="button" class="btn" id="purge-workspace-btn" data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}">Remove from Workspace</button>
+    <span class="toolbar-tip" title="Delete CreoPDM vault copies of this file. The original in your project folder is not deleted. If you have it checked out, that checkout is cancelled.">
+      <button type="button" class="btn" id="purge-workspace-btn" data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}">Remove from Vault</button>
     </span>
-    <span class="toolbar-tip" title="Remove this file from the project list and delete CreoPDM workspace copies. The original in your project folder is not deleted.">
+    <span class="toolbar-tip" title="Remove this file from the project list and delete CreoPDM vault copies. The original in your project folder is not deleted.">
       <button type="button" class="btn btn-danger" id="remove-project-btn" data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}">Remove from Project</button>
     </span>
   </div>
@@ -86,10 +86,10 @@
     {% if workspace_pending %}
     <p class="pending-note">
       {% if workspace_pending.newer_save %}
-      Creo saved a newer file in the workspace: <strong>{{ workspace_pending.filename }}</strong>
+      Creo saved a newer file in the vault: <strong>{{ workspace_pending.filename }}</strong>
       (last checked in: {{ workspace_pending.recorded_filename }}). Check in to record this change.
       {% else %}
-      The workspace copy of <strong>{{ workspace_pending.filename }}</strong> has changes that are not checked in.
+      The vault copy of <strong>{{ workspace_pending.filename }}</strong> has changes that are not checked in.
       {% endif %}
     </p>
     {% endif %}
@@ -117,14 +117,14 @@
             <td class="filename-cell">
               {{ workspace_pending.filename }}
               {% if workspace_pending.newer_save %}
-              <div class="muted small">from {{ workspace_pending.recorded_filename }} · on disk in workspace</div>
+              <div class="muted small">from {{ workspace_pending.recorded_filename }} · on disk in vault</div>
               {% else %}
-              <div class="muted small">modified in workspace</div>
+              <div class="muted small">modified in vault</div>
               {% endif %}
             </td>
             <td></td>
             <td>{{ workspace_pending.file_size | byte_size }}</td>
-            <td>workspace</td>
+            <td>vault</td>
             <td>{{ workspace_pending.saved_at }}</td>
           </tr>
           {% endif %}
@@ -164,12 +164,12 @@
             <td class="filename-cell">
               {{ workspace_pending.filename }}
               {% if workspace_pending.newer_save %}
-              <div class="muted small">from {{ workspace_pending.recorded_filename }} · on disk in workspace</div>
+              <div class="muted small">from {{ workspace_pending.recorded_filename }} · on disk in vault</div>
               {% endif %}
             </td>
-            <td>workspace</td>
+            <td>vault</td>
             <td>{{ workspace_pending.saved_at }}</td>
-            <td>Newer Creo save in the workspace. Check in to record it.</td>
+            <td>Newer Creo save in the vault. Check in to record it.</td>
           </tr>
           {% endif %}
           {% for version in history %}
@@ -204,7 +204,7 @@
     </label>
     <ul class="detect-list" id="checkin-changes"></ul>
     <div id="checkin-new-wrap" hidden>
-      <p class="muted small" id="checkin-new-help">New files in the workspace. They are not added unless you check them.</p>
+      <p class="muted small" id="checkin-new-help">New files in the vault. They are not added unless you check them.</p>
       <div class="checkin-new-pick" id="checkin-new-pick" hidden>
         <span class="muted small">Add to project:</span>
         <label class="choice"><input type="radio" name="checkin-new-pick" value="none" checked> None</label>

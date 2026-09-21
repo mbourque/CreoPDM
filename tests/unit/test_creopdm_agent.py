@@ -73,6 +73,32 @@ def test_agent_health_and_materialize(tmp_path, monkeypatch):
         assert workdir.json()["path"].endswith("proj1")
 
 
+def test_agent_open_folder_uses_project_cache(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    opened: list[Path] = []
+
+    def fake_open(path):
+        opened.append(Path(path))
+
+    monkeypatch.setattr("creopdm.utils.launch.open_windows_folder", fake_open)
+    with TestClient(app) as client:
+        nested = root / "proj1" / "drawings"
+        nested.mkdir(parents=True)
+        ok = client.post("/open-folder", json={"project_id": "proj1", "folder": "drawings"})
+        assert ok.status_code == 200, ok.text
+        assert opened[-1].resolve() == nested.resolve()
+        root_ok = client.post("/open-folder", json={"project_id": "proj1"})
+        assert root_ok.status_code == 200, root_ok.text
+        assert opened[-1].resolve() == (root / "proj1").resolve()
+        denied = client.post(
+            "/open-folder",
+            json={"project_id": "proj1", "folder": "..\\..\\Windows"},
+        )
+        assert denied.status_code == 403
+
+
 def test_agent_open_local_association(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     root.mkdir()

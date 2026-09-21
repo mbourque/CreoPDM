@@ -100,7 +100,7 @@ class ObjectService:
 
     def _vault(self, project: Project) -> Path:
         if self._config is None:
-            raise RepositoryError("Workspace configuration is missing.")
+            raise RepositoryError("Vault configuration is missing.")
         path = self._config.workspace_for_project(project.uuid)
         path.mkdir(parents=True, exist_ok=True)
         return path

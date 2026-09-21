@@ -29,9 +29,9 @@
     </section>
 
     <section class="settings-card">
-      <h2>Workspace</h2>
-      <p class="muted small">Checked-out and downloaded files are copied here, one folder per project. On Linux the default is <code>~/.local/share/CreoPDM/workspaces</code>. Use that path, not <code>~/.local/share/CreoPDM</code> itself (that folder is the application data directory).</p>
-      <label>Workspace folder
+      <h2>Vault</h2>
+      <p class="muted small">Master repository for each project (Git history and vault copies), one folder per project. On Linux the default is under <code>~/.local/share/CreoPDM/workspaces</code>. Use that vault path, not <code>~/.local/share/CreoPDM</code> itself (that folder is the application data directory). Your Creo working files on the client PC live in the local agent workspace, not here.</p>
+      <label>Vault folder
         <input name="workspace_root" type="text" value="{{ settings.workspace_root }}" placeholder="{{ settings.default_workspace_root }}">
       </label>
       <p class="muted small">Default: {{ settings.default_workspace_root }}</p>
@@ -90,7 +90,7 @@
 
     <section class="settings-card">
       <h2>Ignored files</h2>
-      <p class="muted small">These never enter the workspace, are never stored in Git, and never appear in the file list. Patterns are written to each project's <code>.gitignore</code>.</p>
+      <p class="muted small">These never enter the vault, are never stored in Git, and never appear in the file list. Patterns are written to each project's <code>.gitignore</code>.</p>
       <label>Ignore patterns
         <textarea name="ignore_patterns" rows="3" placeholder="*.tst, trail.txt*, std.out">{{ settings.ignore_patterns | join(', ') }}</textarea>
       </label>
@@ -108,11 +108,11 @@
 
     <section class="settings-card">
       <h2>Local Creo agent</h2>
-      <p class="muted small">When this page runs inside Creo’s browser, open/materialize calls the local <code>creopdm-agent</code> on the Creo PC. Change this if the agent listen port is not 8766. Workspace refresh controls how often the file list checks for pending saves and new files.</p>
+      <p class="muted small">When this page runs inside Creo’s browser, open/materialize uses the local <code>creopdm-agent</code> workspace on the Creo PC. Change this if the agent listen port is not 8766. File list refresh controls how often the page checks the vault for pending saves and new files.</p>
       <label>Agent base URL
         <input name="agent_base_url" type="text" value="{{ settings.agent_base_url }}" placeholder="http://127.0.0.1:8766" autocomplete="off">
       </label>
-      <label>Workspace refresh interval (ms)
+      <label>File list refresh interval (ms)
         <input name="workspace_poll_interval_ms" type="number" min="500" max="120000" step="100" value="{{ settings.workspace_poll_interval_ms }}" placeholder="2000">
       </label>
       <p class="muted small">500–120000 ms. Default 2000. Reload the project page after saving.</p>

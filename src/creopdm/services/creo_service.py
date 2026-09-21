@@ -111,7 +111,7 @@ class CreoService:
         path = self._workspaces.file_path(project.uuid, relative_path)
         if not path.is_file():
             raise PathValidationError(
-                f"Workspace file not found: {Path(relative_path).name}.",
+                f"Vault file not found: {Path(relative_path).name}.",
                 details={"relative_path": relative_path},
             )
         kind = classify_filename(
@@ -259,7 +259,7 @@ class CreoService:
             method = "prepared"
             if not path.is_file():
                 raise PathValidationError(
-                    f"Workspace file not found for Creo open: {path.name}.",
+                    f"Vault file not found for Creo open: {path.name}.",
                     details={"path": str(path)},
                 )
             logger.info("Prepared %s for Creo session open from %s", path, workdir)
