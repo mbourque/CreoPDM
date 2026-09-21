@@ -135,6 +135,7 @@ class PurgeVersionsRequest(BaseModel):
     project_id: str = ""
     model_extensions: list[str] = Field(default_factory=list)
     floors: list[PurgeFloor] = Field(default_factory=list)
+    dry_run: bool = False
 
 
 class PurgeVersionsResponse(BaseModel):
@@ -613,6 +614,17 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             except ValueError:
                 rel = local.name
             if not resolved.is_file():
+                continue
+            if payload.dry_run:
+                ok.append(
+                    PushItemResult(
+                        object_id=project_id,
+                        filename=resolved.name,
+                        ok=True,
+                        path=str(resolved),
+                        message=rel,
+                    )
+                )
                 continue
             try:
                 resolved.unlink()

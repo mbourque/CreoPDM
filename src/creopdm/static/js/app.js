@@ -2306,7 +2306,7 @@
     return response.json();
   }
 
-  async function purgeLocalVersionsOlderThanVault(projectId) {
+  async function purgeLocalVersionsOlderThanVault(projectId, { dryRun = false } = {}) {
     if (!projectId) return { ok: [], failed: [], deleted: 0, skipped: true };
     const floorsResponse = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/workspace/purge-floors`
@@ -2320,7 +2320,7 @@
       ? floorsBody.model_extensions
       : [];
     if (!floors.length) {
-      return { ok: [], failed: [], deleted: 0, empty: true };
+      return { ok: [], failed: [], deleted: 0, empty: true, floors: [] };
     }
     const agent = await probeCreoAgent();
     if (!agent) return null;
@@ -2330,6 +2330,7 @@
       body: JSON.stringify({
         project_id: projectId,
         model_extensions: modelExtensions,
+        dry_run: Boolean(dryRun),
         floors: floors.map((item) => ({
           logical_path: item.logical_path,
           min_keep: item.min_keep,
@@ -2344,7 +2345,9 @@
       }
       throw new Error(await readError(response));
     }
-    return response.json();
+    const body = await response.json();
+    body.floors = floors;
+    return body;
   }
 
   function logicalRelativePath(rel) {
@@ -3205,7 +3208,7 @@
     ).trim();
   }
 
-  function confirmByProjectName({ title, lead, note, submitLabel }) {
+  function confirmByProjectName({ title, lead, note, submitLabel, detailsHtml = "" }) {
     const dialog = $("#danger-confirm-dialog");
     const form = $("#danger-confirm-form");
     const expected = expectedProjectName();
@@ -3214,11 +3217,17 @@
     const leadEl = $("#danger-confirm-lead");
     const noteEl = $("#danger-confirm-note");
     const noteStrong = noteEl?.querySelector("strong");
+    const detailsEl = $("#danger-confirm-details");
     const submitBtn = $("#danger-confirm-submit");
     if (titleEl) titleEl.textContent = title;
     if (leadEl) leadEl.textContent = lead;
     if (noteStrong) noteStrong.textContent = note || "";
     if (noteEl) noteEl.hidden = !note;
+    if (detailsEl) {
+      const html = String(detailsHtml || "").trim();
+      detailsEl.innerHTML = html;
+      detailsEl.hidden = !html;
+    }
     if (submitBtn) submitBtn.textContent = submitLabel;
     showError($("#danger-confirm-error"), "");
     form.reset();
@@ -3230,6 +3239,10 @@
         form.removeEventListener("submit", onSubmit);
         $("#danger-confirm-cancel")?.removeEventListener("click", onCancel);
         dialog.removeEventListener("close", onClose);
+        if (detailsEl) {
+          detailsEl.innerHTML = "";
+          detailsEl.hidden = true;
+        }
         if (dialog.open) dialog.close();
         resolve(ok);
       };
@@ -3250,6 +3263,54 @@
       dialog.showModal();
       $("#danger-confirm-input")?.focus();
     });
+  }
+
+  function formatPurgeConfirmDetails(preview) {
+    const deleted = Array.isArray(preview?.ok) ? preview.ok : [];
+    const floors = Array.isArray(preview?.floors) ? preview.floors : [];
+    const parts = [];
+    if (deleted.length) {
+      parts.push(
+        `<p><strong>${deleted.length}</strong> local save(s) would be deleted from the agent cache:</p>`
+      );
+      const shown = deleted.slice(0, 20);
+      const items = shown
+        .map((item) => {
+          const name = escapeHtml(item.message || item.filename || item.path || "");
+          return `<li><code>${name}</code></li>`;
+        })
+        .join("");
+      const more =
+        deleted.length > shown.length
+          ? `<li class="muted">…and ${deleted.length - shown.length} more</li>`
+          : "";
+      parts.push(`<ul class="confirm-file-list">${items}${more}</ul>`);
+    } else {
+      parts.push("<p>No older local saves match the vault floors right now.</p>");
+    }
+    if (floors.length) {
+      parts.push(
+        "<p>Kept for each vault model: the revision matching the vault and any newer local numbered saves. Examples:</p>"
+      );
+      const floorShown = floors.slice(0, 8);
+      const floorItems = floorShown
+        .map((item) => {
+          const path = escapeHtml(item.logical_path || "");
+          const keep = Number(item.min_keep) || 0;
+          const keepLabel = keep <= 0 ? "unnumbered / .1+" : `.${keep} and newer`;
+          return `<li><code>${path}</code> — keep ${escapeHtml(keepLabel)}</li>`;
+        })
+        .join("");
+      const floorMore =
+        floors.length > floorShown.length
+          ? `<li class="muted">…and ${floors.length - floorShown.length} more model(s)</li>`
+          : "";
+      parts.push(`<ul class="confirm-file-list">${floorItems}${floorMore}</ul>`);
+    }
+    parts.push(
+      "<p>Unrelated local files, newer-than-vault work, and everything in the vault are left alone.</p>"
+    );
+    return parts.join("");
   }
 
   function projectHome() {
@@ -3397,12 +3458,37 @@
       || checkinBtn?.dataset.project
       || openWorkspaceBtn?.dataset.project;
     if (!projectId) return;
+    showError($("#toolbar-error"), "");
+    const preview = await withBusy("Checking what Purge workspace would delete…", async () => {
+      try {
+        return await purgeLocalVersionsOlderThanVault(projectId, { dryRun: true });
+      } catch (err) {
+        showError($("#toolbar-error"), err?.message || String(err));
+        return false;
+      }
+    });
+    if (preview === false) return;
+    if (!preview) {
+      showError(
+        $("#toolbar-error"),
+        "Start creopdm-agent on this Creo PC to purge older local workspace saves."
+      );
+      return;
+    }
+    if (preview.empty) {
+      showOk("Nothing to purge — no vault Creo models with numbered saves.");
+      return;
+    }
+    const wouldDelete = preview.deleted || preview.ok?.length || 0;
     const confirmed = await confirmByProjectName({
       title: "Purge workspace",
       lead:
-        "Deletes local agent-cache Creo model saves that are older than the vault copy. The vault revision and any newer local work stay. The vault is not changed.",
+        wouldDelete > 0
+          ? `About to delete ${wouldDelete} older local Creo model save(s) from the agent cache on this PC. The vault revision and any newer local work stay. The vault is not changed.`
+          : "No older local Creo model saves match the vault floors. You can still confirm, but nothing will be deleted.",
+      detailsHtml: formatPurgeConfirmDetails(preview),
       note: "This cannot be undone from CreoPDM.",
-      submitLabel: "Purge workspace",
+      submitLabel: wouldDelete > 0 ? `Purge ${wouldDelete} save(s)` : "Purge workspace",
     });
     if (!confirmed) return;
     showError($("#toolbar-error"), "");

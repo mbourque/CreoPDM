@@ -662,6 +662,31 @@ dialog:not([open]) { display: none !important; }
 .path-picker input { flex: 1; min-width: 0; }
 .path-picker .btn { flex-shrink: 0; }
 .dialog label .muted { font-weight: 400; }
+.confirm-details {
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #f7f9fb;
+  font-weight: 400;
+}
+.confirm-details p { margin: 0 0 0.45rem; }
+.confirm-details p:last-child { margin-bottom: 0; }
+.confirm-file-list {
+  margin: 0 0 0.55rem;
+  padding-left: 1.15rem;
+  max-height: 7rem;
+  overflow: auto;
+}
+.confirm-file-list li { margin: 0.15rem 0; }
+.confirm-file-list code {
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+.dialog.danger-confirm-dialog {
+  width: min(560px, 94vw);
+}
 .busy-overlay {
   border: none;
   padding: 0;

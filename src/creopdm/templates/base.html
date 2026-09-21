@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-toolbar7">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-toolbar8">
   <script>
     /* Suppress PTC creojs.js noise outside Creo's browser (and when Creo injects its own copy). */
     (function () {
@@ -40,10 +40,11 @@
   <main class="shell">
     {% block content %}{% endblock %}
   </main>
-  <dialog id="danger-confirm-dialog" class="dialog">
+  <dialog id="danger-confirm-dialog" class="dialog danger-confirm-dialog">
     <form method="dialog" id="danger-confirm-form">
       <h2 id="danger-confirm-title">Confirm</h2>
       <p id="danger-confirm-lead"></p>
+      <div id="danger-confirm-details" class="muted small confirm-details" hidden></div>
       <p id="danger-confirm-note"><strong></strong></p>
       <label>Type the project name to confirm
         <input name="confirm_name" id="danger-confirm-input" required maxlength="255" autocomplete="off">
@@ -432,6 +433,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push22"></script>
+  <script src="/client/app.js?v={{ app_version }}-push23"></script>
 </body>
 </html>

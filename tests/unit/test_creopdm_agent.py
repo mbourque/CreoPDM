@@ -395,3 +395,32 @@ def test_agent_purge_versions_deletes_only_older_than_vault_floor(tmp_path):
         assert empty.status_code == 200, empty.text
         assert empty.json()["deleted"] == 0
         assert (cache / "shaft.prt.3").is_file()
+
+
+def test_agent_purge_versions_dry_run_lists_without_deleting(tmp_path):
+    root = tmp_path / "cache"
+    project_id = "proj-purge-dry"
+    cache = root / project_id
+    cache.mkdir(parents=True)
+    (cache / "shaft.prt").write_bytes(b"0")
+    (cache / "shaft.prt.1").write_bytes(b"1")
+    (cache / "shaft.prt.3").write_bytes(b"3")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    with TestClient(app) as client:
+        response = client.post(
+            "/purge-versions",
+            json={
+                "project_id": project_id,
+                "model_extensions": [".prt", ".asm", ".drw"],
+                "dry_run": True,
+                "floors": [{"logical_path": "shaft.prt", "min_keep": 3}],
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["deleted"] == 2
+        assert {item["filename"] for item in body["ok"]} == {"shaft.prt", "shaft.prt.1"}
+        assert (cache / "shaft.prt").is_file()
+        assert (cache / "shaft.prt.1").is_file()
+        assert (cache / "shaft.prt.3").is_file()
