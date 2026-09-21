@@ -1925,7 +1925,7 @@
       el.hidden = !hostedCreoJS();
     });
     const pill = $("#creo-status");
-    if (!pill || !hostedCreoJS()) return;
+    if (!pill || !hostedCreoJS()) return null;
     const modeKey = creoOpenMode() || "association";
     const modeName = modeKey === "embedded" ? "Embedded" : modeKey === "association" ? "OS" : modeKey;
     if (modeKey === "embedded") {
@@ -1940,11 +1940,12 @@
         pill.title =
           "Creo session is open, but creopdm-agent is not running on this PC. Start creopdm-agent-tray for Embedded open.";
       }
-      return;
+      return agent;
     }
     pill.textContent = `Creo: Connected · ${modeName}`;
     pill.dataset.state = "ok";
     pill.title = "Opens Creo models as a browser download for the OS association";
+    return null;
   }
 
   function showCreoSessionControls() {
@@ -1952,14 +1953,15 @@
   }
   void creoJSReady.then(() => {
     void (async () => {
-      await refreshCreoStatusPill();
-      const agent = await probeCreoAgent();
-      let seconds = 5;
+      // One /health on load. Repeat only when agent Settings → Browser status poll > 0.
+      // Do not default to 5s: missing field or offline agent must not spam /health.
+      let agent = await refreshCreoStatusPill();
+      if (!agent) agent = await probeCreoAgent();
+      let seconds = 0;
       if (agent && Object.prototype.hasOwnProperty.call(agent, "status_poll_interval_seconds")) {
         const parsed = Number(agent.status_poll_interval_seconds);
-        seconds = Number.isFinite(parsed) ? parsed : 5;
+        seconds = Number.isFinite(parsed) ? parsed : 0;
       }
-      // 0 from agent Settings → Browser status poll: check once, then stop.
       if (seconds > 0) {
         const interval = Math.min(120000, Math.max(1000, Math.round(seconds * 1000)));
         window.setInterval(() => {

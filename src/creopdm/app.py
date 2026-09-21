@@ -114,4 +114,13 @@ def create_app(context: AppContext | None = None) -> FastAPI:
     static_dir = PACKAGE_DIR / "static"
     static_dir.mkdir(exist_ok=True)
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    @app.middleware("http")
+    async def no_store_app_js(request, call_next):
+        response = await call_next(request)
+        path = request.url.path or ""
+        if path.endswith("/static/js/app.js") or path == "/static/js/app.js":
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     return app
