@@ -41,6 +41,7 @@ def test_agent_health_and_materialize(tmp_path, monkeypatch):
         assert health.status_code == 200
         assert health.json()["ok"] is True
         assert health.json()["app"] == "creopdm-agent"
+        assert "status_poll_interval_seconds" in health.json()
         saved = client.post(
             "/materialize",
             json={

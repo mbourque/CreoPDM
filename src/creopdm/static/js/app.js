@@ -1951,10 +1951,22 @@
     void refreshCreoStatusPill();
   }
   void creoJSReady.then(() => {
-    void refreshCreoStatusPill();
-    window.setInterval(() => {
-      void refreshCreoStatusPill();
-    }, 5000);
+    void (async () => {
+      await refreshCreoStatusPill();
+      const agent = await probeCreoAgent();
+      let seconds = 5;
+      if (agent && Object.prototype.hasOwnProperty.call(agent, "status_poll_interval_seconds")) {
+        const parsed = Number(agent.status_poll_interval_seconds);
+        seconds = Number.isFinite(parsed) ? parsed : 5;
+      }
+      // 0 from agent Settings → Browser status poll: check once, then stop.
+      if (seconds > 0) {
+        const interval = Math.min(120000, Math.max(1000, Math.round(seconds * 1000)));
+        window.setInterval(() => {
+          void refreshCreoStatusPill();
+        }, interval);
+      }
+    })();
   });
 
   async function agentWorkdir(projectId) {
@@ -2031,7 +2043,8 @@
   }
 
   function agentBase() {
-    return "http://127.0.0.1:8766";
+    const fromBody = (document.body?.dataset?.agentBase || "").trim();
+    return fromBody || "http://127.0.0.1:8766";
   }
 
   async function probeCreoAgent() {
@@ -2998,6 +3011,13 @@
         const parsed = Number.parseInt(raw, 10);
         return Number.isFinite(parsed) ? parsed : 0;
       })(),
+      agent_base_url: String(data.get("agent_base_url") || "").trim(),
+      workspace_poll_interval_ms: (() => {
+        const raw = String(data.get("workspace_poll_interval_ms") || "").trim();
+        if (!raw) return 2000;
+        const parsed = Number.parseInt(raw, 10);
+        return Number.isFinite(parsed) ? parsed : 2000;
+      })(),
     };
     const response = await fetch("/api/settings", {
       method: "PUT",
@@ -3170,7 +3190,9 @@
   }
 
   if (watchProjectId) {
-    setInterval(pollWorkspaceWatch, 2000);
+    const pollMsRaw = Number.parseInt(document.body?.dataset?.workspacePollMs || "2000", 10);
+    const pollMs = Number.isFinite(pollMsRaw) ? Math.min(120000, Math.max(500, pollMsRaw)) : 2000;
+    setInterval(pollWorkspaceWatch, pollMs);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) pollWorkspaceWatch();
     });

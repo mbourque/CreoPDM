@@ -113,6 +113,29 @@ class UiConfig(BaseModel):
     open_browser_on_start: bool = True
     last_project_uuid: str | None = None
     project_folders: dict[str, str] = Field(default_factory=dict)
+    # Embedded Creo browser calls this local agent (materialize / open).
+    agent_base_url: str = "http://127.0.0.1:8766"
+    # How often the project page polls workspace-watch for pending saves / new files.
+    workspace_poll_interval_ms: int = 2000
+
+    @field_validator("agent_base_url")
+    @classmethod
+    def normalize_agent_base_url(cls, value: object) -> str:
+        text = str(value or "").strip().rstrip("/")
+        return text or "http://127.0.0.1:8766"
+
+    @field_validator("workspace_poll_interval_ms")
+    @classmethod
+    def normalize_workspace_poll(cls, value: object) -> int:
+        try:
+            ms = int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Workspace poll interval must be an integer.") from exc
+        if ms < 500:
+            return 500
+        if ms > 120_000:
+            return 120_000
+        return ms
 
 
 def _normalize_extension_list(value: object, default: tuple[str, ...] | list[str]) -> list[str]:

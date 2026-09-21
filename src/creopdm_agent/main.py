@@ -11,7 +11,7 @@ from pathlib import Path
 import uvicorn
 
 from creopdm_agent import __version__
-from creopdm_agent.config import DEFAULT_PORT, load_config, save_config
+from creopdm_agent.config import DEFAULT_HEALTH_INTERVAL_SECONDS, DEFAULT_PORT, DEFAULT_STATUS_POLL_INTERVAL_SECONDS, load_config, save_config
 from creopdm_agent.server import create_agent_app
 
 # Windows: spawn without attaching a console window.
@@ -54,9 +54,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional bearer token when CreoPDM requires auth.",
     )
     parser.add_argument(
+        "--health-interval",
+        type=int,
+        default=None,
+        help=(
+            "Seconds between tray health checks of the local agent and CreoPDM "
+            f"(default {DEFAULT_HEALTH_INTERVAL_SECONDS}; 0 = Status menu only)."
+        ),
+    )
+    parser.add_argument(
+        "--status-poll-interval",
+        type=int,
+        default=None,
+        help=(
+            "Seconds between CreoPDM page /health checks for the status pill "
+            f"(default {DEFAULT_STATUS_POLL_INTERVAL_SECONDS}; 0 = once on load)."
+        ),
+    )
+    parser.add_argument(
         "--save-config",
         action="store_true",
         help="Write the resolved settings to the agent config file and exit.",
+    )
+    parser.add_argument(
+        "--settings",
+        action="store_true",
+        help="Open the agent settings dialog and exit.",
     )
     parser.add_argument(
         "--tray",
@@ -77,6 +100,10 @@ def _apply_args(settings, args) -> None:
         settings.local_root = args.root.strip()
     if args.token is not None:
         settings.token = args.token.strip()
+    if args.health_interval is not None:
+        settings.health_interval_seconds = int(args.health_interval)
+    if getattr(args, "status_poll_interval", None) is not None:
+        settings.status_poll_interval_seconds = int(args.status_poll_interval)
 
 
 def _windows_tray_without_console(argv: list[str] | None) -> bool:
@@ -108,6 +135,10 @@ def main(argv: list[str] | None = None) -> int:
     settings = load_config()
     _apply_args(settings, args)
     settings.ensure_dirs()
+    if args.settings:
+        from creopdm_agent.settingsui import run_settings
+
+        return run_settings(settings)
     if args.save_config:
         save_config(settings)
         print(f"Saved agent config for port {settings.port}")

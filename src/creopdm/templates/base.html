@@ -6,7 +6,10 @@
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-folder2">
 </head>
-<body>
+<body
+  data-agent-base="{{ agent_base_url | default('http://127.0.0.1:8766') }}"
+  data-workspace-poll-ms="{{ workspace_poll_interval_ms | default('2000') }}"
+>
   <header class="topbar">
     <a class="brand" href="/">
       <span class="brand-mark" aria-hidden="true"></span>
@@ -418,6 +421,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/static/js/app.js?v={{ app_version }}-open74"></script>
+  <script src="/static/js/app.js?v={{ app_version }}-open75"></script>
 </body>
 </html>

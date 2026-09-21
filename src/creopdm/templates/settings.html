@@ -103,7 +103,19 @@
       <label>Port
         <input name="port" type="number" min="0" max="65535" step="1" value="{{ settings.port }}" placeholder="0">
       </label>
-      <p class="muted small">0 = automatic.</p>
+      <p class="muted small">0 = automatic. The agent tray calls this CreoPDM server over HTTP — CreoPDM does not open a special inbound port for the tray.</p>
+    </section>
+
+    <section class="settings-card">
+      <h2>Local Creo agent</h2>
+      <p class="muted small">When this page runs inside Creo’s browser, open/materialize calls the local <code>creopdm-agent</code> on the Creo PC. Change this if the agent listen port is not 8766. Workspace refresh controls how often the file list checks for pending saves and new files.</p>
+      <label>Agent base URL
+        <input name="agent_base_url" type="text" value="{{ settings.agent_base_url }}" placeholder="http://127.0.0.1:8766" autocomplete="off">
+      </label>
+      <label>Workspace refresh interval (ms)
+        <input name="workspace_poll_interval_ms" type="number" min="500" max="120000" step="100" value="{{ settings.workspace_poll_interval_ms }}" placeholder="2000">
+      </label>
+      <p class="muted small">500–120000 ms. Default 2000. Reload the project page after saving.</p>
     </section>
 
     <section class="settings-card">

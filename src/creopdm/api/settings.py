@@ -62,6 +62,8 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         database_url=ctx.config.database_url(),
         default_database_url=ctx.config.default_sqlite_url(),
         port=settings.server.port,
+        agent_base_url=settings.ui.agent_base_url,
+        workspace_poll_interval_ms=settings.ui.workspace_poll_interval_ms,
     )
 
 
@@ -182,5 +184,9 @@ def update_settings(
         current.database.url = "" if not text or text == default else text
     if payload.port is not None:
         current.server.port = payload.port
+    if payload.agent_base_url is not None:
+        current.ui.agent_base_url = payload.agent_base_url
+    if payload.workspace_poll_interval_ms is not None:
+        current.ui.workspace_poll_interval_ms = payload.workspace_poll_interval_ms
     apply_settings(ctx, current)
     return settings_to_response(ctx)

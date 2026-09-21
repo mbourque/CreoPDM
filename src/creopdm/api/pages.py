@@ -69,6 +69,8 @@ _PAGE_DEFAULTS = {
     "creo_open_mode": "association",
     "creo_open_title": "Opens Creo models as a browser download for the OS association",
     "native_picker": False,
+    "agent_base_url": "http://127.0.0.1:8766",
+    "workspace_poll_interval_ms": "2000",
 }
 
 _CREO_OPEN_NAMES = {
@@ -175,6 +177,8 @@ def _creo_page(ctx: AppContext) -> dict[str, str | None]:
         "creo_open_mode": mode,
         "creo_open_name": _creo_open_name(mode),
         "creo_open_title": _creo_open_title(ctx, mode),
+        "agent_base_url": ctx.settings.ui.agent_base_url,
+        "workspace_poll_interval_ms": str(ctx.settings.ui.workspace_poll_interval_ms),
     }
     _CREO_PAGE_CACHE = (now, stamp, payload)
     return payload

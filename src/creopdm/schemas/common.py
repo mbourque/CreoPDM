@@ -309,6 +309,8 @@ class SettingsResponse(BaseModel):
     database_url: str = ""
     default_database_url: str = ""
     port: int = 0
+    agent_base_url: str = "http://127.0.0.1:8766"
+    workspace_poll_interval_ms: int = 2000
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -328,6 +330,8 @@ class SettingsUpdateRequest(BaseModel):
     ignore_patterns: list[str] | None = None
     database_url: str | None = None
     port: int | None = None
+    agent_base_url: str | None = None
+    workspace_poll_interval_ms: int | None = None
 
     @field_validator("creo_open_mode")
     @classmethod
@@ -432,3 +436,27 @@ class SettingsUpdateRequest(BaseModel):
         if not 0 <= int(value) <= 65535:
             raise ValueError("Port must be 0 (automatic) or 1–65535.")
         return int(value)
+
+    @field_validator("agent_base_url")
+    @classmethod
+    def valid_agent_base_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip().rstrip("/")
+        if not text:
+            return "http://127.0.0.1:8766"
+        if "://" not in text:
+            raise ValueError("Agent base URL must include a scheme, e.g. http://127.0.0.1:8766")
+        return text
+
+    @field_validator("workspace_poll_interval_ms")
+    @classmethod
+    def valid_workspace_poll(cls, value: int | None) -> int | None:
+        if value is None:
+            return None
+        ms = int(value)
+        if ms < 500:
+            return 500
+        if ms > 120_000:
+            return 120_000
+        return ms

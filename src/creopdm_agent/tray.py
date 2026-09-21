@@ -13,10 +13,16 @@ import httpx
 import uvicorn
 
 from creopdm_agent import __version__
-from creopdm_agent.config import AgentConfig, default_data_dir
+from creopdm_agent.config import (
+    AgentConfig,
+    apply_runtime_settings,
+    default_data_dir,
+    load_config,
+)
 from creopdm_agent.logbuf import LogBuffer, install_log_buffer, uvicorn_log_config
 from creopdm_agent.logui import open_log_window
 from creopdm_agent.server import create_agent_app
+from creopdm_agent.settingsui import open_settings_window
 
 logger = logging.getLogger("creopdm_agent")
 
@@ -88,6 +94,26 @@ def _make_icon():
     return image
 
 
+def _probe_pdm(pdm_url: str, token: str = "") -> str:
+    base = (pdm_url or "").strip().rstrip("/")
+    if not base:
+        return "PDM: (not set — UI sends page origin on open)"
+    headers = {}
+    if token.strip():
+        headers["Authorization"] = f"Bearer {token.strip()}"
+    try:
+        response = httpx.get(f"{base}/api/health", headers=headers, timeout=1.5)
+        if response.status_code == 200:
+            data = response.json()
+            name = data.get("name") or data.get("app") or "CreoPDM"
+            version = data.get("version") or ""
+            label = f"{name} {version}".strip()
+            return f"PDM: OK ({label}) @ {base}"
+        return f"PDM: HTTP {response.status_code} @ {base}"
+    except Exception as exc:
+        return f"PDM: unreachable ({exc}) @ {base}"
+
+
 def run_tray(settings: AgentConfig) -> int:
     hide_console_window()
     # Uvicorn/logging can attach a console a moment later — hide again.
@@ -122,6 +148,8 @@ def run_tray(settings: AgentConfig) -> int:
         log_config=uvicorn_log_config(),
     )
     server = uvicorn.Server(config)
+    stop_health = threading.Event()
+    icon_holder: dict[str, object] = {}
 
     def serve() -> None:
         # dictConfig may replace handlers — keep our buffer attached.
@@ -132,6 +160,12 @@ def run_tray(settings: AgentConfig) -> int:
             settings.port,
             settings.resolved_root(),
         )
+        if settings.pdm_url:
+            logger.info("Default CreoPDM URL %s", settings.pdm_url)
+        logger.info(
+            "Health interval %ss (0 = Status menu only)",
+            settings.health_interval_seconds,
+        )
         logger.info("Log file %s", log_path)
         server.run()
 
@@ -139,18 +173,28 @@ def run_tray(settings: AgentConfig) -> int:
     thread.start()
 
     url = f"http://{settings.host}:{settings.port}"
-    root = settings.resolved_root()
+
+    def _reload_runtime() -> None:
+        try:
+            fresh = load_config()
+            notes = apply_runtime_settings(settings, fresh)
+            for note in notes:
+                logger.info("%s", note)
+        except Exception:
+            logger.exception("Could not reload agent settings")
 
     def _status_lines() -> tuple[bool, str]:
-        # Prefer a quick local summary so the menu never feels dead if HTTP stalls.
+        _reload_runtime()
+        root = settings.resolved_root()
         lines = [
             "Status: running",
-            f"Port: {settings.port}",
+            f"Listen: {settings.host}:{settings.port}",
             f"Version: {__version__}",
             f"Cache: {root}",
+            f"Health interval: {settings.health_interval_seconds}s",
+            f"Browser status poll: {settings.status_poll_interval_seconds}s",
         ]
-        if settings.pdm_url:
-            lines.append(f"PDM: {settings.pdm_url}")
+        lines.append(_probe_pdm(settings.pdm_url, settings.token))
         try:
             response = httpx.get(f"{url}/health", timeout=0.75)
             data = response.json()
@@ -166,18 +210,64 @@ def run_tray(settings: AgentConfig) -> int:
             lines.append(str(exc))
             return True, "\n".join(lines)
 
+    def _update_tooltip(ok: bool, detail: str = "") -> None:
+        icon = icon_holder.get("icon")
+        if icon is None:
+            return
+        state = "OK" if ok else "Error"
+        title = f"CreoPDM agent — {state} (:{settings.port})"
+        if detail:
+            title = f"{title} — {detail}"
+        try:
+            icon.title = title[:120]
+        except Exception:
+            pass
+
+    def _health_loop() -> None:
+        while not stop_health.wait(0.5):
+            _reload_runtime()
+            interval = int(settings.health_interval_seconds or 0)
+            if interval <= 0:
+                # Sleep a bit then re-check settings (user may enable interval).
+                if stop_health.wait(5):
+                    break
+                continue
+            ok, text = _status_lines()
+            pdm_line = next((line for line in text.splitlines() if line.startswith("PDM:")), "")
+            detail = ""
+            if "PDM: OK" in pdm_line:
+                detail = "PDM OK"
+            elif "PDM: (not set" in pdm_line:
+                detail = "PDM unset"
+            elif pdm_line:
+                detail = "PDM issue"
+            _update_tooltip(ok and ("PDM: OK" in pdm_line or "PDM: (not set" in pdm_line), detail)
+            # Wait the configured interval, but wake early on stop.
+            stop_health.wait(interval)
+
+    health_thread = threading.Thread(target=_health_loop, name="creopdm-agent-health", daemon=True)
+    health_thread.start()
+
     def on_show_status(icon: object, item: object) -> None:
         # Defer past the tray menu callback — a modal MessageBox here can ignore OK.
         def show() -> None:
             ok, text = _status_lines()
             title = "CreoPDM agent" if ok else "CreoPDM agent — problem"
-            try:
-                icon.title = f"CreoPDM agent — {'OK' if ok else 'Error'} (:{settings.port})"
-            except Exception:
-                pass
+            _update_tooltip(ok)
             _message_box(title, text)
 
         threading.Timer(0.2, show).start()
+
+    def on_settings(icon: object, item: object) -> None:
+        def after_save() -> None:
+            _reload_runtime()
+            logger.info(
+                "Settings reloaded (PDM %s, health %ss)",
+                settings.pdm_url or "(unset)",
+                settings.health_interval_seconds,
+            )
+
+        open_settings_window(settings, on_saved=after_save)
 
     def on_show_logs(icon: object, item: object) -> None:
         try:
@@ -190,11 +280,12 @@ def run_tray(settings: AgentConfig) -> int:
             )
 
     def on_open_cache(icon: object, item: object) -> None:
-        path = Path(root)
+        path = Path(settings.resolved_root())
         path.mkdir(parents=True, exist_ok=True)
         webbrowser.open(path.as_uri())
 
     def on_quit(icon: object, item: object) -> None:
+        stop_health.set()
         server.should_exit = True
         logger.info("Stopping agent")
         icon.stop()
@@ -204,6 +295,7 @@ def run_tray(settings: AgentConfig) -> int:
         Item(f"Listening on {settings.port}", None, enabled=False),
         pystray.Menu.SEPARATOR,
         Item("Show status", on_show_status),
+        Item("Settings…", on_settings),
         Item("Show logs", on_show_logs),
         Item("Open cache folder", on_open_cache),
         pystray.Menu.SEPARATOR,
@@ -215,5 +307,7 @@ def run_tray(settings: AgentConfig) -> int:
         f"CreoPDM agent (:{settings.port})",
         menu,
     )
+    icon_holder["icon"] = icon
     icon.run()
+    stop_health.set()
     return 0
