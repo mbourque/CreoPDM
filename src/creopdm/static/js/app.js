@@ -240,7 +240,7 @@
       row.dataset.canCheckout = "1";
       if (item.filename) {
         row.dataset.filename = item.filename;
-        const openBtn = row.querySelector("button.object-open");
+        const openBtn = row.querySelector(".object-open");
         if (openBtn) {
           openBtn.textContent = item.filename;
           openBtn.title = item.filename;
@@ -3298,14 +3298,16 @@
           const cell = document.createElement("td");
           if (index === 1) {
             cell.className = "filename-cell";
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = "object-open";
-            btn.textContent = filename;
-            btn.title = filename;
-            if (meta.uuid) btn.dataset.uuid = meta.uuid;
-            if (meta.relativePath) btn.dataset.relativePath = meta.relativePath;
-            cell.appendChild(btn);
+            // Use a span — Creo/CEF paints an opaque fill on <button> that shows as a white band.
+            const link = document.createElement("span");
+            link.className = "object-open";
+            link.setAttribute("role", "link");
+            link.tabIndex = 0;
+            link.textContent = filename;
+            link.title = filename;
+            if (meta.uuid) link.dataset.uuid = meta.uuid;
+            if (meta.relativePath) link.dataset.relativePath = meta.relativePath;
+            cell.appendChild(link);
             const noteText = meta.recordedFilename
               ? `from ${meta.recordedFilename}`
               : meta.relativePath && meta.relativePath !== filename

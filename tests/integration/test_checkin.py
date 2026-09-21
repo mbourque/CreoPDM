@@ -399,7 +399,7 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     assert re.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", str(bushing["saved_at"]))
     script = client.get("/static/js/app.js")
     assert script.status_code == 200
-    assert 'btn.className = "object-open"' in script.text
+    assert 'link.className = "object-open"' in script.text
     assert "relative_path: spec.relativePath" in script.text
     assert "confirmByProjectName" in script.text
     assert "Type the project name exactly to confirm." in script.text

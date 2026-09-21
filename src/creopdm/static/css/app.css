@@ -468,14 +468,13 @@ tr.is-row-hidden { display: none !important; }
   width: auto;
   white-space: normal;
 }
-#changes-table .filename-cell,
-#changes-table .filename-cell .object-open,
-#changes-table .filename-cell .muted.small {
+#changes-table .filename-cell {
   display: block;
   text-align: left;
 }
 #changes-table .filename-cell .object-open {
-  /* Creo/CEF keeps a solid button fill; that shows as a white band once the row is selected. */
+  display: inline;
+  text-align: left;
   background: transparent !important;
   background-color: transparent !important;
   padding: 0;
@@ -485,6 +484,8 @@ tr.is-row-hidden { display: none !important; }
   box-shadow: none;
 }
 #changes-table .filename-cell .muted.small {
+  display: block;
+  text-align: left;
   margin: 0.12rem 0 0;
   background: transparent;
 }
@@ -527,7 +528,8 @@ button.folder-open:hover .folder-name { text-decoration: underline; }
   font-weight: 600;
   cursor: pointer;
 }
-button.object-open {
+button.object-open,
+span.object-open {
   background: transparent !important;
   background-color: transparent !important;
   border: none;
@@ -535,11 +537,14 @@ button.object-open {
   margin: 0;
   font: inherit;
   font-weight: 600;
+  font-family: inherit;
   color: var(--accent-2);
   cursor: pointer;
   box-shadow: none;
+  display: inline;
 }
-button.object-open:hover { text-decoration: underline; }
+button.object-open:hover,
+span.object-open:hover { text-decoration: underline; }
 .detail-head .object-open { font-size: inherit; color: inherit; }
 .grid tr.is-latest td { background: #eef6f1; }
 .grid tr.is-pending td { background: #fff6e8; }

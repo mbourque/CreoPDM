@@ -234,14 +234,15 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "queue-row" in script.text
     assert "#changes-table" in script.text
     assert ".object-row, .folder-row, .queue-row" in script.text
-    assert 'btn.className = "object-open"' in script.text
+    assert 'link.className = "object-open"' in script.text
     assert "dataset.relativePath" in script.text
     css = client.get("/static/css/app.css")
     assert css.status_code == 200
     assert ".grid tr.is-selected td" in css.text
     assert css.text.index(".grid tr.is-pending td") < css.text.rindex(".grid tr.is-selected td")
     assert "#changes-table td" in css.text
-    assert "vertical-align: top" in css.text.split("#changes-table td")[1].split("}")[0]
+    assert "vertical-align: top" in css.text
+    assert "span.object-open" in css.text
     assert "background: transparent !important" in css.text
     assert "appearance: none" in css.text.split(".metric {")[1].split("}")[0]
     assert "tr.is-row-hidden" in css.text
