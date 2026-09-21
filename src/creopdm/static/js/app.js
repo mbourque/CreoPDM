@@ -813,6 +813,39 @@
     return match ? match[1] : text;
   }
 
+  function purgeableExtensionSet() {
+    const raw = document.getElementById("metric-filters")?.dataset?.purgeable || "";
+    return new Set(
+      raw
+        .split(/[\s,;]+/)
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean)
+        .map((item) => (item.startsWith(".") ? item : `.${item}`))
+    );
+  }
+
+  function isPurgeableVersionedExtension(extension) {
+    const key = String(extension || "").trim().toLowerCase();
+    if (!key) return false;
+    const dotted = key.startsWith(".") ? key : `.${key}`;
+    return purgeableExtensionSet().has(dotted);
+  }
+
+  function creoSaveNumber(filename) {
+    const name = PathBasename(filename);
+    const parts = name.split(".");
+    if (parts.length < 3 || !parts[0]) return 0;
+    const last = parts[parts.length - 1];
+    const prev = parts[parts.length - 2];
+    if (/^\d+$/.test(last) && isPurgeableVersionedExtension(`.${prev}`)) {
+      return Number.parseInt(last, 10) || 0;
+    }
+    if (/^\d+$/.test(prev) && isPurgeableVersionedExtension(`.${last}`)) {
+      return Number.parseInt(prev, 10) || 0;
+    }
+    return 0;
+  }
+
   function uploadExtension(name) {
     const logical = logicalUploadName(PathBasename(name)).toLowerCase();
     const dot = logical.lastIndexOf(".");
@@ -2447,6 +2480,46 @@
     return created;
   }
 
+  function newerLocalCacheSaves(cacheFiles, objects) {
+    const bestByLogical = new Map();
+    (cacheFiles || []).forEach((item) => {
+      const rel = String(item.relative_path || "").replace(/\\/g, "/");
+      if (!rel) return;
+      const key = logicalRelativePath(rel).toLowerCase();
+      const filename = item.filename || PathBasename(rel);
+      const saveNumber = creoSaveNumber(filename);
+      const prev = bestByLogical.get(key);
+      if (!prev || saveNumber > prev.saveNumber) {
+        bestByLogical.set(key, { item, rel, filename, saveNumber });
+      }
+    });
+    const rows = [];
+    (Array.isArray(objects) ? objects : []).forEach((obj) => {
+      const vaultRel = String(obj.relative_path || obj.filename || "").replace(/\\/g, "/");
+      if (!vaultRel) return;
+      const key = logicalRelativePath(vaultRel).toLowerCase();
+      const local = bestByLogical.get(key);
+      if (!local) return;
+      const vaultNumber = creoSaveNumber(obj.filename || PathBasename(vaultRel));
+      if (local.saveNumber <= vaultNumber) return;
+      rows.push({
+        uuid: obj.uuid,
+        filename: local.filename,
+        recorded_filename: obj.filename || PathBasename(vaultRel),
+        object_type: obj.object_type,
+        relative_path: local.rel,
+        size: local.item.size,
+        saved_at: local.item.saved_at || "",
+        local_cache: true,
+        newer_save: true,
+        checked_out: obj.owned_by_me ? "1" : "0",
+        can_checkin: obj.can_checkin ? "1" : "0",
+        can_checkout: obj.can_checkout ? "1" : "0",
+      });
+    });
+    return rows;
+  }
+
   async function countLocalNewWorkspaceFiles(projectId) {
     if (!projectId) return 0;
     const [cacheFiles, known] = await Promise.all([
@@ -2776,6 +2849,14 @@
       } else {
         owned.forEach((row) => {
           if (row.dataset.uuid) {
+            pushItems.push({
+              object_id: row.dataset.uuid,
+              filename: row.dataset.filename || "",
+            });
+          }
+        });
+        queued.forEach((row) => {
+          if (row.dataset.uuid && row.dataset.localCache === "1") {
             pushItems.push({
               object_id: row.dataset.uuid,
               filename: row.dataset.filename || "",
@@ -3575,12 +3656,16 @@
     body.appendChild(loading);
     refreshTabMetrics();
     try {
-      const [queueResponse, cacheFiles] = await Promise.all([
+      const [queueResponse, cacheFiles, objectsResponse] = await Promise.all([
         fetch(`/api/projects/${projectId}/checkin-queue`),
         listAgentCacheFiles(projectId),
+        fetch(`/api/projects/${encodeURIComponent(projectId)}/objects`),
       ]);
       if (!queueResponse.ok) throw new Error("queue");
       const data = await queueResponse.json();
+      const objects = objectsResponse.ok
+        ? await objectsResponse.json().catch(() => [])
+        : [];
       const saves = data.saves || [];
       const vaultNew = data.new_files || [];
       const known = await loadKnownWorkspacePaths(
@@ -3588,9 +3673,15 @@
         vaultNew.map((item) => item.relative_path || "")
       );
       const created = [...vaultNew, ...localOnlyCacheFiles(cacheFiles, known)];
-      const pending = saves.length + created.length;
+      const vaultSaveIds = new Set(
+        saves.map((item) => String(item.uuid || "")).filter(Boolean)
+      );
+      const newerLocal = newerLocalCacheSaves(cacheFiles, objects).filter(
+        (item) => !vaultSaveIds.has(String(item.uuid || ""))
+      );
+      const pending = saves.length + created.length + newerLocal.length;
       if (tab) tab.textContent = pending ? `New files · ${pending}` : "New files";
-      setCheckinQueueCounts(saves.length, created.length);
+      setCheckinQueueCounts(saves.length + newerLocal.length, created.length);
       body.replaceChildren();
       if (!pending) {
         const row = document.createElement("tr");
@@ -3613,7 +3704,8 @@
         row.dataset.extension = ext;
         row.dataset.objectType = meta.objectType || typeFromExtension(ext);
         row.dataset.checkedOut = meta.checkedOut || "0";
-        row.dataset.canCheckin = "1";
+        row.dataset.canCheckin = meta.canCheckin || "1";
+        row.dataset.canCheckout = meta.canCheckout || "0";
         row.dataset.inWorkspace = "1";
         if (meta.uuid) row.dataset.uuid = meta.uuid;
         if (meta.relativePath) row.dataset.relativePath = meta.relativePath;
@@ -3669,6 +3761,31 @@
             objectType: item.object_type,
             checkedOut: "1",
             recordedFilename: item.newer_save ? item.recorded_filename : "",
+          }
+        );
+      });
+      newerLocal.forEach((item) => {
+        addRow(
+          [
+            "Newer local save",
+            item.filename || "",
+            item.can_checkin === "1"
+              ? "Local workspace — select and Check In."
+              : "Local workspace — check out to Check In.",
+            item.size != null ? formatByteSize(item.size) : "",
+            item.saved_at || "—",
+          ],
+          "is-pending",
+          {
+            filename: item.filename,
+            uuid: item.uuid,
+            objectType: item.object_type,
+            relativePath: item.relative_path,
+            localCache: true,
+            checkedOut: item.checked_out || "0",
+            canCheckin: item.can_checkin || "0",
+            canCheckout: item.can_checkout || "0",
+            recordedFilename: item.recorded_filename || "",
           }
         );
       });
@@ -3823,6 +3940,10 @@
         .map((item) => item.trim())
         .filter(Boolean),
       cad_extensions: String(data.get("cad_extensions") || "")
+        .split(/[\s,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+      purgeable_extensions: String(data.get("purgeable_extensions") || "")
         .split(/[\s,;]+/)
         .map((item) => item.trim())
         .filter(Boolean),

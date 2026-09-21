@@ -523,6 +523,33 @@ DEFAULT_OPENABLE_CAD_EXTENSIONS = (
     ".lst",
 )
 
+# Local agent-cache Purge workspace: only these extensions get vault floors.
+DEFAULT_PURGEABLE_EXTENSIONS = (
+    ".asm",
+    ".dat",
+    ".drw",
+    ".err",
+    ".frm",
+    ".gph",
+    ".inf",
+    ".log",
+    ".lsl",
+    ".lst",
+    ".mat",
+    ".mrd",
+    ".ncl",
+    ".neu",
+    ".prt",
+    ".sec",
+    ".sym",
+    ".tbl",
+    ".tph",
+    ".txt",
+    ".xml",
+)
+
+PREVIOUS_DEFAULT_PURGEABLE_SETS: tuple[frozenset[str], ...] = ()
+
 DEFAULT_EXTRA_CAD_EXTENSIONS = (
     ".tph",
     ".inf",

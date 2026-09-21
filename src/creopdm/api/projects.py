@@ -275,19 +275,20 @@ def workspace_purge_floors(
     ctx: AppContext = Depends(get_context),
 ) -> PurgeFloorsResponse:
     """Vault save floors for Purge workspace (local agent deletes only older cache saves)."""
-    from creopdm.utils.classify import is_creo_openable
+    from creopdm.utils.classify import extra_cad_set
 
     project = ctx.projects.get_project(db, project_id)
-    models = ctx.config.model_cad_extensions()
-    extras = ctx.config.data_cad_extensions()
+    purgeable = ctx.config.purgeable_cad_extensions()
+    allowed = extra_cad_set(purgeable)
     floors: list[PurgeFloorItem] = []
     for obj in ctx.objects.list_objects(db, project.id):
-        if not is_creo_openable(obj.filename, models, extras):
+        logical_name = CreoFileManager.logical_filename(obj.filename, purgeable)
+        if Path(logical_name).suffix.lower() not in allowed:
             continue
-        min_keep = CreoFileManager.save_number(obj.filename, models)
+        min_keep = CreoFileManager.save_number(obj.filename, purgeable)
         if min_keep <= 0:
             continue
-        logical_path = CreoFileManager.logical_repo_path(obj.relative_path, models)
+        logical_path = CreoFileManager.logical_repo_path(obj.relative_path, purgeable)
         floors.append(
             PurgeFloorItem(
                 logical_path=logical_path,
@@ -297,7 +298,7 @@ def workspace_purge_floors(
             )
         )
     floors.sort(key=lambda item: item.logical_path.lower())
-    return PurgeFloorsResponse(floors=floors, model_extensions=list(models))
+    return PurgeFloorsResponse(floors=floors, model_extensions=list(purgeable))
 
 
 def _picker_filters(ctx: AppContext) -> dict[str, list[str]]:

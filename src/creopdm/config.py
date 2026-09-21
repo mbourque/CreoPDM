@@ -24,11 +24,13 @@ from creopdm.constants import (
     DEFAULT_IGNORE_PATTERNS,
     DEFAULT_LFS_PATTERNS,
     DEFAULT_OPENABLE_CAD_EXTENSIONS,
+    DEFAULT_PURGEABLE_EXTENSIONS,
     DEFAULT_TYPE_LABELS,
     PREVIOUS_DEFAULT_CREO_MODEL_SETS,
     PREVIOUS_DEFAULT_DOCUMENT_SETS,
     PREVIOUS_DEFAULT_EXTRA_CAD_SETS,
     PREVIOUS_DEFAULT_IGNORE_SETS,
+    PREVIOUS_DEFAULT_PURGEABLE_SETS,
     PREVIOUS_DEFAULT_TYPE_LABEL_SETS,
 )
 from creopdm.exceptions import ConfigurationError, PathValidationError
@@ -162,6 +164,7 @@ class CadConfig(BaseModel):
     document_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_DOCUMENT_EXTENSIONS))
     openable_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_OPENABLE_CAD_EXTENSIONS))
     extra_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_EXTRA_CAD_EXTENSIONS))
+    purgeable_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_PURGEABLE_EXTENSIONS))
     type_labels: list[dict[str, str]] = Field(
         default_factory=lambda: unique_type_labels(DEFAULT_TYPE_LABELS)
     )
@@ -190,6 +193,11 @@ class CadConfig(BaseModel):
     @classmethod
     def normalize_extra_extensions(cls, value: object) -> list[str]:
         return _normalize_extension_list(value, DEFAULT_EXTRA_CAD_EXTENSIONS)
+
+    @field_validator("purgeable_extensions", mode="before")
+    @classmethod
+    def normalize_purgeable_extensions(cls, value: object) -> list[str]:
+        return _normalize_extension_list(value, DEFAULT_PURGEABLE_EXTENSIONS)
 
     @field_validator("type_labels", mode="before")
     @classmethod
@@ -568,6 +576,14 @@ class ConfigManager:
         if not isinstance(cad_raw, dict) or "document_extensions" not in cad_raw:
             settings.cad.document_extensions = list(DEFAULT_DOCUMENT_EXTENSIONS)
             dirty = True
+        if not isinstance(cad_raw, dict) or "purgeable_extensions" not in cad_raw:
+            settings.cad.purgeable_extensions = list(DEFAULT_PURGEABLE_EXTENSIONS)
+            dirty = True
+        else:
+            raw_purgeable = extra_cad_set((cad_raw or {}).get("purgeable_extensions"))
+            if raw_purgeable in PREVIOUS_DEFAULT_PURGEABLE_SETS:
+                settings.cad.purgeable_extensions = list(DEFAULT_PURGEABLE_EXTENSIONS)
+                dirty = True
         raw_docs = (
             extra_cad_set((cad_raw or {}).get("document_extensions"))
             if isinstance(cad_raw, dict)
@@ -716,6 +732,12 @@ class ConfigManager:
 
     def data_cad_extensions(self) -> list[str]:
         return unique_extensions((*self.openable_cad_extensions(), *self.extra_cad_extensions()))
+
+    def purgeable_cad_extensions(self) -> list[str]:
+        configured = self.settings.cad.purgeable_extensions
+        if not configured:
+            return list(DEFAULT_PURGEABLE_EXTENSIONS)
+        return unique_extensions(configured)
 
     def all_cad_extensions(self) -> list[str]:
         return unique_extensions((*self.model_cad_extensions(), *self.data_cad_extensions()))

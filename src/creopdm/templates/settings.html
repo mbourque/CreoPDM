@@ -83,6 +83,15 @@
     </section>
 
     <section class="settings-card">
+      <h2>Purge workspace</h2>
+      <p class="muted small">Purge workspace only considers numbered local agent-cache saves for these extensions. It deletes saves older than the vault copy; the vault revision and any newer local work stay. The vault is not changed.</p>
+      <label>Purgeable extensions
+        <textarea name="purgeable_extensions" rows="3" placeholder=".prt, .asm, .tph, .inf">{{ settings.purgeable_extensions | join(', ') }}</textarea>
+      </label>
+      <p class="muted small">Comma-separated, with or without the dot. Default: {{ settings.default_purgeable_extensions | join(', ') }}</p>
+    </section>
+
+    <section class="settings-card">
       <h2>File type names</h2>
       <p class="muted small">Optional labels for the Type column. Use an extension such as <code>.stp, .step</code>, or a file name such as <code>reviewref.inf</code>. If a row is empty or missing, CreoPDM uses the usual names such as Creo Part or Pdf.</p>
       <p><a class="btn" href="/settings/types">Edit type names</a></p>

@@ -14,6 +14,7 @@ from creopdm.constants import (
     DEFAULT_EXTRA_CAD_EXTENSIONS,
     DEFAULT_IGNORE_PATTERNS,
     DEFAULT_OPENABLE_CAD_EXTENSIONS,
+    DEFAULT_PURGEABLE_EXTENSIONS,
     DEFAULT_TYPE_LABELS,
     PREVIOUS_DEFAULT_DOCUMENT_SETS,
     PREVIOUS_DEFAULT_EXTRA_CAD_SETS,
@@ -65,7 +66,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push25" in text
+    assert "push26" in text
     assert 'id="project-menu-btn"' in text
     assert 'id="sidebar-collapse-btn"' in text
     assert 'class="workspace"' in text
@@ -208,6 +209,23 @@ def test_previous_localhost_bind_migrates_to_all_interfaces(tmp_path):
     manager.save(settings)
     loaded = manager.load()
     assert loaded.server.host == "0.0.0.0"
+
+
+def test_missing_purgeable_extensions_migrate_to_defaults(tmp_path):
+    manager = ConfigManager(tmp_path / "appdata")
+    manager.ensure_layout()
+    settings = AppSettings()
+    manager.save(settings)
+    raw_path = manager.settings_path
+    raw = json.loads(raw_path.read_text(encoding="utf-8"))
+    raw.get("cad", {}).pop("purgeable_extensions", None)
+    raw_path.write_text(json.dumps(raw), encoding="utf-8")
+    manager._settings = None
+    loaded = manager.load()
+    assert extra_cad_set(loaded.cad.purgeable_extensions) == extra_cad_set(
+        DEFAULT_PURGEABLE_EXTENSIONS
+    )
+    assert ".tph" in loaded.cad.purgeable_extensions
 
 
 def test_previous_cad_defaults_migrate(tmp_path):

@@ -296,6 +296,7 @@ def home(
             "cad_models_extensions": ctx.config.cad_models_extensions(),
             "cad_model_extensions": ctx.config.model_cad_extensions(),
             "document_extensions": ctx.config.document_extensions(),
+            "purgeable_extensions": ctx.config.purgeable_cad_extensions(),
             "checkin_queue": checkin_queue,
             "checkout_count": checkout_count,
             "pending_saves": pending_saves,

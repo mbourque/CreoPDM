@@ -214,7 +214,8 @@ def _find_cache_file(cache_dir: Path, filename: str) -> Path | None:
     name = Path(filename or "").name.strip()
     if not name or not cache_dir.is_dir():
         return None
-    latest = CreoFileManager.latest_in_directory(cache_dir, name, ())
+    # None → built-in versioned CAD set (models + openable + extras), so .tph.N works.
+    latest = CreoFileManager.latest_in_directory(cache_dir, name, None)
     if latest is not None and latest.is_file():
         return latest
     exact = cache_dir / name

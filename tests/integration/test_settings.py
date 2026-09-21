@@ -87,6 +87,11 @@ def test_get_and_update_settings(client, tmp_path):
     assert ".log" in openable
     assert ".lst" in openable
     assert extra_cad_set(openable) == extra_cad_set(payload["default_cad_openable_extensions"])
+    assert ".tph" in payload["purgeable_extensions"]
+    assert ".prt" in payload["purgeable_extensions"]
+    assert extra_cad_set(payload["purgeable_extensions"]) == extra_cad_set(
+        payload["default_purgeable_extensions"]
+    )
     models = payload["cad_model_extensions"]
     assert ".prt" in models
     assert ".dxf" in models
@@ -224,6 +229,7 @@ def test_get_and_update_settings(client, tmp_path):
         "Creo-openable models",
         "Text files",
         "Non openable CAD data",
+        "Purge workspace",
         "File type names",
         "Ignored files",
         "Network",
@@ -234,6 +240,7 @@ def test_get_and_update_settings(client, tmp_path):
     assert positions == sorted(positions)
     assert 'name="cad_models_extensions"' in page.text
     assert 'name="document_extensions"' in page.text
+    assert 'name="purgeable_extensions"' in page.text
     assert "Comma-separated, with or without the dot." in page.text
     assert "notes.pdf.2" not in page.text
     assert "Default: .pdf, .xps" not in page.text

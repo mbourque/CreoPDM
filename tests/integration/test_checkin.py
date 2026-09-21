@@ -519,9 +519,15 @@ def test_workspace_purge_floors_from_vault_objects(client, repo_parent, data_dir
         data={"comment": "Initial"},
     )
     assert numbered.status_code == 201, numbered.text
+    toolpath = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("op10.tph.1", b"tph1", "application/octet-stream")},
+        data={"comment": "Toolpath"},
+    )
+    assert toolpath.status_code == 201, toolpath.text
     unnumbered = client.post(
         f"/api/projects/{project['uuid']}/objects",
-        files={"file": ("notes.txt", b"txt", "text/plain")},
+        files={"file": ("notes.pdf", b"pdf", "application/pdf")},
         data={"comment": "Doc"},
     )
     assert unnumbered.status_code == 201, unnumbered.text
@@ -536,11 +542,14 @@ def test_workspace_purge_floors_from_vault_objects(client, repo_parent, data_dir
     assert floors.status_code == 200, floors.text
     body = floors.json()
     assert ".prt" in body["model_extensions"]
+    assert ".tph" in body["model_extensions"]
     by_path = {item["logical_path"]: item for item in body["floors"]}
     assert "shaft.prt" in by_path
     assert by_path["shaft.prt"]["min_keep"] == 3
+    assert "op10.tph" in by_path
+    assert by_path["op10.tph"]["min_keep"] == 1
     assert "blank.prt" not in by_path
-    assert "notes.txt" not in by_path
+    assert "notes.pdf" not in by_path
 
 
 @requires_git

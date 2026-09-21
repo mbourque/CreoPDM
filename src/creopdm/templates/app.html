@@ -73,7 +73,7 @@
     </div>
 
     {% if selected and status %}
-    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}">
+    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}">
       <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Select all files and clear type chips. Click again to clear."><strong>{{ status.files }}</strong> Files</button></li>
       <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Select Creo models. Click again to filter. Click a third time to clear."><strong>{{ status.cad_models }}</strong> Creo Models</button></li>
       <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Select parts. Click again to filter. Click a third time to clear."><strong>{{ status.creo_parts }}</strong> Parts</button></li>
@@ -340,7 +340,7 @@
         <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-versions-btn"
                 {% if selected %}data-project="{{ selected.uuid }}" data-project-name="{{ selected.name }}"{% endif %}
                 disabled
-                title="Move local agent-cache Creo model saves older than the vault copy to the Recycle Bin. Keeps the vault revision and any newer local work. Does not change the vault.">Purge workspace</button>
+                title="Move local agent-cache numbered saves older than the vault copy to the Recycle Bin (configured purgeable extensions). Keeps the vault revision and any newer local work. Does not change the vault.">Purge workspace</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn"
                 {% if selected %}data-project-name="{{ selected.name }}"{% endif %}
                 disabled

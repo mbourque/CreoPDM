@@ -325,6 +325,8 @@ class SettingsResponse(BaseModel):
     default_cad_models_extensions: list[str] = Field(default_factory=list)
     document_extensions: list[str] = Field(default_factory=list)
     default_document_extensions: list[str] = Field(default_factory=list)
+    purgeable_extensions: list[str] = Field(default_factory=list)
+    default_purgeable_extensions: list[str] = Field(default_factory=list)
     type_labels: list[dict[str, str]] = Field(default_factory=list)
     ignore_patterns: list[str] = Field(default_factory=list)
     default_ignore_patterns: list[str] = Field(default_factory=list)
@@ -348,6 +350,7 @@ class SettingsUpdateRequest(BaseModel):
     cad_model_extensions: list[str] | None = None
     cad_models_extensions: list[str] | None = None
     document_extensions: list[str] | None = None
+    purgeable_extensions: list[str] | None = None
     type_labels: list[dict[str, str]] | None = None
     ignore_patterns: list[str] | None = None
     database_url: str | None = None
@@ -412,6 +415,15 @@ class SettingsUpdateRequest(BaseModel):
     @field_validator("document_extensions")
     @classmethod
     def valid_document_extensions(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        from creopdm.utils.classify import unique_extensions
+
+        return unique_extensions(value)
+
+    @field_validator("purgeable_extensions")
+    @classmethod
+    def valid_purgeable_extensions(cls, value: list[str] | None) -> list[str] | None:
         if value is None:
             return None
         from creopdm.utils.classify import unique_extensions
