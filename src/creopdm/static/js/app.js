@@ -3569,15 +3569,18 @@
       return;
     }
     const wouldDelete = preview.deleted || preview.ok?.length || 0;
+    if (!wouldDelete) {
+      showOk(
+        "Nothing to purge — no older local saves below the vault revision (vault copy and newer local work are kept)."
+      );
+      return;
+    }
     const confirmed = await confirmByProjectName({
       title: "Purge workspace",
-      lead:
-        wouldDelete > 0
-          ? `About to move ${wouldDelete} older local Creo model save(s) from the agent cache to the Recycle Bin on this PC. The vault revision and any newer local work stay. The vault is not changed.`
-          : "No older local Creo model saves match the vault floors. You can still confirm, but nothing will be deleted.",
+      lead: `About to move ${wouldDelete} older local Creo model save(s) from the agent cache to the Recycle Bin on this PC. The vault revision and any newer local work stay. The vault is not changed.`,
       detailsHtml: formatPurgeConfirmDetails(preview),
       note: "This cannot be undone from CreoPDM. Restore from the Recycle Bin on this PC if needed.",
-      submitLabel: wouldDelete > 0 ? `Purge ${wouldDelete} save(s)` : "Purge workspace",
+      submitLabel: `Purge ${wouldDelete} save(s)`,
     });
     if (!confirmed) return;
     showError($("#toolbar-error"), "");

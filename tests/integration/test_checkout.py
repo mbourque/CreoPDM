@@ -236,6 +236,7 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function purgeLocalVersionsOlderThanVault" in script.text
     assert "function formatPurgeConfirmDetails" in script.text
     assert "function newerLocalCacheSaves" in script.text
+    assert "Nothing to purge — no older local saves below the vault revision" in script.text
     assert "workspace/purge-floors" in script.text
     assert "/purge-versions" in script.text
     assert "dry_run: Boolean(dryRun)" in script.text
