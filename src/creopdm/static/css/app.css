@@ -469,12 +469,10 @@ tr.is-row-hidden { display: none !important; }
   white-space: normal;
 }
 #changes-table .filename-cell {
-  display: block;
   text-align: left;
 }
 #changes-table .filename-cell .object-open {
   display: inline;
-  text-align: left;
   background: transparent !important;
   background-color: transparent !important;
   padding: 0;
