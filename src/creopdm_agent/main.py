@@ -102,7 +102,7 @@ def _apply_args(settings, args) -> None:
         settings.token = args.token.strip()
     if args.health_interval is not None:
         settings.health_interval_seconds = int(args.health_interval)
-    if getattr(args, "status_poll_interval", None) is not None:
+    if args.status_poll_interval is not None:
         settings.status_poll_interval_seconds = int(args.status_poll_interval)
 
 

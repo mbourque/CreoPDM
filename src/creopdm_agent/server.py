@@ -135,13 +135,6 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
 
     @app.get("/health")
     def health() -> dict[str, object]:
-        # Re-read disk so status_poll_interval_seconds is live after Settings save.
-        try:
-            from creopdm_agent.config import apply_runtime_settings, load_config
-
-            apply_runtime_settings(settings, load_config())
-        except Exception:
-            pass
         return {
             "ok": True,
             "app": "creopdm-agent",
@@ -149,7 +142,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             "pdm_url": settings.pdm_url or None,
             "local_root": str(root),
             "port": settings.port,
-            "health_interval_seconds": settings.health_interval_seconds,
+            "health_interval_seconds": int(settings.health_interval_seconds or 0),
             "status_poll_interval_seconds": int(settings.status_poll_interval_seconds or 0),
         }
 

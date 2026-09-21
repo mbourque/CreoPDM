@@ -123,3 +123,22 @@ def test_agent_open_local_creo(tmp_path, monkeypatch):
         assert ok.status_code == 200, ok.text
         assert ok.json()["mode"] == "creo"
         assert started == [(str(parametric), str(target.resolve()), False)]
+
+
+def test_agent_health_reports_status_poll_zero(tmp_path):
+    root = tmp_path / "cache"
+    settings = AgentConfig(
+        host="127.0.0.1",
+        port=8766,
+        local_root=str(root),
+        health_interval_seconds=0,
+        status_poll_interval_seconds=0,
+    )
+    app = create_agent_app(settings)
+    with TestClient(app) as client:
+        health = client.get("/health")
+        assert health.status_code == 200
+        body = health.json()
+        assert body["ok"] is True
+        assert body["health_interval_seconds"] == 0
+        assert body["status_poll_interval_seconds"] == 0
