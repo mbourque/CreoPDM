@@ -336,11 +336,11 @@
         <button type="button" class="toolbar-menu-item" role="menuitem" id="discard-local-btn"
                 {% if selected %}data-project-name="{{ selected.name }}"{% endif %}
                 disabled
-                title="Delete selected files from the local workspace on this PC (creopdm-agent cache). Does not affect the vault or project list.">Remove from Workspace</button>
+                title="Move selected files from the local workspace on this PC (creopdm-agent cache) to the Recycle Bin. Does not affect the vault or project list.">Remove from Workspace</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-versions-btn"
                 {% if selected %}data-project="{{ selected.uuid }}" data-project-name="{{ selected.name }}"{% endif %}
                 disabled
-                title="Delete local agent-cache Creo model saves older than the vault copy. Keeps the vault revision and any newer local work. Does not change the vault.">Purge workspace</button>
+                title="Move local agent-cache Creo model saves older than the vault copy to the Recycle Bin. Keeps the vault revision and any newer local work. Does not change the vault.">Purge workspace</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn"
                 {% if selected %}data-project-name="{{ selected.name }}"{% endif %}
                 disabled

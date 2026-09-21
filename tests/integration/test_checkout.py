@@ -238,6 +238,7 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "workspace/purge-floors" in script.text
     assert "/purge-versions" in script.text
     assert "dry_run: Boolean(dryRun)" in script.text
+    assert "Recycle Bin" in script.text
     assert 'id="danger-confirm-details"' in home.text
     assert "toolbar-menu-panel" in home.text
     assert 'selected.every((row) => row.dataset.canCheckout === "1")' in script.text

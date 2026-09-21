@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from creopdm_agent import __version__
 from creopdm_agent.config import AgentConfig
+from creopdm_agent.trash import move_to_trash
 
 logger = logging.getLogger("creopdm_agent")
 
@@ -551,7 +552,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 )
                 continue
             try:
-                local.unlink()
+                move_to_trash(local)
             except OSError as exc:
                 failed.append(
                     PushItemResult(
@@ -570,7 +571,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     message=rel,
                 )
             )
-            logger.info("Deleted local cache path %s", rel)
+            logger.info("Moved local cache path to trash %s", rel)
         return DeletePathsResponse(ok=ok, failed=failed)
 
     @app.post("/purge-versions", response_model=PurgeVersionsResponse)
@@ -627,7 +628,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 )
                 continue
             try:
-                resolved.unlink()
+                move_to_trash(resolved)
             except OSError as exc:
                 failed.append(
                     PushItemResult(
@@ -646,7 +647,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     message=rel,
                 )
             )
-            logger.info("Purged older-than-vault cache save %s", rel)
+            logger.info("Purged older-than-vault cache save to trash %s", rel)
         return PurgeVersionsResponse(ok=ok, failed=failed, deleted=len(ok))
 
     @app.post("/materialize", response_model=MaterializeResponse)

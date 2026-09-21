@@ -3279,7 +3279,7 @@
     const parts = [];
     if (deleted.length) {
       parts.push(
-        `<p><strong>${deleted.length}</strong> local save(s) would be deleted from the agent cache:</p>`
+        `<p><strong>${deleted.length}</strong> local save(s) would move to the Recycle Bin:</p>`
       );
       const shown = deleted.slice(0, 20);
       const items = shown
@@ -3316,7 +3316,7 @@
       parts.push(`<ul class="confirm-file-list">${floorItems}${floorMore}</ul>`);
     }
     parts.push(
-      "<p>Unrelated local files, newer-than-vault work, and everything in the vault are left alone.</p>"
+      "<p>Unrelated local files, the vault revision, newer local saves, and everything in the vault stay. On Windows, purged files go to the Recycle Bin.</p>"
     );
     return parts.join("");
   }
@@ -3422,9 +3422,9 @@
       title: paths.length === 1 ? "Remove from workspace" : `Remove ${paths.length} files from workspace`,
       lead:
         paths.length === 1
-          ? "This deletes the file from the local workspace on this PC (creopdm-agent cache). The vault and project list are unchanged."
-          : "These files are deleted from the local workspace on this PC (creopdm-agent cache). The vault and project list are unchanged.",
-      note: "This cannot be undone from CreoPDM.",
+          ? "This moves the file from the local workspace on this PC (creopdm-agent cache) to the Recycle Bin. The vault and project list are unchanged."
+          : "These files move from the local workspace on this PC (creopdm-agent cache) to the Recycle Bin. The vault and project list are unchanged.",
+      note: "This cannot be undone from CreoPDM. Restore from the Recycle Bin on this PC if needed.",
       submitLabel: "Remove from Workspace",
     });
     if (!confirmed) return;
@@ -3492,10 +3492,10 @@
       title: "Purge workspace",
       lead:
         wouldDelete > 0
-          ? `About to delete ${wouldDelete} older local Creo model save(s) from the agent cache on this PC. The vault revision and any newer local work stay. The vault is not changed.`
+          ? `About to move ${wouldDelete} older local Creo model save(s) from the agent cache to the Recycle Bin on this PC. The vault revision and any newer local work stay. The vault is not changed.`
           : "No older local Creo model saves match the vault floors. You can still confirm, but nothing will be deleted.",
       detailsHtml: formatPurgeConfirmDetails(preview),
-      note: "This cannot be undone from CreoPDM.",
+      note: "This cannot be undone from CreoPDM. Restore from the Recycle Bin on this PC if needed.",
       submitLabel: wouldDelete > 0 ? `Purge ${wouldDelete} save(s)` : "Purge workspace",
     });
     if (!confirmed) return;
