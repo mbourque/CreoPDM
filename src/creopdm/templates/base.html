@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-folder2">
+  <script>
+    /* Suppress PTC creojs.js noise outside Creo's browser (and when Creo injects its own copy). */
+    (function () {
+      var nativeAlert = window.alert;
+      window.alert = function (message) {
+        var text = String(message == null ? "" : message);
+        if (text.indexOf("Creo environment which is not supported") !== -1) return;
+        return nativeAlert.apply(window, arguments);
+      };
+    })();
+  </script>
 </head>
 <body
   data-agent-base="{{ agent_base_url | default('http://127.0.0.1:8766') }}"

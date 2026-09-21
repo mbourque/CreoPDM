@@ -107,8 +107,8 @@ def test_creojs_route_suppresses_unsupported_browser_alert(tmp_path, data_dir, i
     library = tmp_path / "creojs.js"
     library.write_text(
         "var CreoJS = {};\n"
-        "alert ('The page attempts to access Creo environment which is not supported "
-        "by your browser. Some functionalty may not be available')\n",
+        'alert("The page attempts to access Creo environment which is not supported '
+        'by your browser. Some functionalty may not be available")\n',
         encoding="utf-8",
     )
     manager = ConfigManager()
@@ -121,3 +121,10 @@ def test_creojs_route_suppresses_unsupported_browser_alert(tmp_path, data_dir, i
         assert response.status_code == 200
         assert b"not supported by your browser" not in response.content
         assert b"creo env alert suppressed" in response.content
+
+
+def test_home_page_suppresses_creo_env_alert(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Creo environment which is not supported" in response.text
+    assert "nativeAlert" in response.text

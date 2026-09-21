@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 import time
 from urllib.parse import quote
@@ -189,9 +190,10 @@ def _sidebar_collapsed(request: Request) -> bool:
     return raw in {"1", "true", "yes"}
 
 
-_CREO_UNSUPPORTED_BROWSER_ALERT = (
-    "alert ('The page attempts to access Creo environment which is not supported "
-    "by your browser. Some functionalty may not be available')"
+_CREO_UNSUPPORTED_BROWSER_ALERT_RE = re.compile(
+    r"alert\s*\(\s*['\"]The page attempts to access Creo environment which is not supported"
+    r" by your browser\. Some functionalty may not be available['\"]\s*\)",
+    re.IGNORECASE,
 )
 
 
@@ -209,8 +211,13 @@ def creojs_library(ctx: AppContext = Depends(get_context)) -> Response:
         )
     text = path.read_text(encoding="utf-8", errors="replace")
     # Outside Creo's browser this alert is normal noise; suppress it for any served copy.
-    if _CREO_UNSUPPORTED_BROWSER_ALERT in text:
-        text = text.replace(_CREO_UNSUPPORTED_BROWSER_ALERT, "/* creo env alert suppressed */")
+    text, n = _CREO_UNSUPPORTED_BROWSER_ALERT_RE.subn("/* creo env alert suppressed */", text)
+    if n == 0 and "Creo environment which is not supported" in text:
+        # Fallback for odd spacing/quoting in older Creo builds.
+        text = text.replace(
+            "The page attempts to access Creo environment which is not supported by your browser. Some functionalty may not be available",
+            "",
+        )
     return Response(
         content=text,
         media_type="application/javascript",
