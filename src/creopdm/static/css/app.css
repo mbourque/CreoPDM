@@ -474,6 +474,9 @@ tr.is-row-hidden { display: none !important; }
   display: block;
   text-align: left;
 }
+#changes-table td {
+  vertical-align: top;
+}
 .folder-row { background: transparent; cursor: pointer; user-select: none; }
 .folder-row:hover td { background: #f6f8fa; }
 .folder-row.is-selected td {

@@ -3349,7 +3349,7 @@
             item.local_cache ? "New file (local)" : "New file",
             item.filename || "",
             item.local_cache
-              ? "In local workspace. Select and click Add to upload into the vault."
+              ? "Local workspace — select and Add."
               : "Not in the project yet. Select and click Add.",
             item.size != null ? formatByteSize(item.size) : "",
             item.saved_at || "—",
