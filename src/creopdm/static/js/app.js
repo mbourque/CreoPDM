@@ -167,8 +167,8 @@
 
   function reloadPage() {
     closeOpenDialogs();
-    // Creo's embedded browser often no-ops location.reload() and may serve a
-    // stale document. Force a new GET with a cache-buster.
+    // Creo's embedded browser often no-ops location.reload() and may drop a
+    // pending setTimeout after a <dialog> closes. Navigate synchronously.
     let next = window.location.pathname + window.location.search + window.location.hash;
     try {
       const url = new URL(window.location.href);
@@ -178,13 +178,11 @@
     } catch {
       /* keep next */
     }
-    window.setTimeout(() => {
-      try {
-        window.location.replace(next);
-      } catch {
-        window.location.href = next;
-      }
-    }, 0);
+    try {
+      window.location.replace(next);
+    } catch {
+      window.location.href = next;
+    }
   }
 
   async function withHtmlDialogClosed(dialog, work) {
