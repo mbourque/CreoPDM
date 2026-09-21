@@ -2246,6 +2246,104 @@
     return parts.length ? `${parts.join("/")}/${logical}` : logical;
   }
 
+  function rememberKnownWorkspacePaths(exact, logical, basenames) {
+    knownWorkspacePaths = {
+      exact: new Set(exact || []),
+      logical: new Set(logical || []),
+      basenames: new Set(basenames || []),
+      at: Date.now(),
+    };
+  }
+
+  let knownWorkspacePaths = { exact: new Set(), logical: new Set(), basenames: new Set(), at: 0 };
+
+  function markKnownPath(rel, exact, logical, basenames) {
+    const path = String(rel || "").replace(/\\/g, "/");
+    if (!path) return;
+    exact.add(path.toLowerCase());
+    logical.add(logicalRelativePath(path).toLowerCase());
+    basenames.add(logicalUploadName(PathBasename(path)).toLowerCase());
+  }
+
+  async function loadKnownWorkspacePaths(projectId, extraRels = []) {
+    const exact = new Set();
+    const logical = new Set();
+    const basenames = new Set();
+    (extraRels || []).forEach((rel) => markKnownPath(rel, exact, logical, basenames));
+    try {
+      const [objectsResponse, queueResponse] = await Promise.all([
+        fetch(`/api/projects/${encodeURIComponent(projectId)}/objects`),
+        fetch(`/api/projects/${encodeURIComponent(projectId)}/checkin-queue`),
+      ]);
+      if (objectsResponse.ok) {
+        const objects = await objectsResponse.json().catch(() => []);
+        (Array.isArray(objects) ? objects : []).forEach((item) => {
+          markKnownPath(item.relative_path || item.filename || "", exact, logical, basenames);
+        });
+      }
+      if (queueResponse.ok) {
+        const queue = await queueResponse.json().catch(() => null);
+        (queue?.new_files || []).forEach((item) => {
+          markKnownPath(item.relative_path || "", exact, logical, basenames);
+        });
+      }
+    } catch {
+      /* keep whatever we collected */
+    }
+    rememberKnownWorkspacePaths(exact, logical, basenames);
+    return knownWorkspacePaths;
+  }
+
+  async function ensureKnownWorkspacePaths(projectId, { force = false } = {}) {
+    if (
+      !force &&
+      knownWorkspacePaths.at &&
+      Date.now() - knownWorkspacePaths.at < 15000 &&
+      knownWorkspacePaths.exact.size + knownWorkspacePaths.logical.size > 0
+    ) {
+      return knownWorkspacePaths;
+    }
+    return loadKnownWorkspacePaths(projectId);
+  }
+
+  function localOnlyCacheFiles(cacheFiles, known) {
+    const exact = new Set(known.exact || []);
+    const logical = new Set(known.logical || []);
+    const basenames = new Set(known.basenames || []);
+    const created = [];
+    (cacheFiles || []).forEach((item) => {
+      const rel = String(item.relative_path || "").replace(/\\/g, "/");
+      if (!rel) return;
+      const exactKey = rel.toLowerCase();
+      const logicalKey = logicalRelativePath(rel).toLowerCase();
+      const base = logicalUploadName(PathBasename(rel)).toLowerCase();
+      const atRoot = !rel.includes("/");
+      if (exact.has(exactKey) || logical.has(logicalKey)) return;
+      if (atRoot && basenames.has(base)) return;
+      exact.add(exactKey);
+      logical.add(logicalKey);
+      basenames.add(base);
+      created.push({
+        filename: item.filename || PathBasename(rel),
+        relative_path: rel,
+        size: item.size,
+        saved_at: item.saved_at || "",
+        object_type: typeFromExtension(filenameExtension(item.filename || rel)),
+        local_cache: true,
+      });
+    });
+    return created;
+  }
+
+  async function countLocalNewWorkspaceFiles(projectId) {
+    if (!projectId) return 0;
+    const [cacheFiles, known] = await Promise.all([
+      listAgentCacheFiles(projectId),
+      ensureKnownWorkspacePaths(projectId),
+    ]);
+    return localOnlyCacheFiles(cacheFiles, known).length;
+  }
+
   async function materializeViaAgent(prepared) {
     const companions = Array.isArray(prepared.companions) ? prepared.companions : [];
     const response = await fetch(`${agentBase()}/materialize`, {
@@ -3150,58 +3248,19 @@
     body.appendChild(loading);
     refreshTabMetrics();
     try {
-      const [queueResponse, objectsResponse, cacheFiles] = await Promise.all([
+      const [queueResponse, cacheFiles] = await Promise.all([
         fetch(`/api/projects/${projectId}/checkin-queue`),
-        fetch(`/api/projects/${projectId}/objects`),
         listAgentCacheFiles(projectId),
       ]);
       if (!queueResponse.ok) throw new Error("queue");
       const data = await queueResponse.json();
       const saves = data.saves || [];
-      const created = [...(data.new_files || [])];
-      const knownLogical = new Set();
-      const knownExact = new Set();
-      const knownBasenames = new Set();
-      created.forEach((item) => {
-        const rel = String(item.relative_path || "").replace(/\\/g, "/");
-        if (rel) {
-          knownExact.add(rel.toLowerCase());
-          knownLogical.add(logicalRelativePath(rel).toLowerCase());
-          knownBasenames.add(logicalUploadName(PathBasename(rel)).toLowerCase());
-        }
-      });
-      if (objectsResponse.ok) {
-        const objects = await objectsResponse.json().catch(() => []);
-        (Array.isArray(objects) ? objects : []).forEach((item) => {
-          const rel = String(item.relative_path || item.filename || "").replace(/\\/g, "/");
-          if (!rel) return;
-          knownExact.add(rel.toLowerCase());
-          knownLogical.add(logicalRelativePath(rel).toLowerCase());
-          knownBasenames.add(logicalUploadName(PathBasename(rel)).toLowerCase());
-        });
-      }
-      cacheFiles.forEach((item) => {
-        const rel = String(item.relative_path || "").replace(/\\/g, "/");
-        if (!rel) return;
-        const exact = rel.toLowerCase();
-        const logical = logicalRelativePath(rel).toLowerCase();
-        const base = logicalUploadName(PathBasename(rel)).toLowerCase();
-        const atRoot = !rel.includes("/");
-        if (knownExact.has(exact) || knownLogical.has(logical)) return;
-        // Materialized checkouts usually sit at the cache root with the same basename.
-        if (atRoot && knownBasenames.has(base)) return;
-        knownExact.add(exact);
-        knownLogical.add(logical);
-        knownBasenames.add(base);
-        created.push({
-          filename: item.filename || PathBasename(rel),
-          relative_path: rel,
-          size: item.size,
-          saved_at: item.saved_at || "",
-          object_type: typeFromExtension(filenameExtension(item.filename || rel)),
-          local_cache: true,
-        });
-      });
+      const vaultNew = data.new_files || [];
+      const known = await loadKnownWorkspacePaths(
+        projectId,
+        vaultNew.map((item) => item.relative_path || "")
+      );
+      const created = [...vaultNew, ...localOnlyCacheFiles(cacheFiles, known)];
       const pending = saves.length + created.length;
       if (tab) tab.textContent = pending ? `New files · ${pending}` : "New files";
       setCheckinQueueCounts(saves.length, created.length);
@@ -3621,10 +3680,13 @@
   async function pollWorkspaceWatch() {
     if (!watchProjectId || watchPaused()) return;
     try {
-      const response = await fetch(`/api/projects/${watchProjectId}/workspace-watch`);
+      const [response, localNew] = await Promise.all([
+        fetch(`/api/projects/${watchProjectId}/workspace-watch`),
+        countLocalNewWorkspaceFiles(watchProjectId),
+      ]);
       if (!response.ok) return;
       const data = await response.json();
-      setCheckinQueueCounts(data.pending_saves, data.new_files);
+      setCheckinQueueCounts(data.pending_saves, Number(data.new_files || 0) + Number(localNew || 0));
       const next = data.stamp || "";
       if (watchStamp === null) {
         watchStamp = next;
@@ -3632,6 +3694,7 @@
       }
       if (next === watchStamp) return;
       watchStamp = next;
+      knownWorkspacePaths.at = 0; // vault changed — refresh known paths on next count
       window.clearTimeout(watchReloadTimer);
       watchReloadTimer = window.setTimeout(() => {
         if (watchPaused()) return;
