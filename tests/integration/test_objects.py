@@ -336,7 +336,7 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data
     assert "pin.prt" not in root.text
     assert (location / "Incoming" / "shaft.prt.4").is_file()
     assert (location / "Incoming" / "lib" / "pin.prt").is_file()
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     assert (workspace / "Incoming" / "shaft.prt.4").is_file()
     assert (workspace / "Incoming" / "lib" / "pin.prt").is_file()
 
@@ -415,7 +415,7 @@ def test_choose_folder_from_outside_location(client, repo_parent, tmp_path, monk
     assert imported.json()["failed"] == []
     listing = {item["filename"]: item["relative_path"] for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
     assert listing == {"pin.prt": "Elsewhere/pin.prt", "bushing.prt": "Elsewhere/lib/bushing.prt"}
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     assert (workspace / "Elsewhere" / "pin.prt").read_bytes() == b"from-elsewhere"
     assert (workspace / "Elsewhere" / "lib" / "bushing.prt").read_bytes() == b"nested"
 
@@ -436,7 +436,7 @@ def test_from_disk_adds_file_outside_project_location(client, repo_parent, tmp_p
     listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
     assert listing[0]["relative_path"] == "foreign.prt"
     assert listing[0]["filename"] == "foreign.prt"
-    assert (data_dir / "workspaces" / project["uuid"] / "foreign.prt").read_bytes() == b"from-elsewhere"
+    assert (data_dir / "vaults" / project["uuid"] / "foreign.prt").read_bytes() == b"from-elsewhere"
     assert outsider.is_file()
 
 
@@ -504,7 +504,7 @@ def test_import_from_vault_after_git_deleted_keeps_file(client, repo_parent, dat
     project, location = _create_project(client, repo_parent)
     pin = location / "keep.prt.1"
     pin.write_bytes(b"do-not-delete")
-    vault = data_dir / "workspaces" / project["uuid"]
+    vault = data_dir / "vaults" / project["uuid"]
     assert remove_tree(vault / ".git"), "Could not delete .git to simulate a removed repository"
     imported = client.post(
         f"/api/projects/{project['uuid']}/objects/from-disk",
@@ -597,7 +597,7 @@ def test_from_disk_later_numbered_save_updates_workspace(client, repo_parent, tm
     assert len(listing) == 1
     assert listing[0]["filename"] == "bridgeport_mill.prt.6"
     assert listing[0]["display_revision"] == "A.2"
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     assert (workspace / "bridgeport_mill.prt.6").is_file()
     assert (workspace / "bridgeport_mill.prt.6").read_bytes() == b"save-6"
 
@@ -625,7 +625,7 @@ def test_from_disk_later_save_while_checked_out_stays_working_copy(client, repo_
     listing = client.get(f"/api/projects/{project['uuid']}/objects").json()[0]
     assert listing["filename"] == "bridgeport_mill.prt.4"
     assert listing["owned_by_me"] is True
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     assert (workspace / "bridgeport_mill.prt.6").read_bytes() == b"save-6"
     checked = client.post(
         f"/api/objects/{obj['uuid']}/checkin",
@@ -683,7 +683,7 @@ def test_purge_workspace_keeps_vault_file(client, repo_parent, data_dir):
     assert created.status_code == 201, created.text
     obj = created.json()
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"] / "shaft.prt"
+    workspace = data_dir / "vaults" / project["uuid"] / "shaft.prt"
     extra = workspace.with_name("shaft.prt.4")
     extra.write_bytes(b"later-save")
     assert workspace.is_file()
@@ -698,7 +698,7 @@ def test_purge_workspace_keeps_vault_file(client, repo_parent, data_dir):
     detail = client.get(f"/api/objects/{obj['uuid']}")
     assert detail.status_code == 200
     assert detail.json()["owned_by_me"] is False
-    assert (data_dir / "workspaces" / project["uuid"] / ".git").exists()
+    assert (data_dir / "vaults" / project["uuid"] / ".git").exists()
     restored = client.post("/api/objects/batch/workspace", json={"object_ids": [obj["uuid"]]})
     assert restored.status_code == 200, restored.text
     assert workspace.is_file()
@@ -720,7 +720,7 @@ def test_batch_purge_workspace_keeps_originals(client, repo_parent, data_dir):
     ).json()
     ids = [part["uuid"], notes["uuid"]]
     assert client.post("/api/objects/batch/checkout", json={"object_ids": ids}).status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     assert (workspace / "shaft.prt").is_file()
     assert (workspace / "notes.txt").is_file()
 
@@ -751,7 +751,7 @@ def test_remove_from_project_keeps_original_file(client, repo_parent, data_dir):
     assert created.status_code == 200, created.text
     obj = created.json()["ok"][0]
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"] / "spec.pdf"
+    workspace = data_dir / "vaults" / project["uuid"] / "spec.pdf"
     assert workspace.is_file()
     assert spec.is_file()
 
@@ -785,7 +785,7 @@ def test_cannot_remove_file_checked_out_by_someone_else(client, repo_parent, ide
     assert denied_delete.status_code == 403
     assert denied_delete.json()["error"]["code"] == "CHECKOUT_OWNERSHIP"
 
-    workspace = data_dir / "workspaces" / project["uuid"] / "pin.prt"
+    workspace = data_dir / "vaults" / project["uuid"] / "pin.prt"
     assert workspace.is_file()
     assert not (location / "pin.prt").exists()
     still = client.get(f"/api/objects/{obj['uuid']}")
@@ -818,7 +818,7 @@ def test_batch_remove_from_project(client, repo_parent, data_dir):
     assert (location / "notes.txt").is_file()
     from creopdm.services.git_service import GitService
 
-    vault = data_dir / "workspaces" / project["uuid"]
+    vault = data_dir / "vaults" / project["uuid"]
     messages = [entry.message for entry in GitService().get_history(vault)]
     unregister = [item for item in messages if item.startswith("Unregister")]
     assert unregister == ["Unregister 2 files"]
@@ -842,7 +842,7 @@ def test_remove_from_project_prunes_empty_workspace_folder(client, repo_parent, 
     )
     assert added.status_code == 200, added.text
     ids = [item["uuid"] for item in added.json()["ok"]]
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     assert (workspace / "html_tutorials" / "index.html").is_file()
     removed = client.post("/api/objects/batch/remove", json={"object_ids": ids})
     assert removed.status_code == 200, removed.text
@@ -872,7 +872,7 @@ def test_batch_add_from_disk_one_commit(client, repo_parent, data_dir):
     assert (location / "notes.txt").is_file()
     from creopdm.services.git_service import GitService
 
-    vault = data_dir / "workspaces" / project["uuid"]
+    vault = data_dir / "vaults" / project["uuid"]
     messages = [entry.message for entry in GitService().get_history(vault)]
     assert [item for item in messages if item.startswith("Add")] == ["Add 2 files"]
 
@@ -905,7 +905,7 @@ def test_batch_add_later_save_same_commit(client, repo_parent, tmp_path, data_di
     assert notes.is_file()
     from creopdm.services.git_service import GitService
 
-    vault = data_dir / "workspaces" / project["uuid"]
+    vault = data_dir / "vaults" / project["uuid"]
     messages = [entry.message for entry in GitService().get_history(vault)]
     assert messages.count("Batch later") == 1
     assert messages[0] == "Batch later"

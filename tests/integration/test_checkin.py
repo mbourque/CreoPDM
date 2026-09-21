@@ -40,7 +40,7 @@ def test_checkin_increments_iteration_and_releases_lock(client, repo_parent, dat
     assert current["display_revision"] == "A.3"
 
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"] / "shaft.prt"
+    workspace = data_dir / "vaults" / project["uuid"] / "shaft.prt"
     workspace.write_bytes(b"bearing-diameter-25mm")
 
     preview = client.get(f"/api/objects/{obj['uuid']}/checkin-preview")
@@ -86,7 +86,7 @@ def test_checkin_increments_iteration_and_releases_lock(client, repo_parent, dat
 def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     project, obj = _create_part(client, repo_parent)
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     (workspace / "pin.prt").write_bytes(b"new-pin")
 
     preview = client.get(f"/api/objects/{obj['uuid']}/checkin-preview")
@@ -122,7 +122,7 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     assert "shaft.prt" in files
     assert "pin.prt" in files
     assert files["pin.prt"]["display_revision"] == "A.1"
-    assert (data_dir / "workspaces" / project["uuid"] / "pin.prt").is_file()
+    assert (data_dir / "vaults" / project["uuid"] / "pin.prt").is_file()
 
 
 @requires_git
@@ -133,7 +133,7 @@ def test_workspace_watch_stamp_changes_when_creo_saves(client, repo_parent, data
     assert first.status_code == 200, first.text
     before = first.json()
     assert before["stamp"]
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     (workspace / "shaft.prt.2").write_bytes(b"creo-save")
     second = client.get(f"/api/projects/{project['uuid']}/workspace-watch")
     assert second.status_code == 200, second.text
@@ -151,7 +151,7 @@ def test_checkin_keeps_creo_numbered_filename(client, repo_parent, data_dir):
     project, obj = _create_part(client, repo_parent)
     assert obj["filename"] == "shaft.prt"
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     (workspace / "shaft.prt.4").write_bytes(b"creo-save-4")
 
     preview = client.get(f"/api/objects/{obj['uuid']}/checkin-preview")
@@ -167,7 +167,7 @@ def test_checkin_keeps_creo_numbered_filename(client, repo_parent, data_dir):
     payload = checked.json()
     assert payload["filename"] == "shaft.prt.4"
     assert payload["relative_path"] == "shaft.prt.4"
-    assert (data_dir / "workspaces" / project["uuid"] / "shaft.prt.4").is_file()
+    assert (data_dir / "vaults" / project["uuid"] / "shaft.prt.4").is_file()
 
     history = client.get(f"/api/objects/{obj['uuid']}/history").json()
     assert history[0]["filename"] == "shaft.prt.4"
@@ -196,7 +196,7 @@ def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_paren
     obj = created.json()
     assert obj["filename"] == "shaft.prt.3"
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     assert (workspace / "shaft.prt.3").read_bytes() == b"v3-content"
     (workspace / "shaft.prt.4").write_bytes(b"creo-save-4")
     (workspace / "trail.txt.5").write_bytes(b"trail")
@@ -229,7 +229,7 @@ def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_paren
     payload = checked.json()
     assert payload["filename"] == "shaft.prt.4"
     assert payload["relative_path"] == "shaft.prt.4"
-    vault = data_dir / "workspaces" / project["uuid"]
+    vault = data_dir / "vaults" / project["uuid"]
     assert (vault / "shaft.prt.4").read_bytes() == b"creo-save-4"
     page = client.get(f"/projects/{project['uuid']}/objects/{obj['uuid']}")
     assert page.status_code == 200
@@ -252,7 +252,7 @@ def test_force_checkin_records_workspace_save_without_checkout(client, repo_pare
         data={"comment": "Initial"},
     ).json()
     assert client.post(f"/api/objects/{created['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     (workspace / "shaft.prt.4").write_bytes(b"save-4")
     assert client.post(
         f"/api/objects/{created['uuid']}/checkin",
@@ -288,7 +288,7 @@ def test_force_checkin_records_workspace_save_without_checkout(client, repo_pare
 def test_checkin_after_undo_checkout_records_numbered_save(client, repo_parent, data_dir):
     project, obj = _create_part(client, repo_parent)
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     (workspace / "shaft.prt.2").write_bytes(b"creo-save")
     undone = client.post(f"/api/objects/{obj['uuid']}/undo-checkout")
     assert undone.status_code == 200, undone.text
@@ -323,7 +323,7 @@ def test_checkout_keeps_newer_workspace_save(client, repo_parent, data_dir):
         data={"comment": "Initial"},
     ).json()
     assert client.post(f"/api/objects/{created['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     assert client.post(
         f"/api/objects/{created['uuid']}/checkin",
         json={"comment": "Done"},
@@ -347,7 +347,7 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
         data={"comment": "Initial"},
     ).json()
     assert client.post(f"/api/objects/{created['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     (workspace / "shaft.prt.4").write_bytes(b"save-4")
     (workspace / "bushing.prt").write_bytes(b"new-bushing")
     page = client.get(f"/?project={project['uuid']}")
@@ -408,7 +408,7 @@ def test_project_checkin_queue_adds_new_workspace_file_without_checkout(client, 
         data={"comment": "Initial"},
     )
     assert created.status_code == 201, created.text
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "bushing.prt").write_bytes(b"new-bushing")
     page = client.get(f"/?project={project['uuid']}")
@@ -452,7 +452,7 @@ def test_purge_workspace_paths_removes_new_files(client, repo_parent, data_dir):
         data={"comment": "Initial"},
     )
     assert created.status_code == 201, created.text
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     (workspace / "bushing.prt").write_bytes(b"new-bushing")
     (workspace / "bushing.prt.2").write_bytes(b"newer-bushing")
     (workspace / "pin.prt").write_bytes(b"new-pin")
@@ -506,7 +506,7 @@ def test_project_checkin_queue_records_pending_save_and_new_file(client, repo_pa
         data={"comment": "Initial"},
     ).json()
     assert client.post(f"/api/objects/{created['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     (workspace / "shaft.prt.4").write_bytes(b"save-4")
     (workspace / "bushing.prt").write_bytes(b"new-bushing")
     preview = client.get(f"/api/projects/{project['uuid']}/checkin-preview")
@@ -558,7 +558,7 @@ def test_checkin_records_creo_release_from_workspace_file(client, repo_parent, d
     obj = created.json()
     assert obj["creo_release"] == "13.4.1.0"
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "workspaces" / project["uuid"] / "shaft.prt.1"
+    workspace = data_dir / "vaults" / project["uuid"] / "shaft.prt.1"
     workspace.write_bytes(_CREO_UGC_HEADER_NEXT)
     checked = client.post(
         f"/api/objects/{obj['uuid']}/checkin",

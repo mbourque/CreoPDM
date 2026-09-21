@@ -32,6 +32,7 @@ from creopdm.constants import (
     PREVIOUS_DEFAULT_TYPE_LABEL_SETS,
 )
 from creopdm.exceptions import ConfigurationError, PathValidationError
+from creopdm.logging_setup import get_logger
 from creopdm.utils.classify import (
     exclude_extensions,
     extra_cad_set,
@@ -40,6 +41,11 @@ from creopdm.utils.classify import (
     unique_type_labels,
 )
 from creopdm.utils.ignore import parse_ignore_text, unique_ignore_patterns
+
+logger = get_logger("config")
+
+VAULTS_DIRNAME = "vaults"
+LEGACY_VAULTS_DIRNAME = "workspaces"
 
 
 class ServerConfig(BaseModel):
@@ -387,13 +393,13 @@ def _dir_has_entries(path: Path) -> bool:
 def _store_has_projects(path: Path) -> bool:
     if (path / "database" / "creopdm.db").is_file():
         return True
-    return _dir_has_entries(path / "workspaces")
+    return _dir_has_entries(path / VAULTS_DIRNAME) or _dir_has_entries(path / LEGACY_VAULTS_DIRNAME)
 
 
 def _store_looks_unused(path: Path) -> bool:
     if not path.exists():
         return True
-    if _dir_has_entries(path / "workspaces"):
+    if _dir_has_entries(path / VAULTS_DIRNAME) or _dir_has_entries(path / LEGACY_VAULTS_DIRNAME):
         return False
     try:
         for child in path.iterdir():
@@ -478,21 +484,46 @@ class ConfigManager:
         self.database_dir = self.data_dir / "database"
         self.logs_dir = self.data_dir / "logs"
         self.cache_dir = self.data_dir / "cache"
-        self.workspaces_dir = self.data_dir / "workspaces"
+        self.vaults_dir = self.data_dir / VAULTS_DIRNAME
         self.temp_dir = self.data_dir / "temp"
         self.settings_path = self.config_dir / "settings.json"
         self.database_path = self.database_dir / "creopdm.db"
         self.log_path = self.logs_dir / "creopdm.log"
         self._settings: AppSettings | None = None
 
+    @property
+    def workspaces_dir(self) -> Path:
+        """Compatibility alias: vault folder on the CreoPDM host."""
+        return self.vaults_dir
+
+    def _migrate_vaults_dirname(self) -> None:
+        """Prefer vaults/; rename legacy workspaces/ when safe."""
+        vaults = self.data_dir / VAULTS_DIRNAME
+        legacy = self.data_dir / LEGACY_VAULTS_DIRNAME
+        if vaults.exists():
+            self.vaults_dir = vaults
+            return
+        if legacy.is_dir():
+            try:
+                legacy.rename(vaults)
+                logger.info("Renamed vault folder %s → %s", legacy, vaults)
+                self.vaults_dir = vaults
+                return
+            except OSError:
+                logger.warning("Could not rename %s to %s; keeping legacy path", legacy, vaults)
+                self.vaults_dir = legacy
+                return
+        self.vaults_dir = vaults
+
     def ensure_layout(self) -> None:
+        self._migrate_vaults_dirname()
         for directory in (
             self.data_dir,
             self.config_dir,
             self.database_dir,
             self.logs_dir,
             self.cache_dir,
-            self.workspaces_dir,
+            self.vaults_dir,
             self.temp_dir,
         ):
             directory.mkdir(parents=True, exist_ok=True)
@@ -610,28 +641,39 @@ class ConfigManager:
         return self.default_sqlite_url()
 
     def _normalize_workspace_root(self, settings: AppSettings) -> bool:
-        """Drop a workspace path that is the data dir or a moved Linux AppData folder."""
+        """Drop a vault path that is the data dir, the default vaults folder, or a moved Linux AppData folder."""
         configured = (settings.workspace.root or "").strip()
         if not configured:
             return False
         try:
             location = Path(configured).expanduser().resolve()
-            default = self.workspaces_dir.resolve()
+            default = self.vaults_dir.resolve()
             data = self.data_dir.resolve()
+            legacy_default = (self.data_dir / LEGACY_VAULTS_DIRNAME).resolve()
         except OSError:
             return False
-        if location in {default, data}:
+        if location in {default, data, legacy_default}:
+            settings.workspace.root = None
+            return True
+        # Settings still point at .../workspaces after an automatic rename to vaults/.
+        if (
+            location.name == LEGACY_VAULTS_DIRNAME
+            and location.parent == data
+            and not location.exists()
+            and default.exists()
+        ):
             settings.workspace.root = None
             return True
         if on_windows():
             return False
-        legacy = legacy_linux_data_dir() / "workspaces"
-        try:
-            if location == legacy.resolve() and not _dir_has_entries(legacy):
-                settings.workspace.root = None
-                return True
-        except OSError:
-            return False
+        for dirname in (LEGACY_VAULTS_DIRNAME, VAULTS_DIRNAME):
+            legacy = legacy_linux_data_dir() / dirname
+            try:
+                if location == legacy.resolve() and not _dir_has_entries(legacy):
+                    settings.workspace.root = None
+                    return True
+            except OSError:
+                continue
         return False
 
     def workspace_root(self) -> Path:
@@ -639,9 +681,9 @@ class ConfigManager:
         if configured:
             location = Path(configured).expanduser().resolve()
             if location == self.data_dir.resolve():
-                return self.workspaces_dir
+                return self.vaults_dir
             return location
-        return self.workspaces_dir
+        return self.vaults_dir
 
     def model_cad_extensions(self) -> list[str]:
         return unique_extensions(self.settings.cad.model_extensions or DEFAULT_CREO_MODEL_EXTENSIONS)

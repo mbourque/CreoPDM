@@ -23,7 +23,7 @@ def _create_part(client, repo_parent: Path):
 def test_checkout_then_second_user_denied(client, repo_parent, identity, data_dir):
     project, obj, _location = _create_part(client, repo_parent)
     git = GitService()
-    vault = data_dir / "workspaces" / project["uuid"]
+    vault = data_dir / "vaults" / project["uuid"]
     head_before = git.get_head(vault)
 
     first = client.post(f"/api/objects/{obj['uuid']}/checkout")
@@ -95,7 +95,7 @@ def test_batch_checkout_copies_all_selected_files(client, repo_parent, data_dir)
     body = result.json()
     assert len(body["ok"]) == 3
     assert body["failed"] == []
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     assert (workspace / "shaft.prt").is_file()
     assert (workspace / "notes.txt").is_file()
     assert (workspace / "arm.asm").is_file()
@@ -140,7 +140,7 @@ def test_batch_undo_checkout_releases_all_selected_files(client, repo_parent):
 @requires_git
 def test_batch_workspace_without_checkout(client, repo_parent, data_dir):
     project, obj, _location = _create_part(client, repo_parent)
-    copied = data_dir / "workspaces" / project["uuid"] / "shaft.prt"
+    copied = data_dir / "vaults" / project["uuid"] / "shaft.prt"
     assert copied.is_file()
     listed = client.get(f"/api/objects/{obj['uuid']}").json()
     assert listed["owned_by_me"] is False
@@ -172,7 +172,7 @@ def test_workspace_keeps_project_folders(client, repo_parent, data_dir):
     listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
     item = next(row for row in listing if row["uuid"] == obj["uuid"])
     assert item["relative_path"] == "lib/step/pin.prt"
-    workspace = data_dir / "workspaces" / project["uuid"]
+    workspace = data_dir / "vaults" / project["uuid"]
     assert (workspace / "lib" / "step" / "pin.prt").is_file()
     assert (workspace / "lib" / "step" / "pin.prt").read_bytes() == b"pin-bytes"
     assert not (workspace / "pin.prt").exists()

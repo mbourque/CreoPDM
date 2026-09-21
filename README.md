@@ -158,7 +158,7 @@ systemctl --user enable --now creopdm
 systemctl --user status creopdm
 ```
 
-`creopdm` already binds **52113** and does not open a browser. Git must stay on `PATH` (the unit sets that). On Linux the store is `~/.local/share/CreoPDM` (projects, SQLite, and `workspaces`). Do **not** add `--data-dir` unless you mean a different store.
+`creopdm` already binds **52113** and does not open a browser. Git must stay on `PATH` (the unit sets that). On Linux the store is `~/.local/share/CreoPDM` (projects, SQLite, and `vaults`). Do **not** add `--data-dir` unless you mean a different store.
 
 If an older run used `~/AppData/Local/CreoPDM`, the next start moves that folder into `~/.local/share/CreoPDM` when the new location does not already have projects. Restart the service after updating CreoPDM:
 
@@ -246,4 +246,4 @@ With the venv active, run `pytest`. Tests use temporary directories. They never 
 
 ## Data location
 
-On Windows, application data lives in `%LOCALAPPDATA%\CreoPDM\`. On Linux it lives in `~/.local/share/CreoPDM`. Git history and working copies live in the per-project folder under `workspaces` there. The Settings workspace field should be `~/.local/share/CreoPDM/workspaces`, not `~/.local/share/CreoPDM` itself. Pass `--data-dir` or set `CREOPDM_DATA_DIR` only when you want a different store.
+On Windows, application data lives in `%LOCALAPPDATA%\CreoPDM\`. On Linux it lives in `~/.local/share/CreoPDM`. Git history and vault copies live in the per-project folder under `vaults` there (older installs used `workspaces`; CreoPDM renames that folder on startup). The Settings vault field should be `~/.local/share/CreoPDM/vaults`, not `~/.local/share/CreoPDM` itself. Pass `--data-dir` or set `CREOPDM_DATA_DIR` only when you want a different store.

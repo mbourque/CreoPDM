@@ -60,13 +60,24 @@ def test_adopt_is_noop_on_windows(monkeypatch, tmp_path):
     assert adopt_legacy_linux_data_dir(target) == target
 
 
-def test_workspace_data_dir_normalizes_to_workspaces(tmp_path):
+def test_vault_data_dir_normalizes_to_vaults(tmp_path):
     manager = ConfigManager(tmp_path)
     settings = manager.load()
     settings.workspace.root = str(tmp_path)
     assert manager._normalize_workspace_root(settings) is True
     manager.save(settings)
-    assert manager.workspace_root() == (tmp_path / "workspaces").resolve()
+    assert manager.workspace_root() == (tmp_path / "vaults").resolve()
+
+
+def test_legacy_workspaces_dir_renames_to_vaults(tmp_path):
+    legacy = tmp_path / "workspaces" / "proj-1"
+    legacy.mkdir(parents=True)
+    (legacy / "part.prt").write_bytes(b"prt")
+    manager = ConfigManager(tmp_path)
+    manager.ensure_layout()
+    assert (tmp_path / "vaults" / "proj-1" / "part.prt").read_bytes() == b"prt"
+    assert not (tmp_path / "workspaces").exists()
+    assert manager.workspace_root() == (tmp_path / "vaults").resolve()
 
 
 def test_case_insensitive_jpg_lookup(tmp_path):

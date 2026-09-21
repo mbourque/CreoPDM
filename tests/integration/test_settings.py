@@ -206,7 +206,10 @@ def test_get_and_update_settings(client, tmp_path):
     assert "OS file association" in page.text
     assert "Creo Parametric" not in page.text
     assert "Creo View" not in page.text
-    assert "~/.local/share/CreoPDM/workspaces" in page.text
+    assert "~/.local/share/CreoPDM/vaults" in page.text
+    assert "Vault folder" in page.text
+    assert "Master repository for each project" in page.text
+    assert "CreoPDM/workspaces" not in page.text
     assert "Specific application" not in page.text
     assert "Open Creo View with" not in page.text
     assert 'value="embedded"' in page.text
@@ -303,15 +306,15 @@ def test_custom_workspace_used_on_checkout(client, repo_parent, tmp_path):
     assert copied.read_bytes() == b"original-content"
 
 
-def test_workspace_data_dir_uses_workspaces_subdir(client, data_dir):
+def test_vault_data_dir_uses_vaults_subdir(client, data_dir):
     saved = client.put(
         "/api/settings",
         json={"creo_open_mode": "association", "workspace_root": str(data_dir)},
     )
     assert saved.status_code == 200, saved.text
-    assert Path(saved.json()["workspace_root"]) == (data_dir / "workspaces").resolve()
+    assert Path(saved.json()["workspace_root"]) == (data_dir / "vaults").resolve()
     kept = client.put("/api/settings", json={"creo_open_mode": "association"})
-    assert Path(kept.json()["workspace_root"]) == (data_dir / "workspaces").resolve()
+    assert Path(kept.json()["workspace_root"]) == (data_dir / "vaults").resolve()
 
 
 def test_type_labels_persist_and_keep_when_omitted(client):

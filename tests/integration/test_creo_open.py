@@ -61,7 +61,7 @@ def test_open_untracked_workspace_file_by_relative_path(
     ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
     with TestClient(create_app(ctx)) as client:
         project = client.post("/api/projects", json={"name": "Queue Open"}).json()
-        workspace = data_dir / "workspaces" / project["uuid"]
+        workspace = data_dir / "vaults" / project["uuid"]
         nested = workspace / "Incoming"
         nested.mkdir(parents=True, exist_ok=True)
         (nested / "pin.prt").write_bytes(b"new-pin")
@@ -194,7 +194,7 @@ def test_open_after_checkin_despite_creo_numbered_workspace_file(
         assert created.status_code == 201, created.text
         obj_id = created.json()["uuid"]
         assert client.post(f"/api/objects/{obj_id}/checkout").status_code == 200
-        workspace = data_dir / "workspaces" / project["uuid"]
+        workspace = data_dir / "vaults" / project["uuid"]
         (workspace / "nested-plywood.prt.1").write_bytes(b"creo-iteration")
         checked = client.post(
             f"/api/objects/{obj_id}/checkin",

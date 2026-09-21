@@ -41,7 +41,7 @@ def test_create_list_and_get_project(client, repo_parent, data_dir):
     assert payload["default_branch"] == "main"
     assert payload["remote_mode"] == "LOCAL_ONLY"
     assert payload["repository_path"] == ""
-    vault = data_dir / "workspaces" / payload["uuid"]
+    vault = data_dir / "vaults" / payload["uuid"]
     assert (vault / ".git").exists()
     assert (vault / ".creopdm" / "project.json").exists()
     if os.name == "nt":
@@ -85,7 +85,7 @@ def test_create_list_and_get_project(client, repo_parent, data_dir):
 @requires_git
 def test_sync_gitignore_hides_existing_bookkeeping(client, app, repo_parent, data_dir):
     payload, _ = _create_project(client, repo_parent, name="Hide Bookkeeping")
-    vault = data_dir / "workspaces" / payload["uuid"]
+    vault = data_dir / "vaults" / payload["uuid"]
     from creopdm.utils.files import is_hidden, set_hidden
 
     set_hidden(vault / ".gitignore", False)
@@ -183,7 +183,7 @@ def test_rename_project_keeps_folder(client, repo_parent, data_dir):
     assert body["number"] == "PRJ-0099"
     assert body["description"] == "Second build"
     assert body["repository_path"] == ""
-    marker = (data_dir / "workspaces" / payload["uuid"] / ".creopdm" / "project.json").read_text(
+    marker = (data_dir / "vaults" / payload["uuid"] / ".creopdm" / "project.json").read_text(
         encoding="utf-8"
     )
     assert "Robot Arm Mk2" in marker
@@ -283,7 +283,7 @@ def test_open_workspace_opens_current_files_folder(client, repo_parent, data_dir
         },
     )
     assert added.status_code == 200, added.text
-    workspace = data_dir / "workspaces" / payload["uuid"]
+    workspace = data_dir / "vaults" / payload["uuid"]
     nested_open = client.post(
         f"/api/projects/{payload['uuid']}/workspace/open",
         params={"folder": "html_tutorials/css"},
@@ -314,7 +314,7 @@ def test_delete_project_is_soft(client, repo_parent, data_dir):
     assert deleted.status_code == 204
     listing = client.get("/api/projects")
     assert all(item["uuid"] != payload["uuid"] for item in listing.json())
-    assert (data_dir / "workspaces" / payload["uuid"] / ".git").exists()
+    assert (data_dir / "vaults" / payload["uuid"] / ".git").exists()
 
 
 @requires_git
@@ -357,7 +357,7 @@ def test_forget_project_strips_git_and_keeps_models(client, app, repo_parent, da
     assert not (location / ".gitignore").exists()
     assert not (location / ".creopdm").exists()
     assert not (location / "README.md").exists()
-    assert not (data_dir / "workspaces" / payload["uuid"]).exists()
+    assert not (data_dir / "vaults" / payload["uuid"]).exists()
 
     again = client.post("/api/projects", json={"name": "Ribbed again"})
     assert again.status_code == 201, again.text
@@ -368,7 +368,7 @@ def test_forget_project_strips_git_and_keeps_models(client, app, repo_parent, da
 def test_open_moves_git_from_location_into_workspace(client, app, repo_parent, data_dir):
     payload, location = _create_project(client, repo_parent, name="Legacy Git")
     _attach_legacy_location(app, payload["uuid"], location)
-    vault = data_dir / "workspaces" / payload["uuid"]
+    vault = data_dir / "vaults" / payload["uuid"]
     assert (vault / ".git").exists()
     shutil.copytree(vault / ".git", location / ".git")
     (location / ".gitignore").write_text("*.tst\n", encoding="utf-8")
@@ -387,7 +387,7 @@ def test_open_moves_git_from_location_into_workspace(client, app, repo_parent, d
 def test_open_strips_leftover_location_git_when_workspace_already_has_it(client, app, repo_parent, data_dir):
     payload, location = _create_project(client, repo_parent, name="Both Git")
     _attach_legacy_location(app, payload["uuid"], location)
-    vault = data_dir / "workspaces" / payload["uuid"]
+    vault = data_dir / "vaults" / payload["uuid"]
     shutil.copytree(vault / ".git", location / ".git")
     (location / ".gitignore").write_text("*.tst\n", encoding="utf-8")
     opened = client.get(f"/api/projects/{payload['uuid']}")
