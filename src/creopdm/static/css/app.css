@@ -663,7 +663,7 @@ dialog:not([open]) { display: none !important; }
 .path-picker .btn { flex-shrink: 0; }
 .dialog label .muted { font-weight: 400; }
 .confirm-details {
-  max-height: 12rem;
+  max-height: 14rem;
   overflow: auto;
   padding: 0.55rem 0.65rem;
   border: 1px solid var(--line);
@@ -676,8 +676,6 @@ dialog:not([open]) { display: none !important; }
 .confirm-file-list {
   margin: 0 0 0.55rem;
   padding-left: 1.15rem;
-  max-height: 7rem;
-  overflow: auto;
 }
 .confirm-file-list li { margin: 0.15rem 0; }
 .confirm-file-list code {
