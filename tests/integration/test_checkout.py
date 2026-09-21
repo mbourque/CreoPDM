@@ -221,6 +221,7 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function rowFilename" in script.text
     assert "function setRowHidden" in script.text
     assert "function setToolbarActionVisible" in script.text
+    assert "Keep the control in layout" in script.text
     assert 'selected.every((row) => row.dataset.canCheckout === "1")' in script.text
     assert 'selected.every((row) => row.dataset.canCheckin === "1")' in script.text
     assert 'selected.every((row) => row.dataset.owned === "1")' in script.text

@@ -1559,9 +1559,11 @@
 
   function setToolbarActionVisible(button, visible) {
     if (!button) return;
-    button.hidden = !visible;
+    // Keep the control in layout; only enable/disable so the toolbar does not jump.
+    button.hidden = false;
+    button.disabled = !visible;
     const tip = button.closest(".toolbar-tip");
-    if (tip) tip.hidden = !visible;
+    if (tip) tip.hidden = false;
   }
 
   function isNewFileQueueRow(row) {
@@ -1592,7 +1594,6 @@
     if (checkoutBtn) checkoutBtn.disabled = !canCheckout;
     setToolbarActionVisible(checkoutBtn, canCheckout);
     if (checkinBtn) {
-      checkinBtn.disabled = !canCheckin;
       checkinBtn.textContent = addOnly ? "Add" : "Check In";
       const tip = checkinBtn.closest(".toolbar-tip");
       if (tip) {
@@ -1602,7 +1603,6 @@
       }
     }
     setToolbarActionVisible(checkinBtn, canCheckin);
-    if (undoBtn) undoBtn.disabled = !canUndo;
     setToolbarActionVisible(undoBtn, canUndo);
     if (workspaceBtn) workspaceBtn.disabled = !selected.some((row) => row.dataset.inWorkspace !== "1");
     if (purgeBtn) purgeBtn.disabled = !selected.some((row) => row.dataset.inWorkspace !== "0");
@@ -2026,11 +2026,22 @@
   }
 
   async function refreshCreoStatusPill(prefetchedAgent) {
+    const inSession = hostedCreoJS();
     document.querySelectorAll(".creo-session-only").forEach((el) => {
-      el.hidden = !hostedCreoJS();
+      el.hidden = false;
+      const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
+      if (!btn) return;
+      // Reserve space before Creo.JS is ready; enable only in a Creo session.
+      if (!inSession) {
+        btn.disabled = true;
+        return;
+      }
+      if (btn.id === "set-creo-dir-btn") {
+        btn.disabled = !btn.dataset.workspace;
+      }
     });
     const pill = $("#creo-status");
-    if (!pill || !hostedCreoJS()) return null;
+    if (!pill || !inSession) return null;
     const modeKey = creoOpenMode() || "association";
     const modeName = modeKey === "embedded" ? "Embedded" : modeKey === "association" ? "OS" : modeKey;
     if (modeKey === "embedded") {

@@ -558,8 +558,7 @@ button.object-open:hover { text-decoration: underline; }
 }
 .toolbar-actions { display: flex; gap: 0.4rem; flex-wrap: nowrap; align-items: center; overflow-x: auto; }
 .toolbar-tip { display: inline-flex; }
-.toolbar-actions .btn:disabled,
-.toolbar-actions .toolbar-tip:has(.btn:disabled) { display: none; }
+/* Keep disabled actions in layout so enabling them does not shift neighbors. */
 .toolbar-messages { width: 100%; min-width: 0; }
 .toolbar-messages .error, .toolbar-messages .ok { overflow-wrap: anywhere; }
 .toolbar-note { color: var(--muted); font-size: 0.8rem; }

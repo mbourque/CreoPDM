@@ -301,10 +301,10 @@
 
 <footer class="toolbar">
   <div class="toolbar-actions">
-    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
+    <span class="toolbar-tip creo-session-only" title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
       <button type="button" class="btn" id="set-creo-dir-btn"
               {% if workspace_path %}data-workspace="{{ workspace_path }}"{% endif %}
-              {% if not workspace_path %}disabled{% endif %}>Set Working Directory</button>
+              disabled>Set Working Directory</button>
     </span>
     <button type="button" class="btn" id="add-files-btn" {% if not selected %}disabled{% endif %}>Add Files</button>
     <span class="toolbar-tip" title="Copy selected files into the CreoPDM vault if they are not already there. Does not check them out.">
@@ -316,14 +316,14 @@
     <span class="toolbar-tip" title="Open the selected file in Creo or its Windows associated program.">
       <button type="button" class="btn" id="open-btn" disabled>Open</button>
     </span>
-    <button type="button" class="btn" id="checkout-btn" hidden disabled>Checkout</button>
-    <span class="toolbar-tip" title="Check in selected files." hidden>
+    <button type="button" class="btn" id="checkout-btn" disabled>Checkout</button>
+    <span class="toolbar-tip" title="Check in selected files.">
       <button type="button" class="btn" id="checkin-btn"
               {% if selected %}data-project="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
-              hidden disabled>Check In</button>
+              disabled>Check In</button>
     </span>
-    <span class="toolbar-tip" title="Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward." hidden>
-      <button type="button" class="btn" id="undo-btn" hidden disabled>Undo Checkout</button>
+    <span class="toolbar-tip" title="Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward.">
+      <button type="button" class="btn" id="undo-btn" disabled>Undo Checkout</button>
     </span>
     <span class="toolbar-tip" title="Open version history and details for the selected file.">
       <button type="button" class="btn" id="history-btn" disabled>History</button>

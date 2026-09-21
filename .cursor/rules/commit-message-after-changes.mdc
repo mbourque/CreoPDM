@@ -1,25 +1,47 @@
 ---
-description: After finishing code changes, always give a ready-to-paste git commit message
+description: After finishing code changes, give copy-paste git add/commit/push (and Linux pull/restart when needed)
 alwaysApply: true
 ---
 
-# Commit message after each change
+# Git commands after each change
 
-The user commits themselves. Whenever you finish a batch of code/test/rule changes (not mid-exploration), end with a **short commit subject** they can paste.
+The user runs git themselves. Whenever you finish a batch of code/test/rule changes (not mid-exploration), end with **copy-paste command blocks**.
 
-## Format
+## Always include (Windows / this PC)
 
-- One line, ~50–72 characters when practical
-- Imperative mood (“Fix…”, “Add…”, “Block…”)
-- Focus on **why**, not a file list
-- No trailing period
-- Optional: a second line blank then 1–2 short body lines only if needed
+PowerShell-friendly, from the repo root:
+
+```powershell
+git add -A
+git status
+git commit -m "Short imperative subject"
+git push
+```
+
+- Subject: one line, ~50–72 chars, imperative, why-focused, no trailing period
+- Do **not** run these unless they explicitly ask you to commit/push
+
+## Include Linux when the change needs the CreoPDM host
+
+If the fix is served by the Linux CreoPDM service (API, `app.js`, templates, settings, etc.), also give:
+
+```bash
+git pull
+systemctl --user restart creopdm.service
+```
+
+Skip the Linux block for docs-only, rules-only, or pure Windows-agent work that does not need a server restart.
 
 ## Example
 
 ```text
-Suggested commit message:
-Block empty check-in; use Undo Checkout for unchanged locks
-```
+Windows (commit + push):
+git add -A
+git status
+git commit -m "Disable check-in comment when nothing to submit"
+git push
 
-Do **not** run `git commit` unless they explicitly ask. Still give the message text even when they only asked for the fix.
+Linux (deploy):
+git pull
+systemctl --user restart creopdm.service
+```

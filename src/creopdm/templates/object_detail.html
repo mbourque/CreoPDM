@@ -32,8 +32,8 @@
   </header>
 
   <div class="toolbar-actions detail-actions">
-    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
-      <button type="button" class="btn" id="set-creo-dir-btn" data-workspace="{{ workspace_path }}">Set Working Directory</button>
+    <span class="toolbar-tip creo-session-only" title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
+      <button type="button" class="btn" id="set-creo-dir-btn" data-workspace="{{ workspace_path }}" disabled>Set Working Directory</button>
     </span>
     <button type="button" class="btn" id="open-btn" data-uuid="{{ object.uuid }}">Open</button>
     <span class="toolbar-tip" title="Open this project's local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">
