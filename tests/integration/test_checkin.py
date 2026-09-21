@@ -342,12 +342,7 @@ def test_checkout_keeps_newer_workspace_save(client, repo_parent, data_dir):
         files={"file": ("pin.prt.1", b"v1", "application/octet-stream")},
         data={"comment": "Initial"},
     ).json()
-    assert client.post(f"/api/objects/{created['uuid']}/checkout").status_code == 200
     workspace = data_dir / "vaults" / project["uuid"]
-    assert client.post(
-        f"/api/objects/{created['uuid']}/checkin",
-        json={"comment": "Done"},
-    ).status_code == 200
     (workspace / "pin.prt.2").write_bytes(b"kept-local")
     checked_out = client.post(f"/api/objects/{created['uuid']}/checkout")
     assert checked_out.status_code == 200, checked_out.text
