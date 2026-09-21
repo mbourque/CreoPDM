@@ -143,13 +143,15 @@ def _dialog_owner_hwnd():
     GetConsoleWindow() makes IFileOpenDialog flash and close: the HTML
     <dialog> stays in front and Windows treats the picker as cancelled.
     """
-    import ctypes
-    from ctypes.wintypes import HWND
-
-    user32 = ctypes.windll.user32
-    user32.GetForegroundWindow.restype = HWND
-    user32.GetForegroundWindow.argtypes = []
+    if not _is_windows():
+        return 0
     try:
+        import ctypes
+        from ctypes.wintypes import HWND
+
+        user32 = ctypes.windll.user32
+        user32.GetForegroundWindow.restype = HWND
+        user32.GetForegroundWindow.argtypes = []
         return user32.GetForegroundWindow() or 0
     except Exception:
         return 0
