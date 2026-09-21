@@ -337,6 +337,28 @@ class WorkspaceService:
         logger.info("Staged vault working copy %s (%s bytes)", destination, len(data))
         return destination
 
+    def stage_new_workspace_file(
+        self,
+        project: Project,
+        relative_path: str,
+        data: bytes,
+    ) -> Path:
+        """Write a new (not yet PDM) file into the vault working tree."""
+        relative = assert_safe_relative_path(str(relative_path or "").replace("\\", "/")).as_posix()
+        if not data:
+            raise PathValidationError("The uploaded file is empty.")
+        name = Path(relative).name
+        if self._is_ignored(name):
+            raise PathValidationError(f"{name} is ignored and cannot be staged.")
+        destination = self.file_path(project.uuid, relative)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            set_file_writable(destination)
+        destination.write_bytes(data)
+        set_file_writable(destination)
+        logger.info("Staged new vault file %s (%s bytes)", destination, len(data))
+        return destination
+
     def has_local_copy(self, project: Project, obj: EngineeringObject) -> bool:
         return self.workspace_file_path(project.uuid, obj).is_file()
 

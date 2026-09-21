@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,7 @@ from creopdm.schemas.common import (
     ProjectUpdateRequest,
     PurgeWorkspacePathsRequest,
     QueueCheckinRequest,
+    WorkspaceContentResponse,
     WorkspacePickerResponse,
     WorkspaceWatchResponse,
 )
@@ -381,6 +382,26 @@ def open_workspace_folder(
             details={"path": str(opened)},
         ) from exc
     return Response(status_code=204)
+
+
+@router.put("/api/projects/{project_id}/workspace-content", response_model=WorkspaceContentResponse)
+async def put_project_workspace_content(
+    project_id: str,
+    path: str = Query(..., min_length=1),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> WorkspaceContentResponse:
+    """Stage a new local agent file into the vault (no PDM object required yet)."""
+    project = ctx.projects.get_project(db, project_id)
+    data = await file.read()
+    written = ctx.workspaces.stage_new_workspace_file(project, path, data)
+    return WorkspaceContentResponse(
+        object_id=project_id,
+        filename=written.name,
+        path=str(written),
+        bytes_written=len(data),
+    )
 
 
 @router.get("/api/projects/{project_id}/workspace/content")

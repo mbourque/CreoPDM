@@ -211,6 +211,9 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "Files checked out ·" not in home.text
     script = client.get("/static/js/app.js")
     assert "function loadCheckedOutTab" in script.text
+    assert "function listAgentCacheFiles" in script.text
+    assert "function pushLocalNewPathsToVault" in script.text
+    assert "New file (local)" in script.text
     assert "function setCheckedOutTabCount" in script.text
     assert "function listedMetricRows" in script.text
     assert "function refreshTabMetrics" in script.text

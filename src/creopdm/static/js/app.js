@@ -1598,7 +1598,7 @@
       const tip = checkinBtn.closest(".toolbar-tip");
       if (tip) {
         tip.title = addOnly
-          ? "Add selected vault files to the project."
+          ? "Add selected new files to the project (uploads local workspace files first)."
           : "Check in selected files.";
       }
     }
@@ -2205,6 +2205,47 @@
     return response.json();
   }
 
+  async function listAgentCacheFiles(projectId) {
+    if (!projectId) return [];
+    const agent = await probeCreoAgent();
+    if (!agent) return [];
+    const response = await fetch(
+      `${agentBase()}/files?project_id=${encodeURIComponent(projectId)}`,
+      { method: "GET" }
+    );
+    if (!response.ok) return [];
+    const body = await response.json().catch(() => null);
+    return Array.isArray(body?.files) ? body.files : [];
+  }
+
+  async function pushLocalNewPathsToVault(projectId, relativePaths) {
+    const paths = [...new Set((relativePaths || []).map((item) => String(item || "").replace(/\\/g, "/").replace(/^\/+/, "")).filter(Boolean))];
+    if (!projectId || !paths.length) return { ok: [], failed: [], skipped: true };
+    const agent = await probeCreoAgent();
+    if (!agent) return null;
+    const response = await fetch(`${agentBase()}/push-paths`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pdm_url: window.location.origin,
+        project_id: projectId,
+        relative_paths: paths,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await readError(response));
+    }
+    return response.json();
+  }
+
+  function logicalRelativePath(rel) {
+    const norm = String(rel || "").replace(/\\/g, "/").replace(/^\/+/, "");
+    const parts = norm.split("/").filter(Boolean);
+    const name = parts.pop() || "";
+    const logical = logicalUploadName(name);
+    return parts.length ? `${parts.join("/")}/${logical}` : logical;
+  }
+
   async function materializeViaAgent(prepared) {
     const companions = Array.isArray(prepared.companions) ? prepared.companions : [];
     const response = await fetch(`${agentBase()}/materialize`, {
@@ -2736,6 +2777,12 @@
       checkinDialog.dataset.addPaths = JSON.stringify(
         addOnly ? [...selectedNew] : []
       );
+      const localSelected = addOnly
+        ? queued
+            .filter((row) => row.dataset.localCache === "1" && row.dataset.relativePath)
+            .map((row) => row.dataset.relativePath)
+        : [];
+      checkinDialog.dataset.localPaths = JSON.stringify(localSelected);
     }
     if (wrap && box) {
       box.innerHTML = "";
@@ -2817,6 +2864,43 @@
       if (!added.length) {
         showError($("#checkin-error"), "Select at least one file to add.");
         return;
+      }
+      let localPaths = [];
+      try {
+        localPaths = JSON.parse(checkinDialog.dataset.localPaths || "[]");
+      } catch {
+        localPaths = [];
+      }
+      localPaths = localPaths.filter((path) => added.includes(path));
+      if (localPaths.length) {
+        const projectId =
+          checkinDialog?.dataset.projectId ||
+          checkinBtn?.dataset.project ||
+          openWorkspaceBtn?.dataset.project ||
+          "";
+        const synced = await withBusy("Uploading local workspace files to vault…", async () => {
+          try {
+            return await pushLocalNewPathsToVault(projectId, localPaths);
+          } catch (err) {
+            showError($("#checkin-error"), err?.message || String(err));
+            return false;
+          }
+        });
+        if (synced === false) return;
+        if (!synced) {
+          showError(
+            $("#checkin-error"),
+            "Start creopdm-agent on this Creo PC to upload local workspace files into the vault."
+          );
+          return;
+        }
+        if (synced.failed?.length && !synced.ok?.length) {
+          showError(
+            $("#checkin-error"),
+            synced.failed[0]?.message || "Could not upload local files to the vault."
+          );
+          return;
+        }
       }
     }
     let result;
@@ -3061,16 +3145,63 @@
     loading.className = "empty-row";
     const loadingCell = document.createElement("td");
     loadingCell.colSpan = 5;
-    loadingCell.textContent = "Looking for vault changes…";
+    loadingCell.textContent = "Looking for vault and local workspace changes…";
     loading.appendChild(loadingCell);
     body.appendChild(loading);
     refreshTabMetrics();
     try {
-      const response = await fetch(`/api/projects/${projectId}/checkin-queue`);
-      if (!response.ok) throw new Error("queue");
-      const data = await response.json();
+      const [queueResponse, objectsResponse, cacheFiles] = await Promise.all([
+        fetch(`/api/projects/${projectId}/checkin-queue`),
+        fetch(`/api/projects/${projectId}/objects`),
+        listAgentCacheFiles(projectId),
+      ]);
+      if (!queueResponse.ok) throw new Error("queue");
+      const data = await queueResponse.json();
       const saves = data.saves || [];
-      const created = data.new_files || [];
+      const created = [...(data.new_files || [])];
+      const knownLogical = new Set();
+      const knownExact = new Set();
+      const knownBasenames = new Set();
+      created.forEach((item) => {
+        const rel = String(item.relative_path || "").replace(/\\/g, "/");
+        if (rel) {
+          knownExact.add(rel.toLowerCase());
+          knownLogical.add(logicalRelativePath(rel).toLowerCase());
+          knownBasenames.add(logicalUploadName(PathBasename(rel)).toLowerCase());
+        }
+      });
+      if (objectsResponse.ok) {
+        const objects = await objectsResponse.json().catch(() => []);
+        (Array.isArray(objects) ? objects : []).forEach((item) => {
+          const rel = String(item.relative_path || item.filename || "").replace(/\\/g, "/");
+          if (!rel) return;
+          knownExact.add(rel.toLowerCase());
+          knownLogical.add(logicalRelativePath(rel).toLowerCase());
+          knownBasenames.add(logicalUploadName(PathBasename(rel)).toLowerCase());
+        });
+      }
+      cacheFiles.forEach((item) => {
+        const rel = String(item.relative_path || "").replace(/\\/g, "/");
+        if (!rel) return;
+        const exact = rel.toLowerCase();
+        const logical = logicalRelativePath(rel).toLowerCase();
+        const base = logicalUploadName(PathBasename(rel)).toLowerCase();
+        const atRoot = !rel.includes("/");
+        if (knownExact.has(exact) || knownLogical.has(logical)) return;
+        // Materialized checkouts usually sit at the cache root with the same basename.
+        if (atRoot && knownBasenames.has(base)) return;
+        knownExact.add(exact);
+        knownLogical.add(logical);
+        knownBasenames.add(base);
+        created.push({
+          filename: item.filename || PathBasename(rel),
+          relative_path: rel,
+          size: item.size,
+          saved_at: item.saved_at || "",
+          object_type: typeFromExtension(filenameExtension(item.filename || rel)),
+          local_cache: true,
+        });
+      });
       const pending = saves.length + created.length;
       if (tab) tab.textContent = pending ? `New files · ${pending}` : "New files";
       setCheckinQueueCounts(saves.length, created.length);
@@ -3080,7 +3211,7 @@
         row.className = "empty-row";
         const cell = document.createElement("td");
         cell.colSpan = 5;
-        cell.textContent = "No new or changed vault files.";
+        cell.textContent = "No new or changed vault or local workspace files.";
         row.appendChild(cell);
         body.appendChild(row);
         refreshTabMetrics();
@@ -3100,6 +3231,7 @@
         row.dataset.inWorkspace = "1";
         if (meta.uuid) row.dataset.uuid = meta.uuid;
         if (meta.relativePath) row.dataset.relativePath = meta.relativePath;
+        if (meta.localCache) row.dataset.localCache = "1";
         if (meta.uuid && projectId) {
           row.dataset.detail = `/projects/${projectId}/objects/${meta.uuid}#history`;
         }
@@ -3155,14 +3287,21 @@
       created.forEach((item) => {
         addRow(
           [
-            "New file",
+            item.local_cache ? "New file (local)" : "New file",
             item.filename || "",
-            "Not in the project yet. Select and click Add.",
+            item.local_cache
+              ? "In local workspace. Select and click Add to upload into the vault."
+              : "Not in the project yet. Select and click Add.",
             item.size != null ? formatByteSize(item.size) : "",
             item.saved_at || "—",
           ],
           "",
-          { filename: item.filename, objectType: item.object_type, relativePath: item.relative_path }
+          {
+            filename: item.filename,
+            objectType: item.object_type,
+            relativePath: item.relative_path,
+            localCache: Boolean(item.local_cache),
+          }
         );
       });
       refreshTabMetrics();

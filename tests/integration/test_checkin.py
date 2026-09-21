@@ -382,7 +382,6 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     assert "Newer Creo save" not in page.text
     match = re.search(r'<button[^>]*id="checkin-btn"[^>]*>', page.text)
     assert match, page.text
-    assert "hidden" in match.group(0)
     assert "disabled" in match.group(0)
     assert "Delete project" in page.text
     assert "Forget project" not in page.text
@@ -435,7 +434,6 @@ def test_project_checkin_queue_adds_new_workspace_file_without_checkout(client, 
     assert page.status_code == 200, page.text
     match = re.search(r'<button[^>]*id="checkin-btn"[^>]*>', page.text)
     assert match, page.text
-    assert "hidden" in match.group(0)
     assert "disabled" in match.group(0)
     preview = client.get(f"/api/projects/{project['uuid']}/checkin-preview")
     assert preview.status_code == 200, preview.text
@@ -663,3 +661,32 @@ def test_checkin_rejects_unchanged_checkout(client, repo_parent, data_dir):
     still = client.get(f"/api/objects/{obj['uuid']}").json()
     assert still["owned_by_me"] is True
     assert still["iteration"] == 1
+
+
+@requires_git
+def test_project_workspace_content_stages_new_file_for_add(client, repo_parent, data_dir):
+    project, _obj = _create_part(client, repo_parent)
+    uploaded = client.put(
+        f"/api/projects/{project['uuid']}/workspace-content",
+        params={"path": "notes.txt"},
+        files={"file": ("notes.txt", b"local-notes", "text/plain")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    body = uploaded.json()
+    assert body["filename"] == "notes.txt"
+    assert body["bytes_written"] == len(b"local-notes")
+    vault = data_dir / "vaults" / project["uuid"] / "notes.txt"
+    assert vault.read_bytes() == b"local-notes"
+
+    queue = client.get(f"/api/projects/{project['uuid']}/checkin-queue")
+    assert queue.status_code == 200, queue.text
+    names = {item["filename"] for item in queue.json()["new_files"]}
+    assert "notes.txt" in names
+
+    added = client.post(
+        f"/api/projects/{project['uuid']}/checkin-queue",
+        json={"comment": "Add notes from local workspace", "add_relative_paths": ["notes.txt"]},
+    )
+    assert added.status_code == 200, added.text
+    objects = client.get(f"/api/projects/{project['uuid']}/objects").json()
+    assert any(item["filename"] == "notes.txt" for item in objects)

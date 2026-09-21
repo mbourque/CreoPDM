@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from pathlib import Path
 from urllib.parse import quote, urlparse
@@ -94,6 +95,25 @@ class PushItemResult(BaseModel):
 class PushResponse(BaseModel):
     ok: list[PushItemResult] = Field(default_factory=list)
     failed: list[PushItemResult] = Field(default_factory=list)
+
+
+class PushPathsRequest(BaseModel):
+    pdm_url: str = ""
+    project_id: str = ""
+    token: str | None = None
+    relative_paths: list[str] = Field(default_factory=list)
+
+
+class CacheFileInfo(BaseModel):
+    relative_path: str
+    filename: str
+    size: int = 0
+    saved_at: str = ""
+
+
+class CacheFilesResponse(BaseModel):
+    root: str
+    files: list[CacheFileInfo] = Field(default_factory=list)
 
 
 def _safe_segment(value: str, fallback: str = "file") -> str:
@@ -325,6 +345,144 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     )
                 )
                 logger.info("Pushed %s → vault (%s bytes)", local.name, nbytes)
+        return PushResponse(ok=ok, failed=failed)
+
+    @app.get("/files", response_model=CacheFilesResponse)
+    def list_cache_files(project_id: str = "") -> CacheFilesResponse:
+        """List files under the project agent-cache folder (local workspace)."""
+        from datetime import datetime
+
+        from creopdm.creo.file_manager import CreoFileManager
+
+        target = _project_cache_dir(project_id)
+        files: list[CacheFileInfo] = []
+        skip_dirs = {".git", ".creopdm", "__pycache__"}
+        for dirpath, dirnames, filenames in os.walk(target):
+            dirnames[:] = [name for name in dirnames if name.lower() not in skip_dirs]
+            folder = Path(dirpath)
+            for name in filenames:
+                if name.startswith(".") or CreoFileManager.is_ignored(name):
+                    continue
+                path = folder / name
+                if not path.is_file():
+                    continue
+                try:
+                    rel = path.resolve().relative_to(target.resolve()).as_posix()
+                except ValueError:
+                    continue
+                size = 0
+                stamp = ""
+                try:
+                    info = path.stat()
+                    size = int(info.st_size)
+                    stamp = datetime.fromtimestamp(info.st_mtime).strftime("%Y-%m-%d %H:%M")
+                except OSError:
+                    pass
+                files.append(
+                    CacheFileInfo(
+                        relative_path=rel,
+                        filename=path.name,
+                        size=size,
+                        saved_at=stamp,
+                    )
+                )
+        files.sort(key=lambda item: item.relative_path.lower())
+        return CacheFilesResponse(root=str(target), files=files)
+
+    @app.post("/push-paths", response_model=PushResponse)
+    def push_paths_to_vault(payload: PushPathsRequest) -> PushResponse:
+        """Upload new local-cache paths into the vault (for New files / Add)."""
+        base = _normalize_base(payload.pdm_url or settings.pdm_url)
+        project_id = (payload.project_id or "").strip()
+        if not project_id:
+            raise HTTPException(status_code=400, detail="project_id is required.")
+        cache_dir = _project_cache_dir(project_id)
+        headers: dict[str, str] = {}
+        token = (payload.token or settings.token or "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        ok: list[PushItemResult] = []
+        failed: list[PushItemResult] = []
+        with httpx.Client(timeout=120.0, follow_redirects=True) as client:
+            for raw in payload.relative_paths:
+                rel = str(raw or "").replace("\\", "/").lstrip("/")
+                if not rel or ".." in rel.split("/"):
+                    failed.append(
+                        PushItemResult(object_id=project_id, filename=rel, message="Invalid path.")
+                    )
+                    continue
+                local = (cache_dir / rel).resolve()
+                try:
+                    local.relative_to(cache_dir.resolve())
+                except ValueError:
+                    failed.append(
+                        PushItemResult(
+                            object_id=project_id,
+                            filename=Path(rel).name,
+                            message="Path is outside the agent cache.",
+                        )
+                    )
+                    continue
+                if not local.is_file():
+                    failed.append(
+                        PushItemResult(
+                            object_id=project_id,
+                            filename=Path(rel).name,
+                            message=f"No local cache file found for {rel}.",
+                        )
+                    )
+                    continue
+                url = (
+                    f"{base}/api/projects/{quote(project_id)}/workspace-content"
+                    f"?path={quote(rel)}"
+                )
+                try:
+                    with local.open("rb") as handle:
+                        response = client.put(
+                            url,
+                            headers=headers,
+                            files={"file": (local.name, handle, "application/octet-stream")},
+                        )
+                except httpx.HTTPError as exc:
+                    failed.append(
+                        PushItemResult(
+                            object_id=project_id,
+                            filename=local.name,
+                            message=f"Could not reach CreoPDM: {exc}",
+                        )
+                    )
+                    continue
+                if response.status_code >= 400:
+                    detail = ""
+                    try:
+                        body = response.json()
+                        detail = (
+                            body.get("error", {}).get("message")
+                            or body.get("detail")
+                            or response.text
+                        )
+                    except Exception:
+                        detail = response.text[:300]
+                    failed.append(
+                        PushItemResult(
+                            object_id=project_id,
+                            filename=local.name,
+                            message=detail or f"CreoPDM returned {response.status_code}",
+                        )
+                    )
+                    continue
+                nbytes = local.stat().st_size
+                ok.append(
+                    PushItemResult(
+                        object_id=project_id,
+                        filename=local.name,
+                        ok=True,
+                        path=str(local),
+                        bytes_written=nbytes,
+                        message=rel,
+                    )
+                )
+                logger.info("Pushed new path %s → vault (%s bytes)", rel, nbytes)
         return PushResponse(ok=ok, failed=failed)
 
     @app.post("/materialize", response_model=MaterializeResponse)

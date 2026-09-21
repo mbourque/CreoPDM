@@ -248,3 +248,81 @@ def test_agent_push_uploads_latest_cache_file(tmp_path, monkeypatch):
         assert puts[0]["filename"] == "shaft.prt.4"
         assert puts[0]["body"] == b"agent-local-save"
         assert puts[0]["headers"].get("Authorization") == "Bearer tok"
+
+
+def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    project_id = "proj-new"
+    cache = root / project_id
+    cache.mkdir(parents=True)
+    (cache / "notes.txt").write_bytes(b"hello-local")
+    (cache / "nested").mkdir()
+    (cache / "nested" / "extra.txt").write_bytes(b"nested-local")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), token="tok")
+    app = create_agent_app(settings)
+    puts: list[dict] = []
+
+    class FakeResponse:
+        def __init__(self, status_code: int = 200, payload: dict | None = None):
+            self.status_code = status_code
+            self._payload = payload or {}
+            self.text = ""
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def put(self, url, headers=None, files=None):
+            handle = files["file"][1]
+            body = handle.read()
+            puts.append(
+                {
+                    "url": url,
+                    "headers": headers or {},
+                    "filename": files["file"][0],
+                    "body": body,
+                }
+            )
+            return FakeResponse(
+                200,
+                {
+                    "ok": True,
+                    "object_id": project_id,
+                    "filename": files["file"][0],
+                    "path": f"/vault/{files['file'][0]}",
+                    "bytes_written": len(body),
+                },
+            )
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        listed = client.get(f"/files?project_id={project_id}")
+        assert listed.status_code == 200, listed.text
+        names = {item["relative_path"] for item in listed.json()["files"]}
+        assert names == {"notes.txt", "nested/extra.txt"}
+
+        response = client.post(
+            "/push-paths",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "project_id": project_id,
+                "relative_paths": ["notes.txt", "nested/extra.txt", "missing.txt"],
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert {item["filename"] for item in body["ok"]} == {"notes.txt", "extra.txt"}
+        assert len(body["failed"]) == 1
+        assert body["failed"][0]["filename"] == "missing.txt"
+        assert len(puts) == 2
+        assert all("/api/projects/" in item["url"] and "workspace-content" in item["url"] for item in puts)
+        assert puts[0]["headers"].get("Authorization") == "Bearer tok"
