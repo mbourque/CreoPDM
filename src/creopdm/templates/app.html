@@ -307,9 +307,6 @@
               disabled>Set Working Directory</button>
     </span>
     <button type="button" class="btn" id="add-files-btn" {% if not selected %}disabled{% endif %}>Add Files</button>
-    <span class="toolbar-tip" title="Copy selected files into the CreoPDM vault if they are not already there. Does not check them out.">
-      <button type="button" class="btn" id="workspace-btn" disabled>Copy to Vault</button>
-    </span>
     <span class="toolbar-tip" title="Open this project's local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">
       <button type="button" class="btn" id="open-workspace-btn" {% if selected %}data-project="{{ selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}>Open Workspace</button>
     </span>
@@ -327,6 +324,9 @@
     </span>
     <span class="toolbar-tip" title="Open version history and details for the selected file.">
       <button type="button" class="btn" id="history-btn" disabled>History</button>
+    </span>
+    <span class="toolbar-tip" title="Copy selected files into the CreoPDM vault if they are not already there. Does not check them out.">
+      <button type="button" class="btn" id="workspace-btn" disabled>Copy to Vault</button>
     </span>
     <div class="toolbar-menu" id="remove-menu">
       <button type="button" class="btn btn-danger toolbar-menu-toggle" id="remove-menu-btn"
