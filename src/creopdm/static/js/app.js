@@ -3148,6 +3148,7 @@
       $("#delete-project-btn")?.dataset.name
       || purgeBtn?.dataset.projectName
       || removeBtn?.dataset.projectName
+      || discardLocalBtn?.dataset.projectName
       || ""
     ).trim();
   }
@@ -3296,14 +3297,16 @@
     if (!paths.length) return;
     const projectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
     if (!projectId) return;
-    const label = paths.length === 1 ? paths[0] : `${paths.length} files`;
-    if (
-      !window.confirm(
-        `Delete ${label} from the local workspace on this PC?\n\nThis only removes creopdm-agent cache files. The vault and project list are unchanged.`
-      )
-    ) {
-      return;
-    }
+    const confirmed = await confirmByProjectName({
+      title: paths.length === 1 ? "Remove from workspace" : `Remove ${paths.length} files from workspace`,
+      lead:
+        paths.length === 1
+          ? "This deletes the file from the local workspace on this PC (creopdm-agent cache). The vault and project list are unchanged."
+          : "These files are deleted from the local workspace on this PC (creopdm-agent cache). The vault and project list are unchanged.",
+      note: "This cannot be undone from CreoPDM.",
+      submitLabel: "Remove from Workspace",
+    });
+    if (!confirmed) return;
     showError($("#toolbar-error"), "");
     const result = await withBusy("Removing from local workspace…", async () => {
       try {

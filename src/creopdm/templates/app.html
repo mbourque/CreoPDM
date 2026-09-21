@@ -334,6 +334,7 @@
               title="Remove local workspace files, vault copies, or files from the project.">Remove ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="discard-local-btn"
+                {% if selected %}data-project-name="{{ selected.name }}"{% endif %}
                 disabled
                 title="Delete selected files from the local workspace on this PC (creopdm-agent cache). Does not affect the vault or project list.">Remove from Workspace</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn"
