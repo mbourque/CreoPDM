@@ -242,6 +242,7 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert css.text.index(".grid tr.is-pending td") < css.text.rindex(".grid tr.is-selected td")
     assert "#changes-table td" in css.text
     assert "vertical-align: top" in css.text.split("#changes-table td")[1].split("}")[0]
+    assert "background: transparent !important" in css.text
     assert "appearance: none" in css.text.split(".metric {")[1].split("}")[0]
     assert "tr.is-row-hidden" in css.text
     assert "dialog:not([open])" in css.text

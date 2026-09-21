@@ -474,6 +474,20 @@ tr.is-row-hidden { display: none !important; }
   display: block;
   text-align: left;
 }
+#changes-table .filename-cell .object-open {
+  /* Creo/CEF keeps a solid button fill; that shows as a white band once the row is selected. */
+  background: transparent !important;
+  background-color: transparent !important;
+  padding: 0;
+  margin: 0;
+  min-height: 0;
+  line-height: 1.25;
+  box-shadow: none;
+}
+#changes-table .filename-cell .muted.small {
+  margin: 0.12rem 0 0;
+  background: transparent;
+}
 #changes-table td {
   vertical-align: top;
 }
@@ -514,13 +528,16 @@ button.folder-open:hover .folder-name { text-decoration: underline; }
   cursor: pointer;
 }
 button.object-open {
-  background: none;
+  background: transparent !important;
+  background-color: transparent !important;
   border: none;
   padding: 0;
+  margin: 0;
   font: inherit;
   font-weight: 600;
   color: var(--accent-2);
   cursor: pointer;
+  box-shadow: none;
 }
 button.object-open:hover { text-decoration: underline; }
 .detail-head .object-open { font-size: inherit; color: inherit; }
