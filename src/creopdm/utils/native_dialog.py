@@ -25,16 +25,26 @@ _WINERROR_CANCELLED = 1223
 
 def is_user_cancelled(exc: BaseException) -> bool:
     """True when Windows reports that the user closed or cancelled a dialog."""
-    winerror = getattr(exc, "winerror", None)
-    if winerror is None:
-        winerror = getattr(exc, "errno", None)
-    try:
-        code = int(winerror)
-    except (TypeError, ValueError):
-        return False
-    return code in (_HRESULT_CANCELLED, _WINERROR_CANCELLED, -2147023673) or (
-        code & 0xFFFFFFFF
-    ) == _HRESULT_CANCELLED
+    candidates: list[object] = [
+        getattr(exc, "winerror", None),
+        getattr(exc, "errno", None),
+    ]
+    # On POSIX, OSError's 4th ctor arg is not stored as .winerror.
+    args = getattr(exc, "args", ())
+    if isinstance(args, tuple) and len(args) >= 4:
+        candidates.append(args[3])
+    for winerror in candidates:
+        if winerror is None:
+            continue
+        try:
+            code = int(winerror)
+        except (TypeError, ValueError):
+            continue
+        if code in (_HRESULT_CANCELLED, _WINERROR_CANCELLED, -2147023673):
+            return True
+        if (code & 0xFFFFFFFF) == _HRESULT_CANCELLED:
+            return True
+    return False
 
 
 def cad_dialog_filter_patterns() -> str:
@@ -66,9 +76,14 @@ def document_dialog_filter_patterns() -> str:
     return ";".join(f"*{ext}" for ext in DEFAULT_DOCUMENT_EXTENSIONS)
 
 
+def _is_windows() -> bool:
+    """Isolated so tests can fake Windows without patching os.name (breaks pathlib)."""
+    return os.name == "nt"
+
+
 def native_picker_available() -> bool:
     """True when this process can show a Windows file/folder picker."""
-    return os.name == "nt"
+    return _is_windows()
 
 
 def pick_files(initial_dir: Path, title: str = "Add files to the project") -> list[Path]:
@@ -76,11 +91,11 @@ def pick_files(initial_dir: Path, title: str = "Add files to the project") -> li
 
     Does not change the PDM process working directory.
     """
-    start = Path(initial_dir)
-    start.mkdir(parents=True, exist_ok=True)
-    if os.name != "nt":
+    if not _is_windows():
         logger.info("Native file picker is not available; use the browser file chooser")
         return []
+    start = Path(initial_dir)
+    start.mkdir(parents=True, exist_ok=True)
     try:
         return run_on_sta(lambda: _windows_open_dialog(start, title))
     except Exception:
@@ -97,12 +112,12 @@ def pick_files(initial_dir: Path, title: str = "Add files to the project") -> li
 
 def pick_folder(initial_dir: Path, title: str = "Choose project folder") -> Path | None:
     """Open a native folder picker. Returns None if the user cancels."""
+    if not _is_windows():
+        logger.info("Native folder picker is not available; use the browser folder chooser")
+        return None
     start = Path(initial_dir)
     if not start.is_dir():
         start = start.parent if start.parent.is_dir() else Path.home()
-    if os.name != "nt":
-        logger.info("Native folder picker is not available; use the browser folder chooser")
-        return None
     hwnd = _dialog_owner_hwnd()
     try:
         return run_on_sta(lambda: _windows_folder_dialog(start, title, hwnd))

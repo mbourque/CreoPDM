@@ -219,8 +219,7 @@ def test_windows_connector_respects_executable_override(tmp_path: Path):
 
 def test_windows_connector_association_uses_startfile(tmp_path: Path, monkeypatch):
     opened: list[Path] = []
-    monkeypatch.setattr("creopdm.utils.launch.os.name", "nt")
-    monkeypatch.setattr("creopdm.creo.windows_connector.os.name", "nt")
+    monkeypatch.setattr("creopdm.creo.windows_connector._is_windows", lambda: True)
 
     def fake_start(path: Path, workdir: Path) -> None:
         opened.append(Path(path))
@@ -380,8 +379,7 @@ def test_windows_connector_finds_view_beside_parametric(tmp_path: Path):
 
 def test_windows_connector_view_association_uses_startfile(tmp_path: Path, monkeypatch):
     opened: list[Path] = []
-    monkeypatch.setattr("creopdm.utils.launch.os.name", "nt")
-    monkeypatch.setattr("creopdm.creo.windows_connector.os.name", "nt")
+    monkeypatch.setattr("creopdm.creo.windows_connector._is_windows", lambda: True)
 
     def fake_start(path: Path, workdir: Path) -> None:
         opened.append(Path(path))

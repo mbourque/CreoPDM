@@ -24,6 +24,11 @@ _PROCESS_NAMES = ("xtop.exe", "parametric.exe", "parametric", "xtop")
 _CREOJS_LIBRARY = Path("Common Files") / "apps" / "creojs" / "creojsweb" / "creojs.js"
 
 
+def _is_windows() -> bool:
+    """Isolated so tests can fake Windows without patching os.name (breaks pathlib)."""
+    return os.name == "nt"
+
+
 def locate_creojs_library(executable: Path | str | None) -> Path | None:
     """Find Creo.JS next to parametric / parametric.exe (Creo loadpoint)."""
     if not executable:
@@ -219,7 +224,7 @@ class WindowsCreoConnector(CreoConnector):
         parametric = self.find_executable()
         if self._open_mode == "association" or parametric is None:
             logger.info("Opening %s from working directory %s", target.name, workdir)
-            if os.name == "nt":
+            if _is_windows():
                 open_windows_file(target, cwd=workdir)
                 return
             opener = "xdg-open" if os.name == "posix" else "open"
@@ -250,7 +255,7 @@ class WindowsCreoConnector(CreoConnector):
         viewer = self.find_view_executable()
         if self._view_open_mode == "association" or viewer is None:
             logger.info("Opening %s from working directory %s", target.name, workdir)
-            if os.name == "nt":
+            if _is_windows():
                 open_windows_file(target, cwd=workdir)
                 return
             opener = "xdg-open" if os.name == "posix" else "open"

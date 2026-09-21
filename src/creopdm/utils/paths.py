@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from creopdm.exceptions import PathValidationError
+
+_WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:")
 
 
 def normalize_fs_path(path: str | Path) -> Path:
@@ -17,6 +20,9 @@ def assert_safe_relative_path(relative: str) -> Path:
     if not relative or not relative.strip():
         raise PathValidationError("A relative file path is required.")
     raw = relative.replace("\\", "/").strip()
+    # Drive letters are absolute on Windows; Path() treats them as relative on Linux.
+    if _WINDOWS_DRIVE.match(raw):
+        raise PathValidationError("Repository file paths must be relative.")
     if raw.startswith("/") or raw.startswith("\\"):
         raise PathValidationError("Repository file paths must be relative.")
     candidate = Path(raw)
