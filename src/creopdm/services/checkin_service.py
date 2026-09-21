@@ -150,6 +150,11 @@ class CheckinService:
             previous_git = obj.current_version.git_commit_hash if obj.current_version else None
             copy_file(workspace_file, repo_file)
             unchanged = obj.current_version is not None and content_hash == obj.current_version.content_hash
+            if unchanged and not to_add:
+                raise ValidationAppError(
+                    "No changes to check in. Use Undo Checkout to release the lock without a new version.",
+                    details={"filename": obj.filename},
+                )
             remove_paths = [old_relative] if old_relative != new_relative else []
             try:
                 git_hash = self._store.store_version(

@@ -20,22 +20,28 @@ def _create_part(client, repo_parent: Path):
     return project, created.json()
 
 
-def _advance_to_iteration(client, object_id: str, target: int) -> None:
-    current = client.get(f"/api/objects/{object_id}").json()["iteration"]
-    while current < target:
+def _advance_to_iteration(client, object_id: str, target: int, data_dir) -> None:
+    current = client.get(f"/api/objects/{object_id}").json()
+    iteration = current["iteration"]
+    project_uuid = current["project_uuid"]
+    filename = current["filename"]
+    while iteration < target:
         assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
+        workspace = data_dir / "vaults" / project_uuid / filename
+        workspace.write_bytes(f"prepare-{iteration + 1}".encode("utf-8"))
         response = client.post(
             f"/api/objects/{object_id}/checkin",
-            json={"comment": f"Prepare iteration {current + 1}"},
+            json={"comment": f"Prepare iteration {iteration + 1}"},
         )
         assert response.status_code == 200, response.text
-        current = response.json()["iteration"]
+        iteration = response.json()["iteration"]
+        filename = response.json()["filename"]
 
 
 @requires_git
 def test_checkin_increments_iteration_and_releases_lock(client, repo_parent, data_dir):
     project, obj = _create_part(client, repo_parent)
-    _advance_to_iteration(client, obj["uuid"], 3)
+    _advance_to_iteration(client, obj["uuid"], 3, data_dir)
     current = client.get(f"/api/objects/{obj['uuid']}").json()
     assert current["display_revision"] == "A.3"
 
@@ -119,6 +125,8 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     assert "function applyCheckedInResult" in script.text
     assert "applyCheckedInResult(result)" in script.text
     assert "reloadPageAfterDialog()" in script.text
+    assert "Use Undo Checkout to release locks without a new version" in script.text
+    assert "submitBtn.disabled = !canSubmit" in script.text
 
     checked_in = client.post(
         f"/api/objects/{obj['uuid']}/checkin",
@@ -639,3 +647,18 @@ def test_workspace_content_put_then_checkin(client, repo_parent, data_dir, ident
     assert payload["current_version"]["content_hash"]
     history = client.get(f"/api/objects/{obj['uuid']}/history").json()
     assert history[0]["comment"] == "Synced agent workspace into vault"
+
+
+@requires_git
+def test_checkin_rejects_unchanged_checkout(client, repo_parent, data_dir):
+    project, obj = _create_part(client, repo_parent)
+    assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
+    denied = client.post(
+        f"/api/objects/{obj['uuid']}/checkin",
+        json={"comment": "No edits"},
+    )
+    assert denied.status_code == 400, denied.text
+    assert "Undo Checkout" in denied.json()["error"]["message"]
+    still = client.get(f"/api/objects/{obj['uuid']}").json()
+    assert still["owned_by_me"] is True
+    assert still["iteration"] == 1

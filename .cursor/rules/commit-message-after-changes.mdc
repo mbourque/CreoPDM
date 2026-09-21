@@ -1,0 +1,25 @@
+---
+description: After finishing code changes, always give a ready-to-paste git commit message
+alwaysApply: true
+---
+
+# Commit message after each change
+
+The user commits themselves. Whenever you finish a batch of code/test/rule changes (not mid-exploration), end with a **short commit subject** they can paste.
+
+## Format
+
+- One line, ~50–72 characters when practical
+- Imperative mood (“Fix…”, “Add…”, “Block…”)
+- Focus on **why**, not a file list
+- No trailing period
+- Optional: a second line blank then 1–2 short body lines only if needed
+
+## Example
+
+```text
+Suggested commit message:
+Block empty check-in; use Undo Checkout for unchanged locks
+```
+
+Do **not** run `git commit` unless they explicitly ask. Still give the message text even when they only asked for the fix.

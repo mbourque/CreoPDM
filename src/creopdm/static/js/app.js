@@ -2592,15 +2592,20 @@
         .map((row) => row.dataset.uuid)
         .filter(Boolean);
       const ownedIds = owned.map((row) => row.dataset.uuid).filter(Boolean);
-      checkinDialog.dataset.objectIds = JSON.stringify(
-        addOnly
-          ? []
-          : selectedIdsForQueue.length
-            ? selectedIdsForQueue
-            : ownedIds.length
-              ? ownedIds
-              : data.object_ids || []
-      );
+      const pendingIds = data.object_ids || [];
+      const pendingSet = new Set(pendingIds);
+      // Only vault-dirty files — not every owned checkout (avoids empty revisions).
+      let checkinIds = [];
+      if (!addOnly) {
+        if (selectedIdsForQueue.length) {
+          checkinIds = selectedIdsForQueue.filter((id) => pendingSet.has(id));
+        } else if (ownedIds.length) {
+          checkinIds = ownedIds.filter((id) => pendingSet.has(id));
+        } else {
+          checkinIds = pendingIds.slice();
+        }
+      }
+      checkinDialog.dataset.objectIds = JSON.stringify(checkinIds);
     }
     const forceWarn = $("#checkin-force-warn");
     if (forceWarn) {
@@ -2608,15 +2613,9 @@
       forceWarn.textContent = data.warning || "";
     }
     const submitBtn = checkinForm?.querySelector("button[type='submit']");
-    if (submitBtn) {
-      submitBtn.textContent = addOnly
-        ? "Add"
-        : data.force_checkin
-          ? "Check In anyway"
-          : "Check In";
-    }
     const list = $("#checkin-changes");
     list.innerHTML = "";
+    let canSubmit = true;
     if (useQueue) {
       const wantedIds = new Set(queued.map((row) => row.dataset.uuid).filter(Boolean));
       const pendingNames = data.pending_files || [];
@@ -2648,11 +2647,13 @@
           const item = document.createElement("li");
           item.textContent = "– No files selected";
           list.appendChild(item);
+          canSubmit = false;
         }
       } else if (!names.length && !newCount) {
         const item = document.createElement("li");
-        item.textContent = "– Nothing to check in";
+        item.textContent = "– Nothing to check in. Use Undo Checkout to release locks without a new version.";
         list.appendChild(item);
+        canSubmit = false;
       }
     } else {
       [
@@ -2664,6 +2665,23 @@
         item.textContent = `${flag ? "✓" : "–"} ${label}`;
         list.appendChild(item);
       });
+      if (!addOnly && !data.file_modified && !data.force_checkin) {
+        canSubmit = false;
+        const item = document.createElement("li");
+        item.textContent = "– No changes. Use Undo Checkout to release the lock without a new version.";
+        list.appendChild(item);
+      }
+    }
+    if (submitBtn) {
+      submitBtn.textContent = addOnly
+        ? "Add"
+        : data.force_checkin
+          ? "Check In anyway"
+          : "Check In";
+      submitBtn.disabled = !canSubmit;
+    }
+    if (checkinDialog) {
+      checkinDialog.dataset.canSubmit = canSubmit ? "1" : "0";
     }
     const wrap = $("#checkin-new-wrap");
     const box = $("#checkin-new-files");
@@ -2760,6 +2778,13 @@
       );
       return;
     }
+    if (checkinDialog?.dataset.addOnly !== "1" && checkinDialog?.dataset.canSubmit === "0") {
+      showError(
+        $("#checkin-error"),
+        "Nothing to check in. Use Undo Checkout to release locks without a new version."
+      );
+      return;
+    }
     if (checkinDialog?.dataset.force === "1") {
       const name = $("#checkin-filename")?.textContent || "This file";
       if (!window.confirm(`${name} is not checked out. Check in the vault save anyway?`)) return;
@@ -2819,6 +2844,13 @@
         objectIds = JSON.parse(checkinDialog.dataset.objectIds || "[]");
       } catch {
         objectIds = [];
+      }
+      if (!objectIds.length && !added.length) {
+        showError(
+          $("#checkin-error"),
+          "Nothing to check in. Use Undo Checkout to release locks without a new version."
+        );
+        return;
       }
       result = await postAction(`/api/projects/${projectId}/checkin-queue`, {
         comment,
