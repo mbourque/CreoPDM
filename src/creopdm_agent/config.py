@@ -12,7 +12,7 @@ from pydantic import BaseModel, field_validator
 APP_NAME = "CreoPDM-agent"
 DEFAULT_PORT = 8766
 DEFAULT_HEALTH_INTERVAL_SECONDS = 30
-DEFAULT_STATUS_POLL_INTERVAL_SECONDS = 5
+DEFAULT_STATUS_POLL_INTERVAL_SECONDS = 0
 
 
 def default_data_dir() -> Path:

@@ -1920,7 +1920,7 @@
     });
   }
 
-  async function refreshCreoStatusPill() {
+  async function refreshCreoStatusPill(prefetchedAgent) {
     document.querySelectorAll(".creo-session-only").forEach((el) => {
       el.hidden = !hostedCreoJS();
     });
@@ -1929,7 +1929,8 @@
     const modeKey = creoOpenMode() || "association";
     const modeName = modeKey === "embedded" ? "Embedded" : modeKey === "association" ? "OS" : modeKey;
     if (modeKey === "embedded") {
-      const agent = await probeCreoAgent();
+      const agent =
+        prefetchedAgent !== undefined ? prefetchedAgent : await probeCreoAgent();
       if (agent) {
         pill.textContent = `Creo: Connected · ${modeName}`;
         pill.dataset.state = "ok";
@@ -1953,16 +1954,21 @@
   }
   void creoJSReady.then(() => {
     void (async () => {
-      // One /health on load. Repeat only when agent Settings → Browser status poll > 0.
-      // Do not default to 5s: missing field or offline agent must not spam /health.
-      let agent = await refreshCreoStatusPill();
-      if (!agent) agent = await probeCreoAgent();
+      // CREOPDM_STATUS_POLL_V2: at most one /health on load; repeat only if agent says > 0.
+      const modeKey = creoOpenMode() || "association";
+      let agent = null;
+      if (modeKey === "embedded") {
+        agent = await probeCreoAgent();
+        await refreshCreoStatusPill(agent);
+      } else {
+        await refreshCreoStatusPill(null);
+      }
       let seconds = 0;
       if (agent && Object.prototype.hasOwnProperty.call(agent, "status_poll_interval_seconds")) {
         const parsed = Number(agent.status_poll_interval_seconds);
         seconds = Number.isFinite(parsed) ? parsed : 0;
       }
-      if (seconds > 0) {
+      if (modeKey === "embedded" && seconds > 0) {
         const interval = Math.min(120000, Math.max(1000, Math.round(seconds * 1000)));
         window.setInterval(() => {
           void refreshCreoStatusPill();

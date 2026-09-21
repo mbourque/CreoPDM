@@ -78,7 +78,7 @@ def test_settings_initial_payload_fills_defaults(tmp_path, monkeypatch):
     assert payload["pdm_port"] == ""
     assert payload["agent_port"] == "8766"
     assert payload["health_interval_seconds"] == "30"
-    assert payload["status_poll_interval_seconds"] == "5"
+    assert payload["status_poll_interval_seconds"] == "0"
     assert payload["local_root"]
     assert payload["local_root_default"] == payload["local_root"]
 

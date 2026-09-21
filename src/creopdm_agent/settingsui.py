@@ -105,7 +105,7 @@ $health = Add-Box ([string]$initial.health_interval_seconds)
 Add-Note 'How often the tray checks local agent + CreoPDM. 0 = Status menu only. Minimum 5 when enabled.'
 Add-Label 'Browser status poll (seconds)'
 $statusPoll = Add-Box ([string]$initial.status_poll_interval_seconds)
-Add-Note 'How often the CreoPDM page may re-check /health for the status pill. 0 = once on load only. Default 5.'
+Add-Note 'How often the CreoPDM page may re-check /health for the status pill. 0 = once on load only. Default 0.'
 $buttons = New-Object System.Windows.Forms.Panel
 $buttons.Dock = 'Bottom'
 $buttons.Height = 48

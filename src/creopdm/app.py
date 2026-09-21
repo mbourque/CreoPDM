@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from creopdm.api import checkout, creo, health, objects, pages, projects, settings
@@ -113,13 +114,24 @@ def create_app(context: AppContext | None = None) -> FastAPI:
     app.include_router(pages.router)
     static_dir = PACKAGE_DIR / "static"
     static_dir.mkdir(exist_ok=True)
+    app_js = static_dir / "js" / "app.js"
+
+    @app.get("/client/app.js")
+    def client_app_js() -> FileResponse:
+        # Distinct path from /static/js/app.js so Creo's browser cannot keep an old cached poller.
+        return FileResponse(
+            app_js,
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-store"},
+        )
+
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     @app.middleware("http")
     async def no_store_app_js(request, call_next):
         response = await call_next(request)
         path = request.url.path or ""
-        if path.endswith("/static/js/app.js") or path == "/static/js/app.js":
+        if path.endswith("/app.js"):
             response.headers["Cache-Control"] = "no-store"
         return response
 
