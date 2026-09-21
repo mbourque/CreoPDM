@@ -72,7 +72,14 @@ def test_import_creo_and_document_files(client, repo_parent, tmp_path):
 
 @requires_git
 def test_import_from_uploads_keeps_highest_creo_save(client, repo_parent):
-    project, _location = _create_project(client, repo_parent)
+    location = repo_parent / "HighestSave"
+    location.mkdir(parents=True, exist_ok=True)
+    project = client.post(
+        "/api/projects",
+        json={"name": "Highest Save Import", "number": "PRJ-HS-1"},
+    )
+    assert project.status_code == 201, project.text
+    project = project.json()
     added = client.post(
         f"/api/projects/{project['uuid']}/objects/from-uploads",
         files=[
