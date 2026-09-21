@@ -229,8 +229,9 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function closeRemoveMenu" in script.text
     assert "Remove ▾" in home.text
     assert 'id="remove-menu-btn"' in home.text
+    assert 'id="discard-local-btn"' in home.text
     assert 'id="purge-workspace-btn"' in home.text
-    assert 'id="remove-project-btn"' in home.text
+    assert "function deleteLocalWorkspacePaths" in script.text
     assert "toolbar-menu-panel" in home.text
     assert 'selected.every((row) => row.dataset.canCheckout === "1")' in script.text
     assert 'selected.every((row) => row.dataset.canCheckin === "1")' in script.text

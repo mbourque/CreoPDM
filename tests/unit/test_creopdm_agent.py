@@ -326,3 +326,17 @@ def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
         assert len(puts) == 2
         assert all("/api/projects/" in item["url"] and "workspace-content" in item["url"] for item in puts)
         assert puts[0]["headers"].get("Authorization") == "Bearer tok"
+
+        deleted = client.post(
+            "/delete-paths",
+            json={
+                "project_id": project_id,
+                "relative_paths": ["notes.txt", "nested/extra.txt", "gone.txt"],
+            },
+        )
+        assert deleted.status_code == 200, deleted.text
+        deleted_body = deleted.json()
+        assert {item["filename"] for item in deleted_body["ok"]} == {"notes.txt", "extra.txt"}
+        assert len(deleted_body["failed"]) == 1
+        assert not (cache / "notes.txt").exists()
+        assert not (cache / "nested" / "extra.txt").exists()

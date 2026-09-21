@@ -331,8 +331,11 @@
     <div class="toolbar-menu" id="remove-menu">
       <button type="button" class="btn btn-danger toolbar-menu-toggle" id="remove-menu-btn"
               aria-haspopup="menu" aria-expanded="false" disabled
-              title="Remove vault copies or remove files from the project.">Remove ▾</button>
+              title="Remove local workspace files, vault copies, or files from the project.">Remove ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="discard-local-btn"
+                disabled
+                title="Delete selected files from the local workspace on this PC (creopdm-agent cache). Does not affect the vault or project list.">Remove from Workspace</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn"
                 {% if selected %}data-project-name="{{ selected.name }}"{% endif %}
                 disabled

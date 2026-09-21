@@ -1519,6 +1519,7 @@
   const setCreoDirBtn = $("#set-creo-dir-btn");
   const purgeBtn = $("#purge-workspace-btn");
   const removeBtn = $("#remove-project-btn");
+  const discardLocalBtn = $("#discard-local-btn");
   const removeMenu = $("#remove-menu");
   const removeMenuBtn = $("#remove-menu-btn");
   const removeMenuPanel = removeMenu?.querySelector(".toolbar-menu-panel");
@@ -1627,12 +1628,22 @@
     setToolbarActionVisible(checkinBtn, canCheckin);
     setToolbarActionVisible(undoBtn, canUndo);
     if (workspaceBtn) workspaceBtn.disabled = !selected.some((row) => row.dataset.inWorkspace !== "1");
-    const canPurge = selected.some((row) => row.dataset.inWorkspace !== "0");
+    const localNewSelected = selected.filter(
+      (row) => isNewFileQueueRow(row) && row.dataset.localCache === "1"
+    );
+    const vaultNewSelected = selected.filter(
+      (row) => isNewFileQueueRow(row) && row.dataset.localCache !== "1"
+    );
+    const canDiscardLocal = localNewSelected.length > 0;
+    const canPurge =
+      vaultNewSelected.length > 0 ||
+      selected.some((row) => row.dataset.uuid && row.dataset.inWorkspace !== "0");
     const canRemoveProject = ids.length > 0;
+    if (discardLocalBtn) discardLocalBtn.disabled = !canDiscardLocal;
     if (purgeBtn) purgeBtn.disabled = !canPurge;
     if (removeBtn) removeBtn.disabled = !canRemoveProject;
     if (removeMenuBtn) {
-      removeMenuBtn.disabled = !(canPurge || canRemoveProject);
+      removeMenuBtn.disabled = !(canDiscardLocal || canPurge || canRemoveProject);
       if (removeMenuBtn.disabled) closeRemoveMenu();
     }
     const filtering = metricButtons().some((btn) => metricMode(btn) === "filter");
@@ -2256,6 +2267,25 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         pdm_url: window.location.origin,
+        project_id: projectId,
+        relative_paths: paths,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await readError(response));
+    }
+    return response.json();
+  }
+
+  async function deleteLocalWorkspacePaths(projectId, relativePaths) {
+    const paths = [...new Set((relativePaths || []).map((item) => String(item || "").replace(/\\/g, "/").replace(/^\/+/, "")).filter(Boolean))];
+    if (!projectId || !paths.length) return { ok: [], failed: [], skipped: true };
+    const agent = await probeCreoAgent();
+    if (!agent) return null;
+    const response = await fetch(`${agentBase()}/delete-paths`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         project_id: projectId,
         relative_paths: paths,
       }),
@@ -3193,7 +3223,9 @@
 
   purgeBtn?.addEventListener("click", async () => {
     const selected = selectedRows();
-    const pathRows = selected.filter(isNewFileQueueRow);
+    const pathRows = selected.filter(
+      (row) => isNewFileQueueRow(row) && row.dataset.localCache !== "1"
+    );
     const objectRows = selected.filter((row) => !isNewFileQueueRow(row));
     let ids = objectRows.flatMap(rowObjectIds);
     if (!ids.length && !pathRows.length) ids = selectedIds();
@@ -3252,6 +3284,56 @@
     if (warning) showError($("#toolbar-error"), warning);
     else if (okCount) showOk(`${okCount} file(s) removed from the vault.`);
     if (okCount) reloadPage();
+  });
+
+  discardLocalBtn?.addEventListener("click", async () => {
+    const selected = selectedRows().filter(
+      (row) => isNewFileQueueRow(row) && row.dataset.localCache === "1"
+    );
+    const paths = [
+      ...new Set(selected.map((row) => row.dataset.relativePath).filter(Boolean)),
+    ];
+    if (!paths.length) return;
+    const projectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
+    if (!projectId) return;
+    const label = paths.length === 1 ? paths[0] : `${paths.length} files`;
+    if (
+      !window.confirm(
+        `Delete ${label} from the local workspace on this PC?\n\nThis only removes creopdm-agent cache files. The vault and project list are unchanged.`
+      )
+    ) {
+      return;
+    }
+    showError($("#toolbar-error"), "");
+    const result = await withBusy("Removing from local workspace…", async () => {
+      try {
+        return await deleteLocalWorkspacePaths(projectId, paths);
+      } catch (err) {
+        showError($("#toolbar-error"), err?.message || String(err));
+        return false;
+      }
+    });
+    if (result === false) return;
+    if (!result) {
+      showError(
+        $("#toolbar-error"),
+        "Start creopdm-agent on this Creo PC to delete local workspace files."
+      );
+      return;
+    }
+    if (result.failed?.length && !result.ok?.length) {
+      showError(
+        $("#toolbar-error"),
+        result.failed[0]?.message || "Could not delete local workspace files."
+      );
+      return;
+    }
+    knownWorkspacePaths.at = 0;
+    const removed = result.ok?.length || 0;
+    if (removed) showOk(`${removed} file(s) removed from the local workspace.`);
+    if (activeListTab() === "changes") await loadChangesTab();
+    else reloadPage();
+    pollWorkspaceWatch();
   });
 
   removeBtn?.addEventListener("click", async () => {

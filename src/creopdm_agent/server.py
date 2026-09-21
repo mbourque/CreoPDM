@@ -116,6 +116,16 @@ class CacheFilesResponse(BaseModel):
     files: list[CacheFileInfo] = Field(default_factory=list)
 
 
+class DeletePathsRequest(BaseModel):
+    project_id: str = ""
+    relative_paths: list[str] = Field(default_factory=list)
+
+
+class DeletePathsResponse(BaseModel):
+    ok: list[PushItemResult] = Field(default_factory=list)
+    failed: list[PushItemResult] = Field(default_factory=list)
+
+
 def _safe_segment(value: str, fallback: str = "file") -> str:
     text = _SAFE_NAME.sub("_", (value or "").strip()) or fallback
     return text[:180]
@@ -484,6 +494,66 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 )
                 logger.info("Pushed new path %s → vault (%s bytes)", rel, nbytes)
         return PushResponse(ok=ok, failed=failed)
+
+    @app.post("/delete-paths", response_model=DeletePathsResponse)
+    def delete_cache_paths(payload: DeletePathsRequest) -> DeletePathsResponse:
+        """Delete files from the local agent cache (discard New file local rows)."""
+        project_id = (payload.project_id or "").strip()
+        if not project_id:
+            raise HTTPException(status_code=400, detail="project_id is required.")
+        cache_dir = _project_cache_dir(project_id)
+        ok: list[PushItemResult] = []
+        failed: list[PushItemResult] = []
+        for raw in payload.relative_paths:
+            rel = str(raw or "").replace("\\", "/").lstrip("/")
+            if not rel or ".." in rel.split("/"):
+                failed.append(
+                    PushItemResult(object_id=project_id, filename=rel, message="Invalid path.")
+                )
+                continue
+            local = (cache_dir / rel).resolve()
+            try:
+                local.relative_to(cache_dir.resolve())
+            except ValueError:
+                failed.append(
+                    PushItemResult(
+                        object_id=project_id,
+                        filename=Path(rel).name,
+                        message="Path is outside the agent cache.",
+                    )
+                )
+                continue
+            if not local.is_file():
+                failed.append(
+                    PushItemResult(
+                        object_id=project_id,
+                        filename=Path(rel).name,
+                        message=f"No local cache file found for {rel}.",
+                    )
+                )
+                continue
+            try:
+                local.unlink()
+            except OSError as exc:
+                failed.append(
+                    PushItemResult(
+                        object_id=project_id,
+                        filename=local.name,
+                        message=str(exc),
+                    )
+                )
+                continue
+            ok.append(
+                PushItemResult(
+                    object_id=project_id,
+                    filename=local.name,
+                    ok=True,
+                    path=str(local),
+                    message=rel,
+                )
+            )
+            logger.info("Deleted local cache path %s", rel)
+        return DeletePathsResponse(ok=ok, failed=failed)
 
     @app.post("/materialize", response_model=MaterializeResponse)
     def materialize(payload: MaterializeRequest) -> MaterializeResponse:
