@@ -113,9 +113,9 @@
         <input name="agent_base_url" type="text" value="{{ settings.agent_base_url }}" placeholder="http://127.0.0.1:8766" autocomplete="off">
       </label>
       <label>File list refresh interval (ms)
-        <input name="workspace_poll_interval_ms" type="number" min="500" max="120000" step="100" value="{{ settings.workspace_poll_interval_ms }}" placeholder="2000">
+        <input name="workspace_poll_interval_ms" type="number" min="500" max="120000" step="100" value="{{ settings.workspace_poll_interval_ms }}" placeholder="5000">
       </label>
-      <p class="muted small">500–120000 ms. Default 2000. Reload the project page after saving.</p>
+      <p class="muted small">500–120000 ms. Default 5000 (5 seconds). Reload the project page after saving. This also drives how often the page asks the local agent for new workspace files.</p>
     </section>
 
     <section class="settings-card">

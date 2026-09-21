@@ -116,7 +116,7 @@ def test_get_and_update_settings(client, tmp_path):
     assert payload["default_database_url"].startswith("sqlite:///")
     assert payload["port"] == 0
     assert payload["agent_base_url"] == "http://127.0.0.1:8766"
-    assert payload["workspace_poll_interval_ms"] == 2000
+    assert payload["workspace_poll_interval_ms"] == 5000
 
     fake_creo = tmp_path / "parametric.exe"
     fake_creo.write_bytes(b"fake")

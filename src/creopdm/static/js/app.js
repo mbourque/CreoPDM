@@ -3942,8 +3942,8 @@
   }
 
   if (watchProjectId) {
-    const pollMsRaw = Number.parseInt(document.body?.dataset?.workspacePollMs || "2000", 10);
-    const pollMs = Number.isFinite(pollMsRaw) ? Math.min(120000, Math.max(500, pollMsRaw)) : 2000;
+    const pollMsRaw = Number.parseInt(document.body?.dataset?.workspacePollMs || "5000", 10);
+    const pollMs = Number.isFinite(pollMsRaw) ? Math.min(120000, Math.max(500, pollMsRaw)) : 5000;
     setInterval(pollWorkspaceWatch, pollMs);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) pollWorkspaceWatch();

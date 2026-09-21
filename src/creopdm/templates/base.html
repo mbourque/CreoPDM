@@ -19,7 +19,7 @@
 </head>
 <body
   data-agent-base="{{ agent_base_url | default('http://127.0.0.1:8766') }}"
-  data-workspace-poll-ms="{{ workspace_poll_interval_ms | default('2000') }}"
+  data-workspace-poll-ms="{{ workspace_poll_interval_ms | default('5000') }}"
 >
   <header class="topbar">
     <a class="brand" href="/">
@@ -432,6 +432,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push21"></script>
+  <script src="/client/app.js?v={{ app_version }}-push22"></script>
 </body>
 </html>

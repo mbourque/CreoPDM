@@ -71,7 +71,7 @@ _PAGE_DEFAULTS = {
     "creo_open_title": "Opens Creo models as a browser download for the OS association",
     "native_picker": False,
     "agent_base_url": "http://127.0.0.1:8766",
-    "workspace_poll_interval_ms": "2000",
+    "workspace_poll_interval_ms": "5000",
 }
 
 _CREO_OPEN_NAMES = {

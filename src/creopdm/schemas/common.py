@@ -332,7 +332,7 @@ class SettingsResponse(BaseModel):
     default_database_url: str = ""
     port: int = 0
     agent_base_url: str = "http://127.0.0.1:8766"
-    workspace_poll_interval_ms: int = 2000
+    workspace_poll_interval_ms: int = 5000
 
 
 class SettingsUpdateRequest(BaseModel):

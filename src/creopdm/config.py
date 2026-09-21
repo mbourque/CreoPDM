@@ -122,7 +122,7 @@ class UiConfig(BaseModel):
     # Embedded Creo browser calls this local agent (materialize / open).
     agent_base_url: str = "http://127.0.0.1:8766"
     # How often the project page polls workspace-watch for pending saves / new files.
-    workspace_poll_interval_ms: int = 2000
+    workspace_poll_interval_ms: int = 5000
 
     @field_validator("agent_base_url")
     @classmethod
@@ -542,6 +542,11 @@ class ConfigManager:
             raise ConfigurationError(f"Unable to read settings: {exc}") from exc
         dirty = False
         cad_raw = raw.get("cad") if isinstance(raw, dict) else None
+        ui_raw = raw.get("ui") if isinstance(raw, dict) else None
+        # Old default was 2000 ms; bump installs still on that default to 5000.
+        if isinstance(ui_raw, dict) and ui_raw.get("workspace_poll_interval_ms") == 2000:
+            settings.ui.workspace_poll_interval_ms = 5000
+            dirty = True
         raw_extras = extra_cad_set((cad_raw or {}).get("extra_extensions")) if isinstance(cad_raw, dict) else extra_cad_set()
         if raw_extras in PREVIOUS_DEFAULT_EXTRA_CAD_SETS:
             settings.cad.extra_extensions = list(DEFAULT_EXTRA_CAD_EXTENSIONS)
