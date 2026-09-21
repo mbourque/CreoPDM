@@ -272,6 +272,9 @@ def test_choose_files_starts_in_project_folder(client, repo_parent):
     assert 'id="add-folder-input"' in page.text
     assert 'webkitdirectory' in page.text
     script = client.get("/static/js/app.js")
+    assert "function countLatestImportNames" in script.text
+    assert "function formatReadyToAddSummary" in script.text
+    assert "older numbered" in script.text
     assert "function browseLocalFiles" in script.text
     assert "function browseLocalFolder" in script.text
     assert "function filterUploadItems" in script.text

@@ -807,6 +807,64 @@
     return count === 1 ? "1 file" : `${count} files`;
   }
 
+  function importExtensionSet() {
+    const fromApi = (importExtensions || [])
+      .map((item) => String(item || "").trim().toLowerCase())
+      .filter(Boolean)
+      .map((item) => (item.startsWith(".") ? item : `.${item}`));
+    if (fromApi.length) return new Set(fromApi);
+    return purgeableExtensionSet();
+  }
+
+  function isImportVersionedExtension(extension) {
+    const key = String(extension || "").trim().toLowerCase();
+    if (!key) return false;
+    const dotted = key.startsWith(".") ? key : `.${key}`;
+    return importExtensionSet().has(dotted);
+  }
+
+  function importSaveNumber(filename) {
+    const name = PathBasename(filename);
+    const parts = name.split(".");
+    if (parts.length < 3 || !parts[0]) return 0;
+    const last = parts[parts.length - 1];
+    const prev = parts[parts.length - 2];
+    if (/^\d+$/.test(last) && isImportVersionedExtension(`.${prev}`)) {
+      return Number.parseInt(last, 10) || 0;
+    }
+    if (/^\d+$/.test(prev) && isImportVersionedExtension(`.${last}`)) {
+      return Number.parseInt(prev, 10) || 0;
+    }
+    return 0;
+  }
+
+  function countLatestImportNames(names) {
+    const best = new Map();
+    (names || []).forEach((raw) => {
+      const rel = String(raw || "").replace(/\\/g, "/");
+      if (!rel) return;
+      const key = logicalRelativePath(rel).toLowerCase();
+      const number = importSaveNumber(PathBasename(rel));
+      const prev = best.get(key);
+      if (prev == null || number > prev) best.set(key, number);
+    });
+    return best.size;
+  }
+
+  function formatReadyToAddSummary(selectedCount, willAddCount, skippedIgnored) {
+    const omittedIgnored = skippedIgnored
+      ? ` ${skippedIgnored} ignored ${skippedIgnored === 1 ? "file" : "files"} skipped.`
+      : "";
+    if (!willAddCount) {
+      return skippedIgnored ? `No files to add.${omittedIgnored}` : "";
+    }
+    const older = Math.max(0, selectedCount - willAddCount);
+    const omittedOlder = older
+      ? ` ${older} older numbered ${older === 1 ? "save" : "saves"} omitted.`
+      : "";
+    return `${fileCountLabel(willAddCount)} ready to add.${omittedOlder}${omittedIgnored}`;
+  }
+
   function logicalUploadName(name) {
     const text = String(name || "");
     const match = text.match(/^(.*?)(?:\.\d+)?$/);
@@ -910,7 +968,8 @@
     if (chosenBaseFolder) {
       summary.textContent = `Folder: ${chosenBaseFolder}.${omitted}`;
     } else if (chosenPaths.length) {
-      summary.textContent = `${fileCountLabel(chosenPaths.length)} selected.${omitted}`;
+      const willAdd = countLatestImportNames(chosenPaths);
+      summary.textContent = formatReadyToAddSummary(chosenPaths.length, willAdd, ignored);
     } else if (ignored) {
       summary.textContent = `No files to add.${omitted}`;
     } else {
@@ -1054,14 +1113,10 @@
     chosenUploads = kept;
     const summary = $("#chosen-file-summary");
     if (summary) {
-      const omitted = skipped
-        ? ` ${skipped} ignored ${skipped === 1 ? "file" : "files"} skipped.`
-        : "";
-      summary.textContent = kept.length
-        ? `${fileCountLabel(kept.length)} ready to add.${omitted}`
-        : skipped
-          ? `No files to add.${omitted}`
-          : "";
+      const willAdd = countLatestImportNames(
+        kept.map((item) => item.relativePath || item.file?.name || "")
+      );
+      summary.textContent = formatReadyToAddSummary(kept.length, willAdd, skipped);
     }
   }
 
