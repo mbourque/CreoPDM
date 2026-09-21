@@ -503,7 +503,44 @@ def test_purge_workspace_paths_removes_new_files(client, repo_parent, data_dir):
     script = client.get("/static/js/app.js")
     assert script.status_code == 200
     assert "workspace/purge-paths" in script.text
+    assert "workspace/purge-floors" in script.text
     assert "isNewFileQueueRow" in script.text
+
+
+@requires_git
+def test_workspace_purge_floors_from_vault_objects(client, repo_parent, data_dir):
+    project = client.post(
+        "/api/projects",
+        json={"name": "Purge Floors"},
+    ).json()
+    numbered = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("shaft.prt.3", b"v3", "application/octet-stream")},
+        data={"comment": "Initial"},
+    )
+    assert numbered.status_code == 201, numbered.text
+    unnumbered = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("notes.txt", b"txt", "text/plain")},
+        data={"comment": "Doc"},
+    )
+    assert unnumbered.status_code == 201, unnumbered.text
+    plain_prt = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("blank.prt", b"blank", "application/octet-stream")},
+        data={"comment": "Unnumbered model"},
+    )
+    assert plain_prt.status_code == 201, plain_prt.text
+
+    floors = client.get(f"/api/projects/{project['uuid']}/workspace/purge-floors")
+    assert floors.status_code == 200, floors.text
+    body = floors.json()
+    assert ".prt" in body["model_extensions"]
+    by_path = {item["logical_path"]: item for item in body["floors"]}
+    assert "shaft.prt" in by_path
+    assert by_path["shaft.prt"]["min_keep"] == 3
+    assert "blank.prt" not in by_path
+    assert "notes.txt" not in by_path
 
 
 @requires_git

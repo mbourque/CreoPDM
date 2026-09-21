@@ -340,3 +340,58 @@ def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
         assert len(deleted_body["failed"]) == 1
         assert not (cache / "notes.txt").exists()
         assert not (cache / "nested" / "extra.txt").exists()
+
+
+def test_agent_purge_versions_deletes_only_older_than_vault_floor(tmp_path):
+    root = tmp_path / "cache"
+    project_id = "proj-purge"
+    cache = root / project_id
+    nested = cache / "sub"
+    nested.mkdir(parents=True)
+    (cache / "shaft.prt").write_bytes(b"0")
+    (cache / "shaft.prt.1").write_bytes(b"1")
+    (cache / "shaft.prt.3").write_bytes(b"3")
+    (cache / "shaft.prt.4").write_bytes(b"4")
+    (cache / "orphan.prt.1").write_bytes(b"orphan")
+    (nested / "pin.prt.1").write_bytes(b"1")
+    (nested / "pin.prt.2").write_bytes(b"2")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    with TestClient(app) as client:
+        response = client.post(
+            "/purge-versions",
+            json={
+                "project_id": project_id,
+                "model_extensions": [".prt", ".asm", ".drw"],
+                "floors": [
+                    {"logical_path": "shaft.prt", "min_keep": 3},
+                    {"logical_path": "sub/pin.prt", "min_keep": 2},
+                ],
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["deleted"] == 3
+        assert {item["filename"] for item in body["ok"]} == {
+            "shaft.prt",
+            "shaft.prt.1",
+            "pin.prt.1",
+        }
+        assert (cache / "shaft.prt.3").is_file()
+        assert (cache / "shaft.prt.4").is_file()
+        assert (cache / "orphan.prt.1").is_file()
+        assert (nested / "pin.prt.2").is_file()
+        assert not (cache / "shaft.prt").exists()
+        assert not (cache / "shaft.prt.1").exists()
+        assert not (nested / "pin.prt.1").exists()
+
+        empty = client.post(
+            "/purge-versions",
+            json={
+                "project_id": project_id,
+                "floors": [{"logical_path": "shaft.prt", "min_keep": 0}],
+            },
+        )
+        assert empty.status_code == 200, empty.text
+        assert empty.json()["deleted"] == 0
+        assert (cache / "shaft.prt.3").is_file()

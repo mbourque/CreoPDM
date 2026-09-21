@@ -319,3 +319,82 @@ class CreoFileManager:
             extra_extensions,
             scan_disk_siblings=False,
         )
+
+    @classmethod
+    def filenames_older_than_floor(
+        cls,
+        names: Iterable[str],
+        min_keep: int,
+        model_extensions: Iterable[str] | None = None,
+        logical_name: str | None = None,
+    ) -> list[str]:
+        """Return sibling basenames with save_number strictly below ``min_keep``.
+
+        Vault floor semantics: keep ``== min_keep`` and ``> min_keep``. Unnumbered
+        saves are 0, so they are deleted only when ``min_keep > 0``. When
+        ``min_keep <= 0``, nothing is returned (vault unnumbered → purge nothing).
+        """
+        floor = int(min_keep or 0)
+        if floor <= 0:
+            return []
+        wanted = (
+            cls.logical_filename(logical_name, model_extensions).lower()
+            if logical_name
+            else ""
+        )
+        obsolete: list[str] = []
+        for raw in names:
+            name = Path(str(raw or "").replace("\\", "/")).name
+            if not name:
+                continue
+            if wanted and cls.logical_filename(name, model_extensions).lower() != wanted:
+                continue
+            if cls.save_number(name, model_extensions) < floor:
+                obsolete.append(name)
+        return obsolete
+
+    @classmethod
+    def paths_older_than_vault_floors(
+        cls,
+        root: Path,
+        floors: Iterable[tuple[str, int]],
+        model_extensions: Iterable[str] | None = None,
+    ) -> list[Path]:
+        """Local-cache paths older than each vault floor (logical_path, min_keep).
+
+        Only siblings of listed logical relative paths are considered. Floors with
+        ``min_keep <= 0`` are skipped. Non-matching / untracked files are untouched.
+        """
+        folder = Path(root)
+        if not folder.is_dir():
+            return []
+        obsolete: list[Path] = []
+        seen: set[str] = set()
+        for raw_logical, min_keep in floors:
+            floor = int(min_keep or 0)
+            if floor <= 0:
+                continue
+            logical_rel = str(raw_logical or "").replace("\\", "/").lstrip("/")
+            if not logical_rel or ".." in logical_rel.split("/"):
+                continue
+            logical_path = Path(logical_rel)
+            parent = folder / logical_path.parent
+            if not parent.is_dir():
+                continue
+            wanted = cls.logical_filename(logical_path.name, model_extensions).lower()
+            for child in parent.iterdir():
+                if not child.is_file():
+                    continue
+                if not cls.is_cad_save_family(child.name, model_extensions):
+                    continue
+                if cls.logical_filename(child.name, model_extensions).lower() != wanted:
+                    continue
+                if cls.save_number(child.name, model_extensions) >= floor:
+                    continue
+                ident = os.path.normcase(os.path.abspath(child))
+                if ident in seen:
+                    continue
+                seen.add(ident)
+                obsolete.append(child)
+        obsolete.sort(key=lambda path: path.as_posix().lower())
+        return obsolete

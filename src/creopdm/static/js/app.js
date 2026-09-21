@@ -1518,6 +1518,7 @@
   const openWorkspaceBtn = $("#open-workspace-btn");
   const setCreoDirBtn = $("#set-creo-dir-btn");
   const purgeBtn = $("#purge-workspace-btn");
+  const purgeVersionsBtn = $("#purge-versions-btn");
   const removeBtn = $("#remove-project-btn");
   const discardLocalBtn = $("#discard-local-btn");
   const removeMenu = $("#remove-menu");
@@ -1639,11 +1640,15 @@
       vaultNewSelected.length > 0 ||
       selected.some((row) => row.dataset.uuid && row.dataset.inWorkspace !== "0");
     const canRemoveProject = ids.length > 0;
+    const canPurgeVersions = Boolean(
+      purgeVersionsBtn?.dataset.project || openWorkspaceBtn?.dataset.project || checkinBtn?.dataset.project
+    );
     if (discardLocalBtn) discardLocalBtn.disabled = !canDiscardLocal;
     if (purgeBtn) purgeBtn.disabled = !canPurge;
+    if (purgeVersionsBtn) purgeVersionsBtn.disabled = !canPurgeVersions;
     if (removeBtn) removeBtn.disabled = !canRemoveProject;
     if (removeMenuBtn) {
-      removeMenuBtn.disabled = !(canDiscardLocal || canPurge || canRemoveProject);
+      removeMenuBtn.disabled = !(canDiscardLocal || canPurge || canRemoveProject || canPurgeVersions);
       if (removeMenuBtn.disabled) closeRemoveMenu();
     }
     const filtering = metricButtons().some((btn) => metricMode(btn) === "filter");
@@ -2291,6 +2296,52 @@
       }),
     });
     if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(
+          "Local creopdm-agent does not support Remove from Workspace yet. Restart the creopdm-agent tray (or reinstall from this repo), then try again."
+        );
+      }
+      throw new Error(await readError(response));
+    }
+    return response.json();
+  }
+
+  async function purgeLocalVersionsOlderThanVault(projectId) {
+    if (!projectId) return { ok: [], failed: [], deleted: 0, skipped: true };
+    const floorsResponse = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/workspace/purge-floors`
+    );
+    if (!floorsResponse.ok) {
+      throw new Error(await readError(floorsResponse));
+    }
+    const floorsBody = await floorsResponse.json();
+    const floors = Array.isArray(floorsBody?.floors) ? floorsBody.floors : [];
+    const modelExtensions = Array.isArray(floorsBody?.model_extensions)
+      ? floorsBody.model_extensions
+      : [];
+    if (!floors.length) {
+      return { ok: [], failed: [], deleted: 0, empty: true };
+    }
+    const agent = await probeCreoAgent();
+    if (!agent) return null;
+    const response = await fetch(`${agentBase()}/purge-versions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: projectId,
+        model_extensions: modelExtensions,
+        floors: floors.map((item) => ({
+          logical_path: item.logical_path,
+          min_keep: item.min_keep,
+        })),
+      }),
+    });
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(
+          "Local creopdm-agent does not support Purge workspace yet. Restart the creopdm-agent tray (or reinstall from this repo), then try again."
+        );
+      }
       throw new Error(await readError(response));
     }
     return response.json();
@@ -3146,6 +3197,7 @@
   function expectedProjectName() {
     return (
       $("#delete-project-btn")?.dataset.name
+      || purgeVersionsBtn?.dataset.projectName
       || purgeBtn?.dataset.projectName
       || removeBtn?.dataset.projectName
       || discardLocalBtn?.dataset.projectName
@@ -3337,6 +3389,56 @@
     if (activeListTab() === "changes") await loadChangesTab();
     else reloadPage();
     pollWorkspaceWatch();
+  });
+
+  purgeVersionsBtn?.addEventListener("click", async () => {
+    const projectId =
+      purgeVersionsBtn.dataset.project
+      || checkinBtn?.dataset.project
+      || openWorkspaceBtn?.dataset.project;
+    if (!projectId) return;
+    const confirmed = await confirmByProjectName({
+      title: "Purge workspace",
+      lead:
+        "Deletes local agent-cache Creo model saves that are older than the vault copy. The vault revision and any newer local work stay. The vault is not changed.",
+      note: "This cannot be undone from CreoPDM.",
+      submitLabel: "Purge workspace",
+    });
+    if (!confirmed) return;
+    showError($("#toolbar-error"), "");
+    const result = await withBusy("Purging older local saves…", async () => {
+      try {
+        return await purgeLocalVersionsOlderThanVault(projectId);
+      } catch (err) {
+        showError($("#toolbar-error"), err?.message || String(err));
+        return false;
+      }
+    });
+    if (result === false) return;
+    if (!result) {
+      showError(
+        $("#toolbar-error"),
+        "Start creopdm-agent on this Creo PC to purge older local workspace saves."
+      );
+      return;
+    }
+    if (result.empty) {
+      showOk("Nothing to purge — no vault Creo models with numbered saves.");
+      return;
+    }
+    if (result.failed?.length && !result.ok?.length) {
+      showError(
+        $("#toolbar-error"),
+        result.failed[0]?.message || "Could not purge older local workspace saves."
+      );
+      return;
+    }
+    knownWorkspacePaths.at = 0;
+    const removed = result.deleted || result.ok?.length || 0;
+    if (removed) showOk(`${removed} older local save(s) purged.`);
+    else showOk("No older local saves to purge.");
+    if (activeListTab() === "changes") await loadChangesTab();
+    else pollWorkspaceWatch();
   });
 
   removeBtn?.addEventListener("click", async () => {

@@ -29,6 +29,8 @@ from creopdm.schemas.common import (
     ProjectResponse,
     ProjectStatusResponse,
     ProjectUpdateRequest,
+    PurgeFloorsResponse,
+    PurgeFloorItem,
     PurgeWorkspacePathsRequest,
     QueueCheckinRequest,
     WorkspaceContentResponse,
@@ -261,6 +263,41 @@ def purge_workspace_paths(
         failed=failed,
         workspace_root=str(ctx.workspaces.root_for(project.uuid)),
     )
+
+
+@router.get(
+    "/api/projects/{project_id}/workspace/purge-floors",
+    response_model=PurgeFloorsResponse,
+)
+def workspace_purge_floors(
+    project_id: str,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> PurgeFloorsResponse:
+    """Vault save floors for Purge workspace (local agent deletes only older cache saves)."""
+    from creopdm.utils.classify import is_creo_openable
+
+    project = ctx.projects.get_project(db, project_id)
+    models = ctx.config.model_cad_extensions()
+    extras = ctx.config.data_cad_extensions()
+    floors: list[PurgeFloorItem] = []
+    for obj in ctx.objects.list_objects(db, project.id):
+        if not is_creo_openable(obj.filename, models, extras):
+            continue
+        min_keep = CreoFileManager.save_number(obj.filename, models)
+        if min_keep <= 0:
+            continue
+        logical_path = CreoFileManager.logical_repo_path(obj.relative_path, models)
+        floors.append(
+            PurgeFloorItem(
+                logical_path=logical_path,
+                min_keep=min_keep,
+                filename=obj.filename,
+                object_id=obj.uuid,
+            )
+        )
+    floors.sort(key=lambda item: item.logical_path.lower())
+    return PurgeFloorsResponse(floors=floors, model_extensions=list(models))
 
 
 def _picker_filters(ctx: AppContext) -> dict[str, list[str]]:

@@ -294,6 +294,7 @@ def home(
             "list_entries": list_entries,
             "status": status,
             "cad_models_extensions": ctx.config.cad_models_extensions(),
+            "cad_model_extensions": ctx.config.model_cad_extensions(),
             "document_extensions": ctx.config.document_extensions(),
             "checkin_queue": checkin_queue,
             "checkout_count": checkout_count,

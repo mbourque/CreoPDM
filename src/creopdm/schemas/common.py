@@ -276,6 +276,20 @@ class PurgeWorkspacePathsRequest(BaseModel):
     relative_paths: list[str] = Field(min_length=1)
 
 
+class PurgeFloorItem(BaseModel):
+    """Vault save floor for one project Creo model (agent deletes local saves < min_keep)."""
+
+    logical_path: str
+    min_keep: int
+    filename: str = ""
+    object_id: str = ""
+
+
+class PurgeFloorsResponse(BaseModel):
+    floors: list[PurgeFloorItem] = Field(default_factory=list)
+    model_extensions: list[str] = Field(default_factory=list)
+
+
 class BatchItemResult(BaseModel):
     uuid: str
     filename: str

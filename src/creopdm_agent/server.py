@@ -126,6 +126,23 @@ class DeletePathsResponse(BaseModel):
     failed: list[PushItemResult] = Field(default_factory=list)
 
 
+class PurgeFloor(BaseModel):
+    logical_path: str = ""
+    min_keep: int = 0
+
+
+class PurgeVersionsRequest(BaseModel):
+    project_id: str = ""
+    model_extensions: list[str] = Field(default_factory=list)
+    floors: list[PurgeFloor] = Field(default_factory=list)
+
+
+class PurgeVersionsResponse(BaseModel):
+    ok: list[PushItemResult] = Field(default_factory=list)
+    failed: list[PushItemResult] = Field(default_factory=list)
+    deleted: int = 0
+
+
 def _safe_segment(value: str, fallback: str = "file") -> str:
     text = _SAFE_NAME.sub("_", (value or "").strip()) or fallback
     return text[:180]
@@ -554,6 +571,71 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             )
             logger.info("Deleted local cache path %s", rel)
         return DeletePathsResponse(ok=ok, failed=failed)
+
+    @app.post("/purge-versions", response_model=PurgeVersionsResponse)
+    def purge_older_versions(payload: PurgeVersionsRequest) -> PurgeVersionsResponse:
+        """Delete local cache saves strictly older than vault floors (keep == and >)."""
+        from creopdm.constants import DEFAULT_CREO_MODEL_EXTENSIONS
+        from creopdm.creo.file_manager import CreoFileManager
+
+        project_id = (payload.project_id or "").strip()
+        if not project_id:
+            raise HTTPException(status_code=400, detail="project_id is required.")
+        cache_dir = _project_cache_dir(project_id)
+        models = [str(item or "").strip() for item in payload.model_extensions if str(item or "").strip()]
+        if not models:
+            models = list(DEFAULT_CREO_MODEL_EXTENSIONS)
+        floor_pairs: list[tuple[str, int]] = []
+        for item in payload.floors:
+            logical = str(item.logical_path or "").replace("\\", "/").lstrip("/")
+            if not logical:
+                continue
+            floor_pairs.append((logical, int(item.min_keep or 0)))
+        obsolete = CreoFileManager.paths_older_than_vault_floors(cache_dir, floor_pairs, models)
+        ok: list[PushItemResult] = []
+        failed: list[PushItemResult] = []
+        cache_resolved = cache_dir.resolve()
+        for local in obsolete:
+            try:
+                resolved = local.resolve()
+                resolved.relative_to(cache_resolved)
+            except (OSError, ValueError):
+                failed.append(
+                    PushItemResult(
+                        object_id=project_id,
+                        filename=local.name,
+                        message="Path is outside the agent cache.",
+                    )
+                )
+                continue
+            try:
+                rel = resolved.relative_to(cache_resolved).as_posix()
+            except ValueError:
+                rel = local.name
+            if not resolved.is_file():
+                continue
+            try:
+                resolved.unlink()
+            except OSError as exc:
+                failed.append(
+                    PushItemResult(
+                        object_id=project_id,
+                        filename=resolved.name,
+                        message=str(exc),
+                    )
+                )
+                continue
+            ok.append(
+                PushItemResult(
+                    object_id=project_id,
+                    filename=resolved.name,
+                    ok=True,
+                    path=str(resolved),
+                    message=rel,
+                )
+            )
+            logger.info("Purged older-than-vault cache save %s", rel)
+        return PurgeVersionsResponse(ok=ok, failed=failed, deleted=len(ok))
 
     @app.post("/materialize", response_model=MaterializeResponse)
     def materialize(payload: MaterializeRequest) -> MaterializeResponse:
