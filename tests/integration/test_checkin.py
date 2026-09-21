@@ -113,6 +113,8 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     assert "${agentBase()}/push" in script.text
     assert "const succeeded = batchOk === null ? true : batchOk;" in script.text
     assert 'rememberWatchView({ tab: "files", ids: [] })' in script.text
+    assert "window.location.replace(next)" in script.text
+    assert 'url.searchParams.set("r", String(Date.now()))' in script.text
 
     checked_in = client.post(
         f"/api/objects/{obj['uuid']}/checkin",

@@ -167,11 +167,24 @@
 
   function reloadPage() {
     closeOpenDialogs();
+    // Creo's embedded browser often no-ops location.reload() and may serve a
+    // stale document. Force a new GET with a cache-buster.
+    let next = window.location.pathname + window.location.search + window.location.hash;
     try {
-      window.location.reload();
+      const url = new URL(window.location.href);
+      url.searchParams.delete("r");
+      url.searchParams.set("r", String(Date.now()));
+      next = url.pathname + url.search + url.hash;
     } catch {
-      window.location.href = window.location.href;
+      /* keep next */
     }
+    window.setTimeout(() => {
+      try {
+        window.location.replace(next);
+      } catch {
+        window.location.href = next;
+      }
+    }, 0);
   }
 
   async function withHtmlDialogClosed(dialog, work) {
