@@ -16,6 +16,7 @@ from creopdm.constants import (
     DEFAULT_OPENABLE_CAD_EXTENSIONS,
     DEFAULT_TYPE_LABELS,
     PREVIOUS_DEFAULT_DOCUMENT_SETS,
+    PREVIOUS_DEFAULT_EXTRA_CAD_SETS,
 )
 from creopdm.utils.classify import extra_cad_set, unique_type_labels
 
@@ -50,7 +51,7 @@ def test_home_page(client):
     assert "Older Creo versions cannot open it." in text
     assert "CREOPDM_ERROR:" in text
     assert "catch (errAll)" in text
-    assert "creoOpenFailedMessage(filename, fileRelease, \"\", detail)" in text
+    assert "creoOpenFailedMessage(filename, releaseCatch, \"\", detail)" in text
     assert "throw new Error" not in text.split("function openModel")[1].split("function setWorkingDirectory")[0]
     assert 'id="set-creo-dir-btn"' in text
     assert 'id="add-files-btn"' in text
@@ -131,6 +132,11 @@ def test_config_layout(data_dir):
     assert ".tmz" not in settings.cad.model_extensions
     assert ".tmu" in settings.cad.extra_extensions
     assert ".tmz" in settings.cad.extra_extensions
+    assert ".als" in settings.cad.extra_extensions
+    assert ".mac" in settings.cad.extra_extensions
+    assert ".xas" in settings.cad.extra_extensions
+    assert ".dtl" in settings.cad.extra_extensions
+    assert ".tpm" in settings.cad.extra_extensions
     assert ".pvz" in settings.cad.model_extensions
     assert ".ol" in settings.cad.model_extensions
     assert ".wrl" in settings.cad.model_extensions
@@ -214,6 +220,9 @@ def test_previous_cad_defaults_migrate(tmp_path):
     assert ".smt" in loaded.cad.extra_extensions
     assert ".tmu" in loaded.cad.extra_extensions
     assert ".tmz" in loaded.cad.extra_extensions
+    assert ".als" in loaded.cad.extra_extensions
+    assert ".mac" in loaded.cad.extra_extensions
+    assert ".xas" in loaded.cad.extra_extensions
     assert ".ncl" in loaded.cad.openable_extensions
     assert ".lst" in loaded.cad.openable_extensions
     assert ".ncl" not in loaded.cad.extra_extensions
@@ -283,9 +292,11 @@ def test_previous_model_defaults_move_tmu_to_extras(tmp_path):
     manager.ensure_layout()
     settings = AppSettings()
     settings.cad.model_extensions = [*DEFAULT_CREO_MODEL_EXTENSIONS, ".tmu", ".tmz"]
-    settings.cad.extra_extensions = [
-        item for item in DEFAULT_EXTRA_CAD_EXTENSIONS if item not in {".tmu", ".tmz"}
-    ]
+    # Prior ship had Design Exploration on models and extras without .tmu/.tmz.
+    prior_extras = next(
+        item for item in PREVIOUS_DEFAULT_EXTRA_CAD_SETS if ".smt" in item and ".tmu" not in item
+    )
+    settings.cad.extra_extensions = sorted(prior_extras)
     manager.save(settings)
     manager._settings = None
     loaded = manager.load()
@@ -392,6 +403,21 @@ def test_custom_type_labels_are_not_migrated(tmp_path):
     ]
 
 
+def test_pre_companion_type_labels_migrate_to_defaults(tmp_path):
+    from creopdm.config import _pre_companion_type_labels
+
+    manager = ConfigManager(tmp_path / "appdata")
+    manager.ensure_layout()
+    settings = AppSettings()
+    settings.cad.type_labels = unique_type_labels(_pre_companion_type_labels())
+    manager.save(settings)
+    manager._settings = None
+    loaded = manager.load()
+    assert unique_type_labels(loaded.cad.type_labels) == unique_type_labels(DEFAULT_TYPE_LABELS)
+    assert {"extension": ".mac", "label": "Machine Data"} in loaded.cad.type_labels
+    assert {"extension": ".idx, .xas, .xpr", "label": "Instance Accelerator"} in loaded.cad.type_labels
+
+
 def test_previous_type_labels_gain_new_defaults(tmp_path):
     manager = ConfigManager(tmp_path / "appdata")
     manager.ensure_layout()
@@ -448,6 +474,28 @@ def test_previous_type_labels_gain_new_defaults(tmp_path):
         ".tex, .ltx, .bib",
         ".odg",
         ".psd",
+        "trail.txt*",
+        ".bom",
+        ".m_p",
+        ".wrl",
+        ".dgm",
+        ".mrk",
+        ".als",
+        ".ref",
+        ".tst",
+        ".map",
+        ".ers",
+        ".info",
+        ".cbl",
+        ".con",
+        ".lgh",
+        ".mac",
+        ".bde",
+        ".bdi",
+        ".bdm",
+        ".ger",
+        ".pls",
+        ".txa",
     }
     settings = AppSettings()
     settings.cad.type_labels = [
@@ -496,3 +544,8 @@ def test_previous_type_labels_gain_new_defaults(tmp_path):
     assert {"extension": ".xps, .oxps", "label": "XPS Document"} in labels
     assert {"extension": ".yaml, .yml", "label": "YAML"} in labels
     assert {"extension": ".psd", "label": "Photoshop"} in labels
+    assert {"extension": ".als", "label": "Assembly Program"} in labels
+    assert {"extension": ".mac", "label": "Machine Data"} in labels
+    assert {"extension": ".bom", "label": "BOM"} in labels
+    assert {"extension": "trail.txt*", "label": "Trail"} in labels
+    assert {"extension": ".idx, .xas, .xpr", "label": "Instance Accelerator"} in labels

@@ -256,7 +256,65 @@ _ADDED_DEFAULT_TYPE_LABELS = (
     ".tex, .ltx, .bib",
     ".odg",
     ".psd",
+    "trail.txt*",
+    ".bom",
+    ".m_p",
+    ".wrl",
+    ".dgm",
+    ".mrk",
+    ".als",
+    ".ref",
+    ".tst",
+    ".map",
+    ".ers",
+    ".info",
+    ".cbl",
+    ".con",
+    ".lgh",
+    ".mac",
+    ".bde",
+    ".bdi",
+    ".bdm",
+    ".ger",
+    ".pls",
+    ".txa",
 )
+
+# Keys added after the last shipped defaults (additions only — no renames).
+_PRE_COMPANION_TYPE_LABEL_NEW_KEYS = frozenset(
+    {
+        "trail.txt*",
+        ".bom",
+        ".m_p",
+        ".wrl",
+        ".dgm",
+        ".mrk",
+        ".als",
+        ".ref",
+        ".tst",
+        ".map",
+        ".ers",
+        ".info",
+        ".cbl",
+        ".con",
+        ".lgh",
+        ".mac",
+        ".bde",
+        ".bdi",
+        ".bdm",
+        ".ger",
+        ".pls",
+        ".txa",
+    }
+)
+
+
+def _pre_companion_type_labels() -> list[dict[str, str]]:
+    return [
+        item
+        for item in DEFAULT_TYPE_LABELS
+        if item["extension"] not in _PRE_COMPANION_TYPE_LABEL_NEW_KEYS
+    ]
 
 
 def _type_label_fingerprint(values: object) -> tuple[tuple[str, str], ...]:
@@ -265,6 +323,7 @@ def _type_label_fingerprint(values: object) -> tuple[tuple[str, str], ...]:
 
 def _previous_type_label_fingerprints() -> set[tuple[tuple[str, str], ...]]:
     found: set[tuple[tuple[str, str], ...]] = set(PREVIOUS_DEFAULT_TYPE_LABEL_SETS)
+    found.add(_type_label_fingerprint(_pre_companion_type_labels()))
     skip: set[str] = set()
     for key in reversed(_ADDED_DEFAULT_TYPE_LABELS):
         skip.add(key)

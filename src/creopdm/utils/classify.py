@@ -336,13 +336,13 @@ def display_type_label(
         custom = names.get(basename) or names.get(original)
         if custom:
             return custom
+        for token, label in names.items():
+            if _matches_type_label_pattern(basename, original, token):
+                return label
         suffix = Path(canonical).suffix.lower()
         custom = extensions.get(suffix)
         if custom:
             return custom
-        for token, label in names.items():
-            if _matches_type_label_pattern(basename, original, token):
-                return label
         for token, label in extensions.items():
             if _matches_type_label_pattern(basename, original, token):
                 return label

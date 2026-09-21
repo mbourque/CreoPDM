@@ -173,6 +173,12 @@ def test_creo_openable_models():
     assert not is_creo_openable("cutter.tmu")
     assert is_extra_cad("press.smt")
     assert is_extra_cad("family.ptd.1")
+    assert is_extra_cad("prog.als")
+    assert is_extra_cad("mill.mac")
+    assert is_extra_cad("fast.xas")
+    assert is_extra_cad("setup.dtl")
+    assert is_extra_cad("cut.tpm")
+    assert is_extra_cad("colors.map")
     assert not is_creo_openable("press.smt")
     assert not is_extra_cad("op10.lst")
     assert not is_extra_cad("op10.ncl.tl1")
@@ -284,3 +290,29 @@ def test_display_type_label_defaults_and_overrides():
     assert display_type_label("spec.xps", "PDF", defaults) == "XPS Document"
     assert display_type_label("config.yaml", "TEXT", defaults) == "YAML"
     assert display_type_label("art.psd", "IMAGE", defaults) == "Photoshop"
+    assert display_type_label("asm.bom", "CAD", defaults) == "BOM"
+    assert display_type_label("mass.m_p", "CAD", defaults) == "Mass Properties"
+    assert display_type_label("view.wrl", "CAD", defaults) == "VRML"
+    assert display_type_label("wiring.dgm", "CAD", defaults) == "Diagram"
+    assert display_type_label("redline.mrk", "CAD", defaults) == "Markup"
+    assert display_type_label("prog.als", "CAD", defaults) == "Assembly Program"
+    assert display_type_label("old.ref", "CAD", defaults) == "Rename Reference"
+    assert display_type_label("check.tst", "CAD", defaults) == "Verify Results"
+    assert display_type_label("colors.map", "CAD", defaults) == "Color Map"
+    assert display_type_label("setup.ers", "CAD", defaults) == "Setup Errors"
+    assert display_type_label("diff.info", "CAD", defaults) == "Compare/Review Info"
+    assert display_type_label("harness.cbl", "CAD", defaults) == "Cable Parameters"
+    assert display_type_label("plug.con", "CAD", defaults) == "Connector Parameters"
+    assert display_type_label("scene.lgh", "CAD", defaults) == "Lights"
+    assert display_type_label("mill.mac", "CAD", defaults) == "Machine Data"
+    assert display_type_label("mesh.bde", "CAD", defaults) == "Mesh Aspect Errors"
+    assert display_type_label("mesh.bdi", "CAD", defaults) == "Mesh Jacobian Errors"
+    assert display_type_label("mesh.bdm", "CAD", defaults) == "Mesh Mid-Ratio Errors"
+    assert display_type_label("geom.ger", "CAD", defaults) == "Geometry Errors"
+    assert display_type_label("part.pls", "CAD", defaults) == "Part Program"
+    assert display_type_label("course.txa", "CAD", defaults) == "Training"
+    assert display_type_label("trail.txt", "OTHER", defaults) == "Trail"
+    assert display_type_label("trail.txt.5", "OTHER", defaults) == "Trail"
+    assert display_type_label("index.idx", "CAD", defaults) == "Instance Accelerator"
+    assert display_type_label("fast.xas", "CAD", defaults) == "Instance Accelerator"
+    assert display_type_label("fast.xpr", "CAD", defaults) == "Instance Accelerator"
