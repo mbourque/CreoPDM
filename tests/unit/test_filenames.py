@@ -173,11 +173,19 @@ def test_filter_to_latest_saves_uses_disk_siblings_when_only_old_selected(tmp_pa
 
 
 def test_filenames_older_than_floor_keeps_vault_and_newer():
-    names = ["shaft.prt", "shaft.prt.1", "shaft.prt.2", "shaft.prt.3", "shaft.prt.5", "other.prt.1"]
+    names = [
+        "shaft.prt.10",
+        "shaft.prt.2",
+        "shaft.prt",
+        "shaft.prt.1",
+        "shaft.prt.3",
+        "shaft.prt.5",
+        "other.prt.1",
+    ]
     obsolete = CreoFileManager.filenames_older_than_floor(
         names, min_keep=3, logical_name="shaft.prt"
     )
-    assert set(obsolete) == {"shaft.prt", "shaft.prt.1", "shaft.prt.2"}
+    assert obsolete == ["shaft.prt", "shaft.prt.1", "shaft.prt.2"]
 
 
 def test_filenames_older_than_floor_skips_when_vault_unnumbered():
@@ -192,6 +200,8 @@ def test_paths_older_than_vault_floors_respects_floor_and_ignores_untracked(tmp_
     nested.mkdir(parents=True)
     (root / "shaft.prt").write_bytes(b"0")
     (root / "shaft.prt.1").write_bytes(b"1")
+    (root / "shaft.prt.10").write_bytes(b"10")
+    (root / "shaft.prt.2").write_bytes(b"2")
     (root / "shaft.prt.3").write_bytes(b"3")
     (root / "shaft.prt.4").write_bytes(b"4")
     (root / "orphan.prt.1").write_bytes(b"orphan")
@@ -207,10 +217,11 @@ def test_paths_older_than_vault_floors_respects_floor_and_ignores_untracked(tmp_
             ("notes.txt", 1),
         ],
     )
-    names = {path.relative_to(root).as_posix() for path in obsolete}
-    assert names == {"shaft.prt", "shaft.prt.1", "sub/pin.prt.1"}
+    relative = [path.relative_to(root).as_posix() for path in obsolete]
+    assert relative == ["shaft.prt", "shaft.prt.1", "shaft.prt.2", "sub/pin.prt.1"]
     assert (root / "shaft.prt.3").is_file()
     assert (root / "shaft.prt.4").is_file()
+    assert (root / "shaft.prt.10").is_file()
     assert (root / "orphan.prt.1").is_file()
     assert (nested / "pin.prt.2").is_file()
     assert (nested / "notes.txt").is_file()

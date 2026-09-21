@@ -351,6 +351,13 @@ class CreoFileManager:
                 continue
             if cls.save_number(name, model_extensions) < floor:
                 obsolete.append(name)
+        obsolete.sort(
+            key=lambda name: (
+                cls.logical_filename(name, model_extensions).lower(),
+                cls.save_number(name, model_extensions),
+                name.lower(),
+            )
+        )
         return obsolete
 
     @classmethod
@@ -396,5 +403,12 @@ class CreoFileManager:
                     continue
                 seen.add(ident)
                 obsolete.append(child)
-        obsolete.sort(key=lambda path: path.as_posix().lower())
+        obsolete.sort(
+            key=lambda path: (
+                path.parent.as_posix().lower(),
+                cls.logical_filename(path.name, model_extensions).lower(),
+                cls.save_number(path.name, model_extensions),
+                path.name.lower(),
+            )
+        )
         return obsolete

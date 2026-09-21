@@ -3266,7 +3266,15 @@
   }
 
   function formatPurgeConfirmDetails(preview) {
-    const deleted = Array.isArray(preview?.ok) ? preview.ok : [];
+    const deleted = [...(Array.isArray(preview?.ok) ? preview.ok : [])].sort((a, b) => {
+      const left = String(a.message || a.filename || a.path || "");
+      const right = String(b.message || b.filename || b.path || "");
+      try {
+        return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+      } catch {
+        return left.localeCompare(right);
+      }
+    });
     const floors = Array.isArray(preview?.floors) ? preview.floors : [];
     const parts = [];
     if (deleted.length) {
