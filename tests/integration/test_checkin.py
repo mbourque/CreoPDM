@@ -127,6 +127,7 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     assert "reloadPageAfterDialog()" in script.text
     assert "Use Undo Checkout to release locks without a new version" in script.text
     assert "submitBtn.disabled = !canSubmit" in script.text
+    assert "commentBox.disabled = !canSubmit" in script.text
 
     checked_in = client.post(
         f"/api/objects/{obj['uuid']}/checkin",

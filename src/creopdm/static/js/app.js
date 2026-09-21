@@ -2680,6 +2680,11 @@
           : "Check In";
       submitBtn.disabled = !canSubmit;
     }
+    const commentBox = $("#checkin-comment");
+    if (commentBox) {
+      commentBox.disabled = !canSubmit;
+      if (!canSubmit) commentBox.value = "";
+    }
     if (checkinDialog) {
       checkinDialog.dataset.canSubmit = canSubmit ? "1" : "0";
     }
