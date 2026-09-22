@@ -154,8 +154,9 @@
     }
   }
 
-  function closeOpenDialogs() {
+  function closeOpenDialogs({ keepBusy = false } = {}) {
     document.querySelectorAll("dialog[open]").forEach((dialog) => {
+      if (keepBusy && dialog.id === "busy-overlay") return;
       try {
         dialog.close();
       } catch {
@@ -169,8 +170,18 @@
     window.location.href = url;
   }
 
-  function reloadPage() {
-    closeOpenDialogs();
+  function reloadPage(options = {}) {
+    const keepBusy = Boolean(options.keepBusy);
+    const busyMessage = options.busyMessage || "Refreshing…";
+    closeOpenDialogs({ keepBusy });
+    // Keep the busy overlay up through navigation so the stale table is not shown.
+    // Do not bump busyDepth — that would pause workspace-watch if navigation stalls.
+    if (keepBusy) {
+      setBusyMessage(busyMessage);
+      showBusyOverlay();
+      document.body.classList.add("is-busy");
+      document.body.setAttribute("aria-busy", "true");
+    }
     // Creo's embedded browser often ignores location.reload/replace and
     // document.write. A real GET form submit reliably loads fresh HTML.
     let pathname = window.location.pathname || "/";
@@ -205,7 +216,16 @@
   function reloadPageAfterDialog() {
     // Submitting a navigation form from inside another form's submit handler
     // (Check In dialog) is ignored by Creo; checkout works because it is a button click.
-    window.setTimeout(() => reloadPage(), 50);
+    window.setTimeout(() => reloadPage({ keepBusy: true }), 50);
+  }
+
+  const BULK_SLOW_WARN_THRESHOLD = 100;
+
+  function confirmLargeBulk(actionLabel, count) {
+    if (count <= BULK_SLOW_WARN_THRESHOLD) return true;
+    return window.confirm(
+      `${actionLabel} ${count} files?\n\nThis can take several minutes. Keep this window open until it finishes.`
+    );
   }
 
   function stopHeartbeats(clearIds) {
@@ -2580,11 +2600,46 @@
 
   async function countLocalNewWorkspaceFiles(projectId) {
     if (!projectId) return 0;
-    const [cacheFiles, known] = await Promise.all([
+    const pending = await countLocalWorkspacePending(projectId);
+    return pending.localNew;
+  }
+
+  let cachedProjectObjects = { id: "", at: 0, rows: [] };
+
+  async function ensureProjectObjects(projectId, { force = false } = {}) {
+    if (
+      !force &&
+      cachedProjectObjects.id === projectId &&
+      cachedProjectObjects.at &&
+      Date.now() - cachedProjectObjects.at < 15000
+    ) {
+      return cachedProjectObjects.rows;
+    }
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/objects`);
+      const rows = response.ok ? await response.json().catch(() => []) : [];
+      cachedProjectObjects = {
+        id: projectId,
+        at: Date.now(),
+        rows: Array.isArray(rows) ? rows : [],
+      };
+    } catch {
+      cachedProjectObjects = { id: projectId, at: Date.now(), rows: [] };
+    }
+    return cachedProjectObjects.rows;
+  }
+
+  async function countLocalWorkspacePending(projectId) {
+    if (!projectId) return { localNew: 0, newerLocal: 0 };
+    const [cacheFiles, known, objects] = await Promise.all([
       listAgentCacheFiles(projectId),
       ensureKnownWorkspacePaths(projectId),
+      ensureProjectObjects(projectId),
     ]);
-    return localOnlyCacheFiles(cacheFiles, known).length;
+    return {
+      localNew: localOnlyCacheFiles(cacheFiles, known).length,
+      newerLocal: newerLocalCacheSaves(cacheFiles, objects).length,
+    };
   }
 
   async function materializeViaAgent(prepared) {
@@ -2866,8 +2921,9 @@
   checkoutBtn?.addEventListener("click", async () => {
     const ids = selectedRows().filter((row) => row.dataset.canCheckout === "1").flatMap(rowObjectIds);
     const fallback = selectedIds();
-    const objectIds = ids.length ? ids : fallback;
+    const objectIds = [...new Set((ids.length ? ids : fallback).filter(Boolean))];
     if (!objectIds.length) return;
+    if (!confirmLargeBulk("Check out", objectIds.length)) return;
     showError($("#toolbar-error"), "");
     let checkoutResult = null;
     if (objectIds.length === 1 && !selectedRows().length) {
@@ -2941,7 +2997,7 @@
           : `${sync.ok} file(s) downloaded to the local workspace.`;
       showOk(note);
     }
-    reloadPage();
+    reloadPage({ keepBusy: true });
   });
 
   workspaceBtn?.addEventListener("click", async () => {
@@ -2994,10 +3050,14 @@
     const objectIds = [...new Set((ids.length ? ids : fallback).filter(Boolean))];
     if (!objectIds.length) return;
     const count = objectIds.length;
+    const slowNote =
+      count > BULK_SLOW_WARN_THRESHOLD
+        ? "\n\nThis can take several minutes. Keep this window open until it finishes."
+        : "";
     const confirmMsg =
       count === 1
         ? "Undo checkout of this file?\n\nYour lock is released. Unsaved vault changes for this file may be discarded. Local agent cache files are kept."
-        : `Undo checkout of ${count} files?\n\nYour locks are released. Unsaved vault changes for these files may be discarded. Local agent cache files are kept.`;
+        : `Undo checkout of ${count} files?\n\nYour locks are released. Unsaved vault changes for these files may be discarded. Local agent cache files are kept.${slowNote}`;
     if (!window.confirm(confirmMsg)) return;
     showError($("#toolbar-error"), "");
     if (count === 1 && !selectedRows().length) {
@@ -3009,7 +3069,7 @@
       );
       if (result) {
         rememberWatchView();
-        reloadPage();
+        reloadPage({ keepBusy: true });
       }
       return;
     }
@@ -3034,7 +3094,7 @@
     if (!undoResult) return;
     const warning = formatBatch(undoResult);
     if (warning) showError($("#toolbar-error"), warning);
-    if (undoResult.ok?.length) reloadPage();
+    if (undoResult.ok?.length) reloadPage({ keepBusy: true });
   });
 
   checkinBtn?.addEventListener("click", async () => {
@@ -3054,6 +3114,8 @@
     }
     const useQueue = !objectId;
     if (useQueue && !projectId) return;
+    const bulkCount = useQueue ? owned.length + queued.length : 1;
+    if (!confirmLargeBulk(addOnly ? "Add" : "Check in", bulkCount)) return;
     showError($("#checkin-error"), "");
     showError($("#toolbar-error"), "");
     const pushItems = [];
@@ -4340,7 +4402,9 @@
   restoreWatchView();
 
   function watchPaused() {
-    return document.hidden || busyDepth > 0 || Boolean(document.querySelector("dialog[open]"));
+    if (document.hidden || busyDepth > 0) return true;
+    // Ignore the busy overlay — it is also a <dialog>, and keepBusy reload leaves it open.
+    return [...document.querySelectorAll("dialog[open]")].some((dialog) => dialog.id !== "busy-overlay");
   }
 
   const watchProjectId = openWorkspaceBtn?.dataset.project || addForm?.dataset.project;
@@ -4350,13 +4414,17 @@
   async function pollWorkspaceWatch() {
     if (!watchProjectId || watchPaused()) return;
     try {
-      const [response, localNew] = await Promise.all([
+      const [response, localPending] = await Promise.all([
         fetch(`/api/projects/${watchProjectId}/workspace-watch`),
-        countLocalNewWorkspaceFiles(watchProjectId),
+        countLocalWorkspacePending(watchProjectId),
       ]);
       if (!response.ok) return;
       const data = await response.json();
-      setCheckinQueueCounts(data.pending_saves, Number(data.new_files || 0) + Number(localNew || 0));
+      const localTotal = Number(localPending.localNew || 0) + Number(localPending.newerLocal || 0);
+      setCheckinQueueCounts(
+        Number(data.pending_saves || 0),
+        Number(data.new_files || 0) + localTotal
+      );
       const next = data.stamp || "";
       if (watchStamp === null) {
         watchStamp = next;
@@ -4365,6 +4433,7 @@
       if (next === watchStamp) return;
       watchStamp = next;
       knownWorkspacePaths.at = 0; // vault changed — refresh known paths on next count
+      cachedProjectObjects.at = 0;
       window.clearTimeout(watchReloadTimer);
       watchReloadTimer = window.setTimeout(() => {
         if (watchPaused()) return;

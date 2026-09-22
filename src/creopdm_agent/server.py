@@ -577,7 +577,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             dirnames[:] = [name for name in dirnames if name.lower() not in skip_dirs]
             folder = Path(dirpath)
             for name in filenames:
-                if name.startswith(".") or CreoFileManager.is_ignored(name):
+                if name.startswith(".") or name.startswith("_creopdm") or CreoFileManager.is_ignored(name):
                     continue
                 path = folder / name
                 if not path.is_file():

@@ -290,6 +290,8 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function listAgentCacheFiles" in script.text
     assert "function pushLocalNewPathsToVault" in script.text
     assert "function countLocalNewWorkspaceFiles" in script.text
+    assert "function countLocalWorkspacePending" in script.text
+    assert "newerLocal" in script.text
     assert "New file (local)" in script.text
     assert "function setCheckedOutTabCount" in script.text
     assert "function listedMetricRows" in script.text
@@ -317,6 +319,10 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "/materialize-zip" in script.text
     assert "Checking local cache for ${total} files" in script.text
     assert "already local" in script.text
+    assert "BULK_SLOW_WARN_THRESHOLD" in script.text
+    assert "confirmLargeBulk" in script.text
+    assert "keepBusy: true" in script.text
+    assert "Refreshing…" in script.text
     assert "include_companions: false" in script.text
     assert "Downloading checked-out files…" in script.text
     assert "Checking out…" in script.text
