@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import os
 import re
+import tempfile
+import zipfile
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
@@ -48,6 +50,19 @@ class MaterializeResponse(BaseModel):
     disk_name: str
     bytes_written: int = 0
     companions_written: int = 0
+
+
+class MaterializeZipRequest(BaseModel):
+    pdm_url: str = ""
+    project_id: str = ""
+    object_ids: list[str] = Field(min_length=1)
+    token: str | None = None
+
+
+class MaterializeZipResponse(BaseModel):
+    working_directory: str
+    extracted_count: int = 0
+    bytes_written: int = 0
 
 
 class OpenLocalRequest(BaseModel):
@@ -205,6 +220,33 @@ def _download(
         )
     target.write_bytes(response.content)
     return target, logical, disk_name, len(response.content)
+
+
+def _extract_flat_zip(zip_path: Path, target_dir: Path) -> tuple[int, int]:
+    """Extract zip entries into target_dir using basename only (matches /materialize layout)."""
+    target_resolved = target_dir.resolve()
+    extracted = 0
+    nbytes = 0
+    with zipfile.ZipFile(zip_path) as zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            name = Path(info.filename).name
+            if not name or name in {".", ".."}:
+                continue
+            dest = target_dir / _safe_segment(name, "model.bin")
+            try:
+                dest.resolve().relative_to(target_resolved)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsafe zip entry: {info.filename}",
+                ) from exc
+            data = zf.read(info.filename)
+            dest.write_bytes(data)
+            extracted += 1
+            nbytes += len(data)
+    return extracted, nbytes
 
 
 def _find_cache_file(cache_dir: Path, filename: str) -> Path | None:
@@ -693,6 +735,62 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             disk_name=disk_name,
             bytes_written=nbytes,
             companions_written=companions_written,
+        )
+
+    @app.post("/materialize-zip", response_model=MaterializeZipResponse)
+    def materialize_zip(payload: MaterializeZipRequest) -> MaterializeZipResponse:
+        base = _normalize_base(payload.pdm_url or settings.pdm_url)
+        project_key = _safe_segment(payload.project_id or "local", "local")
+        target_dir = root / project_key
+        target_dir.mkdir(parents=True, exist_ok=True)
+        headers: dict[str, str] = {}
+        token = (payload.token or settings.token or "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        archive_url = f"{base}/api/objects/batch/agent-cache-archive"
+        zip_timeout = httpx.Timeout(connect=30.0, read=3600.0, write=30.0, pool=30.0)
+        fd, raw_tmp = tempfile.mkstemp(suffix=".zip", prefix="creopdm-agent-")
+        os.close(fd)
+        zip_path = Path(raw_tmp)
+        try:
+            with httpx.Client(timeout=zip_timeout, follow_redirects=True) as client:
+                with client.stream(
+                    "POST",
+                    archive_url,
+                    json={"object_ids": payload.object_ids},
+                    headers=headers,
+                ) as response:
+                    if response.status_code >= 400:
+                        detail = ""
+                        try:
+                            detail = response.read().decode("utf-8", errors="replace")[:500]
+                        except Exception:
+                            detail = f"CreoPDM returned {response.status_code}"
+                        raise HTTPException(
+                            status_code=502,
+                            detail=detail or f"CreoPDM returned {response.status_code}",
+                        )
+                    with zip_path.open("wb") as handle:
+                        for chunk in response.iter_bytes():
+                            handle.write(chunk)
+            extracted, nbytes = _extract_flat_zip(zip_path, target_dir)
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not download archive from CreoPDM: {exc}",
+            ) from exc
+        finally:
+            zip_path.unlink(missing_ok=True)
+        logger.info(
+            "Materialized zip (%s files, %s bytes) → %s",
+            extracted,
+            nbytes,
+            target_dir,
+        )
+        return MaterializeZipResponse(
+            working_directory=str(target_dir.resolve()),
+            extracted_count=extracted,
+            bytes_written=nbytes,
         )
 
     @app.post("/open", response_model=OpenLocalResponse)

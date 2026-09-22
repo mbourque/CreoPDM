@@ -1,3 +1,5 @@
+import io
+import zipfile
 from pathlib import Path
 
 from creopdm.services.git_service import GitService
@@ -62,6 +64,32 @@ def test_undo_checkout(client, repo_parent):
     assert payload["owned_by_me"] is False
     assert payload["can_checkout"] is True
     assert payload["checkout_status"] == "Available"
+
+
+@requires_git
+def test_agent_cache_archive_zip(client, repo_parent):
+    project, obj1, _location = _create_part(client, repo_parent)
+    created2 = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("bracket.prt", b"bracket-content", "application/octet-stream")},
+        data={"comment": "Second part"},
+    )
+    assert created2.status_code == 201, created2.text
+    obj2 = created2.json()
+    archive = client.post(
+        "/api/objects/batch/agent-cache-archive",
+        json={"object_ids": [obj1["uuid"], obj2["uuid"]]},
+    )
+    assert archive.status_code == 200, archive.text
+    assert archive.headers.get("x-creopdm-file-count") == "2"
+    assert "application/zip" in archive.headers.get("content-type", "")
+    with zipfile.ZipFile(io.BytesIO(archive.content)) as zf:
+        names = set(zf.namelist())
+        shaft_bytes = zf.read("shaft.prt")
+        bracket_bytes = zf.read("bracket.prt")
+    assert names == {"shaft.prt", "bracket.prt"}
+    assert shaft_bytes == b"original-content"
+    assert bracket_bytes == b"bracket-content"
 
 
 @requires_git
@@ -271,6 +299,9 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function formatPurgeConfirmDetails" in script.text
     assert "function newerLocalCacheSaves" in script.text
     assert "function materializeCheckedOutToAgentCache" in script.text
+    assert "BULK_AGENT_CACHE_ZIP_THRESHOLD" in script.text
+    assert "/materialize-zip" in script.text
+    assert "Downloading ${total} files as one archive" in script.text
     assert "include_companions: false" in script.text
     assert "Downloading checked-out files…" in script.text
     assert "Checking out…" in script.text

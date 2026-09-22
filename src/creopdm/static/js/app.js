@@ -2615,14 +2615,44 @@
     return response.json();
   }
 
+  const BULK_AGENT_CACHE_ZIP_THRESHOLD = 50;
+
+  async function materializeCheckedOutToAgentCacheZip(objectIds) {
+    const response = await fetch(`${agentBase()}/materialize-zip`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pdm_url: window.location.origin,
+        project_id: currentProjectId() || null,
+        object_ids: objectIds,
+      }),
+    });
+    if (!response.ok) {
+      const message = await readError(response);
+      throw new Error(message || "Local CreoPDM agent could not download the archive.");
+    }
+    return response.json();
+  }
+
   async function materializeCheckedOutToAgentCache(objectIds, onProgress) {
     const ids = [...new Set((objectIds || []).filter(Boolean))];
     if (!ids.length) return { agentOffline: false, ok: 0, failed: 0 };
     const agent = await probeCreoAgent();
     if (!agent) return { agentOffline: true, ok: 0, failed: 0 };
+    const total = ids.length;
+    if (total >= BULK_AGENT_CACHE_ZIP_THRESHOLD) {
+      if (typeof onProgress === "function") onProgress(0, total);
+      try {
+        const zipResult = await materializeCheckedOutToAgentCacheZip(ids);
+        const extracted = Number(zipResult?.extracted_count) || total;
+        if (typeof onProgress === "function") onProgress(total, total);
+        return { agentOffline: false, ok: extracted, failed: Math.max(0, total - extracted) };
+      } catch {
+        /* fall back to per-file download */
+      }
+    }
     let ok = 0;
     let failed = 0;
-    const total = ids.length;
     for (let i = 0; i < ids.length; i += 1) {
       const objectId = ids[i];
       if (typeof onProgress === "function") onProgress(i + 1, total);
@@ -2869,7 +2899,11 @@
     const sync = await withBusy("Downloading checked-out files to local workspace…", async () => {
       try {
         return await materializeCheckedOutToAgentCache(syncedIds, (done, total) => {
-          setBusyMessage(`Downloading checked-out files… ${done} of ${total}`);
+          if (total >= BULK_AGENT_CACHE_ZIP_THRESHOLD && done === 0) {
+            setBusyMessage(`Downloading ${total} files as one archive…`);
+          } else {
+            setBusyMessage(`Downloading checked-out files… ${done} of ${total}`);
+          }
         });
       } catch (err) {
         showError($("#toolbar-error"), err?.message || String(err));

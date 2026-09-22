@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import APIRouter, Depends, Response
+from urllib.parse import quote
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -10,7 +13,9 @@ from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import object_to_response
 from creopdm.constants import LifecycleState
 from creopdm.context import AppContext
+from creopdm.exceptions import ValidationAppError
 from creopdm.logging_setup import get_logger
+from creopdm.services.agent_cache_zip import build_agent_cache_zip
 from creopdm.schemas.common import (
     BatchObjectRequest,
     BatchOperationResponse,
@@ -116,6 +121,42 @@ def undo_checkout_batch(
     result = ctx.checkouts.undo_checkout_many(db, payload.object_ids)
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.config.workspace_root())}
+    )
+
+
+@router.post("/api/objects/batch/agent-cache-archive")
+def agent_cache_archive(
+    payload: BatchObjectRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> FileResponse:
+    """Zip vault files (flat names) for one-shot agent-cache download — no Creo open prep."""
+    objects = ctx.objects.get_objects(db, payload.object_ids)
+    if len(objects) != len(payload.object_ids):
+        found = {obj.uuid for obj in objects}
+        missing = [item for item in payload.object_ids if item not in found]
+        raise ValidationAppError(
+            "One or more objects were not found.",
+            details={"missing": missing[:20]},
+        )
+    project_ids = {obj.project.uuid for obj in objects}
+    if len(project_ids) != 1:
+        raise ValidationAppError("All files must belong to the same project.")
+    project = objects[0].project
+    zip_path, count = build_agent_cache_zip(ctx.workspaces, project, objects)
+    background_tasks.add_task(lambda path=zip_path: path.unlink(missing_ok=True))
+    filename = f"creopdm-cache-{project.uuid[:8]}.zip"
+    disposition = f"attachment; filename*=UTF-8''{quote(filename)}"
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=filename,
+        content_disposition_type="attachment",
+        headers={
+            "Content-Disposition": disposition,
+            "X-CreoPDM-File-Count": str(count),
+        },
     )
 
 
