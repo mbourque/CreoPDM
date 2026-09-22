@@ -2342,7 +2342,7 @@
     return "file";
   }
 
-  function promptOpenCheckout({ filename, canCheckout, owned }) {
+  function promptOpenCheckout({ filename, canCheckout }) {
     const dialog = $("#open-checkout-dialog");
     const form = $("#open-checkout-form");
     const lead = $("#open-checkout-lead");
@@ -2356,12 +2356,10 @@
       return Promise.resolve("open");
     }
     if (lead) {
-      lead.textContent = owned
-        ? `${filename} is already checked out by you.`
-        : `How do you want to open ${filename}?`;
+      lead.textContent = `How do you want to open ${filename}?`;
     }
     showError(err, "");
-    const allowCheckout = Boolean(canCheckout) && !owned;
+    const allowCheckout = Boolean(canCheckout);
     if (fileWrap) fileWrap.hidden = !allowCheckout;
     if (companionsWrap) companionsWrap.hidden = !allowCheckout;
     if (companionsNote) companionsNote.hidden = !allowCheckout;
@@ -2449,10 +2447,14 @@
     const filename = openTargetFilename(target, row);
     const canCheckout = row ? row.dataset.canCheckout === "1" : false;
     const owned = row ? row.dataset.owned === "1" : false;
+    // Already mine — no checkout choice needed; open immediately.
+    if (objectId && owned) {
+      return openPdmObject(target);
+    }
     const action = await promptOpenCheckout({
       filename,
       canCheckout: Boolean(objectId) && canCheckout,
-      owned: Boolean(objectId) && owned,
+      owned: false,
     });
     if (action === "cancel") return null;
     if (action === "checkout-file" || action === "checkout-companions") {
