@@ -2479,6 +2479,8 @@
   }
 
   let knownWorkspacePaths = { exact: new Set(), logical: new Set(), basenames: new Set(), at: 0 };
+  let lastChangesPending = null;
+  let changesReloadBusy = false;
 
   function markKnownPath(rel, exact, logical, basenames) {
     const path = String(rel || "").replace(/\\/g, "/");
@@ -3924,20 +3926,23 @@
     if (result.ok?.length) reloadPage();
   });
 
-  async function loadChangesTab() {
+  async function loadChangesTab(options = {}) {
+    const quiet = Boolean(options.quiet);
     const projectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
     const body = $("#changes-table tbody");
     const tab = document.querySelector('.tab[data-tab="changes"]');
-    if (!projectId || !body) return;
-    body.replaceChildren();
-    const loading = document.createElement("tr");
-    loading.className = "empty-row";
-    const loadingCell = document.createElement("td");
-    loadingCell.colSpan = 5;
-    loadingCell.textContent = "Looking for vault and local workspace changes…";
-    loading.appendChild(loadingCell);
-    body.appendChild(loading);
-    refreshTabMetrics();
+    if (!projectId || !body) return 0;
+    if (!quiet) {
+      body.replaceChildren();
+      const loading = document.createElement("tr");
+      loading.className = "empty-row";
+      const loadingCell = document.createElement("td");
+      loadingCell.colSpan = 5;
+      loadingCell.textContent = "Looking for vault and local workspace changes…";
+      loading.appendChild(loadingCell);
+      body.appendChild(loading);
+      refreshTabMetrics();
+    }
     try {
       const [queueResponse, cacheFiles, objectsResponse] = await Promise.all([
         fetch(`/api/projects/${projectId}/checkin-queue`),
@@ -3949,6 +3954,11 @@
       const objects = objectsResponse.ok
         ? await objectsResponse.json().catch(() => [])
         : [];
+      cachedProjectObjects = {
+        id: projectId,
+        at: Date.now(),
+        rows: Array.isArray(objects) ? objects : [],
+      };
       const saves = data.saves || [];
       const vaultNew = data.new_files || [];
       const known = await loadKnownWorkspacePaths(
@@ -3965,6 +3975,7 @@
       const pending = saves.length + created.length + newerLocal.length;
       if (tab) tab.textContent = pending ? `New files · ${pending}` : "New files";
       setCheckinQueueCounts(saves.length + newerLocal.length, created.length);
+      lastChangesPending = pending;
       body.replaceChildren();
       if (!pending) {
         const row = document.createElement("tr");
@@ -3975,7 +3986,7 @@
         row.appendChild(cell);
         body.appendChild(row);
         refreshTabMetrics();
-        return;
+        return pending;
       }
       const addRow = (values, className, meta = {}) => {
         const row = document.createElement("tr");
@@ -4093,16 +4104,20 @@
         );
       });
       refreshTabMetrics();
+      return pending;
     } catch {
-      body.replaceChildren();
-      const row = document.createElement("tr");
-      row.className = "empty-row";
-      const cell = document.createElement("td");
-      cell.colSpan = 5;
-      cell.textContent = "Could not load vault changes.";
-      row.appendChild(cell);
-      body.appendChild(row);
-      refreshTabMetrics();
+      if (!quiet) {
+        body.replaceChildren();
+        const row = document.createElement("tr");
+        row.className = "empty-row";
+        const cell = document.createElement("td");
+        cell.colSpan = 5;
+        cell.textContent = "Could not load vault changes.";
+        row.appendChild(cell);
+        body.appendChild(row);
+        refreshTabMetrics();
+      }
+      return lastChangesPending || 0;
     }
   }
 
@@ -4421,10 +4436,29 @@
       if (!response.ok) return;
       const data = await response.json();
       const localTotal = Number(localPending.localNew || 0) + Number(localPending.newerLocal || 0);
+      const pending =
+        Number(data.pending_saves || 0) + Number(data.new_files || 0) + localTotal;
       setCheckinQueueCounts(
-        Number(data.pending_saves || 0),
-        Number(data.new_files || 0) + localTotal
+        Number(data.pending_saves || 0) + Number(localPending.newerLocal || 0),
+        Number(data.new_files || 0) + Number(localPending.localNew || 0)
       );
+      // Local agent-cache saves do not change the vault stamp — refresh the open tab in place.
+      if (activeListTab() === "changes") {
+        if (lastChangesPending === null) {
+          lastChangesPending = pending;
+        } else if (pending !== lastChangesPending && !changesReloadBusy) {
+          changesReloadBusy = true;
+          knownWorkspacePaths.at = 0;
+          cachedProjectObjects.at = 0;
+          try {
+            await loadChangesTab({ quiet: true });
+          } finally {
+            changesReloadBusy = false;
+          }
+        }
+      } else {
+        lastChangesPending = pending;
+      }
       const next = data.stamp || "";
       if (watchStamp === null) {
         watchStamp = next;
