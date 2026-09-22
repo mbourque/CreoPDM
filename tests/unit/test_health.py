@@ -319,7 +319,7 @@ def test_previous_model_defaults_move_tmu_to_extras(tmp_path):
     manager = ConfigManager(tmp_path / "appdata")
     manager.ensure_layout()
     settings = AppSettings()
-    settings.cad.model_extensions = [*DEFAULT_CREO_MODEL_EXTENSIONS, ".tmu", ".tmz"]
+    settings.cad.model_extensions = [*DEFAULT_CREO_MODEL_EXTENSIONS, ".idx", ".tmu", ".tmz"]
     # Prior ship had Design Exploration on models and extras without .tmu/.tmz.
     prior_extras = next(
         item for item in PREVIOUS_DEFAULT_EXTRA_CAD_SETS if ".smt" in item and ".tmu" not in item

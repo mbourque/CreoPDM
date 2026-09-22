@@ -783,6 +783,7 @@ PREVIOUS_DEFAULT_TYPE_LABEL_SETS = (
 
 PREVIOUS_DEFAULT_CREO_MODEL_SETS = (
     frozenset((*DEFAULT_CREO_MODEL_EXTENSIONS, ".idx", ".tmu", ".tmz")),
+    frozenset((*DEFAULT_CREO_MODEL_EXTENSIONS, ".tmu", ".tmz")),
     frozenset((*DEFAULT_CREO_MODEL_EXTENSIONS, ".idx")),
 )
 
