@@ -104,10 +104,10 @@ def test_get_and_update_settings(client, tmp_path):
     assert ".pvz" in models
     assert ".ol" in models
     assert ".wrl" in models
-    assert ".idx" in models
+    assert ".idx" not in models
     assert ".3mf" in models
     assert ".wrl" not in defaults
-    assert ".idx" not in defaults
+    assert ".idx" in defaults
     assert extra_cad_set(models) == extra_cad_set(payload["default_cad_model_extensions"])
     assert payload["ignore_patterns"] == payload["default_ignore_patterns"]
     assert "trail.txt*" in payload["ignore_patterns"]

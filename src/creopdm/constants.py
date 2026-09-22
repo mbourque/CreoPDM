@@ -296,7 +296,6 @@ DEFAULT_CREO_MODEL_EXTENSIONS = (
     ".obj",
     ".wrl",
     ".emn",
-    ".idx",
     ".emp",
     ".icm",
     ".bdl",
@@ -783,7 +782,8 @@ PREVIOUS_DEFAULT_TYPE_LABEL_SETS = (
 )
 
 PREVIOUS_DEFAULT_CREO_MODEL_SETS = (
-    frozenset((*DEFAULT_CREO_MODEL_EXTENSIONS, ".tmu", ".tmz")),
+    frozenset((*DEFAULT_CREO_MODEL_EXTENSIONS, ".idx", ".tmu", ".tmz")),
+    frozenset((*DEFAULT_CREO_MODEL_EXTENSIONS, ".idx")),
 )
 
 DEFAULT_IGNORE_PATTERNS = (
@@ -1174,4 +1174,7 @@ PREVIOUS_DEFAULT_EXTRA_CAD_SETS = (
             ".tmz",
         }
     ),
+    frozenset(DEFAULT_EXTRA_CAD_EXTENSIONS),
 )
+
+DEFAULT_EXTRA_CAD_EXTENSIONS = (*DEFAULT_EXTRA_CAD_EXTENSIONS, ".idx")

@@ -136,7 +136,6 @@ def test_config_layout(data_dir):
     assert ".dxf" not in settings.cad.extra_extensions
     assert ".frm" not in settings.cad.extra_extensions
     assert ".wrl" not in settings.cad.extra_extensions
-    assert ".idx" not in settings.cad.extra_extensions
     assert ".dxf" in settings.cad.model_extensions
     assert ".tmu" not in settings.cad.model_extensions
     assert ".tmz" not in settings.cad.model_extensions
@@ -150,7 +149,8 @@ def test_config_layout(data_dir):
     assert ".pvz" in settings.cad.model_extensions
     assert ".ol" in settings.cad.model_extensions
     assert ".wrl" in settings.cad.model_extensions
-    assert ".idx" in settings.cad.model_extensions
+    assert ".idx" not in settings.cad.model_extensions
+    assert ".idx" in settings.cad.extra_extensions
     assert ".3mf" in settings.cad.model_extensions
     assert ".x_t" in settings.cad.model_extensions
     assert ".pvz" in settings.cad.model_extensions
@@ -254,7 +254,8 @@ def test_previous_cad_defaults_migrate(tmp_path):
     assert ".lst" in loaded.cad.openable_extensions
     assert ".ncl" not in loaded.cad.extra_extensions
     assert ".wrl" not in loaded.cad.extra_extensions
-    assert ".idx" not in loaded.cad.extra_extensions
+    assert ".idx" in loaded.cad.extra_extensions
+    assert ".idx" not in loaded.cad.model_extensions
     assert extra_cad_set(loaded.cad.model_extensions) == extra_cad_set(DEFAULT_CREO_MODEL_EXTENSIONS)
 
 
