@@ -2976,26 +2976,50 @@
   undoBtn?.addEventListener("click", async () => {
     const ids = selectedRows().filter((row) => row.dataset.owned === "1").flatMap(rowObjectIds);
     const fallback = selectedIds();
-    const objectIds = ids.length ? ids : fallback;
+    const objectIds = [...new Set((ids.length ? ids : fallback).filter(Boolean))];
     if (!objectIds.length) return;
-    if (objectIds.length === 1 && !selectedRows().length) {
-      const result = await postAction(`/api/objects/${objectIds[0]}/undo-checkout`, undefined, "POST", "Cancelling checkout…");
+    const count = objectIds.length;
+    const confirmMsg =
+      count === 1
+        ? "Undo checkout of this file?\n\nYour lock is released. Unsaved vault changes for this file may be discarded. Local agent cache files are kept."
+        : `Undo checkout of ${count} files?\n\nYour locks are released. Unsaved vault changes for these files may be discarded. Local agent cache files are kept.`;
+    if (!window.confirm(confirmMsg)) return;
+    showError($("#toolbar-error"), "");
+    if (count === 1 && !selectedRows().length) {
+      const result = await postAction(
+        `/api/objects/${objectIds[0]}/undo-checkout`,
+        undefined,
+        "POST",
+        "Cancelling checkout…"
+      );
       if (result) {
         rememberWatchView();
         reloadPage();
       }
       return;
     }
-    const result = await postAction(
-      "/api/objects/batch/undo-checkout",
-      { object_ids: objectIds },
-      "POST",
-      "Cancelling checkout…"
-    );
-    if (!result) return;
-    const warning = formatBatch(result);
+    const UNDO_CHUNK = 50;
+    const undoResult = await withBusy(`Cancelling checkout… 0 of ${count}`, async () => {
+      const merged = { ok: [], failed: [] };
+      for (let start = 0; start < objectIds.length; start += UNDO_CHUNK) {
+        const chunk = objectIds.slice(start, start + UNDO_CHUNK);
+        setBusyMessage(`Cancelling checkout… ${Math.min(start + chunk.length, count)} of ${count}`);
+        const part = await postAction(
+          "/api/objects/batch/undo-checkout",
+          { object_ids: chunk },
+          "POST",
+          ""
+        );
+        if (!part) return null;
+        if (Array.isArray(part.ok)) merged.ok.push(...part.ok);
+        if (Array.isArray(part.failed)) merged.failed.push(...part.failed);
+      }
+      return merged;
+    });
+    if (!undoResult) return;
+    const warning = formatBatch(undoResult);
     if (warning) showError($("#toolbar-error"), warning);
-    if (result.ok?.length) reloadPage();
+    if (undoResult.ok?.length) reloadPage();
   });
 
   checkinBtn?.addEventListener("click", async () => {

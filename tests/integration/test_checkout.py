@@ -305,6 +305,10 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "include_companions: false" in script.text
     assert "Downloading checked-out files…" in script.text
     assert "Checking out…" in script.text
+    assert "Cancelling checkout…" in script.text
+    assert "UNDO_CHUNK" in script.text
+    assert "Undo checkout of" in script.text
+    assert "window.confirm(confirmMsg)" in script.text
     assert "function setBusyMessage" in script.text
     assert "/api/objects/batch/heartbeat" in script.text
     assert "Nothing to purge — no older local saves below the vault revision" in script.text
