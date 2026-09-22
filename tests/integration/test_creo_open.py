@@ -619,23 +619,40 @@ def test_open_embedded_still_opens_creo_view(data_dir, repo_parent, identity: St
 
 
 @requires_git
-def test_open_embedded_still_opens_documents(data_dir, repo_parent, identity, monkeypatch):
-    recorder = EmbeddedConnector()
+def test_open_include_companions_false_skips_neighbors(
+    data_dir, repo_parent, identity: StaticUserProvider
+):
+    recorder = RecordingConnector()
     ctx = build_context(ConfigManager(), users=identity)
     ctx.creo = recorder
     ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
     with TestClient(create_app(ctx)) as client:
-        project = client.post("/api/projects", json={"name": "EmbeddedDocs"}).json()
-        created = client.post(
+        project = client.post("/api/projects", json={"name": "CompanionsFlag"}).json()
+        part = client.post(
             f"/api/projects/{project['uuid']}/objects",
-            files={"file": ("notes.txt", b"hello", "text/plain")},
-            data={"comment": "Notes"},
+            files={"file": ("pin.prt", b"part", "application/octet-stream")},
+            data={"comment": "Part"},
         )
-        assert created.status_code == 201, created.text
-        obj_id = created.json()["uuid"]
-        opened_resp = client.post("/api/creo/open", json={"object_id": obj_id})
-        assert opened_resp.status_code == 200, opened_resp.text
-        body = opened_resp.json()
-        assert body["method"] == "browser"
-        assert body["url"] == f"/api/objects/{obj_id}/content"
-        assert recorder.opened == []
+        asm = client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={"file": ("arm.asm", b"asm-with-pin.prt", "application/octet-stream")},
+            data={"comment": "Asm"},
+        )
+        assert part.status_code == 201, part.text
+        assert asm.status_code == 201, asm.text
+        with_companions = client.post(
+            "/api/creo/open",
+            json={"object_id": asm.json()["uuid"], "launch": False},
+        )
+        assert with_companions.status_code == 200, with_companions.text
+        assert with_companions.json()["companions"]
+        skipped = client.post(
+            "/api/creo/open",
+            json={
+                "object_id": asm.json()["uuid"],
+                "launch": False,
+                "include_companions": False,
+            },
+        )
+        assert skipped.status_code == 200, skipped.text
+        assert skipped.json()["companions"] == []

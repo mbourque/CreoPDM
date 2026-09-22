@@ -47,6 +47,8 @@ def create_db_engine(database_url: str) -> Engine:
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.execute("PRAGMA journal_mode=WAL")
+            # Match connect_args timeout (seconds) so writers wait instead of failing fast.
+            cursor.execute("PRAGMA busy_timeout=30000")
             cursor.close()
 
         return engine

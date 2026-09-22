@@ -173,6 +173,9 @@ class CreoOpenRequest(BaseModel):
     project_id: str | None = None
     relative_path: str | None = None
     launch: bool = True
+    # Bulk checkout→cache fills each selected file once; companions would re-download
+    # the same parts. Real Open still defaults to True so Retrieve has neighbors.
+    include_companions: bool = True
 
     @model_validator(mode="after")
     def require_open_target(self) -> "CreoOpenRequest":

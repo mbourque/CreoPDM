@@ -65,6 +65,40 @@ def test_undo_checkout(client, repo_parent):
 
 
 @requires_git
+def test_heartbeat_and_batch_heartbeat(client, repo_parent):
+    _project, obj, _location = _create_part(client, repo_parent)
+    assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
+
+    single = client.post(f"/api/objects/{obj['uuid']}/heartbeat")
+    assert single.status_code == 204, single.text
+
+    batch = client.post("/api/objects/batch/heartbeat")
+    assert batch.status_code == 204, batch.text
+
+
+@requires_git
+def test_heartbeat_soft_fails_when_database_locked(client, repo_parent, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    from creopdm.services.checkout_service import CheckoutService
+
+    _project, obj, _location = _create_part(client, repo_parent)
+    assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
+
+    def boom(_self, _session, _object_uuid):
+        raise OperationalError("UPDATE", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(CheckoutService, "heartbeat", boom)
+    assert client.post(f"/api/objects/{obj['uuid']}/heartbeat").status_code == 204
+
+    def boom_mine(_self, _session):
+        raise OperationalError("UPDATE", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(CheckoutService, "heartbeat_mine", boom_mine)
+    assert client.post("/api/objects/batch/heartbeat").status_code == 204
+
+
+@requires_git
 def test_batch_checkout_copies_all_selected_files(client, repo_parent, data_dir):
     location = repo_parent / "BatchArm"
     project = client.post(
@@ -237,6 +271,11 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function formatPurgeConfirmDetails" in script.text
     assert "function newerLocalCacheSaves" in script.text
     assert "function materializeCheckedOutToAgentCache" in script.text
+    assert "include_companions: false" in script.text
+    assert "Downloading checked-out files…" in script.text
+    assert "Checking out…" in script.text
+    assert "function setBusyMessage" in script.text
+    assert "/api/objects/batch/heartbeat" in script.text
     assert "Nothing to purge — no older local saves below the vault revision" in script.text
     assert "workspace/purge-floors" in script.text
     assert "/purge-versions" in script.text

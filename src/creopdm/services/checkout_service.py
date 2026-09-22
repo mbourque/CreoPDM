@@ -303,6 +303,19 @@ class CheckoutService:
         record.heartbeat_time = datetime.now(timezone.utc)
         session.flush()
 
+    def heartbeat_mine(self, session: Session) -> None:
+        """Touch every active checkout owned by the current user in one write."""
+        user = self._users.get_current_user()
+        session.execute(
+            update(Checkout)
+            .where(
+                Checkout.status == CheckoutStatus.ACTIVE.value,
+                Checkout.user_name == user.user_name,
+            )
+            .values(heartbeat_time=datetime.now(timezone.utc))
+        )
+        session.flush()
+
     def require_owned(
         self,
         session: Session,

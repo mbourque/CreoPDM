@@ -39,7 +39,13 @@ class CreoService:
     def set_connector(self, connector: CreoConnector) -> None:
         self._connector = connector
 
-    def open_object(self, session: Session, object_uuid: str, launch: bool = True) -> dict:
+    def open_object(
+        self,
+        session: Session,
+        object_uuid: str,
+        launch: bool = True,
+        include_companions: bool = True,
+    ) -> dict:
         obj = self._objects.get_object(session, object_uuid)
         project = obj.project
         checkout = self._checkouts.active_for(session, obj.id)
@@ -80,15 +86,17 @@ class CreoService:
             file_release = creo_release_for(path, path.name) or ""
             if not file_release and obj.current_version is not None:
                 file_release = obj.current_version.creo_release or ""
-        companions = self._companions_for(
-            session,
-            project,
-            path=path,
-            object_type=obj.object_type,
-            relative_path=obj.relative_path,
-            filename=obj.filename,
-            skip_object_id=obj.id,
-        )
+        companions: list[dict[str, str | None]] = []
+        if include_companions:
+            companions = self._companions_for(
+                session,
+                project,
+                path=path,
+                object_type=obj.object_type,
+                relative_path=obj.relative_path,
+                filename=obj.filename,
+                skip_object_id=obj.id,
+            )
         return self._open_resolved(
             path,
             launch=launch,
@@ -107,6 +115,7 @@ class CreoService:
         project: Project,
         relative_path: str,
         launch: bool = True,
+        include_companions: bool = True,
     ) -> dict:
         path = self._workspaces.file_path(project.uuid, relative_path)
         if not path.is_file():
@@ -121,15 +130,17 @@ class CreoService:
             document_extensions=self._workspaces._config.document_extensions(),
         )
         rel = str(relative_path).replace("\\", "/")
-        companions = self._companions_for(
-            session,
-            project,
-            path=path,
-            object_type=kind.value,
-            relative_path=rel,
-            filename=path.name,
-            skip_object_id=None,
-        )
+        companions: list[dict[str, str | None]] = []
+        if include_companions:
+            companions = self._companions_for(
+                session,
+                project,
+                path=path,
+                object_type=kind.value,
+                relative_path=rel,
+                filename=path.name,
+                skip_object_id=None,
+            )
         release = ""
         if is_creo_native_model(path.name):
             release = creo_release_for(path, path.name) or ""

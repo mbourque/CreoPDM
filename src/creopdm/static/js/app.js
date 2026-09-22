@@ -127,10 +127,13 @@
     if (!(busyOverlay instanceof HTMLDialogElement)) return;
     if (busyOverlay.open) busyOverlay.close();
   }
-  function setBusy(message) {
-    busyDepth += 1;
+  function setBusyMessage(message) {
     const text = $("#busy-message");
     if (text) text.textContent = message || "Working…";
+  }
+  function setBusy(message) {
+    busyDepth += 1;
+    setBusyMessage(message);
     showBusyOverlay();
     document.body.classList.add("is-busy");
     document.body.setAttribute("aria-busy", "true");
@@ -142,7 +145,7 @@
     document.body.classList.remove("is-busy");
     document.body.removeAttribute("aria-busy");
   }
-    async function withBusy(message, work) {
+  async function withBusy(message, work) {
     setBusy(message);
     try {
       return await work();
@@ -2612,18 +2615,21 @@
     return response.json();
   }
 
-  async function materializeCheckedOutToAgentCache(objectIds) {
+  async function materializeCheckedOutToAgentCache(objectIds, onProgress) {
     const ids = [...new Set((objectIds || []).filter(Boolean))];
     if (!ids.length) return { agentOffline: false, ok: 0, failed: 0 };
     const agent = await probeCreoAgent();
     if (!agent) return { agentOffline: true, ok: 0, failed: 0 };
     let ok = 0;
     let failed = 0;
-    for (const objectId of ids) {
+    const total = ids.length;
+    for (let i = 0; i < ids.length; i += 1) {
+      const objectId = ids[i];
+      if (typeof onProgress === "function") onProgress(i + 1, total);
       try {
         const prepared = await postAction(
           "/api/creo/open",
-          { object_id: objectId, launch: false },
+          { object_id: objectId, launch: false, include_companions: false },
           "POST",
           ""
         );
@@ -2832,12 +2838,25 @@
       );
       if (!checkoutResult) return;
     } else {
-      checkoutResult = await postAction(
-        "/api/objects/batch/checkout",
-        { object_ids: objectIds },
-        "POST",
-        "Checking out…"
-      );
+      const CHECKOUT_CHUNK = 50;
+      const total = objectIds.length;
+      checkoutResult = await withBusy(`Checking out… 0 of ${total}`, async () => {
+        const merged = { ok: [], failed: [] };
+        for (let start = 0; start < objectIds.length; start += CHECKOUT_CHUNK) {
+          const chunk = objectIds.slice(start, start + CHECKOUT_CHUNK);
+          setBusyMessage(`Checking out… ${Math.min(start + chunk.length, total)} of ${total}`);
+          const part = await postAction(
+            "/api/objects/batch/checkout",
+            { object_ids: chunk },
+            "POST",
+            ""
+          );
+          if (!part) return null;
+          if (Array.isArray(part.ok)) merged.ok.push(...part.ok);
+          if (Array.isArray(part.failed)) merged.failed.push(...part.failed);
+        }
+        return merged;
+      });
       if (!checkoutResult) return;
       const warning = formatBatch(checkoutResult);
       if (warning) showError($("#toolbar-error"), warning);
@@ -2849,7 +2868,9 @@
         : objectIds;
     const sync = await withBusy("Downloading checked-out files to local workspace…", async () => {
       try {
-        return await materializeCheckedOutToAgentCache(syncedIds);
+        return await materializeCheckedOutToAgentCache(syncedIds, (done, total) => {
+          setBusyMessage(`Downloading checked-out files… ${done} of ${total}`);
+        });
       } catch (err) {
         showError($("#toolbar-error"), err?.message || String(err));
         return null;
@@ -4191,10 +4212,9 @@
     heartbeat.ids.push(undoBtn.dataset.uuid);
   }
   if (heartbeat.ids.length) {
+    // One write for all of my checkouts — avoid N concurrent POSTs during bulk ops.
     heartbeat.timer = window.setInterval(() => {
-      heartbeat.ids.forEach((id) => {
-        fetch(`/api/objects/${id}/heartbeat`, { method: "POST" });
-      });
+      fetch("/api/objects/batch/heartbeat", { method: "POST" });
     }, 60000);
   }
 

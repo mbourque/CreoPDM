@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from fastapi import APIRouter, Depends, Response
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import object_to_response
 from creopdm.constants import LifecycleState
 from creopdm.context import AppContext
+from creopdm.logging_setup import get_logger
 from creopdm.schemas.common import (
     BatchObjectRequest,
     BatchOperationResponse,
@@ -17,6 +21,24 @@ from creopdm.schemas.common import (
 from creopdm.utils.classify import display_type_label, type_label_maps
 
 router = APIRouter()
+logger = get_logger("checkout.api")
+
+
+def _sqlite_busy(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return "database is locked" in text or "database table is locked" in text
+
+
+def _run_heartbeat(db: Session, work: Callable[[], None]) -> Response:
+    """Heartbeats are best-effort; never fail a bulk write storm with 500s."""
+    try:
+        work()
+    except OperationalError as exc:
+        if not _sqlite_busy(exc):
+            raise
+        db.rollback()
+        logger.warning("Heartbeat skipped while the database is busy")
+    return Response(status_code=204)
 
 
 def present_object(ctx: AppContext, db: Session, obj) -> ObjectResponse:
@@ -135,14 +157,21 @@ def undo_checkout(
     return present_object(ctx, db, obj)
 
 
+@router.post("/api/objects/batch/heartbeat", status_code=204)
+def heartbeat_batch(
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> Response:
+    return _run_heartbeat(db, lambda: ctx.checkouts.heartbeat_mine(db))
+
+
 @router.post("/api/objects/{object_id}/heartbeat", status_code=204)
 def heartbeat(
     object_id: str,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> Response:
-    ctx.checkouts.heartbeat(db, object_id)
-    return Response(status_code=204)
+    return _run_heartbeat(db, lambda: ctx.checkouts.heartbeat(db, object_id))
 
 
 @router.get("/api/objects/{object_id}/checkin-preview", response_model=CheckinPreviewResponse)

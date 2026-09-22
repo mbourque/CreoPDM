@@ -35,10 +35,19 @@ def open_in_creo(
     ctx: AppContext = Depends(get_context),
 ) -> CreoOpenResponse:
     if payload.object_id:
-        result = ctx.creo_service.open_object(db, payload.object_id, launch=payload.launch)
+        result = ctx.creo_service.open_object(
+            db,
+            payload.object_id,
+            launch=payload.launch,
+            include_companions=payload.include_companions,
+        )
     else:
         project = ctx.projects.get_project(db, payload.project_id or "")
         result = ctx.creo_service.open_workspace_file(
-            db, project, payload.relative_path or "", launch=payload.launch
+            db,
+            project,
+            payload.relative_path or "",
+            launch=payload.launch,
+            include_companions=payload.include_companions,
         )
     return CreoOpenResponse.model_validate(result)
