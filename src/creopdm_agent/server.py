@@ -22,6 +22,7 @@ from creopdm_agent.trash import move_to_trash
 logger = logging.getLogger("creopdm_agent")
 
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9._\-]+")
+_CACHE_INDEX_NAME = "_creopdm_cache_index.json"
 
 
 class MaterializeItem(BaseModel):
@@ -63,6 +64,31 @@ class MaterializeZipResponse(BaseModel):
     working_directory: str
     extracted_count: int = 0
     bytes_written: int = 0
+    skipped_count: int = 0
+    kept_newer_count: int = 0
+    download_count: int = 0
+
+
+class CachePlanItem(BaseModel):
+    object_id: str
+    filename: str = ""
+    disk_name: str = ""
+    content_hash: str = ""
+    file_size: int = 0
+
+
+class CachePlanRequest(BaseModel):
+    pdm_url: str = ""
+    project_id: str = ""
+    object_ids: list[str] = Field(min_length=1)
+    token: str | None = None
+
+
+class CachePlanResponse(BaseModel):
+    download_ids: list[str] = Field(default_factory=list)
+    skipped_count: int = 0
+    kept_newer_count: int = 0
+    total: int = 0
 
 
 class OpenLocalRequest(BaseModel):
@@ -222,11 +248,16 @@ def _download(
     return target, logical, disk_name, len(response.content)
 
 
-def _extract_flat_zip(zip_path: Path, target_dir: Path) -> tuple[int, int]:
+def _extract_flat_zip(
+    zip_path: Path,
+    target_dir: Path,
+    hashes_by_name: dict[str, str] | None = None,
+) -> tuple[int, int]:
     """Extract zip entries into target_dir using basename only (matches /materialize layout)."""
     target_resolved = target_dir.resolve()
     extracted = 0
     nbytes = 0
+    index = _load_cache_index(target_dir)
     with zipfile.ZipFile(zip_path) as zf:
         for info in zf.infolist():
             if info.is_dir():
@@ -246,7 +277,120 @@ def _extract_flat_zip(zip_path: Path, target_dir: Path) -> tuple[int, int]:
             dest.write_bytes(data)
             extracted += 1
             nbytes += len(data)
+            digest = (hashes_by_name or {}).get(name) or (hashes_by_name or {}).get(dest.name)
+            if digest:
+                index[dest.name] = {"hash": digest, "size": len(data)}
+    if hashes_by_name:
+        _save_cache_index(target_dir, index)
     return extracted, nbytes
+
+
+def _load_cache_index(cache_dir: Path) -> dict[str, dict[str, object]]:
+    path = cache_dir / _CACHE_INDEX_NAME
+    if not path.is_file():
+        return {}
+    try:
+        import json
+
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, dict[str, object]] = {}
+    for key, value in raw.items():
+        if isinstance(key, str) and isinstance(value, dict):
+            out[key] = value
+    return out
+
+
+def _save_cache_index(cache_dir: Path, index: dict[str, dict[str, object]]) -> None:
+    import json
+
+    path = cache_dir / _CACHE_INDEX_NAME
+    try:
+        path.write_text(json.dumps(index, indent=0, sort_keys=True), encoding="utf-8")
+    except OSError as exc:
+        logger.warning("Could not write cache index %s: %s", path, exc)
+
+
+def _remember_cache_file(cache_dir: Path, disk_name: str, content_hash: str, size: int) -> None:
+    if not content_hash or not disk_name:
+        return
+    index = _load_cache_index(cache_dir)
+    index[disk_name] = {"hash": content_hash, "size": int(size)}
+    _save_cache_index(cache_dir, index)
+
+
+def _plan_cache_downloads(
+    cache_dir: Path,
+    items: list[CachePlanItem],
+) -> tuple[list[str], int, int]:
+    """Decide which object ids need a vault download.
+
+    Equal content_hash → skip. Local Creo save newer than vault disk_name → keep.
+    """
+    from creopdm.creo.file_manager import CreoFileManager
+    from creopdm.utils.hashing import calculate_sha256
+
+    index = _load_cache_index(cache_dir)
+    download_ids: list[str] = []
+    skipped = 0
+    kept_newer = 0
+    index_dirty = False
+
+    for item in items:
+        object_id = (item.object_id or "").strip()
+        if not object_id:
+            continue
+        filename = (item.filename or item.disk_name or "").strip()
+        disk_name = (item.disk_name or filename).strip()
+        expected_hash = (item.content_hash or "").strip().lower()
+        expected_size = int(item.file_size or 0)
+        local = _find_cache_file(cache_dir, filename or disk_name)
+        if local is None or not local.is_file():
+            download_ids.append(object_id)
+            continue
+
+        vault_save = CreoFileManager.save_number(disk_name, None)
+        local_save = CreoFileManager.save_number(local.name, None)
+        if local_save > vault_save:
+            kept_newer += 1
+            continue
+
+        try:
+            local_size = local.stat().st_size
+        except OSError:
+            download_ids.append(object_id)
+            continue
+
+        cached = index.get(local.name) or index.get(disk_name)
+        if (
+            isinstance(cached, dict)
+            and str(cached.get("hash") or "").lower() == expected_hash
+            and expected_hash
+            and int(cached.get("size") or -1) == local_size
+        ):
+            skipped += 1
+            continue
+
+        if expected_hash and (not expected_size or local_size == expected_size):
+            try:
+                digest = calculate_sha256(local).lower()
+            except Exception:
+                download_ids.append(object_id)
+                continue
+            if digest == expected_hash:
+                index[local.name] = {"hash": digest, "size": local_size}
+                index_dirty = True
+                skipped += 1
+                continue
+
+        download_ids.append(object_id)
+
+    if index_dirty:
+        _save_cache_index(cache_dir, index)
+    return download_ids, skipped, kept_newer
 
 
 def _find_cache_file(cache_dir: Path, filename: str) -> Path | None:
@@ -747,17 +891,73 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         token = (payload.token or settings.token or "").strip()
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        archive_url = f"{base}/api/objects/batch/agent-cache-archive"
         zip_timeout = httpx.Timeout(connect=30.0, read=3600.0, write=30.0, pool=30.0)
-        fd, raw_tmp = tempfile.mkstemp(suffix=".zip", prefix="creopdm-agent-")
-        os.close(fd)
-        zip_path = Path(raw_tmp)
-        try:
-            with httpx.Client(timeout=zip_timeout, follow_redirects=True) as client:
+        manifest_url = f"{base}/api/objects/batch/agent-cache-manifest"
+        archive_url = f"{base}/api/objects/batch/agent-cache-archive"
+
+        with httpx.Client(timeout=zip_timeout, follow_redirects=True) as client:
+            try:
+                manifest_response = client.post(
+                    manifest_url,
+                    json={"object_ids": payload.object_ids},
+                    headers=headers,
+                )
+            except httpx.HTTPError as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Could not fetch cache manifest from CreoPDM: {exc}",
+                ) from exc
+            if manifest_response.status_code >= 400:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"CreoPDM manifest returned {manifest_response.status_code}",
+                )
+            try:
+                manifest_body = manifest_response.json()
+            except Exception as exc:
+                raise HTTPException(status_code=502, detail="Invalid cache manifest.") from exc
+            raw_items = manifest_body.get("items") if isinstance(manifest_body, dict) else None
+            items = [
+                CachePlanItem(
+                    object_id=str(item.get("object_id") or ""),
+                    filename=str(item.get("filename") or ""),
+                    disk_name=str(item.get("disk_name") or ""),
+                    content_hash=str(item.get("content_hash") or ""),
+                    file_size=int(item.get("file_size") or 0),
+                )
+                for item in (raw_items or [])
+                if isinstance(item, dict)
+            ]
+            download_ids, skipped, kept_newer = _plan_cache_downloads(target_dir, items)
+            if not download_ids:
+                logger.info(
+                    "Agent cache up to date (%s skipped, %s kept newer) → %s",
+                    skipped,
+                    kept_newer,
+                    target_dir,
+                )
+                return MaterializeZipResponse(
+                    working_directory=str(target_dir.resolve()),
+                    extracted_count=0,
+                    bytes_written=0,
+                    skipped_count=skipped,
+                    kept_newer_count=kept_newer,
+                    download_count=0,
+                )
+
+            hashes_by_name = {
+                item.disk_name: item.content_hash
+                for item in items
+                if item.object_id in set(download_ids) and item.disk_name and item.content_hash
+            }
+            fd, raw_tmp = tempfile.mkstemp(suffix=".zip", prefix="creopdm-agent-")
+            os.close(fd)
+            zip_path = Path(raw_tmp)
+            try:
                 with client.stream(
                     "POST",
                     archive_url,
-                    json={"object_ids": payload.object_ids},
+                    json={"object_ids": download_ids},
                     headers=headers,
                 ) as response:
                     if response.status_code >= 400:
@@ -773,17 +973,20 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     with zip_path.open("wb") as handle:
                         for chunk in response.iter_bytes():
                             handle.write(chunk)
-            extracted, nbytes = _extract_flat_zip(zip_path, target_dir)
-        except httpx.HTTPError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Could not download archive from CreoPDM: {exc}",
-            ) from exc
-        finally:
-            zip_path.unlink(missing_ok=True)
+                extracted, nbytes = _extract_flat_zip(zip_path, target_dir, hashes_by_name)
+            except httpx.HTTPError as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Could not download archive from CreoPDM: {exc}",
+                ) from exc
+            finally:
+                zip_path.unlink(missing_ok=True)
+
         logger.info(
-            "Materialized zip (%s files, %s bytes) → %s",
+            "Materialized zip (%s downloaded, %s skipped, %s kept newer, %s bytes) → %s",
             extracted,
+            skipped,
+            kept_newer,
             nbytes,
             target_dir,
         )
@@ -791,6 +994,9 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             working_directory=str(target_dir.resolve()),
             extracted_count=extracted,
             bytes_written=nbytes,
+            skipped_count=skipped,
+            kept_newer_count=kept_newer,
+            download_count=len(download_ids),
         )
 
     @app.post("/open", response_model=OpenLocalResponse)

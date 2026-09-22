@@ -91,6 +91,20 @@ def test_agent_cache_archive_zip(client, repo_parent):
     assert shaft_bytes == b"original-content"
     assert bracket_bytes == b"bracket-content"
 
+    manifest = client.post(
+        "/api/objects/batch/agent-cache-manifest",
+        json={"object_ids": [obj1["uuid"], obj2["uuid"]]},
+    )
+    assert manifest.status_code == 200, manifest.text
+    body = manifest.json()
+    assert body["project_id"] == project["uuid"]
+    assert len(body["items"]) == 2
+    by_name = {item["disk_name"]: item for item in body["items"]}
+    assert "shaft.prt" in by_name
+    assert "bracket.prt" in by_name
+    assert len(by_name["shaft.prt"]["content_hash"]) == 64
+    assert by_name["shaft.prt"]["file_size"] == len(b"original-content")
+
 
 @requires_git
 def test_heartbeat_and_batch_heartbeat(client, repo_parent):
@@ -301,7 +315,8 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function materializeCheckedOutToAgentCache" in script.text
     assert "BULK_AGENT_CACHE_ZIP_THRESHOLD" in script.text
     assert "/materialize-zip" in script.text
-    assert "Downloading ${total} files as one archive" in script.text
+    assert "Checking local cache for ${total} files" in script.text
+    assert "already local" in script.text
     assert "include_companions: false" in script.text
     assert "Downloading checked-out files…" in script.text
     assert "Checking out…" in script.text

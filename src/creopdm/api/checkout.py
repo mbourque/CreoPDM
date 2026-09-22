@@ -15,8 +15,10 @@ from creopdm.constants import LifecycleState
 from creopdm.context import AppContext
 from creopdm.exceptions import ValidationAppError
 from creopdm.logging_setup import get_logger
-from creopdm.services.agent_cache_zip import build_agent_cache_zip
+from creopdm.services.agent_cache_zip import build_agent_cache_zip, manifest_items_for_objects
 from creopdm.schemas.common import (
+    AgentCacheManifestItem,
+    AgentCacheManifestResponse,
     BatchObjectRequest,
     BatchOperationResponse,
     CheckinPreviewResponse,
@@ -121,6 +123,30 @@ def undo_checkout_batch(
     result = ctx.checkouts.undo_checkout_many(db, payload.object_ids)
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.config.workspace_root())}
+    )
+
+
+@router.post("/api/objects/batch/agent-cache-manifest", response_model=AgentCacheManifestResponse)
+def agent_cache_manifest(
+    payload: BatchObjectRequest,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> AgentCacheManifestResponse:
+    """Content identities for agent-cache hit detection (no file bodies)."""
+    objects = ctx.objects.get_objects(db, payload.object_ids)
+    if len(objects) != len(payload.object_ids):
+        found = {obj.uuid for obj in objects}
+        missing = [item for item in payload.object_ids if item not in found]
+        raise ValidationAppError(
+            "One or more objects were not found.",
+            details={"missing": missing[:20]},
+        )
+    project_ids = {obj.project.uuid for obj in objects}
+    if len(project_ids) != 1:
+        raise ValidationAppError("All files must belong to the same project.")
+    return AgentCacheManifestResponse(
+        project_id=objects[0].project.uuid,
+        items=[AgentCacheManifestItem.model_validate(item) for item in manifest_items_for_objects(objects)],
     )
 
 

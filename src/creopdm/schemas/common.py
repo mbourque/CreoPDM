@@ -275,6 +275,21 @@ class BatchObjectRequest(BaseModel):
     object_ids: list[str] = Field(min_length=1)
 
 
+class AgentCacheManifestItem(BaseModel):
+    """Vault file identity for agent-cache hit detection."""
+
+    object_id: str
+    filename: str
+    disk_name: str
+    content_hash: str
+    file_size: int = 0
+
+
+class AgentCacheManifestResponse(BaseModel):
+    project_id: str
+    items: list[AgentCacheManifestItem] = Field(default_factory=list)
+
+
 class PurgeWorkspacePathsRequest(BaseModel):
     relative_paths: list[str] = Field(min_length=1)
 

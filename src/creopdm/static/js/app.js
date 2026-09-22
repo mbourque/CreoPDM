@@ -2644,9 +2644,20 @@
       if (typeof onProgress === "function") onProgress(0, total);
       try {
         const zipResult = await materializeCheckedOutToAgentCacheZip(ids);
-        const extracted = Number(zipResult?.extracted_count) || total;
+        const extracted = Number(zipResult?.extracted_count) || 0;
+        const skipped = Number(zipResult?.skipped_count) || 0;
+        const keptNewer = Number(zipResult?.kept_newer_count) || 0;
+        const downloaded = Number(zipResult?.download_count) || extracted;
         if (typeof onProgress === "function") onProgress(total, total);
-        return { agentOffline: false, ok: extracted, failed: Math.max(0, total - extracted) };
+        const ok = extracted + skipped + keptNewer;
+        return {
+          agentOffline: false,
+          ok,
+          failed: Math.max(0, total - ok),
+          skipped,
+          keptNewer,
+          downloaded,
+        };
       } catch {
         /* fall back to per-file download */
       }
@@ -2900,7 +2911,7 @@
       try {
         return await materializeCheckedOutToAgentCache(syncedIds, (done, total) => {
           if (total >= BULK_AGENT_CACHE_ZIP_THRESHOLD && done === 0) {
-            setBusyMessage(`Downloading ${total} files as one archive…`);
+            setBusyMessage(`Checking local cache for ${total} files…`);
           } else {
             setBusyMessage(`Downloading checked-out files… ${done} of ${total}`);
           }
@@ -2923,7 +2934,11 @@
     } else if (sync?.ok) {
       const note = sync.failed
         ? `${sync.ok} file(s) in local workspace (${sync.failed} failed).`
-        : `${sync.ok} file(s) downloaded to the local workspace.`;
+        : sync.downloaded != null && (sync.skipped || sync.keptNewer)
+          ? `${sync.ok} file(s) ready (${sync.downloaded} downloaded, ${sync.skipped || 0} already local` +
+            (sync.keptNewer ? `, ${sync.keptNewer} kept newer local` : "") +
+            `).`
+          : `${sync.ok} file(s) downloaded to the local workspace.`;
       showOk(note);
     }
     reloadPage();
