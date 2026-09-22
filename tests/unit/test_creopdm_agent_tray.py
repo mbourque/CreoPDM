@@ -37,3 +37,10 @@ def test_stop_other_agent_processes_excludes_self(monkeypatch):
     assert self_pid not in signaled
     assert 999001 in signaled
     assert stopped == 1
+
+
+def test_safe_print_tolerates_missing_stdout(monkeypatch):
+    from creopdm_agent.main import _safe_print
+
+    monkeypatch.setattr("creopdm_agent.main.sys.stdout", None)
+    _safe_print("should not raise")

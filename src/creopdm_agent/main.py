@@ -123,6 +123,17 @@ def _apply_args(settings, args) -> None:
         settings.status_poll_interval_seconds = int(args.status_poll_interval)
 
 
+def _safe_print(message: str) -> None:
+    """pythonw has no stdout; print() can abort the tray before it starts."""
+    try:
+        stream = sys.stdout
+        if stream is None:
+            return
+        print(message, file=stream)
+    except OSError:
+        return
+
+
 def stop_other_agent_processes(*, exclude_pids: set[int] | None = None) -> int:
     """Force-stop other CreoPDM agent/tray processes. Returns how many were signaled."""
     exclude = set(exclude_pids or ())
@@ -249,9 +260,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.restart:
         stopped = stop_other_agent_processes(exclude_pids={os.getpid()})
         if stopped:
-            print(f"Stopped {stopped} other CreoPDM agent process(es).")
+            _safe_print(f"Stopped {stopped} other CreoPDM agent process(es).")
         else:
-            print("No other CreoPDM agent process was running.")
+            _safe_print("No other CreoPDM agent process was running.")
     if args.tray and _windows_tray_without_console(argv):
         return 0
     settings = load_config()
@@ -263,13 +274,15 @@ def main(argv: list[str] | None = None) -> int:
         return run_settings(settings)
     if args.save_config:
         save_config(settings)
-        print(f"Saved agent config for port {settings.port}")
+        _safe_print(f"Saved agent config for port {settings.port}")
         return 0
     if settings.host not in {"127.0.0.1", "localhost", "::1"}:
-        print(
-            "Refusing to bind on a non-loopback host. The agent must stay local to Creo.",
-            file=sys.stderr,
-        )
+        try:
+            sys.stderr.write(
+                "Refusing to bind on a non-loopback host. The agent must stay local to Creo.\n"
+            )
+        except OSError:
+            pass
         return 2
     if args.tray:
         from creopdm_agent.tray import hide_console_window, run_tray
@@ -277,7 +290,7 @@ def main(argv: list[str] | None = None) -> int:
         hide_console_window()
         return run_tray(settings)
     app = create_agent_app(settings)
-    print(
+    _safe_print(
         f"CreoPDM agent {__version__} on http://{settings.host}:{settings.port} "
         f"(files → {settings.resolved_root()})"
     )

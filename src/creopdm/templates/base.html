@@ -56,6 +56,38 @@
       </div>
     </form>
   </dialog>
+  <dialog id="open-checkout-dialog" class="dialog">
+    <form method="dialog" id="open-checkout-form">
+      <h2 id="open-checkout-title">Open file</h2>
+      <p id="open-checkout-lead"></p>
+      <p class="muted small" id="open-checkout-explain">
+        Check out if you plan to edit and check the file back in later. You can open without checking out to view or reference the model; that does not take an edit lock.
+      </p>
+      <div class="open-choice" id="open-checkout-choices">
+        <label class="choice">
+          <input type="radio" name="open_action" value="open" id="open-action-open" checked>
+          Open without checking out
+        </label>
+        <label class="choice" id="open-checkout-file-wrap">
+          <input type="radio" name="open_action" value="checkout-file" id="open-action-checkout-file">
+          Check out this file, then open
+        </label>
+        <label class="choice" id="open-checkout-companions-wrap">
+          <input type="radio" name="open_action" value="checkout-companions" id="open-action-checkout-companions">
+          Check out this file and its companions, then open
+        </label>
+      </div>
+      <p class="muted small" id="open-checkout-companions-note">
+        Companions are related models Creo needs nearby (for example parts referenced by an assembly). Checking them out takes locks on those files too.
+      </p>
+      <p class="error" id="open-checkout-error" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn" id="open-checkout-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="open-checkout-submit">Continue</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="busy-overlay" class="busy-overlay">
     <div class="busy-panel" role="status" aria-live="polite">
       <span class="busy-spinner" aria-hidden="true"></span>
@@ -433,6 +465,6 @@ function setWorkingDirectory(directory) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push35"></script>
+  <script src="/client/app.js?v={{ app_version }}-push36"></script>
 </body>
 </html>

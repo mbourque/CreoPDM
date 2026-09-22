@@ -2040,11 +2040,13 @@
     if (!openLink || event.detail > 1) return;
     const uuid = openLink.dataset.uuid || row.dataset.uuid;
     if (uuid) {
-      void openPdmObject(uuid);
+      void openPdmObjectFromUi(uuid, row);
       return;
     }
     const relativePath = openLink.dataset.relativePath || row.dataset.relativePath;
-    if (relativePath) void openPdmObject({ relativePath, projectId: currentProjectId() });
+    if (relativePath) {
+      void openPdmObjectFromUi({ relativePath, projectId: currentProjectId() }, row);
+    }
   }
 
   function onFileTableDblclick(event) {
@@ -2311,14 +2313,159 @@
     void setCreoWorkingDirectory();
   });
 
-  function openRequestBody(target, launch) {
+  function openRequestBody(target, launch, includeCompanions) {
     const spec = typeof target === "string" ? { objectId: target } : target || {};
-    if (spec.objectId) return { object_id: spec.objectId, launch };
-    return {
-      project_id: spec.projectId || currentProjectId(),
-      relative_path: spec.relativePath,
-      launch,
-    };
+    const body = { launch: Boolean(launch) };
+    if (includeCompanions !== undefined) body.include_companions = Boolean(includeCompanions);
+    if (spec.objectId) {
+      body.object_id = spec.objectId;
+      return body;
+    }
+    body.project_id = spec.projectId || currentProjectId();
+    body.relative_path = spec.relativePath;
+    return body;
+  }
+
+  function openTargetObjectId(target) {
+    if (typeof target === "string") return target;
+    return target?.objectId || "";
+  }
+
+  function openTargetFilename(target, row) {
+    if (row?.dataset?.filename) return row.dataset.filename;
+    if (typeof target === "string") {
+      const match = rows().find((item) => item.dataset.uuid === target);
+      if (match?.dataset?.filename) return match.dataset.filename;
+      return target;
+    }
+    if (target?.relativePath) return String(target.relativePath).split("/").pop() || "file";
+    return "file";
+  }
+
+  function promptOpenCheckout({ filename, canCheckout, owned }) {
+    const dialog = $("#open-checkout-dialog");
+    const form = $("#open-checkout-form");
+    const lead = $("#open-checkout-lead");
+    const fileWrap = $("#open-checkout-file-wrap");
+    const companionsWrap = $("#open-checkout-companions-wrap");
+    const companionsNote = $("#open-checkout-companions-note");
+    const openRadio = $("#open-action-open");
+    const cancelBtn = $("#open-checkout-cancel");
+    const err = $("#open-checkout-error");
+    if (!(dialog instanceof HTMLDialogElement) || !form || !openRadio) {
+      return Promise.resolve("open");
+    }
+    if (lead) {
+      lead.textContent = owned
+        ? `${filename} is already checked out by you.`
+        : `How do you want to open ${filename}?`;
+    }
+    showError(err, "");
+    const allowCheckout = Boolean(canCheckout) && !owned;
+    if (fileWrap) fileWrap.hidden = !allowCheckout;
+    if (companionsWrap) companionsWrap.hidden = !allowCheckout;
+    if (companionsNote) companionsNote.hidden = !allowCheckout;
+    openRadio.checked = true;
+    const fileRadio = $("#open-action-checkout-file");
+    const companionsRadio = $("#open-action-checkout-companions");
+    if (fileRadio) fileRadio.disabled = !allowCheckout;
+    if (companionsRadio) companionsRadio.disabled = !allowCheckout;
+
+    return new Promise((resolve) => {
+      const finish = (action) => {
+        form.removeEventListener("submit", onSubmit);
+        cancelBtn?.removeEventListener("click", onCancel);
+        dialog.removeEventListener("cancel", onCancel);
+        try {
+          if (dialog.open) dialog.close();
+        } catch {
+          /* ignore */
+        }
+        resolve(action);
+      };
+      const onCancel = (event) => {
+        event?.preventDefault?.();
+        finish("cancel");
+      };
+      const onSubmit = (event) => {
+        event.preventDefault();
+        const selected = form.querySelector('input[name="open_action"]:checked');
+        finish(selected?.value || "open");
+      };
+      form.addEventListener("submit", onSubmit);
+      cancelBtn?.addEventListener("click", onCancel);
+      dialog.addEventListener("cancel", onCancel);
+      if (!dialog.open) dialog.showModal();
+    });
+  }
+
+  async function checkoutBeforeOpen(target, withCompanions) {
+    const objectId = openTargetObjectId(target);
+    if (!objectId) return true;
+    if (!withCompanions) {
+      const result = await postAction(
+        `/api/objects/${objectId}/checkout`,
+        undefined,
+        "POST",
+        "Checking out…"
+      );
+      return Boolean(result);
+    }
+    const prepared = await postAction(
+      "/api/creo/open",
+      openRequestBody(target, false, true),
+      "POST",
+      "Finding companions…"
+    );
+    if (!prepared) return false;
+    const ids = [
+      objectId,
+      ...((prepared.companions || []).map((item) => item.object_id).filter(Boolean)),
+    ];
+    const unique = [...new Set(ids)];
+    if (unique.length === 1) {
+      const result = await postAction(
+        `/api/objects/${unique[0]}/checkout`,
+        undefined,
+        "POST",
+        "Checking out…"
+      );
+      return Boolean(result);
+    }
+    const result = await postAction(
+      "/api/objects/batch/checkout",
+      { object_ids: unique },
+      "POST",
+      `Checking out ${unique.length} files…`
+    );
+    if (!result) return false;
+    const warning = formatBatch(result);
+    if (warning) showError($("#toolbar-error"), warning);
+    return Boolean(result.ok?.length);
+  }
+
+  async function openPdmObjectFromUi(target, row) {
+    const objectId = openTargetObjectId(target);
+    const filename = openTargetFilename(target, row);
+    const canCheckout = row ? row.dataset.canCheckout === "1" : false;
+    const owned = row ? row.dataset.owned === "1" : false;
+    const action = await promptOpenCheckout({
+      filename,
+      canCheckout: Boolean(objectId) && canCheckout,
+      owned: Boolean(objectId) && owned,
+    });
+    if (action === "cancel") return null;
+    if (action === "checkout-file" || action === "checkout-companions") {
+      const ok = await checkoutBeforeOpen(target, action === "checkout-companions");
+      if (!ok) return null;
+      if (row) {
+        row.dataset.owned = "1";
+        row.dataset.canCheckout = "0";
+        row.dataset.canCheckin = "1";
+        row.dataset.checkedOut = "1";
+      }
+    }
+    return openPdmObject(target);
   }
 
   function agentBase() {
@@ -2917,7 +3064,9 @@
       showError($("#toolbar-error"), "Select one file to open.");
       return;
     }
-    await openPdmObject(spec);
+    const selected = selectedRows();
+    const row = selected.length === 1 ? selected[0] : null;
+    await openPdmObjectFromUi(spec, row);
   });
 
   checkoutBtn?.addEventListener("click", async () => {
@@ -4491,8 +4640,18 @@
 
   document.querySelector(".detail-head .object-open")?.addEventListener("click", async (event) => {
     event.preventDefault();
-    const id = event.currentTarget.dataset.uuid;
-    if (id) await openPdmObject(id);
+    const link = event.currentTarget;
+    const id = link?.dataset?.uuid;
+    if (!id) return;
+    const owned = Boolean(undoBtn && !undoBtn.disabled);
+    const canCheckout = Boolean(checkoutBtn && !checkoutBtn.disabled);
+    await openPdmObjectFromUi(id, {
+      dataset: {
+        filename: link.textContent?.trim() || id,
+        canCheckout: canCheckout ? "1" : "0",
+        owned: owned ? "1" : "0",
+      },
+    });
   });
 
   restoreStoredFilters();

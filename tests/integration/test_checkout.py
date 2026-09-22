@@ -350,6 +350,12 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "queue-row" in script.text
     assert "#changes-table" in script.text
     assert ".object-row, .folder-row, .queue-row" in script.text
+    assert "function openPdmObjectFromUi" in script.text
+    assert "function promptOpenCheckout" in script.text
+    assert "checkout-companions" in script.text
+    assert "Check out this file and its companions" in script.text
+    assert 'id="open-checkout-dialog"' in home.text
+    assert "Open without checking out" in home.text
     assert 'link.className = "object-open"' in script.text
     assert "dataset.relativePath" in script.text
     css = client.get("/static/css/app.css")
