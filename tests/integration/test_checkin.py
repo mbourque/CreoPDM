@@ -400,7 +400,7 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     script = client.get("/static/js/app.js")
     assert script.status_code == 200
     assert 'link.className = "object-open"' in script.text
-    assert "relative_path: spec.relativePath" in script.text
+    assert "body.relative_path = spec.relativePath" in script.text
     assert "confirmByProjectName" in script.text
     assert "workspaceOption" in script.text
     assert 'id="danger-confirm-workspace"' in page.text

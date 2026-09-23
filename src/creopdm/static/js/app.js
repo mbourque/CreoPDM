@@ -28,7 +28,9 @@
       /* Chromium / Linux Creo may not expose window.external.ptc */
     }
     try {
-      if (window.CreoJS) return true;
+      if (window.CreoJS && typeof window.CreoJS.isAvailable === "function" && window.CreoJS.isAvailable()) {
+        return true;
+      }
     } catch {
       /* ignore */
     }
@@ -58,7 +60,16 @@
         }
       };
       // Creo may inject CreoJS after scanning text/creojs scripts.
+      // Wait longer when the PTC bridge is present so we don't load a second copy.
       let tries = 0;
+      const hasBridge = () => {
+        try {
+          return !!(window.external && window.external.ptc);
+        } catch {
+          return false;
+        }
+      };
+      const maxTries = hasBridge() ? 80 : 40;
       const poll = setInterval(() => {
         tries += 1;
         if (window.CreoJS) {
@@ -67,8 +78,13 @@
           done(true);
           return;
         }
-        if (tries < 40) return;
+        if (tries < maxTries) return;
         clearInterval(poll);
+        // Outside Creo, skip loading creojs.js — it cannot talk to a session.
+        if (!hasBridge()) {
+          done(false);
+          return;
+        }
         const script = document.createElement("script");
         script.src = "/creojs.js";
         script.onload = () => {
@@ -2781,13 +2797,23 @@
     return String(el?.dataset?.creoOpenMode || "").trim().toLowerCase();
   }
 
+  function creoExternalBridge() {
+    try {
+      return !!(window.external && window.external.ptc);
+    } catch {
+      return false;
+    }
+  }
+
   function hostedCreoJS() {
     try {
       if (!window.CreoJS) return false;
+      // Live PTC bridge — preferred over creojs.js's one-shot isAvailable flag.
+      if (creoExternalBridge()) return true;
       if (typeof window.CreoJS.isAvailable === "function") {
         return Boolean(window.CreoJS.isAvailable());
       }
-      return typeof window.CreoJS.openModel === "function";
+      return false;
     } catch {
       return false;
     }
@@ -2797,9 +2823,9 @@
     try {
       if (!window.CreoJS) return false;
       if (typeof window.CreoJS.gatherModelMetadata !== "function") return false;
-      if (hostedCreoJS()) return true;
-      // Embedded browser sometimes reports isAvailable=false while Creo.JS still works.
-      return creoOpenMode() === "embedded";
+      // Require a real Creo.JS bridge — Embedded mode alone is not enough
+      // (Chrome with settings=Embedded must not pretend to gather).
+      return hostedCreoJS();
     } catch {
       return false;
     }
@@ -2925,7 +2951,6 @@
           : null,
         gather_debug: gatherDebug,
       };
-      };
       try {
         await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {
           method: "POST",
@@ -2995,27 +3020,44 @@
       }
     });
     const pill = $("#creo-status");
-    if (!pill || !inSession) return null;
+    if (!pill) return null;
     const modeKey = creoOpenMode() || "association";
     const modeName = modeKey === "embedded" ? "Embedded" : modeKey === "association" ? "OS" : modeKey;
     if (modeKey === "embedded") {
       const agent =
         prefetchedAgent !== undefined ? prefetchedAgent : await probeCreoAgent();
-      if (agent) {
+      if (inSession && agent) {
         pill.textContent = `Creo: Connected · ${modeName}`;
         pill.dataset.state = "ok";
-        pill.title = "Creo session connected. Local creopdm-agent is running.";
-      } else {
+        pill.title = "Creo.JS session linked. Local creopdm-agent is running.";
+      } else if (inSession && !agent) {
         pill.textContent = `Creo: Agent offline · ${modeName}`;
         pill.dataset.state = "idle";
         pill.title =
-          "Creo session is open, but creopdm-agent is not running on this PC. Start creopdm-agent-tray for Embedded open.";
+          "Creo.JS session is linked, but creopdm-agent is not running on this PC. Start creopdm-agent-tray for Embedded open.";
+      } else if (!inSession && agent) {
+        // Agent health ≠ Creo.JS. SSR often says Not Connected from the Linux host.
+        pill.textContent = `Creo: Session offline · ${modeName}`;
+        pill.dataset.state = "idle";
+        pill.title =
+          "creopdm-agent is running, but this page has no Creo.JS bridge (window.external.ptc). Open CreoPDM inside Creo's embedded browser — not Chrome/Edge — then hard-refresh.";
+      } else {
+        pill.textContent = `Creo: Not Connected · ${modeName}`;
+        pill.dataset.state = "idle";
+        pill.title =
+          "No Creo.JS bridge and creopdm-agent is offline. Open CreoPDM in Creo's embedded browser and start the agent tray.";
       }
       return agent;
     }
-    pill.textContent = `Creo: Connected · ${modeName}`;
-    pill.dataset.state = "ok";
-    pill.title = "Opens Creo models as a browser download for the OS association";
+    if (inSession) {
+      pill.textContent = `Creo: Connected · ${modeName}`;
+      pill.dataset.state = "ok";
+      pill.title = "Creo.JS session linked (OS open mode).";
+    } else {
+      pill.textContent = `Creo: Not Connected · ${modeName}`;
+      pill.dataset.state = "idle";
+      pill.title = "Opens Creo models as a browser download for the OS association";
+    }
     return null;
   }
 
@@ -3032,6 +3074,17 @@
         await refreshCreoStatusPill(agent);
       } else {
         await refreshCreoStatusPill(null);
+      }
+      // Creo.JS bridge can appear after first paint — re-check a few times.
+      if (!hostedCreoJS()) {
+        let bridgeTries = 0;
+        const bridgePoll = window.setInterval(() => {
+          bridgeTries += 1;
+          if (hostedCreoJS() || bridgeTries >= 40) {
+            window.clearInterval(bridgePoll);
+            void refreshCreoStatusPill(agent);
+          }
+        }, 250);
       }
       let seconds = 0;
       if (agent && Object.prototype.hasOwnProperty.call(agent, "status_poll_interval_seconds")) {

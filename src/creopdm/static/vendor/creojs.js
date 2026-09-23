@@ -485,7 +485,16 @@ var CreoJS = (function () {
         }
     }
 
-    var isCreoAvailable = window.external && window.external.ptc && (typeof window.external.ptc !== 'undefined');
+    // CreoPDM: re-check each call. PTC's stock one-shot freezes false if this
+    // script evaluates before window.external.ptc is ready (common race).
+    function checkCreoAvailable() {
+        try {
+            return !!(window.external && window.external.ptc);
+        } catch (ex) {
+            return false;
+        }
+    }
+    var isCreoAvailable = checkCreoAvailable();
     var checkedAvailability = false
 
     var resultEval = null
@@ -552,6 +561,7 @@ var CreoJS = (function () {
                     checkedAvailability = true
                     // CreoPDM: skip alert outside Creo's browser (normal for Chrome/Edge).
                 }
+                isCreoAvailable = checkCreoAvailable();
                 if (isCreoAvailable) {
                     window.external.ptc ('ToolkitJSBridge=v8?' + message);
                }
@@ -1131,7 +1141,7 @@ var CreoJS = (function () {
     }
 
     var connector = {
-        isAvailable: function () {return isCreoAvailable},
+        isAvailable: function () {return checkCreoAvailable()},
         $: function (name, beforeInit) {return scriptCaller (this, name, beforeInit);},
         $SET_IFRAME_SERVER: setIframeServer,
         $INIT_IFRAME_SERVER: setIframeServerIfNeeded,
