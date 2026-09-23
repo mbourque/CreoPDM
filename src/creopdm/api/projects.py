@@ -33,7 +33,7 @@ from creopdm.schemas.common import (
     PurgeFloorItem,
     PurgeWorkspacePathsRequest,
     QueueCheckinRequest,
-    RebuildWhereUsedResponse,
+    WhereUsedIndexJobResponse,
     WorkspaceContentResponse,
     WorkspacePickerResponse,
     WorkspaceWatchResponse,
@@ -218,25 +218,47 @@ def project_checkin_queue(
 
 @router.post(
     "/api/projects/{project_id}/rebuild-where-used",
-    response_model=RebuildWhereUsedResponse,
+    response_model=WhereUsedIndexJobResponse,
 )
-def rebuild_where_used(
+def start_rebuild_where_used(
     project_id: str,
-    offset: int = 0,
-    limit: int = 8,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
-) -> RebuildWhereUsedResponse:
-    """Index vault asm/drw → Dependency rows (chunked). Where Used then uses SQL."""
+) -> WhereUsedIndexJobResponse:
+    """Start background vault → Dependency indexing (no-op if already running)."""
     project = ctx.projects.get_project(db, project_id)
-    result = ctx.metadata.rebuild_where_used_from_vault(
-        db,
-        project.uuid,
-        offset=offset,
-        limit=limit,
+    status = ctx.where_used_index.start(project.uuid)
+    return _where_used_job_response(status)
+
+
+@router.get(
+    "/api/projects/{project_id}/rebuild-where-used",
+    response_model=WhereUsedIndexJobResponse,
+)
+def rebuild_where_used_status(
+    project_id: str,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> WhereUsedIndexJobResponse:
+    """Poll background Where Used index job status."""
+    project = ctx.projects.get_project(db, project_id)
+    return _where_used_job_response(ctx.where_used_index.get(project.uuid))
+
+
+def _where_used_job_response(status) -> WhereUsedIndexJobResponse:
+    return WhereUsedIndexJobResponse(
+        project_id=status.project_id,
+        state=status.state,
+        parents_total=status.parents_total,
+        parents_done=status.parents_done,
+        edges_added=status.edges_added,
+        edges_existing=status.edges_existing,
+        parents_missing_vault=status.parents_missing_vault,
+        error=status.error,
+        done=status.state in {"done", "error"},
+        started_at=status.started_at,
+        finished_at=status.finished_at,
     )
-    db.commit()
-    return result
 
 
 @router.post(
@@ -576,7 +598,15 @@ def import_from_disk(
                     )
                 )
     db.commit()
-    return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.workspaces.root_for(project.uuid)))
+    index_flag = None
+    if ctx.where_used_index.maybe_start_after_add(project.uuid, len(ok)) is not None:
+        index_flag = "started"
+    return BatchOperationResponse(
+        ok=ok,
+        failed=failed,
+        workspace_root=str(ctx.workspaces.root_for(project.uuid)),
+        where_used_index=index_flag,
+    )
 
 
 @router.post("/api/projects/{project_id}/objects/from-uploads", response_model=BatchOperationResponse)
@@ -670,4 +700,12 @@ async def import_from_uploads(
     if not jobs and not failed:
         raise ValidationAppError("Drop files or a folder first.")
     db.commit()
-    return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.workspaces.root_for(project.uuid)))
+    index_flag = None
+    if ctx.where_used_index.maybe_start_after_add(project.uuid, len(ok)) is not None:
+        index_flag = "started"
+    return BatchOperationResponse(
+        ok=ok,
+        failed=failed,
+        workspace_root=str(ctx.workspaces.root_for(project.uuid)),
+        where_used_index=index_flag,
+    )

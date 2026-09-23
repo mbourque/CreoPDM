@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from creopdm.creo.file_manager import CreoFileManager
+from creopdm.utils.cad_name_matcher import CadNameMatcher
 from creopdm.utils.classify import is_creo_openable
 from creopdm.utils.folders import folder_of, objects_in_folder_view
 
@@ -20,6 +21,8 @@ _NEEDS_COMPANIONS = frozenset({
 })
 _NEEDS_COMPANION_SUFFIXES = frozenset({".asm", ".drw"})
 _SCAN_LIMIT = 8 * 1024 * 1024
+# Below this, plain ``in`` checks are cheaper than building an automaton.
+_MATCHER_THRESHOLD = 48
 
 
 def needs_open_companions(object_type: str, filename: str) -> bool:
@@ -29,17 +32,28 @@ def needs_open_companions(object_type: str, filename: str) -> bool:
     return Path(logical).suffix.lower() in _NEEDS_COMPANION_SUFFIXES
 
 
-def names_referenced_in_model(path: Path, candidates: list[str]) -> set[str]:
-    """Return candidate logical names that appear as bytes in the Creo file."""
-    if not candidates or not path.is_file():
-        return set()
+def read_model_scan_blob(path: Path) -> bytes:
+    """Read up to ``_SCAN_LIMIT`` bytes from a Creo file (lowercased)."""
+    if not path.is_file():
+        return b""
     try:
         size = path.stat().st_size
         with path.open("rb") as handle:
             blob = handle.read(min(size, _SCAN_LIMIT))
     except OSError:
+        return b""
+    return blob.lower()
+
+
+def names_referenced_in_model(path: Path, candidates: list[str]) -> set[str]:
+    """Return candidate logical names that appear as bytes in the Creo file."""
+    if not candidates or not path.is_file():
         return set()
-    lower = blob.lower()
+    lower = read_model_scan_blob(path)
+    if not lower:
+        return set()
+    if len(candidates) >= _MATCHER_THRESHOLD:
+        return CadNameMatcher(candidates).find(lower)
     found: set[str] = set()
     for name in candidates:
         logical = CreoFileManager.normalize_creo_filename(name).lower()

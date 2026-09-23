@@ -18,6 +18,7 @@ from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.services.metadata_service import MetadataService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.project_service import ProjectService
+from creopdm.services.where_used_index_jobs import WhereUsedIndexJobs
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.storage.base import VersionStore
 from creopdm.utils.identity import CurrentUserProvider
@@ -42,3 +43,4 @@ class AppContext:
     checkins: CheckinService
     creo_service: CreoService
     metadata: MetadataService
+    where_used_index: WhereUsedIndexJobs

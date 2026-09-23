@@ -28,6 +28,7 @@ from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.services.metadata_service import MetadataService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.project_service import ProjectService
+from creopdm.services.where_used_index_jobs import WhereUsedIndexJobs
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.storage.git_store import GitVersionStore
 from creopdm.utils.identity import CurrentUserProvider
@@ -70,6 +71,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         identity,
         creo_connector,
     )
+    metadata = MetadataService(objects, workspaces)
     return AppContext(
         config=manager,
         settings=app_settings,
@@ -87,7 +89,8 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         checkouts=checkouts,
         checkins=checkins,
         creo_service=CreoService(creo_connector, objects, checkouts, workspaces),
-        metadata=MetadataService(objects, workspaces),
+        metadata=metadata,
+        where_used_index=WhereUsedIndexJobs(session_factory, metadata),
     )
 
 

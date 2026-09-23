@@ -712,43 +712,72 @@
     const projectId = $("#rebuild-where-used-btn")?.dataset.project || currentProjectId();
     if (!projectId) return;
     showError($("#toolbar-error"), "");
-    const limit = 8;
-    let offset = 0;
-    let edgesAdded = 0;
-    let edgesExisting = 0;
-    let missing = 0;
-    let parentsTotal = 0;
-    const ok = await withBusy("Indexing Where Used…", async () => {
-      while (true) {
-        const response = await fetch(
-          `/api/projects/${encodeURIComponent(projectId)}/rebuild-where-used?offset=${offset}&limit=${limit}`,
-          { method: "POST" }
-        );
-        if (!response.ok) {
-          showError($("#toolbar-error"), await readError(response));
-          return false;
-        }
-        const body = await response.json();
-        parentsTotal = Number(body.parents_total) || parentsTotal;
-        edgesAdded += Number(body.edges_added) || 0;
-        edgesExisting += Number(body.edges_existing) || 0;
-        missing += Number(body.parents_missing_vault) || 0;
-        offset = Number(body.next_offset) || offset + limit;
-        const doneCount = Math.min(offset, parentsTotal || offset);
-        setBusyMessage(
-          parentsTotal
-            ? `Indexing Where Used… ${doneCount} of ${parentsTotal} assemblies/drawings`
-            : "Indexing Where Used…"
-        );
-        if (body.done) return true;
-      }
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/rebuild-where-used`, {
+      method: "POST",
     });
-    if (!ok) return;
-    const miss = missing ? ` ${missing} parent file(s) missing from vault.` : "";
-    showOk(
-      `Where Used index updated: ${edgesAdded} new link(s), ${edgesExisting} already stored.${miss}`
-    );
+    if (!response.ok) {
+      showError($("#toolbar-error"), await readError(response));
+      return;
+    }
+    showOk("Where Used indexing started in the background.");
+    watchWhereUsedIndex(projectId);
   });
+
+  function watchWhereUsedIndex(projectId) {
+    if (!projectId) return;
+    let tries = 0;
+    const tick = async () => {
+      tries += 1;
+      try {
+        const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/rebuild-where-used`);
+        if (!response.ok) return;
+        const body = await response.json();
+        const state = String(body.state || "");
+        if (state === "queued" || state === "running") {
+          const total = Number(body.parents_total) || 0;
+          const doneCount = Number(body.parents_done) || 0;
+          if (total > 0) {
+            showOk(`Indexing Where Used in background… ${doneCount} of ${total} assemblies/drawings`);
+          }
+          if (tries < 600) window.setTimeout(tick, 2000);
+          return;
+        }
+        if (state === "done") {
+          const added = Number(body.edges_added) || 0;
+          const existing = Number(body.edges_existing) || 0;
+          const miss = Number(body.parents_missing_vault) || 0;
+          const missMsg = miss ? ` ${miss} parent file(s) missing from vault.` : "";
+          showOk(`Where Used index ready: ${added} new link(s), ${existing} already stored.${missMsg}`);
+          return;
+        }
+        if (state === "error") {
+          showError($("#toolbar-error"), body.error || "Where Used indexing failed.");
+        }
+      } catch {
+        /* ignore transient poll errors */
+      }
+    };
+    window.setTimeout(tick, 800);
+  }
+
+  async function resumeWhereUsedIndexWatch() {
+    const projectId = currentProjectId();
+    if (!projectId) return;
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/rebuild-where-used`);
+      if (!response.ok) return;
+      const body = await response.json();
+      const state = String(body.state || "");
+      if (state === "queued" || state === "running") {
+        watchWhereUsedIndex(projectId);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  resumeWhereUsedIndexWatch();
+
   $("#project-cancel")?.addEventListener("click", () => projectDialog?.close());
 
   const deleteProjectDialog = $("#delete-project-dialog");
@@ -1585,8 +1614,12 @@
         await pushCreoMetadataForItems(metadataTargetsFromResult(result));
       });
     } else if ((result.ok?.length || 0) > 50) {
+      const indexNote =
+        result.where_used_index === "started"
+          ? " Where Used indexing started in the background."
+          : "";
       showOk(
-        `${result.ok.length} file(s) added. Creo metadata was skipped for this large add — open a model in Creo and Check In to capture it.`
+        `${result.ok.length} file(s) added. Creo metadata was skipped for this large add — open a model in Creo and Check In to capture it.${indexNote}`
       );
     }
     reloadPage();

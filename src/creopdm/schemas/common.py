@@ -321,6 +321,7 @@ class BatchOperationResponse(BaseModel):
     ok: list[BatchItemResult]
     failed: list[BatchItemResult]
     workspace_root: str | None = None
+    where_used_index: str | None = None  # "started" when background index kicked off
 
 
 class SettingsResponse(BaseModel):
@@ -595,3 +596,19 @@ class RebuildWhereUsedResponse(BaseModel):
     edges_existing: int = 0
     parents_missing_vault: int = 0
     parents_scanned: list[str] = Field(default_factory=list)
+
+
+class WhereUsedIndexJobResponse(BaseModel):
+    """Background Where Used vault index job status."""
+
+    project_id: str
+    state: str = "idle"
+    parents_total: int = 0
+    parents_done: int = 0
+    edges_added: int = 0
+    edges_existing: int = 0
+    parents_missing_vault: int = 0
+    error: str | None = None
+    done: bool = False
+    started_at: float | None = None
+    finished_at: float | None = None

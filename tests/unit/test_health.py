@@ -77,7 +77,10 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push58" in text
+    assert "push59" in text
+    assert "watchWhereUsedIndex" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "where_used_index" in open("src/creopdm/schemas/common.py", encoding="utf-8").read()
+    assert "CadNameMatcher" in open("src/creopdm/utils/cad_name_matcher.py", encoding="utf-8").read()
     assert "rebuild-where-used" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "function gatherModelMetadata" in text
     assert "function creoRetrieveForMetadata" in text

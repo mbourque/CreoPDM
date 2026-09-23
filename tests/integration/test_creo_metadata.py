@@ -329,6 +329,8 @@ def test_where_used_from_vault_bytes_without_creo_metadata(
 @requires_git
 def test_rebuild_where_used_writes_dependency_edges(client, repo_parent, data_dir, tmp_path):
     """Rebuild indexes vault refs into Dependency so Where Used is SQL-only."""
+    import time
+
     from creopdm.utils.files import set_file_writable
 
     project = _create_project(client, repo_parent)
@@ -341,12 +343,20 @@ def test_rebuild_where_used_writes_dependency_edges(client, repo_parent, data_di
     set_file_writable(asm_files[0])
     asm_files[0].write_bytes(b"assembly body mentions PIN.PRT as component")
 
-    rebuilt = client.post(
-        f"/api/projects/{project['uuid']}/rebuild-where-used?offset=0&limit=10"
-    )
-    assert rebuilt.status_code == 200, rebuilt.text
-    body = rebuilt.json()
-    assert body["done"] is True
+    started = client.post(f"/api/projects/{project['uuid']}/rebuild-where-used")
+    assert started.status_code == 200, started.text
+    assert started.json()["state"] in {"queued", "running", "done"}
+
+    body = None
+    for _ in range(100):
+        status = client.get(f"/api/projects/{project['uuid']}/rebuild-where-used")
+        assert status.status_code == 200, status.text
+        body = status.json()
+        if body["done"]:
+            break
+        time.sleep(0.05)
+    assert body is not None
+    assert body["state"] == "done", body
     assert body["edges_added"] >= 1
     assert body["parents_total"] >= 1
 
@@ -356,9 +366,17 @@ def test_rebuild_where_used_writes_dependency_edges(client, repo_parent, data_di
     assert len(items) == 1
     assert items[0]["object_id"] == frame["uuid"]
 
-    again = client.post(
-        f"/api/projects/{project['uuid']}/rebuild-where-used?offset=0&limit=10"
-    )
+    again = client.post(f"/api/projects/{project['uuid']}/rebuild-where-used")
     assert again.status_code == 200, again.text
-    assert again.json()["edges_added"] == 0
-    assert again.json()["edges_existing"] >= 1
+    body2 = None
+    for _ in range(100):
+        status = client.get(f"/api/projects/{project['uuid']}/rebuild-where-used")
+        assert status.status_code == 200, status.text
+        body2 = status.json()
+        if body2["done"]:
+            break
+        time.sleep(0.05)
+    assert body2 is not None
+    assert body2["state"] == "done"
+    assert body2["edges_added"] == 0
+    assert body2["edges_existing"] >= 1

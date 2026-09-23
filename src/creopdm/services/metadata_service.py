@@ -30,10 +30,11 @@ from creopdm.schemas.common import (
 from creopdm.services.object_service import ObjectService
 from creopdm.utils.bom_match import bom_lookup_keys, bom_where_used_keys
 from creopdm.utils.classify import display_type_label
+from creopdm.utils.cad_name_matcher import CadNameMatcher
 from creopdm.utils.creo_companions import (
     model_references_filename,
-    names_referenced_in_model,
     needs_open_companions,
+    read_model_scan_blob,
 )
 
 logger = logging.getLogger(__name__)
@@ -427,6 +428,7 @@ class MetadataService:
             if logical:
                 by_key.setdefault(logical, row)
 
+        matcher = CadNameMatcher(candidate_names)
         edges_added = 0
         edges_existing = 0
         missing = 0
@@ -447,8 +449,10 @@ class MetadataService:
                 )
                 missing += 1
                 continue
-            others = [name for name in candidate_names if name != parent.filename]
-            found = names_referenced_in_model(path, others)
+            blob = read_model_scan_blob(path)
+            if not blob:
+                continue
+            found = matcher.find(blob)
             if not found:
                 continue
             child_ids: set[int] = set()
