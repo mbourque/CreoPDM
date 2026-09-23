@@ -912,7 +912,14 @@
     const bits = [];
     const summary = dbg.summary || {};
     if (!summary.mass) {
-      bits.push(`mass:${(dbg.mass && (dbg.mass.reason || dbg.mass.try_null || "fail")) || "fail"}`);
+      const mass = dbg.mass || {};
+      const massDetail =
+        mass.try_null ||
+        mass.reason ||
+        mass.parse ||
+        mass.param_fallback ||
+        "fail";
+      bits.push(`mass:${massDetail}`);
     }
     if (!summary.units) {
       bits.push(`units:${(dbg.units && dbg.units.reason) || "empty"}`);
@@ -920,7 +927,7 @@
     if (dbg.is_part && !summary.features) {
       bits.push(`feat:${(dbg.features && dbg.features.reason) || "0"}`);
     }
-    return bits.slice(0, 3).join(" ").slice(0, 120);
+    return bits.slice(0, 3).join(" ").slice(0, 160);
   }
 
   async function pushOneCreoMetadataTarget(target) {
