@@ -1187,6 +1187,17 @@
     }
     if (state.message) showOk(state.message);
     setMetadataCollectCancelVisible(true);
+    // Bridge often appears after first paint (same race as the status pill).
+    await creoJSReady;
+    if (!canGatherCreoMetadata()) {
+      showOk(
+        `Metadata collection paused at ${state.index || 0} of ${state.targets.length}. ` +
+          "Waiting for Creo.JS…"
+      );
+      for (let i = 0; i < 40 && !canGatherCreoMetadata(); i += 1) {
+        await new Promise((r) => window.setTimeout(r, 250));
+      }
+    }
     if (!canGatherCreoMetadata()) {
       showOk(
         `Metadata collection paused at ${state.index || 0} of ${state.targets.length}. ` +
