@@ -258,10 +258,11 @@ def post_creo_metadata(
 def object_where_used(
     object_id: str,
     debug: bool = False,
+    vault_scan: bool = True,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WhereUsedResponse:
-    return ctx.metadata.where_used(db, object_id, debug=debug)
+    return ctx.metadata.where_used(db, object_id, debug=debug, vault_scan=vault_scan)
 
 
 def _assert_can_remove(ctx: AppContext, db: Session, obj) -> None:

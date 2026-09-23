@@ -4743,7 +4743,11 @@
     whereUsedLoaded = true;
     const host = $("#where-used-host");
     try {
-      const response = await fetch(`/api/objects/${encodeURIComponent(objectId)}/where-used`);
+      // Fast path first (deps + BOM). Full vault byte-scan is capped server-side
+      // on large projects so this request cannot hang the service.
+      const response = await fetch(
+        `/api/objects/${encodeURIComponent(objectId)}/where-used`
+      );
       if (!response.ok) {
         if (host) {
           host.innerHTML = `<p class="muted">Could not load Where Used (${await readError(response)}).</p>`;
@@ -4755,7 +4759,7 @@
       if (!host) return;
       if (!items.length) {
         host.innerHTML =
-          '<p class="muted">Not listed in any assembly or drawing in this project yet. Where Used also scans project vault files for this name, so parents do not need a prior Creo.JS BOM capture.</p>';
+          '<p class="muted">Not listed in any captured assembly/drawing BOM in this project yet. Open parent assemblies in Creo and Add or Check In to capture Where Used. (Vault byte-scan is skipped when the project has many assemblies, so the server stays responsive.)</p>';
         return;
       }
       const rows = items

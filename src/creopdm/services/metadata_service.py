@@ -277,15 +277,30 @@ class MetadataService:
 
         # Vault byte scan: works even when Creo.JS never captured a BOM (add-only
         # order of operations, or metadata gather failed on the parent).
+        # Skip automatically on huge projects — reading every asm/drw hangs the server.
+        _VAULT_SCAN_ASM_CAP = 80
+        asm_candidates = [
+            other
+            for other in siblings
+            if other.id != obj.id
+            and other.uuid not in items_by_parent
+            and needs_open_companions(other.object_type, other.filename)
+        ]
+        vault_scan_skipped = False
+        if vault_scan and len(asm_candidates) > _VAULT_SCAN_ASM_CAP:
+            vault_scan_skipped = True
+            vault_scan = False
+            logger.info(
+                "Where-used vault scan skipped for %s (%s asm/drw candidates > %s)",
+                obj.filename,
+                len(asm_candidates),
+                _VAULT_SCAN_ASM_CAP,
+            )
         if vault_scan and self._workspaces is not None:
             project = session.get(Project, obj.project_id)
             project_uuid = project.uuid if project is not None else ""
             if project_uuid:
-                for other in siblings:
-                    if other.id == obj.id or other.uuid in items_by_parent:
-                        continue
-                    if not needs_open_companions(other.object_type, other.filename):
-                        continue
+                for other in asm_candidates:
                     entry: dict[str, object] | None = (
                         {
                             "filename": other.filename,
@@ -339,11 +354,7 @@ class MetadataService:
         items = sorted(items_by_parent.values(), key=lambda row: row.filename.lower())
         payload = WhereUsedResponse(object_id=obj.uuid, items=items)
         if debug:
-            asm_drw = [
-                row.filename
-                for row in siblings
-                if row.id != obj.id and needs_open_companions(row.object_type, row.filename)
-            ]
+            asm_drw = [row.filename for row in asm_candidates]
             payload.debug = {
                 "workspaces_wired": self._workspaces is not None,
                 "sibling_count": len(siblings),
@@ -352,7 +363,8 @@ class MetadataService:
                 "asm_drw_candidates": asm_drw,
                 "bom_hits": debug_bom_hits,
                 "vault_scan": debug_vault,
-                "vault_scan_enabled": vault_scan,
+                "vault_scan_enabled": vault_scan and not vault_scan_skipped,
+                "vault_scan_skipped": vault_scan_skipped,
             }
         return payload
 
