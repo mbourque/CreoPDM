@@ -13,15 +13,34 @@
 {% endmacro %}
 {% macro bom_tree(nodes, depth=0) %}
   {% for node in nodes %}
-  <li>
-    <span class="mono">{{ node.filename or "—" }}</span>
-    {% if node.quantity and node.quantity != 1 %}
-    <span class="muted small">× {{ node.quantity }}</span>
-    {% endif %}
+  <li class="bom-node{% if node.children %} has-children{% endif %}{% if node.dependency_type == 'ASSEMBLY_ROOT' %} is-root{% endif %}">
+    <div class="bom-line" style="padding-left: {{ depth * 1.15 }}rem">
+      <span class="bom-branch" aria-hidden="true">{% if depth %}└{% else %}●{% endif %}</span>
+      <span class="mono bom-name">{{ node.filename or "—" }}</span>
+      {% if node.quantity and node.quantity != 1 %}
+      <span class="muted small bom-qty">× {{ node.quantity }}</span>
+      {% endif %}
+    </div>
     {% if node.children %}
     <ul class="bom-tree">{{ bom_tree(node.children, depth + 1) }}</ul>
     {% endif %}
   </li>
+  {% endfor %}
+{% endmacro %}
+{% macro bom_table_rows(nodes, depth=0) %}
+  {% for node in nodes %}
+  <tr class="{% if node.dependency_type == 'ASSEMBLY_ROOT' %}is-root{% endif %}">
+    <td class="filename-cell">
+      <span class="bom-indent" style="padding-left: {{ depth * 1.15 }}rem">
+        <span class="mono">{{ node.filename or "—" }}</span>
+      </span>
+    </td>
+    <td>{% if node.dependency_type == 'ASSEMBLY_ROOT' %}—{% else %}{{ node.quantity }}{% endif %}</td>
+    <td>{% if node.dependency_type == 'ASSEMBLY_ROOT' %}Assembly{% else %}{{ node.dependency_type }}{% endif %}</td>
+  </tr>
+  {% if node.children %}
+  {{ bom_table_rows(node.children, depth + 1) }}
+  {% endif %}
   {% endfor %}
 {% endmacro %}
 <article class="detail">
@@ -282,14 +301,29 @@
   {% if is_assembly %}
   <section class="tab-panel" id="panel-structure" hidden>
     {% if bom %}
-    <ul class="bom-tree">{{ bom_tree(bom) }}</ul>
+    <p class="muted small">Model tree — top assembly first, subassemblies and parts indented.</p>
+    <ul class="bom-tree bom-tree-root">{{ bom_tree(bom) }}</ul>
     {% else %}
     <p class="muted">No assembly structure captured yet. Open the assembly in Creo and Check In / Add while it is in session.</p>
     {% endif %}
   </section>
 
   <section class="tab-panel" id="panel-bom" hidden>
-    {% if metadata.dependencies %}
+    {% if bom %}
+    <p class="muted small">Indented BOM with quantity at each level (same hierarchy as Structure).</p>
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>Filename</th>
+          <th>Qty</th>
+          <th>Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ bom_table_rows(bom) }}
+      </tbody>
+    </table>
+    {% elif metadata.dependencies %}
     <table class="grid">
       <thead>
         <tr>
@@ -304,25 +338,6 @@
           <td class="filename-cell mono">{{ row.filename }}</td>
           <td>{{ row.quantity }}</td>
           <td>{{ row.dependency_type }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% elif bom %}
-    <table class="grid">
-      <thead>
-        <tr>
-          <th>Filename</th>
-          <th>Qty</th>
-          <th>Type</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in bom %}
-        <tr>
-          <td class="filename-cell mono">{{ row.filename }}</td>
-          <td>{{ row.quantity }}</td>
-          <td>{{ row.dependency_type or "ASSEMBLY_MEMBER" }}</td>
         </tr>
         {% endfor %}
       </tbody>

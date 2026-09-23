@@ -59,14 +59,34 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
         "dependencies": [
             {"filename": "shaft.prt.1", "quantity": 2, "dependency_type": "ASSEMBLY_MEMBER"}
         ],
-        "bom": [
-            {
-                "filename": "shaft.prt",
-                "quantity": 2,
-                "dependency_type": "ASSEMBLY_MEMBER",
-                "children": [],
-            }
-        ],
+            "bom": [
+                {
+                    "filename": "frame.asm",
+                    "quantity": 1,
+                    "dependency_type": "ASSEMBLY_ROOT",
+                    "children": [
+                        {
+                            "filename": "shaft.prt",
+                            "quantity": 2,
+                            "dependency_type": "ASSEMBLY_MEMBER",
+                            "children": [],
+                        },
+                        {
+                            "filename": "top.asm",
+                            "quantity": 1,
+                            "dependency_type": "ASSEMBLY_MEMBER",
+                            "children": [
+                                {
+                                    "filename": "pin.prt",
+                                    "quantity": 4,
+                                    "dependency_type": "ASSEMBLY_MEMBER",
+                                    "children": [],
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ],
     }
     posted = client.post(f"/api/objects/{frame['uuid']}/creo-metadata", json=payload)
     assert posted.status_code == 200, posted.text
@@ -101,6 +121,10 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert 'data-tab="structure"' in text
     assert 'data-tab="bom"' in text
     assert 'data-tab="where-used"' in text
+    assert "frame.asm" in text
+    assert "top.asm" in text
+    assert "pin.prt" in text
+    assert "bom-tree-root" in text
 
     shaft_meta = client.post(
         f"/api/objects/{shaft['uuid']}/creo-metadata",

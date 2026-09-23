@@ -787,8 +787,28 @@ body.is-file-drag #file-drop-overlay {
 .family-table td {
   white-space: nowrap;
 }
-.bom-tree { margin: 0.25rem 0 0.25rem 1.1rem; padding: 0; list-style: disc; }
-.bom-tree .bom-tree { list-style: circle; }
+.bom-tree {
+  margin: 0.15rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.bom-tree-root { margin-top: 0.35rem; }
+.bom-node { margin: 0; padding: 0; }
+.bom-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.12rem 0;
+}
+.bom-branch {
+  color: var(--muted);
+  width: 0.85rem;
+  flex: 0 0 auto;
+  font-family: Consolas, "Cascadia Mono", monospace;
+}
+.bom-node.is-root > .bom-line .bom-name { font-weight: 650; }
+.bom-indent { display: inline-block; }
+.grid tr.is-root td { font-weight: 650; }
 .meta-empty { margin-top: 0.75rem; }
 .grid tr.is-assigned td { font-weight: 600; }
 .hero { max-width: 40rem; padding: 2rem 0; }

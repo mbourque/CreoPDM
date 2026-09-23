@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-toolbar12">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-toolbar13">
   <script>
     /* Suppress PTC creojs.js noise outside Creo's browser (and when Creo injects its own copy). */
     (function () {
@@ -845,22 +845,76 @@ function creoGatherFamilyTable(model) {
         return null;
     }
 }
-function creoGatherBom(model, depth) {
-    var nodes = [];
-    var maxDepth = typeof depth === "number" ? depth : 1;
+function creoFeatureItems(listed) {
+    var out = [];
+    if (!listed) return out;
     try {
+        var count = null;
+        if (typeof listed.getCount === "function") count = listed.getCount();
+        else if (typeof listed.Count !== "undefined" && listed.Count != null) count = listed.Count;
+        else if (typeof listed.length === "number") count = listed.length;
+        if (count == null) return out;
+        for (var i = 0; i < count; i++) {
+            var item = null;
+            try {
+                if (typeof listed.Item === "function") item = listed.Item(i);
+                else if (typeof listed.get === "function") item = listed.get(i);
+                else item = listed[i];
+            } catch (errItem) {
+                item = null;
+            }
+            if (item) out.push(item);
+        }
+    } catch (err) {}
+    return out;
+}
+function creoResolveComponentModel(session, feat, filename) {
+    try {
+        if (feat && typeof feat.GetModel === "function") {
+            var byMethod = feat.GetModel();
+            if (byMethod) return byMethod;
+        }
+    } catch (errMethod) {}
+    try {
+        if (feat && typeof feat.Model !== "undefined" && feat.Model) return feat.Model;
+    } catch (errProp) {}
+    var name = filename || creoLogicalFileName(creoComponentModelName(feat));
+    if (!name || !session) return null;
+    try {
+        if (typeof session.GetModelFromFileName === "function") {
+            var byName = session.GetModelFromFileName(name);
+            if (byName) return byName;
+        }
+    } catch (errGet) {}
+    try {
+        var descr = pfcModelDescriptor.CreateFromFileName(name);
+        return session.RetrieveModel(descr);
+    } catch (errRet) {}
+    return null;
+}
+function creoIsAssemblyModel(model, filename) {
+    try {
+        if (typeof pfcModelType !== "undefined" && model && typeof model.Type !== "undefined") {
+            return model.Type === pfcModelType.MDL_ASSEMBLY;
+        }
+    } catch (errType) {}
+    return String(filename || "").toLowerCase().indexOf(".asm") >= 0;
+}
+function creoGatherBom(model, depth, visited, session) {
+    var nodes = [];
+    var maxDepth = typeof depth === "number" ? depth : 6;
+    var seen = visited || {};
+    try {
+        if (maxDepth < 0) return nodes;
         if (typeof pfcFeatureType === "undefined" || typeof model.ListFeaturesByType !== "function") {
             return nodes;
         }
         var listed = model.ListFeaturesByType(true, pfcFeatureType.FEATTYPE_COMPONENT);
-        var count = listed && typeof listed.getCount === "function"
-            ? listed.getCount()
-            : (listed && listed.length) || 0;
+        var features = creoFeatureItems(listed);
         var qtyByName = {};
         var order = [];
-        for (var i = 0; i < count; i++) {
-            var feat = typeof listed.get === "function" ? listed.get(i) : listed[i];
-            if (!feat) continue;
+        for (var i = 0; i < features.length; i++) {
+            var feat = features[i];
             var name = creoLogicalFileName(creoComponentModelName(feat));
             if (!name) continue;
             var key = name.toLowerCase();
@@ -878,14 +932,17 @@ function creoGatherBom(model, depth) {
                 dependency_type: "ASSEMBLY_MEMBER",
                 children: []
             };
-            if (maxDepth > 0) {
+            var childKey = entry.filename.toLowerCase();
+            if (maxDepth > 0 && !seen[childKey]) {
                 try {
-                    var childModel = null;
-                    if (entry.feature && typeof entry.feature.GetModel === "function") {
-                        childModel = entry.feature.GetModel();
-                    }
-                    if (childModel) {
-                        node.children = creoGatherBom(childModel, maxDepth - 1);
+                    var childModel = creoResolveComponentModel(session, entry.feature, entry.filename);
+                    if (childModel && creoIsAssemblyModel(childModel, entry.filename)) {
+                        var nextSeen = {};
+                        for (var k in seen) {
+                            if (Object.prototype.hasOwnProperty.call(seen, k)) nextSeen[k] = true;
+                        }
+                        nextSeen[childKey] = true;
+                        node.children = creoGatherBom(childModel, maxDepth - 1, nextSeen, session);
                     }
                 } catch (errNest) {}
             }
@@ -893,6 +950,18 @@ function creoGatherBom(model, depth) {
         }
     } catch (err) {}
     return nodes;
+}
+function creoGatherBomTree(model, session) {
+    var rootName = "";
+    try { rootName = String(model.FileName || ""); } catch (errName) { rootName = ""; }
+    rootName = creoLogicalFileName(rootName) || rootName || "assembly";
+    var children = creoGatherBom(model, 6, {}, session);
+    return [{
+        filename: rootName,
+        quantity: 1,
+        dependency_type: "ASSEMBLY_ROOT",
+        children: children
+    }];
 }
 function creoRetrieveForMetadata(session, filePath, filename) {
     /**
@@ -1001,12 +1070,13 @@ function gatherModelMetadata(filename, filePath) {
                 isAsm = String(identity.file_name || filename).toLowerCase().indexOf(".asm") >= 0;
             }
             if (isAsm) {
-                bom = creoGatherBom(model, 1);
-                if (!dependencies.length && bom.length) {
-                    for (var i = 0; i < bom.length; i++) {
+                bom = creoGatherBomTree(model, session);
+                var topChildren = (bom[0] && bom[0].children) ? bom[0].children : [];
+                if (!dependencies.length && topChildren.length) {
+                    for (var i = 0; i < topChildren.length; i++) {
                         dependencies.push({
-                            filename: bom[i].filename,
-                            quantity: bom[i].quantity,
+                            filename: topChildren[i].filename,
+                            quantity: topChildren[i].quantity,
                             dependency_type: "ASSEMBLY_MEMBER"
                         });
                     }
@@ -1028,6 +1098,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push40"></script>
+  <script src="/client/app.js?v={{ app_version }}-push41"></script>
 </body>
 </html>
