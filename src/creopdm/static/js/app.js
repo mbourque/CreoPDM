@@ -804,10 +804,24 @@
   const METADATA_COLLECT_KEY = "creopdmMetadataCollect";
   const metadataCollectJob = { running: false, cancel: false };
   const cancelMetadataBtn = $("#cancel-metadata-collect-btn");
+  const resumeMetadataBtn = $("#resume-metadata-collect-btn");
 
-  function setMetadataCollectCancelVisible(visible) {
-    if (!cancelMetadataBtn) return;
-    cancelMetadataBtn.hidden = !visible;
+  function setMetadataCollectControls({ cancel = false, resume = false } = {}) {
+    if (cancelMetadataBtn) cancelMetadataBtn.hidden = !cancel;
+    if (resumeMetadataBtn) resumeMetadataBtn.hidden = !resume;
+  }
+
+  function syncMetadataCollectControls() {
+    const stored = loadMetadataCollectState();
+    if (!stored || stored.status !== "running") {
+      setMetadataCollectControls({ cancel: false, resume: false });
+      return;
+    }
+    if (metadataCollectJob.running) {
+      setMetadataCollectControls({ cancel: true, resume: false });
+    } else {
+      setMetadataCollectControls({ cancel: true, resume: true });
+    }
   }
 
   function saveMetadataCollectState(state) {
@@ -817,6 +831,7 @@
     } catch {
       /* private mode / quota */
     }
+    syncMetadataCollectControls();
   }
 
   function loadMetadataCollectState() {
@@ -840,9 +855,13 @@
     }
     if (stored && stored.status === "running") {
       saveMetadataCollectState(null);
-      setMetadataCollectCancelVisible(false);
       showOk("Metadata collection cancelled.");
     }
+  });
+
+  resumeMetadataBtn?.addEventListener("click", () => {
+    if (metadataCollectJob.running) return;
+    void resumeMetadataCollectIfNeeded({ fromButton: true });
   });
 
   function confirmCollectMetadata(total) {
@@ -860,7 +879,7 @@
       if (total > METADATA_COLLECT_WARN_THRESHOLD) {
         warn.hidden = false;
         warn.textContent =
-          `This is ${total} models (over ${METADATA_COLLECT_WARN_THRESHOLD}). It can take a long time and may make Creo sluggish. You can cancel from the toolbar. Progress survives navigation within CreoPDM.`;
+          `This is ${total} models (over ${METADATA_COLLECT_WARN_THRESHOLD}). It can take a long time and may make Creo sluggish. Cancel or Resume from the toolbar. Progress survives navigation within CreoPDM.`;
       } else {
         warn.hidden = true;
         warn.textContent = "";
@@ -1005,12 +1024,11 @@
     }
     metadataCollectJob.running = true;
     metadataCollectJob.cancel = false;
-    setMetadataCollectCancelVisible(true);
+    syncMetadataCollectControls();
     showError($("#toolbar-error"), "");
     let index = Math.max(0, Number(state.index) || 0);
     let captured = Number(state.captured) || 0;
     let failed = Number(state.failed) || 0;
-    let pausedBusy = false;
     let lastReason = "";
     try {
       while (index < targets.length) {
@@ -1037,10 +1055,10 @@
           failed += 1;
           lastReason = "timeout";
           index += 1;
+          const waitSec = 8;
           const pauseMsg =
-            `Metadata collection paused on ${target.filename} (Creo busy / timeout). ` +
-            `Progress saved at ${index} of ${targets.length} — refresh to continue.` +
-            ` (${captured} saved, ${failed} skipped)`;
+            `Creo busy / timeout on ${target.filename} — waiting ${waitSec}s then continuing ` +
+            `(${index} of ${targets.length}; ${captured} saved, ${failed} skipped).`;
           showOk(pauseMsg);
           saveMetadataCollectState({
             ...state,
@@ -1052,8 +1070,11 @@
             lastReason,
             updatedAt: Date.now(),
           });
-          pausedBusy = true;
-          break;
+          // Let Creo recover; Cancel still works during the wait.
+          for (let w = 0; w < waitSec * 4 && !metadataCollectJob.cancel; w += 1) {
+            await new Promise((resolve) => window.setTimeout(resolve, 250));
+          }
+          continue;
         }
         if (result.ok) {
           captured += 1;
@@ -1080,10 +1101,6 @@
         });
         await new Promise((resolve) => window.setTimeout(resolve, 0));
       }
-      if (pausedBusy) {
-        setMetadataCollectCancelVisible(true);
-        return;
-      }
       if (typeof window.CreoJS?.eraseUndisplayedModelsQuiet === "function") {
         try {
           await window.CreoJS.eraseUndisplayedModelsQuiet();
@@ -1108,7 +1125,7 @@
     } finally {
       metadataCollectJob.running = false;
       metadataCollectJob.cancel = false;
-      if (!loadMetadataCollectState()) setMetadataCollectCancelVisible(false);
+      syncMetadataCollectControls();
     }
   }
 
@@ -1165,7 +1182,8 @@
     await runMetadataCollectLoop(state);
   }
 
-  async function resumeMetadataCollectIfNeeded() {
+  async function resumeMetadataCollectIfNeeded(opts = {}) {
+    const fromButton = Boolean(opts && opts.fromButton);
     const state = loadMetadataCollectState();
     if (!state || state.status !== "running") return;
     if (!Array.isArray(state.targets) || !state.targets.length) {
@@ -1174,7 +1192,7 @@
     }
     if (metadataCollectJob.running) {
       if (state.message) showOk(state.message);
-      setMetadataCollectCancelVisible(true);
+      syncMetadataCollectControls();
       return;
     }
     const projectId = currentProjectId();
@@ -1182,11 +1200,11 @@
       showOk(
         `Metadata collection paused for another project (${state.index || 0} of ${state.targets.length}).`
       );
-      setMetadataCollectCancelVisible(true);
+      syncMetadataCollectControls();
       return;
     }
     if (state.message) showOk(state.message);
-    setMetadataCollectCancelVisible(true);
+    syncMetadataCollectControls();
     // Bridge often appears after first paint (same race as the status pill).
     await creoJSReady;
     if (!canGatherCreoMetadata()) {
@@ -1201,8 +1219,11 @@
     if (!canGatherCreoMetadata()) {
       showOk(
         `Metadata collection paused at ${state.index || 0} of ${state.targets.length}. ` +
-          "Re-open CreoPDM inside Creo to continue."
+          (fromButton
+            ? "Creo.JS still unavailable — open CreoPDM inside Creo, then click Resume."
+            : "Click Resume when Creo.JS is connected, or re-open CreoPDM inside Creo.")
       );
+      syncMetadataCollectControls();
       return;
     }
     await runMetadataCollectLoop(state);

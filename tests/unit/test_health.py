@@ -77,7 +77,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push71" in text
+    assert "push75" in text
     assert "Saved Creo metadata for" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "Materialize start:" in open("src/creopdm_agent/server.py", encoding="utf-8").read()
     assert "PTC_MASTER_MATERIAL" in text
@@ -97,6 +97,10 @@ def test_home_page(client):
     assert "resumeMetadataCollectIfNeeded" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "collect-metadata-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "cancel-metadata-collect-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    assert "resume-metadata-collect-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    assert "resume-metadata-collect-btn" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "waiting" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "then continuing" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "where_used_index" in open("src/creopdm/schemas/common.py", encoding="utf-8").read()
     assert "CadNameMatcher" in open("src/creopdm/utils/cad_name_matcher.py", encoding="utf-8").read()
     assert "rebuild-where-used" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
