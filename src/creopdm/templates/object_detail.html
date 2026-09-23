@@ -92,6 +92,7 @@
                 title="Delete CreoPDM vault copies of this file. The original in your project folder is not deleted. If you have it checked out, that checkout is cancelled.">Remove from Vault</button>
         <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-project-btn"
                 data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}"
+                data-relative-path="{{ object.relative_path }}" data-filename="{{ object.filename }}"
                 title="Remove this file from the project list and delete CreoPDM vault copies. The original in your project folder is not deleted.">Remove from Project</button>
       </div>
     </div>

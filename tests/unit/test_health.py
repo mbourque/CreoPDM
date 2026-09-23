@@ -45,6 +45,9 @@ def test_app_js_is_not_cached(client):
     assert "browseViaAgentPicker" in response.text
     assert "/pick-files" in response.text
     assert "snapshot.features.length" in response.text
+    assert "workspaceOption" in response.text
+    assert "workspacePathsForRemovedObjects" in response.text
+    assert "deleteWorkspaceFiles" in response.text
 
 
 def test_home_page(client):
@@ -74,7 +77,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push49" in text
+    assert "push50" in text
     assert "function gatherModelMetadata" in text
     assert "function creoRetrieveForMetadata" in text
     assert "function creoGatherMass" in text
@@ -87,6 +90,8 @@ def test_home_page(client):
     assert "errFeatGather" in text
     assert "Do not RetrieveModel here" in text
     assert "AskUserAboutReps = false" in text
+    assert 'id="danger-confirm-workspace"' in text
+    assert "Delete workspace files" in text
     assert 'id="project-menu-btn"' in text
     assert 'id="sidebar-collapse-btn"' in text
     assert 'class="workspace"' in text

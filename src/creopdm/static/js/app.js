@@ -1558,6 +1558,7 @@
               data-object-type="${escapeHtml(obj.object_type || "")}"
               data-extension="${escapeHtml(obj.extension || "")}"
               data-filename="${escapeHtml(obj.filename || "")}"
+              data-relative-path="${escapeHtml(relative)}"
               data-can-checkout="${obj.can_checkout ? "1" : "0"}"
               data-can-checkin="${obj.can_checkin ? "1" : "0"}"
               data-owned="${obj.owned_by_me ? "1" : "0"}"
@@ -3935,17 +3936,29 @@
     ).trim();
   }
 
-  function confirmByProjectName({ title, lead, note, submitLabel, detailsHtml = "" }) {
+  function confirmByProjectName({
+    title,
+    lead,
+    note,
+    submitLabel,
+    detailsHtml = "",
+    workspaceOption = false,
+  }) {
     const dialog = $("#danger-confirm-dialog");
     const form = $("#danger-confirm-form");
     const expected = expectedProjectName();
-    if (!dialog || !form || !expected) return Promise.resolve(false);
+    if (!dialog || !form || !expected) {
+      return Promise.resolve({ ok: false, deleteWorkspaceFiles: false });
+    }
     const titleEl = $("#danger-confirm-title");
     const leadEl = $("#danger-confirm-lead");
     const noteEl = $("#danger-confirm-note");
     const noteStrong = noteEl?.querySelector("strong");
     const detailsEl = $("#danger-confirm-details");
     const submitBtn = $("#danger-confirm-submit");
+    const workspaceWrap = $("#danger-confirm-workspace-wrap");
+    const workspaceHint = $("#danger-confirm-workspace-hint");
+    const workspaceCheck = $("#danger-confirm-workspace");
     if (titleEl) titleEl.textContent = title;
     if (leadEl) leadEl.textContent = lead;
     if (noteStrong) noteStrong.textContent = note || "";
@@ -3958,6 +3971,12 @@
     if (submitBtn) submitBtn.textContent = submitLabel;
     showError($("#danger-confirm-error"), "");
     form.reset();
+    if (workspaceWrap) workspaceWrap.hidden = !workspaceOption;
+    if (workspaceHint) workspaceHint.hidden = !workspaceOption;
+    if (workspaceCheck) {
+      workspaceCheck.disabled = !workspaceOption;
+      workspaceCheck.checked = Boolean(workspaceOption);
+    }
     return new Promise((resolve) => {
       let settled = false;
       const finish = (ok) => {
@@ -3970,8 +3989,11 @@
           detailsEl.innerHTML = "";
           detailsEl.hidden = true;
         }
+        if (workspaceWrap) workspaceWrap.hidden = true;
+        if (workspaceHint) workspaceHint.hidden = true;
+        const deleteWorkspaceFiles = Boolean(ok && workspaceOption && workspaceCheck?.checked);
         if (dialog.open) dialog.close();
-        resolve(ok);
+        resolve({ ok: Boolean(ok), deleteWorkspaceFiles });
       };
       const onCancel = () => finish(false);
       const onClose = () => finish(false);
@@ -3992,6 +4014,47 @@
     });
   }
 
+  async function workspacePathsForRemovedObjects(projectId, selected) {
+    const seeds = new Set();
+    const logicalWanted = new Set();
+    const addSeed = (raw) => {
+      const rel = String(raw || "").replace(/\\/g, "/").replace(/^\/+/, "").trim();
+      if (!rel) return;
+      seeds.add(rel);
+      logicalWanted.add(logicalRelativePath(rel).toLowerCase());
+      const base = PathBasename(rel);
+      if (base) {
+        seeds.add(base);
+        logicalWanted.add(logicalRelativePath(base).toLowerCase());
+      }
+    };
+    (selected || []).forEach((row) => {
+      addSeed(row?.dataset?.relativePath);
+      addSeed(row?.dataset?.sortName);
+      addSeed(row?.dataset?.filename);
+    });
+    if (!seeds.size && removeBtn) {
+      addSeed(removeBtn.dataset.relativePath);
+      addSeed(removeBtn.dataset.filename);
+    }
+    const paths = new Set(seeds);
+    if (!projectId || !logicalWanted.size) return [...paths];
+    try {
+      const cached = await listAgentCacheFiles(projectId);
+      cached.forEach((item) => {
+        const rel = String(item?.relative_path || "").replace(/\\/g, "/").replace(/^\/+/, "");
+        if (!rel) return;
+        if (seeds.has(rel) || seeds.has(PathBasename(rel))) {
+          paths.add(rel);
+          return;
+        }
+        if (logicalWanted.has(logicalRelativePath(rel).toLowerCase())) paths.add(rel);
+      });
+    } catch {
+      /* best-effort: still try seeded paths */
+    }
+    return [...paths];
+  }
   function formatPurgeConfirmDetails(preview) {
     const deleted = [...(Array.isArray(preview?.ok) ? preview.ok : [])].sort((a, b) => {
       const left = String(a.message || a.filename || a.path || "");
@@ -4092,7 +4155,7 @@
       note: "This cannot be undone from CreoPDM.",
       submitLabel: "Remove from Vault",
     });
-    if (!confirmed) return;
+    if (!confirmed.ok) return;
 
     let okCount = 0;
     let warning = "";
@@ -4154,7 +4217,7 @@
       note: "This cannot be undone from CreoPDM. Restore from the Recycle Bin on this PC if needed.",
       submitLabel: "Remove from Workspace",
     });
-    if (!confirmed) return;
+    if (!confirmed.ok) return;
     showError($("#toolbar-error"), "");
     const result = await withBusy("Removing from local workspace…", async () => {
       try {
@@ -4228,7 +4291,7 @@
       note: "This cannot be undone from CreoPDM. Restore from the Recycle Bin on this PC if needed.",
       submitLabel: `Purge ${wouldDelete} save(s)`,
     });
-    if (!confirmed) return;
+    if (!confirmed.ok) return;
     showError($("#toolbar-error"), "");
     const result = await withBusy("Purging older local saves…", async () => {
       try {
@@ -4268,6 +4331,12 @@
   removeBtn?.addEventListener("click", async () => {
     const ids = selectedIds();
     if (!ids.length) return;
+    const selected = selectedRows().filter((row) => !row.classList.contains("folder-row"));
+    const projectId =
+      removeBtn.dataset.project
+      || checkinBtn?.dataset.project
+      || openWorkspaceBtn?.dataset.project
+      || currentProjectId();
     const confirmed = await confirmByProjectName({
       title: ids.length === 1 ? "Remove from project" : `Remove ${ids.length} files from project`,
       lead:
@@ -4276,17 +4345,47 @@
           : "CreoPDM vault copies are deleted. Originals in your project folder are not deleted.",
       note: "The file is removed from this project list. This cannot be undone from CreoPDM.",
       submitLabel: "Remove from Project",
+      workspaceOption: true,
     });
-    if (!confirmed) return;
+    if (!confirmed.ok) return;
+    const deleteWorkspaceFiles = Boolean(confirmed.deleteWorkspaceFiles);
+    const workspacePaths = deleteWorkspaceFiles
+      ? await workspacePathsForRemovedObjects(projectId, selected)
+      : [];
     if (ids.length === 1 && !isListPage) {
       const result = await postAction(`/api/objects/${ids[0]}`, null, "DELETE", "Removing from project…");
-      if (result) window.location.href = projectHome();
+      if (!result) return;
+      if (deleteWorkspaceFiles && projectId && workspacePaths.length) {
+        try {
+          await deleteLocalWorkspacePaths(projectId, workspacePaths);
+        } catch {
+          /* vault remove already succeeded */
+        }
+      }
+      window.location.href = projectHome();
       return;
     }
     const result = await postAction("/api/objects/batch/remove", { object_ids: ids }, "POST", "Removing from project…");
     if (!result) return;
     const warning = formatBatch(result);
     if (warning) showError($("#toolbar-error"), warning);
+    if (result.ok?.length && deleteWorkspaceFiles && projectId && workspacePaths.length) {
+      try {
+        const trashed = await deleteLocalWorkspacePaths(projectId, workspacePaths);
+        const removedLocal = trashed?.ok?.length || 0;
+        if (removedLocal && !warning) {
+          showOk(
+            `${result.ok.length} file(s) removed from the project; ${removedLocal} workspace file(s) moved to the Recycle Bin.`
+          );
+        }
+      } catch (err) {
+        showError(
+          $("#toolbar-error"),
+          (warning ? `${warning} ` : "")
+            + (err?.message || "Removed from project, but local workspace files could not be deleted.")
+        );
+      }
+    }
     if (result.ok?.length) reloadPage();
   });
 

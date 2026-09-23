@@ -46,6 +46,13 @@
       <p id="danger-confirm-lead"></p>
       <div id="danger-confirm-details" class="muted small confirm-details" hidden></div>
       <p id="danger-confirm-note"><strong></strong></p>
+      <label class="choice" id="danger-confirm-workspace-wrap" hidden>
+        <input type="checkbox" name="delete_workspace" id="danger-confirm-workspace" value="1" checked>
+        <span>Delete workspace files</span>
+      </label>
+      <p class="muted small" id="danger-confirm-workspace-hint" hidden>
+        Moves matching files from the local creopdm-agent cache on this PC to the Recycle Bin.
+      </p>
       <label>Type the project name to confirm
         <input name="confirm_name" id="danger-confirm-input" required maxlength="255" autocomplete="off">
       </label>
@@ -1173,6 +1180,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push49"></script>
+  <script src="/client/app.js?v={{ app_version }}-push50"></script>
 </body>
 </html>
