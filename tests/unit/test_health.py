@@ -77,7 +77,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push69" in text
+    assert "push70" in text
     assert "Saved Creo metadata for" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "Materialize start:" in open("src/creopdm_agent/server.py", encoding="utf-8").read()
     assert "PTC_MASTER_MATERIAL" in text
@@ -119,6 +119,10 @@ def test_home_page(client):
     assert "function creoMethodKind" in text
     assert "Do not gate on typeof===function" in text
     assert "units_ok" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
+    assert "function creoUpgradeSolidModel" in text
+    assert "CreateModelWindow" in text
+    assert "try_ListItems" in text
+    assert "solid_upgrade" in text
     app_js = open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "deleteLocalWorkspacePathsBackground" in app_js
     assert "applyAgentPickedPaths" in app_js
