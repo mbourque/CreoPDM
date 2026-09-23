@@ -434,6 +434,29 @@ def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
         assert not (cache / "nested" / "extra.txt").exists()
 
 
+def test_agent_delete_paths_trashes_creo_numbered_siblings(tmp_path):
+    root = tmp_path / "cache"
+    project_id = "proj-del-sib"
+    cache = root / project_id
+    cache.mkdir(parents=True)
+    (cache / "shaft.prt.1").write_bytes(b"v1")
+    (cache / "shaft.prt.3").write_bytes(b"v3")
+    (cache / "other.prt.1").write_bytes(b"keep")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), token="tok")
+    app = create_agent_app(settings)
+    with TestClient(app) as client:
+        deleted = client.post(
+            "/delete-paths",
+            json={"project_id": project_id, "relative_paths": ["shaft.prt"]},
+        )
+        assert deleted.status_code == 200, deleted.text
+        names = {item["filename"] for item in deleted.json()["ok"]}
+        assert names == {"shaft.prt.1", "shaft.prt.3"}
+        assert not (cache / "shaft.prt.1").exists()
+        assert not (cache / "shaft.prt.3").exists()
+        assert (cache / "other.prt.1").is_file()
+
+
 def test_agent_purge_versions_deletes_only_older_than_vault_floor(tmp_path):
     root = tmp_path / "cache"
     project_id = "proj-purge"

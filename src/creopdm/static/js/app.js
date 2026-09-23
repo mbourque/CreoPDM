@@ -1283,6 +1283,15 @@
     const picked = await pickResponse.json();
     const paths = Array.isArray(picked.selected) ? picked.selected : [];
     if (!paths.length) return true;
+    // Loading thousands of files through the browser (one /local-file each) OOMs
+    // or hangs. Folder add is the supported path for bulk imports.
+    if (paths.length > 250) {
+      showError(
+        $("#add-error"),
+        `Selected ${paths.length} files. Use “Choose folder” for large adds — multi-select through the agent is limited to 250 files at a time.`
+      );
+      return true;
+    }
     const uploads = [];
     for (const rawPath of paths) {
       const path = String(rawPath || "");
@@ -2787,6 +2796,27 @@
     return response.json();
   }
 
+  /** Fire-and-forget trash so Remove can refresh without waiting on thousands of files. */
+  function deleteLocalWorkspacePathsBackground(projectId, relativePaths) {
+    const paths = [...new Set((relativePaths || []).map((item) => String(item || "").replace(/\\/g, "/").replace(/^\/+/, "")).filter(Boolean))];
+    if (!projectId || !paths.length) return;
+    const url = `${agentBase()}/delete-paths`;
+    const chunkSize = 150;
+    for (let i = 0; i < paths.length; i += chunkSize) {
+      const slice = paths.slice(i, i + chunkSize);
+      try {
+        fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project_id: projectId, relative_paths: slice }),
+          keepalive: true,
+        });
+      } catch {
+        /* best-effort; page is about to refresh */
+      }
+    }
+  }
+
   async function purgeLocalVersionsOlderThanVault(projectId, { dryRun = false } = {}) {
     if (!projectId) return { ok: [], failed: [], deleted: 0, skipped: true };
     const floorsResponse = await fetch(
@@ -4026,19 +4056,16 @@
     });
   }
 
-  async function workspacePathsForRemovedObjects(projectId, selected) {
+  function workspacePathsForRemovedObjects(projectId, selected) {
+    // Sync only — do not list the whole agent cache (that stalled Remove for
+    // thousands of files). Agent /delete-paths expands Creo numbered siblings.
     const seeds = new Set();
-    const logicalWanted = new Set();
     const addSeed = (raw) => {
       const rel = String(raw || "").replace(/\\/g, "/").replace(/^\/+/, "").trim();
       if (!rel) return;
       seeds.add(rel);
-      logicalWanted.add(logicalRelativePath(rel).toLowerCase());
       const base = PathBasename(rel);
-      if (base) {
-        seeds.add(base);
-        logicalWanted.add(logicalRelativePath(base).toLowerCase());
-      }
+      if (base) seeds.add(base);
     };
     (selected || []).forEach((row) => {
       addSeed(row?.dataset?.relativePath);
@@ -4049,23 +4076,19 @@
       addSeed(removeBtn.dataset.relativePath);
       addSeed(removeBtn.dataset.filename);
     }
-    const paths = new Set(seeds);
-    if (!projectId || !logicalWanted.size) return [...paths];
-    try {
-      const cached = await listAgentCacheFiles(projectId);
-      cached.forEach((item) => {
-        const rel = String(item?.relative_path || "").replace(/\\/g, "/").replace(/^\/+/, "");
-        if (!rel) return;
-        if (seeds.has(rel) || seeds.has(PathBasename(rel))) {
-          paths.add(rel);
-          return;
-        }
-        if (logicalWanted.has(logicalRelativePath(rel).toLowerCase())) paths.add(rel);
-      });
-    } catch {
-      /* best-effort: still try seeded paths */
-    }
-    return [...paths];
+    return [...seeds];
+  }
+
+  function removeSelectedRowsFromDom(rows) {
+    (rows || []).forEach((row) => {
+      try {
+        row.remove();
+      } catch {
+        /* ignore */
+      }
+    });
+    refreshTabMetrics();
+    syncToolbar();
   }
   function formatPurgeConfirmDetails(preview) {
     const deleted = [...(Array.isArray(preview?.ok) ? preview.ok : [])].sort((a, b) => {
@@ -4343,6 +4366,7 @@
   removeBtn?.addEventListener("click", async () => {
     const ids = selectedIds();
     if (!ids.length) return;
+    if (!confirmLargeBulk("Remove", ids.length)) return;
     const selected = selectedRows().filter((row) => !row.classList.contains("folder-row"));
     const projectId =
       removeBtn.dataset.project
@@ -4362,43 +4386,44 @@
     if (!confirmed.ok) return;
     const deleteWorkspaceFiles = Boolean(confirmed.deleteWorkspaceFiles);
     const workspacePaths = deleteWorkspaceFiles
-      ? await workspacePathsForRemovedObjects(projectId, selected)
+      ? workspacePathsForRemovedObjects(projectId, selected)
       : [];
+    removeSelectedRowsFromDom(selected);
     if (ids.length === 1 && !isListPage) {
       const result = await postAction(`/api/objects/${ids[0]}`, null, "DELETE", "Removing from project…");
-      if (!result) return;
+      if (!result) {
+        reloadPage({ keepBusy: true });
+        return;
+      }
       if (deleteWorkspaceFiles && projectId && workspacePaths.length) {
-        try {
-          await deleteLocalWorkspacePaths(projectId, workspacePaths);
-        } catch {
-          /* vault remove already succeeded */
-        }
+        deleteLocalWorkspacePathsBackground(projectId, workspacePaths);
       }
       window.location.href = projectHome();
       return;
     }
-    const result = await postAction("/api/objects/batch/remove", { object_ids: ids }, "POST", "Removing from project…");
-    if (!result) return;
+    const result = await postAction(
+      "/api/objects/batch/remove",
+      { object_ids: ids },
+      "POST",
+      ids.length > 100
+        ? `Removing ${ids.length} files from project…`
+        : "Removing from project…"
+    );
+    if (!result) {
+      reloadPage({ keepBusy: true });
+      return;
+    }
     const warning = formatBatch(result);
     if (warning) showError($("#toolbar-error"), warning);
     if (result.ok?.length && deleteWorkspaceFiles && projectId && workspacePaths.length) {
-      try {
-        const trashed = await deleteLocalWorkspacePaths(projectId, workspacePaths);
-        const removedLocal = trashed?.ok?.length || 0;
-        if (removedLocal && !warning) {
-          showOk(
-            `${result.ok.length} file(s) removed from the project; ${removedLocal} workspace file(s) moved to the Recycle Bin.`
-          );
-        }
-      } catch (err) {
-        showError(
-          $("#toolbar-error"),
-          (warning ? `${warning} ` : "")
-            + (err?.message || "Removed from project, but local workspace files could not be deleted.")
+      deleteLocalWorkspacePathsBackground(projectId, workspacePaths);
+      if (!warning) {
+        showOk(
+          `${result.ok.length} file(s) removed from the project. Local workspace cleanup continues in the background.`
         );
       }
     }
-    if (result.ok?.length) reloadPage();
+    if (result.ok?.length) reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
   });
 
   async function loadChangesTab(options = {}) {

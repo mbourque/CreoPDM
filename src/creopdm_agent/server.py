@@ -751,41 +751,37 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
 
     @app.post("/delete-paths", response_model=DeletePathsResponse)
     def delete_cache_paths(payload: DeletePathsRequest) -> DeletePathsResponse:
-        """Delete files from the local agent cache (discard New file local rows)."""
+        """Delete files from the local agent cache (discard New file local rows).
+
+        Each path also removes Creo numbered siblings in the same folder
+        (``shaft.prt`` → ``shaft.prt.1``, ``shaft.prt.2``, …) so the UI does not
+        need to list the whole cache before Remove.
+        """
+        from creopdm.creo.file_manager import CreoFileManager
+
         project_id = (payload.project_id or "").strip()
         if not project_id:
             raise HTTPException(status_code=400, detail="project_id is required.")
         cache_dir = _project_cache_dir(project_id)
+        cache_resolved = cache_dir.resolve()
         ok: list[PushItemResult] = []
         failed: list[PushItemResult] = []
-        for raw in payload.relative_paths:
-            rel = str(raw or "").replace("\\", "/").lstrip("/")
-            if not rel or ".." in rel.split("/"):
-                failed.append(
-                    PushItemResult(object_id=project_id, filename=rel, message="Invalid path.")
-                )
-                continue
-            local = (cache_dir / rel).resolve()
-            try:
-                local.relative_to(cache_dir.resolve())
-            except ValueError:
-                failed.append(
-                    PushItemResult(
-                        object_id=project_id,
-                        filename=Path(rel).name,
-                        message="Path is outside the agent cache.",
-                    )
-                )
-                continue
+        seen: set[str] = set()
+
+        def trash_one(local: Path, rel_label: str) -> None:
+            key = str(local.resolve()).casefold()
+            if key in seen:
+                return
+            seen.add(key)
             if not local.is_file():
                 failed.append(
                     PushItemResult(
                         object_id=project_id,
-                        filename=Path(rel).name,
-                        message=f"No local cache file found for {rel}.",
+                        filename=Path(rel_label).name,
+                        message=f"No local cache file found for {rel_label}.",
                     )
                 )
-                continue
+                return
             try:
                 move_to_trash(local)
             except OSError as exc:
@@ -796,17 +792,63 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                         message=str(exc),
                     )
                 )
-                continue
+                return
+            try:
+                rel_out = str(local.resolve().relative_to(cache_resolved)).replace("\\", "/")
+            except ValueError:
+                rel_out = rel_label
             ok.append(
                 PushItemResult(
                     object_id=project_id,
                     filename=local.name,
                     ok=True,
                     path=str(local),
-                    message=rel,
+                    message=rel_out,
                 )
             )
-            logger.info("Moved local cache path to trash %s", rel)
+            logger.info("Moved local cache path to trash %s", rel_out)
+
+        for raw in payload.relative_paths:
+            rel = str(raw or "").replace("\\", "/").lstrip("/")
+            if not rel or ".." in rel.split("/"):
+                failed.append(
+                    PushItemResult(object_id=project_id, filename=rel, message="Invalid path.")
+                )
+                continue
+            local = (cache_dir / rel).resolve()
+            try:
+                local.relative_to(cache_resolved)
+            except ValueError:
+                failed.append(
+                    PushItemResult(
+                        object_id=project_id,
+                        filename=Path(rel).name,
+                        message="Path is outside the agent cache.",
+                    )
+                )
+                continue
+            parent = local.parent
+            wanted = CreoFileManager.logical_filename(local.name).lower()
+            siblings: list[Path] = []
+            if parent.is_dir() and wanted:
+                for path in parent.iterdir():
+                    if not path.is_file():
+                        continue
+                    if CreoFileManager.logical_filename(path.name).lower() == wanted:
+                        siblings.append(path)
+            if not siblings and local.is_file():
+                siblings = [local]
+            if not siblings:
+                failed.append(
+                    PushItemResult(
+                        object_id=project_id,
+                        filename=Path(rel).name,
+                        message=f"No local cache file found for {rel}.",
+                    )
+                )
+                continue
+            for path in siblings:
+                trash_one(path, rel)
         return DeletePathsResponse(ok=ok, failed=failed)
 
     @app.post("/purge-versions", response_model=PurgeVersionsResponse)

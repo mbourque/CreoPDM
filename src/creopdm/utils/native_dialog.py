@@ -21,6 +21,8 @@ logger = get_logger("dialog")
 # IFileDialog::Show / HRESULT_FROM_WIN32(ERROR_CANCELLED)
 _HRESULT_CANCELLED = 0x800704C7
 _WINERROR_CANCELLED = 1223
+# GetOpenFileNameW: multi-select path list did not fit lpstrFile
+_FNERR_BUFFERTOOSMALL = 0x3003
 
 
 def is_user_cancelled(exc: BaseException) -> bool:
@@ -113,6 +115,9 @@ def pick_files(initial_dir: Path, title: str = "Add files to the project") -> li
     start.mkdir(parents=True, exist_ok=True)
     try:
         return run_on_sta(lambda: _windows_open_dialog(start, title))
+    except ValidationAppError:
+        # Keep picker errors (buffer too small, etc.) — do not open a second dialog.
+        raise
     except Exception:
         logger.exception("GetOpenFileNameW failed; trying Windows Forms picker")
         try:
@@ -418,8 +423,10 @@ def _windows_open_dialog(initial_dir: Path, title: str) -> list[Path]:
             ("FlagsEx", wintypes.DWORD),
         ]
 
-    buffer_chars = 32768
-    file_buf = ctypes.create_unicode_buffer(buffer_chars)
+    # Several thousand Creo names need far more than the old 32k WCHAR buffer.
+    # Start large so Open succeeds once; grow only if Windows still says too small.
+    buffer_chars = 1_048_576
+    max_buffer_chars = 8_388_608
     # GetOpenFileNameW: pairs are display\0patterns\0… ending with \0\0.
     filter_chunks: list[str] = []
     for label, patterns in add_files_dialog_filter_pairs():
@@ -434,40 +441,66 @@ def _windows_open_dialog(initial_dir: Path, title: str) -> list[Path]:
     initial_buf = ctypes.create_unicode_buffer(str(initial_dir))
     title_buf = ctypes.create_unicode_buffer(title)
 
-    ofn = OPENFILENAMEW()
-    ofn.lStructSize = ctypes.sizeof(OPENFILENAMEW)
-    ofn.hwndOwner = _dialog_owner_hwnd()
-    ofn.lpstrFilter = ctypes.addressof(filter_buf)
-    ofn.nFilterIndex = 1
-    ofn.lpstrFile = ctypes.addressof(file_buf)
-    ofn.nMaxFile = buffer_chars
-    ofn.lpstrInitialDir = ctypes.addressof(initial_buf)
-    ofn.lpstrTitle = ctypes.addressof(title_buf)
-    ofn.Flags = (
-        ofn_explorer
-        | ofn_allow_multi
-        | ofn_file_must_exist
-        | ofn_path_must_exist
-        | ofn_no_change_dir
-        | ofn_hide_readonly
-    )
     get_open = ctypes.windll.comdlg32.GetOpenFileNameW
     get_open.argtypes = [ctypes.POINTER(OPENFILENAMEW)]
     get_open.restype = wintypes.BOOL
-    ok = get_open(ctypes.byref(ofn))
-    if not ok:
-        err = ctypes.windll.comdlg32.CommDlgExtendedError()
+    get_err = ctypes.windll.comdlg32.CommDlgExtendedError
+    get_err.restype = wintypes.DWORD
+
+    while True:
+        file_buf = ctypes.create_unicode_buffer(buffer_chars)
+        ofn = OPENFILENAMEW()
+        ofn.lStructSize = ctypes.sizeof(OPENFILENAMEW)
+        ofn.hwndOwner = _dialog_owner_hwnd()
+        ofn.lpstrFilter = ctypes.addressof(filter_buf)
+        ofn.nFilterIndex = 1
+        ofn.lpstrFile = ctypes.addressof(file_buf)
+        ofn.nMaxFile = buffer_chars
+        ofn.lpstrInitialDir = ctypes.addressof(initial_buf)
+        ofn.lpstrTitle = ctypes.addressof(title_buf)
+        ofn.Flags = (
+            ofn_explorer
+            | ofn_allow_multi
+            | ofn_file_must_exist
+            | ofn_path_must_exist
+            | ofn_no_change_dir
+            | ofn_hide_readonly
+        )
+        ok = get_open(ctypes.byref(ofn))
+        if ok:
+            raw = ctypes.wstring_at(ctypes.addressof(file_buf), buffer_chars)
+            chunks = [item for item in raw.split("\0") if item]
+            if not chunks:
+                return []
+            if len(chunks) == 1:
+                return [Path(chunks[0])]
+            folder = Path(chunks[0])
+            return [folder / name for name in chunks[1:]]
+        err = int(get_err() or 0)
         if not err:
             return []
+        if err == _FNERR_BUFFERTOOSMALL and buffer_chars < max_buffer_chars:
+            # Dialog already closed; required size is in the first WCHAR (Explorer style).
+            try:
+                needed = int(file_buf[0]) or 0
+            except Exception:
+                needed = 0
+            next_size = max(buffer_chars * 4, needed + 1024)
+            buffer_chars = min(next_size, max_buffer_chars)
+            if buffer_chars <= int(ofn.nMaxFile or 0):
+                buffer_chars = min(max(buffer_chars * 2, 1_048_576), max_buffer_chars)
+            logger.warning(
+                "GetOpenFileNameW buffer too small; retrying with %s chars (needed≈%s)",
+                buffer_chars,
+                needed or "?",
+            )
+            continue
+        if err == _FNERR_BUFFERTOOSMALL:
+            raise ValidationAppError(
+                "Too many files for the file picker. Use Add folder instead, or select fewer files.",
+                details={"windows_error": err, "buffer_chars": buffer_chars},
+            )
         raise ValidationAppError(
             "The file picker could not be opened.",
-            details={"windows_error": int(err)},
+            details={"windows_error": err},
         )
-    raw = ctypes.wstring_at(ctypes.addressof(file_buf), buffer_chars)
-    chunks = [item for item in raw.split("\0") if item]
-    if not chunks:
-        return []
-    if len(chunks) == 1:
-        return [Path(chunks[0])]
-    folder = Path(chunks[0])
-    return [folder / name for name in chunks[1:]]
