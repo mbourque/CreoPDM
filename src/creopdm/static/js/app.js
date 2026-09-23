@@ -785,6 +785,7 @@
   resumeWhereUsedIndexWatch();
 
   const METADATA_COLLECT_WARN_THRESHOLD = 50;
+  const METADATA_COLLECT_KEY = "creopdmMetadataCollect";
   const metadataCollectJob = { running: false, cancel: false };
   const cancelMetadataBtn = $("#cancel-metadata-collect-btn");
 
@@ -793,10 +794,39 @@
     cancelMetadataBtn.hidden = !visible;
   }
 
+  function saveMetadataCollectState(state) {
+    try {
+      if (!state) sessionStorage.removeItem(METADATA_COLLECT_KEY);
+      else sessionStorage.setItem(METADATA_COLLECT_KEY, JSON.stringify(state));
+    } catch {
+      /* private mode / quota */
+    }
+  }
+
+  function loadMetadataCollectState() {
+    try {
+      const raw = sessionStorage.getItem(METADATA_COLLECT_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
   cancelMetadataBtn?.addEventListener("click", () => {
-    if (!metadataCollectJob.running) return;
-    metadataCollectJob.cancel = true;
-    showOk("Cancelling metadata collection…");
+    const stored = loadMetadataCollectState();
+    if (metadataCollectJob.running) {
+      metadataCollectJob.cancel = true;
+      showOk("Cancelling metadata collection…");
+      return;
+    }
+    if (stored && stored.status === "running") {
+      saveMetadataCollectState(null);
+      setMetadataCollectCancelVisible(false);
+      showOk("Metadata collection cancelled.");
+    }
   });
 
   function confirmCollectMetadata(total) {
@@ -814,7 +844,7 @@
       if (total > METADATA_COLLECT_WARN_THRESHOLD) {
         warn.hidden = false;
         warn.textContent =
-          `This is ${total} models (over ${METADATA_COLLECT_WARN_THRESHOLD}). It can take a long time and may make Creo sluggish. You can cancel from the toolbar.`;
+          `This is ${total} models (over ${METADATA_COLLECT_WARN_THRESHOLD}). It can take a long time and may make Creo sluggish. You can cancel from the toolbar. Progress survives navigation within CreoPDM.`;
       } else {
         warn.hidden = true;
         warn.textContent = "";
@@ -843,38 +873,148 @@
   }
 
   async function pushOneCreoMetadataTarget(target) {
-    let snapshot = await gatherCreoMetadataForFilename(target.filename, "");
-    if (!snapshot) {
-      let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
-      if (!filePath) {
-        filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
+    const METADATA_ITEM_TIMEOUT_MS = 90000;
+    let settled = false;
+    const work = async () => {
+      let snapshot = await gatherCreoMetadataForFilename(target.filename, "");
+      if (!snapshot) {
+        let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
+        if (!filePath) {
+          filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
+        }
+        snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
       }
-      snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
-    }
-    if (!snapshot) return false;
-    const body = {
-      version_id: target.versionId || null,
-      identity: snapshot.identity || null,
-      parameters: Array.isArray(snapshot.parameters) ? snapshot.parameters : [],
-      materials: snapshot.materials || null,
-      dependencies: Array.isArray(snapshot.dependencies) ? snapshot.dependencies : [],
-      bom: snapshot.bom || null,
-      units: snapshot.units || null,
-      mass: snapshot.mass || null,
-      family_table: snapshot.family_table || null,
-      features: Array.isArray(snapshot.features) && snapshot.features.length
-        ? snapshot.features
-        : null,
+      if (!snapshot) return { ok: false, timedOut: false };
+      const body = {
+        version_id: target.versionId || null,
+        identity: snapshot.identity || null,
+        parameters: Array.isArray(snapshot.parameters) ? snapshot.parameters : [],
+        materials: snapshot.materials || null,
+        dependencies: Array.isArray(snapshot.dependencies) ? snapshot.dependencies : [],
+        bom: snapshot.bom || null,
+        units: snapshot.units || null,
+        mass: snapshot.mass || null,
+        family_table: snapshot.family_table || null,
+        features: Array.isArray(snapshot.features) && snapshot.features.length
+          ? snapshot.features
+          : null,
+      };
+      try {
+        const response = await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        return { ok: response.ok, timedOut: false };
+      } catch {
+        return { ok: false, timedOut: false };
+      }
     };
     try {
-      const response = await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      return response.ok;
+      const result = await Promise.race([
+        work().then((value) => {
+          settled = true;
+          return value;
+        }),
+        new Promise((resolve) => {
+          window.setTimeout(() => {
+            if (!settled) resolve({ ok: false, timedOut: true });
+          }, METADATA_ITEM_TIMEOUT_MS);
+        }),
+      ]);
+      return result;
     } catch {
-      return false;
+      return { ok: false, timedOut: false };
+    }
+  }
+
+  async function runMetadataCollectLoop(state) {
+    if (metadataCollectJob.running) return;
+    const targets = Array.isArray(state.targets) ? state.targets : [];
+    if (!targets.length) {
+      saveMetadataCollectState(null);
+      return;
+    }
+    metadataCollectJob.running = true;
+    metadataCollectJob.cancel = false;
+    setMetadataCollectCancelVisible(true);
+    showError($("#toolbar-error"), "");
+    let index = Math.max(0, Number(state.index) || 0);
+    let captured = Number(state.captured) || 0;
+    let failed = Number(state.failed) || 0;
+    let pausedBusy = false;
+    try {
+      while (index < targets.length) {
+        if (metadataCollectJob.cancel) break;
+        const target = targets[index];
+        const message =
+          `Collecting Creo metadata… ${index + 1} of ${targets.length}: ${target.filename}`;
+        showOk(message);
+        saveMetadataCollectState({
+          ...state,
+          status: "running",
+          index,
+          captured,
+          failed,
+          message,
+          updatedAt: Date.now(),
+        });
+        const result = await pushOneCreoMetadataTarget(target);
+        if (result.timedOut) {
+          failed += 1;
+          index += 1;
+          const pauseMsg =
+            `Metadata collection paused on ${target.filename} (Creo busy after opening a model). ` +
+            `Progress saved at ${index} of ${targets.length} — refresh or return to this page to continue.`;
+          showOk(pauseMsg);
+          saveMetadataCollectState({
+            ...state,
+            status: "running",
+            index,
+            captured,
+            failed,
+            message: pauseMsg,
+            updatedAt: Date.now(),
+          });
+          pausedBusy = true;
+          break;
+        }
+        if (result.ok) captured += 1;
+        else failed += 1;
+        index += 1;
+        saveMetadataCollectState({
+          ...state,
+          status: "running",
+          index,
+          captured,
+          failed,
+          message: `Collecting Creo metadata… ${index} of ${targets.length}`,
+          updatedAt: Date.now(),
+        });
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      }
+      if (pausedBusy) {
+        setMetadataCollectCancelVisible(true);
+        return;
+      }
+      if (metadataCollectJob.cancel) {
+        const msg =
+          `Metadata collection cancelled after ${captured + failed} of ${targets.length} ` +
+          `(${captured} saved, ${failed} skipped).`;
+        showOk(msg);
+        saveMetadataCollectState(null);
+      } else {
+        const msg =
+          `Metadata collection finished: ${captured} saved` +
+          (failed ? `, ${failed} skipped` : "") +
+          `.`;
+        showOk(msg);
+        saveMetadataCollectState(null);
+      }
+    } finally {
+      metadataCollectJob.running = false;
+      metadataCollectJob.cancel = false;
+      if (!loadMetadataCollectState()) setMetadataCollectCancelVisible(false);
     }
   }
 
@@ -888,6 +1028,17 @@
         $("#toolbar-error"),
         "Collect metadata needs Creo’s embedded browser with Creo.JS available."
       );
+      return;
+    }
+    const existing = loadMetadataCollectState();
+    if (
+      existing &&
+      existing.status === "running" &&
+      existing.projectId === projectId &&
+      Array.isArray(existing.targets) &&
+      existing.targets.length
+    ) {
+      await runMetadataCollectLoop(existing);
       return;
     }
     const rows = await ensureProjectObjects(projectId, { force: true });
@@ -906,41 +1057,50 @@
     const okToStart = await confirmCollectMetadata(targets.length);
     if (!okToStart) return;
 
-    metadataCollectJob.running = true;
-    metadataCollectJob.cancel = false;
-    setMetadataCollectCancelVisible(true);
-    showError($("#toolbar-error"), "");
-    let captured = 0;
-    let failed = 0;
-    try {
-      for (let i = 0; i < targets.length; i++) {
-        if (metadataCollectJob.cancel) break;
-        const target = targets[i];
-        showOk(
-          `Collecting Creo metadata… ${i + 1} of ${targets.length}: ${target.filename}`
-        );
-        const saved = await pushOneCreoMetadataTarget(target);
-        if (saved) captured += 1;
-        else failed += 1;
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-      }
-      if (metadataCollectJob.cancel) {
-        showOk(
-          `Metadata collection cancelled after ${captured + failed} of ${targets.length} ` +
-            `(${captured} saved, ${failed} skipped).`
-        );
-      } else {
-        showOk(
-          `Metadata collection finished: ${captured} saved` +
-            (failed ? `, ${failed} skipped` : "") +
-            `.`
-        );
-      }
-    } finally {
-      metadataCollectJob.running = false;
-      metadataCollectJob.cancel = false;
-      setMetadataCollectCancelVisible(false);
+    const state = {
+      projectId,
+      status: "running",
+      index: 0,
+      captured: 0,
+      failed: 0,
+      targets,
+      message: `Collecting Creo metadata… 0 of ${targets.length}`,
+      updatedAt: Date.now(),
+    };
+    saveMetadataCollectState(state);
+    await runMetadataCollectLoop(state);
+  }
+
+  async function resumeMetadataCollectIfNeeded() {
+    const state = loadMetadataCollectState();
+    if (!state || state.status !== "running") return;
+    if (!Array.isArray(state.targets) || !state.targets.length) {
+      saveMetadataCollectState(null);
+      return;
     }
+    if (metadataCollectJob.running) {
+      if (state.message) showOk(state.message);
+      setMetadataCollectCancelVisible(true);
+      return;
+    }
+    const projectId = currentProjectId();
+    if (projectId && state.projectId && projectId !== state.projectId) {
+      showOk(
+        `Metadata collection paused for another project (${state.index || 0} of ${state.targets.length}).`
+      );
+      setMetadataCollectCancelVisible(true);
+      return;
+    }
+    if (state.message) showOk(state.message);
+    setMetadataCollectCancelVisible(true);
+    if (!canGatherCreoMetadata()) {
+      showOk(
+        `Metadata collection paused at ${state.index || 0} of ${state.targets.length}. ` +
+          "Re-open CreoPDM inside Creo to continue."
+      );
+      return;
+    }
+    await runMetadataCollectLoop(state);
   }
 
   $("#collect-metadata-btn")?.addEventListener("click", async () => {
@@ -948,6 +1108,14 @@
     const projectId = $("#collect-metadata-btn")?.dataset.project || currentProjectId();
     if (!projectId) return;
     await runCollectAllMetadata(projectId);
+  });
+
+  resumeMetadataCollectIfNeeded();
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) resumeMetadataCollectIfNeeded();
+  });
+  window.addEventListener("pageshow", () => {
+    resumeMetadataCollectIfNeeded();
   });
 
   $("#project-cancel")?.addEventListener("click", () => projectDialog?.close());
@@ -2207,10 +2375,17 @@
   }
 
   function currentProjectId() {
+    const fromPath = String(window.location.pathname || "").match(
+      /\/projects\/([0-9a-f-]{36})\//i
+    );
     return (
       $("#rename-project-btn")?.dataset.project ||
       $("#delete-project-btn")?.dataset.project ||
+      $("#collect-metadata-btn")?.dataset.project ||
+      $("#rebuild-where-used-btn")?.dataset.project ||
       $("#open-workspace-btn")?.dataset.project ||
+      $("#checkin-btn")?.dataset.project ||
+      (fromPath && fromPath[1]) ||
       new URLSearchParams(window.location.search).get("project") ||
       ""
     );
