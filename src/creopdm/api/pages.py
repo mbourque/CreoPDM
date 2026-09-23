@@ -40,37 +40,63 @@ router = APIRouter()
 _INSTANCE_GENERIC_RE = re.compile(r"<([^>]+)>")
 
 
+def _extension_of(filename: str) -> str:
+    lower = str(filename or "").lower()
+    for candidate in (".prt", ".asm", ".drw", ".frm", ".mfg"):
+        if lower.endswith(candidate) or f"{candidate}." in lower:
+            return candidate
+    name = CreoFileManager.logical_filename(filename)
+    if "." in name:
+        return "." + name.rsplit(".", 1)[-1].lower()
+    return ""
+
+
 def _bom_lookup_keys(filename: str) -> list[str]:
+    """Keys used to match BOM/structure names to project objects.
+
+    Family-table display names like ``INSTALLED<SPLIT-RIVET>.prt`` resolve to the
+    generic ``SPLIT-RIVET.prt`` (name inside ``<>``), which is what Creo opens.
+    """
     name = str(filename or "").strip()
     if not name:
         return []
     keys: list[str] = []
 
     def add(key: str) -> None:
-        text = (key or "").strip().lower()
+        text = CreoFileManager.logical_filename(key or "").strip().lower()
         if text and text not in keys:
             keys.append(text)
 
-    add(CreoFileManager.logical_filename(name).lower())
-    # InstanceName<Generic>.prt → InstanceName.prt and Generic.prt
+    ext = _extension_of(name)
+    # Prefer generic inside <...> first — that file is what exists in the project.
     for match in _INSTANCE_GENERIC_RE.finditer(name):
         generic = match.group(1).strip()
-        if generic:
-            # Keep extension from outer name when possible
-            ext = ""
-            lower = name.lower()
-            for candidate in (".prt", ".asm", ".drw"):
-                if lower.endswith(candidate) or f"{candidate}." in lower:
-                    ext = candidate
-                    break
-            if not ext and "." in name:
-                ext = "." + name.rsplit(".", 1)[-1]
-            add(CreoFileManager.logical_filename(f"{generic}{ext}" if ext else generic).lower())
-            add(CreoFileManager.logical_filename(generic).lower())
+        if not generic:
+            continue
+        add(f"{generic}{ext}" if ext and not generic.lower().endswith(ext) else generic)
+        add(generic)
+    # Instance without generic marker: INSTALLED.prt
     plain = _INSTANCE_GENERIC_RE.sub("", name)
     if plain and plain != name:
-        add(CreoFileManager.logical_filename(plain).lower())
+        add(plain)
+    # Full Creo display name as last resort
+    add(name)
     return keys
+
+
+def _bom_generic_label(filename: str) -> str | None:
+    """Human label for the generic that an instance name opens, if any."""
+    name = str(filename or "").strip()
+    match = _INSTANCE_GENERIC_RE.search(name)
+    if not match:
+        return None
+    generic = match.group(1).strip()
+    if not generic:
+        return None
+    ext = _extension_of(name)
+    if ext and not generic.lower().endswith(ext):
+        return f"{generic}{ext}"
+    return generic
 
 
 def _project_bom_index(ctx: AppContext, db: Session, project_id: int) -> dict[str, str]:
@@ -87,13 +113,17 @@ def _enrich_bom_tree(nodes: list, by_logical: dict[str, str]) -> list[dict]:
         if not isinstance(node, dict):
             continue
         item = dict(node)
+        filename = str(item.get("filename") or "")
         object_id = ""
-        for key in _bom_lookup_keys(str(item.get("filename") or "")):
+        for key in _bom_lookup_keys(filename):
             object_id = by_logical.get(key) or ""
             if object_id:
                 break
         if object_id:
             item["object_id"] = object_id
+            generic = _bom_generic_label(filename)
+            if generic:
+                item["open_as"] = generic
         children = item.get("children")
         if isinstance(children, list):
             item["children"] = _enrich_bom_tree(children, by_logical)

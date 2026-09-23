@@ -13,7 +13,8 @@
 {% endmacro %}
 {% macro bom_name_link(node) %}
   {% if node.object_id %}
-  <button type="button" class="object-open mono bom-name" data-uuid="{{ node.object_id }}" title="Open {{ node.filename }}">{{ node.filename or "—" }}</button>
+  <button type="button" class="object-open mono bom-name" data-uuid="{{ node.object_id }}"
+          title="{% if node.open_as %}Open generic {{ node.open_as }}{% else %}Open {{ node.filename }}{% endif %}">{{ node.filename or "—" }}</button>
   {% else %}
   <span class="mono bom-name" title="Not in this project">{{ node.filename or "—" }}</span>
   {% endif %}
