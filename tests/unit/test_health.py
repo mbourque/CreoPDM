@@ -77,11 +77,14 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push62" in text
+    assert "push63" in text
     assert "function creoGatherMaterials" in text
     assert "creoFeatureItems(model.ListMaterials())" in text
     assert "PTC_MATERIAL_NAME" in text
     assert "ListSolidBodies" in text
+    assert "allowUndisplayed" in text
+    assert "eraseUndisplayedModelsQuiet" in text
+    assert "Do not RetrieveModel by bare name" in text
     assert "watchWhereUsedIndex" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "runCollectAllMetadata" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "creopdmMetadataCollect" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()

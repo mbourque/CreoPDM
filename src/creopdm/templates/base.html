@@ -601,30 +601,49 @@ function creoEraseKeysPreferParentsFirst(names) {
 /**
  * Second Creo.JS turn after metadata gather. PTC defers Erase until control
  * returns to Creo, so this must not run inside gatherModelMetadata.
- * Prefer EraseUndisplayedModels (same as File → Erase Not Displayed). Fallback:
- * Erase() each name we introduced. Never EraseWithDependencies (disk deletes).
+ * Prefer Erase() on the names we retrieved (quiet). Optional EraseUndisplayedModels
+ * for a final sweep — avoid calling that after every model during bulk collect
+ * (Creo prints "All the objects which were not displayed have been erased").
+ * Never EraseWithDependencies (disk deletes).
  */
-function eraseSessionModelsByNames(names) {
+function eraseSessionModelsByNames(names, opts) {
     try {
         var session = (typeof pfcGetCurrentSession === "function")
           ? pfcGetCurrentSession()
           : pfcGetProESession();
         if (!session) return { erased: 0, undisplayed: false };
-        if (typeof session.EraseUndisplayedModels === "function") {
-            try {
-                session.EraseUndisplayedModels();
-                return { erased: 0, undisplayed: true };
-            } catch (errUndisp) {}
-        }
+        var options = opts || {};
+        var allowUndisplayed = options.allowUndisplayed === true;
         var ordered = creoEraseKeysPreferParentsFirst(names);
         var erased = 0;
         for (var i = 0; i < ordered.length; i++) {
             var model = creoFindSessionModel(session, ordered[i]);
             if (model && creoEraseModelQuiet(model)) erased += 1;
         }
+        if (erased > 0) return { erased: erased, undisplayed: false };
+        if (allowUndisplayed && typeof session.EraseUndisplayedModels === "function") {
+            try {
+                session.EraseUndisplayedModels();
+                return { erased: 0, undisplayed: true };
+            } catch (errUndisp) {}
+        }
         return { erased: erased, undisplayed: false };
     } catch (errAll) {
         return { erased: 0, undisplayed: false };
+    }
+}
+function eraseUndisplayedModelsQuiet() {
+    try {
+        var session = (typeof pfcGetCurrentSession === "function")
+          ? pfcGetCurrentSession()
+          : pfcGetProESession();
+        if (!session || typeof session.EraseUndisplayedModels !== "function") {
+            return false;
+        }
+        session.EraseUndisplayedModels();
+        return true;
+    } catch (err) {
+        return false;
     }
 }
 function creoGatherIdentity(model) {
@@ -1246,11 +1265,9 @@ function creoRetrieveForMetadata(session, filePath, filename) {
         if (shortName) {
             model = creoFindSessionModel(session, shortName);
             if (model) return model;
-            try {
-                var descrName = pfcModelDescriptor.CreateFromFileName(shortName);
-                model = session.RetrieveModel(descrName);
-                if (model) return model;
-            } catch (errName) {}
+            // Do not RetrieveModel by bare name — Creo spams
+            // "'PART' cannot be retrieved" when the file is not on search path.
+            // Callers must pass an absolute filePath (agent cache / vault copy).
         }
         return null;
     } finally {
@@ -1269,7 +1286,7 @@ function gatherModelMetadata(filename, filePath) {
         var beforeKeys = creoSessionModelKeys(session);
         var model = creoFindSessionModel(session, filename);
         var weRetrieved = false;
-        if (!model) {
+        if (!model && filePath) {
             model = creoRetrieveForMetadata(session, filePath, filename);
             weRetrieved = !!model;
         }
@@ -1343,6 +1360,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push62"></script>
+  <script src="/client/app.js?v={{ app_version }}-push63"></script>
 </body>
 </html>

@@ -997,6 +997,13 @@
         setMetadataCollectCancelVisible(true);
         return;
       }
+      if (typeof window.CreoJS?.eraseUndisplayedModelsQuiet === "function") {
+        try {
+          await window.CreoJS.eraseUndisplayedModelsQuiet();
+        } catch {
+          /* final sweep is best-effort */
+        }
+      }
       if (metadataCollectJob.cancel) {
         const msg =
           `Metadata collection cancelled after ${captured + failed} of ${targets.length} ` +
@@ -2788,7 +2795,9 @@
       // PTC defers Erase until Creo regains control — must be a separate Creo.JS turn.
       if (eraseKeys.length && typeof window.CreoJS.eraseSessionModelsByNames === "function") {
         try {
-          await window.CreoJS.eraseSessionModelsByNames(eraseKeys);
+          // Named Erase only — EraseUndisplayedModels spams the Creo message area
+          // during bulk Collect metadata.
+          await window.CreoJS.eraseSessionModelsByNames(eraseKeys, { allowUndisplayed: false });
         } catch {
           /* best-effort session cleanup */
         }
