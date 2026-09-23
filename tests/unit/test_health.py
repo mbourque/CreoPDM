@@ -77,7 +77,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push65" in text
+    assert "push66" in text
     assert "Saved Creo metadata for" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "Materialize start:" in open("src/creopdm_agent/server.py", encoding="utf-8").read()
     assert "PTC_MASTER_MATERIAL" in text
@@ -106,6 +106,9 @@ def test_home_page(client):
     assert "EraseUndisplayedModels" in text
     assert "_pdm_erase_keys" in text
     assert ".EraseWithDependencies" not in text
+    assert "function creoAsSolid" in text
+    assert "GetMassPropertyWithDensity" in text
+    assert "pfcSolid.cast" in text
     app_js = open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "deleteLocalWorkspacePathsBackground" in app_js
     assert "applyAgentPickedPaths" in app_js

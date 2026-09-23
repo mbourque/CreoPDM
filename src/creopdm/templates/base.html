@@ -884,34 +884,64 @@ function creoComponentModelName(feature) {
     } catch (errModel) {}
     return "";
 }
+function creoAsSolid(model) {
+    // Mass / units / features live on pfcSolid. RetrieveModel often returns a
+    // pfcModel handle — cast when Creo.JS exposes pfcSolid.cast.
+    if (!model) return null;
+    try {
+        if (typeof pfcSolid !== "undefined" && typeof pfcSolid.cast === "function") {
+            var casted = pfcSolid.cast(model);
+            if (casted) return casted;
+        }
+    } catch (errCast) {}
+    return model;
+}
+function creoUnitName(unit) {
+    if (!unit) return "";
+    try {
+        if (typeof unit.GetName === "function") {
+            var viaGet = unit.GetName();
+            if (viaGet != null && String(viaGet)) return String(viaGet);
+        }
+    } catch (errG) {}
+    try {
+        if (unit.Name != null && String(unit.Name)) return String(unit.Name);
+    } catch (errN) {}
+    try {
+        if (unit.Expression != null && String(unit.Expression)) return String(unit.Expression);
+    } catch (errE) {}
+    return "";
+}
 function creoGatherUnits(model) {
     var units = { system_name: "", length: "", mass: "", time: "", temperature: "" };
     try {
-        if (typeof model.GetPrincipalUnits !== "function") return units;
-        var system = model.GetPrincipalUnits();
+        var solid = creoAsSolid(model);
+        if (!solid || typeof solid.GetPrincipalUnits !== "function") return units;
+        var system = solid.GetPrincipalUnits();
         if (!system) return units;
-        try { units.system_name = String(system.Name || ""); } catch (errN) {}
+        units.system_name = creoUnitName(system);
         var typeKeys = [
-            ["length", "UNIT_LENGTH"],
-            ["mass", "UNIT_MASS"],
-            ["time", "UNIT_TIME"],
-            ["temperature", "UNIT_TEMPERATURE"]
+            ["length", "UNIT_LENGTH", 0],
+            ["mass", "UNIT_MASS", 1],
+            ["time", "UNIT_TIME", 2],
+            ["temperature", "UNIT_TEMPERATURE", 3]
         ];
         for (var i = 0; i < typeKeys.length; i++) {
             var field = typeKeys[i][0];
             var enumName = typeKeys[i][1];
+            var typeOrdinal = typeKeys[i][2];
             try {
                 var unitType = null;
                 if (typeof pfcUnitType !== "undefined" && pfcUnitType[enumName] != null) {
                     unitType = pfcUnitType[enumName];
+                } else {
+                    unitType = typeOrdinal;
                 }
                 var unit = null;
                 if (unitType != null && typeof system.GetUnit === "function") {
-                    unit = system.GetUnit(unitType);
+                    try { unit = system.GetUnit(unitType); } catch (errGu) { unit = null; }
                 }
-                if (unit) {
-                    try { units[field] = String(unit.Name || unit || ""); } catch (errU) {}
-                }
+                if (unit) units[field] = creoUnitName(unit);
             } catch (errType) {}
         }
     } catch (err) {}
@@ -932,33 +962,69 @@ function creoPoint3(value) {
     } catch (err) {}
     return null;
 }
-function creoGatherMass(model) {
-    var mass = null;
-    try {
-        if (typeof model.GetMassProperty !== "function") return null;
-        var props = null;
-        try {
-            props = model.GetMassProperty(null);
-        } catch (errNull) {
-            try { props = model.GetMassProperty(""); } catch (errEmpty) { props = null; }
-        }
-        if (!props) return null;
-        mass = {
-            mass: null,
-            volume: null,
-            surface_area: null,
-            density: null,
-            gravity_center: null,
-            principal_moments: null
-        };
-        try { mass.mass = Number(props.Mass); } catch (e1) {}
-        try { mass.volume = Number(props.Volume); } catch (e2) {}
-        try { mass.surface_area = Number(props.SurfaceArea); } catch (e3) {}
-        try { mass.density = Number(props.Density); } catch (e4) {}
-        try { mass.gravity_center = creoPoint3(props.GravityCenter); } catch (e5) {}
-        try { mass.principal_moments = creoPoint3(props.PrincipalMoments); } catch (e6) {}
-    } catch (err) {}
+function creoMassFromProps(props) {
+    if (!props) return null;
+    var mass = {
+        mass: null,
+        volume: null,
+        surface_area: null,
+        density: null,
+        gravity_center: null,
+        principal_moments: null
+    };
+    try { mass.mass = Number(props.Mass); } catch (e1) {}
+    try { mass.volume = Number(props.Volume); } catch (e2) {}
+    try { mass.surface_area = Number(props.SurfaceArea); } catch (e3) {}
+    try { mass.density = Number(props.Density); } catch (e4) {}
+    try { mass.gravity_center = creoPoint3(props.GravityCenter); } catch (e5) {}
+    try { mass.principal_moments = creoPoint3(props.PrincipalMoments); } catch (e6) {}
+    // Number(undefined) → NaN; keep only finite numbers.
+    ["mass", "volume", "surface_area", "density"].forEach(function (key) {
+        if (typeof mass[key] !== "number" || !isFinite(mass[key])) mass[key] = null;
+    });
+    if (mass.mass == null && mass.volume == null && mass.density == null) return null;
     return mass;
+}
+function creoGatherMass(model) {
+    try {
+        var solid = creoAsSolid(model);
+        if (!solid) return null;
+        var props = null;
+        if (typeof solid.GetMassProperty === "function") {
+            try { props = solid.GetMassProperty(null); } catch (errNull) { props = null; }
+            if (!props) {
+                try { props = solid.GetMassProperty(""); } catch (errEmpty) { props = null; }
+            }
+            if (!props) {
+                // Some Creo.JS builds want zero args (default csys).
+                try { props = solid.GetMassProperty(); } catch (errZero) { props = null; }
+            }
+        }
+        var parsed = creoMassFromProps(props);
+        if (parsed) return parsed;
+        // SYSTEM_MTRL / no density: compute without mutating stored MP when possible.
+        if (typeof solid.GetMassPropertyWithDensity === "function") {
+            var densityOpt = null;
+            try {
+                if (typeof pfcMPDensityUse !== "undefined") {
+                    densityOpt = pfcMPDensityUse.MP_DENSITY_USE_IF_MISSING
+                        || pfcMPDensityUse.MP_DENSITY_DEFAULT
+                        || null;
+                }
+            } catch (errOpt) { densityOpt = null; }
+            if (densityOpt == null) densityOpt = 2; // MP_DENSITY_USE_IF_MISSING ordinal fallback
+            try {
+                props = solid.GetMassPropertyWithDensity(null, densityOpt, 1.0);
+            } catch (errDens) {
+                try {
+                    props = solid.GetMassPropertyWithDensity("", densityOpt, 1.0);
+                } catch (errDens2) { props = null; }
+            }
+            parsed = creoMassFromProps(props);
+            if (parsed) return parsed;
+        }
+    } catch (err) {}
+    return null;
 }
 function creoFamilyCellString(value) {
     if (value == null) return "";
@@ -983,12 +1049,17 @@ function creoFamilyCellString(value) {
 function creoGatherFeatures(model) {
     var rows = [];
     try {
-        if (typeof model.ListFeaturesByType !== "function") return rows;
+        var solid = creoAsSolid(model);
+        if (!solid || typeof solid.ListFeaturesByType !== "function") return rows;
         var listed = null;
         try {
-            listed = model.ListFeaturesByType(true, null);
+            listed = solid.ListFeaturesByType(true, null);
         } catch (errNull) {
-            try { listed = model.ListFeaturesByType(true); } catch (errOne) { listed = null; }
+            try { listed = solid.ListFeaturesByType(true); } catch (errOne) {
+                try { listed = solid.ListFeaturesByType(false, null); } catch (errFalse) {
+                    try { listed = solid.ListFeaturesByType(false); } catch (errLast) { listed = null; }
+                }
+            }
         }
         var features = creoFeatureItems(listed);
         for (var i = 0; i < features.length; i++) {
@@ -1381,6 +1452,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push65"></script>
+  <script src="/client/app.js?v={{ app_version }}-push66"></script>
 </body>
 </html>
