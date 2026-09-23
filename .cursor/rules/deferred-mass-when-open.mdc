@@ -1,0 +1,19 @@
+---
+description: Deferred — gather mass when model already open in Creo (no silent Retrieve)
+globs: "**/templates/base.html,**/static/js/app.js,**/api/objects.py,**/creo/**"
+alwaysApply: false
+---
+
+# Deferred: mass when already open in Creo
+
+Silent Collect does **not** gather mass: Creo.JS leaves `GetMassProperty` unbound on RetrieveModel / undisplayed session handles. Do not re-add silent mass attempts or Display/OpenFile/CreateModelWindow during Collect.
+
+## Later idea (not implemented)
+
+When a model is **already open/displayed** in Creo (active window / bound solid), Collect (or check-in metadata) can call `GetMassProperty` on that handle without opening anything. Reuse `GetActiveModel` / `CurrentModel` when same file and solid methods are bound.
+
+- Only fills mass for models the user already has open
+- Does not solve batch Collect for thousands of closed files
+- Confirm once on a displayed part before wiring broadly
+
+Mass tab / API can still store mass if a client posts it; Collect simply omits mass today.
