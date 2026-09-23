@@ -37,7 +37,7 @@ _template_env.globals["byte_size"] = format_byte_size
 templates = Jinja2Templates(env=_template_env)
 router = APIRouter()
 
-_INSTANCE_GENERIC_RE = re.compile(r"<[^>]+>")
+_INSTANCE_GENERIC_RE = re.compile(r"<([^>]+)>")
 
 
 def _bom_lookup_keys(filename: str) -> list[str]:
@@ -45,14 +45,31 @@ def _bom_lookup_keys(filename: str) -> list[str]:
     if not name:
         return []
     keys: list[str] = []
-    logical = CreoFileManager.logical_filename(name).lower()
-    if logical:
-        keys.append(logical)
+
+    def add(key: str) -> None:
+        text = (key or "").strip().lower()
+        if text and text not in keys:
+            keys.append(text)
+
+    add(CreoFileManager.logical_filename(name).lower())
+    # InstanceName<Generic>.prt → InstanceName.prt and Generic.prt
+    for match in _INSTANCE_GENERIC_RE.finditer(name):
+        generic = match.group(1).strip()
+        if generic:
+            # Keep extension from outer name when possible
+            ext = ""
+            lower = name.lower()
+            for candidate in (".prt", ".asm", ".drw"):
+                if lower.endswith(candidate) or f"{candidate}." in lower:
+                    ext = candidate
+                    break
+            if not ext and "." in name:
+                ext = "." + name.rsplit(".", 1)[-1]
+            add(CreoFileManager.logical_filename(f"{generic}{ext}" if ext else generic).lower())
+            add(CreoFileManager.logical_filename(generic).lower())
     plain = _INSTANCE_GENERIC_RE.sub("", name)
     if plain and plain != name:
-        plain_logical = CreoFileManager.logical_filename(plain).lower()
-        if plain_logical and plain_logical not in keys:
-            keys.append(plain_logical)
+        add(CreoFileManager.logical_filename(plain).lower())
     return keys
 
 
@@ -380,6 +397,7 @@ def object_detail(
     units = metadata.units or {}
     mass = metadata.mass if isinstance(metadata.mass, dict) else None
     family_table = metadata.family_table if isinstance(metadata.family_table, dict) else {}
+    features = metadata.features if isinstance(metadata.features, list) else []
     bom = metadata.bom if isinstance(metadata.bom, list) else []
     bom = _enrich_bom_tree(bom, _project_bom_index(ctx, db, project.id))
     show_mass_tab = bool(
@@ -393,6 +411,7 @@ def object_detail(
     show_family_tab = bool(
         family_table.get("columns") or family_table.get("rows")
     )
+    show_structure_tab = bool(is_assembly or features)
     return render(
         request,
         "object_detail.html",
@@ -413,8 +432,10 @@ def object_detail(
             "units": units,
             "mass": mass,
             "family_table": family_table,
+            "features": features,
             "show_mass_tab": show_mass_tab,
             "show_family_tab": show_family_tab,
+            "show_structure_tab": show_structure_tab,
             "bom": bom,
             "where_used": where_used.items,
             "workspace_path": str(ctx.config.workspace_for_project(project.uuid)),

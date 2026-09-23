@@ -548,6 +548,7 @@ class CreoMetadataRequest(BaseModel):
     units: dict[str, object] | None = None
     mass: dict[str, object] | None = None
     family_table: dict[str, object] | None = None
+    features: list[dict[str, object]] | None = None
 
 
 class CreoMetadataResponse(BaseModel):
@@ -561,6 +562,7 @@ class CreoMetadataResponse(BaseModel):
     units: dict[str, object] | None = None
     mass: dict[str, object] | None = None
     family_table: dict[str, object] | None = None
+    features: list[dict[str, object]] | None = None
     captured: bool = False
 
 

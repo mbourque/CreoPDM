@@ -27,6 +27,7 @@ class ObjectVersion(Base):
     units_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     mass_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     family_table_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    features_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     git_commit_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, default=0)

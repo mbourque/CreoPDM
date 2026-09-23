@@ -85,6 +85,9 @@ class MetadataService:
         if payload.family_table is not None:
             version.family_table_json = _dumps(payload.family_table)
 
+        if payload.features is not None:
+            version.features_json = _dumps(payload.features)
+
         bom_payload = payload.bom
         if bom_payload is not None:
             if hasattr(bom_payload, "model_dump"):
@@ -149,6 +152,8 @@ class MetadataService:
         units = _loads(version.units_json)
         mass = _loads(version.mass_json)
         family_table = _loads(version.family_table_json)
+        features_raw = _loads(version.features_json)
+        features = features_raw if isinstance(features_raw, list) else None
         captured = bool(
             identity
             or materials
@@ -156,6 +161,7 @@ class MetadataService:
             or units
             or mass
             or family_table
+            or features
             or params
             or dep_payloads
         )
@@ -180,6 +186,7 @@ class MetadataService:
             units=units if isinstance(units, dict) else None,
             mass=mass if isinstance(mass, dict) else None,
             family_table=family_table if isinstance(family_table, dict) else None,
+            features=features,
             captured=captured,
         )
 

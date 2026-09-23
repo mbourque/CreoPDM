@@ -157,6 +157,10 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
                     {"instance": "SHAFT_LONG", "cells": ["10", "200"]},
                 ],
             },
+            "features": [
+                {"id": 1, "name": "FIRST_FEATURE", "type": "FIRST_FEAT", "subtype": ""},
+                {"id": 39, "name": "Extrude 1", "type": "PROTRUSION", "subtype": "Extrude"},
+            ],
         },
     )
     assert shaft_meta.status_code == 200, shaft_meta.text
@@ -168,9 +172,12 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert 'class="is-assigned"' in shaft_detail.text
     assert 'data-tab="mass"' in shaft_detail.text
     assert 'data-tab="family"' in shaft_detail.text
+    assert 'data-tab="structure"' in shaft_detail.text
     assert "mmNs" in shaft_detail.text
     assert "SHAFT_LONG" in shaft_detail.text
     assert "1.25" in shaft_detail.text
+    assert "Extrude 1" in shaft_detail.text
+    assert "Feature tree for this part" in shaft_detail.text
 
 
 @requires_git

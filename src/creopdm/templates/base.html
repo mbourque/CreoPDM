@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-toolbar14">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-toolbar15">
   <script>
     /* Suppress PTC creojs.js noise outside Creo's browser (and when Creo injects its own copy). */
     (function () {
@@ -790,6 +790,51 @@ function creoFamilyCellString(value) {
         return "";
     }
 }
+function creoGatherFeatures(model) {
+    var rows = [];
+    try {
+        if (typeof model.ListFeaturesByType !== "function") return rows;
+        var listed = null;
+        try {
+            listed = model.ListFeaturesByType(true, null);
+        } catch (errNull) {
+            try { listed = model.ListFeaturesByType(true); } catch (errOne) { listed = null; }
+        }
+        var features = creoFeatureItems(listed);
+        for (var i = 0; i < features.length; i++) {
+            var feat = features[i];
+            if (!feat) continue;
+            try {
+                if (typeof feat.IsVisible !== "undefined" && feat.IsVisible === false) continue;
+            } catch (errVis) {}
+            // Skip assembly component features here — those belong in BOM/structure.
+            try {
+                if (typeof pfcFeatureType !== "undefined" && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
+                    continue;
+                }
+            } catch (errComp) {}
+            var name = "";
+            try { name = String(feat.Name || ""); } catch (errN) { name = ""; }
+            var typeName = "";
+            try { typeName = String(feat.FeatTypeName || ""); } catch (errT) { typeName = ""; }
+            var subType = "";
+            try { subType = String(feat.FeatSubType || ""); } catch (errS) { subType = ""; }
+            var id = null;
+            try {
+                if (typeof feat.Id !== "undefined") id = feat.Id;
+                else if (typeof feat.GetId === "function") id = feat.GetId();
+            } catch (errId) { id = null; }
+            if (!name && !typeName) continue;
+            rows.push({
+                id: id,
+                name: name || ("Feature " + (id != null ? id : (i + 1))),
+                type: typeName,
+                subtype: subType
+            });
+        }
+    } catch (err) {}
+    return rows;
+}
 function creoGatherFamilyTable(model) {
     var table = { columns: [], rows: [] };
     try {
@@ -1060,14 +1105,19 @@ function gatherModelMetadata(filename, filePath) {
         var units = creoGatherUnits(model);
         var mass = creoGatherMass(model);
         var family_table = creoGatherFamilyTable(model);
+        var features = [];
         var bom = [];
         try {
             var type = model.Type;
             var isAsm = false;
+            var isPart = false;
             if (typeof pfcModelType !== "undefined") {
                 isAsm = type === pfcModelType.MDL_ASSEMBLY;
+                isPart = type === pfcModelType.MDL_PART;
             } else {
-                isAsm = String(identity.file_name || filename).toLowerCase().indexOf(".asm") >= 0;
+                var lowerName = String(identity.file_name || filename).toLowerCase();
+                isAsm = lowerName.indexOf(".asm") >= 0;
+                isPart = lowerName.indexOf(".prt") >= 0;
             }
             if (isAsm) {
                 bom = creoGatherBomTree(model, session);
@@ -1081,6 +1131,8 @@ function gatherModelMetadata(filename, filePath) {
                         });
                     }
                 }
+            } else if (isPart) {
+                features = creoGatherFeatures(model);
             }
         } catch (errBom) {}
         return {
@@ -1091,13 +1143,14 @@ function gatherModelMetadata(filename, filePath) {
             bom: bom,
             units: units,
             mass: mass,
-            family_table: family_table
+            family_table: family_table,
+            features: features
         };
     } catch (errAll) {
         return null;
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push42"></script>
+  <script src="/client/app.js?v={{ app_version }}-push43"></script>
 </body>
 </html>

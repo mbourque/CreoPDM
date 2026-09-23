@@ -114,8 +114,10 @@
     {% if show_family_tab %}
     <button type="button" class="tab" data-tab="family">Family Table</button>
     {% endif %}
-    {% if is_assembly %}
+    {% if show_structure_tab %}
     <button type="button" class="tab" data-tab="structure">Structure</button>
+    {% endif %}
+    {% if is_assembly %}
     <button type="button" class="tab" data-tab="bom">BOM</button>
     {% endif %}
     <button type="button" class="tab" data-tab="where-used">Where Used</button>
@@ -305,19 +307,51 @@
   </section>
   {% endif %}
 
-  {% if is_assembly %}
+  {% if show_structure_tab %}
   <section class="tab-panel" id="panel-structure" hidden>
-    {% if bom %}
+    {% if is_assembly and bom %}
     <p class="muted small">Model tree — top assembly first, subassemblies and parts indented.</p>
+    <p class="muted small bom-legend">
+      <span class="bom-legend-in">Linked names</span> are in this project (click to open).
+      <span class="bom-legend-out">Plain names</span> are not in the project yet.
+    </p>
     <ul class="bom-tree bom-tree-root">{{ bom_tree(bom) }}</ul>
+    {% elif features %}
+    <p class="muted small">Feature tree for this part (visible Creo features).</p>
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Subtype</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for feat in features %}
+        <tr>
+          <td class="mono">{{ feat.id if feat.id is not none else loop.index }}</td>
+          <td class="mono">{{ feat.name }}</td>
+          <td>{{ feat.type or "" }}</td>
+          <td>{{ feat.subtype or "" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
     {% else %}
-    <p class="muted">No assembly structure captured yet. Open the assembly in Creo and Check In / Add while it is in session.</p>
+    <p class="muted">No structure captured yet. Open the model in Creo and Check In / Add while it is in session.</p>
     {% endif %}
   </section>
+  {% endif %}
 
+  {% if is_assembly %}
   <section class="tab-panel" id="panel-bom" hidden>
     {% if bom %}
     <p class="muted small">Indented BOM with quantity at each level (same hierarchy as Structure).</p>
+    <p class="muted small bom-legend">
+      <span class="bom-legend-in">Linked names</span> are in this project (click to open).
+      <span class="bom-legend-out">Plain names</span> are not in the project yet.
+    </p>
     <table class="grid">
       <thead>
         <tr>
