@@ -802,53 +802,48 @@ function creoGatherFeatures(model) {
         }
         var features = creoFeatureItems(listed);
         for (var i = 0; i < features.length; i++) {
-            var feat = features[i];
-            if (!feat) continue;
             try {
-                if (typeof feat.IsVisible !== "undefined" && feat.IsVisible === false) continue;
-            } catch (errVis) {}
-            // Skip assembly component features here — those belong in BOM/structure.
-            try {
-                if (typeof pfcFeatureType !== "undefined" && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
-                    continue;
-                }
-            } catch (errComp) {}
-            // pfcModelItem exposes GetName(); .Name is not a feature property.
-            var name = "";
-            try {
-                if (typeof feat.GetName === "function") {
-                    var got = feat.GetName();
-                    if (got != null && got !== "") name = String(got);
-                }
-            } catch (errGet) { name = ""; }
-            if (!name) {
-                try { name = String(feat.Name || ""); } catch (errN) { name = ""; }
-            }
-            var typeName = "";
-            try { typeName = String(feat.FeatTypeName || ""); } catch (errT) { typeName = ""; }
-            var subType = "";
-            try { subType = String(feat.FeatSubType || ""); } catch (errS) { subType = ""; }
-            var id = null;
-            try {
-                if (typeof feat.Id !== "undefined") id = feat.Id;
-                else if (typeof feat.GetId === "function") id = feat.GetId();
-            } catch (errId) { id = null; }
-            var regenNum = null;
-            try {
-                if (typeof feat.Number !== "undefined" && feat.Number != null) regenNum = feat.Number;
-            } catch (errNum) { regenNum = null; }
-            if (!name) {
+                var feat = features[i];
+                if (!feat) continue;
+                try {
+                    if (typeof feat.IsVisible !== "undefined" && feat.IsVisible === false) continue;
+                } catch (errVis) {}
+                // Skip assembly component features here — those belong in BOM/structure.
+                try {
+                    if (typeof pfcFeatureType !== "undefined" && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
+                        continue;
+                    }
+                } catch (errComp) {}
+                var typeName = "";
+                try { typeName = String(feat.FeatTypeName || ""); } catch (errT) { typeName = ""; }
+                var subType = "";
+                try { subType = String(feat.FeatSubType || ""); } catch (errS) { subType = ""; }
+                var id = null;
+                try {
+                    if (typeof feat.Id !== "undefined") id = feat.Id;
+                    else if (typeof feat.GetId === "function") id = feat.GetId();
+                } catch (errId) { id = null; }
+                var regenNum = null;
+                try {
+                    if (typeof feat.Number !== "undefined" && feat.Number != null) regenNum = feat.Number;
+                } catch (errNum) { regenNum = null; }
+                // Do not call feat.GetName() here: Creo.JS often aborts the whole
+                // metadata gather on unnamed features (uncatchable toolkit error).
+                var name = "";
                 if (subType && regenNum != null) name = subType + " " + regenNum;
                 else if (typeName && regenNum != null) name = typeName + " " + regenNum;
                 else if (subType) name = subType;
+                else if (typeName) name = typeName;
+                if (!name && !typeName && id == null) continue;
+                rows.push({
+                    id: id,
+                    name: name || ("Feature " + (id != null ? id : (i + 1))),
+                    type: typeName,
+                    subtype: subType
+                });
+            } catch (errFeat) {
+                continue;
             }
-            if (!name && !typeName) continue;
-            rows.push({
-                id: id,
-                name: name || ("Feature " + (id != null ? id : (i + 1))),
-                type: typeName,
-                subtype: subType
-            });
         }
     } catch (err) {}
     return rows;
@@ -1150,7 +1145,11 @@ function gatherModelMetadata(filename, filePath) {
                     }
                 }
             } else if (isPart) {
-                features = creoGatherFeatures(model);
+                try {
+                    features = creoGatherFeatures(model);
+                } catch (errFeatGather) {
+                    features = [];
+                }
             }
         } catch (errBom) {}
         return {
@@ -1169,6 +1168,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push45"></script>
+  <script src="/client/app.js?v={{ app_version }}-push47"></script>
 </body>
 </html>

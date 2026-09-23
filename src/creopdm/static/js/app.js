@@ -2317,7 +2317,9 @@
         units: snapshot.units || null,
         mass: snapshot.mass || null,
         family_table: snapshot.family_table || null,
-        features: Array.isArray(snapshot.features) ? snapshot.features : null,
+        features: Array.isArray(snapshot.features) && snapshot.features.length
+          ? snapshot.features
+          : null,
       };
       try {
         await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {
