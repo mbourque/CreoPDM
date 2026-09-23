@@ -47,6 +47,11 @@ def is_user_cancelled(exc: BaseException) -> bool:
     return False
 
 
+def creo_model_dialog_filter_patterns() -> str:
+    """Default Add filter: numbered Creo parts, assemblies, and drawings."""
+    return "*.prt.*;*.asm.*;*.drw.*"
+
+
 def cad_dialog_filter_patterns() -> str:
     """Glob list for the native file picker, including Creo numbered saves.
 
@@ -74,6 +79,16 @@ def cad_dialog_filter_patterns() -> str:
 def document_dialog_filter_patterns() -> str:
     """Glob list for the Documents group in the native file picker."""
     return ";".join(f"*{ext}" for ext in DEFAULT_DOCUMENT_EXTENSIONS)
+
+
+def add_files_dialog_filter_pairs() -> list[tuple[str, str]]:
+    """Filter groups for Add files: Creo models first, then All files, then others."""
+    return [
+        ("Creo models (*.prt.*, *.asm.*, *.drw.*)", creo_model_dialog_filter_patterns()),
+        ("All files (*.*)", "*.*"),
+        ("CAD files", cad_dialog_filter_patterns()),
+        ("Documents", document_dialog_filter_patterns()),
+    ]
 
 
 def _is_windows() -> bool:
@@ -177,7 +192,10 @@ def _winforms_open_dialog(initial_dir: Path, title: str) -> list[Path]:
         "$d.InitialDirectory = $env:CREOPDM_DIALOG_DIR; "
         "$d.Title = $env:CREOPDM_DIALOG_TITLE; "
         "$d.Multiselect = $true; "
-        f"$d.Filter = 'All files (*.*)|*.*|CAD files|{cad_dialog_filter_patterns()}|Documents|{document_dialog_filter_patterns()}'; "
+        "$d.Filter = '"
+        + "|".join(f"{label}|{patterns}" for label, patterns in add_files_dialog_filter_pairs())
+        + "'; "
+        "$d.FilterIndex = 1; "
         "$d.CheckFileExists = $true; "
         "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { "
         "$d.FileNames | ForEach-Object { $_ } }"
@@ -402,13 +420,14 @@ def _windows_open_dialog(initial_dir: Path, title: str) -> list[Path]:
 
     buffer_chars = 32768
     file_buf = ctypes.create_unicode_buffer(buffer_chars)
-    cad_patterns = cad_dialog_filter_patterns()
-    document_patterns = document_dialog_filter_patterns()
-    filter_text = (
-        "All files\0*.*\0"
-        f"CAD files\0{cad_patterns}\0"
-        f"Documents\0{document_patterns}\0\0"
-    )
+    # GetOpenFileNameW: pairs are display\0patterns\0… ending with \0\0.
+    filter_chunks: list[str] = []
+    for label, patterns in add_files_dialog_filter_pairs():
+        # Strip "(*.*)" style hints from WinForms labels for the classic dialog.
+        short_label = label.split(" (", 1)[0]
+        filter_chunks.append(short_label)
+        filter_chunks.append(patterns)
+    filter_text = "\0".join(filter_chunks) + "\0\0"
     filter_buf = ctypes.create_unicode_buffer(len(filter_text) + 2)
     for index, char in enumerate(filter_text):
         filter_buf[index] = char

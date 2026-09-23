@@ -1,6 +1,11 @@
 from creopdm.constants import APP_NAME, APP_VERSION
 from creopdm.creo.file_manager import CreoFileManager
-from creopdm.utils.native_dialog import cad_dialog_filter_patterns, document_dialog_filter_patterns
+from creopdm.utils.native_dialog import (
+    add_files_dialog_filter_pairs,
+    cad_dialog_filter_patterns,
+    creo_model_dialog_filter_patterns,
+    document_dialog_filter_patterns,
+)
 
 
 def test_normalize_creo_numbered_files():
@@ -267,9 +272,22 @@ def test_cad_dialog_filter_includes_numbered_defaults():
     assert "*.*.tmz" not in patterns
     assert "*.pvz;*.pvz.*;*.*.pvz" in patterns
     assert "*.wrl;*.wrl.*;*.*.wrl" in patterns
-    assert "*.idx;*.idx.*;*.*.idx" in patterns
+    assert "*.idx;*.idx.*" in patterns
+    assert "*.*.idx" not in patterns
     assert "*.3mf;*.3mf.*;*.*.3mf" in patterns
     assert "*.x_t;*.x_t.*;*.*.x_t" in patterns
+
+
+def test_creo_model_dialog_filter_is_numbered_prt_asm_drw():
+    assert creo_model_dialog_filter_patterns() == "*.prt.*;*.asm.*;*.drw.*"
+
+
+def test_add_files_dialog_puts_creo_models_before_all_files():
+    pairs = add_files_dialog_filter_pairs()
+    assert pairs[0][1] == "*.prt.*;*.asm.*;*.drw.*"
+    assert pairs[1][1] == "*.*"
+    assert "CAD files" in pairs[2][0]
+    assert "Documents" in pairs[3][0]
 
 
 def test_document_dialog_filter_includes_known_documents():
