@@ -390,7 +390,9 @@ def object_detail(
     show_family_tab = bool(
         family_table.get("columns") or family_table.get("rows")
     )
-    show_structure_tab = bool(is_assembly or features)
+    # Features = Creo feature list; Structure = assembly model tree (separate tabs).
+    show_features_tab = bool(features)
+    show_structure_tab = bool(is_assembly)
     return render(
         request,
         "object_detail.html",
@@ -414,6 +416,7 @@ def object_detail(
             "features": features,
             "show_mass_tab": show_mass_tab,
             "show_family_tab": show_family_tab,
+            "show_features_tab": show_features_tab,
             "show_structure_tab": show_structure_tab,
             "bom": bom,
             "where_used": where_used.items,

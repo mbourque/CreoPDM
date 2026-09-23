@@ -1801,9 +1801,10 @@ function gatherModelMetadata(filename, filePath) {
                         });
                     }
                 }
-                gatherDebug.features.reason = "skipped_asm";
                 gatherDebug.bom_children = topChildren.length;
-            } else if (isPart) {
+            }
+            if (isAsm || isPart) {
+                // Parts + assemblies: feature list (COMPONENT feats skipped inside gather).
                 try {
                     features = creoGatherFeatures(solidModel, gatherDebug.features, session);
                 } catch (errFeatGather) {
@@ -1853,6 +1854,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push71"></script>
+  <script src="/client/app.js?v={{ app_version }}-push72"></script>
 </body>
 </html>

@@ -119,6 +119,9 @@
     {% if show_family_tab %}
     <button type="button" class="tab" data-tab="family">Family Table</button>
     {% endif %}
+    {% if show_features_tab %}
+    <button type="button" class="tab" data-tab="features">Features</button>
+    {% endif %}
     {% if show_structure_tab %}
     <button type="button" class="tab" data-tab="structure">Structure</button>
     {% endif %}
@@ -312,17 +315,9 @@
   </section>
   {% endif %}
 
-  {% if show_structure_tab %}
-  <section class="tab-panel" id="panel-structure" hidden>
-    {% if is_assembly and bom %}
-    <p class="muted small">Model tree — top assembly first, subassemblies and parts indented.</p>
-    <p class="muted small bom-legend">
-      <span class="bom-legend-in">Linked names</span> are in this project (click to open).
-      <span class="bom-legend-out">Plain names</span> are not in the project yet.
-    </p>
-    <ul class="bom-tree bom-tree-root">{{ bom_tree(bom) }}</ul>
-    {% elif features %}
-    <p class="muted small">Feature tree for this part (visible Creo features).</p>
+  {% if show_features_tab %}
+  <section class="tab-panel" id="panel-features" hidden>
+    <p class="muted small">Visible Creo features for this model (components are listed under Structure / BOM).</p>
     <table class="grid">
       <thead>
         <tr>
@@ -343,6 +338,18 @@
         {% endfor %}
       </tbody>
     </table>
+  </section>
+  {% endif %}
+
+  {% if show_structure_tab %}
+  <section class="tab-panel" id="panel-structure" hidden>
+    {% if bom %}
+    <p class="muted small">Model tree — top assembly first, subassemblies and parts indented.</p>
+    <p class="muted small bom-legend">
+      <span class="bom-legend-in">Linked names</span> are in this project (click to open).
+      <span class="bom-legend-out">Plain names</span> are not in the project yet.
+    </p>
+    <ul class="bom-tree bom-tree-root">{{ bom_tree(bom) }}</ul>
     {% else %}
     <p class="muted">No structure captured yet. Open the model in Creo and Check In / Add while it is in session.</p>
     {% endif %}
