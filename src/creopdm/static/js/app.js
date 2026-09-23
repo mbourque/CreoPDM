@@ -2301,6 +2301,18 @@
       const snapshot = await window.CreoJS.gatherModelMetadata(filename, filePath || "");
       if (!snapshot || typeof snapshot !== "object") return null;
       if (typeof snapshot === "string" && snapshot.startsWith("CREOPDM_ERROR:")) return null;
+      const eraseKeys = Array.isArray(snapshot._pdm_erase_keys)
+        ? snapshot._pdm_erase_keys.filter((name) => typeof name === "string" && name.trim())
+        : [];
+      delete snapshot._pdm_erase_keys;
+      // PTC defers Erase until Creo regains control — must be a separate Creo.JS turn.
+      if (eraseKeys.length && typeof window.CreoJS.eraseSessionModelsByNames === "function") {
+        try {
+          await window.CreoJS.eraseSessionModelsByNames(eraseKeys);
+        } catch {
+          /* best-effort session cleanup */
+        }
+      }
       return snapshot;
     } catch {
       return null;

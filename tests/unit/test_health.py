@@ -77,11 +77,12 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push51" in text
+    assert "push52" in text
     assert "function gatherModelMetadata" in text
     assert "function creoRetrieveForMetadata" in text
-    assert "function creoEraseMetadataSessionLoads" in text
-    assert "model.Erase" in text or "creoEraseModelQuiet" in text
+    assert "function eraseSessionModelsByNames" in text
+    assert "EraseUndisplayedModels" in text
+    assert "_pdm_erase_keys" in text
     assert ".EraseWithDependencies" not in text
     assert "function creoGatherMass" in text
     assert "function creoGatherUnits" in text

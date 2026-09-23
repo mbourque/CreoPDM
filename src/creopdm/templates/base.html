@@ -572,49 +572,60 @@ function creoSessionModelKeys(session) {
     return keys;
 }
 function creoEraseModelQuiet(model) {
-    if (!model || typeof model.Erase !== "function") return;
+    if (!model || typeof model.Erase !== "function") return false;
     try {
         model.Erase();
-    } catch (errErase) {}
+        return true;
+    } catch (errErase) {
+        return false;
+    }
 }
-function creoEraseMetadataSessionLoads(session, beforeKeys, rootModel) {
-    /**
-     * Remove models we pulled in only for metadata gather.
-     * Uses Erase() (session only) — never EraseWithDependencies (can delete disk files).
-     * Leaves models that were already in session before retrieve.
-     */
-    if (!session) return;
-    // Erase the retrieved root first (assembly depends on children).
-    creoEraseModelQuiet(rootModel);
-    if (!beforeKeys || typeof session.ListModels !== "function") return;
+function creoEraseKeysPreferParentsFirst(names) {
+    var list = [];
+    var seen = {};
+    for (var i = 0; i < (names || []).length; i++) {
+        var logical = creoLogicalFileName(String(names[i] || "")).toLowerCase();
+        if (!logical || seen[logical]) continue;
+        seen[logical] = true;
+        list.push(logical);
+    }
+    list.sort(function (a, b) {
+        var rank = function (name) {
+            if (name.indexOf(".asm") >= 0 || name.indexOf(".drw") >= 0) return 0;
+            return 1;
+        };
+        return rank(a) - rank(b);
+    });
+    return list;
+}
+/**
+ * Second Creo.JS turn after metadata gather. PTC defers Erase until control
+ * returns to Creo, so this must not run inside gatherModelMetadata.
+ * Prefer EraseUndisplayedModels (same as File → Erase Not Displayed). Fallback:
+ * Erase() each name we introduced. Never EraseWithDependencies (disk deletes).
+ */
+function eraseSessionModelsByNames(names) {
     try {
-        var listed = session.ListModels();
-        var count = null;
-        if (listed && typeof listed.getCount === "function") count = listed.getCount();
-        else if (listed && typeof listed.Count !== "undefined" && listed.Count != null) count = listed.Count;
-        else if (listed && typeof listed.length === "number") count = listed.length;
-        if (count == null) return;
-        var extras = [];
-        for (var i = 0; i < count; i++) {
-            var item = null;
+        var session = (typeof pfcGetCurrentSession === "function")
+          ? pfcGetCurrentSession()
+          : pfcGetProESession();
+        if (!session) return { erased: 0, undisplayed: false };
+        if (typeof session.EraseUndisplayedModels === "function") {
             try {
-                if (typeof listed.Item === "function") item = listed.Item(i);
-                else if (typeof listed.get === "function") item = listed.get(i);
-                else item = listed[i];
-            } catch (errItem) {
-                item = null;
-            }
-            if (!item) continue;
-            var name = "";
-            try { name = String(item.FileName || ""); } catch (errName) { name = ""; }
-            var logical = creoLogicalFileName(name).toLowerCase();
-            if (!logical || beforeKeys[logical]) continue;
-            extras.push(item);
+                session.EraseUndisplayedModels();
+                return { erased: 0, undisplayed: true };
+            } catch (errUndisp) {}
         }
-        for (var j = 0; j < extras.length; j++) {
-            creoEraseModelQuiet(extras[j]);
+        var ordered = creoEraseKeysPreferParentsFirst(names);
+        var erased = 0;
+        for (var i = 0; i < ordered.length; i++) {
+            var model = creoFindSessionModel(session, ordered[i]);
+            if (model && creoEraseModelQuiet(model)) erased += 1;
         }
-    } catch (errSweep) {}
+        return { erased: erased, undisplayed: false };
+    } catch (errAll) {
+        return { erased: 0, undisplayed: false };
+    }
 }
 function creoGatherIdentity(model) {
     var identity = {
@@ -1199,69 +1210,73 @@ function gatherModelMetadata(filename, filePath) {
         if (!model) {
             return null;
         }
+        var identity = creoGatherIdentity(model);
+        var parameters = creoGatherParameters(model);
+        var materials = creoGatherMaterials(model);
+        var dependencies = creoGatherDependencies(model);
+        var units = creoGatherUnits(model);
+        var mass = creoGatherMass(model);
+        var family_table = creoGatherFamilyTable(model);
+        var features = [];
+        var bom = [];
         try {
-            var identity = creoGatherIdentity(model);
-            var parameters = creoGatherParameters(model);
-            var materials = creoGatherMaterials(model);
-            var dependencies = creoGatherDependencies(model);
-            var units = creoGatherUnits(model);
-            var mass = creoGatherMass(model);
-            var family_table = creoGatherFamilyTable(model);
-            var features = [];
-            var bom = [];
-            try {
-                var type = model.Type;
-                var isAsm = false;
-                var isPart = false;
-                if (typeof pfcModelType !== "undefined") {
-                    isAsm = type === pfcModelType.MDL_ASSEMBLY;
-                    isPart = type === pfcModelType.MDL_PART;
-                } else {
-                    var lowerName = String(identity.file_name || filename).toLowerCase();
-                    isAsm = lowerName.indexOf(".asm") >= 0;
-                    isPart = lowerName.indexOf(".prt") >= 0;
-                }
-                if (isAsm) {
-                    bom = creoGatherBomTree(model, session);
-                    var topChildren = (bom[0] && bom[0].children) ? bom[0].children : [];
-                    if (!dependencies.length && topChildren.length) {
-                        for (var i = 0; i < topChildren.length; i++) {
-                            dependencies.push({
-                                filename: topChildren[i].filename,
-                                quantity: topChildren[i].quantity,
-                                dependency_type: "ASSEMBLY_MEMBER"
-                            });
-                        }
-                    }
-                } else if (isPart) {
-                    try {
-                        features = creoGatherFeatures(model);
-                    } catch (errFeatGather) {
-                        features = [];
+            var type = model.Type;
+            var isAsm = false;
+            var isPart = false;
+            if (typeof pfcModelType !== "undefined") {
+                isAsm = type === pfcModelType.MDL_ASSEMBLY;
+                isPart = type === pfcModelType.MDL_PART;
+            } else {
+                var lowerName = String(identity.file_name || filename).toLowerCase();
+                isAsm = lowerName.indexOf(".asm") >= 0;
+                isPart = lowerName.indexOf(".prt") >= 0;
+            }
+            if (isAsm) {
+                bom = creoGatherBomTree(model, session);
+                var topChildren = (bom[0] && bom[0].children) ? bom[0].children : [];
+                if (!dependencies.length && topChildren.length) {
+                    for (var i = 0; i < topChildren.length; i++) {
+                        dependencies.push({
+                            filename: topChildren[i].filename,
+                            quantity: topChildren[i].quantity,
+                            dependency_type: "ASSEMBLY_MEMBER"
+                        });
                     }
                 }
-            } catch (errBom) {}
-            return {
-                identity: identity,
-                parameters: parameters,
-                materials: materials,
-                dependencies: dependencies,
-                bom: bom,
-                units: units,
-                mass: mass,
-                family_table: family_table,
-                features: features
-            };
-        } finally {
-            if (weRetrieved) {
-                creoEraseMetadataSessionLoads(session, beforeKeys, model);
+            } else if (isPart) {
+                try {
+                    features = creoGatherFeatures(model);
+                } catch (errFeatGather) {
+                    features = [];
+                }
+            }
+        } catch (errBom) {}
+        var eraseKeys = [];
+        if (weRetrieved) {
+            var afterKeys = creoSessionModelKeys(session);
+            for (var key in afterKeys) {
+                if (!Object.prototype.hasOwnProperty.call(afterKeys, key)) continue;
+                if (!beforeKeys[key]) eraseKeys.push(key);
             }
         }
+        return {
+            identity: identity,
+            parameters: parameters,
+            materials: materials,
+            dependencies: dependencies,
+            bom: bom,
+            units: units,
+            mass: mass,
+            family_table: family_table,
+            features: features,
+            // Consumed by app.js on a later Creo.JS turn (Erase is deferred by PTC).
+            _pdm_erase_keys: eraseKeys
+        };
     } catch (errAll) {
         return null;
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push51"></script>
+  <script src="/client/app.js?v={{ app_version }}-push52"></script>
 </body>
 </html>
