@@ -807,6 +807,24 @@ body.is-file-drag #file-drop-overlay {
   font-family: Consolas, "Cascadia Mono", monospace;
 }
 .bom-node.is-root > .bom-line .bom-name { font-weight: 650; }
+.bom-line .object-open.bom-name {
+  font-size: inherit;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--accent, #0b57d0);
+}
+.bom-line .object-open.bom-name:hover,
+.filename-cell .object-open.bom-name:hover { text-decoration: underline; }
+.filename-cell .object-open.bom-name {
+  font-size: inherit;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--accent, #0b57d0);
+}
 .bom-indent { display: inline-block; }
 .grid tr.is-root td { font-weight: 650; }
 .meta-empty { margin-top: 0.75rem; }

@@ -125,6 +125,8 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert "top.asm" in text
     assert "pin.prt" in text
     assert "bom-tree-root" in text
+    assert f'data-uuid="{shaft["uuid"]}"' in text
+    assert 'class="object-open mono bom-name"' in text
 
     shaft_meta = client.post(
         f"/api/objects/{shaft['uuid']}/creo-metadata",

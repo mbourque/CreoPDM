@@ -18,6 +18,7 @@ from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import project_to_response, revision_display
 from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPSED_COOKIE
 from creopdm.context import AppContext
+from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import ProjectNotFoundError
 from creopdm.utils.files import format_byte_size
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
@@ -35,6 +36,52 @@ _template_env.globals["local_time"] = format_local
 _template_env.globals["byte_size"] = format_byte_size
 templates = Jinja2Templates(env=_template_env)
 router = APIRouter()
+
+_INSTANCE_GENERIC_RE = re.compile(r"<[^>]+>")
+
+
+def _bom_lookup_keys(filename: str) -> list[str]:
+    name = str(filename or "").strip()
+    if not name:
+        return []
+    keys: list[str] = []
+    logical = CreoFileManager.logical_filename(name).lower()
+    if logical:
+        keys.append(logical)
+    plain = _INSTANCE_GENERIC_RE.sub("", name)
+    if plain and plain != name:
+        plain_logical = CreoFileManager.logical_filename(plain).lower()
+        if plain_logical and plain_logical not in keys:
+            keys.append(plain_logical)
+    return keys
+
+
+def _project_bom_index(ctx: AppContext, db: Session, project_id: int) -> dict[str, str]:
+    index: dict[str, str] = {}
+    for row in ctx.objects.list_objects(db, project_id):
+        for key in _bom_lookup_keys(row.filename):
+            index.setdefault(key, row.uuid)
+    return index
+
+
+def _enrich_bom_tree(nodes: list, by_logical: dict[str, str]) -> list[dict]:
+    enriched: list[dict] = []
+    for node in nodes or []:
+        if not isinstance(node, dict):
+            continue
+        item = dict(node)
+        object_id = ""
+        for key in _bom_lookup_keys(str(item.get("filename") or "")):
+            object_id = by_logical.get(key) or ""
+            if object_id:
+                break
+        if object_id:
+            item["object_id"] = object_id
+        children = item.get("children")
+        if isinstance(children, list):
+            item["children"] = _enrich_bom_tree(children, by_logical)
+        enriched.append(item)
+    return enriched
 
 
 def _folder_page(
@@ -334,6 +381,7 @@ def object_detail(
     mass = metadata.mass if isinstance(metadata.mass, dict) else None
     family_table = metadata.family_table if isinstance(metadata.family_table, dict) else {}
     bom = metadata.bom if isinstance(metadata.bom, list) else []
+    bom = _enrich_bom_tree(bom, _project_bom_index(ctx, db, project.id))
     show_mass_tab = bool(
         mass
         and (

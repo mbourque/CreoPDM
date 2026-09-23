@@ -4805,6 +4805,21 @@
     });
   });
 
+  document.addEventListener("click", (event) => {
+    const link = eventEl(event)?.closest("#panel-structure .object-open, #panel-bom .object-open");
+    if (!link) return;
+    event.preventDefault();
+    const id = link.dataset.uuid;
+    if (!id) return;
+    void openPdmObjectFromUi(id, {
+      dataset: {
+        filename: link.textContent?.trim() || id,
+        canCheckout: "1",
+        owned: "0",
+      },
+    });
+  });
+
   restoreStoredFilters();
   syncToolbar();
 })();

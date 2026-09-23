@@ -11,12 +11,19 @@
     {% endif %}
   {% endif %}
 {% endmacro %}
+{% macro bom_name_link(node) %}
+  {% if node.object_id %}
+  <button type="button" class="object-open mono bom-name" data-uuid="{{ node.object_id }}" title="Open {{ node.filename }}">{{ node.filename or "—" }}</button>
+  {% else %}
+  <span class="mono bom-name" title="Not in this project">{{ node.filename or "—" }}</span>
+  {% endif %}
+{% endmacro %}
 {% macro bom_tree(nodes, depth=0) %}
   {% for node in nodes %}
   <li class="bom-node{% if node.children %} has-children{% endif %}{% if node.dependency_type == 'ASSEMBLY_ROOT' %} is-root{% endif %}">
     <div class="bom-line" style="padding-left: {{ depth * 1.15 }}rem">
       <span class="bom-branch" aria-hidden="true">{% if depth %}└{% else %}●{% endif %}</span>
-      <span class="mono bom-name">{{ node.filename or "—" }}</span>
+      {{ bom_name_link(node) }}
       {% if node.quantity and node.quantity != 1 %}
       <span class="muted small bom-qty">× {{ node.quantity }}</span>
       {% endif %}
@@ -32,7 +39,7 @@
   <tr class="{% if node.dependency_type == 'ASSEMBLY_ROOT' %}is-root{% endif %}">
     <td class="filename-cell">
       <span class="bom-indent" style="padding-left: {{ depth * 1.15 }}rem">
-        <span class="mono">{{ node.filename or "—" }}</span>
+        {{ bom_name_link(node) }}
       </span>
     </td>
     <td>{% if node.dependency_type == 'ASSEMBLY_ROOT' %}—{% else %}{{ node.quantity }}{% endif %}</td>
