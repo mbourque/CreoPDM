@@ -872,6 +872,22 @@
     });
   }
 
+  function summarizeGatherDebugGaps(dbg) {
+    if (!dbg || typeof dbg !== "object") return "";
+    const bits = [];
+    const summary = dbg.summary || {};
+    if (!summary.mass) {
+      bits.push(`mass:${(dbg.mass && (dbg.mass.reason || dbg.mass.try_null || "fail")) || "fail"}`);
+    }
+    if (!summary.units) {
+      bits.push(`units:${(dbg.units && dbg.units.reason) || "empty"}`);
+    }
+    if (dbg.is_part && !summary.features) {
+      bits.push(`feat:${(dbg.features && dbg.features.reason) || "0"}`);
+    }
+    return bits.slice(0, 3).join(" ").slice(0, 120);
+  }
+
   async function pushOneCreoMetadataTarget(target) {
     const METADATA_ITEM_TIMEOUT_MS = 90000;
     let settled = false;
@@ -906,6 +922,14 @@
       if (!identityName) {
         return { ok: false, timedOut: false, reason: "empty_identity" };
       }
+      const gatherDebug = snapshot._pdm_gather_debug || null;
+      if (gatherDebug) {
+        try {
+          console.info("[CreoPDM] gather debug", target.filename, gatherDebug);
+        } catch {
+          /* ignore console failures in Creo */
+        }
+      }
       const body = {
         version_id: target.versionId || null,
         identity: snapshot.identity || null,
@@ -919,6 +943,7 @@
         features: Array.isArray(snapshot.features) && snapshot.features.length
           ? snapshot.features
           : null,
+        gather_debug: gatherDebug,
       };
       try {
         const response = await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {
@@ -926,10 +951,12 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
+        const gapReason = summarizeGatherDebugGaps(gatherDebug);
         return {
           ok: response.ok,
           timedOut: false,
-          reason: response.ok ? "" : "post_failed",
+          reason: response.ok ? gapReason : "post_failed",
+          gatherDebug,
         };
       } catch {
         return { ok: false, timedOut: false, reason: "post_failed" };
@@ -1014,7 +1041,8 @@
         }
         if (result.ok) {
           captured += 1;
-          lastReason = "";
+          // Keep mass/units/feature gap hints on success so we can watch Collect.
+          lastReason = String(result.reason || "");
         } else {
           failed += 1;
           lastReason = String(result.reason || "skipped");
@@ -2874,6 +2902,14 @@
       }
       const snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
       if (!snapshot) continue;
+      const gatherDebug = snapshot._pdm_gather_debug || null;
+      if (gatherDebug) {
+        try {
+          console.info("[CreoPDM] gather debug", target.filename, gatherDebug);
+        } catch {
+          /* ignore */
+        }
+      }
       const body = {
         version_id: target.versionId || null,
         identity: snapshot.identity || null,
@@ -2887,6 +2923,8 @@
         features: Array.isArray(snapshot.features) && snapshot.features.length
           ? snapshot.features
           : null,
+        gather_debug: gatherDebug,
+      };
       };
       try {
         await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {

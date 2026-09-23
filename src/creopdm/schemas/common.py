@@ -550,6 +550,8 @@ class CreoMetadataRequest(BaseModel):
     mass: dict[str, object] | None = None
     family_table: dict[str, object] | None = None
     features: list[dict[str, object]] | None = None
+    # Client-side Creo.JS gather diagnostics (not persisted; logged on save).
+    gather_debug: dict[str, object] | None = None
 
 
 class CreoMetadataResponse(BaseModel):

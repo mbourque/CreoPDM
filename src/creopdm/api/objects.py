@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import mimetypes
 from pathlib import Path
 from urllib.parse import quote
@@ -264,7 +265,7 @@ def post_creo_metadata(
     if isinstance(result.identity, dict):
         ident = str(result.identity.get("file_name") or result.identity.get("full_name") or "")
     logger.info(
-        "Saved Creo metadata for %s (%s): params=%s materials=%s%s deps=%s bom=%s mass=%s units=%s",
+        "Saved Creo metadata for %s (%s): params=%s materials=%s%s deps=%s bom=%s mass=%s units=%s features=%s",
         ident or object_id,
         object_id[:8],
         params,
@@ -274,7 +275,19 @@ def post_creo_metadata(
         bom_n,
         "yes" if result.mass else "no",
         "yes" if result.units else "no",
+        len(result.features or []) if isinstance(result.features, list) else 0,
     )
+    if payload.gather_debug:
+        try:
+            dbg = json.dumps(payload.gather_debug, ensure_ascii=False, separators=(",", ":"))
+        except (TypeError, ValueError):
+            dbg = str(payload.gather_debug)
+        logger.info(
+            "Creo metadata gather debug for %s (%s): %s",
+            ident or object_id,
+            object_id[:8],
+            dbg[:4000],
+        )
     return result
 
 
