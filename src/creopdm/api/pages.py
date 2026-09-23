@@ -323,8 +323,14 @@ def object_detail(
     history = ctx.objects.object_history(db, object_id)
     payload = present_object(ctx, db, obj)
     is_assembly = obj.object_type == ObjectType.CREO_ASSEMBLY.value
+    is_part = obj.object_type == ObjectType.CREO_PART.value
     is_creo = obj.object_type.startswith("CREO_")
     pending = ctx.workspaces.pending_workspace_save(project, obj)
+    metadata = ctx.metadata.get(db, object_id)
+    where_used = ctx.metadata.where_used(db, object_id)
+    identity = metadata.identity or {}
+    materials = metadata.materials or {}
+    bom = metadata.bom if isinstance(metadata.bom, list) else []
     return render(
         request,
         "object_detail.html",
@@ -337,7 +343,13 @@ def object_detail(
             "history": history,
             "workspace_pending": pending,
             "is_assembly": is_assembly,
+            "is_part": is_part,
             "is_creo": is_creo,
+            "metadata": metadata,
+            "identity": identity,
+            "materials": materials,
+            "bom": bom,
+            "where_used": where_used.items,
             "workspace_path": str(ctx.config.workspace_for_project(project.uuid)),
             "workspace_folder": folder_of(obj.relative_path),
         },

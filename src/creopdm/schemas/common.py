@@ -512,3 +512,63 @@ class SettingsUpdateRequest(BaseModel):
         if ms > 120_000:
             return 120_000
         return ms
+
+
+class CreoParamPayload(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    value: str | None = None
+    data_type: str = "STRING"
+    units: str | None = None
+    description: str | None = None
+    is_designated: bool = False
+
+
+class CreoDependencyPayload(BaseModel):
+    filename: str = Field(min_length=1)
+    quantity: float = 1.0
+    dependency_type: str = "ASSEMBLY_MEMBER"
+
+
+class CreoBomNode(BaseModel):
+    filename: str = ""
+    quantity: float = 1.0
+    dependency_type: str = "ASSEMBLY_MEMBER"
+    resolved: bool = False
+    object_id: str | None = None
+    children: list["CreoBomNode"] = Field(default_factory=list)
+
+
+class CreoMetadataRequest(BaseModel):
+    version_id: str | None = None
+    identity: dict[str, object] | None = None
+    parameters: list[CreoParamPayload] = Field(default_factory=list)
+    materials: dict[str, object] | None = None
+    dependencies: list[CreoDependencyPayload] = Field(default_factory=list)
+    bom: list[CreoBomNode] | dict[str, object] | None = None
+
+
+class CreoMetadataResponse(BaseModel):
+    object_id: str
+    version_id: str | None = None
+    identity: dict[str, object] | None = None
+    parameters: list[CreoParamPayload] = Field(default_factory=list)
+    materials: dict[str, object] | None = None
+    dependencies: list[CreoDependencyPayload] = Field(default_factory=list)
+    bom: list[object] | dict[str, object] | None = None
+    captured: bool = False
+
+
+class WhereUsedItem(BaseModel):
+    object_id: str
+    filename: str
+    relative_path: str
+    display_revision: str
+    quantity: float = 1.0
+    dependency_type: str = "ASSEMBLY_MEMBER"
+    object_type: str = ""
+    type_label: str = ""
+
+
+class WhereUsedResponse(BaseModel):
+    object_id: str
+    items: list[WhereUsedItem] = Field(default_factory=list)

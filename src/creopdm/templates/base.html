@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-toolbar9">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-toolbar10">
   <script>
     /* Suppress PTC creojs.js noise outside Creo's browser (and when Creo injects its own copy). */
     (function () {
@@ -464,7 +464,332 @@ function setWorkingDirectory(directory) {
         return "CREOPDM_ERROR:" + fallback;
     }
 }
+function creoParamValueString(param) {
+    try {
+        var value = param.Value;
+        if (!value) return "";
+        if (typeof value.StringValue !== "undefined" && value.StringValue != null) {
+            return String(value.StringValue);
+        }
+        if (typeof value.IntValue !== "undefined" && value.IntValue != null) {
+            return String(value.IntValue);
+        }
+        if (typeof value.DoubleValue !== "undefined" && value.DoubleValue != null) {
+            return String(value.DoubleValue);
+        }
+        if (typeof value.BoolValue !== "undefined" && value.BoolValue != null) {
+            return value.BoolValue ? "true" : "false";
+        }
+        return String(value);
+    } catch (err) {
+        return "";
+    }
+}
+function creoParamDataType(param) {
+    try {
+        var value = param.Value;
+        if (!value || typeof value.discr === "undefined") return "STRING";
+        var discr = value.discr;
+        if (typeof pfcParamValueType !== "undefined") {
+            if (discr === pfcParamValueType.PARAM_INTEGER) return "INTEGER";
+            if (discr === pfcParamValueType.PARAM_DOUBLE) return "DOUBLE";
+            if (discr === pfcParamValueType.PARAM_BOOLEAN) return "BOOLEAN";
+            if (discr === pfcParamValueType.PARAM_NOTE) return "NOTE";
+        }
+        return "STRING";
+    } catch (err) {
+        return "STRING";
+    }
+}
+function creoFindSessionModel(session, filename) {
+    var logical = creoLogicalFileName(filename);
+    var shortName = creoNormalizePath(logical);
+    var model = null;
+    try {
+        if (typeof session.GetModelFromFileName === "function") {
+            model = session.GetModelFromFileName(shortName);
+            if (model) return model;
+        }
+    } catch (errGet) {}
+    try {
+        if (typeof session.ListModels === "function") {
+            var listed = session.ListModels();
+            var want = shortName.toLowerCase();
+            var wantRoot = creoModelRoot(shortName).toLowerCase();
+            var count = listed && typeof listed.getCount === "function"
+                ? listed.getCount()
+                : (listed && listed.length) || 0;
+            for (var i = 0; i < count; i++) {
+                var item = typeof listed.get === "function" ? listed.get(i) : listed[i];
+                if (!item) continue;
+                var name = "";
+                try { name = String(item.FileName || ""); } catch (errName) { name = ""; }
+                var lower = name.toLowerCase();
+                if (lower === want || creoLogicalFileName(name).toLowerCase() === want) {
+                    return item;
+                }
+                if (wantRoot && creoModelRoot(lower) === wantRoot) {
+                    return item;
+                }
+            }
+        }
+    } catch (errList) {}
+    return null;
+}
+function creoGatherIdentity(model) {
+    var identity = {
+        file_name: "",
+        common_name: "",
+        full_name: "",
+        generic_name: "",
+        instance_name: "",
+        origin: "",
+        model_type: "",
+        is_modified: false,
+        version_stamp: null
+    };
+    try { identity.file_name = String(model.FileName || ""); } catch (e1) {}
+    try { identity.common_name = String(model.CommonName || ""); } catch (e2) {}
+    try { identity.full_name = String(model.FullName || ""); } catch (e3) {}
+    try { identity.generic_name = String(model.GenericName || ""); } catch (e4) {}
+    try { identity.instance_name = String(model.InstanceName || ""); } catch (e5) {}
+    try { identity.origin = String(model.Origin || ""); } catch (e6) {}
+    try {
+        var type = model.Type;
+        identity.model_type = type != null ? String(type) : "";
+    } catch (e7) {}
+    try { identity.is_modified = Boolean(model.IsModified); } catch (e8) {}
+    try {
+        if (typeof model.VersionStamp !== "undefined" && model.VersionStamp != null) {
+            identity.version_stamp = model.VersionStamp;
+        }
+    } catch (e9) {}
+    return identity;
+}
+function creoGatherParameters(model) {
+    var rows = [];
+    try {
+        if (typeof model.ListParams !== "function") return rows;
+        var listed = model.ListParams();
+        var count = listed && typeof listed.getCount === "function"
+            ? listed.getCount()
+            : (listed && listed.length) || 0;
+        for (var i = 0; i < count; i++) {
+            var param = typeof listed.get === "function" ? listed.get(i) : listed[i];
+            if (!param) continue;
+            var name = "";
+            try { name = String(param.Name || ""); } catch (errN) { name = ""; }
+            if (!name) continue;
+            var units = null;
+            try {
+                if (typeof param.Units !== "undefined" && param.Units) {
+                    units = String(param.Units.Name || param.Units || "");
+                }
+            } catch (errU) {}
+            var description = null;
+            try {
+                if (param.Description != null) description = String(param.Description);
+            } catch (errD) {}
+            var designated = false;
+            try { designated = Boolean(param.IsDesignated); } catch (errDes) {}
+            rows.push({
+                name: name,
+                value: creoParamValueString(param),
+                data_type: creoParamDataType(param),
+                units: units,
+                description: description,
+                is_designated: designated
+            });
+        }
+    } catch (err) {}
+    return rows;
+}
+function creoGatherMaterials(model) {
+    var materials = { current: null, names: [] };
+    try {
+        if (typeof model.CurrentMaterial !== "undefined" && model.CurrentMaterial) {
+            try {
+                materials.current = String(model.CurrentMaterial.Name || model.CurrentMaterial || "");
+            } catch (errCur) {
+                materials.current = String(model.CurrentMaterial);
+            }
+        }
+    } catch (errMat) {}
+    try {
+        if (typeof model.ListMaterials === "function") {
+            var listed = model.ListMaterials();
+            var count = listed && typeof listed.getCount === "function"
+                ? listed.getCount()
+                : (listed && listed.length) || 0;
+            for (var i = 0; i < count; i++) {
+                var mat = typeof listed.get === "function" ? listed.get(i) : listed[i];
+                if (!mat) continue;
+                var name = "";
+                try { name = String(mat.Name || mat || ""); } catch (errN) { name = ""; }
+                if (name) materials.names.push(name);
+            }
+        }
+    } catch (errList) {}
+    return materials;
+}
+function creoDependencyTypeLabel(dep) {
+    try {
+        if (dep && typeof dep.DepType !== "undefined") {
+            return String(dep.DepType);
+        }
+    } catch (err) {}
+    return "REFERENCE";
+}
+function creoGatherDependencies(model) {
+    var rows = [];
+    try {
+        if (typeof model.ListDependencies !== "function") return rows;
+        var listed = model.ListDependencies();
+        var count = listed && typeof listed.getCount === "function"
+            ? listed.getCount()
+            : (listed && listed.length) || 0;
+        for (var i = 0; i < count; i++) {
+            var dep = typeof listed.get === "function" ? listed.get(i) : listed[i];
+            if (!dep) continue;
+            var childName = "";
+            try {
+                var depModel = dep.DepModel || dep.Model || null;
+                if (depModel) {
+                    childName = String(depModel.FileName || depModel.FullName || "");
+                }
+            } catch (errChild) {}
+            if (!childName) {
+                try {
+                    var descr = dep.DepModelDescr || dep.ModelDescr || null;
+                    if (descr) {
+                        childName = String(descr.GetFileName ? descr.GetFileName() : (descr.FileName || ""));
+                    }
+                } catch (errDescr) {}
+            }
+            if (!childName) continue;
+            rows.push({
+                filename: creoLogicalFileName(childName),
+                quantity: 1,
+                dependency_type: creoDependencyTypeLabel(dep)
+            });
+        }
+    } catch (err) {}
+    return rows;
+}
+function creoComponentModelName(feature) {
+    try {
+        if (typeof feature.ModelDescr !== "undefined" && feature.ModelDescr) {
+            var descr = feature.ModelDescr;
+            if (typeof descr.GetFileName === "function") {
+                return String(descr.GetFileName() || "");
+            }
+            return String(descr.FileName || "");
+        }
+    } catch (errDescr) {}
+    try {
+        if (typeof feature.GetModel === "function") {
+            var child = feature.GetModel();
+            if (child) return String(child.FileName || child.FullName || "");
+        }
+    } catch (errModel) {}
+    return "";
+}
+function creoGatherBom(model, depth) {
+    var nodes = [];
+    var maxDepth = typeof depth === "number" ? depth : 1;
+    try {
+        if (typeof pfcFeatureType === "undefined" || typeof model.ListFeaturesByType !== "function") {
+            return nodes;
+        }
+        var listed = model.ListFeaturesByType(true, pfcFeatureType.FEATTYPE_COMPONENT);
+        var count = listed && typeof listed.getCount === "function"
+            ? listed.getCount()
+            : (listed && listed.length) || 0;
+        var qtyByName = {};
+        var order = [];
+        for (var i = 0; i < count; i++) {
+            var feat = typeof listed.get === "function" ? listed.get(i) : listed[i];
+            if (!feat) continue;
+            var name = creoLogicalFileName(creoComponentModelName(feat));
+            if (!name) continue;
+            var key = name.toLowerCase();
+            if (!qtyByName[key]) {
+                qtyByName[key] = { filename: name, quantity: 0, feature: feat };
+                order.push(key);
+            }
+            qtyByName[key].quantity += 1;
+        }
+        for (var j = 0; j < order.length; j++) {
+            var entry = qtyByName[order[j]];
+            var node = {
+                filename: entry.filename,
+                quantity: entry.quantity,
+                dependency_type: "ASSEMBLY_MEMBER",
+                children: []
+            };
+            if (maxDepth > 0) {
+                try {
+                    var childModel = null;
+                    if (entry.feature && typeof entry.feature.GetModel === "function") {
+                        childModel = entry.feature.GetModel();
+                    }
+                    if (childModel) {
+                        node.children = creoGatherBom(childModel, maxDepth - 1);
+                    }
+                } catch (errNest) {}
+            }
+            nodes.push(node);
+        }
+    } catch (err) {}
+    return nodes;
+}
+function gatherModelMetadata(filename) {
+    try {
+        var session = (typeof pfcGetCurrentSession === "function")
+          ? pfcGetCurrentSession()
+          : pfcGetProESession();
+        var model = creoFindSessionModel(session, filename);
+        if (!model) {
+            return null;
+        }
+        var identity = creoGatherIdentity(model);
+        var parameters = creoGatherParameters(model);
+        var materials = creoGatherMaterials(model);
+        var dependencies = creoGatherDependencies(model);
+        var bom = [];
+        try {
+            var type = model.Type;
+            var isAsm = false;
+            if (typeof pfcModelType !== "undefined") {
+                isAsm = type === pfcModelType.MDL_ASSEMBLY;
+            } else {
+                isAsm = String(identity.file_name || filename).toLowerCase().indexOf(".asm") >= 0;
+            }
+            if (isAsm) {
+                bom = creoGatherBom(model, 1);
+                if (!dependencies.length && bom.length) {
+                    for (var i = 0; i < bom.length; i++) {
+                        dependencies.push({
+                            filename: bom[i].filename,
+                            quantity: bom[i].quantity,
+                            dependency_type: "ASSEMBLY_MEMBER"
+                        });
+                    }
+                }
+            }
+        } catch (errBom) {}
+        return {
+            identity: identity,
+            parameters: parameters,
+            materials: materials,
+            dependencies: dependencies,
+            bom: bom
+        };
+    } catch (errAll) {
+        return null;
+    }
+}
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push37"></script>
+  <script src="/client/app.js?v={{ app_version }}-push38"></script>
 </body>
 </html>

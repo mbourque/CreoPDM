@@ -18,8 +18,11 @@ from creopdm.schemas.common import (
     BatchItemResult,
     BatchObjectRequest,
     BatchOperationResponse,
+    CreoMetadataRequest,
+    CreoMetadataResponse,
     ObjectResponse,
     ObjectVersionResponse,
+    WhereUsedResponse,
     WorkspaceContentResponse,
 )
 
@@ -228,6 +231,36 @@ def object_history(
 ) -> list[ObjectVersionResponse]:
     versions = ctx.objects.object_history(db, object_id)
     return [item for item in (version_to_response(v) for v in versions) if item is not None]
+
+
+@router.get("/api/objects/{object_id}/creo-metadata", response_model=CreoMetadataResponse)
+def get_creo_metadata(
+    object_id: str,
+    version: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> CreoMetadataResponse:
+    return ctx.metadata.get(db, object_id, version)
+
+
+@router.post("/api/objects/{object_id}/creo-metadata", response_model=CreoMetadataResponse)
+def post_creo_metadata(
+    object_id: str,
+    payload: CreoMetadataRequest,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> CreoMetadataResponse:
+    result = ctx.metadata.save(db, object_id, payload)
+    return result
+
+
+@router.get("/api/objects/{object_id}/where-used", response_model=WhereUsedResponse)
+def object_where_used(
+    object_id: str,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> WhereUsedResponse:
+    return ctx.metadata.where_used(db, object_id)
 
 
 def _assert_can_remove(ctx: AppContext, db: Session, obj) -> None:

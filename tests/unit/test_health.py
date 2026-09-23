@@ -37,6 +37,8 @@ def test_app_js_is_not_cached(client):
     assert response.headers.get("cache-control") == "no-store"
     assert "CREOPDM_STATUS_POLL_V2" in response.text
     assert "status_poll_interval_seconds" in response.text
+    assert "pushCreoMetadataForItems" in response.text
+    assert "gatherCreoMetadataForFilename" in response.text
 
 
 def test_home_page(client):
@@ -66,7 +68,8 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push37" in text
+    assert "push38" in text
+    assert "function gatherModelMetadata" in text
     assert 'id="project-menu-btn"' in text
     assert 'id="sidebar-collapse-btn"' in text
     assert 'class="workspace"' in text

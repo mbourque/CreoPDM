@@ -15,6 +15,7 @@ from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.creo_service import CreoService
 from creopdm.services.git_service import GitService
 from creopdm.services.lock_manager import ProjectLockManager
+from creopdm.services.metadata_service import MetadataService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.project_service import ProjectService
 from creopdm.services.workspace_service import WorkspaceService
@@ -40,3 +41,4 @@ class AppContext:
     checkouts: CheckoutService
     checkins: CheckinService
     creo_service: CreoService
+    metadata: MetadataService

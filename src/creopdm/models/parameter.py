@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import Boolean, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from creopdm.database.base import Base
@@ -18,6 +18,8 @@ class Parameter(Base):
     value: Mapped[str | None] = mapped_column(Text, nullable=True)
     data_type: Mapped[str] = mapped_column(String(32), default="STRING")
     units: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_designated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     object: Mapped["EngineeringObject"] = relationship(back_populates="parameters")  # noqa: F821
     version: Mapped["ObjectVersion | None"] = relationship(back_populates="parameters")  # noqa: F821

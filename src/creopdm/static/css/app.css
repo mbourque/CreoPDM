@@ -769,6 +769,9 @@ body.is-file-drag #file-drop-overlay {
 .kv { display: grid; grid-template-columns: 160px 1fr; gap: 0.4rem 1rem; }
 .kv dt { color: var(--muted); }
 .mono { font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.85rem; }
+.bom-tree { margin: 0.25rem 0 0.25rem 1.1rem; padding: 0; list-style: disc; }
+.bom-tree .bom-tree { list-style: circle; }
+.meta-empty { margin-top: 0.75rem; }
 .hero { max-width: 40rem; padding: 2rem 0; }
 
 .workspace.is-sidebar-collapsed {

@@ -1439,6 +1439,11 @@
       showError($("#add-error"), first + extra);
       return;
     }
+    if (hostedCreoJS()) {
+      await withBusy("Capturing Creo metadata…", async () => {
+        await pushCreoMetadataForItems(metadataTargetsFromResult(result));
+      });
+    }
     reloadPage();
   });
 
@@ -2166,6 +2171,70 @@
     } catch {
       return false;
     }
+  }
+
+  async function gatherCreoMetadataForFilename(filename) {
+    if (!hostedCreoJS() || !filename) return null;
+    try {
+      await whenCreoJSReady();
+      if (typeof window.CreoJS.gatherModelMetadata !== "function") return null;
+      const snapshot = await window.CreoJS.gatherModelMetadata(filename);
+      if (!snapshot || typeof snapshot !== "object") return null;
+      if (typeof snapshot === "string" && snapshot.startsWith("CREOPDM_ERROR:")) return null;
+      return snapshot;
+    } catch {
+      return null;
+    }
+  }
+
+  async function pushCreoMetadataForItems(items) {
+    const targets = (items || [])
+      .map((item) => ({
+        uuid: String(item?.uuid || item?.object_id || "").trim(),
+        filename: String(item?.filename || "").trim(),
+        versionId: String(item?.version_id || item?.current_version?.uuid || "").trim(),
+      }))
+      .filter((item) => item.uuid && item.filename);
+    if (!targets.length || !hostedCreoJS()) return;
+    for (const target of targets) {
+      const snapshot = await gatherCreoMetadataForFilename(target.filename);
+      if (!snapshot) continue;
+      const body = {
+        version_id: target.versionId || null,
+        identity: snapshot.identity || null,
+        parameters: Array.isArray(snapshot.parameters) ? snapshot.parameters : [],
+        materials: snapshot.materials || null,
+        dependencies: Array.isArray(snapshot.dependencies) ? snapshot.dependencies : [],
+        bom: snapshot.bom || null,
+      };
+      try {
+        await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        /* soft-fail — metadata is best-effort */
+      }
+    }
+  }
+
+  function metadataTargetsFromResult(result) {
+    if (!result) return [];
+    if (Array.isArray(result.ok)) {
+      return result.ok.filter((item) => item && item.uuid && item.filename);
+    }
+    if (result.uuid && result.filename) {
+      return [
+        {
+          uuid: result.uuid,
+          filename: result.filename,
+          version_id: result.current_version?.uuid || "",
+          current_version: result.current_version || null,
+        },
+      ];
+    }
+    return [];
   }
 
   function whenCreoJSReady() {
@@ -3701,6 +3770,11 @@
       }
       // Always patch the table first — Creo often skips navigation from this dialog.
       applyCheckedInResult(result);
+      if (hostedCreoJS()) {
+        await withBusy("Capturing Creo metadata…", async () => {
+          await pushCreoMetadataForItems(metadataTargetsFromResult(result));
+        });
+      }
       rememberWatchView({ tab: "files", ids: [] });
       reloadPageAfterDialog();
     }

@@ -11,6 +11,19 @@
     {% endif %}
   {% endif %}
 {% endmacro %}
+{% macro bom_tree(nodes, depth=0) %}
+  {% for node in nodes %}
+  <li>
+    <span class="mono">{{ node.filename or "—" }}</span>
+    {% if node.quantity and node.quantity != 1 %}
+    <span class="muted small">× {{ node.quantity }}</span>
+    {% endif %}
+    {% if node.children %}
+    <ul class="bom-tree">{{ bom_tree(node.children, depth + 1) }}</ul>
+    {% endif %}
+  </li>
+  {% endfor %}
+{% endmacro %}
 <article class="detail">
   <nav class="crumb">
     <a href="/?project={{ project.uuid }}"
@@ -64,30 +77,161 @@
   <div class="tabs" role="tablist">
     <button type="button" class="tab is-active" data-tab="overview">Overview</button>
     {% if is_assembly %}
-    <button type="button" class="tab" data-tab="structure" disabled title="Assembly structure is a later milestone">Structure</button>
-    <button type="button" class="tab" data-tab="bom" disabled title="BOM is a later milestone">BOM</button>
+    <button type="button" class="tab" data-tab="structure">Structure</button>
+    <button type="button" class="tab" data-tab="bom">BOM</button>
     {% endif %}
     {% if is_creo %}
-    <button type="button" class="tab" data-tab="parameters" disabled title="Live Creo parameters are a later milestone">Parameters</button>
+    <button type="button" class="tab" data-tab="parameters">Parameters</button>
+    {% endif %}
+    {% if is_part %}
+    <button type="button" class="tab" data-tab="materials">Materials</button>
     {% endif %}
     <button type="button" class="tab" data-tab="history">History{% if workspace_pending %} · unsaved{% endif %}</button>
-    <button type="button" class="tab" data-tab="where-used" disabled title="Where-used is a later milestone">Where Used</button>
+    <button type="button" class="tab" data-tab="where-used">Where Used</button>
   </div>
 
   <section class="tab-panel" id="panel-overview">
     <dl class="kv">
       <dt>Number</dt><dd>{{ object.number or "—" }}</dd>
       <dt>Name</dt><dd>{{ object.name }}</dd>
+      {% if identity.common_name %}
+      <dt>Common name</dt><dd>{{ identity.common_name }}</dd>
+      {% endif %}
+      {% if identity.full_name %}
+      <dt>Full name</dt><dd class="mono">{{ identity.full_name }}</dd>
+      {% endif %}
+      {% if identity.instance_name %}
+      <dt>Instance</dt><dd>{{ identity.instance_name }}</dd>
+      {% endif %}
+      {% if identity.generic_name %}
+      <dt>Generic</dt><dd>{{ identity.generic_name }}</dd>
+      {% endif %}
       <dt>Revision</dt><dd>{{ object.display_revision }}</dd>
       {% if object.creo_release %}
       <dt>Creo</dt><dd>{{ object.creo_release }}</dd>
+      {% endif %}
+      {% if materials.current %}
+      <dt>Material</dt><dd>{{ materials.current }}</dd>
+      {% endif %}
+      {% if identity.origin %}
+      <dt>Origin</dt><dd class="mono">{{ identity.origin }}</dd>
       {% endif %}
       <dt>Lifecycle</dt><dd>{{ object.lifecycle_state.replace('_', ' ').title() }}</dd>
       <dt>Checkout</dt><dd>{{ object.checkout_status }}</dd>
       <dt>Content hash</dt><dd class="mono">{{ object.current_version.content_hash if object.current_version else "—" }}</dd>
       <dt>Size</dt><dd>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</dd>
     </dl>
+    {% if is_creo and not metadata.captured %}
+    <p class="muted small meta-empty">Creo identity not captured yet. Open the model in Creo, then Add or Check In while it is in session.</p>
+    {% endif %}
   </section>
+
+  {% if is_assembly %}
+  <section class="tab-panel" id="panel-structure" hidden>
+    {% if bom %}
+    <ul class="bom-tree">{{ bom_tree(bom) }}</ul>
+    {% else %}
+    <p class="muted">No assembly structure captured yet. Open the assembly in Creo and Check In / Add while it is in session.</p>
+    {% endif %}
+  </section>
+
+  <section class="tab-panel" id="panel-bom" hidden>
+    {% if metadata.dependencies %}
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>Filename</th>
+          <th>Qty</th>
+          <th>Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in metadata.dependencies %}
+        <tr>
+          <td class="filename-cell mono">{{ row.filename }}</td>
+          <td>{{ row.quantity }}</td>
+          <td>{{ row.dependency_type }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% elif bom %}
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>Filename</th>
+          <th>Qty</th>
+          <th>Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in bom %}
+        <tr>
+          <td class="filename-cell mono">{{ row.filename }}</td>
+          <td>{{ row.quantity }}</td>
+          <td>{{ row.dependency_type or "ASSEMBLY_MEMBER" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No BOM captured yet. Open the assembly in Creo and Check In / Add while it is in session.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if is_creo %}
+  <section class="tab-panel" id="panel-parameters" hidden>
+    {% if metadata.parameters %}
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Value</th>
+          <th>Units</th>
+          <th>Type</th>
+          <th>Designated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in metadata.parameters %}
+        <tr>
+          <td class="mono">{{ row.name }}</td>
+          <td>{{ row.value or "" }}</td>
+          <td>{{ row.units or "" }}</td>
+          <td>{{ row.data_type }}</td>
+          <td>{% if row.is_designated %}Yes{% else %}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No parameters captured yet. Open the model in Creo and Check In / Add while it is in session.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if is_part %}
+  <section class="tab-panel" id="panel-materials" hidden>
+    {% if materials.current or materials.names %}
+    <dl class="kv">
+      <dt>Current</dt><dd>{{ materials.current or "—" }}</dd>
+    </dl>
+    {% if materials.names %}
+    <table class="grid">
+      <thead><tr><th>Material</th></tr></thead>
+      <tbody>
+        {% for name in materials.names %}
+        <tr><td>{{ name }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% else %}
+    <p class="muted">No materials captured yet. Open the part in Creo and Check In / Add while it is in session.</p>
+    {% endif %}
+  </section>
+  {% endif %}
 
   <section class="tab-panel" id="panel-history" hidden>
     {% if workspace_pending %}
@@ -195,6 +339,40 @@
         </tbody>
       </table>
     </div>
+  </section>
+
+  <section class="tab-panel" id="panel-where-used" hidden>
+    {% if where_used %}
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>Filename</th>
+          <th>Type</th>
+          <th>Rev</th>
+          <th>Qty</th>
+          <th>Relation</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in where_used %}
+        <tr>
+          <td class="filename-cell">
+            <a href="/projects/{{ project.uuid }}/objects/{{ row.object_id }}">{{ row.filename }}</a>
+            {% if row.relative_path and row.relative_path != row.filename %}
+            <div class="muted small">{{ row.relative_path }}</div>
+            {% endif %}
+          </td>
+          <td>{{ row.type_label }}</td>
+          <td>{{ row.display_revision }}</td>
+          <td>{{ row.quantity }}</td>
+          <td>{{ row.dependency_type }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Not used by any captured assembly or drawing in this project yet.</p>
+    {% endif %}
   </section>
 </article>
 
