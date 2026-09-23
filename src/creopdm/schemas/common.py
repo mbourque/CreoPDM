@@ -580,3 +580,5 @@ class WhereUsedItem(BaseModel):
 class WhereUsedResponse(BaseModel):
     object_id: str
     items: list[WhereUsedItem] = Field(default_factory=list)
+    # Populated only when GET …/where-used?debug=1
+    debug: dict[str, object] | None = None

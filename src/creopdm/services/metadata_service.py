@@ -189,7 +189,13 @@ class MetadataService:
             captured=captured,
         )
 
-    def where_used(self, session: Session, object_uuid: str) -> WhereUsedResponse:
+    def where_used(
+        self,
+        session: Session,
+        object_uuid: str,
+        *,
+        debug: bool = False,
+    ) -> WhereUsedResponse:
         """Parents that reference this object.
 
         Order of operations often leaves Dependency empty: assembly metadata is
@@ -227,6 +233,8 @@ class MetadataService:
 
         siblings = self._objects.list_objects(session, obj.project_id)
         target_keys = set(bom_where_used_keys(obj.filename))
+        debug_bom_hits: list[str] = []
+        debug_vault: list[dict[str, object]] = []
 
         # Stored BOM trees — covers captures that never wrote Dependency rows
         # (e.g. nested BOM skipped, or assembly captured before children existed).
@@ -250,6 +258,8 @@ class MetadataService:
                         matched_type = dep_type
                 if matched_qty <= 0:
                     continue
+                if debug:
+                    debug_bom_hits.append(other.filename)
                 items_by_parent[other.uuid] = WhereUsedItem(
                     object_id=other.uuid,
                     filename=other.filename,
@@ -272,18 +282,44 @@ class MetadataService:
                         continue
                     if not needs_open_companions(other.object_type, other.filename):
                         continue
+                    entry: dict[str, object] | None = (
+                        {
+                            "filename": other.filename,
+                            "object_type": other.object_type,
+                        }
+                        if debug
+                        else None
+                    )
                     try:
                         path = self._workspaces.locate_content(project_uuid, other)
-                    except PathValidationError:
+                    except PathValidationError as exc:
+                        if entry is not None:
+                            entry["locate"] = "missing"
+                            entry["error"] = str(exc)
+                            debug_vault.append(entry)
                         continue
-                    except Exception:
+                    except Exception as exc:
                         logger.debug(
                             "Where-used vault locate failed for %s",
                             other.filename,
                             exc_info=True,
                         )
+                        if entry is not None:
+                            entry["locate"] = "error"
+                            entry["error"] = str(exc)
+                            debug_vault.append(entry)
                         continue
-                    if not model_references_filename(path, obj.filename):
+                    matched = model_references_filename(path, obj.filename)
+                    if entry is not None:
+                        entry["locate"] = "ok"
+                        entry["path"] = str(path)
+                        try:
+                            entry["size"] = int(path.stat().st_size)
+                        except OSError:
+                            entry["size"] = -1
+                        entry["matched"] = matched
+                        debug_vault.append(entry)
+                    if not matched:
                         continue
                     items_by_parent[other.uuid] = WhereUsedItem(
                         object_id=other.uuid,
@@ -297,7 +333,23 @@ class MetadataService:
                     )
 
         items = sorted(items_by_parent.values(), key=lambda row: row.filename.lower())
-        return WhereUsedResponse(object_id=obj.uuid, items=items)
+        payload = WhereUsedResponse(object_id=obj.uuid, items=items)
+        if debug:
+            asm_drw = [
+                row.filename
+                for row in siblings
+                if row.id != obj.id and needs_open_companions(row.object_type, row.filename)
+            ]
+            payload.debug = {
+                "workspaces_wired": self._workspaces is not None,
+                "sibling_count": len(siblings),
+                "dependency_edge_count": len(edges),
+                "target_keys": sorted(target_keys),
+                "asm_drw_candidates": asm_drw,
+                "bom_hits": debug_bom_hits,
+                "vault_scan": debug_vault,
+            }
+        return payload
 
     def _resolve_version(
         self,
