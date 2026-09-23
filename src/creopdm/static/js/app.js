@@ -100,9 +100,15 @@
   function showOk(message) {
     showError($("#toolbar-error"), "");
     const el = $("#toolbar-ok");
+    const row = $("#toolbar-ok-row");
     if (!el) return;
-    el.hidden = !message;
-    el.textContent = message || "";
+    const text = message || "";
+    el.textContent = text;
+    if (row) {
+      row.hidden = !text;
+    } else {
+      el.hidden = !text;
+    }
   }
 
   try {
@@ -777,6 +783,172 @@
   }
 
   resumeWhereUsedIndexWatch();
+
+  const METADATA_COLLECT_WARN_THRESHOLD = 50;
+  const metadataCollectJob = { running: false, cancel: false };
+  const cancelMetadataBtn = $("#cancel-metadata-collect-btn");
+
+  function setMetadataCollectCancelVisible(visible) {
+    if (!cancelMetadataBtn) return;
+    cancelMetadataBtn.hidden = !visible;
+  }
+
+  cancelMetadataBtn?.addEventListener("click", () => {
+    if (!metadataCollectJob.running) return;
+    metadataCollectJob.cancel = true;
+    showOk("Cancelling metadata collection…");
+  });
+
+  function confirmCollectMetadata(total) {
+    const dialog = $("#collect-metadata-dialog");
+    const form = $("#collect-metadata-form");
+    const lead = $("#collect-metadata-lead");
+    const warn = $("#collect-metadata-warn");
+    if (!(dialog instanceof HTMLDialogElement) || !form || !lead) {
+      return Promise.resolve(window.confirm(`Collect Creo metadata for ${total} model(s)?`));
+    }
+    lead.textContent =
+      `Capture parameters, materials, mass, units, features, and BOM/structure for ${total} Creo model(s) in this project. ` +
+      "Each model is retrieved in the Creo session when needed.";
+    if (warn) {
+      if (total > METADATA_COLLECT_WARN_THRESHOLD) {
+        warn.hidden = false;
+        warn.textContent =
+          `This is ${total} models (over ${METADATA_COLLECT_WARN_THRESHOLD}). It can take a long time and may make Creo sluggish. You can cancel from the toolbar.`;
+      } else {
+        warn.hidden = true;
+        warn.textContent = "";
+      }
+    }
+    return new Promise((resolve) => {
+      const onCancel = () => {
+        cleanup();
+        dialog.close();
+        resolve(false);
+      };
+      const onSubmit = (event) => {
+        event.preventDefault();
+        cleanup();
+        dialog.close();
+        resolve(true);
+      };
+      function cleanup() {
+        form.removeEventListener("submit", onSubmit);
+        $("#collect-metadata-cancel")?.removeEventListener("click", onCancel);
+      }
+      form.addEventListener("submit", onSubmit);
+      $("#collect-metadata-cancel")?.addEventListener("click", onCancel);
+      if (!dialog.open) dialog.showModal();
+    });
+  }
+
+  async function pushOneCreoMetadataTarget(target) {
+    let snapshot = await gatherCreoMetadataForFilename(target.filename, "");
+    if (!snapshot) {
+      let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
+      if (!filePath) {
+        filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
+      }
+      snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
+    }
+    if (!snapshot) return false;
+    const body = {
+      version_id: target.versionId || null,
+      identity: snapshot.identity || null,
+      parameters: Array.isArray(snapshot.parameters) ? snapshot.parameters : [],
+      materials: snapshot.materials || null,
+      dependencies: Array.isArray(snapshot.dependencies) ? snapshot.dependencies : [],
+      bom: snapshot.bom || null,
+      units: snapshot.units || null,
+      mass: snapshot.mass || null,
+      family_table: snapshot.family_table || null,
+      features: Array.isArray(snapshot.features) && snapshot.features.length
+        ? snapshot.features
+        : null,
+    };
+    try {
+      const response = await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async function runCollectAllMetadata(projectId) {
+    if (metadataCollectJob.running) {
+      showOk("Metadata collection is already running.");
+      return;
+    }
+    if (!canGatherCreoMetadata()) {
+      showError(
+        $("#toolbar-error"),
+        "Collect metadata needs Creo’s embedded browser with Creo.JS available."
+      );
+      return;
+    }
+    const rows = await ensureProjectObjects(projectId, { force: true });
+    const targets = (Array.isArray(rows) ? rows : [])
+      .map((row) => ({
+        uuid: String(row.uuid || "").trim(),
+        filename: String(row.filename || "").trim(),
+        path: "",
+        versionId: String(row.current_version?.uuid || row.version_id || "").trim(),
+      }))
+      .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename));
+    if (!targets.length) {
+      showOk("No Creo parts, assemblies, or drawings to capture.");
+      return;
+    }
+    const okToStart = await confirmCollectMetadata(targets.length);
+    if (!okToStart) return;
+
+    metadataCollectJob.running = true;
+    metadataCollectJob.cancel = false;
+    setMetadataCollectCancelVisible(true);
+    showError($("#toolbar-error"), "");
+    let captured = 0;
+    let failed = 0;
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        if (metadataCollectJob.cancel) break;
+        const target = targets[i];
+        showOk(
+          `Collecting Creo metadata… ${i + 1} of ${targets.length}: ${target.filename}`
+        );
+        const saved = await pushOneCreoMetadataTarget(target);
+        if (saved) captured += 1;
+        else failed += 1;
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      }
+      if (metadataCollectJob.cancel) {
+        showOk(
+          `Metadata collection cancelled after ${captured + failed} of ${targets.length} ` +
+            `(${captured} saved, ${failed} skipped).`
+        );
+      } else {
+        showOk(
+          `Metadata collection finished: ${captured} saved` +
+            (failed ? `, ${failed} skipped` : "") +
+            `.`
+        );
+      }
+    } finally {
+      metadataCollectJob.running = false;
+      metadataCollectJob.cancel = false;
+      setMetadataCollectCancelVisible(false);
+    }
+  }
+
+  $("#collect-metadata-btn")?.addEventListener("click", async () => {
+    closeProjectSettings();
+    const projectId = $("#collect-metadata-btn")?.dataset.project || currentProjectId();
+    if (!projectId) return;
+    await runCollectAllMetadata(projectId);
+  });
 
   $("#project-cancel")?.addEventListener("click", () => projectDialog?.close());
 

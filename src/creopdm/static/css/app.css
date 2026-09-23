@@ -629,6 +629,19 @@ span.object-open:hover { text-decoration: underline; }
 /* Keep disabled actions in layout so enabling them does not shift neighbors. */
 .toolbar-messages { width: 100%; min-width: 0; }
 .toolbar-messages .error, .toolbar-messages .ok { overflow-wrap: anywhere; }
+.toolbar-ok-row {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+}
+.toolbar-ok-row[hidden] { display: none !important; }
+.toolbar-ok-row .ok { margin: 0; flex: 1 1 auto; }
+.warn-note {
+  margin: 0.6rem 0 0;
+  padding: 0.55rem 0.7rem;
+  background: #fff6e8;
+  border: 1px solid #e8c48a;
+  border-radius: 6px;
+  color: #7a4b00;
+}
 .toolbar-note { color: var(--muted); font-size: 0.8rem; }
 .btn {
   border: 1px solid #b7c3ce; background: white; color: var(--ink);

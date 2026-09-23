@@ -77,12 +77,15 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push60" in text
+    assert "push61" in text
     assert "function creoGatherMaterials" in text
     assert "creoFeatureItems(model.ListMaterials())" in text
     assert "PTC_MATERIAL_NAME" in text
     assert "ListSolidBodies" in text
     assert "watchWhereUsedIndex" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "runCollectAllMetadata" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "collect-metadata-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    assert "cancel-metadata-collect-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "where_used_index" in open("src/creopdm/schemas/common.py", encoding="utf-8").read()
     assert "CadNameMatcher" in open("src/creopdm/utils/cad_name_matcher.py", encoding="utf-8").read()
     assert "rebuild-where-used" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

@@ -59,6 +59,9 @@
             <button type="button" class="project-settings-item" role="menuitem" id="rebuild-where-used-btn"
                     data-project="{{ selected.uuid }}"
                     title="Index vault assemblies/drawings into Where Used links in the background.">Rebuild Where Used</button>
+            <button type="button" class="project-settings-item" role="menuitem" id="collect-metadata-btn"
+                    data-project="{{ selected.uuid }}"
+                    title="Open each Creo model in session and capture parameters, materials, BOM, and related metadata.">Collect all metadata</button>
             <button type="button" class="project-settings-item is-danger" role="menuitem" id="delete-project-btn"
                     data-project="{{ selected.uuid }}"
                     data-name="{{ selected.name }}"
@@ -358,9 +361,25 @@
   </div>
   <div class="toolbar-messages">
     <p class="error" id="toolbar-error" hidden></p>
-    <p class="ok" id="toolbar-ok" hidden></p>
+    <div class="toolbar-ok-row" id="toolbar-ok-row" hidden>
+      <p class="ok" id="toolbar-ok"></p>
+      <button type="button" class="btn" id="cancel-metadata-collect-btn" hidden>Cancel</button>
+    </div>
   </div>
 </footer>
+
+<dialog id="collect-metadata-dialog" class="dialog">
+  <form method="dialog" id="collect-metadata-form">
+    <h2>Collect Creo metadata</h2>
+    <p id="collect-metadata-lead"></p>
+    <p class="warn-note" id="collect-metadata-warn" hidden></p>
+    <p class="muted small">Requires Creo’s embedded browser with an active Creo.JS session. You can cancel from the toolbar while it runs.</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="collect-metadata-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="collect-metadata-start">Start</button>
+    </div>
+  </form>
+</dialog>
 
 <dialog id="project-dialog" class="dialog">
   <form method="dialog" id="project-form">
