@@ -1294,6 +1294,98 @@ function creoMassFromParameters(parameters, dbg) {
     if (dbg) dbg.param_fallback = "ok";
     return mass;
 }
+function creoMassFromBodies(solid, dbg) {
+    /**
+     * Last silent path from Creo.JS docs: pfcSolidBody.GetMassProperty via
+     * GetDefaultBody / ListSolidBodies — no Display / CreateModelWindow.
+     */
+    if (!solid) return null;
+    function tryBodyMass(body, label) {
+        if (!body) return null;
+        var attempts = [
+            function () { return body.GetMassProperty(null); },
+            function () { return body.GetMassProperty(""); },
+            function () { return body.GetMassProperty(); }
+        ];
+        for (var a = 0; a < attempts.length; a++) {
+            try {
+                var props = attempts[a]();
+                var parsed = creoMassFromProps(props, null);
+                if (parsed) {
+                    if (dbg) dbg[label] = "ok";
+                    return parsed;
+                }
+                if (dbg) dbg[label] = props ? "empty_props" : "null";
+            } catch (errBody) {
+                if (dbg) dbg[label] = "threw:" + creoToolkitErr(errBody);
+            }
+        }
+        return null;
+    }
+    var bodies = [];
+    try {
+        var defBody = solid.GetDefaultBody();
+        if (dbg) dbg.try_GetDefaultBody = defBody ? "ok" : "null";
+        if (defBody) bodies.push(defBody);
+    } catch (errDef) {
+        if (dbg) dbg.try_GetDefaultBody = "threw:" + creoToolkitErr(errDef);
+    }
+    try {
+        var listed = null;
+        if (typeof solid.ListSolidBodies === "function" || solid.ListSolidBodies != null) {
+            listed = solid.ListSolidBodies();
+        } else if (typeof solid.ListBodies === "function" || solid.ListBodies != null) {
+            listed = solid.ListBodies();
+        }
+        if (listed) {
+            var items = creoFeatureItems(listed);
+            if (dbg) dbg.try_ListSolidBodies = "count:" + items.length;
+            for (var i = 0; i < items.length; i++) {
+                if (items[i]) bodies.push(items[i]);
+            }
+        } else if (dbg && !dbg.try_ListSolidBodies) {
+            dbg.try_ListSolidBodies = "null";
+        }
+    } catch (errList) {
+        if (dbg) dbg.try_ListSolidBodies = "threw:" + creoToolkitErr(errList);
+    }
+    // Deduplicate by reference loosely; keep first successes.
+    var seen = 0;
+    var total = {
+        mass: null,
+        volume: null,
+        surface_area: null,
+        density: null,
+        gravity_center: null,
+        principal_moments: null
+    };
+    var gotAny = false;
+    for (var b = 0; b < bodies.length; b++) {
+        var one = tryBodyMass(bodies[b], "try_body_" + b);
+        if (!one) continue;
+        gotAny = true;
+        seen += 1;
+        if (one.mass != null) total.mass = (total.mass || 0) + one.mass;
+        if (one.volume != null) total.volume = (total.volume || 0) + one.volume;
+        if (one.surface_area != null) total.surface_area = (total.surface_area || 0) + one.surface_area;
+        if (one.density != null && total.density == null) total.density = one.density;
+        if (one.gravity_center && !total.gravity_center) total.gravity_center = one.gravity_center;
+        if (one.principal_moments && !total.principal_moments) total.principal_moments = one.principal_moments;
+        // Single-body success is enough; multi-body sum when several succeed.
+        if (bodies.length === 1) break;
+    }
+    if (!gotAny) {
+        if (dbg && !dbg.try_GetDefaultBody && !dbg.try_ListSolidBodies) {
+            dbg.body_fallback = "no_bodies";
+        }
+        return null;
+    }
+    if (dbg) {
+        dbg.body_fallback = "ok";
+        dbg.body_count_used = seen;
+    }
+    return total;
+}
 function creoGatherMass(model, dbg, session, parameters) {
     try {
         var solidDbg = dbg ? (dbg.solid = dbg.solid || {}) : null;
@@ -1370,6 +1462,12 @@ function creoGatherMass(model, dbg, session, parameters) {
                 if (dbg) dbg.ok = true;
                 return parsed;
             }
+            // Body-level mass (documented silent API) before PRO_MP_* params.
+            parsed = creoMassFromBodies(solid, dbg);
+            if (parsed) {
+                if (dbg) dbg.ok = true;
+                return parsed;
+            }
         }
         var fromParams = creoMassFromParameters(parameters, dbg);
         if (fromParams) {
@@ -1379,9 +1477,9 @@ function creoGatherMass(model, dbg, session, parameters) {
         if (dbg && !dbg.reason) {
             dbg.reason = [
                 dbg.try_null || "",
-                dbg.try_empty || "",
-                dbg.try_zero_arg || "",
-                dbg.parse || "",
+                dbg.try_GetDefaultBody || "",
+                dbg.try_ListSolidBodies || "",
+                dbg.body_fallback || "",
                 dbg.param_fallback || ""
             ].filter(Boolean).join("|") || "all_attempts_failed";
         }
@@ -1930,6 +2028,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push76"></script>
+  <script src="/client/app.js?v={{ app_version }}-push77"></script>
 </body>
 </html>

@@ -77,7 +77,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push76" in text
+    assert "push77" in text
     assert "Saved Creo metadata for" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "Materialize start:" in open("src/creopdm_agent/server.py", encoding="utf-8").read()
     assert "PTC_MASTER_MATERIAL" in text
@@ -112,6 +112,8 @@ def test_home_page(client):
     assert ".EraseWithDependencies" not in text
     assert "function creoAsSolid" in text
     assert "GetMassPropertyWithDensity" in text
+    assert "function creoMassFromBodies" in text
+    assert "GetDefaultBody" in text
     assert "pfcSolid.cast" in text
     assert "_pdm_gather_debug" in text
     assert "Creo metadata gather debug" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
