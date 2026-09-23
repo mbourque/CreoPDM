@@ -368,7 +368,9 @@ def object_detail(
     is_creo = obj.object_type.startswith("CREO_")
     pending = ctx.workspaces.pending_workspace_save(project, obj)
     metadata = ctx.metadata.get(db, object_id)
-    where_used = ctx.metadata.where_used(db, object_id)
+    # Dependency + BOM only — vault byte scan is too slow on large projects for SSR.
+    # Where Used tab loads the full result (including vault scan) via API.
+    where_used = ctx.metadata.where_used(db, object_id, vault_scan=False)
     identity = metadata.identity or {}
     materials = metadata.materials or {}
     units = metadata.units or {}

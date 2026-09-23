@@ -391,9 +391,13 @@
   </section>
   {% endif %}
 
-  <section class="tab-panel" id="panel-where-used" hidden>
+  <section class="tab-panel" id="panel-where-used" hidden
+           data-object-id="{{ object.uuid }}"
+           data-project-id="{{ project.uuid }}"
+           data-lazy-where-used="1">
+    <div id="where-used-host">
     {% if where_used %}
-    <table class="grid">
+    <table class="grid" id="where-used-table">
       <thead>
         <tr>
           <th>Filename</th>
@@ -420,9 +424,11 @@
         {% endfor %}
       </tbody>
     </table>
+    <p class="muted small" id="where-used-scan-hint">Scanning vault for more parents…</p>
     {% else %}
-    <p class="muted">Not listed in any assembly or drawing in this project yet. Where Used also scans project vault files for this name, so parents do not need a prior Creo.JS BOM capture.</p>
+    <p class="muted" id="where-used-empty">Looking up assemblies and drawings that reference this file…</p>
     {% endif %}
+    </div>
   </section>
 
   <section class="tab-panel" id="panel-history" hidden>

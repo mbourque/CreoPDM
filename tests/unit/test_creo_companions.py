@@ -56,3 +56,21 @@ def test_select_companion_objects_prefers_referenced(tmp_path: Path):
     )
     names = {obj.filename for obj in chosen}
     assert names == {"pin.prt"}
+
+
+def test_select_companion_objects_skips_huge_unreferenced_pool(tmp_path: Path):
+    asm = tmp_path / "top.asm.1"
+    asm.write_bytes(b"no matching names here")
+    siblings = [_Obj("CAD/top.asm", "top.asm")] + [
+        _Obj(f"CAD/part{i}.prt", f"part{i}.prt") for i in range(80)
+    ]
+    chosen = select_companion_objects(
+        primary_relative="CAD/top.asm",
+        primary_filename="top.asm",
+        object_type="CREO_ASSEMBLY",
+        siblings=siblings,
+        model_path=asm,
+        model_extensions=[".prt", ".asm", ".drw"],
+        all_cad_extensions=[],
+    )
+    assert chosen == []

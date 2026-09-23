@@ -89,6 +89,9 @@ def model_references_filename(path: Path, filename: str) -> bool:
     return any(token in lower for token in tokens)
 
 
+_MAX_OPEN_COMPANION_POOL = 40
+
+
 def select_companion_objects(
     *,
     primary_relative: str,
@@ -122,12 +125,17 @@ def select_companion_objects(
     if not pool:
         return []
     referenced = names_referenced_in_model(model_path, candidate_names)
-    if not referenced:
-        return pool
-    narrowed = []
-    for obj in pool:
-        name = str(getattr(obj, "filename", "") or "")
-        logical = CreoFileManager.normalize_creo_filename(name, (*model_extensions, *all_cad_extensions))
-        if logical in referenced or logical.lower() in {item.lower() for item in referenced}:
-            narrowed.append(obj)
-    return narrowed or pool
+    if referenced:
+        narrowed = []
+        for obj in pool:
+            name = str(getattr(obj, "filename", "") or "")
+            logical = CreoFileManager.normalize_creo_filename(name, (*model_extensions, *all_cad_extensions))
+            if logical in referenced or logical.lower() in {item.lower() for item in referenced}:
+                narrowed.append(obj)
+        if narrowed:
+            return narrowed
+    # No byte matches (or empty scan): never drag an entire flat project folder
+    # into Creo — that hangs Open on multi-thousand-file projects.
+    if len(pool) > _MAX_OPEN_COMPANION_POOL:
+        return []
+    return pool

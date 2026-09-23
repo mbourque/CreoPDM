@@ -1461,26 +1461,41 @@
           );
           return null;
         }
-        const response = await fetch(`${agentBase()}/add-paths`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            pdm_url: window.location.origin,
-            project_id: projectId,
-            absolute_paths: chosenAgentPaths,
-            comment: comment || null,
-          }),
-        });
-        if (!response.ok) {
-          showError($("#add-error"), await readError(response));
-          return null;
+        const paths = [...chosenAgentPaths];
+        const total = paths.length;
+        const chunkSize = 200;
+        const combined = { ok: [], failed: [] };
+        for (let offset = 0; offset < paths.length; offset += chunkSize) {
+          const chunk = paths.slice(offset, offset + chunkSize);
+          const done = Math.min(offset + chunk.length, total);
+          setBusyMessage(`Adding files… ${done} of ${total}`);
+          const response = await fetch(`${agentBase()}/add-paths`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              pdm_url: window.location.origin,
+              project_id: projectId,
+              absolute_paths: chunk,
+              comment: offset === 0 ? comment || null : null,
+            }),
+          });
+          if (!response.ok) {
+            showError($("#add-error"), await readError(response));
+            return combined.ok.length ? combined : null;
+          }
+          const body = await response.json();
+          combined.ok.push(...(body.ok || []));
+          combined.failed.push(...(body.failed || []));
         }
-        return response.json();
+        return combined;
       }
       if (chosenUploads.length) {
         const combined = { ok: [], failed: [] };
+        const total = chosenUploads.length;
         for (let offset = 0; offset < chosenUploads.length; offset += UPLOAD_CHUNK) {
           const chunk = chosenUploads.slice(offset, offset + UPLOAD_CHUNK);
+          const done = Math.min(offset + chunk.length, total);
+          setBusyMessage(`Adding files… ${done} of ${total}`);
           const data = new FormData();
           if (comment && offset === 0) data.append("comment", comment);
           chunk.forEach((item) => {
@@ -1493,7 +1508,7 @@
           });
           if (!response.ok) {
             showError($("#add-error"), await readError(response));
-            return null;
+            return combined.ok.length ? combined : null;
           }
           const body = await response.json();
           combined.ok.push(...(body.ok || []));
@@ -1527,6 +1542,10 @@
       await withBusy("Capturing Creo metadata…", async () => {
         await pushCreoMetadataForItems(metadataTargetsFromResult(result));
       });
+    } else if ((result.ok?.length || 0) > 50) {
+      showOk(
+        `${result.ok.length} file(s) added. Creo metadata was skipped for this large add — open a model in Creo and Check In to capture it.`
+      );
     }
     reloadPage();
   });
@@ -4709,9 +4728,64 @@
       });
       if (name === "changes") loadChangesTab();
       else if (name === "checked-out") void loadCheckedOutTab();
+      else if (name === "where-used") void loadWhereUsedTab();
       else refreshTabMetrics();
     });
   });
+
+  let whereUsedLoaded = false;
+  async function loadWhereUsedTab() {
+    const panel = $("#panel-where-used");
+    if (!panel || panel.dataset.lazyWhereUsed !== "1" || whereUsedLoaded) return;
+    const objectId = panel.dataset.objectId || "";
+    const projectId = panel.dataset.projectId || "";
+    if (!objectId) return;
+    whereUsedLoaded = true;
+    const host = $("#where-used-host");
+    try {
+      const response = await fetch(`/api/objects/${encodeURIComponent(objectId)}/where-used`);
+      if (!response.ok) {
+        if (host) {
+          host.innerHTML = `<p class="muted">Could not load Where Used (${await readError(response)}).</p>`;
+        }
+        return;
+      }
+      const body = await response.json();
+      const items = Array.isArray(body.items) ? body.items : [];
+      if (!host) return;
+      if (!items.length) {
+        host.innerHTML =
+          '<p class="muted">Not listed in any assembly or drawing in this project yet. Where Used also scans project vault files for this name, so parents do not need a prior Creo.JS BOM capture.</p>';
+        return;
+      }
+      const rows = items
+        .map((row) => {
+          const href = projectId
+            ? `/projects/${encodeURIComponent(projectId)}/objects/${encodeURIComponent(row.object_id || "")}`
+            : "#";
+          const sub =
+            row.relative_path && row.relative_path !== row.filename
+              ? `<div class="muted small">${escapeHtml(row.relative_path)}</div>`
+              : "";
+          return `<tr>
+            <td class="filename-cell"><a href="${href}">${escapeHtml(row.filename || "")}</a>${sub}</td>
+            <td>${escapeHtml(row.type_label || "")}</td>
+            <td>${escapeHtml(row.display_revision || "")}</td>
+            <td>${escapeHtml(String(row.quantity ?? 1))}</td>
+            <td>${escapeHtml(row.dependency_type || "")}</td>
+          </tr>`;
+        })
+        .join("");
+      host.innerHTML = `<table class="grid" id="where-used-table">
+        <thead><tr><th>Filename</th><th>Type</th><th>Rev</th><th>Qty</th><th>Relation</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    } catch (err) {
+      if (host) {
+        host.innerHTML = `<p class="muted">Could not load Where Used (${escapeHtml(err?.message || "error")}).</p>`;
+      }
+    }
+  }
 
   document.querySelectorAll(".subtab").forEach((tab) => {
     tab.addEventListener("click", () => {
