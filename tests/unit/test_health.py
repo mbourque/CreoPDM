@@ -42,6 +42,8 @@ def test_app_js_is_not_cached(client):
     assert "canGatherCreoMetadata" in response.text
     assert "prepareLocalPathForMetadata" in response.text
     assert "#panel-structure .object-open" in response.text
+    assert "browseViaAgentPicker" in response.text
+    assert "/pick-files" in response.text
 
 
 def test_home_page(client):
@@ -71,7 +73,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push44" in text
+    assert "push45" in text
     assert "function gatherModelMetadata" in text
     assert "function creoRetrieveForMetadata" in text
     assert "function creoGatherMass" in text

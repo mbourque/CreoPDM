@@ -99,6 +99,35 @@ def test_agent_open_folder_uses_project_cache(tmp_path, monkeypatch):
         assert denied.status_code == 403
 
 
+def test_agent_pick_files_and_local_file(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    root.mkdir()
+    sample = tmp_path / "outside" / "shaft.prt.3"
+    sample.parent.mkdir()
+    sample.write_bytes(b"creo")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+
+    monkeypatch.setattr(
+        "creopdm.utils.native_dialog.pick_files",
+        lambda initial_dir, title="Add files to the project": [sample],
+    )
+    with TestClient(app) as client:
+        picked = client.post(
+            "/pick-files",
+            json={"initial_directory": str(tmp_path), "title": "Add files"},
+        )
+        assert picked.status_code == 200, picked.text
+        body = picked.json()
+        assert body["cancelled"] is False
+        assert body["selected"] == [str(sample)]
+        downloaded = client.get("/local-file", params={"path": str(sample)})
+        assert downloaded.status_code == 200, downloaded.text
+        assert downloaded.content == b"creo"
+        missing = client.get("/local-file", params={"path": str(tmp_path / "nope.prt.1")})
+        assert missing.status_code == 404
+
+
 def test_agent_open_local_association(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     root.mkdir()

@@ -113,6 +113,16 @@ class OpenFolderResponse(BaseModel):
     path: str
 
 
+class PickFilesRequest(BaseModel):
+    initial_directory: str = ""
+    title: str = "Add files to the project"
+
+
+class PickFilesResponse(BaseModel):
+    selected: list[str] = Field(default_factory=list)
+    cancelled: bool = False
+
+
 class PushItem(BaseModel):
     object_id: str
     filename: str = ""
@@ -478,6 +488,44 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         logger.info("Opened local workspace folder %s", target)
         return OpenFolderResponse(path=str(target))
+
+    @app.post("/pick-files", response_model=PickFilesResponse)
+    def pick_files_endpoint(payload: PickFilesRequest) -> PickFilesResponse:
+        """Native multi-select file dialog on this Creo PC (Creo numbered filters)."""
+        from creopdm.utils.native_dialog import pick_files
+
+        raw = (payload.initial_directory or "").strip()
+        start = Path(raw) if raw else Path.home()
+        if not start.is_dir():
+            start = start.parent if start.parent.is_dir() else Path.home()
+        title = (payload.title or "").strip() or "Add files to the project"
+        try:
+            selected = pick_files(start, title=title)
+        except Exception as exc:
+            logger.exception("Agent file picker failed")
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        paths = [str(path) for path in selected if path.is_file()]
+        return PickFilesResponse(selected=paths, cancelled=not paths)
+
+    @app.get("/local-file")
+    def local_file(path: str = ""):
+        """Read a local file the user just picked (Add upload via agent)."""
+        from fastapi.responses import FileResponse
+
+        raw = (path or "").strip()
+        if not raw:
+            raise HTTPException(status_code=400, detail="path is required")
+        try:
+            target = Path(raw).resolve()
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid path: {exc}") from exc
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail=f"File not found: {target}")
+        return FileResponse(
+            path=target,
+            filename=target.name,
+            media_type="application/octet-stream",
+        )
 
     @app.post("/push", response_model=PushResponse)
     def push_to_vault(payload: PushRequest) -> PushResponse:

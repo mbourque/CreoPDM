@@ -803,6 +803,7 @@
   let chosenUploads = [];
   let importIgnorePatterns = [];
   let importExtensions = [];
+  let addInitialDirectory = "";
   const UPLOAD_CHUNK = 400;
 
   async function loadAddFolder() {
@@ -815,6 +816,7 @@
     if (addForm && data.native_picker !== undefined) {
       addForm.dataset.nativePicker = data.native_picker ? "1" : "0";
     }
+    addInitialDirectory = String(data.initial_directory || "").trim();
     importIgnorePatterns = Array.isArray(data.ignore_patterns) ? data.ignore_patterns : [];
     importExtensions = Array.isArray(data.import_extensions)
       ? data.import_extensions.map((item) => String(item || "").toLowerCase())
@@ -1263,11 +1265,54 @@
     input.click();
   }
 
+  async function browseViaAgentPicker() {
+    const agent = await probeCreoAgent();
+    if (!agent) return false;
+    const pickResponse = await fetch(`${agentBase()}/pick-files`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        initial_directory: addInitialDirectory || "",
+        title: "Add files to the project",
+      }),
+    });
+    if (!pickResponse.ok) {
+      showError($("#add-error"), await readError(pickResponse));
+      return true;
+    }
+    const picked = await pickResponse.json();
+    const paths = Array.isArray(picked.selected) ? picked.selected : [];
+    if (!paths.length) return true;
+    const uploads = [];
+    for (const rawPath of paths) {
+      const path = String(rawPath || "");
+      if (!path) continue;
+      const fileResponse = await fetch(
+        `${agentBase()}/local-file?path=${encodeURIComponent(path)}`
+      );
+      if (!fileResponse.ok) {
+        showError($("#add-error"), await readError(fileResponse));
+        return true;
+      }
+      const blob = await fileResponse.blob();
+      const name = path.replace(/\\/g, "/").split("/").pop() || "file";
+      uploads.push({
+        file: new File([blob], name),
+        relativePath: name,
+        path: "",
+      });
+    }
+    applyDroppedFiles(uploads, []);
+    return true;
+  }
+
   $("#choose-workspace-files")?.addEventListener("click", async () => {
     const projectId = addForm?.dataset.project;
     if (!projectId) return;
     showError($("#add-error"), "");
     if (!useNativePicker()) {
+      const usedAgent = await withHtmlDialogClosed(addDialog, () => browseViaAgentPicker());
+      if (usedAgent) return;
       browseLocalFiles($("#add-file-input"));
       return;
     }
