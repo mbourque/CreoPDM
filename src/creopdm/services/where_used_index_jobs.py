@@ -15,7 +15,7 @@ logger = get_logger("where_used_index")
 
 # Match the UI threshold that skips Creo.JS metadata on large Add.
 WHERE_USED_AUTO_INDEX_MIN_FILES = 50
-_CHUNK = 40
+_CHUNK = 20
 
 
 @dataclass
@@ -100,6 +100,8 @@ class WhereUsedIndexJobs:
         offset = 0
         try:
             while True:
+                # Short DB session: list + write only. Vault byte scans happen inside
+                # rebuild_where_used_from_vault without holding a write lock.
                 session = self.session_factory()
                 try:
                     result = self.metadata.rebuild_where_used_from_vault(
@@ -128,6 +130,8 @@ class WhereUsedIndexJobs:
                     status.edges_added = edges_added
                     status.edges_existing = edges_existing
                     status.parents_missing_vault = missing
+                # Yield so other requests can use SQLite between chunks.
+                time.sleep(0.05)
                 if result.done:
                     break
             with self._lock:

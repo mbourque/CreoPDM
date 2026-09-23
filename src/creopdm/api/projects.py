@@ -222,12 +222,13 @@ def project_checkin_queue(
 )
 def start_rebuild_where_used(
     project_id: str,
-    db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WhereUsedIndexJobResponse:
-    """Start background vault → Dependency indexing (no-op if already running)."""
-    project = ctx.projects.get_project(db, project_id)
-    status = ctx.where_used_index.start(project.uuid)
+    """Start background vault → Dependency indexing (no-op if already running).
+
+    Does not touch the DB here so a busy indexer cannot block Start.
+    """
+    status = ctx.where_used_index.start(project_id)
     return _where_used_job_response(status)
 
 
@@ -237,12 +238,10 @@ def start_rebuild_where_used(
 )
 def rebuild_where_used_status(
     project_id: str,
-    db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WhereUsedIndexJobResponse:
-    """Poll background Where Used index job status."""
-    project = ctx.projects.get_project(db, project_id)
-    return _where_used_job_response(ctx.where_used_index.get(project.uuid))
+    """Poll background Where Used index job status (memory only — never waits on SQLite)."""
+    return _where_used_job_response(ctx.where_used_index.get(project_id))
 
 
 def _where_used_job_response(status) -> WhereUsedIndexJobResponse:

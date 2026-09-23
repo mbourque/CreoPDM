@@ -433,6 +433,12 @@ class MetadataService:
         edges_existing = 0
         missing = 0
         scanned: list[str] = []
+        # Collect links while reading vault bytes — do not write until the scan
+        # for this chunk finishes, or SQLite holds a write lock across multi‑MB reads
+        # and hangs the rest of CreoPDM (status GET, UI, etc.).
+        pending: list[tuple[int, int, str]] = []
+        # End the list_objects read transaction before vault I/O.
+        session.commit()
 
         for parent in chunk:
             scanned.append(parent.filename)
@@ -477,27 +483,30 @@ class MetadataService:
                 else DependencyType.ASSEMBLY_MEMBER.value
             )
             for child_id in child_ids:
-                existing = session.scalar(
-                    select(Dependency).where(
-                        Dependency.project_id == project.id,
-                        Dependency.parent_object_id == parent.id,
-                        Dependency.child_object_id == child_id,
-                        Dependency.dependency_type == dep_type,
-                    )
+                pending.append((parent.id, child_id, dep_type))
+
+        for parent_id, child_id, dep_type in pending:
+            existing = session.scalar(
+                select(Dependency).where(
+                    Dependency.project_id == project.id,
+                    Dependency.parent_object_id == parent_id,
+                    Dependency.child_object_id == child_id,
+                    Dependency.dependency_type == dep_type,
                 )
-                if existing is not None:
-                    edges_existing += 1
-                    continue
-                session.add(
-                    Dependency(
-                        project_id=project.id,
-                        parent_object_id=parent.id,
-                        child_object_id=child_id,
-                        dependency_type=dep_type,
-                        quantity=1.0,
-                    )
+            )
+            if existing is not None:
+                edges_existing += 1
+                continue
+            session.add(
+                Dependency(
+                    project_id=project.id,
+                    parent_object_id=parent_id,
+                    child_object_id=child_id,
+                    dependency_type=dep_type,
+                    quantity=1.0,
                 )
-                edges_added += 1
+            )
+            edges_added += 1
 
         session.flush()
         next_offset = start + len(chunk)
