@@ -927,6 +927,10 @@ function creoFeatureItems(listed) {
     return out;
 }
 function creoResolveComponentModel(session, feat, filename) {
+    /**
+     * Resolve a component already in session. Do not RetrieveModel here —
+     * missing deps spam Creo with regen failures during metadata/BOM walks.
+     */
     try {
         if (feat && typeof feat.GetModel === "function") {
             var byMethod = feat.GetModel();
@@ -945,9 +949,8 @@ function creoResolveComponentModel(session, feat, filename) {
         }
     } catch (errGet) {}
     try {
-        var descr = pfcModelDescriptor.CreateFromFileName(name);
-        return session.RetrieveModel(descr);
-    } catch (errRet) {}
+        return creoFindSessionModel(session, name);
+    } catch (errFind) {}
     return null;
 }
 function creoIsAssemblyModel(model, filename) {
@@ -1047,6 +1050,7 @@ function creoRetrieveForMetadata(session, filePath, filename) {
                     && typeof pfcRetrieveModelOptions !== "undefined") {
                     try {
                         var opts = pfcRetrieveModelOptions.Create();
+                        try { opts.AskUserAboutReps = false; } catch (errAsk) {}
                         model = session.RetrieveModelWithOpts(descrPath, opts);
                         if (model) return model;
                     } catch (errOpts) {}
@@ -1072,6 +1076,7 @@ function creoRetrieveForMetadata(session, filePath, filename) {
                         && typeof pfcRetrieveModelOptions !== "undefined") {
                         try {
                             var optsDisk = pfcRetrieveModelOptions.Create();
+                            try { optsDisk.AskUserAboutReps = false; } catch (errAsk2) {}
                             model = session.RetrieveModelWithOpts(descrDisk, optsDisk);
                             if (model) return model;
                         } catch (errOpts2) {}
@@ -1168,6 +1173,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push47"></script>
+  <script src="/client/app.js?v={{ app_version }}-push48"></script>
 </body>
 </html>
