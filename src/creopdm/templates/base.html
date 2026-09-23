@@ -915,168 +915,116 @@ function creoHasCallable(obj, name) {
         return false;
     }
 }
+function creoSameLogicalModel(a, b) {
+    if (!a || !b) return false;
+    try {
+        var na = creoLogicalFileName(String(a.FileName || "")).toLowerCase();
+        var nb = creoLogicalFileName(String(b.FileName || "")).toLowerCase();
+        return !!(na && nb && na === nb);
+    } catch (err) {
+        return false;
+    }
+}
+function creoSolidMethodsBound(model) {
+    return creoHasCallable(model, "GetMassProperty")
+        || creoHasCallable(model, "GetPrincipalUnits")
+        || creoHasCallable(model, "ListFeaturesByType");
+}
 function creoUpgradeSolidModel(session, model, dbg) {
     /**
-     * RetrieveModel / GetModelFromFileName often return a handle whose
-     * getClassName() is "pfcModel" — isInstanceOf(pfcSolid) is true but
-     * GetMassProperty / ListFeaturesByType are null. PTC samples use
-     * GetActiveModel(), which returns a properly bound solid/part/asm.
-     * Re-resolve through session APIs (and briefly a model window if needed).
+     * RetrieveModel handles are often unbound (getClassName "pfcModel", solid
+     * methods null). Never OpenFile / CreateModelWindow here — that steals
+     * focus from the embedded browser during Collect.
+     *
+     * Only reuse an already-active/current model when it is the same file and
+     * already has solid methods bound (typical after the user opened it).
      */
     if (!model) return null;
-    if (creoHasCallable(model, "GetMassProperty") || creoHasCallable(model, "ListFeaturesByType")) {
+    if (creoSolidMethodsBound(model)) {
         if (dbg) dbg.upgrade = "already_bound";
         return model;
     }
-    var upgraded = null;
-    var fileName = "";
-    try { fileName = String(model.FileName || ""); } catch (errN) { fileName = ""; }
-    var logical = creoLogicalFileName(fileName);
-    var root = creoModelRoot(logical);
     if (dbg) {
         dbg.upgrade_from = creoMethodKind(model, "GetMassProperty");
-        dbg.upgrade_class = "";
         try {
-            if (typeof model.getClassName === "function") dbg.upgrade_class = String(model.getClassName() || "");
-        } catch (errC) {}
+            if (model && model.getClassName) dbg.upgrade_class = String(model.getClassName() || "");
+        } catch (errC) {
+            dbg.upgrade_class = "";
+        }
     }
-
-    // 1) session.GetModel(name, type) — typed lookup.
+    if (!session) {
+        if (dbg) dbg.upgrade = "no_session";
+        return model;
+    }
     try {
-        if (session && root && typeof session.GetModel === "function" && typeof pfcModelType !== "undefined") {
+        var active = null;
+        try { active = session.GetActiveModel && session.GetActiveModel(); } catch (errA) { active = null; }
+        if (active && creoSameLogicalModel(active, model) && creoSolidMethodsBound(active)) {
+            if (dbg) {
+                dbg.upgrade = "GetActiveModel_same_file";
+                dbg.upgrade_GetMassProperty = creoMethodKind(active, "GetMassProperty");
+            }
+            return active;
+        }
+        if (dbg && active) {
+            dbg.tried_GetActiveModel = creoSameLogicalModel(active, model)
+                ? creoMethodKind(active, "GetMassProperty")
+                : "different_file";
+        }
+    } catch (err1) {
+        if (dbg) dbg.tried_GetActiveModel = "threw:" + creoToolkitErr(err1);
+    }
+    try {
+        var current = null;
+        try { current = session.CurrentModel; } catch (errC) { current = null; }
+        if (current && creoSameLogicalModel(current, model) && creoSolidMethodsBound(current)) {
+            if (dbg) {
+                dbg.upgrade = "CurrentModel_same_file";
+                dbg.upgrade_GetMassProperty = creoMethodKind(current, "GetMassProperty");
+            }
+            return current;
+        }
+    } catch (err2) {
+        if (dbg) dbg.tried_CurrentModel = "threw:" + creoToolkitErr(err2);
+    }
+    // Silent typed lookups — never display.
+    try {
+        var fileName = "";
+        try { fileName = String(model.FileName || ""); } catch (errN) { fileName = ""; }
+        var root = creoModelRoot(creoLogicalFileName(fileName));
+        if (root && session.GetModel && typeof pfcModelType !== "undefined") {
             var typeList = [];
             try {
-                if (typeof model.isInstanceOf === "function") {
+                if (model.isInstanceOf) {
                     if (model.isInstanceOf("pfcAssembly")) typeList.push(pfcModelType.MDL_ASSEMBLY);
                     else if (model.isInstanceOf("pfcPart")) typeList.push(pfcModelType.MDL_PART);
                 }
             } catch (errInst) {}
             if (!typeList.length) {
-                var lower = String(logical || "").toLowerCase();
+                var lower = String(fileName || "").toLowerCase();
                 if (lower.indexOf(".asm") >= 0) typeList.push(pfcModelType.MDL_ASSEMBLY);
                 else typeList.push(pfcModelType.MDL_PART);
             }
             for (var ti = 0; ti < typeList.length; ti++) {
                 try {
-                    upgraded = session.GetModel(root, typeList[ti]);
+                    var got = session.GetModel(root, typeList[ti]);
+                    if (got && creoSolidMethodsBound(got)) {
+                        if (dbg) {
+                            dbg.upgrade = "GetModel";
+                            dbg.upgrade_GetMassProperty = creoMethodKind(got, "GetMassProperty");
+                        }
+                        return got;
+                    }
+                    if (dbg && got) dbg.tried_GetModel = creoMethodKind(got, "GetMassProperty");
                 } catch (errGet) {
-                    upgraded = null;
+                    if (dbg) dbg.tried_GetModel = "threw:" + creoToolkitErr(errGet);
                 }
-                if (upgraded && (
-                    creoHasCallable(upgraded, "GetMassProperty")
-                    || creoHasCallable(upgraded, "ListFeaturesByType")
-                )) {
-                    if (dbg) {
-                        dbg.upgrade = "GetModel";
-                        dbg.upgrade_GetMassProperty = creoMethodKind(upgraded, "GetMassProperty");
-                    }
-                    return upgraded;
-                }
-            }
-        }
-    } catch (err1) {
-        if (dbg) dbg.upgrade_GetModel = creoToolkitErr(err1);
-    }
-
-    // 2) session.GetModelFromDescr
-    try {
-        var descr = null;
-        try {
-            if (typeof model.GetDescr === "function") descr = model.GetDescr();
-        } catch (errD) { descr = null; }
-        try {
-            if (!descr && typeof model.Descr !== "undefined") descr = model.Descr;
-        } catch (errD2) {}
-        if (descr && session && typeof session.GetModelFromDescr === "function") {
-            upgraded = session.GetModelFromDescr(descr);
-            if (upgraded && (
-                creoHasCallable(upgraded, "GetMassProperty")
-                || creoHasCallable(upgraded, "ListFeaturesByType")
-            )) {
-                if (dbg) {
-                    dbg.upgrade = "GetModelFromDescr";
-                    dbg.upgrade_GetMassProperty = creoMethodKind(upgraded, "GetMassProperty");
-                }
-                return upgraded;
-            }
-        }
-    } catch (err2) {
-        if (dbg) dbg.upgrade_GetModelFromDescr = creoToolkitErr(err2);
-    }
-
-    // 3) Model window → GetActiveModel / window.GetModel (matches PTC samples).
-    var win = null;
-    var createdWin = false;
-    try {
-        if (session && typeof session.GetModelWindow === "function") {
-            try { win = session.GetModelWindow(model); } catch (errGW) { win = null; }
-        }
-        if (!win && session && typeof session.CreateModelWindow === "function") {
-            try {
-                win = session.CreateModelWindow(model);
-                createdWin = !!win;
-            } catch (errCW) {
-                win = null;
-                if (dbg) dbg.upgrade_CreateModelWindow = creoToolkitErr(errCW);
-            }
-        }
-        if (win) {
-            try {
-                if (typeof model.Display === "function") model.Display();
-            } catch (errDisp) {}
-            try {
-                if (typeof win.Activate === "function") win.Activate();
-            } catch (errAct) {}
-            upgraded = null;
-            try {
-                if (typeof win.GetModel === "function") upgraded = win.GetModel();
-            } catch (errWG) { upgraded = null; }
-            if (!upgraded || !(
-                creoHasCallable(upgraded, "GetMassProperty")
-                || creoHasCallable(upgraded, "ListFeaturesByType")
-            )) {
-                try { upgraded = session.GetActiveModel(); } catch (errAM) { upgraded = null; }
-            }
-            if (!upgraded || !(
-                creoHasCallable(upgraded, "GetMassProperty")
-                || creoHasCallable(upgraded, "ListFeaturesByType")
-            )) {
-                try { upgraded = session.CurrentModel; } catch (errCM) { upgraded = null; }
-            }
-            if (upgraded && (
-                creoHasCallable(upgraded, "GetMassProperty")
-                || creoHasCallable(upgraded, "ListFeaturesByType")
-            )) {
-                if (dbg) {
-                    dbg.upgrade = createdWin ? "CreateModelWindow" : "existing_window";
-                    dbg.upgrade_GetMassProperty = creoMethodKind(upgraded, "GetMassProperty");
-                    dbg.created_window = createdWin;
-                }
-                // Close windows we opened so Collect does not pile up UI.
-                if (createdWin) {
-                    try {
-                        if (typeof win.Close === "function") win.Close();
-                    } catch (errClose) {
-                        try {
-                            if (typeof session.DeleteModelWindow === "function") {
-                                session.DeleteModelWindow(win);
-                            }
-                        } catch (errDel) {}
-                    }
-                }
-                return upgraded;
-            }
-            if (createdWin) {
-                try {
-                    if (typeof win.Close === "function") win.Close();
-                } catch (errClose2) {}
             }
         }
     } catch (err3) {
-        if (dbg) dbg.upgrade_window = creoToolkitErr(err3);
+        if (dbg) dbg.upgrade_GetModel = creoToolkitErr(err3);
     }
-
-    if (dbg) dbg.upgrade = "failed";
+    if (dbg) dbg.upgrade = "unbound_retrieve_handle";
     return model;
 }
 function creoAsSolid(session, model, dbg) {
@@ -1250,78 +1198,115 @@ function creoMassFromProps(props, dbg) {
     if (dbg) dbg.parse = "ok";
     return mass;
 }
-function creoGatherMass(model, dbg, session) {
+function creoMassFromParameters(parameters, dbg) {
+    // When solid GetMassProperty is unbound on RetrieveModel handles, fall back
+    // to Creo's designated mass-property parameters if they were last computed.
+    if (!parameters || !parameters.length) return null;
+    var map = {};
+    for (var i = 0; i < parameters.length; i++) {
+        var row = parameters[i];
+        if (!row || !row.name) continue;
+        map[String(row.name).toUpperCase()] = row.value;
+    }
+    function num(keys) {
+        for (var k = 0; k < keys.length; k++) {
+            if (map[keys[k]] == null || map[keys[k]] === "") continue;
+            var n = Number(map[keys[k]]);
+            if (typeof n === "number" && isFinite(n)) return n;
+        }
+        return null;
+    }
+    var mass = {
+        mass: num(["PRO_MP_MASS", "MP_MASS", "MASS"]),
+        volume: num(["PRO_MP_VOLUME", "MP_VOLUME", "VOLUME"]),
+        surface_area: num(["PRO_MP_AREA", "PRO_MP_SURFACE_AREA", "MP_AREA", "SURFACE_AREA"]),
+        density: num(["PRO_MP_DENSITY", "MP_DENSITY", "DENSITY"]),
+        gravity_center: null,
+        principal_moments: null
+    };
+    if (mass.mass == null && mass.volume == null && mass.density == null) {
+        if (dbg) dbg.param_fallback = "no_pro_mp";
+        return null;
+    }
+    if (dbg) dbg.param_fallback = "ok";
+    return mass;
+}
+function creoGatherMass(model, dbg, session, parameters) {
     try {
         var solidDbg = dbg ? (dbg.solid = dbg.solid || {}) : null;
         var solid = creoAsSolid(session, model, solidDbg);
         if (!solid) {
             if (dbg) dbg.reason = "no_solid";
-            return null;
-        }
-        // Do not gate on typeof===function — Creo.JS solid methods often fail that check
-        // even though model.GetMassProperty() works (see PTC test_model_properties.js).
-        var props = null;
-        try {
-            props = solid.GetMassProperty(null);
-            if (dbg) dbg.try_null = props ? "ok" : "null";
-        } catch (errNull) {
-            if (dbg) dbg.try_null = "threw:" + creoToolkitErr(errNull);
-            props = null;
-        }
-        if (!props) {
+        } else {
+            // Do not gate on typeof===function — Creo.JS solid methods often fail that check.
+            var props = null;
             try {
-                props = solid.GetMassProperty("");
-                if (dbg) dbg.try_empty = props ? "ok" : "null";
-            } catch (errEmpty) {
-                if (dbg) dbg.try_empty = "threw:" + creoToolkitErr(errEmpty);
+                props = solid.GetMassProperty(null);
+                if (dbg) dbg.try_null = props ? "ok" : "null";
+            } catch (errNull) {
+                if (dbg) dbg.try_null = "threw:" + creoToolkitErr(errNull);
                 props = null;
             }
-        }
-        if (!props) {
-            try {
-                props = solid.GetMassProperty();
-                if (dbg) dbg.try_zero_arg = props ? "ok" : "null";
-            } catch (errZero) {
-                if (dbg) dbg.try_zero_arg = "threw:" + creoToolkitErr(errZero);
-                props = null;
-            }
-        }
-        var parsed = creoMassFromProps(props, dbg);
-        if (parsed) {
-            if (dbg) dbg.ok = true;
-            return parsed;
-        }
-        try {
-            var densityOpt = null;
-            try {
-                if (typeof pfcMPDensityUse !== "undefined") {
-                    densityOpt = pfcMPDensityUse.MP_DENSITY_USE_IF_MISSING
-                        || pfcMPDensityUse.MP_DENSITY_DEFAULT
-                        || null;
-                }
-            } catch (errOpt) { densityOpt = null; }
-            if (densityOpt == null) densityOpt = 2;
-            if (dbg) dbg.density_opt = densityOpt;
-            try {
-                props = solid.GetMassPropertyWithDensity(null, densityOpt, 1.0);
-                if (dbg) dbg.try_density = props ? "ok" : "null";
-            } catch (errDens) {
-                if (dbg) dbg.try_density = "threw:" + creoToolkitErr(errDens);
+            if (!props) {
                 try {
-                    props = solid.GetMassPropertyWithDensity("", densityOpt, 1.0);
-                    if (dbg) dbg.try_density_empty = props ? "ok" : "null";
-                } catch (errDens2) {
-                    if (dbg) dbg.try_density_empty = "threw:" + creoToolkitErr(errDens2);
+                    props = solid.GetMassProperty("");
+                    if (dbg) dbg.try_empty = props ? "ok" : "null";
+                } catch (errEmpty) {
+                    if (dbg) dbg.try_empty = "threw:" + creoToolkitErr(errEmpty);
                     props = null;
                 }
             }
-            parsed = creoMassFromProps(props, dbg);
+            if (!props) {
+                try {
+                    props = solid.GetMassProperty();
+                    if (dbg) dbg.try_zero_arg = props ? "ok" : "null";
+                } catch (errZero) {
+                    if (dbg) dbg.try_zero_arg = "threw:" + creoToolkitErr(errZero);
+                    props = null;
+                }
+            }
+            var parsed = creoMassFromProps(props, dbg);
             if (parsed) {
                 if (dbg) dbg.ok = true;
                 return parsed;
             }
-        } catch (errDensAll) {
-            if (dbg) dbg.density_block = creoToolkitErr(errDensAll);
+            try {
+                var densityOpt = null;
+                try {
+                    if (typeof pfcMPDensityUse !== "undefined") {
+                        densityOpt = pfcMPDensityUse.MP_DENSITY_USE_IF_MISSING
+                            || pfcMPDensityUse.MP_DENSITY_DEFAULT
+                            || null;
+                    }
+                } catch (errOpt) { densityOpt = null; }
+                if (densityOpt == null) densityOpt = 2;
+                if (dbg) dbg.density_opt = densityOpt;
+                try {
+                    props = solid.GetMassPropertyWithDensity(null, densityOpt, 1.0);
+                    if (dbg) dbg.try_density = props ? "ok" : "null";
+                } catch (errDens) {
+                    if (dbg) dbg.try_density = "threw:" + creoToolkitErr(errDens);
+                    try {
+                        props = solid.GetMassPropertyWithDensity("", densityOpt, 1.0);
+                        if (dbg) dbg.try_density_empty = props ? "ok" : "null";
+                    } catch (errDens2) {
+                        if (dbg) dbg.try_density_empty = "threw:" + creoToolkitErr(errDens2);
+                        props = null;
+                    }
+                }
+                parsed = creoMassFromProps(props, dbg);
+                if (parsed) {
+                    if (dbg) dbg.ok = true;
+                    return parsed;
+                }
+            } catch (errDensAll) {
+                if (dbg) dbg.density_block = creoToolkitErr(errDensAll);
+            }
+        }
+        var fromParams = creoMassFromParameters(parameters, dbg);
+        if (fromParams) {
+            if (dbg) dbg.ok = true;
+            return fromParams;
         }
         if (dbg && !dbg.reason) dbg.reason = "all_attempts_failed";
     } catch (err) {
@@ -1578,17 +1563,40 @@ function creoGatherBom(model, depth, visited, session) {
     var seen = visited || {};
     try {
         if (maxDepth < 0) return nodes;
-        if (typeof pfcFeatureType === "undefined") {
-            return nodes;
-        }
         var solid = creoAsSolid(session, model, null);
-        var listed = null;
+        var features = [];
         try {
-            listed = solid.ListFeaturesByType(true, pfcFeatureType.FEATTYPE_COMPONENT);
+            if (typeof pfcFeatureType !== "undefined") {
+                var listed = solid.ListFeaturesByType(true, pfcFeatureType.FEATTYPE_COMPONENT);
+                features = creoFeatureItems(listed);
+            }
         } catch (errList) {
-            listed = null;
+            features = [];
         }
-        var features = creoFeatureItems(listed);
+        // Same unbound-handle fallback as part features: ListItems is on pfcModel.
+        if (!features.length) {
+            try {
+                var itemType = null;
+                if (typeof pfcModelItemType !== "undefined" && pfcModelItemType.ITEM_FEATURE != null) {
+                    itemType = pfcModelItemType.ITEM_FEATURE;
+                }
+                if (itemType != null) {
+                    var allItems = creoFeatureItems(solid.ListItems(itemType));
+                    for (var fi = 0; fi < allItems.length; fi++) {
+                        var feat = allItems[fi];
+                        if (!feat) continue;
+                        try {
+                            if (typeof pfcFeatureType !== "undefined"
+                                && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
+                                features.push(feat);
+                            }
+                        } catch (errComp) {}
+                    }
+                }
+            } catch (errItems) {
+                features = [];
+            }
+        }
         var qtyByName = {};
         var order = [];
         for (var i = 0; i < features.length; i++) {
@@ -1763,7 +1771,7 @@ function gatherModelMetadata(filename, filePath) {
         var solidModel = creoUpgradeSolidModel(session, model, gatherDebug.solid_upgrade);
         if (!solidModel) solidModel = model;
         var units = creoGatherUnits(solidModel, gatherDebug.units, session);
-        var mass = creoGatherMass(solidModel, gatherDebug.mass, session);
+        var mass = creoGatherMass(solidModel, gatherDebug.mass, session, parameters);
         var family_table = creoGatherFamilyTable(model);
         var features = [];
         var bom = [];
@@ -1845,6 +1853,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push70"></script>
+  <script src="/client/app.js?v={{ app_version }}-push71"></script>
 </body>
 </html>
