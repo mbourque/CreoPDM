@@ -24,7 +24,7 @@ from creopdm.schemas.common import (
     WhereUsedResponse,
 )
 from creopdm.services.object_service import ObjectService
-from creopdm.utils.bom_match import bom_lookup_keys
+from creopdm.utils.bom_match import bom_lookup_keys, bom_where_used_keys
 from creopdm.utils.classify import display_type_label
 
 logger = logging.getLogger(__name__)
@@ -217,7 +217,7 @@ class MetadataService:
 
         # Also scan stored BOM trees — older captures may not have written Dependency rows
         # (nested BOM was skipped when ListDependencies returned anything).
-        target_keys = set(bom_lookup_keys(obj.filename))
+        target_keys = set(bom_where_used_keys(obj.filename))
         if target_keys:
             siblings = self._objects.list_objects(session, obj.project_id)
             for other in siblings:
@@ -234,7 +234,7 @@ class MetadataService:
                 for filename, qty, dep_type in self._flatten_bom(bom):
                     if self._skip_dependency_ref(dep_type, filename, other.filename):
                         continue
-                    if set(bom_lookup_keys(filename)) & target_keys:
+                    if set(bom_where_used_keys(filename)) & target_keys:
                         matched_qty += float(qty or 1.0)
                         matched_type = dep_type
                 if matched_qty <= 0:
