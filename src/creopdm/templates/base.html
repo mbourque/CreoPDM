@@ -894,16 +894,42 @@ function creoToolkitErr(err) {
         return "err";
     }
 }
+function creoMethodKind(obj, name) {
+    // Creo.JS toolkit methods are often callable but not typeof "function".
+    try {
+        if (!obj) return "no_obj";
+        var m = obj[name];
+        if (typeof m === "function") return "function";
+        if (m == null) return "null";
+        return typeof m;
+    } catch (err) {
+        return "throw:" + creoToolkitErr(err);
+    }
+}
 function creoAsSolid(model, dbg) {
-    // Mass / units / features live on pfcSolid. RetrieveModel often returns a
-    // pfcModel handle — cast when Creo.JS exposes pfcSolid.cast.
+    // Creo.JS: parts/asms already expose solid methods on the model — no cast required
+    // (PTC samples call model.GetMassProperty() directly). pfcSolid.cast is WebLink-era.
     if (dbg) {
         dbg.has_pfcSolid = typeof pfcSolid !== "undefined";
         dbg.has_cast = typeof pfcSolid !== "undefined" && typeof pfcSolid.cast === "function";
         dbg.cast_used = false;
-        dbg.model_has_GetMassProperty = !!(model && typeof model.GetMassProperty === "function");
-        dbg.model_has_GetPrincipalUnits = !!(model && typeof model.GetPrincipalUnits === "function");
-        dbg.model_has_ListFeaturesByType = !!(model && typeof model.ListFeaturesByType === "function");
+        dbg.GetMassProperty = creoMethodKind(model, "GetMassProperty");
+        dbg.GetPrincipalUnits = creoMethodKind(model, "GetPrincipalUnits");
+        dbg.ListFeaturesByType = creoMethodKind(model, "ListFeaturesByType");
+        try {
+            if (model && typeof model.isInstanceOf === "function") {
+                dbg.is_pfcSolid = !!model.isInstanceOf("pfcSolid");
+                dbg.is_pfcPart = !!model.isInstanceOf("pfcPart");
+                dbg.is_pfcAssembly = !!model.isInstanceOf("pfcAssembly");
+            }
+        } catch (errInst) {
+            dbg.isInstanceOf_error = creoToolkitErr(errInst);
+        }
+        try {
+            if (model && typeof model.getClassName === "function") {
+                dbg.class_name = String(model.getClassName() || "");
+            }
+        } catch (errClass) {}
     }
     if (!model) return null;
     try {
@@ -912,9 +938,7 @@ function creoAsSolid(model, dbg) {
             if (casted) {
                 if (dbg) {
                     dbg.cast_used = true;
-                    dbg.solid_has_GetMassProperty = typeof casted.GetMassProperty === "function";
-                    dbg.solid_has_GetPrincipalUnits = typeof casted.GetPrincipalUnits === "function";
-                    dbg.solid_has_ListFeaturesByType = typeof casted.ListFeaturesByType === "function";
+                    dbg.cast_GetMassProperty = creoMethodKind(casted, "GetMassProperty");
                 }
                 return casted;
             }
@@ -950,13 +974,10 @@ function creoGatherUnits(model, dbg) {
             if (dbg) dbg.reason = "no_solid";
             return units;
         }
-        if (typeof solid.GetPrincipalUnits !== "function") {
-            if (dbg) dbg.reason = "no_GetPrincipalUnits";
-            return units;
-        }
         var system = null;
         try {
             system = solid.GetPrincipalUnits();
+            if (dbg) dbg.try_GetPrincipalUnits = system ? "ok" : "null";
         } catch (errSys) {
             if (dbg) dbg.reason = "GetPrincipalUnits_threw:" + creoToolkitErr(errSys);
             return units;
@@ -967,7 +988,7 @@ function creoGatherUnits(model, dbg) {
         }
         if (dbg) {
             dbg.has_system = true;
-            dbg.has_GetUnit = typeof system.GetUnit === "function";
+            dbg.GetUnit = creoMethodKind(system, "GetUnit");
             dbg.has_pfcUnitType = typeof pfcUnitType !== "undefined";
         }
         units.system_name = creoUnitName(system);
@@ -989,11 +1010,9 @@ function creoGatherUnits(model, dbg) {
                     unitType = typeOrdinal;
                 }
                 var unit = null;
-                if (unitType != null && typeof system.GetUnit === "function") {
-                    try { unit = system.GetUnit(unitType); } catch (errGu) {
-                        if (dbg) dbg["getunit_" + field] = creoToolkitErr(errGu);
-                        unit = null;
-                    }
+                try { unit = system.GetUnit(unitType); } catch (errGu) {
+                    if (dbg) dbg["getunit_" + field] = creoToolkitErr(errGu);
+                    unit = null;
                 }
                 if (unit) units[field] = creoUnitName(unit);
             } catch (errType) {
@@ -1062,46 +1081,40 @@ function creoGatherMass(model, dbg) {
             if (dbg) dbg.reason = "no_solid";
             return null;
         }
+        // Do not gate on typeof===function — Creo.JS solid methods often fail that check
+        // even though model.GetMassProperty() works (see PTC test_model_properties.js).
         var props = null;
-        var hasMp = typeof solid.GetMassProperty === "function";
-        if (dbg) dbg.has_GetMassProperty = hasMp;
-        if (hasMp) {
+        try {
+            props = solid.GetMassProperty(null);
+            if (dbg) dbg.try_null = props ? "ok" : "null";
+        } catch (errNull) {
+            if (dbg) dbg.try_null = "threw:" + creoToolkitErr(errNull);
+            props = null;
+        }
+        if (!props) {
             try {
-                props = solid.GetMassProperty(null);
-                if (dbg) dbg.try_null = props ? "ok" : "null";
-            } catch (errNull) {
-                if (dbg) dbg.try_null = "threw:" + creoToolkitErr(errNull);
+                props = solid.GetMassProperty("");
+                if (dbg) dbg.try_empty = props ? "ok" : "null";
+            } catch (errEmpty) {
+                if (dbg) dbg.try_empty = "threw:" + creoToolkitErr(errEmpty);
                 props = null;
             }
-            if (!props) {
-                try {
-                    props = solid.GetMassProperty("");
-                    if (dbg) dbg.try_empty = props ? "ok" : "null";
-                } catch (errEmpty) {
-                    if (dbg) dbg.try_empty = "threw:" + creoToolkitErr(errEmpty);
-                    props = null;
-                }
+        }
+        if (!props) {
+            try {
+                props = solid.GetMassProperty();
+                if (dbg) dbg.try_zero_arg = props ? "ok" : "null";
+            } catch (errZero) {
+                if (dbg) dbg.try_zero_arg = "threw:" + creoToolkitErr(errZero);
+                props = null;
             }
-            if (!props) {
-                try {
-                    props = solid.GetMassProperty();
-                    if (dbg) dbg.try_zero_arg = props ? "ok" : "null";
-                } catch (errZero) {
-                    if (dbg) dbg.try_zero_arg = "threw:" + creoToolkitErr(errZero);
-                    props = null;
-                }
-            }
-        } else if (dbg) {
-            dbg.reason = "no_GetMassProperty";
         }
         var parsed = creoMassFromProps(props, dbg);
         if (parsed) {
             if (dbg) dbg.ok = true;
             return parsed;
         }
-        var hasDens = typeof solid.GetMassPropertyWithDensity === "function";
-        if (dbg) dbg.has_GetMassPropertyWithDensity = hasDens;
-        if (hasDens) {
+        try {
             var densityOpt = null;
             try {
                 if (typeof pfcMPDensityUse !== "undefined") {
@@ -1130,6 +1143,8 @@ function creoGatherMass(model, dbg) {
                 if (dbg) dbg.ok = true;
                 return parsed;
             }
+        } catch (errDensAll) {
+            if (dbg) dbg.density_block = creoToolkitErr(errDensAll);
         }
         if (dbg && !dbg.reason) dbg.reason = "all_attempts_failed";
     } catch (err) {
@@ -1166,11 +1181,7 @@ function creoGatherFeatures(model, dbg) {
             if (dbg) dbg.reason = "no_solid";
             return rows;
         }
-        if (typeof solid.ListFeaturesByType !== "function") {
-            if (dbg) dbg.reason = "no_ListFeaturesByType";
-            return rows;
-        }
-        if (dbg) dbg.has_ListFeaturesByType = true;
+        // Do not gate on typeof===function — same Creo.JS quirk as GetMassProperty.
         var listed = null;
         try {
             listed = solid.ListFeaturesByType(true, null);
@@ -1372,10 +1383,15 @@ function creoGatherBom(model, depth, visited, session) {
     var seen = visited || {};
     try {
         if (maxDepth < 0) return nodes;
-        if (typeof pfcFeatureType === "undefined" || typeof model.ListFeaturesByType !== "function") {
+        if (typeof pfcFeatureType === "undefined") {
             return nodes;
         }
-        var listed = model.ListFeaturesByType(true, pfcFeatureType.FEATTYPE_COMPONENT);
+        var listed = null;
+        try {
+            listed = model.ListFeaturesByType(true, pfcFeatureType.FEATTYPE_COMPONENT);
+        } catch (errList) {
+            listed = null;
+        }
         var features = creoFeatureItems(listed);
         var qtyByName = {};
         var order = [];
@@ -1628,6 +1644,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push68"></script>
+  <script src="/client/app.js?v={{ app_version }}-push69"></script>
 </body>
 </html>

@@ -261,6 +261,9 @@ def post_creo_metadata(
     deps = len(result.dependencies or [])
     bom = result.bom
     bom_n = len(bom) if isinstance(bom, list) else (1 if bom else 0)
+    units_ok = False
+    if isinstance(result.units, dict):
+        units_ok = any(str(result.units.get(k) or "").strip() for k in ("system_name", "length", "mass", "time", "temperature"))
     ident = ""
     if isinstance(result.identity, dict):
         ident = str(result.identity.get("file_name") or result.identity.get("full_name") or "")
@@ -274,7 +277,7 @@ def post_creo_metadata(
         deps,
         bom_n,
         "yes" if result.mass else "no",
-        "yes" if result.units else "no",
+        "yes" if units_ok else "no",
         len(result.features or []) if isinstance(result.features, list) else 0,
     )
     if payload.gather_debug:
