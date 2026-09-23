@@ -261,3 +261,66 @@ def test_where_used_from_nested_bom_and_family_table_name(client, repo_parent, t
     pin_detail = client.get(f"/projects/{project['uuid']}/objects/{pin['uuid']}")
     assert pin_detail.status_code == 200
     assert "frame.asm.1" in pin_detail.text
+
+
+@requires_git
+def test_where_used_when_child_added_after_assembly_bom(client, repo_parent, tmp_path):
+    """Assembly metadata captured before the child exists still feeds Where Used later."""
+    project = _create_project(client, repo_parent)
+    frame = _add_part(client, project["uuid"], tmp_path, "frame.asm.1")
+    posted = client.post(
+        f"/api/objects/{frame['uuid']}/creo-metadata",
+        json={
+            "identity": {"common_name": "Frame"},
+            "bom": [
+                {
+                    "filename": "frame.asm",
+                    "quantity": 1,
+                    "dependency_type": "ASSEMBLY_ROOT",
+                    "children": [
+                        {
+                            "filename": "late-pin.prt",
+                            "quantity": 3,
+                            "dependency_type": "ASSEMBLY_MEMBER",
+                            "children": [],
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    assert posted.status_code == 200, posted.text
+    assert posted.json()["dependencies"] == []
+
+    pin = _add_part(client, project["uuid"], tmp_path, "late-pin.prt.1")
+    where = client.get(f"/api/objects/{pin['uuid']}/where-used")
+    assert where.status_code == 200, where.text
+    items = where.json()["items"]
+    assert len(items) == 1
+    assert items[0]["object_id"] == frame["uuid"]
+    assert items[0]["quantity"] == 3.0
+
+
+@requires_git
+def test_where_used_from_vault_bytes_without_creo_metadata(
+    client, repo_parent, data_dir, tmp_path
+):
+    """No Creo.JS capture: scan vault asm bytes for the part name."""
+    from creopdm.utils.files import set_file_writable
+
+    project = _create_project(client, repo_parent)
+    pin = _add_part(client, project["uuid"], tmp_path, "clasp-clasp_mir.prt.1")
+    frame = _add_part(client, project["uuid"], tmp_path, "draw_latch.asm.1")
+
+    vault = data_dir / "vaults" / project["uuid"]
+    asm_files = list(vault.rglob("draw_latch.asm*"))
+    assert asm_files, f"expected vault asm under {vault}"
+    set_file_writable(asm_files[0])
+    asm_files[0].write_bytes(b"fake creo asm embeds CLASP-CLASP_MIR.PRT as member")
+
+    where = client.get(f"/api/objects/{pin['uuid']}/where-used")
+    assert where.status_code == 200, where.text
+    items = where.json()["items"]
+    assert len(items) == 1
+    assert items[0]["object_id"] == frame["uuid"]
+    assert items[0]["filename"].lower().startswith("draw_latch.asm")

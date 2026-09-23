@@ -10,10 +10,11 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from creopdm.constants import DependencyType
-from creopdm.exceptions import ObjectNotFoundError, ValidationAppError
+from creopdm.exceptions import ObjectNotFoundError, PathValidationError, ValidationAppError
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
+from creopdm.models.project import Project
 from creopdm.models.version import ObjectVersion
 from creopdm.schemas.common import (
     CreoDependencyPayload,
@@ -26,6 +27,7 @@ from creopdm.schemas.common import (
 from creopdm.services.object_service import ObjectService
 from creopdm.utils.bom_match import bom_lookup_keys, bom_where_used_keys
 from creopdm.utils.classify import display_type_label
+from creopdm.utils.creo_companions import model_references_filename, needs_open_companions
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +48,9 @@ def _loads(raw: str | None) -> Any:
 
 
 class MetadataService:
-    def __init__(self, objects: ObjectService) -> None:
+    def __init__(self, objects: ObjectService, workspaces: Any | None = None) -> None:
         self._objects = objects
+        self._workspaces = workspaces
 
     def save(
         self,
@@ -187,6 +190,13 @@ class MetadataService:
         )
 
     def where_used(self, session: Session, object_uuid: str) -> WhereUsedResponse:
+        """Parents that reference this object.
+
+        Order of operations often leaves Dependency empty: assembly metadata is
+        captured before children exist in the project, so edges never get written.
+        We still answer from (1) Dependency rows, (2) stored BOM JSON on siblings,
+        (3) vault file bytes for asm/drw that embed this name — no Creo.JS needed.
+        """
         obj = self._objects.get_object(session, object_uuid)
         edges = session.scalars(
             select(Dependency).where(Dependency.child_object_id == obj.id)
@@ -215,11 +225,12 @@ class MetadataService:
                 type_label=display_type_label(parent.filename, parent.object_type),
             )
 
-        # Also scan stored BOM trees — older captures may not have written Dependency rows
-        # (nested BOM was skipped when ListDependencies returned anything).
+        siblings = self._objects.list_objects(session, obj.project_id)
         target_keys = set(bom_where_used_keys(obj.filename))
+
+        # Stored BOM trees — covers captures that never wrote Dependency rows
+        # (e.g. nested BOM skipped, or assembly captured before children existed).
         if target_keys:
-            siblings = self._objects.list_objects(session, obj.project_id)
             for other in siblings:
                 if other.id == obj.id or other.uuid in items_by_parent:
                     continue
@@ -249,6 +260,41 @@ class MetadataService:
                     object_type=other.object_type,
                     type_label=display_type_label(other.filename, other.object_type),
                 )
+
+        # Vault byte scan: works even when Creo.JS never captured a BOM (add-only
+        # order of operations, or metadata gather failed on the parent).
+        if self._workspaces is not None:
+            project = session.get(Project, obj.project_id)
+            project_uuid = project.uuid if project is not None else ""
+            if project_uuid:
+                for other in siblings:
+                    if other.id == obj.id or other.uuid in items_by_parent:
+                        continue
+                    if not needs_open_companions(other.object_type, other.filename):
+                        continue
+                    try:
+                        path = self._workspaces.locate_content(project_uuid, other)
+                    except PathValidationError:
+                        continue
+                    except Exception:
+                        logger.debug(
+                            "Where-used vault locate failed for %s",
+                            other.filename,
+                            exc_info=True,
+                        )
+                        continue
+                    if not model_references_filename(path, obj.filename):
+                        continue
+                    items_by_parent[other.uuid] = WhereUsedItem(
+                        object_id=other.uuid,
+                        filename=other.filename,
+                        relative_path=other.relative_path,
+                        display_revision=f"{other.revision}.{other.iteration}",
+                        quantity=1.0,
+                        dependency_type=DependencyType.ASSEMBLY_MEMBER.value,
+                        object_type=other.object_type,
+                        type_label=display_type_label(other.filename, other.object_type),
+                    )
 
         items = sorted(items_by_parent.values(), key=lambda row: row.filename.lower())
         return WhereUsedResponse(object_id=obj.uuid, items=items)

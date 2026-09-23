@@ -54,6 +54,41 @@ def names_referenced_in_model(path: Path, candidates: list[str]) -> set[str]:
     return found
 
 
+def model_references_filename(path: Path, filename: str) -> bool:
+    """True when the vault Creo file byte-content mentions this model name.
+
+    Used for Where Used when Creo.JS BOM metadata was never captured. Matches the
+    same way companion open narrows same-folder siblings.
+    """
+    from creopdm.utils.bom_match import bom_where_used_keys
+
+    if not path.is_file():
+        return False
+    tokens: list[bytes] = []
+    seen: set[bytes] = set()
+    for key in sorted(bom_where_used_keys(filename), key=len, reverse=True):
+        raw = key.encode("ascii", "ignore")
+        if len(raw) < 3:
+            continue
+        # Prefer names with an extension, or stems long enough to avoid noise.
+        if b"." not in raw and len(raw) < 5:
+            continue
+        if raw in seen:
+            continue
+        seen.add(raw)
+        tokens.append(raw)
+    if not tokens:
+        return False
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as handle:
+            blob = handle.read(min(size, _SCAN_LIMIT))
+    except OSError:
+        return False
+    lower = blob.lower()
+    return any(token in lower for token in tokens)
+
+
 def select_companion_objects(
     *,
     primary_relative: str,

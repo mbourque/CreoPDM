@@ -87,7 +87,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         checkouts=checkouts,
         checkins=checkins,
         creo_service=CreoService(creo_connector, objects, checkouts, workspaces),
-        metadata=MetadataService(objects),
+        metadata=MetadataService(objects, workspaces),
     )
 
 

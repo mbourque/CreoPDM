@@ -28,6 +28,15 @@ def test_names_referenced_in_model(tmp_path: Path):
     assert "other.prt" not in {item.lower() for item in found}
 
 
+def test_model_references_filename_matches_stem_and_logical(tmp_path: Path):
+    from creopdm.utils.creo_companions import model_references_filename
+
+    asm = tmp_path / "top.asm.1"
+    asm.write_bytes(b"header ... CLASP-CLASP_MIR.PRT ... footer")
+    assert model_references_filename(asm, "clasp-clasp_mir.prt.3") is True
+    assert model_references_filename(asm, "missing.prt.1") is False
+
+
 def test_select_companion_objects_prefers_referenced(tmp_path: Path):
     asm = tmp_path / "top.asm.1"
     asm.write_bytes(b"assembly uses PIN.PRT only")
