@@ -43,8 +43,25 @@ def test_pick_folder_cancel_does_not_open_winforms(monkeypatch, tmp_path: Path):
     assert called == []
 
 
-def test_native_picker_unavailable_on_posix(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr("creopdm.utils.native_dialog._is_windows", lambda: False)
-    assert native_picker_available() is False
-    assert pick_files(tmp_path) == []
-    assert pick_folder(tmp_path) is None
+def test_pick_files_validation_error_skips_winforms_fallback(monkeypatch, tmp_path: Path):
+    from creopdm.exceptions import ValidationAppError
+
+    def raise_buffer(_fn):
+        raise ValidationAppError(
+            "Too many files for the file picker. Use Add folder instead, or select fewer files.",
+            details={"windows_error": 0x3003},
+        )
+
+    monkeypatch.setattr("creopdm.utils.native_dialog._is_windows", lambda: True)
+    monkeypatch.setattr("creopdm.utils.native_dialog.run_on_sta", raise_buffer)
+    called = []
+    monkeypatch.setattr(
+        "creopdm.utils.native_dialog._winforms_open_dialog",
+        lambda *args, **kwargs: called.append(True) or [],
+    )
+    try:
+        pick_files(tmp_path)
+        assert False, "expected ValidationAppError"
+    except ValidationAppError as exc:
+        assert "Add folder" in exc.message
+    assert called == []

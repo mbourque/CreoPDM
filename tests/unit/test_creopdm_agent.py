@@ -457,6 +457,89 @@ def test_agent_delete_paths_trashes_creo_numbered_siblings(tmp_path):
         assert (cache / "other.prt.1").is_file()
 
 
+def test_agent_add_paths_posts_multipart_to_pdm(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), token="tok")
+    app = create_agent_app(settings)
+    folder = tmp_path / "models"
+    folder.mkdir()
+    pin = folder / "pin.prt.1"
+    shaft = folder / "shaft.prt.2"
+    pin.write_bytes(b"pin-bytes")
+    shaft.write_bytes(b"shaft-bytes")
+    posts: list[dict] = []
+
+    class FakeResponse:
+        def __init__(self, status_code: int = 200, payload: dict | None = None):
+            self.status_code = status_code
+            self._payload = payload or {}
+            self.text = ""
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            file_names = []
+            rels = []
+            for entry in files or []:
+                key, value = entry[0], entry[1]
+                if key == "files":
+                    file_names.append(value[0])
+                    if hasattr(value[1], "read"):
+                        value[1].read()
+                elif key == "relative_paths":
+                    rels.append(value[1] if isinstance(value, tuple) else value)
+            posts.append(
+                {
+                    "url": url,
+                    "headers": headers or {},
+                    "data": data or {},
+                    "file_names": file_names,
+                    "relative_paths": rels,
+                }
+            )
+            return FakeResponse(
+                200,
+                {
+                    "ok": [
+                        {"uuid": "u1", "filename": "pin.prt.1", "status": "added"},
+                        {"uuid": "u2", "filename": "shaft.prt.2", "status": "added"},
+                    ],
+                    "failed": [],
+                },
+            )
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        response = client.post(
+            "/add-paths",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "project_id": "proj-add",
+                "absolute_paths": [str(pin), str(shaft)],
+                "comment": "Initial models",
+            },
+        )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert {item["uuid"] for item in body["ok"]} == {"u1", "u2"}
+    assert len(posts) == 1
+    assert "from-uploads" in posts[0]["url"]
+    assert posts[0]["headers"].get("Authorization") == "Bearer tok"
+    assert posts[0]["data"].get("comment") == "Initial models"
+    assert set(posts[0]["file_names"]) == {"pin.prt.1", "shaft.prt.2"}
+
+
 def test_agent_purge_versions_deletes_only_older_than_vault_floor(tmp_path):
     root = tmp_path / "cache"
     project_id = "proj-purge"

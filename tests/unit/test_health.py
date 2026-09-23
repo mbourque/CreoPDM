@@ -77,16 +77,18 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push53" in text
+    assert "push55" in text
     assert "function gatherModelMetadata" in text
     assert "function creoRetrieveForMetadata" in text
     assert "function eraseSessionModelsByNames" in text
     assert "EraseUndisplayedModels" in text
     assert "_pdm_erase_keys" in text
     assert ".EraseWithDependencies" not in text
-    assert "deleteLocalWorkspacePathsBackground" in open(
-        "src/creopdm/static/js/app.js", encoding="utf-8"
-    ).read()
+    app_js = open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "deleteLocalWorkspacePathsBackground" in app_js
+    assert "applyAgentPickedPaths" in app_js
+    assert "/add-paths" in app_js
+    assert "limited to 250" not in app_js
     assert "function creoGatherMass" in text
     assert "function creoGatherUnits" in text
     assert "function creoGatherFamilyTable" in text

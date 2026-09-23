@@ -156,6 +156,29 @@ class PushPathsRequest(BaseModel):
     relative_paths: list[str] = Field(default_factory=list)
 
 
+class AddPathsRequest(BaseModel):
+    """Absolute Windows paths from the native multi-select picker → project Add."""
+
+    pdm_url: str = ""
+    project_id: str = ""
+    token: str | None = None
+    absolute_paths: list[str] = Field(default_factory=list)
+    comment: str | None = None
+
+
+class BatchAddItem(BaseModel):
+    uuid: str = ""
+    filename: str = ""
+    status: str = ""
+    code: str = ""
+    message: str = ""
+
+
+class AddPathsResponse(BaseModel):
+    ok: list[BatchAddItem] = Field(default_factory=list)
+    failed: list[BatchAddItem] = Field(default_factory=list)
+
+
 class CacheFileInfo(BaseModel):
     relative_path: str
     filename: str
@@ -492,6 +515,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
     @app.post("/pick-files", response_model=PickFilesResponse)
     def pick_files_endpoint(payload: PickFilesRequest) -> PickFilesResponse:
         """Native multi-select file dialog on this Creo PC (Creo numbered filters)."""
+        from creopdm.exceptions import ValidationAppError
         from creopdm.utils.native_dialog import pick_files
 
         raw = (payload.initial_directory or "").strip()
@@ -501,6 +525,8 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         title = (payload.title or "").strip() or "Add files to the project"
         try:
             selected = pick_files(start, title=title)
+        except ValidationAppError as exc:
+            raise HTTPException(status_code=400, detail=exc.message) from exc
         except Exception as exc:
             logger.exception("Agent file picker failed")
             raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -748,6 +774,156 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 )
                 logger.info("Pushed new path %s → vault (%s bytes)", rel, nbytes)
         return PushResponse(ok=ok, failed=failed)
+
+    @app.post("/add-paths", response_model=AddPathsResponse)
+    def add_absolute_paths_to_project(payload: AddPathsRequest) -> AddPathsResponse:
+        """Upload picked local files into the project (from-uploads), chunked.
+
+        Used after the native multi-select picker so the browser never loads
+        thousands of file bodies into memory.
+        """
+        from creopdm.creo.file_manager import CreoFileManager
+
+        base = _normalize_base(payload.pdm_url or settings.pdm_url)
+        project_id = (payload.project_id or "").strip()
+        if not project_id:
+            raise HTTPException(status_code=400, detail="project_id is required.")
+        if not base:
+            raise HTTPException(status_code=400, detail="pdm_url is required.")
+        raw_paths = [str(item or "").strip() for item in payload.absolute_paths if str(item or "").strip()]
+        if not raw_paths:
+            return AddPathsResponse()
+        present: list[Path] = []
+        failed: list[BatchAddItem] = []
+        for raw in raw_paths:
+            path = Path(raw)
+            if not path.is_file():
+                failed.append(
+                    BatchAddItem(
+                        filename=path.name or raw,
+                        code="NOT_FOUND",
+                        message=f"File not found: {raw}",
+                    )
+                )
+                continue
+            present.append(path.resolve())
+        try:
+            selected = CreoFileManager.filter_to_latest_saves(present, scan_disk_siblings=False)
+        except Exception:
+            selected = present
+        # Prefer paths relative to a shared parent when the picker used one folder.
+        parents = {path.parent for path in selected}
+        common_parent = next(iter(parents)) if len(parents) == 1 else None
+        jobs: list[tuple[Path, str]] = []
+        for path in selected:
+            if common_parent is not None:
+                try:
+                    rel = path.relative_to(common_parent).as_posix()
+                except ValueError:
+                    rel = path.name
+            else:
+                rel = path.name
+            jobs.append((path, rel))
+        headers: dict[str, str] = {}
+        token = (payload.token or settings.token or "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        url = f"{base}/api/projects/{quote(project_id)}/objects/from-uploads"
+        ok: list[BatchAddItem] = []
+        chunk_size = 200
+        comment = (payload.comment or "").strip() or None
+        with httpx.Client(timeout=600.0, follow_redirects=True) as client:
+            for offset in range(0, len(jobs), chunk_size):
+                chunk = jobs[offset : offset + chunk_size]
+                files: list[tuple[str, tuple[str, object, str]]] = []
+                data: dict[str, str] = {}
+                handles: list = []
+                try:
+                    for path, rel in chunk:
+                        handle = path.open("rb")
+                        handles.append(handle)
+                        files.append(
+                            ("files", (path.name, handle, "application/octet-stream"))
+                        )
+                        # httpx multipart: repeat relative_paths fields
+                        files.append(("relative_paths", (None, rel)))
+                    if comment and offset == 0:
+                        data["comment"] = comment
+                    try:
+                        response = client.post(url, headers=headers, data=data or None, files=files)
+                    except httpx.HTTPError as exc:
+                        for path, _rel in chunk:
+                            failed.append(
+                                BatchAddItem(
+                                    filename=path.name,
+                                    code="NETWORK",
+                                    message=f"Could not reach CreoPDM: {exc}",
+                                )
+                            )
+                        continue
+                finally:
+                    for handle in handles:
+                        try:
+                            handle.close()
+                        except OSError:
+                            pass
+                if response.status_code >= 400:
+                    detail = ""
+                    try:
+                        body = response.json()
+                        detail = (
+                            body.get("error", {}).get("message")
+                            or body.get("detail")
+                            or response.text
+                        )
+                    except Exception:
+                        detail = response.text[:300]
+                    for path, _rel in chunk:
+                        failed.append(
+                            BatchAddItem(
+                                filename=path.name,
+                                code="HTTP_ERROR",
+                                message=detail or f"CreoPDM returned {response.status_code}",
+                            )
+                        )
+                    continue
+                try:
+                    body = response.json()
+                except Exception:
+                    for path, _rel in chunk:
+                        failed.append(
+                            BatchAddItem(
+                                filename=path.name,
+                                code="BAD_RESPONSE",
+                                message="CreoPDM returned an invalid response.",
+                            )
+                        )
+                    continue
+                for item in body.get("ok") or []:
+                    ok.append(
+                        BatchAddItem(
+                            uuid=str(item.get("uuid") or ""),
+                            filename=str(item.get("filename") or ""),
+                            status=str(item.get("status") or "added"),
+                        )
+                    )
+                for item in body.get("failed") or []:
+                    failed.append(
+                        BatchAddItem(
+                            uuid=str(item.get("uuid") or ""),
+                            filename=str(item.get("filename") or ""),
+                            code=str(item.get("code") or "FAILED"),
+                            message=str(item.get("message") or "The file was not added."),
+                        )
+                    )
+                logger.info(
+                    "Agent add-paths chunk %s–%s → ok=%s failed=%s",
+                    offset + 1,
+                    offset + len(chunk),
+                    len(body.get("ok") or []),
+                    len(body.get("failed") or []),
+                )
+        return AddPathsResponse(ok=ok, failed=failed)
 
     @app.post("/delete-paths", response_model=DeletePathsResponse)
     def delete_cache_paths(payload: DeletePathsRequest) -> DeletePathsResponse:

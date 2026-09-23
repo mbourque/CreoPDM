@@ -801,6 +801,7 @@
   let chosenPaths = [];
   let chosenBaseFolder = null;
   let chosenUploads = [];
+  let chosenAgentPaths = [];
   let importIgnorePatterns = [];
   let importExtensions = [];
   let addInitialDirectory = "";
@@ -980,6 +981,7 @@
 
   function applyChosenPaths(paths, labelText, baseFolder, ignoredCount) {
     chosenUploads = [];
+    chosenAgentPaths = [];
     chosenPaths = paths || [];
     chosenBaseFolder = baseFolder || null;
     const label = $("#add-folder-label");
@@ -1000,6 +1002,22 @@
     } else {
       summary.textContent = "";
     }
+  }
+
+  function applyAgentPickedPaths(paths) {
+    chosenPaths = [];
+    chosenBaseFolder = null;
+    chosenUploads = [];
+    chosenAgentPaths = [...new Set((paths || []).map((item) => String(item || "").trim()).filter(Boolean))];
+    showError($("#add-error"), "");
+    const summary = $("#chosen-file-summary");
+    if (!summary) return;
+    if (!chosenAgentPaths.length) {
+      summary.textContent = "";
+      return;
+    }
+    const willAdd = countLatestImportNames(chosenAgentPaths);
+    summary.textContent = formatReadyToAddSummary(chosenAgentPaths.length, willAdd, 0);
   }
 
   function fileDiskPath(file) {
@@ -1135,6 +1153,7 @@
     const { kept, skipped } = filterUploadItems(uploads);
     chosenPaths = [];
     chosenBaseFolder = null;
+    chosenAgentPaths = [];
     chosenUploads = kept;
     const summary = $("#chosen-file-summary");
     if (summary) {
@@ -1235,6 +1254,7 @@
     chosenPaths = [];
     chosenBaseFolder = null;
     chosenUploads = [];
+    chosenAgentPaths = [];
     const summary = $("#chosen-file-summary");
     if (summary) summary.textContent = "";
     loadAddFolder();
@@ -1283,35 +1303,8 @@
     const picked = await pickResponse.json();
     const paths = Array.isArray(picked.selected) ? picked.selected : [];
     if (!paths.length) return true;
-    // Loading thousands of files through the browser (one /local-file each) OOMs
-    // or hangs. Folder add is the supported path for bulk imports.
-    if (paths.length > 250) {
-      showError(
-        $("#add-error"),
-        `Selected ${paths.length} files. Use “Choose folder” for large adds — multi-select through the agent is limited to 250 files at a time.`
-      );
-      return true;
-    }
-    const uploads = [];
-    for (const rawPath of paths) {
-      const path = String(rawPath || "");
-      if (!path) continue;
-      const fileResponse = await fetch(
-        `${agentBase()}/local-file?path=${encodeURIComponent(path)}`
-      );
-      if (!fileResponse.ok) {
-        showError($("#add-error"), await readError(fileResponse));
-        return true;
-      }
-      const blob = await fileResponse.blob();
-      const name = path.replace(/\\/g, "/").split("/").pop() || "file";
-      uploads.push({
-        file: new File([blob], name),
-        relativePath: name,
-        path: "",
-      });
-    }
-    applyDroppedFiles(uploads, []);
+    // Keep absolute paths on the agent — do not pull thousands of bodies into the browser.
+    applyAgentPickedPaths(paths);
     return true;
   }
 
@@ -1397,6 +1390,7 @@
       chosenPaths = [];
       chosenBaseFolder = null;
       chosenUploads = [];
+      chosenAgentPaths = [];
       const summary = $("#chosen-file-summary");
       if (summary) summary.textContent = "";
       loadAddFolder();
@@ -1441,12 +1435,48 @@
     event.preventDefault();
     const projectId = addForm.dataset.project;
     if (!projectId) return;
-    if (!chosenPaths.length && !chosenBaseFolder && !chosenUploads.length) {
+    if (
+      !chosenPaths.length
+      && !chosenBaseFolder
+      && !chosenUploads.length
+      && !chosenAgentPaths.length
+    ) {
       showError($("#add-error"), "Choose files or a folder first.");
       return;
     }
     const comment = String(new FormData(addForm).get("comment") || "").trim();
-    const result = await withBusy(chosenBaseFolder ? "Adding folder…" : "Adding files…", async () => {
+    const result = await withBusy(
+      chosenBaseFolder
+        ? "Adding folder…"
+        : chosenAgentPaths.length > 100
+          ? `Adding ${chosenAgentPaths.length} files…`
+          : "Adding files…",
+      async () => {
+      if (chosenAgentPaths.length) {
+        const agent = await probeCreoAgent();
+        if (!agent) {
+          showError(
+            $("#add-error"),
+            "Start creopdm-agent on this Creo PC to add the selected files."
+          );
+          return null;
+        }
+        const response = await fetch(`${agentBase()}/add-paths`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pdm_url: window.location.origin,
+            project_id: projectId,
+            absolute_paths: chosenAgentPaths,
+            comment: comment || null,
+          }),
+        });
+        if (!response.ok) {
+          showError($("#add-error"), await readError(response));
+          return null;
+        }
+        return response.json();
+      }
       if (chosenUploads.length) {
         const combined = { ok: [], failed: [] };
         for (let offset = 0; offset < chosenUploads.length; offset += UPLOAD_CHUNK) {
@@ -1493,7 +1523,7 @@
       showError($("#add-error"), first + extra);
       return;
     }
-    if (canGatherCreoMetadata()) {
+    if (canGatherCreoMetadata() && (result.ok?.length || 0) <= 50) {
       await withBusy("Capturing Creo metadata…", async () => {
         await pushCreoMetadataForItems(metadataTargetsFromResult(result));
       });
