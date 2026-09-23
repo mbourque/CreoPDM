@@ -743,12 +743,93 @@ function creoGatherBom(model, depth) {
     } catch (err) {}
     return nodes;
 }
-function gatherModelMetadata(filename) {
+function creoRetrieveForMetadata(session, filePath, filename) {
+    /**
+     * Load a model into session for metadata only (no Display / window activate).
+     * Prefer an absolute path from Add (source file) or agent cache.
+     */
+    if (!session) return null;
+    var fullPath = filePath ? creoNormalizePath(filePath) : "";
+    var shortName = creoLogicalFileName(filename || fullPath);
+    var model = null;
+    var previousWd = "";
+    var changedWd = false;
+    try {
+        if (typeof session.GetCurrentDirectory === "function") {
+            previousWd = String(session.GetCurrentDirectory() || "");
+        }
+    } catch (errGet) {
+        previousWd = "";
+    }
+    try {
+        if (fullPath) {
+            try {
+                var descrPath = pfcModelDescriptor.CreateFromFileName(fullPath);
+                if (typeof session.RetrieveModelWithOpts === "function"
+                    && typeof pfcRetrieveModelOptions !== "undefined") {
+                    try {
+                        var opts = pfcRetrieveModelOptions.Create();
+                        model = session.RetrieveModelWithOpts(descrPath, opts);
+                        if (model) return model;
+                    } catch (errOpts) {}
+                }
+                try {
+                    model = session.RetrieveModel(descrPath);
+                    if (model) return model;
+                } catch (errRet) {}
+            } catch (errPath) {}
+            var dir = fullPath.replace(/[\\\/][^\\\/]+$/, "");
+            var diskName = fullPath.replace(/^.*[\\\/]/, "");
+            if (dir && diskName) {
+                try {
+                    var cacheDir = creoNormalizePath(dir);
+                    if (!previousWd || creoNormalizePath(previousWd).toLowerCase() !== cacheDir.toLowerCase()) {
+                        session.ChangeDirectory(cacheDir);
+                        changedWd = true;
+                    }
+                } catch (errDir) {}
+                try {
+                    var descrDisk = pfcModelDescriptor.CreateFromFileName(creoNormalizePath(diskName));
+                    if (typeof session.RetrieveModelWithOpts === "function"
+                        && typeof pfcRetrieveModelOptions !== "undefined") {
+                        try {
+                            var optsDisk = pfcRetrieveModelOptions.Create();
+                            model = session.RetrieveModelWithOpts(descrDisk, optsDisk);
+                            if (model) return model;
+                        } catch (errOpts2) {}
+                    }
+                    model = session.RetrieveModel(descrDisk);
+                    if (model) return model;
+                } catch (errDisk) {}
+            }
+        }
+        if (shortName) {
+            model = creoFindSessionModel(session, shortName);
+            if (model) return model;
+            try {
+                var descrName = pfcModelDescriptor.CreateFromFileName(shortName);
+                model = session.RetrieveModel(descrName);
+                if (model) return model;
+            } catch (errName) {}
+        }
+        return null;
+    } finally {
+        if (changedWd && previousWd) {
+            try {
+                session.ChangeDirectory(previousWd);
+            } catch (errRestore) {}
+        }
+    }
+}
+function gatherModelMetadata(filename, filePath) {
     try {
         var session = (typeof pfcGetCurrentSession === "function")
           ? pfcGetCurrentSession()
           : pfcGetProESession();
         var model = creoFindSessionModel(session, filename);
+        if (!model) {
+            model = creoRetrieveForMetadata(session, filePath, filename);
+        }
         if (!model) {
             return null;
         }
@@ -790,6 +871,6 @@ function gatherModelMetadata(filename) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push38"></script>
+  <script src="/client/app.js?v={{ app_version }}-push39"></script>
 </body>
 </html>

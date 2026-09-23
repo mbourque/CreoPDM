@@ -1439,7 +1439,7 @@
       showError($("#add-error"), first + extra);
       return;
     }
-    if (hostedCreoJS()) {
+    if (canGatherCreoMetadata()) {
       await withBusy("Capturing Creo metadata…", async () => {
         await pushCreoMetadataForItems(metadataTargetsFromResult(result));
       });
@@ -2173,12 +2173,70 @@
     }
   }
 
-  async function gatherCreoMetadataForFilename(filename) {
-    if (!hostedCreoJS() || !filename) return null;
+  function canGatherCreoMetadata() {
+    try {
+      if (!window.CreoJS) return false;
+      if (typeof window.CreoJS.gatherModelMetadata !== "function") return false;
+      if (hostedCreoJS()) return true;
+      // Embedded browser sometimes reports isAvailable=false while Creo.JS still works.
+      return creoOpenMode() === "embedded";
+    } catch {
+      return false;
+    }
+  }
+
+  function isCreoMetadataCandidate(filename) {
+    const base = String(filename || "");
+    const logical = base.replace(/\.(\d+)$/i, "");
+    return /\.(prt|asm|drw|frm|mfg|lay|sec|dgm|rep)$/i.test(logical);
+  }
+
+  function looksLikeLocalWindowsPath(path) {
+    const text = String(path || "").trim();
+    return /^[a-zA-Z]:[\\/]/.test(text) || text.startsWith("\\\\");
+  }
+
+  async function prepareLocalPathForMetadata(objectId) {
+    if (!objectId) return null;
+    try {
+      const response = await fetch("/api/creo/open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          object_id: objectId,
+          launch: false,
+          include_companions: true,
+        }),
+      });
+      if (!response.ok) return null;
+      const prepared = await response.json();
+      const agent = await probeCreoAgent();
+      if (!agent) {
+        const dir = String(prepared.working_directory || prepared.directory || "").trim();
+        const name = String(prepared.disk_name || prepared.filename || "").trim();
+        if (dir && name && looksLikeLocalWindowsPath(dir)) {
+          return `${dir.replace(/[\\/]+$/, "")}\\${name}`;
+        }
+        return null;
+      }
+      const openSpec = await materializeViaAgent(prepared);
+      const workdir = String(openSpec.working_directory || "").trim();
+      const diskName = String(openSpec.disk_name || openSpec.filename || "").trim();
+      if (workdir && diskName) {
+        return `${workdir.replace(/[\\/]+$/, "")}\\${diskName}`;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function gatherCreoMetadataForFilename(filename, filePath) {
+    if (!canGatherCreoMetadata() || !filename) return null;
     try {
       await whenCreoJSReady();
       if (typeof window.CreoJS.gatherModelMetadata !== "function") return null;
-      const snapshot = await window.CreoJS.gatherModelMetadata(filename);
+      const snapshot = await window.CreoJS.gatherModelMetadata(filename, filePath || "");
       if (!snapshot || typeof snapshot !== "object") return null;
       if (typeof snapshot === "string" && snapshot.startsWith("CREOPDM_ERROR:")) return null;
       return snapshot;
@@ -2192,12 +2250,17 @@
       .map((item) => ({
         uuid: String(item?.uuid || item?.object_id || "").trim(),
         filename: String(item?.filename || "").trim(),
+        path: String(item?.path || "").trim(),
         versionId: String(item?.version_id || item?.current_version?.uuid || "").trim(),
       }))
-      .filter((item) => item.uuid && item.filename);
-    if (!targets.length || !hostedCreoJS()) return;
+      .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename));
+    if (!targets.length || !canGatherCreoMetadata()) return;
     for (const target of targets) {
-      const snapshot = await gatherCreoMetadataForFilename(target.filename);
+      let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
+      if (!filePath) {
+        filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
+      }
+      const snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
       if (!snapshot) continue;
       const body = {
         version_id: target.versionId || null,
@@ -2222,13 +2285,22 @@
   function metadataTargetsFromResult(result) {
     if (!result) return [];
     if (Array.isArray(result.ok)) {
-      return result.ok.filter((item) => item && item.uuid && item.filename);
+      return result.ok
+        .filter((item) => item && item.uuid && item.filename)
+        .map((item) => ({
+          uuid: item.uuid,
+          filename: item.filename,
+          path: item.path || "",
+          version_id: item.version_id || "",
+          current_version: item.current_version || null,
+        }));
     }
     if (result.uuid && result.filename) {
       return [
         {
           uuid: result.uuid,
           filename: result.filename,
+          path: result.path || "",
           version_id: result.current_version?.uuid || "",
           current_version: result.current_version || null,
         },
@@ -3770,7 +3842,7 @@
       }
       // Always patch the table first — Creo often skips navigation from this dialog.
       applyCheckedInResult(result);
-      if (hostedCreoJS()) {
+      if (canGatherCreoMetadata()) {
         await withBusy("Capturing Creo metadata…", async () => {
           await pushCreoMetadataForItems(metadataTargetsFromResult(result));
         });
