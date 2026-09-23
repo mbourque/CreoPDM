@@ -1195,299 +1195,8 @@ function creoGatherUnits(model, dbg, session) {
     }
     return units;
 }
-function creoPoint3(value) {
-    if (!value) return null;
-    try {
-        if (typeof value.getCount === "function" && value.getCount() >= 3) {
-            return [Number(value.get(0)), Number(value.get(1)), Number(value.get(2))];
-        }
-        if (value.length >= 3) {
-            return [Number(value[0]), Number(value[1]), Number(value[2])];
-        }
-        if (typeof value.Item === "function") {
-            return [Number(value.Item(0)), Number(value.Item(1)), Number(value.Item(2))];
-        }
-    } catch (err) {}
-    return null;
-}
-function creoMassFromProps(props, dbg) {
-    if (!props) {
-        if (dbg) dbg.parse = "null_props";
-        return null;
-    }
-    function numProp(names) {
-        for (var i = 0; i < names.length; i++) {
-            var key = names[i];
-            try {
-                var direct = props[key];
-                if (typeof direct === "number" && isFinite(direct)) return direct;
-            } catch (errD) {}
-            try {
-                var getter = props["Get" + key];
-                if (typeof getter === "function") {
-                    var viaGet = getter.call(props);
-                    if (typeof viaGet === "number" && isFinite(viaGet)) return viaGet;
-                }
-            } catch (errG) {}
-        }
-        return null;
-    }
-    var mass = {
-        mass: numProp(["Mass", "mass"]),
-        volume: numProp(["Volume", "volume"]),
-        surface_area: numProp(["SurfaceArea", "surface_area", "Surface_Area"]),
-        density: numProp(["Density", "density"]),
-        gravity_center: null,
-        principal_moments: null
-    };
-    try { mass.gravity_center = creoPoint3(props.GravityCenter); } catch (e5) {}
-    try { mass.principal_moments = creoPoint3(props.PrincipalMoments); } catch (e6) {}
-    if (mass.mass == null && mass.volume == null && mass.density == null) {
-        if (dbg) {
-            dbg.parse = "no_finite_fields";
-            try {
-                var keys = [];
-                for (var k in props) {
-                    if (Object.prototype.hasOwnProperty.call(props, k)) keys.push(k);
-                    if (keys.length >= 12) break;
-                }
-                dbg.props_keys = keys.join(",");
-            } catch (errKeys) {
-                dbg.props_keys = "unreadable";
-            }
-        }
-        return null;
-    }
-    if (dbg) dbg.parse = "ok";
-    return mass;
-}
-function creoMassFromParameters(parameters, dbg) {
-    // When solid GetMassProperty is unbound on RetrieveModel handles, fall back
-    // to Creo's designated mass-property parameters if they were last computed.
-    if (!parameters || !parameters.length) return null;
-    var map = {};
-    for (var i = 0; i < parameters.length; i++) {
-        var row = parameters[i];
-        if (!row || !row.name) continue;
-        map[String(row.name).toUpperCase()] = row.value;
-    }
-    function num(keys) {
-        for (var k = 0; k < keys.length; k++) {
-            if (map[keys[k]] == null || map[keys[k]] === "") continue;
-            var n = Number(map[keys[k]]);
-            if (typeof n === "number" && isFinite(n)) return n;
-        }
-        return null;
-    }
-    var mass = {
-        mass: num(["PRO_MP_MASS", "MP_MASS", "MASS"]),
-        volume: num(["PRO_MP_VOLUME", "MP_VOLUME", "VOLUME"]),
-        surface_area: num(["PRO_MP_AREA", "PRO_MP_SURFACE_AREA", "MP_AREA", "SURFACE_AREA"]),
-        density: num(["PRO_MP_DENSITY", "MP_DENSITY", "DENSITY"]),
-        gravity_center: null,
-        principal_moments: null
-    };
-    if (mass.mass == null && mass.volume == null && mass.density == null) {
-        if (dbg) dbg.param_fallback = "no_pro_mp";
-        return null;
-    }
-    if (dbg) dbg.param_fallback = "ok";
-    return mass;
-}
-function creoMassFromBodies(solid, dbg) {
-    /**
-     * Last silent path from Creo.JS docs: pfcSolidBody.GetMassProperty via
-     * GetDefaultBody / ListSolidBodies — no Display / CreateModelWindow.
-     */
-    if (!solid) return null;
-    function tryBodyMass(body, label) {
-        if (!body) return null;
-        var attempts = [
-            function () { return body.GetMassProperty(null); },
-            function () { return body.GetMassProperty(""); },
-            function () { return body.GetMassProperty(); }
-        ];
-        for (var a = 0; a < attempts.length; a++) {
-            try {
-                var props = attempts[a]();
-                var parsed = creoMassFromProps(props, null);
-                if (parsed) {
-                    if (dbg) dbg[label] = "ok";
-                    return parsed;
-                }
-                if (dbg) dbg[label] = props ? "empty_props" : "null";
-            } catch (errBody) {
-                if (dbg) dbg[label] = "threw:" + creoToolkitErr(errBody);
-            }
-        }
-        return null;
-    }
-    var bodies = [];
-    try {
-        var defBody = solid.GetDefaultBody();
-        if (dbg) dbg.try_GetDefaultBody = defBody ? "ok" : "null";
-        if (defBody) bodies.push(defBody);
-    } catch (errDef) {
-        if (dbg) dbg.try_GetDefaultBody = "threw:" + creoToolkitErr(errDef);
-    }
-    try {
-        var listed = null;
-        if (typeof solid.ListSolidBodies === "function" || solid.ListSolidBodies != null) {
-            listed = solid.ListSolidBodies();
-        } else if (typeof solid.ListBodies === "function" || solid.ListBodies != null) {
-            listed = solid.ListBodies();
-        }
-        if (listed) {
-            var items = creoFeatureItems(listed);
-            if (dbg) dbg.try_ListSolidBodies = "count:" + items.length;
-            for (var i = 0; i < items.length; i++) {
-                if (items[i]) bodies.push(items[i]);
-            }
-        } else if (dbg && !dbg.try_ListSolidBodies) {
-            dbg.try_ListSolidBodies = "null";
-        }
-    } catch (errList) {
-        if (dbg) dbg.try_ListSolidBodies = "threw:" + creoToolkitErr(errList);
-    }
-    // Deduplicate by reference loosely; keep first successes.
-    var seen = 0;
-    var total = {
-        mass: null,
-        volume: null,
-        surface_area: null,
-        density: null,
-        gravity_center: null,
-        principal_moments: null
-    };
-    var gotAny = false;
-    for (var b = 0; b < bodies.length; b++) {
-        var one = tryBodyMass(bodies[b], "try_body_" + b);
-        if (!one) continue;
-        gotAny = true;
-        seen += 1;
-        if (one.mass != null) total.mass = (total.mass || 0) + one.mass;
-        if (one.volume != null) total.volume = (total.volume || 0) + one.volume;
-        if (one.surface_area != null) total.surface_area = (total.surface_area || 0) + one.surface_area;
-        if (one.density != null && total.density == null) total.density = one.density;
-        if (one.gravity_center && !total.gravity_center) total.gravity_center = one.gravity_center;
-        if (one.principal_moments && !total.principal_moments) total.principal_moments = one.principal_moments;
-        // Single-body success is enough; multi-body sum when several succeed.
-        if (bodies.length === 1) break;
-    }
-    if (!gotAny) {
-        if (dbg && !dbg.try_GetDefaultBody && !dbg.try_ListSolidBodies) {
-            dbg.body_fallback = "no_bodies";
-        }
-        return null;
-    }
-    if (dbg) {
-        dbg.body_fallback = "ok";
-        dbg.body_count_used = seen;
-    }
-    return total;
-}
-function creoGatherMass(model, dbg, session, parameters) {
-    try {
-        var solidDbg = dbg ? (dbg.solid = dbg.solid || {}) : null;
-        var solid = creoAsSolid(session, model, solidDbg);
-        if (!solid) {
-            if (dbg) dbg.reason = "no_solid";
-        } else {
-            // Do not gate on typeof===function — Creo.JS solid methods often fail that check.
-            function tryMassCall(label, fn) {
-                try {
-                    var props = fn();
-                    if (dbg) dbg[label] = props ? "ok" : "null";
-                    return props;
-                } catch (errCall) {
-                    if (dbg) dbg[label] = "threw:" + creoToolkitErr(errCall);
-                    return null;
-                }
-            }
-            var props = tryMassCall("try_null", function () { return solid.GetMassProperty(null); });
-            if (!props) props = tryMassCall("try_empty", function () { return solid.GetMassProperty(""); });
-            if (!props) props = tryMassCall("try_zero_arg", function () { return solid.GetMassProperty(); });
-            var parsed = creoMassFromProps(props, dbg);
-            if (parsed) {
-                if (dbg) dbg.ok = true;
-                return parsed;
-            }
-            // Exhaust density options — units can bind when GetMassProperty(null) still returns null.
-            var densityOpts = [];
-            try {
-                if (typeof pfcMPDensityUse !== "undefined") {
-                    [
-                        pfcMPDensityUse.MP_DENSITY_USE_IF_MISSING,
-                        pfcMPDensityUse.MP_DENSITY_DEFAULT,
-                        pfcMPDensityUse.MP_DENSITY_USE_ALWAYS
-                    ].forEach(function (opt) {
-                        if (opt != null && densityOpts.indexOf(opt) < 0) densityOpts.push(opt);
-                    });
-                }
-            } catch (errOpt) {}
-            if (!densityOpts.length) densityOpts = [2, 0, 1];
-            var densities = [1.0];
-            try {
-                var matDens = null;
-                if (parameters && parameters.length) {
-                    for (var pi = 0; pi < parameters.length; pi++) {
-                        var pn = String((parameters[pi] && parameters[pi].name) || "").toUpperCase();
-                        if (pn === "PRO_MP_DENSITY" || pn === "MP_DENSITY" || pn === "DENSITY") {
-                            matDens = Number(parameters[pi].value);
-                            if (typeof matDens === "number" && isFinite(matDens) && matDens > 0) {
-                                densities.unshift(matDens);
-                            }
-                            break;
-                        }
-                    }
-                }
-            } catch (errDensParam) {}
-            for (var di = 0; di < densityOpts.length && !parsed; di++) {
-                for (var dj = 0; dj < densities.length && !parsed; dj++) {
-                    var opt = densityOpts[di];
-                    var dens = densities[dj];
-                    var tag = "try_density_" + di + "_" + dens;
-                    props = tryMassCall(tag, function () {
-                        return solid.GetMassPropertyWithDensity(null, opt, dens);
-                    });
-                    if (!props) {
-                        props = tryMassCall(tag + "_empty", function () {
-                            return solid.GetMassPropertyWithDensity("", opt, dens);
-                        });
-                    }
-                    parsed = creoMassFromProps(props, dbg);
-                }
-            }
-            if (parsed) {
-                if (dbg) dbg.ok = true;
-                return parsed;
-            }
-            // Body-level mass (documented silent API) before PRO_MP_* params.
-            parsed = creoMassFromBodies(solid, dbg);
-            if (parsed) {
-                if (dbg) dbg.ok = true;
-                return parsed;
-            }
-        }
-        var fromParams = creoMassFromParameters(parameters, dbg);
-        if (fromParams) {
-            if (dbg) dbg.ok = true;
-            return fromParams;
-        }
-        if (dbg && !dbg.reason) {
-            dbg.reason = [
-                dbg.try_null || "",
-                dbg.try_GetDefaultBody || "",
-                dbg.try_ListSolidBodies || "",
-                dbg.body_fallback || "",
-                dbg.param_fallback || ""
-            ].filter(Boolean).join("|") || "all_attempts_failed";
-        }
-    } catch (err) {
-        if (dbg) dbg.reason = "exception:" + creoToolkitErr(err);
-    }
-    return null;
-}
+// Mass properties unsupported in silent Collect — Creo.JS leaves GetMassProperty
+// unbound on RetrieveModel/session handles without Display (not used here).
 function creoFamilyCellString(value) {
     if (value == null) return "";
     try {
@@ -1925,27 +1634,11 @@ function gatherModelMetadata(filename, filePath) {
         var parameters = creoGatherParameters(model);
         var materials = creoGatherMaterials(model, parameters);
         var dependencies = creoGatherDependencies(model);
-        var gatherDebug = {
-            file: String(filename || ""),
-            retrieved: !!weRetrieved,
-            type: null,
-            is_part: false,
-            is_asm: false,
-            mass: {},
-            units: {},
-            features: {},
-            solid_upgrade: {}
-        };
-        try {
-            gatherDebug.type = model.Type;
-        } catch (errTypeDbg) {
-            gatherDebug.type = "unreadable";
-        }
-        // One upgrade pass — RetrieveModel handles are often unbound pfcModel wrappers.
-        var solidModel = creoUpgradeSolidModel(session, model, gatherDebug.solid_upgrade);
+        // Upgrade for units/features/BOM; mass is unsupported (Creo.JS unbound solid APIs).
+        var solidModel = creoUpgradeSolidModel(session, model, null);
         if (!solidModel) solidModel = model;
-        var units = creoGatherUnits(solidModel, gatherDebug.units, session);
-        var mass = creoGatherMass(solidModel, gatherDebug.mass, session, parameters);
+        var units = creoGatherUnits(solidModel, null, session);
+        var mass = null;
         var family_table = creoGatherFamilyTable(model);
         var features = [];
         var bom = [];
@@ -1961,8 +1654,6 @@ function gatherModelMetadata(filename, filePath) {
                 isAsm = lowerName.indexOf(".asm") >= 0;
                 isPart = lowerName.indexOf(".prt") >= 0;
             }
-            gatherDebug.is_asm = !!isAsm;
-            gatherDebug.is_part = !!isPart;
             if (isAsm) {
                 bom = creoGatherBomTree(solidModel, session);
                 var topChildren = (bom[0] && bom[0].children) ? bom[0].children : [];
@@ -1975,30 +1666,15 @@ function gatherModelMetadata(filename, filePath) {
                         });
                     }
                 }
-                gatherDebug.bom_children = topChildren.length;
             }
             if (isAsm || isPart) {
-                // Parts + assemblies: feature list (COMPONENT feats skipped inside gather).
                 try {
-                    features = creoGatherFeatures(solidModel, gatherDebug.features, session);
+                    features = creoGatherFeatures(solidModel, null, session);
                 } catch (errFeatGather) {
                     features = [];
-                    gatherDebug.features.reason = "errFeatGather:" + creoToolkitErr(errFeatGather);
                 }
-            } else {
-                gatherDebug.features.reason = "not_part_or_asm";
             }
-        } catch (errBom) {
-            gatherDebug.bom_error = creoToolkitErr(errBom);
-        }
-        gatherDebug.summary = {
-            params: (parameters && parameters.length) || 0,
-            mass: !!mass,
-            units: !!(units && (units.system_name || units.length || units.mass)),
-            features: (features && features.length) || 0,
-            deps: (dependencies && dependencies.length) || 0,
-            materials: !!(materials && (materials.current || (materials.names && materials.names.length)))
-        };
+        } catch (errBom) {}
         var eraseKeys = [];
         if (weRetrieved) {
             var afterKeys = creoSessionModelKeys(session);
@@ -2018,8 +1694,7 @@ function gatherModelMetadata(filename, filePath) {
             family_table: family_table,
             features: features,
             // Consumed by app.js on a later Creo.JS turn (Erase is deferred by PTC).
-            _pdm_erase_keys: eraseKeys,
-            _pdm_gather_debug: gatherDebug
+            _pdm_erase_keys: eraseKeys
         };
     } catch (errAll) {
         var msg = "";
@@ -2028,6 +1703,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push77"></script>
+  <script src="/client/app.js?v={{ app_version }}-push78"></script>
 </body>
 </html>

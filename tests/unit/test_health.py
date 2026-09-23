@@ -77,7 +77,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push77" in text
+    assert "push78" in text
     assert "Saved Creo metadata for" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "Materialize start:" in open("src/creopdm_agent/server.py", encoding="utf-8").read()
     assert "PTC_MASTER_MATERIAL" in text
@@ -111,14 +111,13 @@ def test_home_page(client):
     assert "_pdm_erase_keys" in text
     assert ".EraseWithDependencies" not in text
     assert "function creoAsSolid" in text
-    assert "GetMassPropertyWithDensity" in text
-    assert "function creoMassFromBodies" in text
-    assert "GetDefaultBody" in text
-    assert "pfcSolid.cast" in text
-    assert "_pdm_gather_debug" in text
-    assert "Creo metadata gather debug" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
-    assert "summarizeGatherDebugGaps" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "gather_debug" in open("src/creopdm/schemas/common.py", encoding="utf-8").read()
+    assert "Mass properties unsupported in silent Collect" in text
+    assert "creoGatherMass" not in text
+    assert "_pdm_gather_debug" not in text
+    assert "gather_debug" not in open("src/creopdm/schemas/common.py", encoding="utf-8").read()
+    assert "Creo metadata gather debug" not in open("src/creopdm/api/objects.py", encoding="utf-8").read()
+    assert "summarizeGatherDebugGaps" not in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "Mass properties are not collected" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "creoExternalBridge" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "Session offline" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "function checkCreoAvailable" in open("src/creopdm/static/vendor/creojs.js", encoding="utf-8").read()
@@ -128,16 +127,12 @@ def test_home_page(client):
     assert "function creoUpgradeSolidModel" in text
     assert "Never OpenFile / CreateModelWindow here" in text
     assert "try_ListItems" in text
-    assert "solid_upgrade" in text
-    assert "function creoMassFromParameters" in text
-    assert "PRO_MP_MASS" in text
     assert "unbound_retrieve_handle" in text
     app_js = open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "deleteLocalWorkspacePathsBackground" in app_js
     assert "applyAgentPickedPaths" in app_js
     assert "/add-paths" in app_js
     assert "limited to 250" not in app_js
-    assert "function creoGatherMass" in text
     assert "function creoGatherUnits" in text
     assert "function creoGatherFamilyTable" in text
     assert "function creoGatherBomTree" in text

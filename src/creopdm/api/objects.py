@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import mimetypes
 from pathlib import Path
 from urllib.parse import quote
@@ -280,17 +279,6 @@ def post_creo_metadata(
         "yes" if units_ok else "no",
         len(result.features or []) if isinstance(result.features, list) else 0,
     )
-    if payload.gather_debug:
-        try:
-            dbg = json.dumps(payload.gather_debug, ensure_ascii=False, separators=(",", ":"))
-        except (TypeError, ValueError):
-            dbg = str(payload.gather_debug)
-        logger.info(
-            "Creo metadata gather debug for %s (%s): %s",
-            ident or object_id,
-            object_id[:8],
-            dbg[:4000],
-        )
     return result
 
 

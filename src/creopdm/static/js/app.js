@@ -873,8 +873,8 @@
       return Promise.resolve(window.confirm(`Collect Creo metadata for ${total} model(s)?`));
     }
     lead.textContent =
-      `Capture parameters, materials, mass, units, features, and BOM/structure for ${total} Creo model(s) in this project. ` +
-      "Each model is retrieved in the Creo session when needed.";
+      `Capture parameters, materials, units, features, and BOM/structure for ${total} Creo model(s) in this project. ` +
+      "Each model is retrieved in the Creo session when needed. Mass properties are not collected (unsupported in silent Collect).";
     if (warn) {
       if (total > METADATA_COLLECT_WARN_THRESHOLD) {
         warn.hidden = false;
@@ -905,29 +905,6 @@
       $("#collect-metadata-cancel")?.addEventListener("click", onCancel);
       if (!dialog.open) dialog.showModal();
     });
-  }
-
-  function summarizeGatherDebugGaps(dbg) {
-    if (!dbg || typeof dbg !== "object") return "";
-    const bits = [];
-    const summary = dbg.summary || {};
-    if (!summary.mass) {
-      const mass = dbg.mass || {};
-      const massDetail =
-        mass.try_null ||
-        mass.reason ||
-        mass.parse ||
-        mass.param_fallback ||
-        "fail";
-      bits.push(`mass:${massDetail}`);
-    }
-    if (!summary.units) {
-      bits.push(`units:${(dbg.units && dbg.units.reason) || "empty"}`);
-    }
-    if (dbg.is_part && !summary.features) {
-      bits.push(`feat:${(dbg.features && dbg.features.reason) || "0"}`);
-    }
-    return bits.slice(0, 3).join(" ").slice(0, 160);
   }
 
   async function pushOneCreoMetadataTarget(target) {
@@ -964,14 +941,6 @@
       if (!identityName) {
         return { ok: false, timedOut: false, reason: "empty_identity" };
       }
-      const gatherDebug = snapshot._pdm_gather_debug || null;
-      if (gatherDebug) {
-        try {
-          console.info("[CreoPDM] gather debug", target.filename, gatherDebug);
-        } catch {
-          /* ignore console failures in Creo */
-        }
-      }
       const body = {
         version_id: target.versionId || null,
         identity: snapshot.identity || null,
@@ -980,12 +949,11 @@
         dependencies: Array.isArray(snapshot.dependencies) ? snapshot.dependencies : [],
         bom: snapshot.bom || null,
         units: snapshot.units || null,
-        mass: snapshot.mass || null,
+        // Mass unsupported in silent Collect — omit so existing mass_json is preserved.
         family_table: snapshot.family_table || null,
         features: Array.isArray(snapshot.features) && snapshot.features.length
           ? snapshot.features
           : null,
-        gather_debug: gatherDebug,
       };
       try {
         const response = await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {
@@ -993,12 +961,10 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        const gapReason = summarizeGatherDebugGaps(gatherDebug);
         return {
           ok: response.ok,
           timedOut: false,
-          reason: response.ok ? gapReason : "post_failed",
-          gatherDebug,
+          reason: response.ok ? "" : "post_failed",
         };
       } catch {
         return { ok: false, timedOut: false, reason: "post_failed" };
@@ -2967,14 +2933,6 @@
       }
       const snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
       if (!snapshot) continue;
-      const gatherDebug = snapshot._pdm_gather_debug || null;
-      if (gatherDebug) {
-        try {
-          console.info("[CreoPDM] gather debug", target.filename, gatherDebug);
-        } catch {
-          /* ignore */
-        }
-      }
       const body = {
         version_id: target.versionId || null,
         identity: snapshot.identity || null,
@@ -2983,12 +2941,10 @@
         dependencies: Array.isArray(snapshot.dependencies) ? snapshot.dependencies : [],
         bom: snapshot.bom || null,
         units: snapshot.units || null,
-        mass: snapshot.mass || null,
         family_table: snapshot.family_table || null,
         features: Array.isArray(snapshot.features) && snapshot.features.length
           ? snapshot.features
           : null,
-        gather_debug: gatherDebug,
       };
       try {
         await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {
