@@ -707,6 +707,48 @@
     closeProjectSettings();
     showProjectDialog("rename");
   });
+  $("#rebuild-where-used-btn")?.addEventListener("click", async () => {
+    closeProjectSettings();
+    const projectId = $("#rebuild-where-used-btn")?.dataset.project || currentProjectId();
+    if (!projectId) return;
+    showError($("#toolbar-error"), "");
+    const limit = 8;
+    let offset = 0;
+    let edgesAdded = 0;
+    let edgesExisting = 0;
+    let missing = 0;
+    let parentsTotal = 0;
+    const ok = await withBusy("Indexing Where Used…", async () => {
+      while (true) {
+        const response = await fetch(
+          `/api/projects/${encodeURIComponent(projectId)}/rebuild-where-used?offset=${offset}&limit=${limit}`,
+          { method: "POST" }
+        );
+        if (!response.ok) {
+          showError($("#toolbar-error"), await readError(response));
+          return false;
+        }
+        const body = await response.json();
+        parentsTotal = Number(body.parents_total) || parentsTotal;
+        edgesAdded += Number(body.edges_added) || 0;
+        edgesExisting += Number(body.edges_existing) || 0;
+        missing += Number(body.parents_missing_vault) || 0;
+        offset = Number(body.next_offset) || offset + limit;
+        const doneCount = Math.min(offset, parentsTotal || offset);
+        setBusyMessage(
+          parentsTotal
+            ? `Indexing Where Used… ${doneCount} of ${parentsTotal} assemblies/drawings`
+            : "Indexing Where Used…"
+        );
+        if (body.done) return true;
+      }
+    });
+    if (!ok) return;
+    const miss = missing ? ` ${missing} parent file(s) missing from vault.` : "";
+    showOk(
+      `Where Used index updated: ${edgesAdded} new link(s), ${edgesExisting} already stored.${miss}`
+    );
+  });
   $("#project-cancel")?.addEventListener("click", () => projectDialog?.close());
 
   const deleteProjectDialog = $("#delete-project-dialog");

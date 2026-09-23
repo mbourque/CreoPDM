@@ -582,3 +582,16 @@ class WhereUsedResponse(BaseModel):
     items: list[WhereUsedItem] = Field(default_factory=list)
     # Populated only when GET …/where-used?debug=1
     debug: dict[str, object] | None = None
+
+
+class RebuildWhereUsedResponse(BaseModel):
+    """Chunked vault → Dependency index so Where Used is a fast SQL lookup."""
+
+    parents_total: int = 0
+    parents_processed: int = 0
+    next_offset: int = 0
+    done: bool = False
+    edges_added: int = 0
+    edges_existing: int = 0
+    parents_missing_vault: int = 0
+    parents_scanned: list[str] = Field(default_factory=list)

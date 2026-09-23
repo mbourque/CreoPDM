@@ -324,3 +324,41 @@ def test_where_used_from_vault_bytes_without_creo_metadata(
     assert len(items) == 1
     assert items[0]["object_id"] == frame["uuid"]
     assert items[0]["filename"].lower().startswith("draw_latch.asm")
+
+
+@requires_git
+def test_rebuild_where_used_writes_dependency_edges(client, repo_parent, data_dir, tmp_path):
+    """Rebuild indexes vault refs into Dependency so Where Used is SQL-only."""
+    from creopdm.utils.files import set_file_writable
+
+    project = _create_project(client, repo_parent)
+    pin = _add_part(client, project["uuid"], tmp_path, "pin.prt.1")
+    frame = _add_part(client, project["uuid"], tmp_path, "frame.asm.1")
+
+    vault = data_dir / "vaults" / project["uuid"]
+    asm_files = list(vault.rglob("frame.asm*"))
+    assert asm_files
+    set_file_writable(asm_files[0])
+    asm_files[0].write_bytes(b"assembly body mentions PIN.PRT as component")
+
+    rebuilt = client.post(
+        f"/api/projects/{project['uuid']}/rebuild-where-used?offset=0&limit=10"
+    )
+    assert rebuilt.status_code == 200, rebuilt.text
+    body = rebuilt.json()
+    assert body["done"] is True
+    assert body["edges_added"] >= 1
+    assert body["parents_total"] >= 1
+
+    where = client.get(f"/api/objects/{pin['uuid']}/where-used?vault_scan=false")
+    assert where.status_code == 200, where.text
+    items = where.json()["items"]
+    assert len(items) == 1
+    assert items[0]["object_id"] == frame["uuid"]
+
+    again = client.post(
+        f"/api/projects/{project['uuid']}/rebuild-where-used?offset=0&limit=10"
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["edges_added"] == 0
+    assert again.json()["edges_existing"] >= 1

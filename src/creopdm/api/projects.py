@@ -33,6 +33,7 @@ from creopdm.schemas.common import (
     PurgeFloorItem,
     PurgeWorkspacePathsRequest,
     QueueCheckinRequest,
+    RebuildWhereUsedResponse,
     WorkspaceContentResponse,
     WorkspacePickerResponse,
     WorkspaceWatchResponse,
@@ -213,6 +214,29 @@ def project_checkin_queue(
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.workspaces.root_for(project.uuid))}
     )
+
+
+@router.post(
+    "/api/projects/{project_id}/rebuild-where-used",
+    response_model=RebuildWhereUsedResponse,
+)
+def rebuild_where_used(
+    project_id: str,
+    offset: int = 0,
+    limit: int = 8,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> RebuildWhereUsedResponse:
+    """Index vault asm/drw → Dependency rows (chunked). Where Used then uses SQL."""
+    project = ctx.projects.get_project(db, project_id)
+    result = ctx.metadata.rebuild_where_used_from_vault(
+        db,
+        project.uuid,
+        offset=offset,
+        limit=limit,
+    )
+    db.commit()
+    return result
 
 
 @router.post(

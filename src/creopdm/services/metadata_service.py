@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from creopdm.constants import DependencyType
+from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import ObjectNotFoundError, PathValidationError, ValidationAppError
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
@@ -21,13 +23,18 @@ from creopdm.schemas.common import (
     CreoMetadataRequest,
     CreoMetadataResponse,
     CreoParamPayload,
+    RebuildWhereUsedResponse,
     WhereUsedItem,
     WhereUsedResponse,
 )
 from creopdm.services.object_service import ObjectService
 from creopdm.utils.bom_match import bom_lookup_keys, bom_where_used_keys
 from creopdm.utils.classify import display_type_label
-from creopdm.utils.creo_companions import model_references_filename, needs_open_companions
+from creopdm.utils.creo_companions import (
+    model_references_filename,
+    names_referenced_in_model,
+    needs_open_companions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -367,6 +374,139 @@ class MetadataService:
                 "vault_scan_skipped": vault_scan_skipped,
             }
         return payload
+
+    def rebuild_where_used_from_vault(
+        self,
+        session: Session,
+        project_uuid: str,
+        *,
+        offset: int = 0,
+        limit: int = 8,
+    ) -> RebuildWhereUsedResponse:
+        """Scan vault asm/drw bytes and upsert Dependency rows (chunked).
+
+        Safe to re-run: existing edges are left alone; only missing parent→child
+        ASSEMBLY_MEMBER / DRAWING_MODEL links are added. After this, Where Used
+        is a SQL lookup on ``dependencies`` — no per-page vault scan required.
+        """
+        if self._workspaces is None:
+            raise ValidationAppError(
+                "Vault indexing is not available (workspace service not configured)."
+            )
+        project = session.scalar(select(Project).where(Project.uuid == project_uuid))
+        if project is None:
+            raise ObjectNotFoundError(
+                "Project not found.",
+                details={"project_id": project_uuid},
+            )
+        objects = self._objects.list_objects(session, project.id)
+        parents = sorted(
+            [row for row in objects if needs_open_companions(row.object_type, row.filename)],
+            key=lambda row: (row.filename or "").lower(),
+        )
+        total = len(parents)
+        start = max(0, int(offset))
+        take = max(1, min(int(limit), 40))
+        chunk = parents[start : start + take]
+        if not chunk:
+            return RebuildWhereUsedResponse(
+                parents_total=total,
+                parents_processed=0,
+                next_offset=start,
+                done=True,
+            )
+
+        # Map logical / lookup keys → object for matching names found in file bytes.
+        by_key: dict[str, EngineeringObject] = {}
+        candidate_names: list[str] = []
+        for row in objects:
+            candidate_names.append(row.filename)
+            for key in bom_where_used_keys(row.filename):
+                by_key.setdefault(key, row)
+            logical = CreoFileManager.normalize_creo_filename(row.filename).lower()
+            if logical:
+                by_key.setdefault(logical, row)
+
+        edges_added = 0
+        edges_existing = 0
+        missing = 0
+        scanned: list[str] = []
+
+        for parent in chunk:
+            scanned.append(parent.filename)
+            try:
+                path = self._workspaces.locate_content(project.uuid, parent)
+            except PathValidationError:
+                missing += 1
+                continue
+            except Exception:
+                logger.debug(
+                    "Rebuild where-used locate failed for %s",
+                    parent.filename,
+                    exc_info=True,
+                )
+                missing += 1
+                continue
+            others = [name for name in candidate_names if name != parent.filename]
+            found = names_referenced_in_model(path, others)
+            if not found:
+                continue
+            child_ids: set[int] = set()
+            for name in found:
+                logical = CreoFileManager.normalize_creo_filename(name).lower()
+                child = by_key.get(logical)
+                if child is None:
+                    for key in bom_where_used_keys(name):
+                        child = by_key.get(key)
+                        if child is not None:
+                            break
+                if child is None or child.id == parent.id:
+                    continue
+                child_ids.add(child.id)
+
+            dep_type = (
+                DependencyType.DRAWING_MODEL.value
+                if Path(
+                    CreoFileManager.normalize_creo_filename(parent.filename)
+                ).suffix.lower()
+                == ".drw"
+                else DependencyType.ASSEMBLY_MEMBER.value
+            )
+            for child_id in child_ids:
+                existing = session.scalar(
+                    select(Dependency).where(
+                        Dependency.project_id == project.id,
+                        Dependency.parent_object_id == parent.id,
+                        Dependency.child_object_id == child_id,
+                        Dependency.dependency_type == dep_type,
+                    )
+                )
+                if existing is not None:
+                    edges_existing += 1
+                    continue
+                session.add(
+                    Dependency(
+                        project_id=project.id,
+                        parent_object_id=parent.id,
+                        child_object_id=child_id,
+                        dependency_type=dep_type,
+                        quantity=1.0,
+                    )
+                )
+                edges_added += 1
+
+        session.flush()
+        next_offset = start + len(chunk)
+        return RebuildWhereUsedResponse(
+            parents_total=total,
+            parents_processed=len(chunk),
+            next_offset=next_offset,
+            done=next_offset >= total,
+            edges_added=edges_added,
+            edges_existing=edges_existing,
+            parents_missing_vault=missing,
+            parents_scanned=scanned,
+        )
 
     def _resolve_version(
         self,
