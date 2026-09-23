@@ -695,32 +695,98 @@ function creoGatherParameters(model) {
     } catch (err) {}
     return rows;
 }
-function creoGatherMaterials(model) {
-    var materials = { current: null, names: [] };
+function creoMaterialName(mat) {
+    if (mat == null || mat === "") return "";
+    if (typeof mat === "string" || typeof mat === "number") {
+        var asText = String(mat).trim();
+        return asText === "[object Object]" ? "" : asText;
+    }
+    var name = "";
     try {
-        if (typeof model.CurrentMaterial !== "undefined" && model.CurrentMaterial) {
-            try {
-                materials.current = String(model.CurrentMaterial.Name || model.CurrentMaterial || "");
-            } catch (errCur) {
-                materials.current = String(model.CurrentMaterial);
-            }
+        if (mat.Name != null) name = String(mat.Name);
+    } catch (errName) {
+        name = "";
+    }
+    if (name && name !== "[object Object]") return name.trim();
+    try {
+        if (typeof mat.GetName === "function") name = String(mat.GetName() || "");
+    } catch (errGet) {
+        name = "";
+    }
+    if (name && name !== "[object Object]") return name.trim();
+    return "";
+}
+function creoGatherMaterials(model, parameters) {
+    /**
+     * Materials live on pfcPart. Creo.JS sequences often use Count/Item (not getCount/get).
+     * Multi-body parts may assign material on a body while CurrentMaterial (master) is empty;
+     * PTC_MATERIAL_NAME is updated when a master material is set.
+     */
+    var materials = { current: null, names: [] };
+    var seen = {};
+    function addName(name, asCurrent) {
+        name = String(name || "").trim();
+        if (!name || name === "[object Object]") return;
+        if (asCurrent) materials.current = name;
+        var key = name.toLowerCase();
+        if (seen[key]) return;
+        seen[key] = true;
+        materials.names.push(name);
+    }
+    try {
+        if (typeof model.CurrentMaterial !== "undefined") {
+            var cur = model.CurrentMaterial;
+            if (cur) addName(creoMaterialName(cur), true);
         }
     } catch (errMat) {}
     try {
+        if (typeof model.GetCurrentMaterial === "function") {
+            var curGet = model.GetCurrentMaterial();
+            if (curGet) addName(creoMaterialName(curGet), !materials.current);
+        }
+    } catch (errGetCur) {}
+    try {
         if (typeof model.ListMaterials === "function") {
-            var listed = model.ListMaterials();
-            var count = listed && typeof listed.getCount === "function"
-                ? listed.getCount()
-                : (listed && listed.length) || 0;
-            for (var i = 0; i < count; i++) {
-                var mat = typeof listed.get === "function" ? listed.get(i) : listed[i];
-                if (!mat) continue;
-                var name = "";
-                try { name = String(mat.Name || mat || ""); } catch (errN) { name = ""; }
-                if (name) materials.names.push(name);
+            var listed = creoFeatureItems(model.ListMaterials());
+            for (var i = 0; i < listed.length; i++) {
+                addName(creoMaterialName(listed[i]), false);
             }
         }
     } catch (errList) {}
+    try {
+        var bodies = null;
+        if (typeof model.ListSolidBodies === "function") bodies = model.ListSolidBodies();
+        else if (typeof model.ListBodies === "function") bodies = model.ListBodies();
+        if (bodies) {
+            var bodyItems = creoFeatureItems(bodies);
+            for (var b = 0; b < bodyItems.length; b++) {
+                var body = bodyItems[b];
+                if (!body) continue;
+                var bodyMat = null;
+                try {
+                    if (typeof body.GetMaterial === "function") bodyMat = body.GetMaterial();
+                    else if (typeof body.Material !== "undefined") bodyMat = body.Material;
+                } catch (errBodyMat) {
+                    bodyMat = null;
+                }
+                if (bodyMat) addName(creoMaterialName(bodyMat), !materials.current);
+            }
+        }
+    } catch (errBodies) {}
+    if (!materials.current && parameters && parameters.length) {
+        for (var p = 0; p < parameters.length; p++) {
+            var pname = String((parameters[p] && parameters[p].name) || "").toUpperCase();
+            if (
+                pname === "PTC_MATERIAL_NAME" ||
+                pname === "MATERIAL" ||
+                pname === "MATERIAL_NAME"
+            ) {
+                var val = String((parameters[p] && parameters[p].value) || "").trim();
+                if (val) addName(val, true);
+                break;
+            }
+        }
+    }
     return materials;
 }
 function creoDependencyTypeLabel(dep) {
@@ -1212,7 +1278,7 @@ function gatherModelMetadata(filename, filePath) {
         }
         var identity = creoGatherIdentity(model);
         var parameters = creoGatherParameters(model);
-        var materials = creoGatherMaterials(model);
+        var materials = creoGatherMaterials(model, parameters);
         var dependencies = creoGatherDependencies(model);
         var units = creoGatherUnits(model);
         var mass = creoGatherMass(model);
@@ -1277,6 +1343,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push59"></script>
+  <script src="/client/app.js?v={{ app_version }}-push60"></script>
 </body>
 </html>
