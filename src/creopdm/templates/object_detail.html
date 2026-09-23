@@ -214,19 +214,26 @@
   {% if is_part %}
   <section class="tab-panel" id="panel-materials" hidden>
     {% if materials.current or materials.names %}
-    <dl class="kv">
-      <dt>Current</dt><dd>{{ materials.current or "—" }}</dd>
-    </dl>
-    {% if materials.names %}
+    {% set assigned = (materials.current or "")|string %}
+    {% set assigned_key = assigned|lower %}
     <table class="grid">
       <thead><tr><th>Material</th></tr></thead>
       <tbody>
+        {% set ns = namespace(found=false) %}
         {% for name in materials.names %}
-        <tr><td>{{ name }}</td></tr>
+        {% set is_current = name|lower == assigned_key %}
+        {% if is_current %}{% set ns.found = true %}{% endif %}
+        <tr{% if is_current %} class="is-assigned"{% endif %}>
+          <td>{{ name }}{% if is_current %} <span class="muted">(Assigned)</span>{% endif %}</td>
+        </tr>
         {% endfor %}
+        {% if assigned and not ns.found %}
+        <tr class="is-assigned">
+          <td>{{ assigned }} <span class="muted">(Assigned)</span></td>
+        </tr>
+        {% endif %}
       </tbody>
     </table>
-    {% endif %}
     {% else %}
     <p class="muted">No materials captured yet. Open the part in Creo and Check In / Add while it is in session.</p>
     {% endif %}

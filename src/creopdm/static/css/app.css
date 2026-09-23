@@ -772,6 +772,7 @@ body.is-file-drag #file-drop-overlay {
 .bom-tree { margin: 0.25rem 0 0.25rem 1.1rem; padding: 0; list-style: disc; }
 .bom-tree .bom-tree { list-style: circle; }
 .meta-empty { margin-top: 0.75rem; }
+.grid tr.is-assigned td { font-weight: 600; }
 .hero { max-width: 40rem; padding: 2rem 0; }
 
 .workspace.is-sidebar-collapsed {

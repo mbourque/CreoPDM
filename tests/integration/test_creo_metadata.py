@@ -102,9 +102,22 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert 'data-tab="bom"' in text
     assert 'data-tab="where-used"' in text
 
+    shaft_meta = client.post(
+        f"/api/objects/{shaft['uuid']}/creo-metadata",
+        json={
+            "materials": {
+                "current": "ALUMINUM_WROUGHT",
+                "names": ["PTC_SYSTEM_MTRL_PROPS", "ALUMINUM_WROUGHT"],
+            }
+        },
+    )
+    assert shaft_meta.status_code == 200, shaft_meta.text
     shaft_detail = client.get(f"/projects/{project['uuid']}/objects/{shaft['uuid']}")
     assert shaft_detail.status_code == 200
     assert "frame.asm.1" in shaft_detail.text
+    assert "ALUMINUM_WROUGHT" in shaft_detail.text
+    assert "(Assigned)" in shaft_detail.text
+    assert 'class="is-assigned"' in shaft_detail.text
 
 
 @requires_git
