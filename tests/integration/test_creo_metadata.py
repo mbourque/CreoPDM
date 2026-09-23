@@ -198,3 +198,66 @@ def test_creo_metadata_unresolved_child_skipped(client, repo_parent, tmp_path):
     body = posted.json()
     assert body["dependencies"] == []
     assert body["bom"][0]["filename"] == "missing.prt"
+
+
+@requires_git
+def test_where_used_from_nested_bom_and_family_table_name(client, repo_parent, tmp_path):
+    project = _create_project(client, repo_parent)
+    pin = _add_part(client, project["uuid"], tmp_path, "pin.prt.1")
+    rivet = _add_part(client, project["uuid"], tmp_path, "SPLIT-RIVET.prt.1")
+    frame = _add_part(client, project["uuid"], tmp_path, "frame.asm.1")
+
+    posted = client.post(
+        f"/api/objects/{frame['uuid']}/creo-metadata",
+        json={
+            "identity": {"common_name": "Frame"},
+            # Non-empty ListDependencies-style list must not block nested BOM indexing.
+            "dependencies": [
+                {"filename": "pin.prt", "quantity": 1, "dependency_type": "ASSEMBLY_MEMBER"}
+            ],
+            "bom": [
+                {
+                    "filename": "frame.asm",
+                    "quantity": 1,
+                    "dependency_type": "ASSEMBLY_ROOT",
+                    "children": [
+                        {
+                            "filename": "pin.prt",
+                            "quantity": 4,
+                            "dependency_type": "ASSEMBLY_MEMBER",
+                            "children": [],
+                        },
+                        {
+                            "filename": "INSTALLED<SPLIT-RIVET>.prt",
+                            "quantity": 2,
+                            "dependency_type": "ASSEMBLY_MEMBER",
+                            "children": [],
+                        },
+                    ],
+                }
+            ],
+        },
+    )
+    assert posted.status_code == 200, posted.text
+    deps = posted.json()["dependencies"]
+    child_names = {item["filename"] for item in deps}
+    assert "pin.prt.1" in child_names
+    assert "SPLIT-RIVET.prt.1" in child_names
+
+    pin_where = client.get(f"/api/objects/{pin['uuid']}/where-used")
+    assert pin_where.status_code == 200, pin_where.text
+    pin_items = pin_where.json()["items"]
+    assert len(pin_items) == 1
+    assert pin_items[0]["object_id"] == frame["uuid"]
+    assert pin_items[0]["quantity"] == 4.0  # BOM qty (deps not double-counted)
+
+    rivet_where = client.get(f"/api/objects/{rivet['uuid']}/where-used")
+    assert rivet_where.status_code == 200, rivet_where.text
+    rivet_items = rivet_where.json()["items"]
+    assert len(rivet_items) == 1
+    assert rivet_items[0]["object_id"] == frame["uuid"]
+    assert rivet_items[0]["quantity"] == 2.0
+
+    pin_detail = client.get(f"/projects/{project['uuid']}/objects/{pin['uuid']}")
+    assert pin_detail.status_code == 200
+    assert "frame.asm.1" in pin_detail.text

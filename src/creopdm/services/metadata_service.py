@@ -10,7 +10,6 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from creopdm.constants import DependencyType
-from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import ObjectNotFoundError, ValidationAppError
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
@@ -25,6 +24,7 @@ from creopdm.schemas.common import (
     WhereUsedResponse,
 )
 from creopdm.services.object_service import ObjectService
+from creopdm.utils.bom_match import bom_lookup_keys
 from creopdm.utils.classify import display_type_label
 
 logger = logging.getLogger(__name__)
@@ -43,10 +43,6 @@ def _loads(raw: str | None) -> Any:
         return json.loads(raw)
     except json.JSONDecodeError:
         return None
-
-
-def _logical_key(filename: str) -> str:
-    return CreoFileManager.logical_filename(filename).lower()
 
 
 class MetadataService:
@@ -100,8 +96,8 @@ class MetadataService:
 
         self._replace_parameters(session, obj, version, payload.parameters)
 
-        if payload.dependencies or payload.bom is not None:
-            self._replace_dependencies(session, obj, payload.dependencies, payload.bom)
+        if payload.dependencies or bom_payload is not None:
+            self._replace_dependencies(session, obj, payload.dependencies, bom_payload)
 
         session.flush()
         return self.get(session, object_uuid, version.uuid)
@@ -203,24 +199,58 @@ class MetadataService:
             ).all()
         } if parent_ids else {}
 
-        items: list[WhereUsedItem] = []
+        items_by_parent: dict[str, WhereUsedItem] = {}
         for edge in edges:
             parent = parents.get(edge.parent_object_id)
             if parent is None:
                 continue
-            items.append(
-                WhereUsedItem(
-                    object_id=parent.uuid,
-                    filename=parent.filename,
-                    relative_path=parent.relative_path,
-                    display_revision=f"{parent.revision}.{parent.iteration}",
-                    quantity=float(edge.quantity or 1.0),
-                    dependency_type=edge.dependency_type or DependencyType.ASSEMBLY_MEMBER.value,
-                    object_type=parent.object_type,
-                    type_label=display_type_label(parent.filename, parent.object_type),
-                )
+            items_by_parent[parent.uuid] = WhereUsedItem(
+                object_id=parent.uuid,
+                filename=parent.filename,
+                relative_path=parent.relative_path,
+                display_revision=f"{parent.revision}.{parent.iteration}",
+                quantity=float(edge.quantity or 1.0),
+                dependency_type=edge.dependency_type or DependencyType.ASSEMBLY_MEMBER.value,
+                object_type=parent.object_type,
+                type_label=display_type_label(parent.filename, parent.object_type),
             )
-        items.sort(key=lambda row: row.filename.lower())
+
+        # Also scan stored BOM trees — older captures may not have written Dependency rows
+        # (nested BOM was skipped when ListDependencies returned anything).
+        target_keys = set(bom_lookup_keys(obj.filename))
+        if target_keys:
+            siblings = self._objects.list_objects(session, obj.project_id)
+            for other in siblings:
+                if other.id == obj.id or other.uuid in items_by_parent:
+                    continue
+                version = self._resolve_version(session, other, None)
+                if version is None:
+                    continue
+                bom = _loads(version.bom_json)
+                if not bom:
+                    continue
+                matched_qty = 0.0
+                matched_type = DependencyType.ASSEMBLY_MEMBER.value
+                for filename, qty, dep_type in self._flatten_bom(bom):
+                    if self._skip_dependency_ref(dep_type, filename, other.filename):
+                        continue
+                    if set(bom_lookup_keys(filename)) & target_keys:
+                        matched_qty += float(qty or 1.0)
+                        matched_type = dep_type
+                if matched_qty <= 0:
+                    continue
+                items_by_parent[other.uuid] = WhereUsedItem(
+                    object_id=other.uuid,
+                    filename=other.filename,
+                    relative_path=other.relative_path,
+                    display_revision=f"{other.revision}.{other.iteration}",
+                    quantity=matched_qty,
+                    dependency_type=matched_type,
+                    object_type=other.object_type,
+                    type_label=display_type_label(other.filename, other.object_type),
+                )
+
+        items = sorted(items_by_parent.values(), key=lambda row: row.filename.lower())
         return WhereUsedResponse(object_id=obj.uuid, items=items)
 
     def _resolve_version(
@@ -278,57 +308,109 @@ class MetadataService:
     ) -> None:
         session.execute(delete(Dependency).where(Dependency.parent_object_id == parent.id))
 
-        aggregated: dict[tuple[str, str], float] = {}
-        for item in dependencies:
-            key_name = (item.filename or "").strip()
-            if not key_name:
-                continue
-            dep_type = (item.dependency_type or DependencyType.ASSEMBLY_MEMBER.value).strip()
-            qty = float(item.quantity or 1.0)
-            key = (_logical_key(key_name), dep_type)
-            aggregated[key] = aggregated.get(key, 0.0) + qty
+        refs: list[tuple[str, str, float]] = []
+        bom_refs = list(self._flatten_bom(bom)) if bom is not None else []
+        bom_has_members = any(
+            not self._skip_dependency_ref(dep_type, filename, parent.filename)
+            for filename, _qty, dep_type in bom_refs
+        )
+        if bom_has_members:
+            for filename, qty, dep_type in bom_refs:
+                refs.append((filename, dep_type, float(qty or 1.0)))
+            covered: set[str] = set()
+            for filename, _dep_type, _qty in refs:
+                if self._skip_dependency_ref(_dep_type, filename, parent.filename):
+                    continue
+                covered.update(bom_lookup_keys(filename))
+            for item in dependencies:
+                key_name = (item.filename or "").strip()
+                if not key_name:
+                    continue
+                dep_type = (item.dependency_type or DependencyType.ASSEMBLY_MEMBER.value).strip()
+                if self._skip_dependency_ref(dep_type, key_name, parent.filename):
+                    continue
+                # Skip assembly members already represented in the BOM tree.
+                if set(bom_lookup_keys(key_name)) & covered:
+                    continue
+                refs.append((key_name, dep_type, float(item.quantity or 1.0)))
+        else:
+            for item in dependencies:
+                key_name = (item.filename or "").strip()
+                if not key_name:
+                    continue
+                dep_type = (item.dependency_type or DependencyType.ASSEMBLY_MEMBER.value).strip()
+                refs.append((key_name, dep_type, float(item.quantity or 1.0)))
 
-        if not aggregated and bom is not None:
-            for filename, qty, dep_type in self._flatten_bom(bom):
-                key = (_logical_key(filename), dep_type)
-                aggregated[key] = aggregated.get(key, 0.0) + qty
-
-        if not aggregated:
+        if not refs:
             return
 
         siblings = self._objects.list_objects(session, parent.project_id)
-        by_logical = {_logical_key(row.filename): row for row in siblings if row.id != parent.id}
+        by_key: dict[str, EngineeringObject] = {}
+        for row in siblings:
+            if row.id == parent.id:
+                continue
+            for key in bom_lookup_keys(row.filename):
+                by_key.setdefault(key, row)
 
-        for (logical, dep_type), quantity in aggregated.items():
-            child = by_logical.get(logical)
+        by_child: dict[tuple[int, str], float] = {}
+        for filename, dep_type, quantity in refs:
+            if self._skip_dependency_ref(dep_type, filename, parent.filename):
+                continue
+            child = None
+            for key in bom_lookup_keys(filename):
+                child = by_key.get(key)
+                if child is not None:
+                    break
             if child is None:
                 continue
+            edge_key = (child.id, (dep_type or DependencyType.ASSEMBLY_MEMBER.value)[:32])
+            by_child[edge_key] = by_child.get(edge_key, 0.0) + float(quantity or 1.0)
+
+        for (child_id, dep_type), quantity in by_child.items():
             session.add(
                 Dependency(
                     project_id=parent.project_id,
                     parent_object_id=parent.id,
-                    child_object_id=child.id,
-                    dependency_type=dep_type[:32],
+                    child_object_id=child_id,
+                    dependency_type=dep_type,
                     quantity=quantity,
                 )
             )
 
+    @staticmethod
+    def _skip_dependency_ref(dep_type: str, filename: str, parent_filename: str) -> bool:
+        kind = (dep_type or "").strip().upper()
+        if kind in {"ASSEMBLY_ROOT", "ROOT"}:
+            return True
+        parent_keys = set(bom_lookup_keys(parent_filename))
+        child_keys = set(bom_lookup_keys(filename))
+        return bool(parent_keys and child_keys and (parent_keys & child_keys))
+
     def _flatten_bom(self, bom: Any) -> list[tuple[str, float, str]]:
         rows: list[tuple[str, float, str]] = []
+
+        def as_dict(node: Any) -> dict[str, Any] | None:
+            if isinstance(node, dict):
+                return node
+            if hasattr(node, "model_dump"):
+                dumped = node.model_dump()
+                return dumped if isinstance(dumped, dict) else None
+            return None
 
         def walk(node: Any) -> None:
             if isinstance(node, list):
                 for item in node:
                     walk(item)
                 return
-            if not isinstance(node, dict):
+            data = as_dict(node)
+            if data is None:
                 return
-            filename = str(node.get("filename") or "").strip()
-            dep_type = str(node.get("dependency_type") or DependencyType.ASSEMBLY_MEMBER.value)
-            qty = float(node.get("quantity") or 1.0)
+            filename = str(data.get("filename") or "").strip()
+            dep_type = str(data.get("dependency_type") or DependencyType.ASSEMBLY_MEMBER.value)
+            qty = float(data.get("quantity") or 1.0)
             if filename:
                 rows.append((filename, qty, dep_type))
-            children = node.get("children")
+            children = data.get("children")
             if isinstance(children, list):
                 for child in children:
                     walk(child)

@@ -18,8 +18,8 @@ from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import project_to_response, revision_display
 from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPSED_COOKIE
 from creopdm.context import AppContext
-from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import ProjectNotFoundError
+from creopdm.utils.bom_match import bom_generic_label, bom_lookup_keys
 from creopdm.utils.files import format_byte_size
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
 from creopdm.utils.native_dialog import native_picker_available
@@ -37,66 +37,13 @@ _template_env.globals["byte_size"] = format_byte_size
 templates = Jinja2Templates(env=_template_env)
 router = APIRouter()
 
-_INSTANCE_GENERIC_RE = re.compile(r"<([^>]+)>")
-
-
-def _extension_of(filename: str) -> str:
-    lower = str(filename or "").lower()
-    for candidate in (".prt", ".asm", ".drw", ".frm", ".mfg"):
-        if lower.endswith(candidate) or f"{candidate}." in lower:
-            return candidate
-    name = CreoFileManager.logical_filename(filename)
-    if "." in name:
-        return "." + name.rsplit(".", 1)[-1].lower()
-    return ""
-
 
 def _bom_lookup_keys(filename: str) -> list[str]:
-    """Keys used to match BOM/structure names to project objects.
-
-    Family-table display names like ``INSTALLED<SPLIT-RIVET>.prt`` resolve to the
-    generic ``SPLIT-RIVET.prt`` (name inside ``<>``), which is what Creo opens.
-    """
-    name = str(filename or "").strip()
-    if not name:
-        return []
-    keys: list[str] = []
-
-    def add(key: str) -> None:
-        text = CreoFileManager.logical_filename(key or "").strip().lower()
-        if text and text not in keys:
-            keys.append(text)
-
-    ext = _extension_of(name)
-    # Prefer generic inside <...> first — that file is what exists in the project.
-    for match in _INSTANCE_GENERIC_RE.finditer(name):
-        generic = match.group(1).strip()
-        if not generic:
-            continue
-        add(f"{generic}{ext}" if ext and not generic.lower().endswith(ext) else generic)
-        add(generic)
-    # Instance without generic marker: INSTALLED.prt
-    plain = _INSTANCE_GENERIC_RE.sub("", name)
-    if plain and plain != name:
-        add(plain)
-    # Full Creo display name as last resort
-    add(name)
-    return keys
+    return bom_lookup_keys(filename)
 
 
 def _bom_generic_label(filename: str) -> str | None:
-    """Human label for the generic that an instance name opens, if any."""
-    name = str(filename or "").strip()
-    match = _INSTANCE_GENERIC_RE.search(name)
-    if not match:
-        return None
-    generic = match.group(1).strip()
-    if not generic:
-        return None
-    ext = _extension_of(name)
-    if ext and not generic.lower().endswith(ext):
-        return f"{generic}{ext}"
-    return generic
+    return bom_generic_label(filename)
 
 
 def _project_bom_index(ctx: AppContext, db: Session, project_id: int) -> dict[str, str]:

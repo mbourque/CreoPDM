@@ -1,24 +1,25 @@
 """BOM/structure name matching, including family-table generics."""
 
-from creopdm.api.pages import _bom_generic_label, _bom_lookup_keys, _enrich_bom_tree
+from creopdm.api.pages import _enrich_bom_tree
+from creopdm.utils.bom_match import bom_generic_label, bom_lookup_keys
 
 
 def test_bom_lookup_keys_prefer_generic_inside_brackets():
-    keys = _bom_lookup_keys("INSTALLED<SPLIT-RIVET>.prt")
+    keys = bom_lookup_keys("INSTALLED<SPLIT-RIVET>.prt")
     assert keys[0] == "split-rivet.prt"
     assert "installed.prt" in keys
     assert "installed<split-rivet>.prt" in keys
 
 
 def test_bom_lookup_keys_icrps_instance():
-    keys = _bom_lookup_keys("ICRPS0302<ICRPS03>.prt")
+    keys = bom_lookup_keys("ICRPS0302<ICRPS03>.prt")
     assert keys[0] == "icrps03.prt"
     assert "icrps0302.prt" in keys
 
 
 def test_bom_generic_label():
-    assert _bom_generic_label("INSTALLED<SPLIT-RIVET>.prt") == "SPLIT-RIVET.prt"
-    assert _bom_generic_label("TOP-BACK.prt") is None
+    assert bom_generic_label("INSTALLED<SPLIT-RIVET>.prt") == "SPLIT-RIVET.prt"
+    assert bom_generic_label("TOP-BACK.prt") is None
 
 
 def test_enrich_bom_links_instance_to_generic_uuid():
