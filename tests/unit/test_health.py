@@ -77,7 +77,10 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push63" in text
+    assert "push64" in text
+    assert "Always ChangeDirectory into the file's folder first" in text
+    assert "empty_identity" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "retrieve_failed" in text
     assert "function creoGatherMaterials" in text
     assert "creoFeatureItems(model.ListMaterials())" in text
     assert "PTC_MATERIAL_NAME" in text

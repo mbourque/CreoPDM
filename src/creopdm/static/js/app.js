@@ -877,14 +877,35 @@
     let settled = false;
     const work = async () => {
       let snapshot = await gatherCreoMetadataForFilename(target.filename, "");
+      let reason = "";
+      if (snapshot && snapshot.__error) {
+        reason = snapshot.__error;
+        snapshot = null;
+      }
       if (!snapshot) {
         let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
         if (!filePath) {
           filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
         }
+        if (!filePath) {
+          return { ok: false, timedOut: false, reason: reason || "materialize_failed" };
+        }
         snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
+        if (snapshot && snapshot.__error) {
+          return {
+            ok: false,
+            timedOut: false,
+            reason: String(snapshot.__error),
+            detail: String(snapshot.__detail || ""),
+          };
+        }
       }
-      if (!snapshot) return { ok: false, timedOut: false };
+      if (!snapshot) return { ok: false, timedOut: false, reason: reason || "gather_failed" };
+      // Require a real identity filename so empty/failed snapshots are never "saved".
+      const identityName = String(snapshot.identity?.file_name || snapshot.identity?.full_name || "").trim();
+      if (!identityName) {
+        return { ok: false, timedOut: false, reason: "empty_identity" };
+      }
       const body = {
         version_id: target.versionId || null,
         identity: snapshot.identity || null,
@@ -905,9 +926,13 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        return { ok: response.ok, timedOut: false };
+        return {
+          ok: response.ok,
+          timedOut: false,
+          reason: response.ok ? "" : "post_failed",
+        };
       } catch {
-        return { ok: false, timedOut: false };
+        return { ok: false, timedOut: false, reason: "post_failed" };
       }
     };
     try {
@@ -918,13 +943,13 @@
         }),
         new Promise((resolve) => {
           window.setTimeout(() => {
-            if (!settled) resolve({ ok: false, timedOut: true });
+            if (!settled) resolve({ ok: false, timedOut: true, reason: "timeout" });
           }, METADATA_ITEM_TIMEOUT_MS);
         }),
       ]);
       return result;
     } catch {
-      return { ok: false, timedOut: false };
+      return { ok: false, timedOut: false, reason: "exception" };
     }
   }
 
@@ -943,12 +968,16 @@
     let captured = Number(state.captured) || 0;
     let failed = Number(state.failed) || 0;
     let pausedBusy = false;
+    let lastReason = "";
     try {
       while (index < targets.length) {
         if (metadataCollectJob.cancel) break;
         const target = targets[index];
         const message =
-          `Collecting Creo metadata… ${index + 1} of ${targets.length}: ${target.filename}`;
+          `Collecting Creo metadata… ${index + 1} of ${targets.length}: ${target.filename}` +
+          ` (${captured} saved, ${failed} skipped` +
+          (lastReason ? `, last: ${lastReason}` : "") +
+          `)`;
         showOk(message);
         saveMetadataCollectState({
           ...state,
@@ -957,15 +986,18 @@
           captured,
           failed,
           message,
+          lastReason,
           updatedAt: Date.now(),
         });
         const result = await pushOneCreoMetadataTarget(target);
         if (result.timedOut) {
           failed += 1;
+          lastReason = "timeout";
           index += 1;
           const pauseMsg =
-            `Metadata collection paused on ${target.filename} (Creo busy after opening a model). ` +
-            `Progress saved at ${index} of ${targets.length} — refresh or return to this page to continue.`;
+            `Metadata collection paused on ${target.filename} (Creo busy / timeout). ` +
+            `Progress saved at ${index} of ${targets.length} — refresh to continue.` +
+            ` (${captured} saved, ${failed} skipped)`;
           showOk(pauseMsg);
           saveMetadataCollectState({
             ...state,
@@ -974,13 +1006,19 @@
             captured,
             failed,
             message: pauseMsg,
+            lastReason,
             updatedAt: Date.now(),
           });
           pausedBusy = true;
           break;
         }
-        if (result.ok) captured += 1;
-        else failed += 1;
+        if (result.ok) {
+          captured += 1;
+          lastReason = "";
+        } else {
+          failed += 1;
+          lastReason = String(result.reason || "skipped");
+        }
         index += 1;
         saveMetadataCollectState({
           ...state,
@@ -988,7 +1026,12 @@
           index,
           captured,
           failed,
-          message: `Collecting Creo metadata… ${index} of ${targets.length}`,
+          lastReason,
+          message:
+            `Collecting Creo metadata… ${index} of ${targets.length}` +
+            ` (${captured} saved, ${failed} skipped` +
+            (lastReason ? `, last: ${lastReason}` : "") +
+            `)`,
           updatedAt: Date.now(),
         });
         await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -2788,6 +2831,12 @@
       const snapshot = await window.CreoJS.gatherModelMetadata(filename, filePath || "");
       if (!snapshot || typeof snapshot !== "object") return null;
       if (typeof snapshot === "string" && snapshot.startsWith("CREOPDM_ERROR:")) return null;
+      if (snapshot.__error) {
+        return {
+          __error: String(snapshot.__error || "gather_failed"),
+          __detail: String(snapshot.__detail || ""),
+        };
+      }
       const eraseKeys = Array.isArray(snapshot._pdm_erase_keys)
         ? snapshot._pdm_erase_keys.filter((name) => typeof name === "string" && name.trim())
         : [];

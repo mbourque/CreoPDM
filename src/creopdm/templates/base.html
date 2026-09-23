@@ -1203,7 +1203,8 @@ function creoGatherBomTree(model, session) {
 function creoRetrieveForMetadata(session, filePath, filename) {
     /**
      * Load a model into session for metadata only (no Display / window activate).
-     * Prefer an absolute path from Add (source file) or agent cache.
+     * Always ChangeDirectory into the file's folder first so assembly companions
+     * beside it resolve — then try numbered disk name and logical name.ext.
      */
     if (!session) return null;
     var fullPath = filePath ? creoNormalizePath(filePath) : "";
@@ -1218,27 +1219,31 @@ function creoRetrieveForMetadata(session, filePath, filename) {
     } catch (errGet) {
         previousWd = "";
     }
+    function tryRetrieve(nameOrPath) {
+        if (!nameOrPath) return null;
+        var got = null;
+        try {
+            var descr = pfcModelDescriptor.CreateFromFileName(creoNormalizePath(nameOrPath));
+            if (typeof session.RetrieveModelWithOpts === "function"
+                && typeof pfcRetrieveModelOptions !== "undefined") {
+                try {
+                    var opts = pfcRetrieveModelOptions.Create();
+                    try { opts.AskUserAboutReps = false; } catch (errAsk) {}
+                    got = session.RetrieveModelWithOpts(descr, opts);
+                    if (got) return got;
+                } catch (errOpts) {}
+            }
+            got = session.RetrieveModel(descr);
+            if (got) return got;
+        } catch (errRet) {}
+        return null;
+    }
     try {
         if (fullPath) {
-            try {
-                var descrPath = pfcModelDescriptor.CreateFromFileName(fullPath);
-                if (typeof session.RetrieveModelWithOpts === "function"
-                    && typeof pfcRetrieveModelOptions !== "undefined") {
-                    try {
-                        var opts = pfcRetrieveModelOptions.Create();
-                        try { opts.AskUserAboutReps = false; } catch (errAsk) {}
-                        model = session.RetrieveModelWithOpts(descrPath, opts);
-                        if (model) return model;
-                    } catch (errOpts) {}
-                }
-                try {
-                    model = session.RetrieveModel(descrPath);
-                    if (model) return model;
-                } catch (errRet) {}
-            } catch (errPath) {}
             var dir = fullPath.replace(/[\\\/][^\\\/]+$/, "");
             var diskName = fullPath.replace(/^.*[\\\/]/, "");
-            if (dir && diskName) {
+            var logicalFromDisk = creoLogicalFileName(diskName || filename);
+            if (dir) {
                 try {
                     var cacheDir = creoNormalizePath(dir);
                     if (!previousWd || creoNormalizePath(previousWd).toLowerCase() !== cacheDir.toLowerCase()) {
@@ -1246,28 +1251,22 @@ function creoRetrieveForMetadata(session, filePath, filename) {
                         changedWd = true;
                     }
                 } catch (errDir) {}
-                try {
-                    var descrDisk = pfcModelDescriptor.CreateFromFileName(creoNormalizePath(diskName));
-                    if (typeof session.RetrieveModelWithOpts === "function"
-                        && typeof pfcRetrieveModelOptions !== "undefined") {
-                        try {
-                            var optsDisk = pfcRetrieveModelOptions.Create();
-                            try { optsDisk.AskUserAboutReps = false; } catch (errAsk2) {}
-                            model = session.RetrieveModelWithOpts(descrDisk, optsDisk);
-                            if (model) return model;
-                        } catch (errOpts2) {}
-                    }
-                    model = session.RetrieveModel(descrDisk);
-                    if (model) return model;
-                } catch (errDisk) {}
             }
+            // Prefer names relative to the cache WD (companions resolve). Full path last.
+            model = tryRetrieve(diskName);
+            if (model) return model;
+            if (logicalFromDisk && logicalFromDisk.toLowerCase() !== String(diskName || "").toLowerCase()) {
+                model = tryRetrieve(logicalFromDisk);
+                if (model) return model;
+            }
+            model = tryRetrieve(fullPath);
+            if (model) return model;
         }
         if (shortName) {
             model = creoFindSessionModel(session, shortName);
             if (model) return model;
-            // Do not RetrieveModel by bare name — Creo spams
+            // Do not RetrieveModel by bare name when no filePath — Creo spams
             // "'PART' cannot be retrieved" when the file is not on search path.
-            // Callers must pass an absolute filePath (agent cache / vault copy).
         }
         return null;
     } finally {
@@ -1283,6 +1282,9 @@ function gatherModelMetadata(filename, filePath) {
         var session = (typeof pfcGetCurrentSession === "function")
           ? pfcGetCurrentSession()
           : pfcGetProESession();
+        if (!session) {
+            return { __error: "no_creo_session" };
+        }
         var beforeKeys = creoSessionModelKeys(session);
         var model = creoFindSessionModel(session, filename);
         var weRetrieved = false;
@@ -1291,7 +1293,10 @@ function gatherModelMetadata(filename, filePath) {
             weRetrieved = !!model;
         }
         if (!model) {
-            return null;
+            return {
+                __error: filePath ? "retrieve_failed" : "not_in_session",
+                __detail: String(filename || "") + (filePath ? (" @ " + filePath) : "")
+            };
         }
         var identity = creoGatherIdentity(model);
         var parameters = creoGatherParameters(model);
@@ -1356,10 +1361,12 @@ function gatherModelMetadata(filename, filePath) {
             _pdm_erase_keys: eraseKeys
         };
     } catch (errAll) {
-        return null;
+        var msg = "";
+        try { msg = String(errAll && (errAll.message || errAll) || ""); } catch (errMsg) { msg = ""; }
+        return { __error: "gather_exception", __detail: msg };
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push63"></script>
+  <script src="/client/app.js?v={{ app_version }}-push64"></script>
 </body>
 </html>
