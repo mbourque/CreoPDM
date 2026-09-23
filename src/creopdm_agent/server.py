@@ -265,6 +265,7 @@ def _download(
         disk_name,
     )
     target = target_dir / disk_name
+    logger.info("Downloading %s from CreoPDM…", disk_name)
     try:
         response = client.get(url, headers=headers)
     except httpx.HTTPError as exc:
@@ -278,6 +279,7 @@ def _download(
             detail=f"CreoPDM returned {response.status_code} for {url}",
         )
     target.write_bytes(response.content)
+    logger.info("Wrote %s (%s bytes) → %s", disk_name, len(response.content), target)
     return target, logical, disk_name, len(response.content)
 
 
@@ -1120,6 +1122,13 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         token = (payload.token or settings.token or "").strip()
         if token:
             headers["Authorization"] = f"Bearer {token}"
+        logger.info(
+            "Materialize start: %s (+%s companion request%s) → %s",
+            primary.disk_name or primary.filename or primary.object_id,
+            len(payload.companions),
+            "" if len(payload.companions) == 1 else "s",
+            target_dir,
+        )
         with httpx.Client(timeout=120.0, follow_redirects=True) as client:
             target, logical, disk_name, nbytes = _download(
                 client, base, primary, target_dir, headers
@@ -1128,10 +1137,15 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             for item in payload.companions:
                 if not item.object_id and not (item.project_id and item.relative_path):
                     continue
+                logger.info(
+                    "Downloading companion %s…",
+                    item.disk_name or item.filename or item.object_id,
+                )
                 _download(client, base, item, target_dir, headers)
                 companions_written += 1
         logger.info(
-            "Materialized %s (%s bytes, %s companion%s) → %s",
+            "Materialize done: %s ready for Creo (%s bytes, %s companion%s) in %s — "
+            "metadata save happens on the CreoPDM server after Creo.JS gather, not in the agent",
             disk_name,
             nbytes,
             companions_written,

@@ -726,6 +726,13 @@ function creoMaterialName(mat) {
     } catch (errName) {
         name = "";
     }
+    if (!name || name === "[object Object]") {
+        try {
+            if (mat.name != null) name = String(mat.name);
+        } catch (errName2) {
+            name = "";
+        }
+    }
     if (name && name !== "[object Object]") return name.trim();
     try {
         if (typeof mat.GetName === "function") name = String(mat.GetName() || "");
@@ -765,6 +772,11 @@ function creoGatherMaterials(model, parameters) {
         }
     } catch (errGetCur) {}
     try {
+        if (typeof model.Material !== "undefined" && model.Material) {
+            addName(creoMaterialName(model.Material), !materials.current);
+        }
+    } catch (errMatProp) {}
+    try {
         if (typeof model.ListMaterials === "function") {
             var listed = creoFeatureItems(model.ListMaterials());
             for (var i = 0; i < listed.length; i++) {
@@ -798,7 +810,8 @@ function creoGatherMaterials(model, parameters) {
             if (
                 pname === "PTC_MATERIAL_NAME" ||
                 pname === "MATERIAL" ||
-                pname === "MATERIAL_NAME"
+                pname === "MATERIAL_NAME" ||
+                pname === "PTC_MASTER_MATERIAL"
             ) {
                 var val = String((parameters[p] && parameters[p].value) || "").trim();
                 if (val) addName(val, true);
@@ -806,6 +819,7 @@ function creoGatherMaterials(model, parameters) {
             }
         }
     }
+    // If we listed materials but never got a current assignment, keep names for the UI.
     return materials;
 }
 function creoDependencyTypeLabel(dep) {
@@ -1367,6 +1381,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push64"></script>
+  <script src="/client/app.js?v={{ app_version }}-push65"></script>
 </body>
 </html>

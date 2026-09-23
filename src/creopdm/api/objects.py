@@ -14,6 +14,7 @@ from creopdm.api.serializers import version_to_response
 from creopdm.context import AppContext
 from creopdm.constants import ActivityAction
 from creopdm.exceptions import CheckoutOwnershipError, CreoPDMError, PathValidationError, ValidationAppError
+from creopdm.logging_setup import get_logger
 from creopdm.schemas.common import (
     BatchItemResult,
     BatchObjectRequest,
@@ -27,6 +28,7 @@ from creopdm.schemas.common import (
 )
 
 router = APIRouter()
+logger = get_logger("metadata-api")
 
 
 def _file_response(path, filename: str) -> FileResponse:
@@ -251,6 +253,28 @@ def post_creo_metadata(
     ctx: AppContext = Depends(get_context),
 ) -> CreoMetadataResponse:
     result = ctx.metadata.save(db, object_id, payload)
+    params = len(result.parameters or [])
+    mats = result.materials if isinstance(result.materials, dict) else {}
+    mat_current = str((mats or {}).get("current") or "") or None
+    mat_names = len((mats or {}).get("names") or []) if isinstance(mats, dict) else 0
+    deps = len(result.dependencies or [])
+    bom = result.bom
+    bom_n = len(bom) if isinstance(bom, list) else (1 if bom else 0)
+    ident = ""
+    if isinstance(result.identity, dict):
+        ident = str(result.identity.get("file_name") or result.identity.get("full_name") or "")
+    logger.info(
+        "Saved Creo metadata for %s (%s): params=%s materials=%s%s deps=%s bom=%s mass=%s units=%s",
+        ident or object_id,
+        object_id[:8],
+        params,
+        mat_current or "none",
+        f"/{mat_names} listed" if mat_names else "",
+        deps,
+        bom_n,
+        "yes" if result.mass else "no",
+        "yes" if result.units else "no",
+    )
     return result
 
 
