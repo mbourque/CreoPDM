@@ -813,8 +813,17 @@ function creoGatherFeatures(model) {
                     continue;
                 }
             } catch (errComp) {}
+            // pfcModelItem exposes GetName(); .Name is not a feature property.
             var name = "";
-            try { name = String(feat.Name || ""); } catch (errN) { name = ""; }
+            try {
+                if (typeof feat.GetName === "function") {
+                    var got = feat.GetName();
+                    if (got != null && got !== "") name = String(got);
+                }
+            } catch (errGet) { name = ""; }
+            if (!name) {
+                try { name = String(feat.Name || ""); } catch (errN) { name = ""; }
+            }
             var typeName = "";
             try { typeName = String(feat.FeatTypeName || ""); } catch (errT) { typeName = ""; }
             var subType = "";
@@ -824,6 +833,15 @@ function creoGatherFeatures(model) {
                 if (typeof feat.Id !== "undefined") id = feat.Id;
                 else if (typeof feat.GetId === "function") id = feat.GetId();
             } catch (errId) { id = null; }
+            var regenNum = null;
+            try {
+                if (typeof feat.Number !== "undefined" && feat.Number != null) regenNum = feat.Number;
+            } catch (errNum) { regenNum = null; }
+            if (!name) {
+                if (subType && regenNum != null) name = subType + " " + regenNum;
+                else if (typeName && regenNum != null) name = typeName + " " + regenNum;
+                else if (subType) name = subType;
+            }
             if (!name && !typeName) continue;
             rows.push({
                 id: id,
@@ -1151,6 +1169,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push43"></script>
+  <script src="/client/app.js?v={{ app_version }}-push44"></script>
 </body>
 </html>
