@@ -2269,6 +2269,9 @@
         materials: snapshot.materials || null,
         dependencies: Array.isArray(snapshot.dependencies) ? snapshot.dependencies : [],
         bom: snapshot.bom || null,
+        units: snapshot.units || null,
+        mass: snapshot.mass || null,
+        family_table: snapshot.family_table || null,
       };
       try {
         await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {

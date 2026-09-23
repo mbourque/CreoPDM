@@ -76,6 +76,15 @@ class MetadataService:
         if payload.materials is not None:
             version.materials_json = _dumps(payload.materials)
 
+        if payload.units is not None:
+            version.units_json = _dumps(payload.units)
+
+        if payload.mass is not None:
+            version.mass_json = _dumps(payload.mass)
+
+        if payload.family_table is not None:
+            version.family_table_json = _dumps(payload.family_table)
+
         bom_payload = payload.bom
         if bom_payload is not None:
             if hasattr(bom_payload, "model_dump"):
@@ -137,8 +146,18 @@ class MetadataService:
         identity = _loads(version.identity_json)
         materials = _loads(version.materials_json)
         bom = _loads(version.bom_json)
+        units = _loads(version.units_json)
+        mass = _loads(version.mass_json)
+        family_table = _loads(version.family_table_json)
         captured = bool(
-            identity or materials or bom or params or dep_payloads
+            identity
+            or materials
+            or bom
+            or units
+            or mass
+            or family_table
+            or params
+            or dep_payloads
         )
         return CreoMetadataResponse(
             object_id=obj.uuid,
@@ -158,6 +177,9 @@ class MetadataService:
             materials=materials if isinstance(materials, dict) else None,
             dependencies=dep_payloads,
             bom=bom,
+            units=units if isinstance(units, dict) else None,
+            mass=mass if isinstance(mass, dict) else None,
+            family_table=family_table if isinstance(family_table, dict) else None,
             captured=captured,
         )
 

@@ -76,109 +76,96 @@
 
   <div class="tabs" role="tablist">
     <button type="button" class="tab is-active" data-tab="overview">Overview</button>
-    {% if is_assembly %}
-    <button type="button" class="tab" data-tab="structure">Structure</button>
-    <button type="button" class="tab" data-tab="bom">BOM</button>
-    {% endif %}
     {% if is_creo %}
     <button type="button" class="tab" data-tab="parameters">Parameters</button>
     {% endif %}
     {% if is_part %}
     <button type="button" class="tab" data-tab="materials">Materials</button>
     {% endif %}
-    <button type="button" class="tab" data-tab="history">History{% if workspace_pending %} · unsaved{% endif %}</button>
+    {% if show_mass_tab %}
+    <button type="button" class="tab" data-tab="mass">Mass</button>
+    {% endif %}
+    {% if show_family_tab %}
+    <button type="button" class="tab" data-tab="family">Family Table</button>
+    {% endif %}
+    {% if is_assembly %}
+    <button type="button" class="tab" data-tab="structure">Structure</button>
+    <button type="button" class="tab" data-tab="bom">BOM</button>
+    {% endif %}
     <button type="button" class="tab" data-tab="where-used">Where Used</button>
+    <button type="button" class="tab" data-tab="history">History{% if workspace_pending %} · unsaved{% endif %}</button>
   </div>
 
   <section class="tab-panel" id="panel-overview">
-    <dl class="kv">
-      <dt>Number</dt><dd>{{ object.number or "—" }}</dd>
-      <dt>Name</dt><dd>{{ object.name }}</dd>
-      {% if identity.common_name %}
-      <dt>Common name</dt><dd>{{ identity.common_name }}</dd>
+    <div class="detail-sections">
+      <section class="detail-section">
+        <h3 class="detail-section-title">Identity</h3>
+        <dl class="kv">
+          <dt>Number</dt><dd>{{ object.number or "—" }}</dd>
+          <dt>Name</dt><dd>{{ object.name }}</dd>
+          {% if identity.common_name %}
+          <dt>Common name</dt><dd>{{ identity.common_name }}</dd>
+          {% endif %}
+          {% if identity.full_name %}
+          <dt>Full name</dt><dd class="mono">{{ identity.full_name }}</dd>
+          {% endif %}
+          {% if identity.instance_name %}
+          <dt>Instance</dt><dd>{{ identity.instance_name }}</dd>
+          {% endif %}
+          {% if identity.generic_name %}
+          <dt>Generic</dt><dd>{{ identity.generic_name }}</dd>
+          {% endif %}
+          <dt>Revision</dt><dd>{{ object.display_revision }}</dd>
+          {% if object.creo_release %}
+          <dt>Creo</dt><dd>{{ object.creo_release }}</dd>
+          {% endif %}
+          <dt>Lifecycle</dt><dd>{{ object.lifecycle_state.replace('_', ' ').title() }}</dd>
+          <dt>Checkout</dt><dd>{{ object.checkout_status }}</dd>
+          {% if identity.origin %}
+          <dt>Origin</dt><dd class="mono">{{ identity.origin }}</dd>
+          {% endif %}
+          <dt>Content hash</dt><dd class="mono">{{ object.current_version.content_hash if object.current_version else "—" }}</dd>
+          <dt>Size</dt><dd>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</dd>
+        </dl>
+      </section>
+
+      {% if units.system_name or units.length or units.mass %}
+      <section class="detail-section">
+        <h3 class="detail-section-title">Units</h3>
+        <dl class="kv">
+          {% if units.system_name %}<dt>System</dt><dd>{{ units.system_name }}</dd>{% endif %}
+          {% if units.length %}<dt>Length</dt><dd>{{ units.length }}</dd>{% endif %}
+          {% if units.mass %}<dt>Mass</dt><dd>{{ units.mass }}</dd>{% endif %}
+          {% if units.time %}<dt>Time</dt><dd>{{ units.time }}</dd>{% endif %}
+          {% if units.temperature %}<dt>Temperature</dt><dd>{{ units.temperature }}</dd>{% endif %}
+        </dl>
+      </section>
       {% endif %}
-      {% if identity.full_name %}
-      <dt>Full name</dt><dd class="mono">{{ identity.full_name }}</dd>
+
+      {% if materials.current or (mass and mass.mass is not none) %}
+      <section class="detail-section">
+        <h3 class="detail-section-title">Summary</h3>
+        <dl class="kv">
+          {% if materials.current %}
+          <dt>Material</dt><dd>{{ materials.current }}</dd>
+          {% endif %}
+          {% if mass and mass.mass is not none %}
+          <dt>Mass</dt><dd>{{ mass.mass }}{% if units.mass %} {{ units.mass }}{% endif %}</dd>
+          {% endif %}
+          {% if mass and mass.volume is not none %}
+          <dt>Volume</dt><dd>{{ mass.volume }}</dd>
+          {% endif %}
+          {% if mass and mass.density is not none %}
+          <dt>Density</dt><dd>{{ mass.density }}</dd>
+          {% endif %}
+        </dl>
+      </section>
       {% endif %}
-      {% if identity.instance_name %}
-      <dt>Instance</dt><dd>{{ identity.instance_name }}</dd>
-      {% endif %}
-      {% if identity.generic_name %}
-      <dt>Generic</dt><dd>{{ identity.generic_name }}</dd>
-      {% endif %}
-      <dt>Revision</dt><dd>{{ object.display_revision }}</dd>
-      {% if object.creo_release %}
-      <dt>Creo</dt><dd>{{ object.creo_release }}</dd>
-      {% endif %}
-      {% if materials.current %}
-      <dt>Material</dt><dd>{{ materials.current }}</dd>
-      {% endif %}
-      {% if identity.origin %}
-      <dt>Origin</dt><dd class="mono">{{ identity.origin }}</dd>
-      {% endif %}
-      <dt>Lifecycle</dt><dd>{{ object.lifecycle_state.replace('_', ' ').title() }}</dd>
-      <dt>Checkout</dt><dd>{{ object.checkout_status }}</dd>
-      <dt>Content hash</dt><dd class="mono">{{ object.current_version.content_hash if object.current_version else "—" }}</dd>
-      <dt>Size</dt><dd>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</dd>
-    </dl>
+    </div>
     {% if is_creo and not metadata.captured %}
-    <p class="muted small meta-empty">Creo identity not captured yet. Open the model in Creo, then Add or Check In while it is in session.</p>
+    <p class="muted small meta-empty">Creo metadata not captured yet. Open the model in Creo, then Add or Check In while it is in session.</p>
     {% endif %}
   </section>
-
-  {% if is_assembly %}
-  <section class="tab-panel" id="panel-structure" hidden>
-    {% if bom %}
-    <ul class="bom-tree">{{ bom_tree(bom) }}</ul>
-    {% else %}
-    <p class="muted">No assembly structure captured yet. Open the assembly in Creo and Check In / Add while it is in session.</p>
-    {% endif %}
-  </section>
-
-  <section class="tab-panel" id="panel-bom" hidden>
-    {% if metadata.dependencies %}
-    <table class="grid">
-      <thead>
-        <tr>
-          <th>Filename</th>
-          <th>Qty</th>
-          <th>Type</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in metadata.dependencies %}
-        <tr>
-          <td class="filename-cell mono">{{ row.filename }}</td>
-          <td>{{ row.quantity }}</td>
-          <td>{{ row.dependency_type }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% elif bom %}
-    <table class="grid">
-      <thead>
-        <tr>
-          <th>Filename</th>
-          <th>Qty</th>
-          <th>Type</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in bom %}
-        <tr>
-          <td class="filename-cell mono">{{ row.filename }}</td>
-          <td>{{ row.quantity }}</td>
-          <td>{{ row.dependency_type or "ASSEMBLY_MEMBER" }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p class="muted">No BOM captured yet. Open the assembly in Creo and Check In / Add while it is in session.</p>
-    {% endif %}
-  </section>
-  {% endif %}
 
   {% if is_creo %}
   <section class="tab-panel" id="panel-parameters" hidden>
@@ -239,6 +226,146 @@
     {% endif %}
   </section>
   {% endif %}
+
+  {% if show_mass_tab %}
+  <section class="tab-panel" id="panel-mass" hidden>
+    {% if mass %}
+    <dl class="kv">
+      {% if mass.mass is not none %}<dt>Mass</dt><dd>{{ mass.mass }}{% if units.mass %} {{ units.mass }}{% endif %}</dd>{% endif %}
+      {% if mass.volume is not none %}<dt>Volume</dt><dd>{{ mass.volume }}</dd>{% endif %}
+      {% if mass.surface_area is not none %}<dt>Surface area</dt><dd>{{ mass.surface_area }}</dd>{% endif %}
+      {% if mass.density is not none %}<dt>Density</dt><dd>{{ mass.density }}</dd>{% endif %}
+      {% if mass.gravity_center %}
+      <dt>Center of gravity</dt>
+      <dd class="mono">{{ mass.gravity_center[0] }}, {{ mass.gravity_center[1] }}, {{ mass.gravity_center[2] }}</dd>
+      {% endif %}
+      {% if mass.principal_moments %}
+      <dt>Principal moments</dt>
+      <dd class="mono">{{ mass.principal_moments[0] }}, {{ mass.principal_moments[1] }}, {{ mass.principal_moments[2] }}</dd>
+      {% endif %}
+    </dl>
+    {% else %}
+    <p class="muted">No mass properties captured yet.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if show_family_tab %}
+  <section class="tab-panel" id="panel-family" hidden>
+    <div class="table-scroll">
+      <table class="grid family-table">
+        <thead>
+          <tr>
+            <th>Instance</th>
+            {% for col in family_table.columns %}
+            <th class="mono">{{ col }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in family_table.rows %}
+          <tr>
+            <td class="mono">{{ row.instance }}</td>
+            {% for cell in row.cells %}
+            <td>{{ cell }}</td>
+            {% endfor %}
+          </tr>
+          {% else %}
+          <tr><td colspan="{{ 1 + (family_table.columns|length) }}">No family table rows.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if is_assembly %}
+  <section class="tab-panel" id="panel-structure" hidden>
+    {% if bom %}
+    <ul class="bom-tree">{{ bom_tree(bom) }}</ul>
+    {% else %}
+    <p class="muted">No assembly structure captured yet. Open the assembly in Creo and Check In / Add while it is in session.</p>
+    {% endif %}
+  </section>
+
+  <section class="tab-panel" id="panel-bom" hidden>
+    {% if metadata.dependencies %}
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>Filename</th>
+          <th>Qty</th>
+          <th>Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in metadata.dependencies %}
+        <tr>
+          <td class="filename-cell mono">{{ row.filename }}</td>
+          <td>{{ row.quantity }}</td>
+          <td>{{ row.dependency_type }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% elif bom %}
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>Filename</th>
+          <th>Qty</th>
+          <th>Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in bom %}
+        <tr>
+          <td class="filename-cell mono">{{ row.filename }}</td>
+          <td>{{ row.quantity }}</td>
+          <td>{{ row.dependency_type or "ASSEMBLY_MEMBER" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No BOM captured yet. Open the assembly in Creo and Check In / Add while it is in session.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <section class="tab-panel" id="panel-where-used" hidden>
+    {% if where_used %}
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>Filename</th>
+          <th>Type</th>
+          <th>Rev</th>
+          <th>Qty</th>
+          <th>Relation</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in where_used %}
+        <tr>
+          <td class="filename-cell">
+            <a href="/projects/{{ project.uuid }}/objects/{{ row.object_id }}">{{ row.filename }}</a>
+            {% if row.relative_path and row.relative_path != row.filename %}
+            <div class="muted small">{{ row.relative_path }}</div>
+            {% endif %}
+          </td>
+          <td>{{ row.type_label }}</td>
+          <td>{{ row.display_revision }}</td>
+          <td>{{ row.quantity }}</td>
+          <td>{{ row.dependency_type }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Not used by any captured assembly or drawing in this project yet.</p>
+    {% endif %}
+  </section>
 
   <section class="tab-panel" id="panel-history" hidden>
     {% if workspace_pending %}
@@ -346,40 +473,6 @@
         </tbody>
       </table>
     </div>
-  </section>
-
-  <section class="tab-panel" id="panel-where-used" hidden>
-    {% if where_used %}
-    <table class="grid">
-      <thead>
-        <tr>
-          <th>Filename</th>
-          <th>Type</th>
-          <th>Rev</th>
-          <th>Qty</th>
-          <th>Relation</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in where_used %}
-        <tr>
-          <td class="filename-cell">
-            <a href="/projects/{{ project.uuid }}/objects/{{ row.object_id }}">{{ row.filename }}</a>
-            {% if row.relative_path and row.relative_path != row.filename %}
-            <div class="muted small">{{ row.relative_path }}</div>
-            {% endif %}
-          </td>
-          <td>{{ row.type_label }}</td>
-          <td>{{ row.display_revision }}</td>
-          <td>{{ row.quantity }}</td>
-          <td>{{ row.dependency_type }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p class="muted">Not used by any captured assembly or drawing in this project yet.</p>
-    {% endif %}
   </section>
 </article>
 

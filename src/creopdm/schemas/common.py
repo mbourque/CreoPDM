@@ -545,6 +545,9 @@ class CreoMetadataRequest(BaseModel):
     materials: dict[str, object] | None = None
     dependencies: list[CreoDependencyPayload] = Field(default_factory=list)
     bom: list[CreoBomNode] | dict[str, object] | None = None
+    units: dict[str, object] | None = None
+    mass: dict[str, object] | None = None
+    family_table: dict[str, object] | None = None
 
 
 class CreoMetadataResponse(BaseModel):
@@ -555,6 +558,9 @@ class CreoMetadataResponse(BaseModel):
     materials: dict[str, object] | None = None
     dependencies: list[CreoDependencyPayload] = Field(default_factory=list)
     bom: list[object] | dict[str, object] | None = None
+    units: dict[str, object] | None = None
+    mass: dict[str, object] | None = None
+    family_table: dict[str, object] | None = None
     captured: bool = False
 
 

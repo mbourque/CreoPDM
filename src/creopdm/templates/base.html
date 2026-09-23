@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-toolbar11">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-toolbar12">
   <script>
     /* Suppress PTC creojs.js noise outside Creo's browser (and when Creo injects its own copy). */
     (function () {
@@ -694,6 +694,157 @@ function creoComponentModelName(feature) {
     } catch (errModel) {}
     return "";
 }
+function creoGatherUnits(model) {
+    var units = { system_name: "", length: "", mass: "", time: "", temperature: "" };
+    try {
+        if (typeof model.GetPrincipalUnits !== "function") return units;
+        var system = model.GetPrincipalUnits();
+        if (!system) return units;
+        try { units.system_name = String(system.Name || ""); } catch (errN) {}
+        var typeKeys = [
+            ["length", "UNIT_LENGTH"],
+            ["mass", "UNIT_MASS"],
+            ["time", "UNIT_TIME"],
+            ["temperature", "UNIT_TEMPERATURE"]
+        ];
+        for (var i = 0; i < typeKeys.length; i++) {
+            var field = typeKeys[i][0];
+            var enumName = typeKeys[i][1];
+            try {
+                var unitType = null;
+                if (typeof pfcUnitType !== "undefined" && pfcUnitType[enumName] != null) {
+                    unitType = pfcUnitType[enumName];
+                }
+                var unit = null;
+                if (unitType != null && typeof system.GetUnit === "function") {
+                    unit = system.GetUnit(unitType);
+                }
+                if (unit) {
+                    try { units[field] = String(unit.Name || unit || ""); } catch (errU) {}
+                }
+            } catch (errType) {}
+        }
+    } catch (err) {}
+    return units;
+}
+function creoPoint3(value) {
+    if (!value) return null;
+    try {
+        if (typeof value.getCount === "function" && value.getCount() >= 3) {
+            return [Number(value.get(0)), Number(value.get(1)), Number(value.get(2))];
+        }
+        if (value.length >= 3) {
+            return [Number(value[0]), Number(value[1]), Number(value[2])];
+        }
+        if (typeof value.Item === "function") {
+            return [Number(value.Item(0)), Number(value.Item(1)), Number(value.Item(2))];
+        }
+    } catch (err) {}
+    return null;
+}
+function creoGatherMass(model) {
+    var mass = null;
+    try {
+        if (typeof model.GetMassProperty !== "function") return null;
+        var props = null;
+        try {
+            props = model.GetMassProperty(null);
+        } catch (errNull) {
+            try { props = model.GetMassProperty(""); } catch (errEmpty) { props = null; }
+        }
+        if (!props) return null;
+        mass = {
+            mass: null,
+            volume: null,
+            surface_area: null,
+            density: null,
+            gravity_center: null,
+            principal_moments: null
+        };
+        try { mass.mass = Number(props.Mass); } catch (e1) {}
+        try { mass.volume = Number(props.Volume); } catch (e2) {}
+        try { mass.surface_area = Number(props.SurfaceArea); } catch (e3) {}
+        try { mass.density = Number(props.Density); } catch (e4) {}
+        try { mass.gravity_center = creoPoint3(props.GravityCenter); } catch (e5) {}
+        try { mass.principal_moments = creoPoint3(props.PrincipalMoments); } catch (e6) {}
+    } catch (err) {}
+    return mass;
+}
+function creoFamilyCellString(value) {
+    if (value == null) return "";
+    try {
+        if (typeof value.StringValue !== "undefined" && value.StringValue != null) {
+            return String(value.StringValue);
+        }
+        if (typeof value.IntValue !== "undefined" && value.IntValue != null) {
+            return String(value.IntValue);
+        }
+        if (typeof value.DoubleValue !== "undefined" && value.DoubleValue != null) {
+            return String(value.DoubleValue);
+        }
+        if (typeof value.BoolValue !== "undefined" && value.BoolValue != null) {
+            return value.BoolValue ? "true" : "false";
+        }
+        return String(value);
+    } catch (err) {
+        return "";
+    }
+}
+function creoGatherFamilyTable(model) {
+    var table = { columns: [], rows: [] };
+    try {
+        if (typeof model.ListColumns !== "function" || typeof model.ListRows !== "function") {
+            return null;
+        }
+        var columns = model.ListColumns();
+        var rows = model.ListRows();
+        var colCount = columns && typeof columns.getCount === "function"
+            ? columns.getCount()
+            : (columns && columns.length) || 0;
+        var rowCount = rows && typeof rows.getCount === "function"
+            ? rows.getCount()
+            : (rows && rows.length) || 0;
+        if (!colCount && !rowCount) return null;
+        var colObjs = [];
+        for (var c = 0; c < colCount; c++) {
+            var col = typeof columns.get === "function" ? columns.get(c) : columns[c];
+            if (!col) continue;
+            var symbol = "";
+            try { symbol = String(col.Symbol || col.Name || ("COL" + c)); } catch (errS) {
+                symbol = "COL" + c;
+            }
+            table.columns.push(symbol);
+            colObjs.push(col);
+        }
+        for (var r = 0; r < rowCount; r++) {
+            var row = typeof rows.get === "function" ? rows.get(r) : rows[r];
+            if (!row) continue;
+            var instance = "";
+            try {
+                instance = String(row.InstanceName || row.Name || ("ROW" + (r + 1)));
+            } catch (errI) {
+                instance = "ROW" + (r + 1);
+            }
+            var cells = [];
+            for (var ci = 0; ci < colObjs.length; ci++) {
+                var cellVal = "";
+                try {
+                    if (typeof model.GetCell === "function") {
+                        cellVal = creoFamilyCellString(model.GetCell(colObjs[ci], row));
+                    }
+                } catch (errCell) {
+                    cellVal = "";
+                }
+                cells.push(cellVal);
+            }
+            table.rows.push({ instance: instance, cells: cells });
+        }
+        if (!table.columns.length && !table.rows.length) return null;
+        return table;
+    } catch (err) {
+        return null;
+    }
+}
 function creoGatherBom(model, depth) {
     var nodes = [];
     var maxDepth = typeof depth === "number" ? depth : 1;
@@ -837,6 +988,9 @@ function gatherModelMetadata(filename, filePath) {
         var parameters = creoGatherParameters(model);
         var materials = creoGatherMaterials(model);
         var dependencies = creoGatherDependencies(model);
+        var units = creoGatherUnits(model);
+        var mass = creoGatherMass(model);
+        var family_table = creoGatherFamilyTable(model);
         var bom = [];
         try {
             var type = model.Type;
@@ -864,13 +1018,16 @@ function gatherModelMetadata(filename, filePath) {
             parameters: parameters,
             materials: materials,
             dependencies: dependencies,
-            bom: bom
+            bom: bom,
+            units: units,
+            mass: mass,
+            family_table: family_table
         };
     } catch (errAll) {
         return null;
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push39"></script>
+  <script src="/client/app.js?v={{ app_version }}-push40"></script>
 </body>
 </html>

@@ -108,7 +108,29 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
             "materials": {
                 "current": "ALUMINUM_WROUGHT",
                 "names": ["PTC_SYSTEM_MTRL_PROPS", "ALUMINUM_WROUGHT"],
-            }
+            },
+            "units": {
+                "system_name": "mmNs",
+                "length": "mm",
+                "mass": "kg",
+                "time": "sec",
+                "temperature": "C",
+            },
+            "mass": {
+                "mass": 1.25,
+                "volume": 460.0,
+                "surface_area": 320.0,
+                "density": 0.0027,
+                "gravity_center": [0.1, 0.2, 0.3],
+                "principal_moments": [1.0, 2.0, 3.0],
+            },
+            "family_table": {
+                "columns": ["D1", "LENGTH"],
+                "rows": [
+                    {"instance": "SHAFT_GENERIC", "cells": ["10", "100"]},
+                    {"instance": "SHAFT_LONG", "cells": ["10", "200"]},
+                ],
+            },
         },
     )
     assert shaft_meta.status_code == 200, shaft_meta.text
@@ -118,6 +140,11 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert "ALUMINUM_WROUGHT" in shaft_detail.text
     assert "(Assigned)" in shaft_detail.text
     assert 'class="is-assigned"' in shaft_detail.text
+    assert 'data-tab="mass"' in shaft_detail.text
+    assert 'data-tab="family"' in shaft_detail.text
+    assert "mmNs" in shaft_detail.text
+    assert "SHAFT_LONG" in shaft_detail.text
+    assert "1.25" in shaft_detail.text
 
 
 @requires_git

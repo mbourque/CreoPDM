@@ -330,7 +330,21 @@ def object_detail(
     where_used = ctx.metadata.where_used(db, object_id)
     identity = metadata.identity or {}
     materials = metadata.materials or {}
+    units = metadata.units or {}
+    mass = metadata.mass if isinstance(metadata.mass, dict) else None
+    family_table = metadata.family_table if isinstance(metadata.family_table, dict) else {}
     bom = metadata.bom if isinstance(metadata.bom, list) else []
+    show_mass_tab = bool(
+        mass
+        and (
+            mass.get("mass") is not None
+            or mass.get("volume") is not None
+            or mass.get("density") is not None
+        )
+    )
+    show_family_tab = bool(
+        family_table.get("columns") or family_table.get("rows")
+    )
     return render(
         request,
         "object_detail.html",
@@ -348,6 +362,11 @@ def object_detail(
             "metadata": metadata,
             "identity": identity,
             "materials": materials,
+            "units": units,
+            "mass": mass,
+            "family_table": family_table,
+            "show_mass_tab": show_mass_tab,
+            "show_family_tab": show_family_tab,
             "bom": bom,
             "where_used": where_used.items,
             "workspace_path": str(ctx.config.workspace_for_project(project.uuid)),

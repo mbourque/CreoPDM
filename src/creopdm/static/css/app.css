@@ -769,6 +769,24 @@ body.is-file-drag #file-drop-overlay {
 .kv { display: grid; grid-template-columns: 160px 1fr; gap: 0.4rem 1rem; }
 .kv dt { color: var(--muted); }
 .mono { font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.85rem; }
+.detail-sections {
+  display: grid;
+  gap: 1.25rem;
+}
+.detail-section-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+.table-scroll {
+  overflow: auto;
+  max-width: 100%;
+}
+.family-table th,
+.family-table td {
+  white-space: nowrap;
+}
 .bom-tree { margin: 0.25rem 0 0.25rem 1.1rem; padding: 0; list-style: disc; }
 .bom-tree .bom-tree { list-style: circle; }
 .meta-empty { margin-top: 0.75rem; }
