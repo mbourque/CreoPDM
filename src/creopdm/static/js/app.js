@@ -548,8 +548,9 @@
     btn.setAttribute("data-mode", mode);
     // Use add/remove — Creo's embedded browser mishandles classList.toggle(name, force).
     if (mode === "select") {
-      btn.classList.add("is-selected");
-      btn.classList.remove("is-filtered");
+      // Legacy stored mode — treat like filter visually until migrated.
+      btn.classList.remove("is-selected");
+      btn.classList.add("is-filtered");
     } else if (mode === "filter") {
       btn.classList.remove("is-selected");
       btn.classList.add("is-filtered");
@@ -561,27 +562,19 @@
     const label = METRIC_LABELS[key] || key;
     if (key === "files") {
       btn.title = mode === "off"
-        ? "Select all files and clear type chips. Click again to clear."
-        : "Showing all files. Click to clear.";
+        ? "Show and select all files. Clears type chips. Click again to clear."
+        : "Showing all files (selected). Click to clear.";
       return;
     }
     if (key === "checked_out") {
-      if (mode === "off") {
-        btn.title = "Select checked out files in the current group. Click again to hide the rest. Click a third time to clear.";
-      } else if (mode === "select") {
-        btn.title = "Selected checked out files in the current group. Click to hide files that are not checked out.";
-      } else {
-        btn.title = "Showing checked out files in the current group. Click to clear.";
-      }
+      btn.title = mode === "off"
+        ? "Filter to checked out files in the current group and select them. Click again to clear."
+        : "Showing checked out files (selected). Click to clear.";
       return;
     }
-    if (mode === "off") {
-      btn.title = `Select ${label}. Click again to filter. Click a third time to clear.`;
-    } else if (mode === "select") {
-      btn.title = `Selected ${label}. Click to filter the list to this group.`;
-    } else {
-      btn.title = `Filtering to ${label}. Click to clear.`;
-    }
+    btn.title = mode === "off"
+      ? `Filter to ${label} and select them. Click again to clear.`
+      : `Filtering to ${label} (selected). Click to clear.`;
   }
 
   function isCheckoutMetric(key) {
@@ -2604,8 +2597,9 @@
     let applied = false;
     metricButtons().forEach((btn) => {
       let mode = saved[metricKey(btn)];
-      if (metricKey(btn) === "files" && mode === "select") mode = "filter";
-      if (mode !== "select" && mode !== "filter" && mode !== "off") return;
+      // Old three-click "select" mode → sticky filter.
+      if (mode === "select") mode = "filter";
+      if (mode !== "filter" && mode !== "off") return;
       setMetricMode(btn, mode);
       applied = true;
     });
@@ -2772,9 +2766,8 @@
     if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
     const current = metricMode(btn);
     const key = metricKey(btn);
-    const next = key === "files"
-      ? (current === "filter" ? "off" : "filter")
-      : (current === "off" ? "select" : current === "select" ? "filter" : "off");
+    // One click = sticky filter (list filtered + matching rows selected). Click again clears.
+    const next = current === "filter" || current === "select" ? "off" : "filter";
     setMetricMode(btn, next);
     if (key === "files" && next !== "off") {
       metricButtons().forEach((item) => {

@@ -80,14 +80,14 @@
 
     {% if selected and status %}
     <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}">
-      <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Select all files and clear type chips. Click again to clear."><strong>{{ status.files }}</strong> Files</button></li>
-      <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Select Creo models. Click again to filter. Click a third time to clear."><strong>{{ status.cad_models }}</strong> Creo Models</button></li>
-      <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Select parts. Click again to filter. Click a third time to clear."><strong>{{ status.creo_parts }}</strong> Parts</button></li>
-      <li><button type="button" class="metric" data-filter="assemblies" data-mode="off" title="Select assemblies. Click again to filter. Click a third time to clear."><strong>{{ status.assemblies }}</strong> Assemblies</button></li>
-      <li><button type="button" class="metric" data-filter="drawings" data-mode="off" title="Select drawings. Click again to filter. Click a third time to clear."><strong>{{ status.drawings }}</strong> Drawings</button></li>
-      <li><button type="button" class="metric" data-filter="documents" data-mode="off" title="Select documents. Click again to filter. Click a third time to clear."><strong>{{ status.documents }}</strong> Documents</button></li>
-      <li><button type="button" class="metric" data-filter="other" data-mode="off" title="Select files that are not Creo models. Click again to filter. Click a third time to clear."><strong>{{ status.other }}</strong> Other</button></li>
-      <li><button type="button" class="metric" data-filter="checked_out" data-mode="off" title="Select checked out files in the current group. Click again to hide the rest. Click a third time to clear."><strong>{{ status.checked_out }}</strong> Checked out</button></li>
+      <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Show and select all files. Clears type chips. Click again to clear."><strong>{{ status.files }}</strong> Files</button></li>
+      <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Filter to Creo models and select them. Click again to clear."><strong>{{ status.cad_models }}</strong> Creo Models</button></li>
+      <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Filter to parts and select them. Click again to clear."><strong>{{ status.creo_parts }}</strong> Parts</button></li>
+      <li><button type="button" class="metric" data-filter="assemblies" data-mode="off" title="Filter to assemblies and select them. Click again to clear."><strong>{{ status.assemblies }}</strong> Assemblies</button></li>
+      <li><button type="button" class="metric" data-filter="drawings" data-mode="off" title="Filter to drawings and select them. Click again to clear."><strong>{{ status.drawings }}</strong> Drawings</button></li>
+      <li><button type="button" class="metric" data-filter="documents" data-mode="off" title="Filter to documents and select them. Click again to clear."><strong>{{ status.documents }}</strong> Documents</button></li>
+      <li><button type="button" class="metric" data-filter="other" data-mode="off" title="Filter to files that are not Creo models and select them. Click again to clear."><strong>{{ status.other }}</strong> Other</button></li>
+      <li><button type="button" class="metric" data-filter="checked_out" data-mode="off" title="Filter to checked out files in the current group and select them. Click again to clear."><strong>{{ status.checked_out }}</strong> Checked out</button></li>
     </ul>
     {% endif %}
     <p class="muted small" id="selection-summary" hidden></p>
