@@ -33,3 +33,16 @@ def test_filetype_icon_fetch_script_uses_vscode_icons():
     assert "word2" in text
     assert "excel2" in text
     assert "pdf2" in text
+    # Must not re-pad SVGs after fetch (that made icons too small vs Creo PNGs).
+    assert "pad_viewbox" not in text
+
+
+def test_default_type_icons_cover_office_and_creo():
+    from creopdm.constants import DEFAULT_TYPE_ICON_BY_LABEL
+
+    assert DEFAULT_TYPE_ICON_BY_LABEL["Part"] == "part.png"
+    assert DEFAULT_TYPE_ICON_BY_LABEL["Assembly"] == "assembly.png"
+    assert DEFAULT_TYPE_ICON_BY_LABEL["Drawing"] == "drawing.png"
+    assert DEFAULT_TYPE_ICON_BY_LABEL["PDF Document"].endswith(".svg")
+    assert DEFAULT_TYPE_ICON_BY_LABEL["Word Document"].endswith(".svg")
+    assert DEFAULT_TYPE_ICON_BY_LABEL["Excel Document"].endswith(".svg")

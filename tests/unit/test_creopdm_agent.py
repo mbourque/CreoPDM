@@ -154,6 +154,76 @@ def test_agent_pick_folder(tmp_path, monkeypatch):
         assert str(part) in body["selected"]
 
 
+def test_agent_pick_folder_cancel(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    root.mkdir()
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    monkeypatch.setattr(
+        "creopdm.utils.native_dialog.pick_folder",
+        lambda initial_dir, title="Add a folder to the project": None,
+    )
+    with TestClient(app) as client:
+        picked = client.post("/pick-folder", json={})
+        assert picked.status_code == 200, picked.text
+        body = picked.json()
+        assert body["cancelled"] is True
+        assert body["selected"] == []
+        assert body.get("folder", "") == ""
+
+
+def test_agent_add_paths_uses_base_folder_for_relative_paths(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    root.mkdir()
+    folder = tmp_path / "kit"
+    nested = folder / "sub"
+    nested.mkdir(parents=True)
+    part = nested / "pin.prt.1"
+    part.write_bytes(b"prt")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), pdm_url="http://pdm.test")
+    app = create_agent_app(settings)
+    uploaded: list[tuple[str, str]] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"ok": [{"filename": "pin.prt", "uuid": "u1"}], "failed": []}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            rels = []
+            for item in files or []:
+                if item[0] == "relative_paths":
+                    rels.append(item[1][1] if isinstance(item[1], tuple) else item[1])
+            uploaded.append((url, rels[0] if rels else ""))
+            return FakeResponse()
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        response = client.post(
+            "/add-paths",
+            json={
+                "pdm_url": "http://pdm.test",
+                "project_id": "proj1",
+                "absolute_paths": [str(part)],
+                "base_folder": str(folder),
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert uploaded
+        assert uploaded[0][1] == "sub/pin.prt.1"
+
+
 def test_agent_open_local_association(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     root.mkdir()
