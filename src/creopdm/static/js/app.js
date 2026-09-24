@@ -237,15 +237,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   let softNavBusy = false;
 
-  async function softNavigate(url, historyMode = "push") {
+  function softNavigate(url, historyMode = "push") {
     const absolute = new URL(url, window.location.href);
     if (!isListHomeUrl(absolute.href)) {
       window.location.href = absolute.href;
-      return;
+      return Promise.resolve();
     }
-    if (window.__creopdmSoftNavBusy || softNavBusy) return;
+    // Never silently drop a folder/project navigation if one is already in flight.
+    if (window.__creopdmSoftNavBusy || softNavBusy) {
+      window.location.href = absolute.href;
+      return Promise.resolve();
+    }
     softNavBusy = true;
     window.__creopdmSoftNavBusy = true;
+    return (async () => {
     try {
       const response = await fetch(absolute.href, {
         headers: { Accept: "text/html", "X-CreoPDM-Soft": "1" },
@@ -280,6 +285,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       softNavBusy = false;
       window.__creopdmSoftNavBusy = false;
     }
+    })();
   }
 
   function leavePage(url) {
@@ -3059,19 +3065,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   document.querySelectorAll("table.grid").forEach(enableTableSort);
 
   function openFolderRow(folder) {
-    const projectId = $("#rename-project-btn")?.dataset.project;
-    const path = folder?.dataset.folder || "";
+    if (!folder) return;
+    const link = folder.matches?.("a.folder-open")
+      ? folder
+      : folder.querySelector?.("a.folder-open");
+    const href = link?.getAttribute?.("href") || "";
+    if (href) {
+      leavePage(href);
+      return;
+    }
+    const projectId = currentProjectId();
+    const path =
+      folder.dataset?.folder
+      || folder.querySelector?.(".folder-open")?.dataset?.folder
+      || "";
     if (projectId && path) {
-      leavePage(`/?project=${projectId}&folder=${encodeURIComponent(path)}`);
+      leavePage(`/?project=${encodeURIComponent(projectId)}&folder=${encodeURIComponent(path)}`);
     }
   }
 
   function onFileTableClick(event) {
     const target = eventEl(event);
-    const folder = target?.closest(".folder-row");
-    const folderLink = target?.closest(".folder-open");
+    const folderLink = target?.closest?.(".folder-open") || null;
+    const folder = target?.closest?.(".folder-row") || null;
     if (folderLink && folder && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
+      event.stopPropagation();
       cancelPendingOpen();
       openFolderRow(folder);
       return;

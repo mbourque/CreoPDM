@@ -78,8 +78,11 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push94" in text
-    assert "toolbar20" in text
+    assert "push95" in text
+    assert "toolbar21" in text
+    assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    assert "folder | urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "obj.type_icon" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "function typeIconHtml" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "function resolveTypeIcon" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
