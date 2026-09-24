@@ -437,6 +437,14 @@ tr.is-row-hidden { display: none !important; }
   object-fit: contain;
   vertical-align: middle;
 }
+/* Line-art SVGs read smaller than solid Creo PNGs at the same box — bump SVG. */
+#object-table td:first-child img.type-icon[src$=".svg"],
+#checked-out-table td:first-child img.type-icon[src$=".svg"],
+#changes-table .filename-cell img.type-icon[src$=".svg"],
+img.type-icon[src$=".svg"] {
+  width: 16px;
+  height: 16px;
+}
 #object-table td:first-child .name-with-icon .object-open,
 #checked-out-table td:first-child .name-with-icon .object-open,
 #changes-table .filename-cell .name-with-icon .object-open {
