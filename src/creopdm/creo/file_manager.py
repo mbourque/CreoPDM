@@ -67,13 +67,23 @@ class CreoFileManager:
 
     @staticmethod
     def versioned_extensions(extra_extensions: Iterable[str] | None = None) -> frozenset[str]:
-        """Extensions that use Creo-style .ext.N save numbers."""
-        extras = (
-            (*DEFAULT_CREO_MODEL_EXTENSIONS, *DEFAULT_OPENABLE_CAD_EXTENSIONS, *DEFAULT_EXTRA_CAD_EXTENSIONS)
-            if extra_extensions is None
-            else extra_extensions
-        )
-        known = set(CREO_FILE_EXTENSIONS)
+        """Extensions that use Creo-style .ext.N save numbers.
+
+        ``None`` → built-in CAD defaults (Creo models + openable + extra).
+        An explicit list (e.g. Settings → Purgeable) is the sole authority used
+        when omitting older numbered saves on import — do not also union the
+        built-in Creo set, or removing ``.prt`` from Purgeable would be ignored.
+        """
+        if extra_extensions is None:
+            extras: Iterable[str] = (
+                *DEFAULT_CREO_MODEL_EXTENSIONS,
+                *DEFAULT_OPENABLE_CAD_EXTENSIONS,
+                *DEFAULT_EXTRA_CAD_EXTENSIONS,
+            )
+            known = set(CREO_FILE_EXTENSIONS)
+        else:
+            extras = extra_extensions
+            known = set()
         for item in extras:
             ext = _dot_ext(item)
             if ext:

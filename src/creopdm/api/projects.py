@@ -347,27 +347,10 @@ def workspace_purge_floors(
 
 
 def _picker_filters(ctx: AppContext) -> dict[str, list[str]]:
-    extensions = [
-        *ctx.config.model_cad_extensions(),
-        *ctx.config.openable_cad_extensions(),
-        *ctx.config.data_cad_extensions(),
-        *ctx.config.document_extensions(),
-    ]
-    seen: set[str] = set()
-    unique: list[str] = []
-    for raw in extensions:
-        ext = str(raw or "").strip().lower()
-        if not ext:
-            continue
-        if not ext.startswith("."):
-            ext = f".{ext}"
-        if ext in seen:
-            continue
-        seen.add(ext)
-        unique.append(ext)
     return {
         "ignore_patterns": list(ctx.config.ignore_patterns()),
-        "import_extensions": unique,
+        # Used by the Add dialog to omit older .ext.N saves (Settings → Purgeable).
+        "import_extensions": list(ctx.config.purgeable_cad_extensions()),
     }
 
 
@@ -400,7 +383,7 @@ def choose_workspace_files(
     start.mkdir(parents=True, exist_ok=True)
     picked = pick_files(start, title="Add files to the project")
     ignored = ctx.config.ignore_patterns()
-    extras = ctx.config.all_cad_extensions()
+    extras = ctx.config.purgeable_cad_extensions()
     ignored_count = 0
     present: list[Path] = []
     for path in picked:
@@ -521,7 +504,7 @@ def import_from_disk(
 ) -> BatchOperationResponse:
     project = ctx.projects.get_project(db, project_id)
     comment = (payload.comment or "").strip() or None
-    extras = ctx.config.all_cad_extensions()
+    extras = ctx.config.purgeable_cad_extensions()
     ignored = ctx.config.ignore_patterns()
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []

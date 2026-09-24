@@ -135,6 +135,8 @@ def test_agent_pick_folder(tmp_path, monkeypatch):
     folder.mkdir()
     part = folder / "shaft.prt.2"
     part.write_bytes(b"prt")
+    older = folder / "shaft.prt.1"
+    older.write_bytes(b"old")
     settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
     app = create_agent_app(settings)
 
@@ -145,13 +147,18 @@ def test_agent_pick_folder(tmp_path, monkeypatch):
     with TestClient(app) as client:
         picked = client.post(
             "/pick-folder",
-            json={"initial_directory": str(tmp_path), "title": "Add folder"},
+            json={
+                "initial_directory": str(tmp_path),
+                "title": "Add folder",
+                "purgeable_extensions": [".prt"],
+            },
         )
         assert picked.status_code == 200, picked.text
         body = picked.json()
         assert body["cancelled"] is False
         assert body["folder"] == str(folder)
         assert str(part) in body["selected"]
+        assert str(older) not in body["selected"]
 
 
 def test_agent_pick_folder_cancel(tmp_path, monkeypatch):
@@ -222,6 +229,63 @@ def test_agent_add_paths_uses_base_folder_for_relative_paths(tmp_path, monkeypat
         assert response.status_code == 200, response.text
         assert uploaded
         assert uploaded[0][1] == "kit/sub/pin.prt.1"
+
+
+def test_agent_add_paths_omits_older_purgeable_versions(tmp_path, monkeypatch):
+    """Regression: Settings → Purgeable drives which .ext.N siblings are skipped on upload."""
+    root = tmp_path / "cache"
+    root.mkdir()
+    folder = tmp_path / "models"
+    folder.mkdir()
+    older = folder / "shaft.prt.1"
+    latest = folder / "shaft.prt.4"
+    notes = folder / "notes.pdf"
+    older.write_bytes(b"1")
+    latest.write_bytes(b"4")
+    notes.write_bytes(b"%PDF")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), pdm_url="http://pdm.test")
+    app = create_agent_app(settings)
+    uploaded: list[str] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"ok": [], "failed": []}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            for item in files or []:
+                if item[0] == "files":
+                    uploaded.append(Path(item[1][0]).name if isinstance(item[1], tuple) else str(item[1]))
+            return FakeResponse()
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        # Only list the older save — disk sibling scan must still pick .prt.4.
+        response = client.post(
+            "/add-paths",
+            json={
+                "pdm_url": "http://pdm.test",
+                "project_id": "proj1",
+                "absolute_paths": [str(older), str(notes)],
+                "base_folder": str(folder),
+                "purgeable_extensions": [".prt", ".asm"],
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert "shaft.prt.4" in uploaded
+        assert "shaft.prt.1" not in uploaded
+        assert "notes.pdf" in uploaded
 
 
 def test_agent_add_paths_preserves_sibling_subfolders_under_chosen_folder(tmp_path, monkeypatch):

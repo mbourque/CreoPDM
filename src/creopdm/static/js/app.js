@@ -1460,6 +1460,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function importExtensionSet() {
+    // Older .ext.N saves are omitted using Settings → Purgeable extensions.
     const fromApi = (importExtensions || [])
       .map((item) => String(item || "").trim().toLowerCase())
       .filter(Boolean)
@@ -1518,9 +1519,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function logicalUploadName(name) {
-    const text = String(name || "");
-    const match = text.match(/^(.*?)(?:\.\d+)?$/);
-    return match ? match[1] : text;
+    // Strip .ext.N / .N.ext only for Settings → Purgeable (import) extensions.
+    const text = PathBasename(name);
+    const parts = text.split(".");
+    if (parts.length >= 3 && parts[0]) {
+      const last = parts[parts.length - 1];
+      const prev = parts[parts.length - 2];
+      if (/^\d+$/.test(last) && isImportVersionedExtension(`.${prev}`)) {
+        return parts.slice(0, -1).join(".");
+      }
+      if (/^\d+$/.test(prev) && isImportVersionedExtension(`.${last}`)) {
+        return [...parts.slice(0, -2), last].join(".");
+      }
+    }
+    return text;
   }
 
   function purgeableExtensionSet() {
@@ -1982,6 +1994,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       body: JSON.stringify({
         initial_directory: addInitialDirectory || "",
         title: "Add files to the project",
+        purgeable_extensions: [...purgeableExtensionSet()],
       }),
     });
     if (!pickResponse.ok) {
@@ -2005,6 +2018,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       body: JSON.stringify({
         initial_directory: addInitialDirectory || "",
         title: "Add a folder to the project",
+        purgeable_extensions: [...purgeableExtensionSet()],
       }),
     });
     if (!pickResponse.ok) {
@@ -2218,6 +2232,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
                 comment: offset === 0 ? comment || null : null,
                 client_offset: offset,
                 client_total: total,
+                purgeable_extensions: [...purgeableExtensionSet()],
               }),
             });
           } catch (exc) {

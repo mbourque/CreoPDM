@@ -94,6 +94,29 @@ def test_add_paths_sends_agent_base_folder():
     assert "applyAgentPickedPaths(paths, folder)" in script
 
 
+def test_add_paths_sends_purgeable_extensions():
+    """Regression: agent omit-older-saves must use Settings → Purgeable extensions."""
+    script = _app_js()
+    assert "purgeable_extensions: [...purgeableExtensionSet()]" in script
+    assert "function purgeableExtensionSet" in script
+    pick_folder = _between(
+        script,
+        "async function browseViaAgentFolderPicker(",
+        '$("#choose-workspace-files")?.addEventListener("click"',
+    )
+    assert "purgeable_extensions" in pick_folder
+    add_chunk = _between(
+        script,
+        "if (chosenAgentPaths.length)",
+        "if (chosenUploads.length)",
+    )
+    assert "purgeable_extensions" in add_chunk
+    assert "importExtensionSet" in script
+    # logicalUploadName must not strip .N from non-purgeable names (e.g. .snagx.1).
+    logical = _between(script, "function logicalUploadName(", "function purgeableExtensionSet(")
+    assert "isImportVersionedExtension" in logical
+
+
 def test_agent_add_chunks_continue_after_http_error():
     """Regression: one failed /add-paths batch used to abort the rest of a large folder add."""
     script = _app_js()

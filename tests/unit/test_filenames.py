@@ -205,6 +205,51 @@ def test_filter_to_latest_saves_uses_disk_siblings_when_only_old_selected(tmp_pa
     assert [path.name for path in chosen] == ["shaft.prt.4"]
 
 
+def test_filter_to_latest_uses_purgeable_extensions_only(tmp_path):
+    """Regression: older .ext.N omission follows Settings → Purgeable, not all CAD."""
+    from creopdm.constants import DEFAULT_PURGEABLE_EXTENSIONS
+
+    prt1 = tmp_path / "shaft.prt.1"
+    prt3 = tmp_path / "shaft.prt.3"
+    txt1 = tmp_path / "notes.txt.1"
+    txt2 = tmp_path / "notes.txt.2"
+    snag1 = tmp_path / "clip.snagx.1"
+    snag2 = tmp_path / "clip.snagx.2"
+    for path, payload in (
+        (prt1, b"1"),
+        (prt3, b"3"),
+        (txt1, b"a"),
+        (txt2, b"b"),
+        (snag1, b"s1"),
+        (snag2, b"s2"),
+    ):
+        path.write_bytes(payload)
+
+    with_defaults = CreoFileManager.filter_to_latest_saves(
+        [prt1, prt3, txt1, txt2, snag1, snag2],
+        DEFAULT_PURGEABLE_EXTENSIONS,
+        scan_disk_siblings=False,
+    )
+    assert {path.name for path in with_defaults} == {
+        "shaft.prt.3",
+        "notes.txt.2",
+        "clip.snagx.1",
+        "clip.snagx.2",
+    }
+
+    # Explicit list without .prt must not still collapse Creo cores via CREO_FILE_EXTENSIONS.
+    txt_only = CreoFileManager.filter_to_latest_saves(
+        [prt1, prt3, txt1, txt2],
+        [".txt"],
+        scan_disk_siblings=False,
+    )
+    assert {path.name for path in txt_only} == {
+        "shaft.prt.1",
+        "shaft.prt.3",
+        "notes.txt.2",
+    }
+
+
 def test_filenames_older_than_floor_keeps_vault_and_newer():
     names = [
         "shaft.prt.10",

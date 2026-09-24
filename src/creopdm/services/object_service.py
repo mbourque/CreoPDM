@@ -15,6 +15,7 @@ from creopdm.constants import (
     DEFAULT_CREO_MODEL_EXTENSIONS,
     DEFAULT_EXTRA_CAD_EXTENSIONS,
     DEFAULT_OPENABLE_CAD_EXTENSIONS,
+    DEFAULT_PURGEABLE_EXTENSIONS,
     DEFAULT_REVISION,
     INITIAL_ITERATION,
     ActivityAction,
@@ -115,6 +116,12 @@ class ObjectService:
                 )
             )
         return self._config.all_cad_extensions()
+
+    def _purgeable_extensions(self) -> list[str]:
+        """Extensions whose .ext.N siblings collapse to the latest on import."""
+        if self._config is None:
+            return list(DEFAULT_PURGEABLE_EXTENSIONS)
+        return self._config.purgeable_cad_extensions()
 
     @staticmethod
     def _import_job_logical(
@@ -463,8 +470,9 @@ class ObjectService:
         """
         if not jobs:
             return []
-        extras = self._cad_extensions()
-        jobs = self._prefer_latest_import_jobs(jobs, extras)
+        # Numbered-save collapse follows Settings → Purgeable extensions.
+        purgeable = self._purgeable_extensions()
+        jobs = self._prefer_latest_import_jobs(jobs, purgeable)
         ignore = self._config.ignore_patterns() if self._config else None
         user = self._users.get_current_user()
         index = self._logical_index(session, project.id)
@@ -478,7 +486,7 @@ class ObjectService:
                 source_path,
                 original_name,
                 relative_path,
-                extras,
+                purgeable,
                 ignore,
                 index,
                 checkouts,
@@ -718,12 +726,12 @@ class ObjectService:
             return None, exc
 
     def _logical_index(self, session: Session, project_id: int) -> dict[str, EngineeringObject]:
-        extras = self._cad_extensions()
+        purgeable = self._purgeable_extensions()
         objects = session.scalars(
             select(EngineeringObject).where(EngineeringObject.project_id == project_id)
         )
         return {
-            CreoFileManager.logical_repo_path(obj.relative_path, extras): obj
+            CreoFileManager.logical_repo_path(obj.relative_path, purgeable): obj
             for obj in objects
         }
 

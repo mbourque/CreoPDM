@@ -116,6 +116,20 @@ class OpenFolderResponse(BaseModel):
 class PickFilesRequest(BaseModel):
     initial_directory: str = ""
     title: str = "Add files to the project"
+    # Settings → Purgeable extensions; older .ext.N saves are omitted when set.
+    purgeable_extensions: list[str] = Field(default_factory=list)
+
+
+def _agent_purgeable_extensions(raw: list[str] | None) -> list[str]:
+    """Normalize payload purgeable list; fall back to built-in defaults."""
+    from creopdm.constants import DEFAULT_PURGEABLE_EXTENSIONS
+
+    cleaned = [
+        str(item).strip().lower()
+        for item in (raw or [])
+        if str(item or "").strip()
+    ]
+    return cleaned or list(DEFAULT_PURGEABLE_EXTENSIONS)
 
 
 class PickFilesResponse(BaseModel):
@@ -170,6 +184,8 @@ class AddPathsRequest(BaseModel):
     # Browser batch progress (for logs only).
     client_offset: int = 0
     client_total: int = 0
+    # Settings → Purgeable extensions (omit older .ext.N on upload).
+    purgeable_extensions: list[str] = Field(default_factory=list)
 
 
 class BatchAddItem(BaseModel):
@@ -538,7 +554,19 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         except Exception as exc:
             logger.exception("Agent file picker failed")
             raise HTTPException(status_code=500, detail=str(exc)) from exc
-        paths = [str(path) for path in selected if path.is_file()]
+        from creopdm.creo.file_manager import CreoFileManager
+
+        present = [path for path in selected if path.is_file()]
+        purgeable = _agent_purgeable_extensions(payload.purgeable_extensions)
+        try:
+            latest = CreoFileManager.filter_to_latest_saves(
+                present,
+                purgeable,
+                scan_disk_siblings=True,
+            )
+        except Exception:
+            latest = present
+        paths = [str(path) for path in latest]
         return PickFilesResponse(selected=paths, cancelled=not paths)
 
     @app.post("/pick-folder", response_model=PickFilesResponse)
@@ -562,16 +590,18 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         if chosen is None:
             return PickFilesResponse(selected=[], cancelled=True)
+        purgeable = _agent_purgeable_extensions(payload.purgeable_extensions)
         try:
-            files = CreoFileManager.list_latest_in_folder(chosen)
+            files = CreoFileManager.list_latest_in_folder(chosen, purgeable)
         except Exception:
             logger.exception("Listing folder for agent pick failed: %s", chosen)
             files = [path for path in chosen.rglob("*") if path.is_file()]
         paths = [str(path) for path in files if path.is_file()]
         logger.info(
-            "Pick folder %s → %s importable file(s)",
+            "Pick folder %s → %s importable file(s) (purgeable=%s)",
             chosen,
             len(paths),
+            len(purgeable),
         )
         return PickFilesResponse(selected=paths, cancelled=False, folder=str(chosen))
 
@@ -852,7 +882,13 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             # the chosen tree (junctions) and must not flatten to basename.
             present.append(path)
         try:
-            selected = CreoFileManager.filter_to_latest_saves(present, scan_disk_siblings=False)
+            purgeable = _agent_purgeable_extensions(payload.purgeable_extensions)
+            # Disk siblings: a chunk may only list .prt.1 while .prt.4 is nearby.
+            selected = CreoFileManager.filter_to_latest_saves(
+                present,
+                purgeable,
+                scan_disk_siblings=True,
+            )
         except Exception:
             selected = present
         base_raw = (payload.base_folder or "").strip()
