@@ -280,6 +280,64 @@ def test_agent_add_paths_preserves_sibling_subfolders_under_chosen_folder(tmp_pa
         }
 
 
+def test_agent_add_paths_skips_outside_base_instead_of_flattening(tmp_path, monkeypatch):
+    """Regression: resolve()/relative_to failure used to land basename-only under Documents/."""
+    root = tmp_path / "cache"
+    root.mkdir()
+    docs = tmp_path / "Documents"
+    snagit = docs / "Snagit"
+    snagit.mkdir(parents=True)
+    inside = snagit / "capture.png"
+    inside.write_bytes(b"png")
+    outside = tmp_path / "elsewhere" / "capture.png"
+    outside.parent.mkdir(parents=True)
+    outside.write_bytes(b"png")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), pdm_url="http://pdm.test")
+    app = create_agent_app(settings)
+    uploaded: list[str] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"ok": [], "failed": []}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            for item in files or []:
+                if item[0] == "relative_paths":
+                    uploaded.append(item[1][1] if isinstance(item[1], tuple) else item[1])
+            return FakeResponse()
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        response = client.post(
+            "/add-paths",
+            json={
+                "pdm_url": "http://pdm.test",
+                "project_id": "proj1",
+                "absolute_paths": [str(inside), str(outside)],
+                "base_folder": str(docs),
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert uploaded == ["Documents/Snagit/capture.png"]
+        assert "Documents/capture.png" not in uploaded
+        failed = body.get("failed") or []
+        assert any(item.get("code") == "OUTSIDE_BASE" for item in failed)
+        assert any(item.get("filename") == "capture.png" for item in failed)
+
+
 def test_agent_open_local_association(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     root.mkdir()

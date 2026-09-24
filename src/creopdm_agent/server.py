@@ -840,29 +840,74 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     )
                 )
                 continue
-            present.append(path.resolve())
+            # Keep the pick spelling for vault-relative paths. resolve() can leave
+            # the chosen tree (junctions) and must not flatten to basename.
+            present.append(path)
         try:
             selected = CreoFileManager.filter_to_latest_saves(present, scan_disk_siblings=False)
         except Exception:
             selected = present
         base_raw = (payload.base_folder or "").strip()
-        base_parent = Path(base_raw).resolve() if base_raw else None
+        base_parent = Path(base_raw) if base_raw else None
         if base_parent is not None and not base_parent.is_dir():
             base_parent = None
         root = base_parent or common_import_root(selected)
+
+        def _inner_relative(path: Path, base: Path) -> str | None:
+            for file_p, root_p in (
+                (path, base),
+                (
+                    path.resolve(),
+                    base.resolve(),
+                ),
+            ):
+                try:
+                    return file_p.relative_to(root_p).as_posix()
+                except (ValueError, OSError):
+                    continue
+            return None
+
         jobs: list[tuple[Path, str]] = []
         for path in selected:
+            try:
+                open_path = path.resolve()
+            except OSError as exc:
+                failed.append(
+                    BatchAddItem(
+                        filename=path.name,
+                        code="IO_ERROR",
+                        message=f"Could not resolve path: {exc}",
+                    )
+                )
+                continue
+            if not open_path.is_file():
+                failed.append(
+                    BatchAddItem(
+                        filename=path.name,
+                        code="NOT_FOUND",
+                        message=f"File not found: {path}",
+                    )
+                )
+                continue
             if root is not None:
-                try:
-                    inner = path.relative_to(root).as_posix()
-                except ValueError:
-                    inner = path.name
-                # Choose Folder: Documents/Camtasia/…, Documents/PDF/… under the
-                # chosen folder name as the project-root group.
+                inner = _inner_relative(path, root)
+                if inner is None:
+                    failed.append(
+                        BatchAddItem(
+                            filename=path.name,
+                            code="OUTSIDE_BASE",
+                            message=(
+                                "File is outside the chosen folder "
+                                f"({root}); skipped to avoid flattening."
+                            ),
+                        )
+                    )
+                    continue
+                # Choose Folder: Documents/Camtasia/…, Documents/Word/…
                 rel = f"{root.name}/{inner}" if root.name else inner
             else:
                 rel = path.name
-            jobs.append((path, rel))
+            jobs.append((open_path, rel))
         headers: dict[str, str] = {}
         token = (payload.token or settings.token or "").strip()
         if token:
@@ -877,15 +922,28 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 files: list[tuple[str, tuple[str, object, str]]] = []
                 data: dict[str, str] = {}
                 handles: list = []
+                response = None
                 try:
                     for path, rel in chunk:
-                        handle = path.open("rb")
+                        try:
+                            handle = path.open("rb")
+                        except OSError as exc:
+                            failed.append(
+                                BatchAddItem(
+                                    filename=path.name,
+                                    code="IO_ERROR",
+                                    message=f"Could not read file: {exc}",
+                                )
+                            )
+                            continue
                         handles.append(handle)
                         files.append(
                             ("files", (path.name, handle, "application/octet-stream"))
                         )
                         # httpx multipart: repeat relative_paths fields
                         files.append(("relative_paths", (None, rel)))
+                    if not files:
+                        continue
                     if comment and offset == 0:
                         data["comment"] = comment
                     try:
@@ -906,6 +964,8 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                             handle.close()
                         except OSError:
                             pass
+                if response is None:
+                    continue
                 if response.status_code >= 400:
                     detail = ""
                     try:

@@ -94,6 +94,17 @@ def test_add_paths_sends_agent_base_folder():
     assert "applyAgentPickedPaths(paths, folder)" in script
 
 
+def test_agent_add_chunks_continue_after_http_error():
+    """Regression: one failed /add-paths batch used to abort the rest of a large folder add."""
+    script = _app_js()
+    start = script.index("if (chosenAgentPaths.length)")
+    end = script.index("if (chosenUploads.length)", start)
+    body = script[start:end]
+    assert "continue;" in body
+    assert "return combined.ok.length ? combined : null;" not in body
+    assert "Keep going" in body or "must not drop" in body
+
+
 def test_dropped_folder_keeps_nested_relative_paths():
     """Disk .path must not flatten a walked folder tree (subfolders would be lost)."""
     script = _app_js()

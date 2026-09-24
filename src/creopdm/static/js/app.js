@@ -2188,24 +2188,50 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const total = paths.length;
         const chunkSize = 50;
         const combined = { ok: [], failed: [] };
+        const basenameOf = (path) => {
+          const text = String(path || "");
+          const parts = text.split(/[/\\]/);
+          return parts[parts.length - 1] || text;
+        };
         for (let offset = 0; offset < paths.length; offset += chunkSize) {
           const chunk = paths.slice(offset, offset + chunkSize);
           const done = Math.min(offset + chunk.length, total);
           setBusyMessage(`Adding files… ${done} of ${total}`);
-          const response = await fetch(`${agentBase()}/add-paths`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              pdm_url: window.location.origin,
-              project_id: projectId,
-              absolute_paths: chunk,
-              base_folder: chosenAgentBaseFolder || "",
-              comment: offset === 0 ? comment || null : null,
-            }),
-          });
+          let response;
+          try {
+            response = await fetch(`${agentBase()}/add-paths`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                pdm_url: window.location.origin,
+                project_id: projectId,
+                absolute_paths: chunk,
+                base_folder: chosenAgentBaseFolder || "",
+                comment: offset === 0 ? comment || null : null,
+              }),
+            });
+          } catch (exc) {
+            const message = exc?.message || "Could not reach creopdm-agent.";
+            chunk.forEach((path) => {
+              combined.failed.push({
+                filename: basenameOf(path),
+                code: "NETWORK",
+                message,
+              });
+            });
+            continue;
+          }
           if (!response.ok) {
-            showError($("#add-error"), await readError(response));
-            return combined.ok.length ? combined : null;
+            const message = await readError(response);
+            // Keep going — one bad batch must not drop the rest of Documents.
+            chunk.forEach((path) => {
+              combined.failed.push({
+                filename: basenameOf(path),
+                code: "HTTP_ERROR",
+                message,
+              });
+            });
+            continue;
           }
           const body = await response.json();
           combined.ok.push(...(body.ok || []));
