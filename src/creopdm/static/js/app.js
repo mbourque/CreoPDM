@@ -622,15 +622,14 @@
   }
 
   function applyMetricSelection() {
-    const active = metricButtons().filter((btn) => metricMode(btn) !== "off");
-    const typeActive = active.filter((btn) => !isCheckoutMetric(metricKey(btn)));
-    const checkoutOn = active.some((btn) => isCheckoutMetric(metricKey(btn)));
+    // Only "select" mode drives row selection. "filter" only hides rows —
+    // so a plain click can select one row without looking like the pill cleared.
+    const selecting = metricButtons().filter((btn) => metricMode(btn) === "select");
+    if (!selecting.length) return;
+    const typeActive = selecting.filter((btn) => !isCheckoutMetric(metricKey(btn)));
+    const checkoutOn = selecting.some((btn) => isCheckoutMetric(metricKey(btn)));
     rows().forEach((row) => {
       if (row.classList.contains("folder-row")) {
-        if (!active.length) markRowSelected(row, false);
-        return;
-      }
-      if (!active.length) {
         markRowSelected(row, false);
         return;
       }
@@ -2653,8 +2652,9 @@
     }
     const row = target?.closest(".object-row, .folder-row, .queue-row");
     if (!row) return;
-    const openLink = target?.closest(".object-open");
-    if (openLink) event.preventDefault();
+    // Name links: prevent navigation. Single click = select only; Open toolbar opens;
+    // double-click (elsewhere / same row) opens History — do not open Creo here.
+    if (target?.closest(".object-open")) event.preventDefault();
     if (event.shiftKey) {
       event.preventDefault();
       selectRange(row, event.ctrlKey || event.metaKey);
@@ -2666,17 +2666,6 @@
       return;
     }
     selectOnly(row);
-    if (row.classList.contains("folder-row")) return;
-    if (!openLink || event.detail > 1) return;
-    const uuid = openLink.dataset.uuid || row.dataset.uuid;
-    if (uuid) {
-      void openPdmObjectFromUi(uuid, row);
-      return;
-    }
-    const relativePath = openLink.dataset.relativePath || row.dataset.relativePath;
-    if (relativePath) {
-      void openPdmObjectFromUi({ relativePath, projectId: currentProjectId() }, row);
-    }
   }
 
   function onFileTableDblclick(event) {
@@ -2688,11 +2677,11 @@
       return;
     }
     if (target?.closest(".folder-row")) return;
-    if (target?.closest(".object-open")) return;
     const row = target?.closest(".object-row, .queue-row");
     const href = rowHistoryHref(row);
     if (!href) return;
     event.preventDefault();
+    if (target?.closest(".object-open")) event.preventDefault();
     window.location.href = href;
   }
 
