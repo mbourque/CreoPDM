@@ -193,13 +193,13 @@
             <td title="{{ obj.filename }}">
               <span class="name-with-icon">
                 {% if obj.object_type == "CREO_PART" %}
-                <img class="type-icon" src="/static/icons/part.png" alt="" width="14" height="14" decoding="async">
+                <img class="type-icon" src="/static/icons/part.png" alt="Part" title="Part" width="14" height="14" decoding="async">
                 {% elif obj.object_type == "CREO_ASSEMBLY" %}
-                <img class="type-icon" src="/static/icons/assembly.png" alt="" width="14" height="14" decoding="async">
+                <img class="type-icon" src="/static/icons/assembly.png" alt="Assembly" title="Assembly" width="14" height="14" decoding="async">
                 {% elif obj.object_type == "CREO_DRAWING" %}
-                <img class="type-icon" src="/static/icons/drawing.png" alt="" width="14" height="14" decoding="async">
+                <img class="type-icon" src="/static/icons/drawing.png" alt="Drawing" title="Drawing" width="14" height="14" decoding="async">
                 {% endif %}
-                <button type="button" class="object-open" data-uuid="{{ obj.uuid }}" title="{{ obj.filename }}">{{ obj.filename }}</button>
+                <button type="button" class="object-open" data-uuid="{{ obj.uuid }}" title="Open this file">{{ obj.filename }}</button>
               </span>
               {% if entry.depth == 0 and obj.relative_path and obj.relative_path != obj.filename %}
               <div class="muted small">{{ obj.relative_path }}</div>
@@ -274,13 +274,13 @@
               <td class="filename-cell">
                 <span class="name-with-icon">
                   {% if item.object_type == "CREO_PART" %}
-                  <img class="type-icon" src="/static/icons/part.png" alt="" width="14" height="14" decoding="async">
+                  <img class="type-icon" src="/static/icons/part.png" alt="Part" title="Part" width="14" height="14" decoding="async">
                   {% elif item.object_type == "CREO_ASSEMBLY" %}
-                  <img class="type-icon" src="/static/icons/assembly.png" alt="" width="14" height="14" decoding="async">
+                  <img class="type-icon" src="/static/icons/assembly.png" alt="Assembly" title="Assembly" width="14" height="14" decoding="async">
                   {% elif item.object_type == "CREO_DRAWING" %}
-                  <img class="type-icon" src="/static/icons/drawing.png" alt="" width="14" height="14" decoding="async">
+                  <img class="type-icon" src="/static/icons/drawing.png" alt="Drawing" title="Drawing" width="14" height="14" decoding="async">
                   {% endif %}
-                  <span class="object-open" role="link" tabindex="0" data-uuid="{{ item.uuid }}" title="{{ item.filename }}">{{ item.filename }}</span>
+                  <span class="object-open" role="link" tabindex="0" data-uuid="{{ item.uuid }}" title="Open this file">{{ item.filename }}</span>
                 </span>
                 {% if item.newer_save %}
                 <div class="muted small">from {{ item.recorded_filename }}</div>
@@ -298,13 +298,13 @@
               <td class="filename-cell">
                 <span class="name-with-icon">
                   {% if item.object_type == "CREO_PART" %}
-                  <img class="type-icon" src="/static/icons/part.png" alt="" width="14" height="14" decoding="async">
+                  <img class="type-icon" src="/static/icons/part.png" alt="Part" title="Part" width="14" height="14" decoding="async">
                   {% elif item.object_type == "CREO_ASSEMBLY" %}
-                  <img class="type-icon" src="/static/icons/assembly.png" alt="" width="14" height="14" decoding="async">
+                  <img class="type-icon" src="/static/icons/assembly.png" alt="Assembly" title="Assembly" width="14" height="14" decoding="async">
                   {% elif item.object_type == "CREO_DRAWING" %}
-                  <img class="type-icon" src="/static/icons/drawing.png" alt="" width="14" height="14" decoding="async">
+                  <img class="type-icon" src="/static/icons/drawing.png" alt="Drawing" title="Drawing" width="14" height="14" decoding="async">
                   {% endif %}
-                  <span class="object-open" role="link" tabindex="0" data-relative-path="{{ item.relative_path }}" title="{{ item.filename }}">{{ item.filename }}</span>
+                  <span class="object-open" role="link" tabindex="0" data-relative-path="{{ item.relative_path }}" title="Open this file">{{ item.filename }}</span>
                 </span>
                 {% if item.relative_path and item.relative_path != item.filename %}
                 <div class="muted small">{{ item.relative_path }}</div>

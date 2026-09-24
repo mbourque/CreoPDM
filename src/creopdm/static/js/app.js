@@ -2223,11 +2223,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function typeIconHtml(objectType) {
     const key = String(objectType || "").toUpperCase();
     let file = "";
-    if (key === "CREO_PART") file = "part.png";
-    else if (key === "CREO_ASSEMBLY") file = "assembly.png";
-    else if (key === "CREO_DRAWING") file = "drawing.png";
+    let label = "";
+    if (key === "CREO_PART") {
+      file = "part.png";
+      label = "Part";
+    } else if (key === "CREO_ASSEMBLY") {
+      file = "assembly.png";
+      label = "Assembly";
+    } else if (key === "CREO_DRAWING") {
+      file = "drawing.png";
+      label = "Drawing";
+    }
     if (!file) return "";
-    return `<img class="type-icon" src="/static/icons/${file}" alt="" width="14" height="14" decoding="async">`;
+    return `<img class="type-icon" src="/static/icons/${file}" alt="${label}" title="${label}" width="14" height="14" decoding="async">`;
   }
 
   function searchRowHtml(obj, projectId) {
@@ -2276,7 +2284,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               class="object-row"
               style="--depth: 0">
             <td title="${escapeHtml(filename)}">
-              <span class="name-with-icon">${icon}<button type="button" class="object-open" data-uuid="${escapeHtml(obj.uuid)}" title="${escapeHtml(filename)}">${escapeHtml(filename)}</button></span>
+              <span class="name-with-icon">${icon}<button type="button" class="object-open" data-uuid="${escapeHtml(obj.uuid)}" title="Open this file">${escapeHtml(filename)}</button></span>
               ${pathLine}
             </td>
             <td title="${escapeHtml(rev)}">${escapeHtml(rev)}</td>
@@ -5514,10 +5522,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             if (objectType === "CREO_PART" || objectType === "CREO_ASSEMBLY" || objectType === "CREO_DRAWING") {
               const icon = document.createElement("img");
               icon.className = "type-icon";
+              const label =
+                objectType === "CREO_PART" ? "Part" : objectType === "CREO_ASSEMBLY" ? "Assembly" : "Drawing";
               icon.src = `/static/icons/${
                 objectType === "CREO_PART" ? "part" : objectType === "CREO_ASSEMBLY" ? "assembly" : "drawing"
               }.png`;
-              icon.alt = "";
+              icon.alt = label;
+              icon.title = label;
               icon.width = 14;
               icon.height = 14;
               icon.decoding = "async";
@@ -5529,7 +5540,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             link.setAttribute("role", "link");
             link.tabIndex = 0;
             link.textContent = filename;
-            link.title = filename;
+            link.title = "Open this file";
             if (meta.uuid) link.dataset.uuid = meta.uuid;
             if (meta.relativePath) link.dataset.relativePath = meta.relativePath;
             wrap.appendChild(link);
