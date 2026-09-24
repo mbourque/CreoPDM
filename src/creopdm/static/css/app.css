@@ -386,7 +386,7 @@ a.brand:hover { text-decoration: none; color: inherit; }
 tr[hidden],
 tr.is-row-hidden { display: none !important; }
 .queue-row { cursor: pointer; user-select: none; }
-.queue-row:hover:not(.is-selected) td { background: #f6f8fa; }
+.queue-row:hover td { background: #ffefd6; }
 #object-table,
 #checked-out-table,
 #changes-table {
@@ -498,9 +498,12 @@ tr.is-row-hidden { display: none !important; }
   vertical-align: top;
 }
 .folder-row { background: transparent; cursor: pointer; user-select: none; }
-.folder-row:hover td { background: #f6f8fa; }
+.folder-row:hover td { background: #ffefd6; }
 .folder-row.is-selected td {
   background: #e7f1f6;
+}
+.folder-row.is-selected:hover td {
+  background: #ffefd6;
 }
 .folder-label { font-weight: 650; display: inline-flex; align-items: center; gap: 0.45rem; margin-right: 0; }
 .folder-icon {
@@ -553,13 +556,18 @@ span.object-open:hover { text-decoration: underline; }
 .detail-head .object-open { font-size: inherit; color: inherit; }
 .grid tr.is-latest td { background: #eef6f1; }
 .grid tr.is-pending td { background: #fff6e8; }
-.grid tr.queue-row:hover:not(.is-selected) td { background: #f6f8fa; }
-.grid tr.is-pending:hover:not(.is-selected) td { background: #ffefd6; }
+.grid tr.object-row:hover td,
+.grid tr.queue-row:hover td,
+.grid tr.is-pending:hover td {
+  background: #ffefd6;
+}
 .grid tr.is-selected td,
-.grid tr.is-selected:hover td,
-.grid tr[data-selected="1"] td,
-.grid tr[data-selected="1"]:hover td {
+.grid tr[data-selected="1"] td {
   background: #e7f1f6;
+}
+.grid tr.is-selected:hover td,
+.grid tr[data-selected="1"]:hover td {
+  background: #ffefd6;
 }
 .pending-note {
   margin: 0 0 0.75rem; padding: 0.55rem 0.75rem; background: #fff6e8;

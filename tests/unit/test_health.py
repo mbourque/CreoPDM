@@ -78,7 +78,13 @@ def test_home_page(client):
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
     assert "push86" in text
-    assert "toolbar17" in text
+    assert "toolbar18" in text
+    assert ".grid tr.is-selected:hover td" in open(
+        "src/creopdm/static/css/app.css", encoding="utf-8"
+    ).read()
+    assert ".grid tr.object-row:hover td" in open(
+        "src/creopdm/static/css/app.css", encoding="utf-8"
+    ).read()
     script = open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "function afterRowSelectionChange" in script
     assert "function metricSelectionActive" in script
