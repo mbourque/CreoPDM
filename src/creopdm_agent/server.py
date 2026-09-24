@@ -121,6 +121,7 @@ class PickFilesRequest(BaseModel):
 class PickFilesResponse(BaseModel):
     selected: list[str] = Field(default_factory=list)
     cancelled: bool = False
+    folder: str = ""
 
 
 class PushItem(BaseModel):
@@ -164,6 +165,8 @@ class AddPathsRequest(BaseModel):
     token: str | None = None
     absolute_paths: list[str] = Field(default_factory=list)
     comment: str | None = None
+    # Folder pick: keep vault-relative paths under this directory.
+    base_folder: str = ""
 
 
 class BatchAddItem(BaseModel):
@@ -535,6 +538,35 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         paths = [str(path) for path in selected if path.is_file()]
         return PickFilesResponse(selected=paths, cancelled=not paths)
 
+    @app.post("/pick-folder", response_model=PickFilesResponse)
+    def pick_folder_endpoint(payload: PickFilesRequest) -> PickFilesResponse:
+        """Native folder picker on this Creo PC; returns importable files under it."""
+        from creopdm.creo.file_manager import CreoFileManager
+        from creopdm.exceptions import ValidationAppError
+        from creopdm.utils.native_dialog import pick_folder
+
+        raw = (payload.initial_directory or "").strip()
+        start = Path(raw) if raw else Path.home()
+        if not start.is_dir():
+            start = start.parent if start.parent.is_dir() else Path.home()
+        title = (payload.title or "").strip() or "Add a folder to the project"
+        try:
+            chosen = pick_folder(start, title=title)
+        except ValidationAppError as exc:
+            raise HTTPException(status_code=400, detail=exc.message) from exc
+        except Exception as exc:
+            logger.exception("Agent folder picker failed")
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        if chosen is None:
+            return PickFilesResponse(selected=[], cancelled=True)
+        try:
+            files = CreoFileManager.list_latest_in_folder(chosen)
+        except Exception:
+            logger.exception("Listing folder for agent pick failed: %s", chosen)
+            files = [path for path in chosen.rglob("*") if path.is_file()]
+        paths = [str(path) for path in files if path.is_file()]
+        return PickFilesResponse(selected=paths, cancelled=False, folder=str(chosen))
+
     @app.get("/local-file")
     def local_file(path: str = ""):
         """Read a local file the user just picked (Add upload via agent)."""
@@ -813,14 +845,19 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             selected = CreoFileManager.filter_to_latest_saves(present, scan_disk_siblings=False)
         except Exception:
             selected = present
-        # Prefer paths relative to a shared parent when the picker used one folder.
+        base_raw = (payload.base_folder or "").strip()
+        base_parent = Path(base_raw).resolve() if base_raw else None
+        if base_parent is not None and not base_parent.is_dir():
+            base_parent = None
+        # Prefer explicit folder root; else a shared parent when all files are siblings.
         parents = {path.parent for path in selected}
         common_parent = next(iter(parents)) if len(parents) == 1 else None
+        root = base_parent or common_parent
         jobs: list[tuple[Path, str]] = []
         for path in selected:
-            if common_parent is not None:
+            if root is not None:
                 try:
-                    rel = path.relative_to(common_parent).as_posix()
+                    rel = path.relative_to(root).as_posix()
                 except ValueError:
                     rel = path.name
             else:

@@ -1427,6 +1427,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   let chosenBaseFolder = null;
   let chosenUploads = [];
   let chosenAgentPaths = [];
+  let chosenAgentBaseFolder = null;
   let importIgnorePatterns = [];
   let importExtensions = [];
   let addInitialDirectory = "";
@@ -1607,6 +1608,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function applyChosenPaths(paths, labelText, baseFolder, ignoredCount) {
     chosenUploads = [];
     chosenAgentPaths = [];
+    chosenAgentBaseFolder = null;
     chosenPaths = paths || [];
     chosenBaseFolder = baseFolder || null;
     const label = $("#add-folder-label");
@@ -1629,20 +1631,26 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  function applyAgentPickedPaths(paths) {
+  function applyAgentPickedPaths(paths, baseFolder) {
     chosenPaths = [];
     chosenBaseFolder = null;
     chosenUploads = [];
     chosenAgentPaths = [...new Set((paths || []).map((item) => String(item || "").trim()).filter(Boolean))];
+    chosenAgentBaseFolder = baseFolder ? String(baseFolder) : null;
     showError($("#add-error"), "");
     const summary = $("#chosen-file-summary");
     if (!summary) return;
     if (!chosenAgentPaths.length) {
-      summary.textContent = "";
+      summary.textContent = chosenAgentBaseFolder
+        ? `Folder: ${chosenAgentBaseFolder} (no importable files).`
+        : "";
       return;
     }
     const willAdd = countLatestImportNames(chosenAgentPaths);
-    summary.textContent = formatReadyToAddSummary(chosenAgentPaths.length, willAdd, 0);
+    const ready = formatReadyToAddSummary(chosenAgentPaths.length, willAdd, 0);
+    summary.textContent = chosenAgentBaseFolder
+      ? `Folder: ${chosenAgentBaseFolder}. ${ready}`
+      : ready;
   }
 
   function fileDiskPath(file) {
@@ -1779,6 +1787,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     chosenPaths = [];
     chosenBaseFolder = null;
     chosenAgentPaths = [];
+    chosenAgentBaseFolder = null;
     chosenUploads = kept;
     const summary = $("#chosen-file-summary");
     if (summary) {
@@ -1880,6 +1889,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     chosenBaseFolder = null;
     chosenUploads = [];
     chosenAgentPaths = [];
+    chosenAgentBaseFolder = null;
     const summary = $("#chosen-file-summary");
     if (summary) summary.textContent = "";
     loadAddFolder();
@@ -1933,6 +1943,38 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return true;
   }
 
+  async function browseViaAgentFolderPicker() {
+    const agent = await probeCreoAgent();
+    if (!agent) return false;
+    const pickResponse = await fetch(`${agentBase()}/pick-folder`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        initial_directory: addInitialDirectory || "",
+        title: "Add a folder to the project",
+      }),
+    });
+    if (!pickResponse.ok) {
+      showError($("#add-error"), await readError(pickResponse));
+      return true;
+    }
+    const picked = await pickResponse.json();
+    if (picked.cancelled) return true;
+    const paths = Array.isArray(picked.selected) ? picked.selected : [];
+    const folder = String(picked.folder || "").trim();
+    if (!paths.length) {
+      showError(
+        $("#add-error"),
+        folder
+          ? `No importable files found in ${folder}.`
+          : "No folder was selected."
+      );
+      return true;
+    }
+    applyAgentPickedPaths(paths, folder);
+    return true;
+  }
+
   $("#choose-workspace-files")?.addEventListener("click", async () => {
     const projectId = addForm?.dataset.project;
     if (!projectId) return;
@@ -1965,6 +2007,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!projectId) return;
     showError($("#add-error"), "");
     if (!useNativePicker()) {
+      const usedAgent = await withHtmlDialogClosed(addDialog, () => browseViaAgentFolderPicker());
+      if (usedAgent) return;
       await browseLocalFolder();
       return;
     }
@@ -2016,6 +2060,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       chosenBaseFolder = null;
       chosenUploads = [];
       chosenAgentPaths = [];
+      chosenAgentBaseFolder = null;
       const summary = $("#chosen-file-summary");
       if (summary) summary.textContent = "";
       loadAddFolder();
@@ -2101,6 +2146,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               pdm_url: window.location.origin,
               project_id: projectId,
               absolute_paths: chunk,
+              base_folder: chosenAgentBaseFolder || "",
               comment: offset === 0 ? comment || null : null,
             }),
           });

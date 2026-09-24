@@ -128,6 +128,32 @@ def test_agent_pick_files_and_local_file(tmp_path, monkeypatch):
         assert missing.status_code == 404
 
 
+def test_agent_pick_folder(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    root.mkdir()
+    folder = tmp_path / "models"
+    folder.mkdir()
+    part = folder / "shaft.prt.2"
+    part.write_bytes(b"prt")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+
+    monkeypatch.setattr(
+        "creopdm.utils.native_dialog.pick_folder",
+        lambda initial_dir, title="Add a folder to the project": folder,
+    )
+    with TestClient(app) as client:
+        picked = client.post(
+            "/pick-folder",
+            json={"initial_directory": str(tmp_path), "title": "Add folder"},
+        )
+        assert picked.status_code == 200, picked.text
+        body = picked.json()
+        assert body["cancelled"] is False
+        assert body["folder"] == str(folder)
+        assert str(part) in body["selected"]
+
+
 def test_agent_open_local_association(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     root.mkdir()

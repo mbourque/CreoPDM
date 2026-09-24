@@ -45,6 +45,7 @@ def test_app_js_is_not_cached(client):
     assert "#panel-structure .object-open" in response.text
     assert "browseViaAgentPicker" in response.text
     assert "/pick-files" in response.text
+    assert "/pick-folder" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "snapshot.features.length" in response.text
     assert "workspaceOption" in response.text
     assert "workspacePathsForRemovedObjects" in response.text
@@ -78,7 +79,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push98" in text
+    assert "push99" in text
     assert "toolbar22" in text
     assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
