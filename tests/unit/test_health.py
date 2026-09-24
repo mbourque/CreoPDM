@@ -78,7 +78,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push91" in text
+    assert "push92" in text
     assert "toolbar20" in text
     assert "/static/icons/part.png" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "function typeIconHtml" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
@@ -94,6 +94,9 @@ def test_home_page(client):
     assert "function refreshPendingCheckinIds" in script
     assert "newerLocalCacheSaves(cacheFiles, objects)" in script.split("async function refreshPendingCheckinIds")[1].split("function rowHasCheckinWork")[0]
     assert "data-modified-locally" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    assert "function stateSortToken" in script
+    assert 'if (s === "MODIFIED") return "0-MODIFIED"' in script
+    assert "function reapplyActiveTableSorts" in script
     assert "Nothing to check in for this selection" in script
     assert "function syncModifiedStateLabels" in script
     assert '.state[data-state="MODIFIED"]' in open("src/creopdm/static/css/app.css", encoding="utf-8").read()

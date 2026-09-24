@@ -2252,6 +2252,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       modifiedLocally && (obj.owned_by_me || obj.can_checkin);
     const stateDisplay = showModified ? "MODIFIED" : state;
     const stateDisplayLabel = showModified ? "Modified" : stateLabel;
+    const stateSort = stateSortToken(stateDisplay);
     return `<tr data-uuid="${escapeHtml(obj.uuid)}"
               data-object-type="${escapeHtml(objectType)}"
               data-extension="${escapeHtml(obj.extension || "")}"
@@ -2266,7 +2267,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               data-tree="${escapeHtml(folder)}"
               data-sort-name="${escapeHtml(relative)}"
               data-sort-rev="${escapeHtml(folder)}/${escapeHtml(obj.revision || "")}-${padIteration(obj.iteration)}"
-              data-sort-state="${escapeHtml(folder)}/${escapeHtml(stateDisplay)}"
+              data-sort-state="${escapeHtml(folder)}/${escapeHtml(stateSort)}"
               data-sort-type="${escapeHtml(folder)}/${escapeHtml(typeLabel)}"
               data-sort-creo="${escapeHtml(folder)}/${escapeHtml(creo)}"
               data-sort-modified="${stamp.replace(/[-: ]/g, "")}"
@@ -2503,13 +2504,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         stateEl.dataset.state = "MODIFIED";
         stateEl.textContent = "Modified";
         if (td) td.title = "Modified";
+        writeRowSortState(row, "MODIFIED");
         return;
       }
       stateEl.dataset.state = base;
       const label = titleCaseWords(base);
       stateEl.textContent = label;
       if (td) td.title = label;
+      writeRowSortState(row, base);
     });
+    reapplyActiveTableSorts();
   }
 
   async function refreshPendingCheckinIds(projectId) {
@@ -2772,12 +2776,61 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return null;
   }
 
+  function stateSortToken(state) {
+    const s = String(state || "")
+      .toUpperCase()
+      .replace(/\s+/g, "_")
+      .replace(/^\d+-/, "");
+    if (!s) return "9-";
+    // First ascending click should put dirty work at the top.
+    if (s === "MODIFIED") return "0-MODIFIED";
+    if (s === "IN_WORK") return "1-IN_WORK";
+    return `2-${s}`;
+  }
+
+  function rowDisplayState(row) {
+    const stateEl = row.querySelector(".state[data-state]");
+    const live = String(stateEl?.getAttribute("data-state") || "").toUpperCase();
+    if (live) return live.replace(/^\d+-/, "");
+    const raw = String(row.dataset.sortState || "");
+    const leaf = raw.includes("/") ? raw.slice(raw.lastIndexOf("/") + 1) : raw;
+    return leaf.toUpperCase().replace(/^\d+-/, "");
+  }
+
+  function writeRowSortState(row, state) {
+    if (!row || row.classList.contains("folder-row")) return;
+    const tree = row.dataset.tree || "";
+    const token = stateSortToken(state);
+    row.dataset.sortState = tree ? `${tree}/${token}` : token;
+  }
+
   function sortValue(row, key, columnIndex) {
+    if (key === "state") {
+      if (row.classList.contains("folder-row")) {
+        const folder = row.dataset.folder || "";
+        return folder ? `${folder}/` : String(row.dataset.sortState || "");
+      }
+      const state = rowDisplayState(row);
+      const tree = row.dataset.tree || "";
+      const token = stateSortToken(state);
+      return tree ? `${tree}/${token}` : token;
+    }
     const dataKey = `sort${key.charAt(0).toUpperCase()}${key.slice(1)}`;
     const fromData = row.dataset[dataKey];
     if (fromData !== undefined && fromData !== "") return fromData;
     const cell = row.children[columnIndex];
     return cell ? cell.textContent.replace(/\s+/g, " ").trim() : "";
+  }
+
+  function reapplyActiveTableSorts() {
+    document.querySelectorAll("table.grid").forEach((table) => {
+      const th = table.querySelector(
+        'th[data-sort][aria-sort="ascending"], th[data-sort][aria-sort="descending"]'
+      );
+      if (!th) return;
+      const dir = th.getAttribute("aria-sort") === "descending" ? "desc" : "asc";
+      applyTableSort(table, th.dataset.sort, dir);
+    });
   }
 
   function currentProjectId() {

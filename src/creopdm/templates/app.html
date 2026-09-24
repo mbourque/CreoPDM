@@ -182,7 +182,7 @@
               data-tree="{{ entry.folder }}"
               data-sort-name="{{ obj.relative_path }}"
               data-sort-rev="{{ entry.folder }}/{{ obj.revision }}-{{ '%06d'|format(obj.iteration) }}"
-              data-sort-state="{{ entry.folder }}/{% if obj.modified_locally and (obj.owned_by_me or obj.can_checkin) %}MODIFIED{% else %}{{ obj.lifecycle_state }}{% endif %}"
+              data-sort-state="{{ entry.folder }}/{% if obj.modified_locally and (obj.owned_by_me or obj.can_checkin) %}0-MODIFIED{% elif obj.lifecycle_state == 'IN_WORK' %}1-IN_WORK{% else %}2-{{ obj.lifecycle_state }}{% endif %}"
               data-sort-type="{{ entry.folder }}/{{ obj.type_label }}"
               data-sort-creo="{{ entry.folder }}/{{ obj.creo_release or '' }}"
               data-sort-modified="{% if obj.updated_at %}{{ local_time(obj.updated_at, '%Y%m%d%H%M%S') }}{% endif %}"
