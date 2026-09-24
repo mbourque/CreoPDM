@@ -221,7 +221,59 @@ def test_agent_add_paths_uses_base_folder_for_relative_paths(tmp_path, monkeypat
         )
         assert response.status_code == 200, response.text
         assert uploaded
-        assert uploaded[0][1] == "sub/pin.prt.1"
+        assert uploaded[0][1] == "kit/sub/pin.prt.1"
+
+
+def test_agent_add_paths_preserves_sibling_subfolders_without_base(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    root.mkdir()
+    kit = tmp_path / "Kit"
+    lib = kit / "lib"
+    asm = kit / "asm"
+    lib.mkdir(parents=True)
+    asm.mkdir(parents=True)
+    pin = lib / "pin.prt"
+    top = asm / "top.asm"
+    pin.write_bytes(b"pin")
+    top.write_bytes(b"asm")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), pdm_url="http://pdm.test")
+    app = create_agent_app(settings)
+    uploaded: list[str] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"ok": [], "failed": []}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            for item in files or []:
+                if item[0] == "relative_paths":
+                    uploaded.append(item[1][1] if isinstance(item[1], tuple) else item[1])
+            return FakeResponse()
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        response = client.post(
+            "/add-paths",
+            json={
+                "pdm_url": "http://pdm.test",
+                "project_id": "proj1",
+                "absolute_paths": [str(pin), str(top)],
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert set(uploaded) == {"Kit/lib/pin.prt", "Kit/asm/top.asm"}
 
 
 def test_agent_open_local_association(tmp_path, monkeypatch):

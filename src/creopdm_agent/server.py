@@ -816,7 +816,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         Used after the native multi-select picker so the browser never loads
         thousands of file bodies into memory.
         """
-        from creopdm.creo.file_manager import CreoFileManager
+        from creopdm.creo.file_manager import CreoFileManager, common_import_root
 
         base = _normalize_base(payload.pdm_url or settings.pdm_url)
         project_id = (payload.project_id or "").strip()
@@ -849,15 +849,14 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         base_parent = Path(base_raw).resolve() if base_raw else None
         if base_parent is not None and not base_parent.is_dir():
             base_parent = None
-        # Prefer explicit folder root; else a shared parent when all files are siblings.
-        parents = {path.parent for path in selected}
-        common_parent = next(iter(parents)) if len(parents) == 1 else None
-        root = base_parent or common_parent
+        root = base_parent or common_import_root(selected)
         jobs: list[tuple[Path, str]] = []
         for path in selected:
             if root is not None:
                 try:
-                    rel = path.relative_to(root).as_posix()
+                    inner = path.relative_to(root).as_posix()
+                    # Match server Choose Folder: keep the chosen folder name as the group root.
+                    rel = f"{root.name}/{inner}" if root.name else inner
                 except ValueError:
                     rel = path.name
             else:

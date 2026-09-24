@@ -549,6 +549,12 @@ def import_from_disk(
         ]
         selected = CreoFileManager.filter_to_latest_saves(present, extras)
         base_folder = payload.base_folder
+        if not base_folder:
+            from creopdm.creo.file_manager import common_import_root
+
+            inferred = common_import_root(selected)
+            if inferred is not None:
+                base_folder = str(inferred)
     for path in missing:
         failed.append(
             BatchItemResult(

@@ -1,5 +1,5 @@
 from creopdm.constants import APP_NAME, APP_VERSION
-from creopdm.creo.file_manager import CreoFileManager
+from creopdm.creo.file_manager import CreoFileManager, common_import_root
 from creopdm.utils.native_dialog import (
     add_files_dialog_filter_pairs,
     cad_dialog_filter_patterns,
@@ -165,6 +165,22 @@ def test_list_latest_in_folder_skips_older_transients_and_git(tmp_path):
     (git / "config").write_bytes(b"git")
     chosen = {path.name for path in CreoFileManager.list_latest_in_folder(root)}
     assert chosen == {"parallels.prt.3", "bushing.prt.2", "op10.lst", "cut.mbx"}
+
+
+def test_common_import_root_keeps_sibling_subfolders(tmp_path):
+    kit = tmp_path / "Kit"
+    lib = kit / "lib"
+    asm = kit / "asm"
+    lib.mkdir(parents=True)
+    asm.mkdir(parents=True)
+    pin = lib / "pin.prt"
+    top = asm / "top.asm"
+    pin.write_bytes(b"p")
+    top.write_bytes(b"a")
+    root = common_import_root([pin, top])
+    assert root is not None
+    assert root.resolve() == kit.resolve()
+    assert (root / "lib" / "pin.prt").is_file()
 
 
 def test_filter_to_latest_saves_uses_disk_siblings_when_only_old_selected(tmp_path):

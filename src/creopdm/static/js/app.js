@@ -1772,15 +1772,68 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }));
   }
 
+  function commonParentDir(paths) {
+    const dirs = [...new Set(
+      (paths || [])
+        .map((item) => String(item || "").trim().replace(/\\/g, "/"))
+        .filter(Boolean)
+        .map((item) => {
+          const cut = item.replace(/\/+$/, "");
+          const idx = cut.lastIndexOf("/");
+          return idx > 0 ? cut.slice(0, idx) : "";
+        })
+        .filter(Boolean)
+    )];
+    if (!dirs.length) return "";
+    let parts = dirs[0].split("/");
+    for (const dir of dirs.slice(1)) {
+      const other = dir.split("/");
+      let i = 0;
+      while (i < parts.length && i < other.length && parts[i].toLowerCase() === other[i].toLowerCase()) {
+        i += 1;
+      }
+      parts = parts.slice(0, i);
+    }
+    if (!parts.length) return "";
+    // Need a real folder (not "C:" alone on Windows).
+    if (parts.length === 1 && /^[A-Za-z]:$/.test(parts[0])) return "";
+    return parts.join("/");
+  }
+
   function applyDroppedFiles(items, uriPaths) {
     const uploads = (items || []).filter((item) => item?.file);
+    const nestedUploads = uploads.some((item) => String(item.relativePath || "").includes("/"));
+    // Keep browser-relative paths whenever a folder tree was walked — disk paths
+    // alone would flatten nested subfolders (Creo / some Chromium builds set .path).
+    if (nestedUploads) {
+      const { kept, skipped } = filterUploadItems(uploads);
+      chosenPaths = [];
+      chosenBaseFolder = null;
+      chosenAgentPaths = [];
+      chosenAgentBaseFolder = null;
+      chosenUploads = kept;
+      const summary = $("#chosen-file-summary");
+      if (summary) {
+        const willAdd = countLatestImportNames(
+          kept.map((item) => item.relativePath || item.file?.name || "")
+        );
+        summary.textContent = formatReadyToAddSummary(kept.length, willAdd, skipped);
+      }
+      return;
+    }
     const diskPaths = [
       ...(uriPaths || []),
       ...uploads.map((item) => item.path).filter(Boolean),
     ];
     const uniquePaths = [...new Set(diskPaths)];
     if (uniquePaths.length && uniquePaths.length >= uploads.length) {
-      applyChosenPaths(uniquePaths, "", null, 0);
+      const base = commonParentDir(uniquePaths);
+      applyChosenPaths(
+        uniquePaths,
+        base ? `Folder: ${base}` : "",
+        base || null,
+        0
+      );
       return;
     }
     const { kept, skipped } = filterUploadItems(uploads);

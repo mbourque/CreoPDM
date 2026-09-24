@@ -22,6 +22,27 @@ _SKIP_IMPORT_DIRS = {".git", ".creopdm", "__pycache__"}
 _SKIP_IMPORT_SUFFIXES = {".bak", ".tmp"}
 
 
+def common_import_root(paths: Iterable[Path]) -> Path | None:
+    """Shared ancestor directory for preserving nested relative paths on import."""
+    resolved: list[Path] = []
+    for raw in paths:
+        try:
+            path = Path(raw).resolve()
+        except OSError:
+            continue
+        if path.is_file() or path.exists():
+            resolved.append(path)
+    if not resolved:
+        return None
+    try:
+        common = Path(os.path.commonpath([str(path) for path in resolved]))
+    except ValueError:
+        return None
+    if len(resolved) == 1 or common.is_file():
+        return resolved[0].parent
+    return common
+
+
 def _dot_ext(value: str) -> str:
     text = str(value or "").strip().lower()
     if not text:

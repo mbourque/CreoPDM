@@ -94,6 +94,17 @@ def test_add_paths_sends_agent_base_folder():
     assert "applyAgentPickedPaths(paths, folder)" in script
 
 
+def test_dropped_folder_keeps_nested_relative_paths():
+    """Disk .path must not flatten a walked folder tree (subfolders would be lost)."""
+    script = _app_js()
+    body = _between(script, "function applyDroppedFiles(", "function applyBrowserPickedFiles(")
+    assert "nestedUploads" in body
+    assert "commonParentDir" in script
+    assert 'String(item.relativePath || "").includes("/")' in body
+    # Nested browser paths win over absolute disk paths.
+    assert body.index("nestedUploads") < body.index("uniquePaths")
+
+
 def test_soft_nav_does_not_silently_drop_when_busy():
     """Regression: soft-nav busy used to no-op folder/project clicks."""
     body = _between(_app_js(), "function softNavigate(", "function leavePage(")
