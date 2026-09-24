@@ -947,13 +947,18 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                         )
                     )
                 for item in body.get("failed") or []:
-                    failed.append(
-                        BatchAddItem(
-                            uuid=str(item.get("uuid") or ""),
-                            filename=str(item.get("filename") or ""),
-                            code=str(item.get("code") or "FAILED"),
-                            message=str(item.get("message") or "The file was not added."),
-                        )
+                    fail_item = BatchAddItem(
+                        uuid=str(item.get("uuid") or ""),
+                        filename=str(item.get("filename") or ""),
+                        code=str(item.get("code") or "FAILED"),
+                        message=str(item.get("message") or "The file was not added."),
+                    )
+                    failed.append(fail_item)
+                    logger.warning(
+                        "Agent add-paths failed %s [%s]: %s",
+                        fail_item.filename or "(unknown)",
+                        fail_item.code,
+                        fail_item.message,
                     )
                 logger.info(
                     "Agent add-paths chunk %s–%s → ok=%s failed=%s",
