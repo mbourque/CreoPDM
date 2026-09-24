@@ -2612,6 +2612,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   let lastSelectRow = null;
+  let pendingOpen = 0;
+
+  function cancelPendingOpen() {
+    if (pendingOpen) {
+      window.clearTimeout(pendingOpen);
+      pendingOpen = 0;
+    }
+  }
+
+  function openSpecFromRow(row, openLink) {
+    if (!row || row.classList.contains("folder-row")) return null;
+    const uuid = openLink?.dataset?.uuid || row.dataset.uuid || "";
+    if (uuid) return { objectId: uuid };
+    const relativePath = openLink?.dataset?.relativePath || row.dataset.relativePath || "";
+    if (relativePath) return { relativePath, projectId: currentProjectId() };
+    return null;
+  }
 
   function sortValue(row, key, columnIndex) {
     const dataKey = `sort${key.charAt(0).toUpperCase()}${key.slice(1)}`;
@@ -2813,28 +2830,40 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const folderLink = target?.closest(".folder-open");
     if (folderLink && folder && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
+      cancelPendingOpen();
       openFolderRow(folder);
       return;
     }
     const row = target?.closest(".object-row, .folder-row, .queue-row");
     if (!row) return;
-    // Name links: prevent navigation. Single click = select only; Open toolbar opens;
-    // double-click (elsewhere / same row) opens History — do not open Creo here.
-    if (target?.closest(".object-open")) event.preventDefault();
+    const openLink = target?.closest(".object-open");
+    if (openLink) event.preventDefault();
     if (event.shiftKey) {
       event.preventDefault();
+      cancelPendingOpen();
       selectRange(row, event.ctrlKey || event.metaKey);
       return;
     }
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
+      cancelPendingOpen();
       toggleRow(row);
       return;
     }
     selectOnly(row);
+    if (!openLink) return;
+    const spec = openSpecFromRow(row, openLink);
+    if (!spec) return;
+    cancelPendingOpen();
+    // Delay so a double-click can cancel and open History instead.
+    pendingOpen = window.setTimeout(() => {
+      pendingOpen = 0;
+      void openPdmObjectFromUi(spec, row);
+    }, 280);
   }
 
   function onFileTableDblclick(event) {
+    cancelPendingOpen();
     const target = eventEl(event);
     if (target?.closest(".folder-open")) {
       event.preventDefault();

@@ -78,7 +78,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push87" in text
+    assert "push88" in text
     assert "toolbar19" in text
     assert "/static/icons/part.png" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "function typeIconHtml" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
@@ -87,6 +87,9 @@ def test_home_page(client):
     assert (Path("src/creopdm/static/icons/assembly.png").is_file())
     assert (Path("src/creopdm/static/icons/drawing.png").is_file())
     script = open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "function openSpecFromRow" in script
+    assert "cancelPendingOpen" in script
+    assert "void openPdmObjectFromUi(spec, row)" in script.split("function onFileTableClick")[1].split("function onFileTableDblclick")[0]
     assert "function afterRowSelectionChange" in script
     assert "function metricSelectionActive" in script
     assert "clearAllMetricModes" not in script
