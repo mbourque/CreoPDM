@@ -259,8 +259,15 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .search-form input[type="search"] {
   width: 100%; padding: 0.32rem 0.55rem; border: 1px solid var(--line); border-radius: 4px;
 }
-#selection-summary { margin: 0.15rem 0 0; display: none; }
-#selection-summary.is-active { display: block !important; }
+#selection-summary {
+  margin: 0.15rem 0 0;
+  display: block;
+  min-height: 1.15em;
+  line-height: 1.15;
+}
+#selection-summary:not(.is-active) {
+  visibility: hidden;
+}
 
 .metrics {
   display: flex; gap: 0.4rem; list-style: none; padding: 0; margin: 0.4rem 0 0.1rem;

@@ -2499,13 +2499,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (summary) {
       const count = selected.length || ids.length;
       if (count) {
-        summary.removeAttribute("hidden");
         summary.classList.add("is-active");
         summary.textContent = `${count} selected${filtering ? ". The list is filtered" : ""}.`;
       } else {
-        summary.setAttribute("hidden", "");
         summary.classList.remove("is-active");
-        summary.textContent = "";
+        // Keep a non-breaking space so the reserved line height stays stable.
+        summary.textContent = "\u00a0";
       }
     }
   }

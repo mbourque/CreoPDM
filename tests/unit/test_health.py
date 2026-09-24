@@ -77,7 +77,8 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push85" in text
+    assert "push86" in text
+    assert "toolbar17" in text
     script = open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "function afterRowSelectionChange" in script
     assert "function metricSelectionActive" in script
@@ -93,6 +94,13 @@ def test_home_page(client):
     assert "function softNavigate" in script
     assert "window.__creopdmBoot" in script
     assert "Keep the live Creo.JS bridge" in script
+    assert 'id="selection-summary"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    assert 'id="selection-summary" hidden' not in open(
+        "src/creopdm/templates/app.html", encoding="utf-8"
+    ).read()
+    assert "#selection-summary:not(.is-active)" in open(
+        "src/creopdm/static/css/app.css", encoding="utf-8"
+    ).read()
     assert "Saved Creo metadata for" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "Materialize start:" in open("src/creopdm_agent/server.py", encoding="utf-8").read()
     assert "PTC_MASTER_MATERIAL" in text
