@@ -78,8 +78,8 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push89" in text
-    assert "toolbar19" in text
+    assert "push90" in text
+    assert "toolbar20" in text
     assert "/static/icons/part.png" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "function typeIconHtml" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert ".name-with-icon" in open("src/creopdm/static/css/app.css", encoding="utf-8").read()
@@ -93,6 +93,9 @@ def test_home_page(client):
     assert "function selectionCanCheckin" in script
     assert "function refreshPendingCheckinIds" in script
     assert "Nothing to check in for this selection" in script
+    assert "function syncModifiedStateLabels" in script
+    assert '.state[data-state="MODIFIED"]' in open("src/creopdm/static/css/app.css", encoding="utf-8").read()
+    assert "width: max-content" in open("src/creopdm/static/css/app.css", encoding="utf-8").read()
     assert "function afterRowSelectionChange" in script
     assert "function metricSelectionActive" in script
     assert "clearAllMetricModes" not in script

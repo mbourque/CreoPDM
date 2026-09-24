@@ -2273,7 +2273,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               ${pathLine}
             </td>
             <td title="${escapeHtml(rev)}">${escapeHtml(rev)}</td>
-            <td title="${escapeHtml(stateLabel)}"><span class="state" data-state="${escapeHtml(state)}">${escapeHtml(stateLabel)}</span></td>
+            <td title="${escapeHtml(stateLabel)}"><span class="state" data-state="${escapeHtml(state)}" data-lifecycle-state="${escapeHtml(state)}">${escapeHtml(stateLabel)}</span></td>
             <td title="${escapeHtml(typeLabel)}">${escapeHtml(typeLabel)}</td>
             <td title="${escapeHtml(creo)}">${escapeHtml(creo)}</td>
             <td title="${escapeHtml(stamp || "—")}">${escapeHtml(stamp || "—")}</td>
@@ -2304,6 +2304,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     objectTbody.innerHTML = items.map((item) => searchRowHtml(item, projectId)).join("");
     updateMetricCounts();
+    syncModifiedStateLabels();
   }
 
   async function searchAllFolders(query) {
@@ -2471,6 +2472,33 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     );
     pendingCheckinIds = next;
     pendingCheckinIdsReady = true;
+    syncModifiedStateLabels();
+  }
+
+  function syncModifiedStateLabels() {
+    document.querySelectorAll(".object-row, .queue-row").forEach((row) => {
+      const stateEl = row.querySelector(".state[data-lifecycle-state], .state[data-state]");
+      if (!stateEl) return;
+      if (!stateEl.dataset.lifecycleState) {
+        stateEl.dataset.lifecycleState = stateEl.getAttribute("data-state") || "";
+      }
+      const base = String(stateEl.dataset.lifecycleState || "").toUpperCase();
+      const uuid = row.dataset.uuid || "";
+      const owned = row.dataset.owned === "1" || row.dataset.canCheckin === "1";
+      const dirty = Boolean(uuid && pendingCheckinIds.has(String(uuid)));
+      const td = stateEl.closest("td");
+      if (owned && dirty && (base === "IN_WORK" || base === "MODIFIED" || !base)) {
+        stateEl.dataset.state = "MODIFIED";
+        stateEl.textContent = "Modified";
+        if (td) td.title = "Modified";
+        return;
+      }
+      if (!base) return;
+      stateEl.dataset.state = base;
+      const label = titleCaseWords(base);
+      stateEl.textContent = label;
+      if (td) td.title = label;
+    });
   }
 
   async function refreshPendingCheckinIds(projectId) {
@@ -2925,7 +2953,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     selectOnly(row);
-    if (!openLink) return;
+    if (!openLink) {
+      cancelPendingOpen();
+      return;
+    }
     const spec = openSpecFromRow(row, openLink);
     if (!spec) return;
     cancelPendingOpen();
@@ -5540,6 +5571,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       body.innerHTML = list.map((item) => searchRowHtml(item, projectId)).join("");
       refreshTabMetrics();
+      syncModifiedStateLabels();
     } catch {
       body.replaceChildren();
       const row = document.createElement("tr");

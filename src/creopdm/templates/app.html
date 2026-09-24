@@ -205,7 +205,7 @@
               {% endif %}
             </td>
             <td title="{{ obj.display_revision }}">{{ obj.display_revision }}</td>
-            <td title="{{ obj.lifecycle_state.replace('_', ' ').title() }}"><span class="state" data-state="{{ obj.lifecycle_state }}">{{ obj.lifecycle_state.replace('_', ' ').title() }}</span></td>
+            <td title="{{ obj.lifecycle_state.replace('_', ' ').title() }}"><span class="state" data-state="{{ obj.lifecycle_state }}" data-lifecycle-state="{{ obj.lifecycle_state }}">{{ obj.lifecycle_state.replace('_', ' ').title() }}</span></td>
             <td title="{{ obj.type_label }}">{{ obj.type_label }}</td>
             <td title="{{ obj.creo_release or '' }}">{{ obj.creo_release or "" }}</td>
             <td title="{% if obj.updated_at %}{{ local_time(obj.updated_at) }}{% else %}—{% endif %}">{% if obj.updated_at %}{{ local_time(obj.updated_at) }}{% else %}—{% endif %}</td>

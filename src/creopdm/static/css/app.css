@@ -445,7 +445,9 @@ tr.is-row-hidden { display: none !important; }
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
-  flex: 1 1 auto;
+  /* Only as wide as the name — rest of the cell selects without opening. */
+  flex: 0 1 auto;
+  width: max-content;
   max-width: 100%;
   text-align: left;
 }
@@ -618,6 +620,7 @@ span.object-open:hover { text-decoration: underline; }
 .detect-list { margin: 0; padding-left: 1.1rem; color: var(--ink); }
 .detail-actions { margin: 0.8rem 0 0.4rem; }
 .state[data-state="IN_WORK"]::before { background: var(--accent-2); }
+.state[data-state="MODIFIED"]::before { background: var(--warn); }
 .state[data-state="RELEASED"]::before { background: var(--ok); }
 .state[data-state="OBSOLETE"]::before { background: var(--idle); }
 
