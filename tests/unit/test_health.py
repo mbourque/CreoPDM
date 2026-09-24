@@ -77,9 +77,14 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push81" in text
-    assert "function afterRowSelectionChange" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "clearAllMetricModes" not in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "push82" in text
+    script = open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "function afterRowSelectionChange" in script
+    assert "function metricSelectionActive" in script
+    assert "clearAllMetricModes" not in script
+    assert 'mode === "select" || mode === "filter"' in script
+    assert 'btn.classList.add("is-filtered")' in script
+    assert "mishandles classList.toggle" in script
     assert "Saved Creo metadata for" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "Materialize start:" in open("src/creopdm_agent/server.py", encoding="utf-8").read()
     assert "PTC_MASTER_MATERIAL" in text

@@ -546,8 +546,17 @@
   function setMetricMode(btn, mode) {
     btn.dataset.mode = mode;
     btn.setAttribute("data-mode", mode);
-    btn.classList.toggle("is-selected", mode === "select");
-    btn.classList.toggle("is-filtered", mode === "filter");
+    // Use add/remove — Creo's embedded browser mishandles classList.toggle(name, force).
+    if (mode === "select") {
+      btn.classList.add("is-selected");
+      btn.classList.remove("is-filtered");
+    } else if (mode === "filter") {
+      btn.classList.remove("is-selected");
+      btn.classList.add("is-filtered");
+    } else {
+      btn.classList.remove("is-selected");
+      btn.classList.remove("is-filtered");
+    }
     const key = metricKey(btn);
     const label = METRIC_LABELS[key] || key;
     if (key === "files") {
@@ -622,9 +631,11 @@
   }
 
   function applyMetricSelection() {
-    // Only "select" mode drives row selection. "filter" only hides rows —
-    // so a plain click can select one row without looking like the pill cleared.
-    const selecting = metricButtons().filter((btn) => metricMode(btn) === "select");
+    // Select and filter both keep matching rows selected (sticky while the pill is on).
+    const selecting = metricButtons().filter((btn) => {
+      const mode = metricMode(btn);
+      return mode === "select" || mode === "filter";
+    });
     if (!selecting.length) return;
     const typeActive = selecting.filter((btn) => !isCheckoutMetric(metricKey(btn)));
     const checkoutOn = selecting.some((btn) => isCheckoutMetric(metricKey(btn)));
@@ -636,6 +647,13 @@
       const matchesType = !typeActive.length || typeActive.some((btn) => rowMatchesMetric(row, metricKey(btn)));
       const matchesCheckout = !checkoutOn || rowMatchesMetric(row, "checked_out");
       markRowSelected(row, matchesType && matchesCheckout && !rowIsHidden(row));
+    });
+  }
+
+  function metricSelectionActive() {
+    return metricButtons().some((btn) => {
+      const mode = metricMode(btn);
+      return mode === "select" || mode === "filter";
     });
   }
 
@@ -2434,15 +2452,23 @@
   }
 
   function afterRowSelectionChange(snapshot) {
-    // Row clicks must never clear an active pill. Re-assert modes and visibility.
-    if (restoreMetricModes(snapshot) || metricButtons().some((btn) => metricMode(btn) === "filter")) {
+    // Row clicks must never clear an active pill.
+    restoreMetricModes(snapshot);
+    if (metricSelectionActive()) {
       applyMetricVisibility();
+      applyMetricSelection();
     }
     syncToolbar();
   }
 
   function toggleRow(row) {
     const snapshot = snapshotMetricModes();
+    // While a pill is sticky, ignore ctrl-toggle so the group stays selected.
+    if (metricSelectionActive()) {
+      lastSelectRow = row;
+      afterRowSelectionChange(snapshot);
+      return;
+    }
     markRowSelected(row, !row.classList.contains("is-selected"));
     lastSelectRow = row;
     afterRowSelectionChange(snapshot);
@@ -2450,13 +2476,24 @@
 
   function selectOnly(row) {
     const snapshot = snapshotMetricModes();
-    rows().forEach((item) => markRowSelected(item, item === row));
     lastSelectRow = row;
+    // Sticky pill: keep filtered/selected group; do not collapse to one row.
+    if (metricSelectionActive()) {
+      afterRowSelectionChange(snapshot);
+      return;
+    }
+    rows().forEach((item) => markRowSelected(item, item === row));
     afterRowSelectionChange(snapshot);
   }
 
   function selectRange(toRow, additive = false) {
     const snapshot = snapshotMetricModes();
+    // Sticky pill: range clicks keep the metric group, not a custom range.
+    if (metricSelectionActive()) {
+      lastSelectRow = toRow;
+      afterRowSelectionChange(snapshot);
+      return;
+    }
     const visible = rows().filter((row) => !rowIsHidden(row));
     const end = visible.indexOf(toRow);
     const start = lastSelectRow ? visible.indexOf(lastSelectRow) : end;
@@ -2752,12 +2789,6 @@
     }
     if (next !== "off" && CAD_MODEL_CHILD_FILTERS.has(key)) {
       clearMetricFilters(new Set(["cad_models"]));
-    }
-    // Filter mode only hides rows. Drop the prior select-mode multi-select so a
-    // later single-row click does not look like the pill turned off.
-    if (next === "filter") {
-      rows().forEach((row) => markRowSelected(row, false));
-      lastSelectRow = null;
     }
     applyMetricVisibility();
     applyMetricSelection();
