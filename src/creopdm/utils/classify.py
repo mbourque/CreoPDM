@@ -397,7 +397,7 @@ def resolve_type_icon(
     if ot in _OBJECT_TYPE_ICONS:
         return _OBJECT_TYPE_ICONS[ot]
     if label or ext or ot:
-        return labels.get("_default", "file.png")
+        return labels.get("_default", "file.svg")
     return ""
 
 

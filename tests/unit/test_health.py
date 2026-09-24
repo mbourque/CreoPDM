@@ -78,7 +78,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push95" in text
+    assert "push96" in text
     assert "toolbar21" in text
     assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
@@ -89,10 +89,13 @@ def test_home_page(client):
     assert "data-type-icons" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "DEFAULT_TYPE_ICON_BY_LABEL" in open("src/creopdm/constants.py", encoding="utf-8").read()
     assert "def resolve_type_icon" in open("src/creopdm/utils/classify.py", encoding="utf-8").read()
-    assert (Path("src/creopdm/static/icons/pdf.svg").is_file() or Path("src/creopdm/static/icons/pdf.png").is_file())
-    assert (Path("src/creopdm/static/icons/word.svg").is_file() or Path("src/creopdm/static/icons/word.png").is_file())
-    assert (Path("src/creopdm/static/icons/sldprt.svg").is_file() or Path("src/creopdm/static/icons/sldprt.png").is_file())
-    assert Path("scripts/extract_windows_filetype_icons.py").is_file()
+    assert (Path("src/creopdm/static/icons/pdf.svg").is_file())
+    assert (Path("src/creopdm/static/icons/word.svg").is_file())
+    assert (Path("src/creopdm/static/icons/image.svg").is_file())
+    assert (Path("src/creopdm/static/icons/json.svg").is_file())
+    assert (Path("src/creopdm/static/icons/sldprt.svg").is_file())
+    assert Path("scripts/fetch_type_icons.py").is_file()
+    assert "material-icon-theme" in open("scripts/fetch_type_icons.py", encoding="utf-8").read()
     assert 'alt="${label}" title="${label}"' in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert 'title="Open this file"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "obj.type_label" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

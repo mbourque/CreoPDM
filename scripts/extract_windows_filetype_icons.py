@@ -1,19 +1,10 @@
-"""Extract real Windows Explorer filetype icons (32×32 PNG).
+"""Extract Windows Explorer filetype icons (32×32 PNG).
 
-Uses the same shell associations as File Explorer — so .sldprt looks like
-SOLIDWORKS, .docx like Word, .pdf like your PDF app, etc. Apps must be
-installed and registered on this PC for branded icons to appear.
+Prefer scripts/fetch_type_icons.py instead — Material Icon Theme icons are
+recognizable filetype glyphs. This script pulls whatever app is registered
+on this PC (e.g. Snagit for .png), which is often wrong for a PDM list.
 
-Run (from repo root, on Windows):
-
-  python scripts/extract_windows_filetype_icons.py
-
-Optional:
-
-  python scripts/extract_windows_filetype_icons.py --size 32
-  python scripts/extract_windows_filetype_icons.py --overwrite-creo
-
-Requires: Windows + Pillow  (pip install pillow)
+Kept for optional local experiments only.
 """
 from __future__ import annotations
 

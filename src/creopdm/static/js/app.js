@@ -2262,7 +2262,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return { file: maps.by_object_type[objectType], label: label || fallback };
     }
     if label || ext || objectType) {
-      return { file: maps.by_label._default || "file.png", label: label || ext || "File" };
+      return { file: maps.by_label._default || "file.svg", label: label || ext || "File" };
     }
     return { file: "", label: "" };
   }
