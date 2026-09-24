@@ -2186,7 +2186,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         const paths = [...chosenAgentPaths];
         const total = paths.length;
-        const chunkSize = 50;
+        const chunkSize = 25;
         const combined = { ok: [], failed: [] };
         const basenameOf = (path) => {
           const text = String(path || "");
@@ -2283,21 +2283,51 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!result) return;
     const failed = result.failed || [];
     const okCount = result.ok?.length || 0;
+    const summarizeAddFailures = (items) => {
+      const counts = {};
+      for (const item of items || []) {
+        const code = String(item?.code || "FAILED").trim() || "FAILED";
+        counts[code] = (counts[code] || 0) + 1;
+      }
+      return Object.keys(counts)
+        .sort()
+        .map((code) => `${code}=${counts[code]}`)
+        .join(", ");
+    };
+    const rememberNotice = (message) => {
+      const text = String(message || "").trim();
+      if (!text) return;
+      try {
+        sessionStorage.setItem("creopdmNotice", text);
+      } catch {
+        /* private mode / blocked storage */
+      }
+    };
     if (failed.length && !okCount) {
       const first = failed[0]?.message || "Could not add files.";
-      const extra = failed.length > 1 ? ` (${failed.length} files failed)` : "";
-      showError($("#add-error"), first + extra);
+      const codes = summarizeAddFailures(failed);
+      const msg =
+        first +
+        ` (${failed.length} files failed` +
+        (codes ? `: ${codes}` : "") +
+        ").";
+      showError($("#add-error"), msg);
+      rememberNotice(msg);
       return;
     }
     if (failed.length && okCount) {
+      const codes = summarizeAddFailures(failed);
       const sample = failed
         .slice(0, 3)
         .map((item) => item.filename || item.uuid || "file")
         .join(", ");
-      showError(
-        $("#add-error"),
-        `Added ${okCount} file(s); ${failed.length} failed (${sample}${failed.length > 3 ? ", …" : ""}).`
-      );
+      const msg =
+        `Added ${okCount} file(s); ${failed.length} failed` +
+        (codes ? ` [${codes}]` : "") +
+        ` (${sample}${failed.length > 3 ? ", …" : ""}).` +
+        " See creopdm-agent log for each file.";
+      showError($("#add-error"), msg);
+      rememberNotice(msg);
     }
     if (canGatherCreoMetadata() && okCount > 0 && okCount <= 50) {
       await withBusy("Capturing Creo metadata…", async () => {

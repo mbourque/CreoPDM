@@ -105,6 +105,14 @@ def test_agent_add_chunks_continue_after_http_error():
     assert "Keep going" in body or "must not drop" in body
 
 
+def test_add_partial_failure_notice_survives_reload():
+    """Regression: partial add errors were wiped by reloadPage before the user saw them."""
+    script = _app_js()
+    assert 'sessionStorage.setItem("creopdmNotice"' in script
+    assert "summarizeAddFailures" in script
+    assert "See creopdm-agent log" in script
+
+
 def test_dropped_folder_keeps_nested_relative_paths():
     """Disk .path must not flatten a walked folder tree (subfolders would be lost)."""
     script = _app_js()

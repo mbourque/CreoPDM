@@ -565,6 +565,11 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             logger.exception("Listing folder for agent pick failed: %s", chosen)
             files = [path for path in chosen.rglob("*") if path.is_file()]
         paths = [str(path) for path in files if path.is_file()]
+        logger.info(
+            "Pick folder %s → %s importable file(s)",
+            chosen,
+            len(paths),
+        )
         return PickFilesResponse(selected=paths, cancelled=False, folder=str(chosen))
 
     @app.get("/local-file")
@@ -829,16 +834,16 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             return AddPathsResponse()
         present: list[Path] = []
         failed: list[BatchAddItem] = []
+
+        def _fail(filename: str, code: str, message: str) -> None:
+            item = BatchAddItem(filename=filename, code=code, message=message)
+            failed.append(item)
+            logger.warning("Agent add-paths failed %s [%s]: %s", filename or "(unknown)", code, message)
+
         for raw in raw_paths:
             path = Path(raw)
             if not path.is_file():
-                failed.append(
-                    BatchAddItem(
-                        filename=path.name or raw,
-                        code="NOT_FOUND",
-                        message=f"File not found: {raw}",
-                    )
-                )
+                _fail(path.name or raw, "NOT_FOUND", f"File not found: {raw}")
                 continue
             # Keep the pick spelling for vault-relative paths. resolve() can leave
             # the chosen tree (junctions) and must not flatten to basename.
@@ -872,49 +877,48 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             try:
                 open_path = path.resolve()
             except OSError as exc:
-                failed.append(
-                    BatchAddItem(
-                        filename=path.name,
-                        code="IO_ERROR",
-                        message=f"Could not resolve path: {exc}",
-                    )
-                )
+                _fail(path.name, "IO_ERROR", f"Could not resolve path: {exc}")
                 continue
             if not open_path.is_file():
-                failed.append(
-                    BatchAddItem(
-                        filename=path.name,
-                        code="NOT_FOUND",
-                        message=f"File not found: {path}",
-                    )
-                )
+                _fail(path.name, "NOT_FOUND", f"File not found: {path}")
+                continue
+            try:
+                size = open_path.stat().st_size
+            except OSError as exc:
+                _fail(path.name, "IO_ERROR", f"Could not stat file: {exc}")
+                continue
+            if size <= 0:
+                _fail(path.name, "EMPTY", "The file is empty (0 bytes) on disk.")
                 continue
             if root is not None:
                 inner = _inner_relative(path, root)
                 if inner is None:
-                    failed.append(
-                        BatchAddItem(
-                            filename=path.name,
-                            code="OUTSIDE_BASE",
-                            message=(
-                                "File is outside the chosen folder "
-                                f"({root}); skipped to avoid flattening."
-                            ),
-                        )
+                    _fail(
+                        path.name,
+                        "OUTSIDE_BASE",
+                        f"File is outside the chosen folder ({root}); skipped to avoid flattening.",
                     )
                     continue
-                # Choose Folder: Documents/Camtasia/…, Documents/Word/…
+                # Choose Folder: Documents/foo.docx, Documents/Word/…, Documents/Snagit/…
                 rel = f"{root.name}/{inner}" if root.name else inner
             else:
                 rel = path.name
             jobs.append((open_path, rel))
+        logger.info(
+            "Agent add-paths: %s path(s) → %s job(s), %s failed before upload (base=%s)",
+            len(raw_paths),
+            len(jobs),
+            len(failed),
+            base_raw or "(none)",
+        )
         headers: dict[str, str] = {}
         token = (payload.token or settings.token or "").strip()
         if token:
             headers["Authorization"] = f"Bearer {token}"
         url = f"{base}/api/projects/{quote(project_id)}/objects/from-uploads"
         ok: list[BatchAddItem] = []
-        chunk_size = 50
+        # Small chunks avoid reverse-proxy body limits on Snagit media batches.
+        chunk_size = 5
         comment = (payload.comment or "").strip() or None
         with httpx.Client(timeout=600.0, follow_redirects=True) as client:
             for offset in range(0, len(jobs), chunk_size):
@@ -928,13 +932,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                         try:
                             handle = path.open("rb")
                         except OSError as exc:
-                            failed.append(
-                                BatchAddItem(
-                                    filename=path.name,
-                                    code="IO_ERROR",
-                                    message=f"Could not read file: {exc}",
-                                )
-                            )
+                            _fail(path.name, "IO_ERROR", f"Could not read file: {exc}")
                             continue
                         handles.append(handle)
                         files.append(
@@ -943,18 +941,30 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                         # httpx multipart: repeat relative_paths fields
                         files.append(("relative_paths", (None, rel)))
                     if not files:
+                        logger.warning(
+                            "Agent add-paths chunk %s–%s: nothing readable to upload",
+                            offset + 1,
+                            offset + len(chunk),
+                        )
                         continue
                     if comment and offset == 0:
                         data["comment"] = comment
                     try:
                         response = client.post(url, headers=headers, data=data or None, files=files)
                     except httpx.HTTPError as exc:
+                        message = f"Could not reach CreoPDM: {exc}"
+                        logger.warning(
+                            "Agent add-paths chunk %s–%s NETWORK: %s",
+                            offset + 1,
+                            offset + len(chunk),
+                            message,
+                        )
                         for path, _rel in chunk:
                             failed.append(
                                 BatchAddItem(
                                     filename=path.name,
                                     code="NETWORK",
-                                    message=f"Could not reach CreoPDM: {exc}",
+                                    message=message,
                                 )
                             )
                         continue
@@ -977,18 +987,31 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                         )
                     except Exception:
                         detail = response.text[:300]
+                    message = detail or f"CreoPDM returned {response.status_code}"
+                    logger.warning(
+                        "Agent add-paths chunk %s–%s HTTP %s: %s",
+                        offset + 1,
+                        offset + len(chunk),
+                        response.status_code,
+                        message,
+                    )
                     for path, _rel in chunk:
                         failed.append(
                             BatchAddItem(
                                 filename=path.name,
                                 code="HTTP_ERROR",
-                                message=detail or f"CreoPDM returned {response.status_code}",
+                                message=message,
                             )
                         )
                     continue
                 try:
                     body = response.json()
                 except Exception:
+                    logger.warning(
+                        "Agent add-paths chunk %s–%s: invalid JSON from CreoPDM",
+                        offset + 1,
+                        offset + len(chunk),
+                    )
                     for path, _rel in chunk:
                         failed.append(
                             BatchAddItem(
@@ -1027,6 +1050,18 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     len(body.get("ok") or []),
                     len(body.get("failed") or []),
                 )
+        # Summarize codes for the agent log (and UI via returned failed list).
+        by_code: dict[str, int] = {}
+        for item in failed:
+            key = (item.code or "FAILED").strip() or "FAILED"
+            by_code[key] = by_code.get(key, 0) + 1
+        summary = ", ".join(f"{code}={count}" for code, count in sorted(by_code.items())) or "none"
+        logger.info(
+            "Agent add-paths done: ok=%s failed=%s (%s)",
+            len(ok),
+            len(failed),
+            summary,
+        )
         return AddPathsResponse(ok=ok, failed=failed)
 
     @app.post("/delete-paths", response_model=DeletePathsResponse)

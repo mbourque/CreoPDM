@@ -338,6 +338,108 @@ def test_agent_add_paths_skips_outside_base_instead_of_flattening(tmp_path, monk
         assert any(item.get("filename") == "capture.png" for item in failed)
 
 
+def test_agent_add_paths_skips_empty_files_before_upload(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    root.mkdir()
+    docs = tmp_path / "Documents"
+    docs.mkdir()
+    empty = docs / "blank.docx"
+    empty.write_bytes(b"")
+    real = docs / "notes.docx"
+    real.write_bytes(b"docx")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), pdm_url="http://pdm.test")
+    app = create_agent_app(settings)
+    uploaded: list[str] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"ok": [{"filename": "notes.docx", "uuid": "u1"}], "failed": []}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            for item in files or []:
+                if item[0] == "relative_paths":
+                    uploaded.append(item[1][1] if isinstance(item[1], tuple) else item[1])
+            return FakeResponse()
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        response = client.post(
+            "/add-paths",
+            json={
+                "pdm_url": "http://pdm.test",
+                "project_id": "proj1",
+                "absolute_paths": [str(empty), str(real)],
+                "base_folder": str(docs),
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert uploaded == ["Documents/notes.docx"]
+        failed = body.get("failed") or []
+        assert any(item.get("code") == "EMPTY" and item.get("filename") == "blank.docx" for item in failed)
+
+
+def test_agent_add_paths_keeps_documents_root_files(tmp_path, monkeypatch):
+    """Files directly under the chosen folder (not only subfolders) must keep Documents/name."""
+    root = tmp_path / "cache"
+    root.mkdir()
+    docs = tmp_path / "Documents"
+    docs.mkdir()
+    top = docs / "readme.txt"
+    top.write_bytes(b"hi")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), pdm_url="http://pdm.test")
+    app = create_agent_app(settings)
+    uploaded: list[str] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"ok": [], "failed": []}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            for item in files or []:
+                if item[0] == "relative_paths":
+                    uploaded.append(item[1][1] if isinstance(item[1], tuple) else item[1])
+            return FakeResponse()
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        response = client.post(
+            "/add-paths",
+            json={
+                "pdm_url": "http://pdm.test",
+                "project_id": "proj1",
+                "absolute_paths": [str(top)],
+                "base_folder": str(docs),
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert uploaded == ["Documents/readme.txt"]
+
+
 def test_agent_open_local_association(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     root.mkdir()
