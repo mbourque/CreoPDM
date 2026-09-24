@@ -233,6 +233,22 @@ def main() -> int:
         update_constants()
         patch_defaults_to_svg()
         write_attribution()
+        # Optical size: pad SVG viewBoxes to match Creo PNG margins (~84% fill).
+        import importlib.util
+
+        norm = ROOT / "scripts" / "normalize_type_icons.py"
+        spec = importlib.util.spec_from_file_location("normalize_type_icons", norm)
+        mod = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(mod)
+        padded = 0
+        for path in OUT.glob("*.svg"):
+            text = path.read_text(encoding="utf-8")
+            updated, changed = mod.pad_viewbox(text)
+            if changed and updated != text:
+                path.write_text(updated, encoding="utf-8")
+                padded += 1
+        print(f"Padded {padded} SVG viewBox(es) to match Creo icon margins.")
 
     print(f"\nDone: {ok}/{len(ICONS)} icons → {OUT}")
     if failed:
