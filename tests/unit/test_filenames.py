@@ -183,6 +183,18 @@ def test_common_import_root_keeps_sibling_subfolders(tmp_path):
     assert (root / "lib" / "pin.prt").is_file()
 
 
+def test_common_import_root_none_for_single_or_same_parent(tmp_path):
+    """Single-file / same-folder adds stay flat — do not wrap in the parent dir name."""
+    kit = tmp_path / "Kit"
+    kit.mkdir()
+    a = kit / "a.prt"
+    b = kit / "b.prt"
+    a.write_bytes(b"a")
+    b.write_bytes(b"b")
+    assert common_import_root([a]) is None
+    assert common_import_root([a, b]) is None
+
+
 def test_filter_to_latest_saves_uses_disk_siblings_when_only_old_selected(tmp_path):
     older = tmp_path / "shaft.prt"
     older.write_bytes(b"old")

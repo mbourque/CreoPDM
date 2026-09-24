@@ -458,6 +458,38 @@ def test_choose_folder_from_outside_location(client, repo_parent, tmp_path, monk
 
 
 @requires_git
+def test_from_disk_paths_preserve_sibling_subfolders_without_base(client, repo_parent, tmp_path, data_dir):
+    """Regression: multi-folder disk picks must not flatten to one parent or lose siblings."""
+    project, _location = _create_project(client, repo_parent)
+    kit = tmp_path / "Kit"
+    lib = kit / "lib"
+    asm = kit / "asm"
+    lib.mkdir(parents=True)
+    asm.mkdir(parents=True)
+    pin = lib / "pin.prt"
+    top = asm / "top.asm"
+    pin.write_bytes(b"pin")
+    top.write_bytes(b"asm")
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(pin), str(top)], "comment": "Nested kit"},
+    )
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["failed"] == []
+    listing = {item["filename"]: item["relative_path"] for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
+    assert listing == {"pin.prt": "Kit/lib/pin.prt", "top.asm": "Kit/asm/top.asm"}
+    workspace = data_dir / "vaults" / project["uuid"]
+    assert (workspace / "Kit" / "lib" / "pin.prt").read_bytes() == b"pin"
+    assert (workspace / "Kit" / "asm" / "top.asm").read_bytes() == b"asm"
+    home = client.get(f"/?project={project['uuid']}")
+    assert home.status_code == 200
+    assert 'data-folder="Kit"' in home.text
+    inside = client.get(f"/?project={project['uuid']}&folder=Kit")
+    assert 'data-folder="Kit/lib"' in inside.text
+    assert 'data-folder="Kit/asm"' in inside.text
+
+
+@requires_git
 def test_from_disk_adds_file_outside_project_location(client, repo_parent, tmp_path, data_dir):
     project, _location = _create_project(client, repo_parent)
     outsider = tmp_path / "foreign.prt"

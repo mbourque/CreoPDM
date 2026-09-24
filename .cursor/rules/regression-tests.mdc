@@ -1,0 +1,26 @@
+---
+description: When the user reports a regression, add a regression test if one does not already exist
+alwaysApply: true
+---
+
+# Regression → regression test
+
+When the user reports a **regression** (something that used to work and broke, or a bug they found after a change):
+
+1. **Fix the bug** (or confirm it is already fixed).
+2. **Search for an existing test** that would have failed on the broken behavior.
+3. If none exists, **add a regression test** in the same change (or immediately after the fix) that:
+   - Fails on the broken behavior
+   - Passes on the fixed behavior
+   - Names or documents the failure mode briefly (comment or test name)
+4. Prefer the smallest layer that catches it (unit > integration). Do not skip the test because the fix “looks obvious.”
+
+## Examples that need a test
+
+- Nested folder add flattened subfolders → assert sibling subfolder relative paths
+- `app.js` syntax typo killed all clicks → `node --check` / bare-`if` guard
+- Choose Folder on LAN http skipped the agent → assert agent pick runs before browser fallback
+
+## Also
+
+When the user pastes `@pytest-last.log` (or failed output) after a fix, treat failing tests as the source of truth: fix the product or update assertions that drifted with an intentional change — do not ignore red tests that the fix caused.

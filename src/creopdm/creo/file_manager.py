@@ -23,7 +23,11 @@ _SKIP_IMPORT_SUFFIXES = {".bak", ".tmp"}
 
 
 def common_import_root(paths: Iterable[Path]) -> Path | None:
-    """Shared ancestor directory for preserving nested relative paths on import."""
+    """Shared ancestor when files span sibling subfolders (preserves nest on import).
+
+    Returns None for a single file or for siblings that already share one parent —
+    those stay flat at the vault root unless the caller passes an explicit base folder.
+    """
     resolved: list[Path] = []
     for raw in paths:
         try:
@@ -32,14 +36,17 @@ def common_import_root(paths: Iterable[Path]) -> Path | None:
             continue
         if path.is_file() or path.exists():
             resolved.append(path)
-    if not resolved:
+    if len(resolved) < 2:
+        return None
+    parents = {path.parent for path in resolved}
+    if len(parents) <= 1:
         return None
     try:
         common = Path(os.path.commonpath([str(path) for path in resolved]))
     except ValueError:
         return None
-    if len(resolved) == 1 or common.is_file():
-        return resolved[0].parent
+    if common.is_file():
+        return None
     return common
 
 

@@ -343,7 +343,8 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "data-purgeable=" in home.text
     assert "toolbar-menu-panel" in home.text
     assert 'selected.every((row) => row.dataset.canCheckout === "1")' in script.text
-    assert 'selected.every((row) => row.dataset.canCheckin === "1")' in script.text
+    assert "function selectionCanCheckin" in script.text
+    assert 'row.dataset.canCheckin === "1"' in script.text
     assert 'selected.every((row) => row.dataset.owned === "1")' in script.text
     assert 'return row.classList.contains("is-row-hidden")' in script.text
     assert "/checkouts" in script.text
