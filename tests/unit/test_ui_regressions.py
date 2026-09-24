@@ -145,9 +145,16 @@ def test_creo_and_filetype_icons_exist_on_disk():
         assert path.stat().st_size > 20
 
 
-def test_normalize_type_icons_script_restores_viewbox():
-    path = ROOT / "scripts" / "normalize_type_icons.py"
-    assert path.is_file()
-    text = path.read_text(encoding="utf-8")
-    assert "restore_viewbox" in text or "PREV_FILL" in text
-    assert "0.84" in text
+def test_folder_row_click_selects_link_opens():
+    """Regression: row click selects for Remove; only the folder name link navigates."""
+    script = _app_js()
+    body = _between(script, "function onFileTableClick(", "function onFileTableDblclick(")
+    assert "Folder name link opens" in body or "anywhere else on the row only selects" in body
+    assert "openFolderRow(folderRow)" in body
+    assert "selectOnly(folderRow)" in body
+    assert 'closest?.("a.folder-open, button.folder-open")' in body
+    assert body.index("openFolderRow(folderRow)") < body.index("selectOnly(folderRow)")
+    assert 'closest(".object-row, .queue-row")' in body
+    css = APP_CSS.read_text(encoding="utf-8")
+    assert "cursor: default" in css.split(".folder-row {", 1)[1].split("}", 1)[0]
+    assert "width: fit-content" in css

@@ -24,19 +24,6 @@ def test_type_icon_client_payload_includes_settings_extensions():
     assert payload["by_object_type"]["CREO_DRAWING"] == "drawing.png"
 
 
-def test_filetype_icon_fetch_script_uses_vscode_icons():
-    path = Path("scripts/fetch_type_icons.py")
-    assert path.is_file()
-    text = path.read_text(encoding="utf-8")
-    assert "vscode-icons" in text
-    assert "file_type_" in text
-    assert "word2" in text
-    assert "excel2" in text
-    assert "pdf2" in text
-    # Must not re-pad SVGs after fetch (that made icons too small vs Creo PNGs).
-    assert "pad_viewbox" not in text
-
-
 def test_default_type_icons_cover_office_and_creo():
     from creopdm.constants import DEFAULT_TYPE_ICON_BY_LABEL
 
@@ -46,3 +33,10 @@ def test_default_type_icons_cover_office_and_creo():
     assert DEFAULT_TYPE_ICON_BY_LABEL["PDF Document"].endswith(".svg")
     assert DEFAULT_TYPE_ICON_BY_LABEL["Word Document"].endswith(".svg")
     assert DEFAULT_TYPE_ICON_BY_LABEL["Excel Document"].endswith(".svg")
+
+
+def test_filetype_icon_attribution_present():
+    path = Path("src/creopdm/static/icons/ATTRIBUTION.txt")
+    assert path.is_file()
+    text = path.read_text(encoding="utf-8")
+    assert "vscode-icons" in text

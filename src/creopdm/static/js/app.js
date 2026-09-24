@@ -3185,16 +3185,40 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function onFileTableClick(event) {
     const target = eventEl(event);
-    const folderLink = target?.closest?.(".folder-open") || null;
-    const folder = target?.closest?.(".folder-row") || null;
-    if (folderLink && folder && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+    const folderLink = target?.closest?.("a.folder-open, button.folder-open") || null;
+    const folderRow = target?.closest?.(".folder-row") || null;
+    // Folder name link opens; anywhere else on the row only selects (for Remove, etc.).
+    if (folderLink && folderRow) {
       event.preventDefault();
       event.stopPropagation();
       cancelPendingOpen();
-      openFolderRow(folder);
+      if (event.shiftKey) {
+        selectRange(folderRow, event.ctrlKey || event.metaKey);
+        return;
+      }
+      if (event.ctrlKey || event.metaKey) {
+        toggleRow(folderRow);
+        return;
+      }
+      openFolderRow(folderRow);
       return;
     }
-    const row = target?.closest(".object-row, .folder-row, .queue-row");
+    if (folderRow) {
+      cancelPendingOpen();
+      if (event.shiftKey) {
+        event.preventDefault();
+        selectRange(folderRow, event.ctrlKey || event.metaKey);
+        return;
+      }
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        toggleRow(folderRow);
+        return;
+      }
+      selectOnly(folderRow);
+      return;
+    }
+    const row = target?.closest(".object-row, .queue-row");
     if (!row) return;
     const openLink = target?.closest(".object-open");
     if (openLink) event.preventDefault();
@@ -3228,7 +3252,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function onFileTableDblclick(event) {
     cancelPendingOpen();
     const target = eventEl(event);
-    if (target?.closest(".folder-open")) {
+    // Double-click opens folder only on the name link — not the rest of the row.
+    if (target?.closest("a.folder-open, button.folder-open")) {
       event.preventDefault();
       const folder = target.closest(".folder-row");
       if (folder) openFolderRow(folder);
@@ -5527,7 +5552,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const ids = selectedIds();
     if (!ids.length) return;
     if (!confirmLargeBulk("Remove", ids.length)) return;
-    const selected = selectedRows().filter((row) => !row.classList.contains("folder-row"));
+    const selected = selectedRows();
     const projectId =
       removeBtn.dataset.project
       || checkinBtn?.dataset.project
