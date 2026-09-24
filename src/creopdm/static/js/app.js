@@ -2457,6 +2457,73 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return rows.length > 0 && rows.every(isNewFileQueueRow);
   }
 
+  // UUIDs with vault/local saves waiting to check in (not merely checked out).
+  let pendingCheckinIds = new Set();
+  let pendingCheckinIdsReady = false;
+  let pendingCheckinFetch = 0;
+
+  function rememberPendingCheckinIds(ids, { merge = false } = {}) {
+    const next = new Set(
+      (merge ? [...pendingCheckinIds] : [])
+        .concat(ids || [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+    );
+    pendingCheckinIds = next;
+    pendingCheckinIdsReady = true;
+  }
+
+  async function refreshPendingCheckinIds(projectId) {
+    if (!projectId) return;
+    const seq = ++pendingCheckinFetch;
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/checkin-preview`);
+      if (seq !== pendingCheckinFetch) return;
+      if (!response.ok) {
+        pendingCheckinIdsReady = true;
+        syncToolbar();
+        return;
+      }
+      const data = await response.json();
+      if (seq !== pendingCheckinFetch) return;
+      const ids = [...(data.object_ids || [])];
+      document.querySelectorAll("#changes-table .queue-row.is-pending[data-uuid]").forEach((row) => {
+        if (row.dataset.canCheckin === "0") return;
+        ids.push(row.dataset.uuid);
+      });
+      rememberPendingCheckinIds(ids);
+      syncToolbar();
+    } catch {
+      if (seq !== pendingCheckinFetch) return;
+      pendingCheckinIdsReady = true;
+      syncToolbar();
+    }
+  }
+
+  function rowHasCheckinWork(row) {
+    if (!row) return false;
+    if (isNewFileQueueRow(row)) return true;
+    if (row.classList.contains("queue-row") && row.dataset.uuid && row.dataset.canCheckin === "1") {
+      return true;
+    }
+    if (row.dataset.canCheckin === "1" && row.dataset.uuid) {
+      return pendingCheckinIds.has(String(row.dataset.uuid));
+    }
+    return false;
+  }
+
+  function selectionCanCheckin(selected) {
+    if (!selected.length) return false;
+    if (selectionIsAddOnly(selected)) return true;
+    // Every selected row must be something we could check in / add; at least one
+    // must actually have work (dirty save or new file) — not just a clean checkout.
+    const allEligible = selected.every(
+      (row) => row.dataset.canCheckin === "1" || isNewFileQueueRow(row)
+    );
+    if (!allEligible) return false;
+    return selected.some(rowHasCheckinWork);
+  }
+
   function syncToolbar() {
     if (!isListPage) return;
     const selected = selectedRows();
@@ -2467,7 +2534,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       historyBtn.disabled = !rowHistoryHref(one);
     }
     const canCheckout = selected.length > 0 && selected.every((row) => row.dataset.canCheckout === "1");
-    const canCheckin = selected.length > 0 && selected.every((row) => row.dataset.canCheckin === "1");
+    const canCheckin = selectionCanCheckin(selected);
     const canUndo = selected.length > 0 && selected.every((row) => row.dataset.owned === "1");
     const addOnly = selectionIsAddOnly(selected);
     if (checkoutBtn) checkoutBtn.disabled = !canCheckout;
@@ -2476,9 +2543,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       checkinBtn.textContent = addOnly ? "Add" : "Check In";
       const tip = checkinBtn.closest(".toolbar-tip");
       if (tip) {
-        tip.title = addOnly
-          ? "Add selected new files to the project (uploads local workspace files first)."
-          : "Check in selected files.";
+        if (addOnly) {
+          tip.title = "Add selected new files to the project (uploads local workspace files first).";
+        } else if (canCheckin) {
+          tip.title = "Check in selected files.";
+        } else if (selected.some((row) => row.dataset.canCheckin === "1")) {
+          tip.title =
+            "Nothing to check in for this selection. Save changes in Creo first, or use Undo Checkout to release locks.";
+        } else {
+          tip.title = "Check in selected files.";
+        }
       }
     }
     setToolbarActionVisible(checkinBtn, canCheckin);
@@ -4291,8 +4365,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
 
   checkinBtn?.addEventListener("click", async () => {
-    const queued = selectedRows().filter((row) => row.classList.contains("queue-row"));
-    const owned = selectedRows().filter((row) => {
+    const selected = selectedRows();
+    if (!selectionCanCheckin(selected)) {
+      showError(
+        $("#toolbar-error"),
+        "Nothing to check in for this selection. Save changes in Creo first, or use Undo Checkout."
+      );
+      return;
+    }
+    const queued = selected.filter((row) => row.classList.contains("queue-row"));
+    const owned = selected.filter((row) => {
       return row.dataset.canCheckin === "1" && !row.classList.contains("queue-row");
     });
     const addOnly = selectionIsAddOnly(selectedRows());
@@ -5408,6 +5490,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           }
         );
       });
+      rememberPendingCheckinIds([
+        ...saves.map((item) => item.uuid),
+        ...newerLocal
+          .filter((item) => item.can_checkin === "1")
+          .map((item) => item.uuid),
+      ]);
       refreshTabMetrics();
       return pending;
     } catch {
@@ -5789,6 +5877,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const watchProjectId = openWorkspaceBtn?.dataset.project || addForm?.dataset.project;
   let watchStamp = null;
   let watchReloadTimer = 0;
+  let lastPendingCheckinCount = null;
 
   async function pollWorkspaceWatch() {
     if (!watchProjectId || watchPaused()) return;
@@ -5806,6 +5895,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         Number(data.pending_saves || 0) + Number(localPending.newerLocal || 0),
         Number(data.new_files || 0) + Number(localPending.localNew || 0)
       );
+      if (lastPendingCheckinCount === null || lastPendingCheckinCount !== pending) {
+        lastPendingCheckinCount = pending;
+        void refreshPendingCheckinIds(watchProjectId);
+      }
       // Local agent-cache saves do not change the vault stamp — refresh the open tab in place.
       if (activeListTab() === "changes") {
         if (lastChangesPending === null) {
@@ -5910,6 +6003,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   restoreStoredFilters();
   syncToolbar();
+  const pendingProjectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
+  if (pendingProjectId) void refreshPendingCheckinIds(pendingProjectId);
 
   } finally {
     EventTarget.prototype.addEventListener = origAddEventListener;
