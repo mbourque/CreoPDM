@@ -2220,22 +2220,56 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return String(Number(value) || 0).padStart(6, "0");
   }
 
-  function typeIconHtml(objectType) {
-    const key = String(objectType || "").toUpperCase();
-    let file = "";
-    let label = "";
-    if (key === "CREO_PART") {
-      file = "part.png";
-      label = "Part";
-    } else if (key === "CREO_ASSEMBLY") {
-      file = "assembly.png";
-      label = "Assembly";
-    } else if (key === "CREO_DRAWING") {
-      file = "drawing.png";
-      label = "Drawing";
+  function typeIconMaps() {
+    const raw = $("#metric-filters")?.dataset?.typeIcons || "";
+    if (!raw) return { by_ext: {}, by_label: {}, by_object_type: {} };
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        by_ext: parsed.by_ext || {},
+        by_label: parsed.by_label || {},
+        by_object_type: parsed.by_object_type || {},
+      };
+    } catch {
+      return { by_ext: {}, by_label: {}, by_object_type: {} };
     }
-    if (!file) return "";
-    return `<img class="type-icon" src="/static/icons/${file}" alt="${label}" title="${label}" width="14" height="14" decoding="async">`;
+  }
+
+  function resolveTypeIcon(spec = {}) {
+    const maps = typeIconMaps();
+    const label = String(spec.typeLabel || spec.type_label || "").trim();
+    if (label && maps.by_label[label]) return { file: maps.by_label[label], label };
+    const ext = String(spec.extension || filenameExtension(spec.filename || "")).toLowerCase();
+    if (ext && maps.by_ext[ext]) {
+      return { file: maps.by_ext[ext], label: label || ext };
+    }
+    const objectType = String(spec.objectType || spec.object_type || "").toUpperCase();
+    if (objectType && maps.by_object_type[objectType]) {
+      const fallback =
+        objectType === "CREO_PART"
+          ? "Part"
+          : objectType === "CREO_ASSEMBLY"
+            ? "Assembly"
+            : objectType === "CREO_DRAWING"
+              ? "Drawing"
+              : label || objectType;
+      return { file: maps.by_object_type[objectType], label: label || fallback };
+    }
+    if label || ext || objectType) {
+      return { file: maps.by_label._default || "file.png", label: label || ext || "File" };
+    }
+    return { file: "", label: "" };
+  }
+
+  function typeIconHtml(spec) {
+    // Legacy: typeIconHtml("CREO_PART") still works.
+    const info =
+      typeof spec === "string"
+        ? resolveTypeIcon({ objectType: spec })
+        : resolveTypeIcon(spec || {});
+    if (!info.file) return "";
+    const label = escapeHtml(info.label || "File");
+    return `<img class="type-icon" src="/static/icons/${escapeHtml(info.file)}" alt="${label}" title="${label}" width="14" height="14" decoding="async">`;
   }
 
   function searchRowHtml(obj, projectId) {
@@ -2254,7 +2288,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const pathLine = relative && relative !== filename
       ? `<div class="muted small">${escapeHtml(relative)}</div>`
       : "";
-    const icon = typeIconHtml(objectType);
+    const icon = typeIconHtml({
+      objectType,
+      typeLabel,
+      extension: obj.extension || filenameExtension(filename),
+      filename,
+    });
     const modifiedLocally = Boolean(obj.modified_locally);
     const showModified =
       modifiedLocally && (obj.owned_by_me || obj.can_checkin);
@@ -5519,16 +5558,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             const wrap = document.createElement("span");
             wrap.className = "name-with-icon";
             const objectType = row.dataset.objectType || "";
-            if (objectType === "CREO_PART" || objectType === "CREO_ASSEMBLY" || objectType === "CREO_DRAWING") {
+            const typeLabel = meta.typeLabel || "";
+            const iconInfo = resolveTypeIcon({
+              objectType,
+              typeLabel,
+              extension: ext,
+              filename,
+            });
+            if (iconInfo.file) {
               const icon = document.createElement("img");
               icon.className = "type-icon";
-              const label =
-                objectType === "CREO_PART" ? "Part" : objectType === "CREO_ASSEMBLY" ? "Assembly" : "Drawing";
-              icon.src = `/static/icons/${
-                objectType === "CREO_PART" ? "part" : objectType === "CREO_ASSEMBLY" ? "assembly" : "drawing"
-              }.png`;
-              icon.alt = label;
-              icon.title = label;
+              icon.src = `/static/icons/${iconInfo.file}`;
+              icon.alt = iconInfo.label || "File";
+              icon.title = iconInfo.label || "File";
               icon.width = 14;
               icon.height = 14;
               icon.decoding = "async";

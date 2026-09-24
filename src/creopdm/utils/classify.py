@@ -14,6 +14,8 @@ from creopdm.constants import (
     DEFAULT_EXTRA_CAD_EXTENSIONS,
     DEFAULT_FOLDER_BY_TYPE,
     DEFAULT_OPENABLE_CAD_EXTENSIONS,
+    DEFAULT_TYPE_ICON_BY_LABEL,
+    DEFAULT_TYPE_LABELS,
     DOCUMENT_OBJECT_TYPES,
     OBJECT_TYPE_BY_EXTENSION,
     ObjectType,
@@ -347,6 +349,76 @@ def display_type_label(
             if _matches_type_label_pattern(basename, original, token):
                 return label
     return default_type_label(object_type)
+
+
+_OBJECT_TYPE_ICONS = {
+    ObjectType.CREO_PART.value: "part.png",
+    ObjectType.CREO_ASSEMBLY.value: "assembly.png",
+    ObjectType.CREO_DRAWING.value: "drawing.png",
+}
+
+
+def default_type_icon_by_extension() -> dict[str, str]:
+    """Built-in extension → icon from DEFAULT_TYPE_LABELS + DEFAULT_TYPE_ICON_BY_LABEL."""
+    _names, extensions = type_label_maps(DEFAULT_TYPE_LABELS)
+    out: dict[str, str] = {}
+    for ext, label in extensions.items():
+        icon = DEFAULT_TYPE_ICON_BY_LABEL.get(label)
+        if icon:
+            out[ext] = icon
+    return out
+
+
+_DEFAULT_ICON_BY_EXTENSION = default_type_icon_by_extension()
+
+
+def resolve_type_icon(
+    *,
+    type_label: str = "",
+    object_type: str = "",
+    extension: str = "",
+    filename: str = "",
+    icon_by_label: dict[str, str] | None = None,
+    icon_by_extension: dict[str, str] | None = None,
+) -> str:
+    """Icon filename under /static/icons/ for a row (empty if unknown)."""
+    labels = icon_by_label if icon_by_label is not None else DEFAULT_TYPE_ICON_BY_LABEL
+    by_ext = icon_by_extension if icon_by_extension is not None else _DEFAULT_ICON_BY_EXTENSION
+    label = str(type_label or "").strip()
+    if label and label in labels:
+        return labels[label]
+    ext = normalize_extension(extension)
+    if not ext and filename:
+        canonical = CreoFileManager.normalize_creo_filename(filename)
+        ext = Path(canonical).suffix.lower()
+    if ext and ext in by_ext:
+        return by_ext[ext]
+    ot = str(object_type or "").upper()
+    if ot in _OBJECT_TYPE_ICONS:
+        return _OBJECT_TYPE_ICONS[ot]
+    if label or ext or ot:
+        return labels.get("_default", "file.png")
+    return ""
+
+
+def type_icon_client_payload(type_labels: object = None) -> dict[str, dict[str, str]]:
+    """Maps for the browser: by_ext / by_label / by_object_type."""
+    labels = dict(DEFAULT_TYPE_ICON_BY_LABEL)
+    by_ext = dict(_DEFAULT_ICON_BY_EXTENSION)
+    # Settings may rename labels; keep extension icons from current type_labels.
+    _names, extensions = type_label_maps(type_labels if type_labels is not None else DEFAULT_TYPE_LABELS)
+    for ext, label in extensions.items():
+        icon = labels.get(label) or by_ext.get(ext)
+        if icon:
+            by_ext[ext] = icon
+            if label and label not in labels:
+                # Custom label: still expose for tooltip-driven lookup when ext missing.
+                labels[label] = icon
+    return {
+        "by_ext": by_ext,
+        "by_label": labels,
+        "by_object_type": dict(_OBJECT_TYPE_ICONS),
+    }
 
 
 def _matches_type_label_pattern(basename: str, original: str, token: str) -> bool:

@@ -9,7 +9,7 @@ from creopdm.models.project import Project
 from creopdm.models.version import ObjectVersion
 from creopdm.schemas.common import ObjectResponse, ObjectVersionResponse, ProjectResponse
 from creopdm.services.checkout_service import CheckoutView
-from creopdm.utils.classify import display_type_label
+from creopdm.utils.classify import display_type_label, resolve_type_icon
 from creopdm.utils.identity import UserIdentity
 from creopdm.utils.timefmt import as_utc
 
@@ -73,6 +73,7 @@ def object_to_response(
     label = view.label if view else "Available"
     if modified_locally and (view is None or view.owned_by_me or checkout is None):
         label = "Modified locally" if view is None or checkout is None else f"{view.label} · Modified locally"
+    resolved_label = type_label if type_label is not None else display_type_label(obj.filename, obj.object_type)
     return ObjectResponse(
         uuid=obj.uuid,
         project_uuid=project_uuid,
@@ -81,7 +82,13 @@ def object_to_response(
         filename=obj.filename,
         extension=obj.extension,
         object_type=obj.object_type,
-        type_label=type_label if type_label is not None else display_type_label(obj.filename, obj.object_type),
+        type_label=resolved_label,
+        type_icon=resolve_type_icon(
+            type_label=resolved_label,
+            object_type=obj.object_type,
+            extension=obj.extension,
+            filename=obj.filename,
+        ),
         relative_path=obj.relative_path,
         revision=obj.revision,
         iteration=obj.iteration,

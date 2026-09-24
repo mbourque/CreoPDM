@@ -97,6 +97,7 @@ class ObjectResponse(BaseModel):
     extension: str
     object_type: str
     type_label: str = ""
+    type_icon: str = ""
     relative_path: str
     revision: str
     iteration: int

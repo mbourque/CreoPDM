@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 import time
@@ -20,6 +21,7 @@ from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPS
 from creopdm.context import AppContext
 from creopdm.exceptions import ProjectNotFoundError
 from creopdm.utils.bom_match import bom_generic_label, bom_lookup_keys
+from creopdm.utils.classify import display_type_label, resolve_type_icon, type_icon_client_payload
 from creopdm.utils.files import format_byte_size
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
 from creopdm.utils.native_dialog import native_picker_available
@@ -32,8 +34,11 @@ _template_env = Environment(
 )
 _template_env.filters["local_time"] = format_local
 _template_env.filters["byte_size"] = format_byte_size
+_template_env.filters["tojson"] = lambda value: json.dumps(value, separators=(",", ":"))
 _template_env.globals["local_time"] = format_local
 _template_env.globals["byte_size"] = format_byte_size
+_template_env.globals["type_icon"] = resolve_type_icon
+_template_env.globals["type_label"] = display_type_label
 templates = Jinja2Templates(env=_template_env)
 router = APIRouter()
 
@@ -338,6 +343,8 @@ def home(
             "cad_model_extensions": ctx.config.model_cad_extensions(),
             "document_extensions": ctx.config.document_extensions(),
             "purgeable_extensions": ctx.config.purgeable_cad_extensions(),
+            "type_icons": type_icon_client_payload(ctx.config.type_labels()),
+            "type_label_settings": ctx.config.type_labels(),
             "checkin_queue": checkin_queue,
             "checkout_count": checkout_count,
             "pending_saves": pending_saves,

@@ -79,7 +79,7 @@
     </div>
 
     {% if selected and status %}
-    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}">
+    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}" data-type-icons='{{ type_icons | tojson }}'>
       <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Show and select all files. Clears type chips. Click again to clear."><strong>{{ status.files }}</strong> Files</button></li>
       <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Filter to Creo models and select them. Click again to clear."><strong>{{ status.cad_models }}</strong> Creo Models</button></li>
       <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Filter to parts and select them. Click again to clear."><strong>{{ status.creo_parts }}</strong> Parts</button></li>
@@ -192,12 +192,8 @@
               style="--depth: {{ entry.depth }}">
             <td title="{{ obj.filename }}">
               <span class="name-with-icon">
-                {% if obj.object_type == "CREO_PART" %}
-                <img class="type-icon" src="/static/icons/part.png" alt="Part" title="Part" width="14" height="14" decoding="async">
-                {% elif obj.object_type == "CREO_ASSEMBLY" %}
-                <img class="type-icon" src="/static/icons/assembly.png" alt="Assembly" title="Assembly" width="14" height="14" decoding="async">
-                {% elif obj.object_type == "CREO_DRAWING" %}
-                <img class="type-icon" src="/static/icons/drawing.png" alt="Drawing" title="Drawing" width="14" height="14" decoding="async">
+                {% if obj.type_icon %}
+                <img class="type-icon" src="/static/icons/{{ obj.type_icon }}" alt="{{ obj.type_label }}" title="{{ obj.type_label }}" width="14" height="14" decoding="async">
                 {% endif %}
                 <button type="button" class="object-open" data-uuid="{{ obj.uuid }}" title="Open this file">{{ obj.filename }}</button>
               </span>
@@ -273,12 +269,10 @@
               <td>{% if item.newer_save %}Newer Creo save{% else %}Modified{% endif %}</td>
               <td class="filename-cell">
                 <span class="name-with-icon">
-                  {% if item.object_type == "CREO_PART" %}
-                  <img class="type-icon" src="/static/icons/part.png" alt="Part" title="Part" width="14" height="14" decoding="async">
-                  {% elif item.object_type == "CREO_ASSEMBLY" %}
-                  <img class="type-icon" src="/static/icons/assembly.png" alt="Assembly" title="Assembly" width="14" height="14" decoding="async">
-                  {% elif item.object_type == "CREO_DRAWING" %}
-                  <img class="type-icon" src="/static/icons/drawing.png" alt="Drawing" title="Drawing" width="14" height="14" decoding="async">
+                  {% set q_label = type_label(item.filename, item.object_type or '', type_label_settings) %}
+                  {% set q_icon = type_icon(type_label=q_label, object_type=item.object_type or '', filename=item.filename) %}
+                  {% if q_icon %}
+                  <img class="type-icon" src="/static/icons/{{ q_icon }}" alt="{{ q_label }}" title="{{ q_label }}" width="14" height="14" decoding="async">
                   {% endif %}
                   <span class="object-open" role="link" tabindex="0" data-uuid="{{ item.uuid }}" title="Open this file">{{ item.filename }}</span>
                 </span>
@@ -297,12 +291,10 @@
               <td>New file</td>
               <td class="filename-cell">
                 <span class="name-with-icon">
-                  {% if item.object_type == "CREO_PART" %}
-                  <img class="type-icon" src="/static/icons/part.png" alt="Part" title="Part" width="14" height="14" decoding="async">
-                  {% elif item.object_type == "CREO_ASSEMBLY" %}
-                  <img class="type-icon" src="/static/icons/assembly.png" alt="Assembly" title="Assembly" width="14" height="14" decoding="async">
-                  {% elif item.object_type == "CREO_DRAWING" %}
-                  <img class="type-icon" src="/static/icons/drawing.png" alt="Drawing" title="Drawing" width="14" height="14" decoding="async">
+                  {% set q_label = type_label(item.filename, item.object_type or '', type_label_settings) %}
+                  {% set q_icon = type_icon(type_label=q_label, object_type=item.object_type or '', filename=item.filename) %}
+                  {% if q_icon %}
+                  <img class="type-icon" src="/static/icons/{{ q_icon }}" alt="{{ q_label }}" title="{{ q_label }}" width="14" height="14" decoding="async">
                   {% endif %}
                   <span class="object-open" role="link" tabindex="0" data-relative-path="{{ item.relative_path }}" title="Open this file">{{ item.filename }}</span>
                 </span>
