@@ -1,4 +1,37 @@
-(() => {
+window.__creopdmBoot = function creopdmBoot(options = {}) {
+  const soft = Boolean(options.soft);
+  window.__creopdmAbort?.abort();
+  const pageAbort = new AbortController();
+  window.__creopdmAbort = pageAbort;
+  const pageSignal = pageAbort.signal;
+  const pageIntervals = [];
+  const origAddEventListener = EventTarget.prototype.addEventListener;
+  origAddEventListener.call(pageSignal, "abort", () => {
+    pageIntervals.forEach((id) => {
+      try {
+        window.clearInterval(id);
+      } catch {
+        /* ignore */
+      }
+    });
+    pageIntervals.length = 0;
+  });
+  function trackedInterval(fn, ms) {
+    const id = window.setInterval(fn, ms);
+    pageIntervals.push(id);
+    return id;
+  }
+  // Soft project switches re-run this boot; abort prior listeners via signal.
+  EventTarget.prototype.addEventListener = function creopdmAddEventListener(type, listener, options) {
+    let opts;
+    if (options === true) opts = { capture: true, signal: pageSignal };
+    else if (options === false || options == null) opts = { signal: pageSignal };
+    else opts = { ...options, signal: options.signal || pageSignal };
+    return origAddEventListener.call(this, type, listener, opts);
+  };
+
+  try {
+
   const $ = (sel, root = document) => root.querySelector(sel);
 
   function formatByteSize(value) {
@@ -37,7 +70,11 @@
     return false;
   }
 
-  const creoJSReady = (function loadHostedCreoJS() {
+  const creoJSReady =
+    soft && window.CreoJS
+      ? Promise.resolve(true)
+      : window.__creopdmCreoJSReady ||
+        (window.__creopdmCreoJSReady = (function loadHostedCreoJS() {
     if (window.CreoJS) return Promise.resolve(true);
     return new Promise((resolve) => {
       let settled = false;
@@ -70,16 +107,16 @@
         }
       };
       const maxTries = hasBridge() ? 80 : 40;
-      const poll = setInterval(() => {
+      const poll = trackedInterval(() => {
         tries += 1;
         if (window.CreoJS) {
-          clearInterval(poll);
+          window.clearInterval(poll);
           tryInit();
           done(true);
           return;
         }
         if (tries < maxTries) return;
-        clearInterval(poll);
+        window.clearInterval(poll);
         // Outside Creo, skip loading creojs.js — it cannot talk to a session.
         if (!hasBridge()) {
           done(false);
@@ -95,7 +132,7 @@
         document.head.appendChild(script);
       }, 50);
     });
-  })();
+  })());
 
   function userFacingError(message) {
     let text = String(message || "").replace(/^\s*Uncaught Error:\s*/i, "").trim();
@@ -187,8 +224,70 @@
     });
   }
 
+  function isListHomeUrl(url) {
+    try {
+      const parsed = new URL(url, window.location.href);
+      if (parsed.origin !== window.location.origin) return false;
+      const path = parsed.pathname || "/";
+      return path === "/" || path === "";
+    } catch {
+      return false;
+    }
+  }
+
+  let softNavBusy = false;
+
+  async function softNavigate(url, historyMode = "push") {
+    const absolute = new URL(url, window.location.href);
+    if (!isListHomeUrl(absolute.href)) {
+      window.location.href = absolute.href;
+      return;
+    }
+    if (window.__creopdmSoftNavBusy || softNavBusy) return;
+    softNavBusy = true;
+    window.__creopdmSoftNavBusy = true;
+    try {
+      const response = await fetch(absolute.href, {
+        headers: { Accept: "text/html", "X-CreoPDM-Soft": "1" },
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        window.location.href = absolute.href;
+        return;
+      }
+      const html = await response.text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const nextShell = doc.querySelector("main.shell");
+      const curShell = document.querySelector("main.shell");
+      if (!nextShell || !curShell) {
+        window.location.href = absolute.href;
+        return;
+      }
+      curShell.innerHTML = nextShell.innerHTML;
+      if (doc.title) document.title = doc.title;
+      const nextUrl = response.url || absolute.href;
+      if (historyMode === "push") {
+        history.pushState({ creopdmSoft: 1 }, "", nextUrl);
+      } else if (historyMode === "replace") {
+        history.replaceState({ creopdmSoft: 1 }, "", nextUrl);
+      }
+      // Keep the live Creo.JS bridge — rebind UI only.
+      EventTarget.prototype.addEventListener = origAddEventListener;
+      window.__creopdmBoot({ soft: true });
+    } catch {
+      window.location.href = absolute.href;
+    } finally {
+      softNavBusy = false;
+      window.__creopdmSoftNavBusy = false;
+    }
+  }
+
   function leavePage(url) {
     closeOpenDialogs();
+    if (inCreoBrowser() && isListHomeUrl(url)) {
+      void withBusy("Loading project…", () => softNavigate(url, "push"));
+      return;
+    }
     window.location.href = url;
   }
 
@@ -2693,7 +2792,7 @@
     const projectId = $("#rename-project-btn")?.dataset.project;
     const path = folder?.dataset.folder || "";
     if (projectId && path) {
-      window.location.href = `/?project=${projectId}&folder=${encodeURIComponent(path)}`;
+      leavePage(`/?project=${projectId}&folder=${encodeURIComponent(path)}`);
     }
   }
 
@@ -3102,16 +3201,19 @@
       } else {
         await refreshCreoStatusPill(null);
       }
-      // Creo.JS bridge can appear after first paint — re-check a few times.
-      if (!hostedCreoJS()) {
-        let bridgeTries = 0;
-        const bridgePoll = window.setInterval(() => {
-          bridgeTries += 1;
-          if (hostedCreoJS() || bridgeTries >= 40) {
-            window.clearInterval(bridgePoll);
-            void refreshCreoStatusPill(agent);
-          }
-        }, 250);
+      // Soft project switch: bridge already live — skip reconnect wait, keep status refresh.
+      if (!(soft && hostedCreoJS())) {
+        // Creo.JS bridge can appear after first paint — re-check a few times.
+        if (!hostedCreoJS()) {
+          let bridgeTries = 0;
+          const bridgePoll = trackedInterval(() => {
+            bridgeTries += 1;
+            if (hostedCreoJS() || bridgeTries >= 40) {
+              window.clearInterval(bridgePoll);
+              void refreshCreoStatusPill(agent);
+            }
+          }, 250);
+        }
       }
       let seconds = 0;
       if (agent && Object.prototype.hasOwnProperty.call(agent, "status_poll_interval_seconds")) {
@@ -3120,7 +3222,7 @@
       }
       if (modeKey === "embedded" && seconds > 0) {
         const interval = Math.min(120000, Math.max(1000, Math.round(seconds * 1000)));
-        window.setInterval(() => {
+        trackedInterval(() => {
           void refreshCreoStatusPill();
         }, interval);
       }
@@ -5569,7 +5671,7 @@
   }
   if (heartbeat.ids.length) {
     // One write for all of my checkouts — avoid N concurrent POSTs during bulk ops.
-    heartbeat.timer = window.setInterval(() => {
+    heartbeat.timer = trackedInterval(() => {
       fetch("/api/objects/batch/heartbeat", { method: "POST" });
     }, 60000);
   }
@@ -5688,7 +5790,7 @@
   if (watchProjectId) {
     const pollMsRaw = Number.parseInt(document.body?.dataset?.workspacePollMs || "5000", 10);
     const pollMs = Number.isFinite(pollMsRaw) ? Math.min(120000, Math.max(500, pollMsRaw)) : 5000;
-    setInterval(pollWorkspaceWatch, pollMs);
+    trackedInterval(pollWorkspaceWatch, pollMs);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) pollWorkspaceWatch();
     });
@@ -5726,6 +5828,36 @@
     });
   });
 
+  // Keep Creo.JS connected: soft-navigate list home links in the embedded browser.
+  document.addEventListener(
+    "click",
+    (event) => {
+      const link = eventEl(event)?.closest("a.project-item, nav.folder-crumb a, a.brand");
+      if (!link || event.defaultPrevented) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (event.button != null && event.button !== 0) return;
+      if (!inCreoBrowser()) return;
+      const href = link.getAttribute("href");
+      if (!href || !isListHomeUrl(href)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void withBusy("Loading project…", () => softNavigate(href, "push"));
+    },
+    true
+  );
+
+  window.addEventListener("popstate", () => {
+    if (!inCreoBrowser()) return;
+    if (!isListHomeUrl(window.location.href)) return;
+    void withBusy("Loading…", () => softNavigate(window.location.href, "none"));
+  });
+
   restoreStoredFilters();
   syncToolbar();
-})();
+
+  } finally {
+    EventTarget.prototype.addEventListener = origAddEventListener;
+  }
+};
+
+window.__creopdmBoot({ soft: false });
