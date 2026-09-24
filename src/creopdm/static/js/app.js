@@ -2220,6 +2220,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return String(Number(value) || 0).padStart(6, "0");
   }
 
+  function typeIconHtml(objectType) {
+    const key = String(objectType || "").toUpperCase();
+    let file = "";
+    if (key === "CREO_PART") file = "part.png";
+    else if (key === "CREO_ASSEMBLY") file = "assembly.png";
+    else if (key === "CREO_DRAWING") file = "drawing.png";
+    if (!file) return "";
+    return `<img class="type-icon" src="/static/icons/${file}" alt="" width="14" height="14" decoding="async">`;
+  }
+
   function searchRowHtml(obj, projectId) {
     const relative = String(obj.relative_path || obj.filename || "");
     const folder = folderOfPath(relative);
@@ -2228,6 +2238,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const state = String(obj.lifecycle_state || "");
     const stateLabel = titleCaseWords(state);
     const typeLabel = String(obj.type_label || "");
+    const objectType = String(obj.object_type || "");
     const creo = String(obj.creo_release || "");
     const checkout = String(obj.checkout_status || "Available");
     const checkoutKind = obj.owned_by_me ? "mine" : obj.checkout_user ? "other" : "available";
@@ -2235,8 +2246,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const pathLine = relative && relative !== filename
       ? `<div class="muted small">${escapeHtml(relative)}</div>`
       : "";
+    const icon = typeIconHtml(objectType);
     return `<tr data-uuid="${escapeHtml(obj.uuid)}"
-              data-object-type="${escapeHtml(obj.object_type || "")}"
+              data-object-type="${escapeHtml(objectType)}"
               data-extension="${escapeHtml(obj.extension || "")}"
               data-filename="${escapeHtml(obj.filename || "")}"
               data-relative-path="${escapeHtml(relative)}"
@@ -2257,7 +2269,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               class="object-row"
               style="--depth: 0">
             <td title="${escapeHtml(filename)}">
-              <button type="button" class="object-open" data-uuid="${escapeHtml(obj.uuid)}" title="${escapeHtml(filename)}">${escapeHtml(filename)}</button>
+              <span class="name-with-icon">${icon}<button type="button" class="object-open" data-uuid="${escapeHtml(obj.uuid)}" title="${escapeHtml(filename)}">${escapeHtml(filename)}</button></span>
               ${pathLine}
             </td>
             <td title="${escapeHtml(rev)}">${escapeHtml(rev)}</td>
@@ -5259,6 +5271,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const cell = document.createElement("td");
           if (index === 1) {
             cell.className = "filename-cell";
+            const wrap = document.createElement("span");
+            wrap.className = "name-with-icon";
+            const objectType = row.dataset.objectType || "";
+            if (objectType === "CREO_PART" || objectType === "CREO_ASSEMBLY" || objectType === "CREO_DRAWING") {
+              const icon = document.createElement("img");
+              icon.className = "type-icon";
+              icon.src = `/static/icons/${
+                objectType === "CREO_PART" ? "part" : objectType === "CREO_ASSEMBLY" ? "assembly" : "drawing"
+              }.png`;
+              icon.alt = "";
+              icon.width = 14;
+              icon.height = 14;
+              icon.decoding = "async";
+              wrap.appendChild(icon);
+            }
             // Use a span — Creo/CEF paints an opaque fill on <button> that shows as a white band.
             const link = document.createElement("span");
             link.className = "object-open";
@@ -5268,7 +5295,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             link.title = filename;
             if (meta.uuid) link.dataset.uuid = meta.uuid;
             if (meta.relativePath) link.dataset.relativePath = meta.relativePath;
-            cell.appendChild(link);
+            wrap.appendChild(link);
+            cell.appendChild(wrap);
             const noteText = meta.recordedFilename
               ? `from ${meta.recordedFilename}`
               : meta.relativePath && meta.relativePath !== filename

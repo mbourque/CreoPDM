@@ -418,6 +418,37 @@ tr.is-row-hidden { display: none !important; }
   overflow: visible;
   text-overflow: clip;
 }
+#object-table td:first-child .name-with-icon,
+#checked-out-table td:first-child .name-with-icon,
+#changes-table .filename-cell .name-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+}
+#object-table td:first-child .type-icon,
+#checked-out-table td:first-child .type-icon,
+#changes-table .filename-cell .type-icon,
+.type-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  object-fit: contain;
+  vertical-align: middle;
+}
+#object-table td:first-child .name-with-icon .object-open,
+#checked-out-table td:first-child .name-with-icon .object-open,
+#changes-table .filename-cell .name-with-icon .object-open {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: 100%;
+  text-align: left;
+}
 #object-table td:first-child .object-open,
 #object-table .object-row td:first-child .muted.small,
 #object-table .folder-row td:first-child .folder-count,
