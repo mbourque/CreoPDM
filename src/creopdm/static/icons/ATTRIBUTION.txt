@@ -1,0 +1,4 @@
+Filetype icons (except Creo part/assembly/drawing.png) are from
+vscode-icons (https://github.com/vscode-icons/vscode-icons).
+Icons: Creative Commons Attribution-ShareAlike (CC BY-SA).
+Branded marks (Microsoft, Adobe, etc.) remain their respective owners.

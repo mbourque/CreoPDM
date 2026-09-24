@@ -78,7 +78,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push96" in text
+    assert "push97" in text
     assert "toolbar21" in text
     assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
@@ -95,7 +95,8 @@ def test_home_page(client):
     assert (Path("src/creopdm/static/icons/json.svg").is_file())
     assert (Path("src/creopdm/static/icons/sldprt.svg").is_file())
     assert Path("scripts/fetch_type_icons.py").is_file()
-    assert "material-icon-theme" in open("scripts/fetch_type_icons.py", encoding="utf-8").read()
+    assert "vscode-icons" in open("scripts/fetch_type_icons.py", encoding="utf-8").read()
+    assert "word2" in open("scripts/fetch_type_icons.py", encoding="utf-8").read()
     assert 'alt="${label}" title="${label}"' in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert 'title="Open this file"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "obj.type_label" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

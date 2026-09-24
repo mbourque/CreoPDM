@@ -1,13 +1,14 @@
-"""Download Material Icon Theme filetype icons (MIT) into static/icons.
+"""Download familiar Microsoft / Adobe / common filetype icons (vscode-icons).
 
-These are purpose-built filetype glyphs — not Windows “open with” associations
-(so Image is a picture icon, not Snagit; JSON/DXF are distinct, not blank docs).
+These look like the usual Office / PDF / image badges people recognize — not
+abstract Material glyphs, and not “whatever app is registered on this PC”.
 
-Source: https://github.com/material-extensions/vscode-material-icon-theme
-CDN:    https://cdn.jsdelivr.net/npm/material-icon-theme@5.38.1/icons/
+True official Microsoft Office / Adobe / SOLIDWORKS product artwork cannot be
+redistributed in our repo (trademark). vscode-icons provides the common
+look-alikes used widely in IDEs (CC BY-SA; branded marks remain their owners’).
 
-Do NOT use extract_windows_filetype_icons.py for the list UI — that pulls
-whatever app is registered on this PC.
+Source: https://github.com/vscode-icons/vscode-icons
+Raw:    https://raw.githubusercontent.com/vscode-icons/vscode-icons/master/icons/
 
 Run (from repo root):
 
@@ -15,7 +16,6 @@ Run (from repo root):
 """
 from __future__ import annotations
 
-import json
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -24,70 +24,60 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "src" / "creopdm" / "static" / "icons"
 CONSTANTS = ROOT / "src" / "creopdm" / "constants.py"
 
-# Prefer pinned version; fall back to latest package path / GitHub raw.
-VERSIONS = ("5.38.1", "5.37.0", "")
-CDN_TMPL = "https://cdn.jsdelivr.net/npm/material-icon-theme{ver}/icons/{name}.svg"
-GH_TMPL = (
-    "https://raw.githubusercontent.com/material-extensions/"
-    "vscode-material-icon-theme/main/icons/{name}.svg"
+# GitHub raw + jsDelivr mirror of the same repo icons folder.
+BASES = (
+    "https://raw.githubusercontent.com/vscode-icons/vscode-icons/master/icons",
+    "https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons",
 )
 
-# Our filename → upstream material-icon-theme icon name (no .svg).
-# See icons list in the material-icon-theme repo.
-ICONS: dict[str, str] = {
-    "pdf.svg": "pdf",
-    "xps.svg": "pdf",
-    "word.svg": "word",
-    "rtf.svg": "word",
-    "excel.svg": "table",
-    "csv.svg": "table",
-    "powerpoint.svg": "powerpoint",
-    "visio.svg": "drawio",
-    "project.svg": "document",
-    "publisher.svg": "document",
-    "onenote.svg": "document",
-    "webpage.svg": "html",
-    "email.svg": "email",
-    "photoshop.svg": "adobe-photoshop",
-    "xml.svg": "xml",
-    "log.svg": "log",
-    "text.svg": "document",
-    "css.svg": "css",
-    "javascript.svg": "javascript",
-    "markdown.svg": "markdown",
-    "json.svg": "json",
-    "exe.svg": "exe",
-    "ini.svg": "settings",
-    "audio.svg": "audio",
-    "video.svg": "video",
-    "font.svg": "font",
-    # CAD / 3D — Material "3d" glyph (not Windows app associations).
-    "sldprt.svg": "3d",
-    "sldasm.svg": "3d",
-    "slddrw.svg": "3d",
-    "model3d.svg": "3d",
-    "obj.svg": "3d",
-    "step.svg": "3d",
-    "stl.svg": "3d",
-    "dxf.svg": "3d",
-    "dwg.svg": "3d",
-    "image.svg": "image",
-    "archive.svg": "zip",
-    "file.svg": "file",
+# Our filename → vscode-icons file_type_* name (without file_type_ / .svg).
+# Prefer Office/Adobe branded lookalikes from the vscode-icons set.
+ICONS: dict[str, tuple[str, ...]] = {
+    # Microsoft Office family (word2/excel2/powerpoint2 = familiar Office look)
+    "word.svg": ("word2", "word"),
+    "rtf.svg": ("word2", "word", "text"),
+    "excel.svg": ("excel2", "excel"),
+    "csv.svg": ("excel2", "excel", "text"),
+    "powerpoint.svg": ("powerpoint2", "powerpoint"),
+    "visio.svg": ("drawio", "vector", "svg"),
+    "project.svg": ("onenote", "document", "text"),  # no dedicated MPP icon in set
+    "publisher.svg": ("publisher", "word2", "document"),
+    "onenote.svg": ("onenote", "document"),
+    "email.svg": ("outlook", "email", "mail"),
+    # Adobe / documents
+    "pdf.svg": ("pdf2", "pdf"),
+    "xps.svg": ("pdf2", "pdf", "document"),
+    "photoshop.svg": ("photoshop2", "photoshop", "image"),
+    # Web / code
+    "webpage.svg": ("html",),
+    "css.svg": ("css",),
+    "javascript.svg": ("js_official", "js"),
+    "json.svg": ("json_official", "json"),
+    "xml.svg": ("xml",),
+    "markdown.svg": ("markdown",),
+    "text.svg": ("text",),
+    "log.svg": ("log", "text"),
+    "ini.svg": ("ini", "config", "settings"),
+    "exe.svg": ("binary",),
+    # Media
+    "image.svg": ("image",),
+    "audio.svg": ("audio",),
+    "video.svg": ("video",),
+    "font.svg": ("font",),
+    "archive.svg": ("zip2", "zip"),
+    # CAD — pack has limited CAD art; blender/openscad are the closest recognizable 3D glyphs
+    "sldprt.svg": ("openscad", "blender", "binary"),
+    "sldasm.svg": ("openscad", "blender", "binary"),
+    "slddrw.svg": ("openscad", "blender", "svg"),
+    "model3d.svg": ("blender", "openscad", "obj"),
+    "obj.svg": ("blender", "openscad"),
+    "step.svg": ("openscad", "blender"),
+    "stl.svg": ("openscad", "blender"),
+    "dxf.svg": ("svg", "vector", "openscad"),
+    "dwg.svg": ("svg", "vector", "openscad"),
+    "file.svg": ("text", "document"),
 }
 
-# If primary name 404s, try these (Material renamed some icons over time).
-ALIASES: dict[str, tuple[str, ...]] = {
-    "adobe-photoshop": ("photoshop", "image"),
-    "log": ("console", "document"),
-    "drawio": ("diagram", "document"),
-    "table": ("excel", "document"),
-    "3d": ("cube", "file"),
-    "settings": ("tune", "document"),
-    "zip": ("folder-zip", "document"),
-}
-
-# Label → icon file written into constants.py
 LABEL_ICONS: dict[str, str] = {
     "Part": "part.png",
     "Assembly": "assembly.png",
@@ -144,120 +134,113 @@ LABEL_ICONS: dict[str, str] = {
 }
 
 
-def _urls_for(name: str) -> list[str]:
-    urls: list[str] = []
-    for ver in VERSIONS:
-        suffix = f"@{ver}" if ver else ""
-        urls.append(CDN_TMPL.format(ver=suffix, name=name))
-    urls.append(GH_TMPL.format(name=name))
-    return urls
+def _candidate_urls(icon_key: str) -> list[str]:
+    name = icon_key if icon_key.startswith("file_type_") else f"file_type_{icon_key}"
+    return [f"{base}/{name}.svg" for base in BASES]
 
 
-def fetch_svg(name: str) -> bytes | None:
-    for cand in (name, *ALIASES.get(name, ())):
-        for url in _urls_for(cand):
+def fetch_svg(candidates: tuple[str, ...]) -> tuple[bytes, str] | None:
+    for key in candidates:
+        for url in _candidate_urls(key):
             try:
                 with urllib.request.urlopen(url, timeout=45) as resp:
                     data = resp.read()
                 text = data.lstrip()
                 if text.startswith(b"<") or text.startswith(b"<?xml"):
-                    print(f"  ← {cand}.svg  ({url})")
-                    return data
-            except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
+                    return data, url
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
                 print(f"  miss {url}: {exc}")
     return None
 
 
 def update_constants() -> None:
-    """Point DEFAULT_TYPE_ICON_BY_LABEL at the Material SVG filenames."""
     text = CONSTANTS.read_text(encoding="utf-8")
-    new = text
-    # Flip any Windows-extracted .png entries back to Material .svg names.
-    for svg_name in ICONS:
-        png_name = svg_name.replace(".svg", ".png")
-        new = new.replace(f'"{png_name}"', f'"{svg_name}"')
-    # Dedicated OBJ icon when present
-    if (OUT / "obj.svg").is_file():
-        new = new.replace('"OBJ Model": "model3d.svg"', '"OBJ Model": "obj.svg"')
-        new = new.replace('"OBJ Model": "model3d.png"', '"OBJ Model": "obj.svg"')
-    # Ensure label map matches LABEL_ICONS for known keys (rewrite block when present).
-    start = new.find("DEFAULT_TYPE_ICON_BY_LABEL")
-    if start >= 0:
-        brace = new.find("{", start)
-        close = new.find("\n}", brace)
-        if brace > 0 and close > brace:
-            body_lines = ["DEFAULT_TYPE_ICON_BY_LABEL: dict[str, str] = {"]
-            for label, icon in LABEL_ICONS.items():
-                body_lines.append(f'    "{label}": "{icon}",')
-            body_lines.append("}")
-            line_end = new.find("\n", close + 2)
-            if line_end < 0:
-                line_end = len(new)
-            new = new[:start] + "\n".join(body_lines) + new[line_end:]
-    if new != text:
-        CONSTANTS.write_text(new, encoding="utf-8")
-        print(f"Updated {CONSTANTS.relative_to(ROOT)}")
-    else:
-        print("constants.py already up to date")
+    start = text.find("DEFAULT_TYPE_ICON_BY_LABEL")
+    if start < 0:
+        print("WARN: DEFAULT_TYPE_ICON_BY_LABEL not found")
+        return
+    brace = text.find("{", start)
+    close = text.find("\n}", brace)
+    if brace < 0 or close < 0:
+        print("WARN: could not locate icon map block")
+        return
+    line_end = text.find("\n", close + 2)
+    if line_end < 0:
+        line_end = len(text)
+    body = ["DEFAULT_TYPE_ICON_BY_LABEL: dict[str, str] = {"]
+    for label, icon in LABEL_ICONS.items():
+        body.append(f'    "{label}": "{icon}",')
+    body.append("}")
+    CONSTANTS.write_text(text[:start] + "\n".join(body) + text[line_end:], encoding="utf-8")
+    print(f"Updated {CONSTANTS.relative_to(ROOT)}")
 
 
-def remove_windows_pngs(keep: set[str]) -> None:
-    """Remove shell-extracted PNGs we are replacing with Material SVGs."""
+def remove_stale_material_pngs() -> None:
+    keep = {"part.png", "assembly.png", "drawing.png"}
     for path in OUT.glob("*.png"):
         if path.name in keep:
             continue
-        # Keep Creo custom art; drop association PNGs that match our svg basenames.
-        stem_svg = f"{path.stem}.svg"
-        if stem_svg in ICONS:
+        if f"{path.stem}.svg" in ICONS:
             path.unlink()
             print(f"Removed old {path.name}")
+
+
+def patch_defaults_to_svg() -> None:
+    for rel in (
+        "src/creopdm/static/js/app.js",
+        "src/creopdm/utils/classify.py",
+    ):
+        path = ROOT / rel
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        new = text.replace('|| "file.png"', '|| "file.svg"').replace(
+            'get("_default", "file.png")', 'get("_default", "file.svg")'
+        )
+        if new != text:
+            path.write_text(new, encoding="utf-8")
+            print(f"Updated {rel} default → file.svg")
+
+
+def write_attribution() -> None:
+    note = OUT / "ATTRIBUTION.txt"
+    note.write_text(
+        "Filetype icons (except Creo part/assembly/drawing.png) are from\n"
+        "vscode-icons (https://github.com/vscode-icons/vscode-icons).\n"
+        "Icons: Creative Commons Attribution-ShareAlike (CC BY-SA).\n"
+        "Branded marks (Microsoft, Adobe, etc.) remain their respective owners.\n",
+        encoding="utf-8",
+    )
 
 
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     ok = 0
     failed: list[str] = []
-    for dest_name, upstream in ICONS.items():
-        data = fetch_svg(upstream)
-        if not data:
+    for dest_name, candidates in ICONS.items():
+        got = fetch_svg(candidates)
+        if not got:
             failed.append(dest_name)
-            print(f"FAIL {dest_name}")
+            print(f"FAIL {dest_name}  tried {candidates}")
             continue
+        data, url = got
         (OUT / dest_name).write_bytes(data)
         ok += 1
-        print(f"OK   {dest_name}")
+        print(f"OK   {dest_name:20} ← {url}")
 
-    remove_windows_pngs(keep={"part.png", "assembly.png", "drawing.png"})
+    remove_stale_material_pngs()
     if ok:
         update_constants()
-
-    # Point JS fallback at svg
-    app_js = ROOT / "src" / "creopdm" / "static" / "js" / "app.js"
-    if app_js.is_file():
-        js = app_js.read_text(encoding="utf-8")
-        js2 = js.replace('|| "file.png"', '|| "file.svg"').replace(
-            'get("_default", "file.png")', 'get("_default", "file.svg")'
-        )
-        # classify.py too via separate edit if needed
-        if js2 != js:
-            app_js.write_text(js2, encoding="utf-8")
-            print("Updated app.js default icon to file.svg")
-
-    classify = ROOT / "src" / "creopdm" / "utils" / "classify.py"
-    if classify.is_file():
-        py = classify.read_text(encoding="utf-8")
-        py2 = py.replace('labels.get("_default", "file.png")', 'labels.get("_default", "file.svg")')
-        if py2 != py:
-            classify.write_text(py2, encoding="utf-8")
-            print("Updated classify.py default icon to file.svg")
+        patch_defaults_to_svg()
+        write_attribution()
 
     print(f"\nDone: {ok}/{len(ICONS)} icons → {OUT}")
     if failed:
-        print("Failed:")
+        print("Failed (will fall back to file.svg in the UI if missing):")
         for name in failed:
             print(f"  - {name}")
-        return 1
-    print("\nAttribution: Material Icon Theme (MIT) — material-extensions/vscode-material-icon-theme")
+        return 1 if ok == 0 else 0
+    print("\nAttribution: vscode-icons (CC BY-SA). Not official Microsoft/Adobe assets.")
     return 0
 
 

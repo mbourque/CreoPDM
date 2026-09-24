@@ -24,6 +24,12 @@ def test_type_icon_client_payload_includes_settings_extensions():
     assert payload["by_object_type"]["CREO_DRAWING"] == "drawing.png"
 
 
-def test_material_icon_fetch_script_exists():
-    assert Path("scripts/fetch_type_icons.py").is_file()
-    assert "material-icon-theme" in open("scripts/fetch_type_icons.py", encoding="utf-8").read()
+def test_filetype_icon_fetch_script_uses_vscode_icons():
+    path = Path("scripts/fetch_type_icons.py")
+    assert path.is_file()
+    text = path.read_text(encoding="utf-8")
+    assert "vscode-icons" in text
+    assert "file_type_" in text
+    assert "word2" in text
+    assert "excel2" in text
+    assert "pdf2" in text
