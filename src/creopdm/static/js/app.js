@@ -291,7 +291,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function leavePage(url) {
     closeOpenDialogs();
     if (inCreoBrowser() && isListHomeUrl(url)) {
-      void withBusy("Loading project…", () => softNavigate(url, "push"));
+      void withBusy("Loading…", () => softNavigate(url, "push"));
       return;
     }
     window.location.href = url;
@@ -6288,7 +6288,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (!href || !isListHomeUrl(href)) return;
       event.preventDefault();
       event.stopPropagation();
-      void withBusy("Loading project…", () => softNavigate(href, "push"));
+      void withBusy("Loading…", () => softNavigate(href, "push"));
     },
     true
   );
