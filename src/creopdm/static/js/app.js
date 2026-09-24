@@ -2426,23 +2426,7 @@
     syncToolbar();
   }
 
-  function clearAllMetricModes() {
-    let cleared = false;
-    metricButtons().forEach((btn) => {
-      if (metricMode(btn) === "off") return;
-      setMetricMode(btn, "off");
-      cleared = true;
-    });
-    return cleared;
-  }
-
   function selectOnly(row) {
-    // Plain click on one row exits chip select/filter so the full list is visible again.
-    if (clearAllMetricModes()) {
-      applyMetricVisibility();
-      writeStoredFilters();
-      updateMetricCounts();
-    }
     rows().forEach((item) => markRowSelected(item, item === row));
     lastSelectRow = row;
     syncToolbar();

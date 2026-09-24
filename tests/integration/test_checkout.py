@@ -301,7 +301,6 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function metricKey" in script.text
     assert "function markRowSelected" in script.text
     assert "function onMetricChip" in script.text
-    assert "function clearAllMetricModes" in script.text
     assert "stopImmediatePropagation" in script.text
     assert "function rowFilename" in script.text
     assert "function setRowHidden" in script.text
