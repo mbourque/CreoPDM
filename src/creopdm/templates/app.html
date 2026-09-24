@@ -177,11 +177,12 @@
               data-can-checkin="{{ '1' if obj.can_checkin else '0' }}"
               data-owned="{{ '1' if obj.owned_by_me else '0' }}"
               data-checked-out="{{ '1' if obj.owned_by_me or obj.checkout_user else '0' }}"
+              data-modified-locally="{{ '1' if obj.modified_locally else '0' }}"
               data-in-workspace="{{ '1' if obj.in_workspace else '0' }}"
               data-tree="{{ entry.folder }}"
               data-sort-name="{{ obj.relative_path }}"
               data-sort-rev="{{ entry.folder }}/{{ obj.revision }}-{{ '%06d'|format(obj.iteration) }}"
-              data-sort-state="{{ entry.folder }}/{{ obj.lifecycle_state }}"
+              data-sort-state="{{ entry.folder }}/{% if obj.modified_locally and (obj.owned_by_me or obj.can_checkin) %}MODIFIED{% else %}{{ obj.lifecycle_state }}{% endif %}"
               data-sort-type="{{ entry.folder }}/{{ obj.type_label }}"
               data-sort-creo="{{ entry.folder }}/{{ obj.creo_release or '' }}"
               data-sort-modified="{% if obj.updated_at %}{{ local_time(obj.updated_at, '%Y%m%d%H%M%S') }}{% endif %}"
@@ -205,7 +206,8 @@
               {% endif %}
             </td>
             <td title="{{ obj.display_revision }}">{{ obj.display_revision }}</td>
-            <td title="{{ obj.lifecycle_state.replace('_', ' ').title() }}"><span class="state" data-state="{{ obj.lifecycle_state }}" data-lifecycle-state="{{ obj.lifecycle_state }}">{{ obj.lifecycle_state.replace('_', ' ').title() }}</span></td>
+            {% set state_modified = obj.modified_locally and (obj.owned_by_me or obj.can_checkin) %}
+            <td title="{{ 'Modified' if state_modified else obj.lifecycle_state.replace('_', ' ').title() }}"><span class="state" data-state="{{ 'MODIFIED' if state_modified else obj.lifecycle_state }}" data-lifecycle-state="{{ obj.lifecycle_state }}">{{ 'Modified' if state_modified else obj.lifecycle_state.replace('_', ' ').title() }}</span></td>
             <td title="{{ obj.type_label }}">{{ obj.type_label }}</td>
             <td title="{{ obj.creo_release or '' }}">{{ obj.creo_release or "" }}</td>
             <td title="{% if obj.updated_at %}{{ local_time(obj.updated_at) }}{% else %}—{% endif %}">{% if obj.updated_at %}{{ local_time(obj.updated_at) }}{% else %}—{% endif %}</td>

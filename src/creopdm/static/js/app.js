@@ -2247,6 +2247,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       ? `<div class="muted small">${escapeHtml(relative)}</div>`
       : "";
     const icon = typeIconHtml(objectType);
+    const modifiedLocally = Boolean(obj.modified_locally);
+    const showModified =
+      modifiedLocally && (obj.owned_by_me || obj.can_checkin);
+    const stateDisplay = showModified ? "MODIFIED" : state;
+    const stateDisplayLabel = showModified ? "Modified" : stateLabel;
     return `<tr data-uuid="${escapeHtml(obj.uuid)}"
               data-object-type="${escapeHtml(objectType)}"
               data-extension="${escapeHtml(obj.extension || "")}"
@@ -2256,11 +2261,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               data-can-checkin="${obj.can_checkin ? "1" : "0"}"
               data-owned="${obj.owned_by_me ? "1" : "0"}"
               data-checked-out="${obj.owned_by_me || obj.checkout_user ? "1" : "0"}"
+              data-modified-locally="${modifiedLocally ? "1" : "0"}"
               data-in-workspace="${obj.in_workspace ? "1" : "0"}"
               data-tree="${escapeHtml(folder)}"
               data-sort-name="${escapeHtml(relative)}"
               data-sort-rev="${escapeHtml(folder)}/${escapeHtml(obj.revision || "")}-${padIteration(obj.iteration)}"
-              data-sort-state="${escapeHtml(folder)}/${escapeHtml(state)}"
+              data-sort-state="${escapeHtml(folder)}/${escapeHtml(stateDisplay)}"
               data-sort-type="${escapeHtml(folder)}/${escapeHtml(typeLabel)}"
               data-sort-creo="${escapeHtml(folder)}/${escapeHtml(creo)}"
               data-sort-modified="${stamp.replace(/[-: ]/g, "")}"
@@ -2273,7 +2279,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               ${pathLine}
             </td>
             <td title="${escapeHtml(rev)}">${escapeHtml(rev)}</td>
-            <td title="${escapeHtml(stateLabel)}"><span class="state" data-state="${escapeHtml(state)}" data-lifecycle-state="${escapeHtml(state)}">${escapeHtml(stateLabel)}</span></td>
+            <td title="${escapeHtml(stateDisplayLabel)}"><span class="state" data-state="${escapeHtml(stateDisplay)}" data-lifecycle-state="${escapeHtml(state)}">${escapeHtml(stateDisplayLabel)}</span></td>
             <td title="${escapeHtml(typeLabel)}">${escapeHtml(typeLabel)}</td>
             <td title="${escapeHtml(creo)}">${escapeHtml(creo)}</td>
             <td title="${escapeHtml(stamp || "—")}">${escapeHtml(stamp || "—")}</td>
@@ -2479,21 +2485,26 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     document.querySelectorAll(".object-row, .queue-row").forEach((row) => {
       const stateEl = row.querySelector(".state[data-lifecycle-state], .state[data-state]");
       if (!stateEl) return;
-      if (!stateEl.dataset.lifecycleState) {
-        stateEl.dataset.lifecycleState = stateEl.getAttribute("data-state") || "";
+      // Prefer the real lifecycle; never treat display "MODIFIED" as the restore base.
+      let base = String(stateEl.dataset.lifecycleState || "").toUpperCase();
+      if (!base || base === "MODIFIED") {
+        const attr = String(stateEl.getAttribute("data-lifecycle-state") || "").toUpperCase();
+        base = attr && attr !== "MODIFIED" ? attr : "IN_WORK";
+        stateEl.dataset.lifecycleState = base;
       }
-      const base = String(stateEl.dataset.lifecycleState || "").toUpperCase();
       const uuid = row.dataset.uuid || "";
       const owned = row.dataset.owned === "1" || row.dataset.canCheckin === "1";
-      const dirty = Boolean(uuid && pendingCheckinIds.has(String(uuid)));
+      const dirty = Boolean(
+        row.dataset.modifiedLocally === "1"
+          || (uuid && pendingCheckinIds.has(String(uuid)))
+      );
       const td = stateEl.closest("td");
-      if (owned && dirty && (base === "IN_WORK" || base === "MODIFIED" || !base)) {
+      if (owned && dirty) {
         stateEl.dataset.state = "MODIFIED";
         stateEl.textContent = "Modified";
         if (td) td.title = "Modified";
         return;
       }
-      if (!base) return;
       stateEl.dataset.state = base;
       const label = titleCaseWords(base);
       stateEl.textContent = label;
@@ -2505,25 +2516,51 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!projectId) return;
     const seq = ++pendingCheckinFetch;
     try {
+      const ids = [];
+      document.querySelectorAll(".object-row[data-modified-locally='1'][data-uuid]").forEach((row) => {
+        ids.push(row.dataset.uuid);
+      });
+      // Paint Modified from SSR flags immediately; agent/vault merge follows.
+      if (ids.length) rememberPendingCheckinIds(ids, { merge: true });
       const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/checkin-preview`);
       if (seq !== pendingCheckinFetch) return;
-      if (!response.ok) {
-        pendingCheckinIdsReady = true;
-        syncToolbar();
-        return;
+      if (response.ok) {
+        const data = await response.json();
+        if (seq !== pendingCheckinFetch) return;
+        (data.object_ids || []).forEach((id) => ids.push(id));
       }
-      const data = await response.json();
-      if (seq !== pendingCheckinFetch) return;
-      const ids = [...(data.object_ids || [])];
+      // Same local-cache signal as the New files tab (Creo often saves there first).
+      try {
+        const [cacheFiles, objects] = await Promise.all([
+          listAgentCacheFiles(projectId),
+          ensureProjectObjects(projectId),
+        ]);
+        if (seq !== pendingCheckinFetch) return;
+        newerLocalCacheSaves(cacheFiles, objects).forEach((item) => {
+          if (item.uuid && item.can_checkin === "1") ids.push(item.uuid);
+        });
+      } catch {
+        /* agent offline — vault/preview ids still apply */
+      }
       document.querySelectorAll("#changes-table .queue-row.is-pending[data-uuid]").forEach((row) => {
         if (row.dataset.canCheckin === "0") return;
         ids.push(row.dataset.uuid);
       });
+      if (seq !== pendingCheckinFetch) return;
       rememberPendingCheckinIds(ids);
+      document.querySelectorAll(".object-row[data-uuid]").forEach((row) => {
+        const id = row.dataset.uuid;
+        if (!id) return;
+        if (pendingCheckinIds.has(String(id))) {
+          row.dataset.modifiedLocally = "1";
+        }
+      });
+      syncModifiedStateLabels();
       syncToolbar();
     } catch {
       if (seq !== pendingCheckinFetch) return;
       pendingCheckinIdsReady = true;
+      syncModifiedStateLabels();
       syncToolbar();
     }
   }
@@ -2535,7 +2572,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return true;
     }
     if (row.dataset.canCheckin === "1" && row.dataset.uuid) {
-      return pendingCheckinIds.has(String(row.dataset.uuid));
+      return (
+        row.dataset.modifiedLocally === "1"
+        || pendingCheckinIds.has(String(row.dataset.uuid))
+      );
     }
     return false;
   }
@@ -5388,6 +5428,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         row.appendChild(cell);
         body.appendChild(row);
         refreshTabMetrics();
+        // Still merge vault/agent pending so list State stays accurate without this tab.
+        void refreshPendingCheckinIds(projectId);
         return pending;
       }
       const addRow = (values, className, meta = {}) => {
