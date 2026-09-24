@@ -103,6 +103,8 @@ def test_agent_add_chunks_continue_after_http_error():
     assert "continue;" in body
     assert "return combined.ok.length ? combined : null;" not in body
     assert "Keep going" in body or "must not drop" in body
+    assert "addInFlight" in _app_js()
+    assert "client_offset" in body
 
 
 def test_add_partial_failure_notice_survives_reload():

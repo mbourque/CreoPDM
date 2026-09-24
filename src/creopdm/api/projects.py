@@ -622,7 +622,16 @@ async def import_from_uploads(
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     # Browser folder picks send many parts; Starlette defaults to 1000 files/fields.
-    form = await request.form(max_files=20000, max_fields=40000)
+    try:
+        form = await request.form(max_files=20000, max_fields=40000)
+    except OSError as exc:
+        # Multipart spills to /tmp; a full disk surfaces here as Errno 28.
+        if getattr(exc, "errno", None) == 28:
+            raise ValidationAppError(
+                "CreoPDM host disk is full (could not receive the upload). "
+                "Free space under /tmp and ~/.local/share/CreoPDM, then retry."
+            ) from exc
+        raise
     uploaded_files = form.getlist("files")
     rels = [str(item) for item in form.getlist("relative_paths")]
     comment_raw = form.get("comment")
@@ -647,7 +656,20 @@ async def import_from_uploads(
                     )
                 )
                 continue
-            data = await uploaded.read()
+            try:
+                data = await uploaded.read()
+            except OSError as exc:
+                if getattr(exc, "errno", None) == 28:
+                    failed.append(
+                        BatchItemResult(
+                            uuid="",
+                            filename=filename,
+                            code="DISK_FULL",
+                            message="CreoPDM host disk is full while reading the upload.",
+                        )
+                    )
+                    break
+                raise
             if not data:
                 failed.append(
                     BatchItemResult(

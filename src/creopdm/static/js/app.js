@@ -2154,8 +2154,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     handleDroppedTransfer(transfer);
   });
 
+  let addInFlight = false;
   addForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (addInFlight) {
+      showError($("#add-error"), "Add is already running — wait for it to finish.");
+      return;
+    }
     const projectId = addForm.dataset.project;
     if (!projectId) return;
     if (
@@ -2168,7 +2173,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     const comment = String(new FormData(addForm).get("comment") || "").trim();
-    const result = await withBusy(
+    addInFlight = true;
+    let result;
+    try {
+    result = await withBusy(
       chosenBaseFolder
         ? "Adding folder…"
         : chosenAgentPaths.length > 100
@@ -2208,6 +2216,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
                 absolute_paths: chunk,
                 base_folder: chosenAgentBaseFolder || "",
                 comment: offset === 0 ? comment || null : null,
+                client_offset: offset,
+                client_total: total,
               }),
             });
           } catch (exc) {
@@ -2222,7 +2232,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             continue;
           }
           if (!response.ok) {
-            const message = await readError(response);
+            let message = `creopdm-agent returned ${response.status}`;
+            try {
+              message = await readError(response);
+            } catch {
+              /* keep status message */
+            }
             // Keep going — one bad batch must not drop the rest of Documents.
             chunk.forEach((path) => {
               combined.failed.push({
@@ -2233,7 +2248,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             });
             continue;
           }
-          const body = await response.json();
+          let body = {};
+          try {
+            body = await response.json();
+          } catch (exc) {
+            const message = exc?.message || "Invalid JSON from creopdm-agent.";
+            chunk.forEach((path) => {
+              combined.failed.push({
+                filename: basenameOf(path),
+                code: "BAD_RESPONSE",
+                message,
+              });
+            });
+            continue;
+          }
           combined.ok.push(...(body.ok || []));
           combined.failed.push(...(body.failed || []));
         }
@@ -2343,6 +2371,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       );
     }
     if (okCount) reloadPage();
+    } finally {
+      addInFlight = false;
+    }
   });
 
   const searchInput = $("#search-input");

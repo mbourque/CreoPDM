@@ -167,6 +167,9 @@ class AddPathsRequest(BaseModel):
     comment: str | None = None
     # Folder pick: keep vault-relative paths under this directory.
     base_folder: str = ""
+    # Browser batch progress (for logs only).
+    client_offset: int = 0
+    client_total: int = 0
 
 
 class BatchAddItem(BaseModel):
@@ -905,7 +908,10 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 rel = path.name
             jobs.append((open_path, rel))
         logger.info(
-            "Agent add-paths: %s path(s) → %s job(s), %s failed before upload (base=%s)",
+            "Agent add-paths: client %s–%s of %s; %s path(s) → %s job(s), %s failed before upload (base=%s)",
+            int(payload.client_offset) + 1,
+            int(payload.client_offset) + len(raw_paths),
+            int(payload.client_total) or "?",
             len(raw_paths),
             len(jobs),
             len(failed),
