@@ -2419,19 +2419,44 @@
     tab.textContent = n ? `Files checked out · ${n}` : "Files checked out";
   }
 
+  function snapshotMetricModes() {
+    return metricButtons().map((btn) => ({ btn, mode: metricMode(btn) }));
+  }
+
+  function restoreMetricModes(snapshot) {
+    let changed = false;
+    (snapshot || []).forEach(({ btn, mode }) => {
+      if (!btn || metricMode(btn) === mode) return;
+      setMetricMode(btn, mode);
+      changed = true;
+    });
+    return changed;
+  }
+
+  function afterRowSelectionChange(snapshot) {
+    // Row clicks must never clear an active pill. Re-assert modes and visibility.
+    if (restoreMetricModes(snapshot) || metricButtons().some((btn) => metricMode(btn) === "filter")) {
+      applyMetricVisibility();
+    }
+    syncToolbar();
+  }
+
   function toggleRow(row) {
+    const snapshot = snapshotMetricModes();
     markRowSelected(row, !row.classList.contains("is-selected"));
     lastSelectRow = row;
-    syncToolbar();
+    afterRowSelectionChange(snapshot);
   }
 
   function selectOnly(row) {
+    const snapshot = snapshotMetricModes();
     rows().forEach((item) => markRowSelected(item, item === row));
     lastSelectRow = row;
-    syncToolbar();
+    afterRowSelectionChange(snapshot);
   }
 
   function selectRange(toRow, additive = false) {
+    const snapshot = snapshotMetricModes();
     const visible = rows().filter((row) => !rowIsHidden(row));
     const end = visible.indexOf(toRow);
     const start = lastSelectRow ? visible.indexOf(lastSelectRow) : end;
@@ -2443,7 +2468,7 @@
     }
     visible.slice(from, until + 1).forEach((row) => markRowSelected(row, true));
     lastSelectRow = toRow;
-    syncToolbar();
+    afterRowSelectionChange(snapshot);
   }
 
   let lastSelectRow = null;
@@ -2727,6 +2752,12 @@
     }
     if (next !== "off" && CAD_MODEL_CHILD_FILTERS.has(key)) {
       clearMetricFilters(new Set(["cad_models"]));
+    }
+    // Filter mode only hides rows. Drop the prior select-mode multi-select so a
+    // later single-row click does not look like the pill turned off.
+    if (next === "filter") {
+      rows().forEach((row) => markRowSelected(row, false));
+      lastSelectRow = null;
     }
     applyMetricVisibility();
     applyMetricSelection();
