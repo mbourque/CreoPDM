@@ -2790,6 +2790,10 @@
     if (next !== "off" && CAD_MODEL_CHILD_FILTERS.has(key)) {
       clearMetricFilters(new Set(["cad_models"]));
     }
+    if (next === "off") {
+      rows().forEach((row) => markRowSelected(row, false));
+      lastSelectRow = null;
+    }
     applyMetricVisibility();
     applyMetricSelection();
     writeStoredFilters();
