@@ -2261,7 +2261,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               : label || objectType;
       return { file: maps.by_object_type[objectType], label: label || fallback };
     }
-    if label || ext || objectType) {
+    if (label || ext || objectType) {
       return { file: maps.by_label._default || "file.svg", label: label || ext || "File" };
     }
     return { file: "", label: "" };
