@@ -2186,7 +2186,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         const paths = [...chosenAgentPaths];
         const total = paths.length;
-        const chunkSize = 200;
+        const chunkSize = 50;
         const combined = { ok: [], failed: [] };
         for (let offset = 0; offset < paths.length; offset += chunkSize) {
           const chunk = paths.slice(offset, offset + chunkSize);
@@ -2256,26 +2256,37 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
     if (!result) return;
     const failed = result.failed || [];
-    if (failed.length && !result.ok?.length) {
+    const okCount = result.ok?.length || 0;
+    if (failed.length && !okCount) {
       const first = failed[0]?.message || "Could not add files.";
       const extra = failed.length > 1 ? ` (${failed.length} files failed)` : "";
       showError($("#add-error"), first + extra);
       return;
     }
-    if (canGatherCreoMetadata() && (result.ok?.length || 0) <= 50) {
+    if (failed.length && okCount) {
+      const sample = failed
+        .slice(0, 3)
+        .map((item) => item.filename || item.uuid || "file")
+        .join(", ");
+      showError(
+        $("#add-error"),
+        `Added ${okCount} file(s); ${failed.length} failed (${sample}${failed.length > 3 ? ", …" : ""}).`
+      );
+    }
+    if (canGatherCreoMetadata() && okCount > 0 && okCount <= 50) {
       await withBusy("Capturing Creo metadata…", async () => {
         await pushCreoMetadataForItems(metadataTargetsFromResult(result));
       });
-    } else if ((result.ok?.length || 0) > 50) {
+    } else if (okCount > 50) {
       const indexNote =
         result.where_used_index === "started"
           ? " Where Used indexing started in the background."
           : "";
       showOk(
-        `${result.ok.length} file(s) added. Creo metadata was skipped for this large add — open a model in Creo and Check In to capture it.${indexNote}`
+        `${okCount} file(s) added. Creo metadata was skipped for this large add — open a model in Creo and Check In to capture it.${indexNote}`
       );
     }
-    reloadPage();
+    if (okCount) reloadPage();
   });
 
   const searchInput = $("#search-input");

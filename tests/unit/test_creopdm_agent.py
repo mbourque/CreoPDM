@@ -224,18 +224,18 @@ def test_agent_add_paths_uses_base_folder_for_relative_paths(tmp_path, monkeypat
         assert uploaded[0][1] == "kit/sub/pin.prt.1"
 
 
-def test_agent_add_paths_preserves_sibling_subfolders_without_base(tmp_path, monkeypatch):
+def test_agent_add_paths_preserves_sibling_subfolders_under_chosen_folder(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     root.mkdir()
-    kit = tmp_path / "Kit"
-    lib = kit / "lib"
-    asm = kit / "asm"
+    docs = tmp_path / "Documents"
+    lib = docs / "Camtasia"
+    pdf = docs / "PDF"
     lib.mkdir(parents=True)
-    asm.mkdir(parents=True)
-    pin = lib / "pin.prt"
-    top = asm / "top.asm"
-    pin.write_bytes(b"pin")
-    top.write_bytes(b"asm")
+    pdf.mkdir(parents=True)
+    video = lib / "demo.mp4"
+    sheet = pdf / "notes.pdf"
+    video.write_bytes(b"mp4")
+    sheet.write_bytes(b"pdf")
     settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), pdm_url="http://pdm.test")
     app = create_agent_app(settings)
     uploaded: list[str] = []
@@ -269,11 +269,15 @@ def test_agent_add_paths_preserves_sibling_subfolders_without_base(tmp_path, mon
             json={
                 "pdm_url": "http://pdm.test",
                 "project_id": "proj1",
-                "absolute_paths": [str(pin), str(top)],
+                "absolute_paths": [str(video), str(sheet)],
+                "base_folder": str(docs),
             },
         )
         assert response.status_code == 200, response.text
-        assert set(uploaded) == {"Kit/lib/pin.prt", "Kit/asm/top.asm"}
+        assert set(uploaded) == {
+            "Documents/Camtasia/demo.mp4",
+            "Documents/PDF/notes.pdf",
+        }
 
 
 def test_agent_open_local_association(tmp_path, monkeypatch):

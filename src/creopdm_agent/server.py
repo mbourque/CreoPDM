@@ -855,10 +855,11 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             if root is not None:
                 try:
                     inner = path.relative_to(root).as_posix()
-                    # Match server Choose Folder: keep the chosen folder name as the group root.
-                    rel = f"{root.name}/{inner}" if root.name else inner
                 except ValueError:
-                    rel = path.name
+                    inner = path.name
+                # Choose Folder: Documents/Camtasia/…, Documents/PDF/… under the
+                # chosen folder name as the project-root group.
+                rel = f"{root.name}/{inner}" if root.name else inner
             else:
                 rel = path.name
             jobs.append((path, rel))
@@ -868,7 +869,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             headers["Authorization"] = f"Bearer {token}"
         url = f"{base}/api/projects/{quote(project_id)}/objects/from-uploads"
         ok: list[BatchAddItem] = []
-        chunk_size = 200
+        chunk_size = 50
         comment = (payload.comment or "").strip() or None
         with httpx.Client(timeout=600.0, follow_redirects=True) as client:
             for offset in range(0, len(jobs), chunk_size):
