@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +17,8 @@ logger = get_logger("git")
 
 # Windows CreateProcess command lines cap near 32KB. Keep path batches small.
 _PATHSPEC_CHUNK = 64
+_INDEX_LOCK_RETRIES = 6
+_INDEX_LOCK_STALE_SEC = 20.0
 
 
 def _chunks(items: list[str], size: int = _PATHSPEC_CHUNK):
@@ -31,6 +34,33 @@ def _porcelain_path(raw: str) -> str:
     if len(name) >= 2 and name[0] == '"' and name[-1] == '"':
         name = name[1:-1].encode("utf-8").decode("unicode_escape")
     return name.replace("\\", "/")
+
+
+def is_git_index_lock_error(message: str) -> bool:
+    text = (message or "").lower()
+    return "index.lock" in text and (
+        "file exists" in text or "unable to create" in text or "write error" in text
+    )
+
+
+def clear_stale_git_index_lock(repo: Path, *, max_age_sec: float = _INDEX_LOCK_STALE_SEC) -> bool:
+    """Remove a leftover .git/index.lock when it is older than max_age_sec."""
+    lock = Path(repo) / ".git" / "index.lock"
+    if not lock.is_file():
+        return False
+    try:
+        age = time.time() - lock.stat().st_mtime
+    except OSError:
+        return False
+    if age < max_age_sec:
+        return False
+    try:
+        lock.unlink()
+        logger.warning("Removed stale git index.lock at %s (age %.0fs)", lock, age)
+        return True
+    except OSError as exc:
+        logger.warning("Could not remove stale index.lock %s: %s", lock, exc)
+        return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +142,40 @@ class GitService:
             logger.error("Git failure: %s", message)
             raise RepositoryError(message, details={"args": args})
         return result
+
+    def run_with_index_lock_retry(
+        self,
+        args: list[str],
+        cwd: Path,
+        *,
+        check: bool = True,
+        quiet: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run a mutating git command; retry when another commit left index.lock."""
+        delay = 0.2
+        last_error: RepositoryError | None = None
+        for attempt in range(1, _INDEX_LOCK_RETRIES + 1):
+            try:
+                return self._run(args, cwd=cwd, check=check, quiet=quiet)
+            except RepositoryError as exc:
+                last_error = exc
+                if not is_git_index_lock_error(exc.message):
+                    raise
+                cleared = clear_stale_git_index_lock(
+                    cwd,
+                    max_age_sec=2.0 if attempt >= 3 else _INDEX_LOCK_STALE_SEC,
+                )
+                logger.warning(
+                    "Git index.lock busy (%s/%s)%s; retrying in %.1fs",
+                    attempt,
+                    _INDEX_LOCK_RETRIES,
+                    " — cleared stale lock" if cleared else "",
+                    delay,
+                )
+                time.sleep(delay)
+                delay = min(delay * 2, 2.0)
+        assert last_error is not None
+        raise last_error
 
     def is_available(self) -> bool:
         try:
@@ -217,7 +281,7 @@ class GitService:
             return
         logger.info("git add (%s files)", len(files))
         for chunk in _chunks(files):
-            self._run(["add", "--", *chunk], cwd=path, quiet=True)
+            self.run_with_index_lock_retry(["add", "--", *chunk], cwd=path, quiet=True)
 
     def remove_files(self, path: Path, files: list[str], *, keep_working_copy: bool = False) -> None:
         if not files:
@@ -227,7 +291,7 @@ class GitService:
             args.append("--cached")
         logger.info("git rm %s(%s files)", "--cached " if keep_working_copy else "", len(files))
         for chunk in _chunks(files):
-            self._run([*args, "--", *chunk], cwd=path, quiet=True)
+            self.run_with_index_lock_retry([*args, "--", *chunk], cwd=path, quiet=True)
 
     def commit(
         self,
@@ -241,8 +305,8 @@ class GitService:
         args = ["commit", "-m", message]
         if allow_empty:
             args.append("--allow-empty")
-            # Isolate author identity without writing credentials or relying on global git config.
-        result = self._run(
+        # Isolate author identity without writing credentials or relying on global git config.
+        self.run_with_index_lock_retry(
             [
                 "-c",
                 f"user.name={author.user_name}",
@@ -252,7 +316,7 @@ class GitService:
             ],
             cwd=path,
         )
-        logger.debug("commit stdout: %s", result.stdout)
+        logger.debug("commit finished")
         return self.get_head(path)
 
     def get_head(self, path: Path) -> str:
