@@ -41,6 +41,8 @@ def test_app_js_is_not_cached(client):
     assert "pushCreoMetadataForItems" in response.text
     assert "gatherCreoMetadataForFilename" in response.text
     assert "canGatherCreoMetadata" in response.text
+    assert "waitForCreoMetadataBridge" in response.text
+    assert "Waiting for Creo.JS…" in response.text
     assert "prepareLocalPathForMetadata" in response.text
     assert "#panel-structure .object-open" in response.text
     assert "browseViaAgentPicker" in response.text
@@ -79,7 +81,7 @@ def test_home_page(client):
     assert 'id="add-files-btn"' in text
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
-    assert "push118" in text
+    assert "push120" in text
     assert "toolbar24" in text
     assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

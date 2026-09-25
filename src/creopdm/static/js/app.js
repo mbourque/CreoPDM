@@ -309,8 +309,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       document.body.classList.add("is-busy");
       document.body.setAttribute("aria-busy", "true");
     }
-    // Creo's embedded browser often ignores location.reload/replace and
-    // document.write. A real GET form submit reliably loads fresh HTML.
     let pathname = window.location.pathname || "/";
     let hash = window.location.hash || "";
     const params = new URLSearchParams();
@@ -325,9 +323,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       /* keep defaults */
     }
     params.set("r", String(Date.now()));
+    const query = params.toString();
+    const next = `${pathname}${query ? `?${query}` : ""}${hash}`;
+    // Normal browsers: assign works. Creo's embedded browser often ignores
+    // location.reload/assign — a GET form submit loads fresh HTML there.
+    if (!inCreoBrowser()) {
+      window.location.assign(next);
+      return;
+    }
     const form = document.createElement("form");
     form.method = "GET";
-    form.action = pathname + hash;
+    form.action = pathname;
     form.style.display = "none";
     params.forEach((value, key) => {
       const input = document.createElement("input");
@@ -451,6 +457,48 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       state.textContent = text;
     });
     try {
+      syncToolbar();
+      updateMetricCounts();
+      reapplyActiveTableSorts();
+    } catch {
+      /* list helpers may not be ready on detail-only pages */
+    }
+  }
+
+  function applyUndoCheckoutOnRows(uuids) {
+    /** Paint Available immediately when reload is slow or ignored. */
+    const ids = new Set(
+      (uuids || []).map((id) => String(id || "").trim()).filter(Boolean)
+    );
+    if (!ids.size) return;
+    stopHeartbeats([...ids]);
+    const text = "Available";
+    rows().forEach((row) => {
+      const id = row.dataset.uuid;
+      if (!id || !ids.has(id)) return;
+      row.dataset.owned = "0";
+      row.dataset.checkedOut = "0";
+      row.dataset.canCheckin = "0";
+      row.dataset.canCheckout = "1";
+      row.dataset.modifiedLocally = "0";
+      const state = row.querySelector(".checkout-state");
+      if (state) {
+        state.dataset.state = "available";
+        state.textContent = text;
+        const td = state.closest("td");
+        if (td) td.title = text;
+      }
+      const tree = row.dataset.tree || "";
+      if (row.dataset.sortCheckout != null) {
+        row.dataset.sortCheckout = `${tree}/${text}`;
+      }
+    });
+    document.querySelectorAll(".detail-meta .checkout-state").forEach((state) => {
+      state.dataset.state = "available";
+      state.textContent = text;
+    });
+    try {
+      syncModifiedStateLabels();
       syncToolbar();
       updateMetricCounts();
       reapplyActiveTableSorts();
@@ -1261,13 +1309,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       showOk("Metadata collection is already running.");
       return;
     }
-    if (!canGatherCreoMetadata()) {
+    // Bridge often arrives after first paint — same wait as Resume.
+    showOk("Waiting for Creo.JS…");
+    const ready = await waitForCreoMetadataBridge();
+    if (!ready) {
       showError(
         $("#toolbar-error"),
         "Collect metadata needs Creo’s embedded browser with Creo.JS available."
       );
       return;
     }
+    showOk("");
     const existing = loadMetadataCollectState();
     if (
       existing &&
@@ -1333,17 +1385,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (state.message) showOk(state.message);
     syncMetadataCollectControls();
     // Bridge often appears after first paint (same race as the status pill).
-    await creoJSReady;
-    if (!canGatherCreoMetadata()) {
-      showOk(
-        `Metadata collection paused at ${state.index || 0} of ${state.targets.length}. ` +
-          "Waiting for Creo.JS…"
-      );
-      for (let i = 0; i < 40 && !canGatherCreoMetadata(); i += 1) {
-        await new Promise((r) => window.setTimeout(r, 250));
-      }
-    }
-    if (!canGatherCreoMetadata()) {
+    if (!(await waitForCreoMetadataBridge())) {
       showOk(
         `Metadata collection paused at ${state.index || 0} of ${state.targets.length}. ` +
           (fromButton
@@ -3713,10 +3755,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (typeof window.CreoJS.gatherModelMetadata !== "function") return false;
       // Require a real Creo.JS bridge — Embedded mode alone is not enough
       // (Chrome with settings=Embedded must not pretend to gather).
-      return hostedCreoJS();
+      if (hostedCreoJS()) return true;
+      // Chromium Creo sometimes omits window.external.ptc / isAvailable while
+      // pfcGetCurrentSession is already live (same race as the status pill).
+      try {
+        if (typeof pfcGetCurrentSession === "function" && pfcGetCurrentSession()) {
+          return true;
+        }
+      } catch {
+        /* not in a Creo session */
+      }
+      return false;
     } catch {
       return false;
     }
+  }
+
+  async function waitForCreoMetadataBridge({ tries = 40, intervalMs = 250 } = {}) {
+    await creoJSReady;
+    if (canGatherCreoMetadata()) return true;
+    for (let i = 0; i < tries && !canGatherCreoMetadata(); i += 1) {
+      await new Promise((r) => window.setTimeout(r, intervalMs));
+    }
+    return canGatherCreoMetadata();
   }
 
   function isCreoMetadataCandidate(filename) {
@@ -5025,6 +5086,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       );
       if (result) {
         rememberWatchView();
+        applyUndoCheckoutOnRows(objectIds);
         reloadPage({ keepBusy: true });
       }
       return;
@@ -5050,7 +5112,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!undoResult) return;
     const warning = formatBatch(undoResult);
     if (warning) showError($("#toolbar-error"), warning);
-    if (undoResult.ok?.length) reloadPage({ keepBusy: true });
+    if (undoResult.ok?.length) {
+      const undone = undoResult.ok.map((item) => item.uuid).filter(Boolean);
+      applyUndoCheckoutOnRows(undone.length ? undone : objectIds);
+      reloadPage({ keepBusy: true });
+    }
   });
 
   checkinBtn?.addEventListener("click", async () => {
