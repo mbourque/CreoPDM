@@ -154,10 +154,17 @@ def test_project_dialog_has_vault_folder_and_use_hash():
     assert "Vault/Workspace name" in html
     assert 'id="project-use-hash"' in html
     assert 'name="vault_folder"' in html
+    assert 'class="checkbox-row"' in html
+    assert 'for="project-use-hash"' in html
     script = _app_js()
     assert "syncProjectVaultFolderField" in script
     assert "body.vault_folder" in script
     assert "Vault/workspace name cannot contain spaces" in script
+    assert "getRandomValues" in script
+    assert "proj-${" not in script
+    css = APP_CSS.read_text(encoding="utf-8")
+    assert ".project-vault-fields .checkbox-row" in css
+    assert "flex-direction: row" in css.split(".project-vault-fields .checkbox-row", 1)[1].split("}", 1)[0]
 
 
 def test_soft_nav_does_not_silently_drop_when_busy():

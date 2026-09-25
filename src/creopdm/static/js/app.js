@@ -1404,8 +1404,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   let projectVaultCustom = "";
 
   function newProjectVaultHash() {
+    // Prefer platform UUID; CEF often lacks randomUUID but has getRandomValues.
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
-    return `proj-${Date.now().toString(36)}`;
+    if (window.crypto?.getRandomValues) {
+      const bytes = new Uint8Array(16);
+      window.crypto.getRandomValues(bytes);
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+    // Last resort: still UUID-shaped (not proj-…).
+    let hex = "";
+    for (let i = 0; i < 32; i += 1) hex += Math.floor(Math.random() * 16).toString(16);
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
   }
 
   function syncProjectVaultFolderField(resetHash) {
