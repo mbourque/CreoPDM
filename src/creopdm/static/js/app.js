@@ -3191,10 +3191,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       openWorkspaceBtn?.dataset.project ||
       currentProjectId() ||
       "";
-    const canCheckoutProject = Boolean(projectId);
-    const canCheckinProject = Boolean(projectId);
+    const canCheckoutProject =
+      Boolean(projectId) &&
+      Number(checkoutProjectBtn?.dataset.checkoutable || 0) > 0;
+    const pendingProjectSaves = Number(
+      checkinBtn?.dataset.pendingSaves || checkinMenuBtn?.dataset.pendingSaves || 0
+    );
+    const pendingProjectNew = Number(
+      checkinBtn?.dataset.newFiles || checkinMenuBtn?.dataset.newFiles || 0
+    );
+    // Project check-in only when there is queue work (modified checkouts and/or new files).
+    const canCheckinProject = Boolean(projectId) && (pendingProjectSaves > 0 || pendingProjectNew > 0);
     if (checkoutBtn) checkoutBtn.disabled = !canCheckout;
-    if (checkoutProjectBtn) checkoutProjectBtn.disabled = !canCheckoutProject;
+    if (checkoutProjectBtn) {
+      checkoutProjectBtn.disabled = !canCheckoutProject;
+      checkoutProjectBtn.title = canCheckoutProject
+        ? "Check out every file in this project that is available (not locked by someone else)."
+        : "Nothing left to check out in this project.";
+    }
     if (checkoutMenuBtn) {
       checkoutMenuBtn.disabled = !(canCheckout || canCheckoutProject);
       if (checkoutMenuBtn.disabled) closeCheckoutMenu();
@@ -3210,7 +3224,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             ? "Nothing to check in for this selection. Save changes in Creo first, or use Undo Checkout to release locks."
             : "Check in selected files.";
     }
-    if (checkinProjectBtn) checkinProjectBtn.disabled = !canCheckinProject;
+    if (checkinProjectBtn) {
+      checkinProjectBtn.disabled = !canCheckinProject;
+      checkinProjectBtn.title = canCheckinProject
+        ? "Check in all modified checkouts and add new files in this project (full project check-in)."
+        : "Nothing to check in for this project. Check out and save changes, or add new files first.";
+    }
     if (checkinMenuBtn) {
       checkinMenuBtn.disabled = !(canCheckin || canCheckinProject);
       if (checkinMenuBtn.disabled) closeCheckinMenu();
@@ -3273,6 +3292,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!tab) return;
     const n = Number(count) || 0;
     tab.textContent = n ? `Files checked out · ${n}` : "Files checked out";
+  }
+
+  function setCheckoutableCount(count) {
+    if (checkoutProjectBtn) checkoutProjectBtn.dataset.checkoutable = String(Number(count) || 0);
+    syncToolbar();
   }
 
   function snapshotMetricModes() {
@@ -5061,8 +5085,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function runCheckoutObjects(objectIds) {
     const ids = [...new Set((objectIds || []).filter(Boolean))];
-    if (!ids.length) return;
-    if (!confirmLargeBulk("Check out", ids.length)) return;
+    if (!ids.length) return false;
+    if (!confirmLargeBulk("Check out", ids.length)) return false;
     showError($("#toolbar-error"), "");
     let checkoutResult = null;
     if (ids.length === 1 && !selectedRows().length) {
@@ -5072,7 +5096,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         "POST",
         "Checking out…"
       );
-      if (!checkoutResult) return;
+      if (!checkoutResult) return false;
     } else {
       const CHECKOUT_CHUNK = 50;
       const total = ids.length;
@@ -5093,10 +5117,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         return merged;
       });
-      if (!checkoutResult) return;
+      if (!checkoutResult) return false;
       const warning = formatBatch(checkoutResult);
       if (warning) showError($("#toolbar-error"), warning);
-      if (!checkoutResult.ok?.length) return;
+      if (!checkoutResult.ok?.length) return false;
     }
     const syncedIds =
       Array.isArray(checkoutResult.ok) && checkoutResult.ok.length
@@ -5139,7 +5163,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Paint before reload — Creo often collapses the browser on open and may
     // ignore form navigation while a folder view is showing.
     applyCheckedOutOnRows(syncedIds);
+    const remaining = Math.max(
+      0,
+      Number(checkoutProjectBtn?.dataset.checkoutable || 0) - syncedIds.length
+    );
+    setCheckoutableCount(remaining);
     reloadPage({ keepBusy: true });
+    return true;
   }
 
   checkoutBtn?.addEventListener("click", async () => {
@@ -5174,6 +5204,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       .map((item) => String(item.uuid));
     if (!objectIds.length) {
       showError($("#toolbar-error"), "No files available to check out in this project.");
+      setCheckoutableCount(0);
       return;
     }
     await runCheckoutObjects(objectIds);
@@ -5294,6 +5325,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         "Nothing to check in for this selection. Save changes in Creo first, or use Undo Checkout."
       );
       return;
+    }
+    if (projectScope) {
+      const pending = Number(
+        checkinBtn?.dataset.pendingSaves || checkinMenuBtn?.dataset.pendingSaves || 0
+      );
+      const news = Number(checkinBtn?.dataset.newFiles || checkinMenuBtn?.dataset.newFiles || 0);
+      if (pending <= 0 && news <= 0) {
+        showError(
+          $("#toolbar-error"),
+          "Nothing to check in for this project. Modified checkouts and new files appear under New files."
+        );
+        return;
+      }
     }
     const queued = selected.filter((row) => row.classList.contains("queue-row"));
     const owned = selected.filter((row) => {

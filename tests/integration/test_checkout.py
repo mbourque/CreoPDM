@@ -314,6 +314,12 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert 'id="checkout-project-btn"' in home.text
     assert "Checkout selected" in home.text
     assert "Checkout project" in home.text
+    assert "data-checkoutable" in home.text
+    assert "setCheckoutableCount" in script.text
+    assert "Nothing left to check out in this project" in script.text
+    assert "count_checkoutable_for_project" in open(
+        "src/creopdm/services/checkout_service.py", encoding="utf-8"
+    ).read()
     assert 'id="checkin-menu-btn"' in home.text
     assert "Check In ▾" in home.text
     assert 'id="checkin-project-btn"' in home.text

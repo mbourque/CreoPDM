@@ -350,8 +350,8 @@
                 disabled
                 title="Check out the selected files and download them to the local workspace.">Checkout selected</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-project-btn"
-                {% if selected %}data-project="{{ selected.uuid }}"{% endif %}
-                {% if not selected %}disabled{% endif %}
+                {% if selected %}data-project="{{ selected.uuid }}" data-checkoutable="{{ checkoutable_count|default(0) }}"{% endif %}
+                {% if not selected or (checkoutable_count|default(0)) == 0 %}disabled{% endif %}
                 title="Check out every file in this project that is available (not locked by someone else).">Checkout project</button>
       </div>
     </div>
@@ -367,7 +367,7 @@
                 title="Check in selected files.">Check in selected</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-project-btn"
                 {% if selected %}data-project="{{ selected.uuid }}"{% endif %}
-                {% if not selected %}disabled{% endif %}
+                {% if not selected or ((pending_saves|default(0)) == 0 and (new_workspace_files|default(0)) == 0) %}disabled{% endif %}
                 title="Check in all modified checkouts and add new files in this project (full project check-in).">Check in project</button>
       </div>
     </div>

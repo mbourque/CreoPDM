@@ -275,6 +275,13 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "function beginCheckin" in script
     assert 'beginCheckin("project")' in script
     assert "function runCheckoutObjects" in script
+    assert "pendingProjectSaves" in script
+    assert "canCheckinProject = Boolean(projectId) && (pendingProjectSaves > 0 || pendingProjectNew > 0)" in script
+    assert "Nothing to check in for this project" in script
+    assert "data-checkoutable" in html
+    assert "setCheckoutableCount" in script
+    assert "canCheckoutProject" in script
+    assert "Nothing left to check out in this project" in script
     assert 'id="open-checkout-set-wd"' in base
     assert "Set Creo working directory" in base
     assert "open-checkout-set-wd" in script

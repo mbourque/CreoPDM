@@ -101,6 +101,20 @@ class CheckoutService:
         )
         return int(value or 0)
 
+    def count_checkoutable_for_project(self, session: Session, project_id: int) -> int:
+        """IN_WORK files with no active checkout — available for Checkout project."""
+        active = select(Checkout.object_id).where(Checkout.status == CheckoutStatus.ACTIVE.value)
+        value = session.scalar(
+            select(func.count())
+            .select_from(EngineeringObject)
+            .where(
+                EngineeringObject.project_id == project_id,
+                EngineeringObject.lifecycle_state == LifecycleState.IN_WORK.value,
+                EngineeringObject.id.not_in(active),
+            )
+        )
+        return int(value or 0)
+
     def describe(
         self,
         obj: EngineeringObject,

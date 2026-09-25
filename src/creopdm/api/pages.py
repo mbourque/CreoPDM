@@ -109,6 +109,7 @@ _PAGE_DEFAULTS = {
     "pending_saves": 0,
     "new_workspace_files": 0,
     "checkout_count": 0,
+    "checkoutable_count": 0,
     "checkin_queue": {"saves": [], "new_files": []},
     "local_time": format_local,
     "creo_label": "Not Connected",
@@ -309,11 +310,13 @@ def home(
     objects: list = []
     list_entries: list = []
     checkout_count = 0
+    checkoutable_count = 0
     pending_saves = 0
     new_workspace_files = 0
     if project is not None:
         objects, list_entries = _folder_page(ctx, db, project.id, current_folder)
         checkout_count = ctx.checkouts.count_for_project(db, project.id)
+        checkoutable_count = ctx.checkouts.count_checkoutable_for_project(db, project.id)
         known = ctx.objects.list_path_index(db, project.id)
         watch = ctx.workspaces.watch_stamp(project, known)
         pending_saves = int(watch.get("pending_saves") or 0)
@@ -347,6 +350,7 @@ def home(
             "type_label_settings": ctx.config.type_labels(),
             "checkin_queue": checkin_queue,
             "checkout_count": checkout_count,
+            "checkoutable_count": checkoutable_count,
             "pending_saves": pending_saves,
             "new_workspace_files": new_workspace_files,
             "workspace_path": str(ctx.workspaces.vault_for(selected)) if selected else None,
