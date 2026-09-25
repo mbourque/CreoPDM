@@ -163,6 +163,8 @@ def test_project_dialog_has_vault_folder_and_use_hash():
     assert "slugifyVaultFolder" in script
     assert "fillVaultFolderFromName" in script
     assert "body.vault_folder" in script
+    assert "Typing a custom name turns off Use hash" in script
+    assert "input.readOnly = true" not in script
     assert "Vault/workspace name cannot contain spaces" in script
     assert "getRandomValues" in script
     assert "proj-${" not in script

@@ -1446,27 +1446,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const input = $("#project-vault-folder");
     const useHash = $("#project-use-hash");
     if (!input || !useHash) return;
+    input.readOnly = false;
     if (resetHash || !projectVaultHash) projectVaultHash = newProjectVaultHash();
     if (useHash.checked) {
-      if (!input.readOnly) {
-        projectVaultCustom = String(input.value || "").trim();
-        projectVaultCustomTouched = Boolean(projectVaultCustom);
-      }
       input.value = projectVaultHash;
-      input.readOnly = true;
+    } else if (!projectVaultCustomTouched) {
+      fillVaultFolderFromName();
     } else {
-      input.readOnly = false;
-      if (!projectVaultCustomTouched) {
-        fillVaultFolderFromName();
-      } else {
-        input.value = projectVaultCustom || "";
-      }
-      input.focus();
+      input.value = projectVaultCustom || "";
     }
   }
 
   $("#project-use-hash")?.addEventListener("change", () => {
-    syncProjectVaultFolderField(false);
+    const useHash = $("#project-use-hash");
+    if (useHash?.checked) {
+      projectVaultCustomTouched = false;
+      syncProjectVaultFolderField(true);
+    } else {
+      syncProjectVaultFolderField(false);
+      $("#project-vault-folder")?.focus();
+      $("#project-vault-folder")?.select();
+    }
   });
 
   projectForm?.elements?.name?.addEventListener("input", () => {
@@ -1474,10 +1474,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
 
   $("#project-vault-folder")?.addEventListener("input", () => {
+    const input = $("#project-vault-folder");
     const useHash = $("#project-use-hash");
-    if (useHash?.checked) return;
+    const value = String(input?.value || "").trim();
+    // Typing a custom name turns off Use hash so Create keeps what they typed.
+    if (useHash?.checked && value !== projectVaultHash) {
+      useHash.checked = false;
+    }
     projectVaultCustomTouched = true;
-    projectVaultCustom = String($("#project-vault-folder")?.value || "").trim();
+    projectVaultCustom = value;
   });
 
   projectForm?.addEventListener("submit", async (event) => {
@@ -1493,7 +1498,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const useHash = Boolean($("#project-use-hash")?.checked);
       let vaultFolder = String(data.get("vault_folder") || "").trim();
       if (useHash) {
-        body.vault_folder = projectVaultHash || vaultFolder || newProjectVaultHash();
+        // Prefer the field value when it still matches the generated hash.
+        body.vault_folder =
+          vaultFolder && vaultFolder === projectVaultHash
+            ? vaultFolder
+            : projectVaultHash || vaultFolder || newProjectVaultHash();
       } else {
         if (!vaultFolder) vaultFolder = slugifyVaultFolder(body.name);
         if (!vaultFolder) {
