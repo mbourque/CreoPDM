@@ -379,7 +379,10 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function applyUndoCheckoutOnRows" in script.text
     assert "Paint before openModel" in script.text
     assert "window.location.assign(next)" in script.text
-    assert "if (!inCreoBrowser())" in script.text.split("function reloadPage(")[1].split("function reloadPageAfterDialog(")[0]
+    reload_body = script.text.split("function reloadPage(")[1].split("function reloadPageAfterDialog(")[0]
+    assert "isSoftNavUrl(next)" in reload_body
+    assert 'softNavigate(next, "replace")' in reload_body
+    assert "if (!inCreoBrowser())" in reload_body
     assert "checkout-companions" in script.text
     assert "Already mine — no checkout choice needed" in script.text
     assert "Check out this file and its companions" in home.text

@@ -268,6 +268,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const response = await fetch(absolute.href, {
         headers: { Accept: "text/html", "X-CreoPDM-Soft": "1" },
         credentials: "same-origin",
+        // After remove/add the prior GET is often still in the HTTP cache; without
+        // this, soft reload paints the deleted folder/file until a hard refresh.
+        cache: "no-store",
       });
       if (!response.ok) {
         window.location.href = absolute.href;
@@ -344,8 +347,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     params.set("r", String(Date.now()));
     const query = params.toString();
     const next = `${pathname}${query ? `?${query}` : ""}${hash}`;
-    // Normal browsers: assign works. Creo's embedded browser often ignores
-    // location.reload/assign — a GET form submit loads fresh HTML there.
+    // Soft-nav pages: fetch+swap (cache-busted, no-store) so Creo actually refreshes
+    // and Creo.JS stays alive. Hard assign/form is often ignored there, which left a
+    // stale Files table after Remove until the user hard-refreshed.
+    if (isSoftNavUrl(next)) {
+      void withBusy(busyMessage, () => softNavigate(next, "replace"));
+      return;
+    }
+    // Non-shell pages: normal browsers assign; Creo needs a GET form submit.
     if (!inCreoBrowser()) {
       window.location.assign(next);
       return;
@@ -6363,6 +6372,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         /* ignore */
       }
     });
+    // Keep the folder-view snapshot in sync. Clearing search calls showFolderView()
+    // which restores folderTbodyHtml — without this, a removed folder reappears.
+    if (objectTbody && objectTable?.dataset?.searching !== "1") {
+      folderTbodyHtml = objectTbody.innerHTML;
+    }
     refreshTabMetrics();
     syncToolbar();
   }

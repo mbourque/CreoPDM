@@ -86,6 +86,25 @@ def test_remove_from_project_sends_folder_paths():
     assert "canRemoveProject = ids.length > 0 || folderPaths.length > 0" in script
 
 
+def test_remove_rows_update_folder_tbody_cache_and_soft_reload():
+    """Regression: folder stayed visible after remove until hard refresh.
+
+    removeSelectedRowsFromDom must refresh folderTbodyHtml (showFolderView restores it),
+    and reloadPage must soft-nav with no-store so Creo gets fresh SSR.
+    """
+    script = _app_js()
+    remove_dom = _between(
+        script,
+        "function removeSelectedRowsFromDom(",
+        "function formatPurgeConfirmDetails(",
+    )
+    assert "folderTbodyHtml = objectTbody.innerHTML" in remove_dom
+    soft = _between(script, "function softNavigate(", "function leavePage(")
+    assert 'cache: "no-store"' in soft
+    reload = _between(script, "function reloadPage(", "function reloadPageAfterDialog(")
+    assert 'softNavigate(next, "replace")' in reload
+
+
 def test_choose_folder_uses_agent_before_browser_picker():
     """LAN http:// cannot use showDirectoryPicker; agent native folder pick must run first."""
     script = _app_js()
@@ -258,11 +277,18 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "Keep the live Creo.JS bridge" in soft_nav
     assert "softNavQueued" in soft_nav
     assert "isSoftNavUrl" in soft_nav
+    assert 'cache: "no-store"' in soft_nav
 
     leave = _between(script, "function leavePage(", "function reloadPage(")
     assert "isSoftNavUrl(url)" in leave
     assert "softNavigate" in leave
     assert "inCreoBrowser()" not in leave
+
+    # Soft reload after remove/add — hard assign is ignored in Creo and left a stale table.
+    reload = _between(script, "function reloadPage(", "function reloadPageAfterDialog(")
+    assert "isSoftNavUrl(next)" in reload
+    assert 'softNavigate(next, "replace")' in reload
+    assert "window.location.assign(next)" in reload
 
     # Any same-origin soft-nav <a href> (Settings pill, crumbs, folders, …).
     assert 'closest("a[href]")' in script
