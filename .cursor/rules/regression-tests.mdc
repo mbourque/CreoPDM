@@ -1,22 +1,24 @@
 ---
-description: When the user reports a regression, add a regression test if one does not already exist
+description: When the user finds a bug, create or update unit tests in the same change
 alwaysApply: true
 ---
 
-# Regression → regression test
+# Bug → unit test
 
-When the user reports a **regression** (something that used to work and broke, or a bug they found after a change):
+When the user reports a **bug** (including regressions, UI glitches, wrong data, or “it used to work”):
 
 1. **Fix the bug** (or confirm it is already fixed).
 2. **Search for an existing test** that would have failed on the broken behavior.
-3. If none exists, **add a regression test** in the same change (or immediately after the fix) that:
+3. **Create or update a unit test** in the same change (or immediately after the fix) that:
    - Fails on the broken behavior
    - Passes on the fixed behavior
    - Names or documents the failure mode briefly (comment or test name)
-4. Prefer the smallest layer that catches it (unit > integration). Do not skip the test because the fix “looks obvious.”
+4. Prefer the smallest layer that catches it (**unit > integration**). Do not skip the test because the fix “looks obvious.”
+5. Do **not** wait for the user to ask for a test — bug report implies test coverage.
 
 ## Examples that need a test
 
+- Soft folder/project nav re-probed Creo.JS → soft boot skips probe / pill stays outside shell
 - Nested folder add flattened subfolders → assert sibling subfolder relative paths
 - `app.js` syntax typo killed all clicks → `node --check` / bare-`if` guard
 - Choose Folder on LAN http skipped the agent → assert agent pick runs before browser fallback
