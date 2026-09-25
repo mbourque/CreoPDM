@@ -223,7 +223,7 @@ def test_get_and_update_settings(client, tmp_path):
     assert 'value="executable"' not in page.text
     headings = [
         "Open Creo models with",
-        "Workspace",
+        "Vault",
         "Creo Models",
         "Documents",
         "Creo-openable models",
@@ -233,9 +233,11 @@ def test_get_and_update_settings(client, tmp_path):
         "File type names",
         "Ignored files",
         "Network",
+        "Local Creo agent",
         "Database",
     ]
-    positions = [page.text.find(title) for title in headings]
+    # Match <h2> only — bare titles can appear earlier in help copy.
+    positions = [page.text.find(f"<h2>{title}</h2>") for title in headings]
     assert all(index >= 0 for index in positions)
     assert positions == sorted(positions)
     assert 'name="cad_models_extensions"' in page.text

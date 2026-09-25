@@ -251,3 +251,4 @@ On Windows, application data lives in `%LOCALAPPDATA%\CreoPDM\`. On Linux it liv
 ## Further reading
 
 - [Creo templates and libraries with CreoPDM](docs/creo-library-templates.md) — Library project, Samba share, and `config.pro` UNC paths
+- [Linux disk space email alerts](docs/linux-disk-alerts.md) — Hourly disk monitoring with Postfix on the CreoPDM host

@@ -655,6 +655,72 @@ def test_agent_push_uploads_latest_cache_file(tmp_path, monkeypatch):
         assert puts[0]["headers"].get("Authorization") == "Bearer tok"
 
 
+def test_agent_push_finds_newer_save_in_cache_subfolder(tmp_path, monkeypatch):
+    """Regression: nested vault folders materialize flat, but a save may land in a
+    subfolder; push must still find the highest .ext.N by logical name.
+    """
+    root = tmp_path / "cache"
+    project_id = "proj-nested-push"
+    cache = root / project_id
+    nested = cache / "Documents"
+    nested.mkdir(parents=True)
+    (nested / "shaft.prt.1").write_bytes(b"old")
+    (nested / "shaft.prt.2").write_bytes(b"nested-save")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), token="tok")
+    app = create_agent_app(settings)
+    puts: list[dict] = []
+
+    class FakeResponse:
+        def __init__(self, status_code: int = 200, payload: dict | None = None):
+            self.status_code = status_code
+            self._payload = payload or {}
+            self.text = ""
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def put(self, url, headers=None, files=None):
+            handle = files["file"][1]
+            body = handle.read()
+            puts.append({"filename": files["file"][0], "body": body})
+            return FakeResponse(
+                200,
+                {
+                    "ok": True,
+                    "object_id": "obj-1",
+                    "filename": files["file"][0],
+                    "path": "/vault/Documents/shaft.prt.2",
+                    "bytes_written": len(body),
+                },
+            )
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        response = client.post(
+            "/push",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "project_id": project_id,
+                "items": [{"object_id": "obj-1", "filename": "Documents/shaft.prt.1"}],
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert len(body["ok"]) == 1
+        assert body["ok"][0]["filename"] == "shaft.prt.2"
+        assert puts[0]["body"] == b"nested-save"
+
+
 def test_agent_push_uploads_latest_extra_cad_numbered_save(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     project_id = "proj-tph"

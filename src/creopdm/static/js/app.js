@@ -4438,24 +4438,51 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function newerLocalCacheSaves(cacheFiles, objects) {
+    // Agent cache is flat (basename only). Vault paths may be nested
+    // (Documents/part.prt.1); Creo then saves part.prt.2 at the cache root.
+    // Match full logical path first; fall back to unique logical basename.
     const bestByLogical = new Map();
+    const bestByBasename = new Map();
     (cacheFiles || []).forEach((item) => {
       const rel = String(item.relative_path || "").replace(/\\/g, "/");
       if (!rel) return;
       const key = logicalRelativePath(rel).toLowerCase();
       const filename = item.filename || PathBasename(rel);
       const saveNumber = creoSaveNumber(filename);
+      const base = logicalUploadName(filename).toLowerCase();
+      const entry = { item, rel, filename, saveNumber };
       const prev = bestByLogical.get(key);
       if (!prev || saveNumber > prev.saveNumber) {
-        bestByLogical.set(key, { item, rel, filename, saveNumber });
+        bestByLogical.set(key, entry);
       }
+      const prevBase = bestByBasename.get(base);
+      const flatter =
+        prevBase
+        && saveNumber === prevBase.saveNumber
+        && rel.split("/").length < prevBase.rel.split("/").length;
+      if (!prevBase || saveNumber > prevBase.saveNumber || flatter) {
+        bestByBasename.set(base, entry);
+      }
+    });
+    const vaultBasenameCounts = new Map();
+    (Array.isArray(objects) ? objects : []).forEach((obj) => {
+      const vaultRel = String(obj.relative_path || obj.filename || "").replace(/\\/g, "/");
+      if (!vaultRel) return;
+      const base = logicalUploadName(PathBasename(vaultRel)).toLowerCase();
+      vaultBasenameCounts.set(base, (vaultBasenameCounts.get(base) || 0) + 1);
     });
     const rows = [];
     (Array.isArray(objects) ? objects : []).forEach((obj) => {
       const vaultRel = String(obj.relative_path || obj.filename || "").replace(/\\/g, "/");
       if (!vaultRel) return;
       const key = logicalRelativePath(vaultRel).toLowerCase();
-      const local = bestByLogical.get(key);
+      let local = bestByLogical.get(key);
+      if (!local) {
+        const base = logicalUploadName(PathBasename(vaultRel)).toLowerCase();
+        if ((vaultBasenameCounts.get(base) || 0) === 1) {
+          local = bestByBasename.get(base);
+        }
+      }
       if (!local) return;
       const vaultNumber = creoSaveNumber(obj.filename || PathBasename(vaultRel));
       if (local.saveNumber <= vaultNumber) return;

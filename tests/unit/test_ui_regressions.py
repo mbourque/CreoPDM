@@ -237,3 +237,27 @@ def test_folder_row_click_selects_link_opens():
     css = APP_CSS.read_text(encoding="utf-8")
     assert "cursor: default" in css.split(".folder-row {", 1)[1].split("}", 1)[0]
     assert "width: fit-content" in css
+
+
+def test_newer_local_cache_matches_flat_save_for_nested_vault_path():
+    """Regression: agent cache is flat; vault may be Documents/part.prt.1 while Creo
+    saves part.prt.2 at the cache root — full-path-only matching hid Modified/Check In.
+    """
+    script = _app_js()
+    body = _between(script, "function newerLocalCacheSaves(", "async function countLocalNewWorkspaceFiles(")
+    assert "bestByBasename" in body
+    assert "vaultBasenameCounts" in body
+    assert "vaultBasenameCounts.get(base) || 0) === 1" in body
+    assert "Agent cache is flat" in body
+
+
+def test_newer_local_cache_matches_flat_save_for_nested_vault_path():
+    """Regression: agent cache is flat; vault may be Documents/part.prt.1 while Creo
+    saves part.prt.2 at the cache root — full-path-only matching hid Modified/Check In.
+    """
+    script = _app_js()
+    body = _between(script, "function newerLocalCacheSaves(", "async function countLocalNewWorkspaceFiles(")
+    assert "bestByBasename" in body
+    assert "vaultBasenameCounts" in body
+    assert "vaultBasenameCounts.get(base) || 0) === 1" in body
+    assert "Agent cache is flat" in body

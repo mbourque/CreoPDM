@@ -479,7 +479,11 @@ def _plan_cache_downloads(
 
 
 def _find_cache_file(cache_dir: Path, filename: str) -> Path | None:
-    """Latest Creo save (or exact name) for filename under the project cache folder."""
+    """Latest Creo save (or exact name) for filename under the project cache folder.
+
+    Searches the cache root first, then subfolders. Vault objects may live under
+    a nested relative path while the agent cache keeps a flat basename copy.
+    """
     from creopdm.creo.file_manager import CreoFileManager
 
     name = Path(filename or "").name.strip()
@@ -489,6 +493,22 @@ def _find_cache_file(cache_dir: Path, filename: str) -> Path | None:
     latest = CreoFileManager.latest_in_directory(cache_dir, name, None)
     if latest is not None and latest.is_file():
         return latest
+    wanted = CreoFileManager.logical_filename(name, None).lower()
+    matches: list[Path] = []
+    skip_dirs = {".git", ".creopdm", "__pycache__"}
+    for dirpath, dirnames, filenames in os.walk(cache_dir):
+        dirnames[:] = [item for item in dirnames if item.lower() not in skip_dirs]
+        folder = Path(dirpath)
+        if folder.resolve() == cache_dir.resolve():
+            continue
+        for entry in filenames:
+            if CreoFileManager.logical_filename(entry, None).lower() != wanted:
+                continue
+            path = folder / entry
+            if path.is_file():
+                matches.append(path)
+    if matches:
+        return CreoFileManager.select_latest_creo_version(matches, None) or matches[0]
     exact = cache_dir / name
     return exact if exact.is_file() else None
 
@@ -533,16 +553,20 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         project_id: str = "",
         folder: str = "",
         vault_folder: str = "",
+        *,
+        create: bool = True,
     ) -> Path:
         base = settings.ensure_dirs().resolve()
         key = _project_cache_key(project_id, vault_folder)
         target = base / key
-        target.mkdir(parents=True, exist_ok=True)
+        if create:
+            target.mkdir(parents=True, exist_ok=True)
+        target_resolved = target.resolve()
         rel = (folder or "").replace("\\", "/").strip().strip("/")
         if rel:
             candidate = (target / Path(rel)).resolve()
             try:
-                candidate.relative_to(target.resolve())
+                candidate.relative_to(target_resolved)
             except ValueError as exc:
                 raise HTTPException(
                     status_code=403,
@@ -550,7 +574,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 ) from exc
             if candidate.is_dir():
                 return candidate
-        return target.resolve()
+        return target_resolved
 
     @app.post("/open-folder", response_model=OpenFolderResponse)
     def open_folder(payload: OpenFolderRequest) -> OpenFolderResponse:
@@ -1247,7 +1271,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         vault_folder = (payload.vault_folder or "").strip()
         if not project_id and not vault_folder:
             raise HTTPException(status_code=400, detail="project_id or vault_folder is required.")
-        cache_dir = _project_cache_dir(project_id, vault_folder=vault_folder)
+        cache_dir = _project_cache_dir(project_id, vault_folder=vault_folder, create=False)
         root_resolved = settings.ensure_dirs().resolve()
         try:
             cache_dir.resolve().relative_to(root_resolved)
