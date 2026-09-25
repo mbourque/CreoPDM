@@ -699,25 +699,38 @@ class WorkspaceService:
         project: Project,
         source: Path,
         base_folder: Path | str | None = None,
+        parent_folder: str | None = None,
     ) -> str | None:
         """Workspace-relative path used when adding a file.
 
         Choose Folder keeps the chosen folder name as a group, including nested
-        files. Choose Files stores the file at the workspace root.
+        files. Choose Files stores the file at the workspace root (or under
+        parent_folder when the Files view is inside a subfolder).
         """
+        from creopdm.utils.folders import normalize_folder_query
+
         path = Path(source)
-        if not base_folder:
-            return None
-        base = Path(base_folder)
-        try:
-            rel = path.resolve().relative_to(base.resolve())
-        except ValueError:
-            return None
-        stored = CreoFileManager.canonical_repository_name(rel.name)
-        parent = rel.parent
-        if parent.as_posix() == ".":
-            return f"{base.name}/{stored}"
-        return (Path(base.name) / parent / stored).as_posix()
+        relative: str | None = None
+        if base_folder:
+            base = Path(base_folder)
+            try:
+                rel = path.resolve().relative_to(base.resolve())
+            except ValueError:
+                return None
+            stored = CreoFileManager.canonical_repository_name(rel.name)
+            parent = rel.parent
+            if parent.as_posix() == ".":
+                relative = f"{base.name}/{stored}"
+            else:
+                relative = (Path(base.name) / parent / stored).as_posix()
+        parent = normalize_folder_query(parent_folder)
+        if not parent:
+            return relative
+        if relative is None:
+            relative = CreoFileManager.canonical_repository_name(path.name)
+        if relative == parent or relative.startswith(f"{parent}/"):
+            return relative
+        return f"{parent}/{relative}"
 
     def list_untracked(
         self,

@@ -251,6 +251,8 @@ class ImportLocalRequest(BaseModel):
     recursive: bool = True
     comment: str | None = None
     base_folder: str | None = None
+    # Files view location — imported paths land under this vault folder.
+    parent_folder: str = ""
 
 
 class CreateFolderRequest(BaseModel):

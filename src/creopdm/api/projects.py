@@ -513,6 +513,7 @@ def import_from_disk(
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
     recursive = bool(payload.recursive)
+    parent_folder = (payload.parent_folder or "").strip()
     folder_paths: list[Path] = []
     if (payload.folder or "").strip():
         folder_paths.append(Path(payload.folder))
@@ -529,7 +530,7 @@ def import_from_disk(
         seen_folders.add(key)
         unique_folders.append(folder)
 
-    jobs: list[tuple[Path, str, str]] = []
+    jobs: list[tuple[Path, str, str | None]] = []
     missing: list[Path] = []
     if unique_folders:
         for folder in unique_folders:
@@ -549,7 +550,9 @@ def import_from_disk(
                     (
                         path,
                         path.name,
-                        ctx.workspaces.import_relative_path(project, path, base_folder),
+                        ctx.workspaces.import_relative_path(
+                            project, path, base_folder, parent_folder=parent_folder
+                        ),
                     )
                 )
         if not jobs:
@@ -576,7 +579,13 @@ def import_from_disk(
             if inferred is not None:
                 base_folder = str(inferred)
         jobs = [
-            (path, path.name, ctx.workspaces.import_relative_path(project, path, base_folder))
+            (
+                path,
+                path.name,
+                ctx.workspaces.import_relative_path(
+                    project, path, base_folder, parent_folder=parent_folder
+                ),
+            )
             for path in selected
         ]
     for path in missing:
@@ -676,6 +685,8 @@ async def import_from_uploads(
     rels = [str(item) for item in form.getlist("relative_paths")]
     comment_raw = form.get("comment")
     note = str(comment_raw).strip() if comment_raw not in (None, "") else None
+    parent_raw = form.get("parent_folder")
+    parent_folder = str(parent_raw or "").strip().replace("\\", "/").strip("/")
     project = ctx.projects.get_project(db, project_id)
     temps: list[Path] = []
     jobs: list[tuple[Path, str | None, str | None]] = []
@@ -728,6 +739,14 @@ async def import_from_uploads(
             temp_path = Path(handle.name)
             temps.append(temp_path)
             relative = rels[index] if index < len(rels) else None
+            if relative:
+                rel = str(relative).replace("\\", "/").lstrip("/")
+                if parent_folder and rel != parent_folder and not rel.startswith(f"{parent_folder}/"):
+                    relative = f"{parent_folder}/{rel}"
+                else:
+                    relative = rel
+            elif parent_folder:
+                relative = f"{parent_folder}/{filename}"
             jobs.append((temp_path, filename, relative or None))
         if jobs:
             for outcome in ctx.objects.import_files(db, project, jobs, note):

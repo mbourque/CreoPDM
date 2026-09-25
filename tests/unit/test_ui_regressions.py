@@ -109,6 +109,7 @@ def test_add_paths_sends_agent_base_folder():
     script = _app_js()
     assert "chosenAgentBaseFolder" in script
     assert "base_folder: baseFolder || \"\"" in script
+    assert "parent_folder: parentFolder" in script
     assert "applyAgentPickedPaths(paths, folder)" in script
 
 

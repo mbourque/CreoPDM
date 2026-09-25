@@ -459,6 +459,38 @@ def test_from_disk_folder_non_recursive_skips_nested(client, repo_parent, tmp_pa
 
 
 @requires_git
+def test_from_disk_folder_lands_under_current_parent_folder(client, repo_parent, tmp_path, data_dir):
+    """Regression: Add Folder while browsing a subfolder must nest under that location."""
+    project, _location = _create_project(client, repo_parent)
+    created = client.post(
+        f"/api/projects/{project['uuid']}/folders",
+        json={"name": "Incoming", "parent_folder": ""},
+    )
+    assert created.status_code == 201, created.text
+    root = tmp_path / "Kit"
+    root.mkdir()
+    (root / "top.prt").write_bytes(b"top")
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={
+            "folder": str(root),
+            "base_folder": str(root),
+            "recursive": False,
+            "parent_folder": "Incoming",
+            "comment": "Into Incoming",
+        },
+    )
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["failed"] == []
+    listing = {
+        item["filename"]: item["relative_path"]
+        for item in client.get(f"/api/projects/{project['uuid']}/objects").json()
+    }
+    assert listing == {"top.prt": "Incoming/Kit/top.prt"}
+    assert (data_dir / "vaults" / project["uuid"] / "Incoming" / "Kit" / "top.prt").read_bytes() == b"top"
+
+
+@requires_git
 def test_from_disk_folders_list_imports_each_tree(client, repo_parent, tmp_path, data_dir):
     """Add folders mode accepts multiple recursive folder roots."""
     project, _location = _create_project(client, repo_parent)

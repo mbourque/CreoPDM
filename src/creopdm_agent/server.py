@@ -201,6 +201,8 @@ class AddPathsRequest(BaseModel):
     comment: str | None = None
     # Folder pick: keep vault-relative paths under this directory.
     base_folder: str = ""
+    # Files view location on the PDM project — prefix vault paths with this.
+    parent_folder: str = ""
     # Browser batch progress (for logs only).
     client_offset: int = 0
     client_total: int = 0
@@ -1006,6 +1008,9 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 rel = f"{root.name}/{inner}" if root.name else inner
             else:
                 rel = path.name
+            parent = (payload.parent_folder or "").strip().replace("\\", "/").strip("/")
+            if parent and rel != parent and not rel.startswith(f"{parent}/"):
+                rel = f"{parent}/{rel}"
             jobs.append((open_path, rel))
         logger.info(
             "Agent add-paths: client %s–%s of %s; %s path(s) → %s job(s), %s failed before upload (base=%s)",

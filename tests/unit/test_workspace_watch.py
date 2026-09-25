@@ -93,3 +93,22 @@ def test_watch_stamp_changes_when_git_raw_changes():
     after = _watch(_status(untracked=["shaft.prt.2"], raw="?? shaft.prt.2"), known)
     assert after["stamp"] != before["stamp"]
     assert after["pending_saves"] == 1
+
+
+def test_import_relative_path_nests_under_parent_folder(tmp_path):
+    """Add Folder while in a Files subfolder must prefix with that location."""
+    service = WorkspaceService(_Config())
+    kit = tmp_path / "Kit"
+    kit.mkdir()
+    part = kit / "top.prt"
+    part.write_bytes(b"top")
+    project = SimpleNamespace(uuid="p1")
+    assert service.import_relative_path(project, part, kit) == "Kit/top.prt"
+    assert (
+        service.import_relative_path(project, part, kit, parent_folder="Incoming")
+        == "Incoming/Kit/top.prt"
+    )
+    assert (
+        service.import_relative_path(project, part, None, parent_folder="Incoming")
+        == "Incoming/top.prt"
+    )

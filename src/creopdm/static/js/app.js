@@ -2638,6 +2638,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const total = list.length;
         const chunkSize = 25;
         const combined = { ok: [], failed: [] };
+        const parentFolder = currentFolder() || "";
         const basenameOf = (path) => {
           const text = String(path || "");
           const parts = text.split(/[/\\]/);
@@ -2657,6 +2658,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
                 project_id: projectId,
                 absolute_paths: chunk,
                 base_folder: baseFolder || "",
+                parent_folder: parentFolder,
                 comment: offset === 0 ? commentOnce || null : null,
                 client_offset: offset,
                 client_total: total,
@@ -2733,12 +2735,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (chosenUploads.length) {
         const combined = { ok: [], failed: [] };
         const total = chosenUploads.length;
+        const parentFolder = currentFolder() || "";
         for (let offset = 0; offset < chosenUploads.length; offset += UPLOAD_CHUNK) {
           const chunk = chosenUploads.slice(offset, offset + UPLOAD_CHUNK);
           const done = Math.min(offset + chunk.length, total);
           setBusyMessage(`Adding files… ${done} of ${total}`);
           const data = new FormData();
           if (comment && offset === 0) data.append("comment", comment);
+          if (parentFolder) data.append("parent_folder", parentFolder);
           chunk.forEach((item) => {
             data.append("files", item.file, item.file.name);
             data.append("relative_paths", item.relativePath || item.file.name);
@@ -2757,11 +2761,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         return combined;
       }
+      const parentFolder = currentFolder() || "";
       let payload;
       if (chosenFolders.length) {
         payload = {
           folders: chosenFolders,
           recursive,
+          parent_folder: parentFolder || "",
           comment: comment || null,
         };
       } else if (chosenBaseFolder) {
@@ -2769,10 +2775,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           folder: chosenBaseFolder,
           base_folder: chosenBaseFolder,
           recursive,
+          parent_folder: parentFolder || "",
           comment: comment || null,
         };
       } else {
-        payload = { paths: chosenPaths, comment: comment || null };
+        payload = {
+          paths: chosenPaths,
+          parent_folder: parentFolder || "",
+          comment: comment || null,
+        };
       }
       const response = await fetch(`/api/projects/${projectId}/objects/from-disk`, {
         method: "POST",
