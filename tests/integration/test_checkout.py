@@ -362,7 +362,7 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "Open without checking out" in home.text
     assert 'link.className = "object-open"' in script.text
     assert "dataset.relativePath" in script.text
-    assert "Do not Activate the model window" in home.text
+    assert "do not Activate it" in home.text
     assert "collapses Creo's embedded browser" in home.text
     css = client.get("/static/css/app.css")
     assert css.status_code == 200
