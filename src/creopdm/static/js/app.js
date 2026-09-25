@@ -3741,7 +3741,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // Live PTC bridge — preferred over creojs.js's one-shot isAvailable flag.
       if (creoExternalBridge()) return true;
       if (typeof window.CreoJS.isAvailable === "function") {
-        return Boolean(window.CreoJS.isAvailable());
+        if (Boolean(window.CreoJS.isAvailable())) return true;
+      }
+      // Chromium Creo often omits external.ptc / isAvailable while the session is live.
+      try {
+        if (typeof pfcGetCurrentSession === "function" && pfcGetCurrentSession()) {
+          return true;
+        }
+      } catch {
+        /* not in a Creo session */
       }
       return false;
     } catch {
@@ -3755,17 +3763,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (typeof window.CreoJS.gatherModelMetadata !== "function") return false;
       // Require a real Creo.JS bridge — Embedded mode alone is not enough
       // (Chrome with settings=Embedded must not pretend to gather).
-      if (hostedCreoJS()) return true;
-      // Chromium Creo sometimes omits window.external.ptc / isAvailable while
-      // pfcGetCurrentSession is already live (same race as the status pill).
-      try {
-        if (typeof pfcGetCurrentSession === "function" && pfcGetCurrentSession()) {
-          return true;
-        }
-      } catch {
-        /* not in a Creo session */
-      }
-      return false;
+      return hostedCreoJS();
     } catch {
       return false;
     }
@@ -4003,6 +4001,31 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function showCreoSessionControls() {
     void refreshCreoStatusPill();
   }
+
+  function syncCreoSessionControlsFromBridge() {
+    /** Soft nav only: re-enable toolbar Creo buttons. Do not probe or touch the pill. */
+    const inSession = hostedCreoJS();
+    document.querySelectorAll(".creo-session-only").forEach((el) => {
+      el.hidden = false;
+      const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
+      if (!btn) return;
+      if (!inSession) {
+        btn.disabled = true;
+        return;
+      }
+      if (btn.id === "set-creo-dir-btn") {
+        btn.disabled = !btn.dataset.workspace;
+      } else {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  // Soft folder/project switches keep the live Creo.JS bridge and header status
+  // pill (both live outside main.shell). Never re-probe agent or reconnect.
+  if (soft) {
+    syncCreoSessionControlsFromBridge();
+  } else {
   void creoJSReady.then(() => {
     void (async () => {
       // CREOPDM_STATUS_POLL_V2: at most one /health on load; repeat only if agent says > 0.
@@ -4014,33 +4037,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       } else {
         await refreshCreoStatusPill(null);
       }
-      // Soft project switch: bridge already live — skip reconnect wait, keep status refresh.
-      if (!(soft && hostedCreoJS())) {
-        // Creo.JS bridge can appear after first paint — re-check a few times.
-        if (!hostedCreoJS()) {
-          let bridgeTries = 0;
-          const bridgePoll = trackedInterval(() => {
-            bridgeTries += 1;
-            if (hostedCreoJS() || bridgeTries >= 40) {
-              window.clearInterval(bridgePoll);
-              void refreshCreoStatusPill(agent);
-            }
-          }, 250);
-        }
+      // First load: Creo.JS bridge can appear after first paint — re-check a few times.
+      if (!hostedCreoJS()) {
+        let bridgeTries = 0;
+        const bridgePoll = trackedInterval(() => {
+          bridgeTries += 1;
+          if (hostedCreoJS() || bridgeTries >= 40) {
+            window.clearInterval(bridgePoll);
+            void refreshCreoStatusPill(agent);
+          }
+        }, 250);
       }
       let seconds = 0;
       if (agent && Object.prototype.hasOwnProperty.call(agent, "status_poll_interval_seconds")) {
         const parsed = Number(agent.status_poll_interval_seconds);
         seconds = Number.isFinite(parsed) ? parsed : 0;
       }
-      if (modeKey === "embedded" && seconds > 0) {
+      if (modeKey === "embedded" && seconds > 0 && !window.__creopdmStatusPollId) {
         const interval = Math.min(120000, Math.max(1000, Math.round(seconds * 1000)));
-        trackedInterval(() => {
+        // Survive soft folder/project boots (those abort pageIntervals).
+        window.__creopdmStatusPollId = window.setInterval(() => {
           void refreshCreoStatusPill();
         }, interval);
       }
     })();
   });
+  }
 
   async function agentWorkdir(projectId, vaultFolder) {
     const params = new URLSearchParams();

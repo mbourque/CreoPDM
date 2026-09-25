@@ -193,6 +193,21 @@ def test_soft_nav_does_not_silently_drop_when_busy():
     assert "window.__creopdmBoot({ soft: true })" in body
 
 
+def test_soft_nav_skips_creojs_reconnect():
+    """Folder/project soft nav must not re-probe Creo.JS or flash Session offline."""
+    script = _app_js()
+    assert "syncCreoSessionControlsFromBridge" in script
+    assert "Do not probe or touch the pill" in script
+    block = script.split("function showCreoSessionControls(")[1].split("async function agentWorkdir(")[0]
+    assert "if (soft)" in block
+    assert "syncCreoSessionControlsFromBridge()" in block
+    # Soft path must not call probeCreoAgent / bridge reconnect poll.
+    soft_branch = block.split("if (soft)")[1].split("} else {")[0]
+    assert "probeCreoAgent" not in soft_branch
+    assert "bridgePoll" not in soft_branch
+    assert "__creopdmStatusPollId" in block
+
+
 def test_new_project_and_sidebar_collapse_handlers_present():
     script = _app_js()
     assert '$("#new-project-btn")?.addEventListener("click"' in script
