@@ -471,6 +471,7 @@
             <th data-sort="size" aria-sort="none" title="Sort by size. Click again to reverse.">Size</th>
             <th data-sort="user" aria-sort="none" title="Sort by user. Click again to reverse.">User</th>
             <th data-sort="date" aria-sort="none" title="Sort by date. Click again to reverse.">Date</th>
+            <th data-sort="comment" aria-sort="none" title="Sort by check-in comment. Click again to reverse.">Comment</th>
           </tr>
         </thead>
         <tbody>
@@ -489,6 +490,7 @@
             <td>{{ workspace_pending.file_size | byte_size }}</td>
             <td>vault</td>
             <td>{{ workspace_pending.saved_at }}</td>
+            <td class="muted">Not checked in</td>
           </tr>
           {% endif %}
           {% for version in history %}
@@ -499,10 +501,11 @@
             <td>{{ version.file_size | byte_size }}</td>
             <td>{{ version.created_by }}</td>
             <td>{% if version.created_at %}{{ local_time(version.created_at) }}{% else %}—{% endif %}</td>
+            <td title="{{ version.comment or '' }}">{{ version.comment or "—" }}</td>
           </tr>
           {% else %}
           {% if not workspace_pending %}
-          <tr><td colspan="6">No file history yet.</td></tr>
+          <tr><td colspan="7">No file history yet.</td></tr>
           {% endif %}
           {% endfor %}
         </tbody>
@@ -541,7 +544,7 @@
             <td class="filename-cell">{% if not loop.last %}{{ version_file_label(version, history[loop.index0 + 1]) }}{% else %}{{ version_file_label(version) }}{% endif %}</td>
             <td>{{ version.created_by }}</td>
             <td>{% if version.created_at %}{{ local_time(version.created_at) }}{% else %}—{% endif %}</td>
-            <td>{{ version.comment }}</td>
+            <td title="{{ version.comment or '' }}">{{ version.comment or "—" }}</td>
           </tr>
           {% else %}
           {% if not workspace_pending %}

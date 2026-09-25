@@ -68,6 +68,9 @@ def test_import_creo_and_document_files(client, repo_parent, tmp_path):
     assert page.status_code == 200
     assert "File History" in page.text
     assert "shaft.prt.3" in page.text
+    # File History (default History subtab) shows check-in comments per revision.
+    assert 'data-sort="comment"' in page.text.split('id="subpanel-files"', 1)[1].split("subpanel-versions", 1)[0]
+    assert "Initial shaft" in page.text.split('id="subpanel-files"', 1)[1].split("subpanel-versions", 1)[0]
 
 
 @requires_git
