@@ -194,18 +194,44 @@ def test_soft_nav_does_not_silently_drop_when_busy():
 
 
 def test_soft_nav_skips_creojs_reconnect():
-    """Folder/project soft nav must not re-probe Creo.JS or flash Session offline."""
+    """Regression: folder/project soft nav used to re-probe Creo.JS and flash offline.
+
+    Soft switches only replace main.shell; the status pill and Creo.JS bridge live
+    outside it and must stay connected — including when changing projects.
+    """
     script = _app_js()
+    base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
+
+    # Pill / status cluster sit outside the soft-swapped shell.
+    assert 'id="creo-status"' in base
+    assert base.index("status-cluster") < base.index('<main class="shell">')
+    assert base.index('id="creo-status"') < base.index('<main class="shell">')
+
+    # Soft navigate rebinds UI only — never a full reload for list home URLs.
+    soft_nav = _between(script, "function softNavigate(", "function leavePage(")
+    assert "window.__creopdmBoot({ soft: true })" in soft_nav
+    assert "Keep the live Creo.JS bridge" in soft_nav
+
+    # Project, folder crumb, and brand clicks soft-navigate in Creo's browser.
+    assert "a.project-item, nav.folder-crumb a, a.brand" in script
+    assert 'softNavigate(href, "push")' in script
+
+    # Soft boot: toolbar sync only — no agent probe, no bridge reconnect poll.
     assert "syncCreoSessionControlsFromBridge" in script
     assert "Do not probe or touch the pill" in script
+    assert "Never re-probe agent or reconnect" in script
     block = script.split("function showCreoSessionControls(")[1].split("async function agentWorkdir(")[0]
     assert "if (soft)" in block
-    assert "syncCreoSessionControlsFromBridge()" in block
-    # Soft path must not call probeCreoAgent / bridge reconnect poll.
     soft_branch = block.split("if (soft)")[1].split("} else {")[0]
+    assert "syncCreoSessionControlsFromBridge()" in soft_branch
     assert "probeCreoAgent" not in soft_branch
     assert "bridgePoll" not in soft_branch
+    assert "refreshCreoStatusPill" not in soft_branch
+    assert "creoJSReady.then" not in soft_branch
+
+    # Status poll must survive soft boots (those abort pageIntervals).
     assert "__creopdmStatusPollId" in block
+    assert "Survive soft folder/project boots" in block
 
 
 def test_new_project_and_sidebar_collapse_handlers_present():
