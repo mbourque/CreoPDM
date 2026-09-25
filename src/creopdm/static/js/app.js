@@ -3478,7 +3478,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (checkoutMenuBtn.disabled) closeCheckoutMenu();
     }
     if (checkinBtn) {
-      checkinBtn.textContent = addOnly ? "Add selected" : "Check in selected";
+      checkinBtn.textContent = addOnly ? "Add selected…" : "Check in selected…";
       checkinBtn.disabled = !canCheckin;
       checkinBtn.title = addOnly
         ? "Add selected new files to the project (uploads local workspace files first)."

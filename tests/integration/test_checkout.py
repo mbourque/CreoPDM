@@ -326,8 +326,9 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert 'id="checkin-menu-btn"' in home.text
     assert "Check In ▾" in home.text
     assert 'id="checkin-project-btn"' in home.text
-    assert "Check in selected" in home.text
-    assert "Check in project" in home.text
+    assert ">Check in project…<" in home.text
+    assert ">Check in selected…<" in home.text
+    assert home.text.index('id="checkin-project-btn"') < home.text.index('id="checkin-btn"')
     assert "function beginCheckin" in script.text
     assert "function runCheckoutObjects" in script.text
     assert 'beginCheckin("project")' in script.text

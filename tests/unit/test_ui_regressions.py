@@ -54,14 +54,21 @@ def test_resolve_type_icon_if_conditions_use_parens():
 
 
 def test_add_toolbar_is_menu_with_modes():
-    """Add ▾ exposes files / folders / folder / Create folder like Checkout/Check In."""
+    """Add ▾: Create folder…, Add files…, Add folder…, Add folders…"""
     html = APP_HTML.read_text(encoding="utf-8")
     assert 'id="add-menu"' in html
     assert "Add ▾" in html
-    assert 'id="add-files-btn"' in html
-    assert 'id="add-folders-btn"' in html
-    assert 'id="add-folder-btn"' in html
     assert 'id="create-folder-btn"' in html
+    assert 'id="add-files-btn"' in html
+    assert 'id="add-folder-btn"' in html
+    assert 'id="add-folders-btn"' in html
+    assert html.index('id="create-folder-btn"') < html.index('id="add-files-btn"')
+    assert html.index('id="add-files-btn"') < html.index('id="add-folder-btn"')
+    assert html.index('id="add-folder-btn"') < html.index('id="add-folders-btn"')
+    assert ">Create folder…<" in html
+    assert ">Add files…<" in html
+    assert ">Add folder…<" in html
+    assert ">Add folders…<" in html
     assert 'id="create-folder-dialog"' in html
     script = _app_js()
     assert 'openAddDialog("files")' in script
@@ -334,7 +341,10 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert html.index('id="undo-btn"') < html.index('id="checkin-menu"')
     assert 'id="checkin-menu"' in html
     assert 'id="checkin-project-btn"' in html
-    assert "Check in project" in html
+    assert 'id="checkin-btn"' in html
+    assert html.index('id="checkin-project-btn"') < html.index('id="checkin-btn"')
+    assert ">Check in project…<" in html
+    assert ">Check in selected…<" in html
     assert "function beginCheckin" in script
     assert 'beginCheckin("project")' in script
     assert "function runCheckoutObjects" in script

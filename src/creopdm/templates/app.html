@@ -340,18 +340,18 @@
               {% if not selected %}disabled{% endif %}
               title="Add files or folders to this project, or create an empty folder.">Add ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="add-files-btn"
-                {% if not selected %}disabled{% endif %}
-                title="Pick files to copy into the vault.">Add files</button>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="add-folders-btn"
-                {% if not selected %}disabled{% endif %}
-                title="Pick one or more folders and import all nested files.">Add folders</button>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="add-folder-btn"
-                {% if not selected %}disabled{% endif %}
-                title="Pick a folder and import only its top-level files (not subfolders).">Add Folder</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="create-folder-btn"
                 {% if not selected %}disabled{% endif %}
-                title="Create an empty folder in the current project location.">Create folder</button>
+                title="Create an empty folder in the current project location.">Create folder…</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="add-files-btn"
+                {% if not selected %}disabled{% endif %}
+                title="Pick files to copy into the vault.">Add files…</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="add-folder-btn"
+                {% if not selected %}disabled{% endif %}
+                title="Pick a folder and import only its top-level files (not subfolders).">Add folder…</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="add-folders-btn"
+                {% if not selected %}disabled{% endif %}
+                title="Pick one or more folders and import all nested files.">Add folders…</button>
       </div>
     </div>
     <span class="toolbar-tip" title="Open this project's local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">
@@ -383,14 +383,14 @@
               {% if selected %}data-project="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
               title="Check in selected files, or everything pending in this project.">Check In ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-btn"
-                {% if selected %}data-project="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
-                disabled
-                title="Check in selected files.">Check in selected</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-project-btn"
                 {% if selected %}data-project="{{ selected.uuid }}" data-checkout-count="{{ checkout_count|default(0) }}"{% endif %}
                 {% if not selected or ((pending_saves|default(0)) == 0 and (new_workspace_files|default(0)) == 0 and (checkout_count|default(0)) == 0) %}disabled{% endif %}
-                title="Check in modified files and new files, and release unchanged checkouts so the project looks fully checked in.">Check in project</button>
+                title="Check in modified files and new files, and release unchanged checkouts so the project looks fully checked in.">Check in project…</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-btn"
+                {% if selected %}data-project="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
+                disabled
+                title="Check in selected files.">Check in selected…</button>
       </div>
     </div>
     <span class="toolbar-tip" title="Open version history and details for the selected file.">
