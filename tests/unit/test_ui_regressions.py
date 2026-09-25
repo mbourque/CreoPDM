@@ -71,6 +71,21 @@ def test_add_toolbar_is_menu_with_modes():
     assert "/api/projects/${projectId}/folders" in script or '/api/projects/${projectId}/folders' in script
 
 
+def test_remove_from_project_sends_folder_paths():
+    """Regression: Create/Add folder rows may lack data-object-ids; remove by path."""
+    script = _app_js()
+    assert "function selectedFolderPaths" in script
+    assert "folder_paths: folderPaths" in script
+    remove = _between(
+        script,
+        "removeBtn?.addEventListener(\"click\"",
+        "async function loadChangesTab",
+    )
+    assert "selectedFolderPaths()" in remove
+    assert "folder_paths" in remove
+    assert "canRemoveProject = ids.length > 0 || folderPaths.length > 0" in script
+
+
 def test_choose_folder_uses_agent_before_browser_picker():
     """LAN http:// cannot use showDirectoryPicker; agent native folder pick must run first."""
     script = _app_js()

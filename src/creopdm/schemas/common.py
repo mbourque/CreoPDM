@@ -295,6 +295,32 @@ class BatchObjectRequest(BaseModel):
     object_ids: list[str] = Field(min_length=1)
 
 
+class BatchRemoveRequest(BaseModel):
+    """Remove by object id and/or whole vault folder paths (descendants included)."""
+
+    object_ids: list[str] = Field(default_factory=list)
+    folder_paths: list[str] = Field(default_factory=list)
+    project_id: str | None = None
+
+    @model_validator(mode="after")
+    def require_remove_target(self) -> "BatchRemoveRequest":
+        ids = [str(item).strip() for item in (self.object_ids or []) if str(item or "").strip()]
+        folders = [
+            str(item).replace("\\", "/").strip().strip("/")
+            for item in (self.folder_paths or [])
+            if str(item or "").strip()
+        ]
+        project_id = (self.project_id or "").strip() or None
+        self.object_ids = ids
+        self.folder_paths = folders
+        self.project_id = project_id
+        if not ids and not folders:
+            raise ValueError("Choose files or a folder to remove.")
+        if folders and not project_id and not ids:
+            raise ValueError("Choose a project before removing folders.")
+        return self
+
+
 class AgentCacheManifestItem(BaseModel):
     """Vault file identity for agent-cache hit detection."""
 

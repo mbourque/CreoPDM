@@ -1127,6 +1127,24 @@ class ObjectService:
             )
         return files, folder_entries
 
+    def uuids_under_folder(
+        self,
+        session: Session,
+        project_id: int,
+        folder: str,
+    ) -> list[str]:
+        """All object UUIDs whose relative_path is under folder (inclusive prefix)."""
+        from creopdm.utils.folders import normalize_folder_query
+
+        current = normalize_folder_query(folder)
+        if not current:
+            return []
+        stmt = select(EngineeringObject.uuid).where(
+            EngineeringObject.project_id == project_id,
+            EngineeringObject.relative_path.startswith(f"{current}/"),
+        )
+        return [str(item) for item in session.scalars(stmt).all() if item]
+
     @staticmethod
     def _remove_copied_file(destination: Path) -> None:
         try:

@@ -168,6 +168,48 @@ class WorkspaceService:
         logger.info("Created project folder %s", relative)
         return relative
 
+    def remove_project_folder(
+        self,
+        project: Project,
+        folder: str,
+        user: UserIdentity,
+    ) -> str:
+        """Remove a vault folder tree (including .gitkeep) after its objects are gone."""
+        from creopdm.utils.folders import normalize_folder_query
+
+        relative = normalize_folder_query(folder)
+        if not relative:
+            raise PathValidationError("A folder path is required to remove a folder.")
+        relative = assert_safe_relative_path(relative).as_posix()
+        vault = self.vault_for(project)
+        target = ensure_within(vault, vault / relative)
+        if not target.exists():
+            return relative
+        tracked: list[str] = []
+        if target.is_file():
+            tracked.append(relative)
+            remove_file(target)
+        elif target.is_dir():
+            skip = _RESERVED_WORKSPACE_DIRS
+            for dirpath, dirnames, filenames in os.walk(target):
+                dirnames[:] = [name for name in dirnames if name.lower() not in skip]
+                rel_dir = Path(dirpath).resolve().relative_to(vault.resolve()).as_posix()
+                for name in filenames:
+                    rel = name if rel_dir == "." else f"{rel_dir}/{name}"
+                    tracked.append(rel.replace("\\", "/"))
+            remove_tree(target)
+        if tracked and self._git is not None and self._git.is_repository(vault):
+            try:
+                self._git.remove_files(vault, tracked, keep_working_copy=False)
+                status = self._git.status(vault)
+                if status.staged or status.unstaged:
+                    self._git.commit(vault, f"Remove folder {relative}", user)
+            except Exception:
+                logger.exception("Could not commit removal of folder %s", relative)
+                # Disk tree is already gone; avoid failing the whole remove.
+        logger.info("Removed project folder %s (%s tracked path(s))", relative, len(tracked))
+        return relative
+
     def list_immediate_vault_folders(
         self,
         project: Project,

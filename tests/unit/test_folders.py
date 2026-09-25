@@ -171,6 +171,21 @@ def test_folder_index_collects_descendant_object_ids():
     assert nested[0]["object_ids"] == ["pin-id"]
 
 
+def test_folder_index_reads_sqlalchemy_style_mapping():
+    """Regression: Row._mapping must still populate data-object-ids for Remove."""
+    row = SimpleNamespace(
+        _mapping={
+            "relative_path": "Incoming/Kit/top.prt",
+            "updated_at": None,
+            "uuid": "kit-file",
+        }
+    )
+    folders, files = folder_index([row], "")
+    assert files == []
+    assert folders[0]["name"] == "Incoming"
+    assert folders[0]["object_ids"] == ["kit-file"]
+
+
 def test_folder_index_folder_only_catalog_has_no_file_rows():
     rows = [(f"html_tutorials/page{index}.html", None) for index in range(6)]
     folders, files = folder_index(rows, "")

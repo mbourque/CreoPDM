@@ -1,5 +1,6 @@
 from creopdm.schemas.common import (
     BatchObjectRequest,
+    BatchRemoveRequest,
     CheckinPreviewResponse,
     CheckinRequest,
     CreoOpenRequest,
@@ -16,6 +17,7 @@ from creopdm.schemas.common import (
 
 __all__ = [
     "BatchObjectRequest",
+    "BatchRemoveRequest",
     "CreoStatusResponse",
     "ErrorResponse",
     "HealthResponse",

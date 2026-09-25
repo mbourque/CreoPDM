@@ -120,11 +120,29 @@ def folder_index(rows: list[tuple[str, Any]], current: str = "") -> tuple[list[d
     prefix = f"{current}/" if current else ""
     folders: dict[str, dict[str, Any]] = {}
     files: list[str] = []
+
+    def row_parts(row: Any) -> tuple[str, Any, str]:
+        if row is None:
+            return "", None, ""
+        mapping = getattr(row, "_mapping", None)
+        if mapping is not None:
+            relative = mapping.get("relative_path", mapping.get(0, ""))
+            updated = mapping.get("updated_at", mapping.get(1))
+            raw_uuid = mapping.get("uuid", mapping.get(2, ""))
+            return str(relative or ""), updated, str(raw_uuid or "")
+        try:
+            relative = row[0]
+            updated = row[1] if len(row) > 1 else None
+            raw_uuid = row[2] if len(row) > 2 else ""
+        except Exception:
+            relative = getattr(row, "relative_path", "")
+            updated = getattr(row, "updated_at", None)
+            raw_uuid = getattr(row, "uuid", "")
+        return str(relative or ""), updated, str(raw_uuid or "")
+
     for row in rows:
-        relative = row[0] if row else ""
-        updated = row[1] if len(row) > 1 else None
-        uuid = str(row[2]) if len(row) > 2 and row[2] else ""
-        rel = str(relative or "").replace("\\", "/")
+        relative, updated, uuid = row_parts(row)
+        rel = relative.replace("\\", "/")
         if prefix:
             if not rel.startswith(prefix):
                 continue

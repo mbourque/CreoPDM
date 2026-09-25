@@ -488,6 +488,56 @@ def test_from_disk_folder_lands_under_current_parent_folder(client, repo_parent,
     }
     assert listing == {"top.prt": "Incoming/Kit/top.prt"}
     assert (data_dir / "vaults" / project["uuid"] / "Incoming" / "Kit" / "top.prt").read_bytes() == b"top"
+    page = client.get(f"/?project={project['uuid']}")
+    assert page.status_code == 200, page.text
+    assert 'data-folder="Incoming"' in page.text
+    # Folder rows must expose descendant object ids for Remove from Project.
+    assert "data-object-ids=" in page.text
+    incoming_chunk = page.text.split('data-folder="Incoming"', 1)[1].split("</tr>", 1)[0]
+    assert "data-object-ids=" in incoming_chunk
+    assert incoming_chunk.split('data-object-ids="', 1)[1].split('"', 1)[0]
+
+
+@requires_git
+def test_batch_remove_by_folder_path_removes_created_and_uploaded(client, repo_parent, tmp_path, data_dir):
+    """Regression: Create folder / Add Folder selection must remove via folder_paths."""
+    project, _location = _create_project(client, repo_parent)
+    assert (
+        client.post(
+            f"/api/projects/{project['uuid']}/folders",
+            json={"name": "EmptyBox", "parent_folder": ""},
+        ).status_code
+        == 201
+    )
+    kit = tmp_path / "Kit"
+    kit.mkdir()
+    (kit / "top.prt").write_bytes(b"top")
+    added = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={
+            "folder": str(kit),
+            "base_folder": str(kit),
+            "recursive": False,
+            "comment": "Uploaded folder",
+        },
+    )
+    assert added.status_code == 200, added.text
+    vault = data_dir / "vaults" / project["uuid"]
+    assert (vault / "EmptyBox" / ".gitkeep").is_file()
+    assert (vault / "Kit" / "top.prt").is_file()
+    removed = client.post(
+        "/api/objects/batch/remove",
+        json={
+            "object_ids": [],
+            "folder_paths": ["EmptyBox", "Kit"],
+            "project_id": project["uuid"],
+        },
+    )
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["failed"] == []
+    assert client.get(f"/api/projects/{project['uuid']}/objects").json() == []
+    assert not (vault / "EmptyBox").exists()
+    assert not (vault / "Kit").exists()
 
 
 @requires_git

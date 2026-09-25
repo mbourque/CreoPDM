@@ -3230,6 +3230,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return row.dataset.uuid ? [row.dataset.uuid] : [];
   }
 
+  function selectedFolderPaths() {
+    return [
+      ...new Set(
+        selectedRows()
+          .filter((row) => row.classList.contains("folder-row"))
+          .map((row) => String(row.dataset.folder || "").trim())
+          .filter(Boolean)
+      ),
+    ];
+  }
+
   function selectedRows() {
     const picked = rows().filter((row) => row.classList.contains("is-selected") && !rowIsHidden(row));
     if (picked.length) return picked;
@@ -3491,7 +3502,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const canPurge =
       vaultNewSelected.length > 0 ||
       selected.some((row) => row.dataset.uuid && row.dataset.inWorkspace !== "0");
-    const canRemoveProject = ids.length > 0;
+    const folderPaths = selectedFolderPaths();
+    const canRemoveProject = ids.length > 0 || folderPaths.length > 0;
     const canPurgeVersions = Boolean(
       purgeVersionsBtn?.dataset.project || openWorkspaceBtn?.dataset.project || checkinBtn?.dataset.project
     );
@@ -6329,6 +6341,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       addSeed(row?.dataset?.relativePath);
       addSeed(row?.dataset?.sortName);
       addSeed(row?.dataset?.filename);
+      if (row?.classList?.contains("folder-row")) {
+        addSeed(row.dataset.folder);
+      }
     });
     if (!seeds.size && removeBtn) {
       addSeed(removeBtn.dataset.relativePath);
@@ -6700,8 +6715,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   removeBtn?.addEventListener("click", async () => {
     const ids = selectedIds();
-    if (!ids.length) return;
-    if (!confirmLargeBulk("Remove", ids.length)) return;
+    const folderPaths = selectedFolderPaths();
+    if (!ids.length && !folderPaths.length) return;
+    const removeCount = Math.max(ids.length, folderPaths.length);
+    if (!confirmLargeBulk("Remove", removeCount)) return;
     const selected = selectedRows();
     const projectId =
       removeBtn.dataset.project
@@ -6709,12 +6726,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       || openWorkspaceBtn?.dataset.project
       || currentProjectId();
     const confirmed = await confirmByProjectName({
-      title: ids.length === 1 ? "Remove from project" : `Remove ${ids.length} files from project`,
+      title:
+        folderPaths.length && !ids.length
+          ? folderPaths.length === 1
+            ? "Remove folder from project"
+            : `Remove ${folderPaths.length} folders from project`
+          : ids.length === 1
+            ? "Remove from project"
+            : `Remove ${ids.length} files from project`,
       lead:
-        ids.length === 1
-          ? "CreoPDM vault copies are deleted. The original in your project folder is not deleted."
-          : "CreoPDM vault copies are deleted. Originals in your project folder are not deleted.",
-      note: "The file is removed from this project list. This cannot be undone from CreoPDM.",
+        folderPaths.length
+          ? "CreoPDM vault copies under the selected folder(s) are deleted. Originals in your project folder are not deleted."
+          : ids.length === 1
+            ? "CreoPDM vault copies are deleted. The original in your project folder is not deleted."
+            : "CreoPDM vault copies are deleted. Originals in your project folder are not deleted.",
+      note: "Removed from this project list. This cannot be undone from CreoPDM.",
       submitLabel: "Remove from Project",
       workspaceOption: true,
     });
@@ -6724,7 +6750,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       ? workspacePathsForRemovedObjects(projectId, selected)
       : [];
     removeSelectedRowsFromDom(selected);
-    if (ids.length === 1 && !isListPage) {
+    if (ids.length === 1 && !folderPaths.length && !isListPage) {
       const result = await postAction(`/api/objects/${ids[0]}`, null, "DELETE", "Removing from project…");
       if (!result) {
         reloadPage({ keepBusy: true });
@@ -6738,10 +6764,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     const result = await postAction(
       "/api/objects/batch/remove",
-      { object_ids: ids },
+      {
+        object_ids: ids,
+        folder_paths: folderPaths,
+        project_id: projectId || null,
+      },
       "POST",
-      ids.length > 100
-        ? `Removing ${ids.length} files from project…`
+      removeCount > 100
+        ? `Removing ${removeCount} items from project…`
         : "Removing from project…"
     );
     if (!result) {
@@ -6754,8 +6784,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       deleteLocalWorkspacePathsBackground(projectId, workspacePaths);
       if (!warning) {
         showOk(
-          `${result.ok.length} file(s) removed from the project. Local workspace cleanup continues in the background.`
+          `${result.ok.length} item(s) removed from the project. Local workspace cleanup continues in the background.`
         );
+      }
+    } else if (result.ok?.length && !warning) {
+      const files = (result.ok || []).filter((item) => item.status === "removed").length;
+      const folders = (result.ok || []).filter((item) => item.status === "folder_removed").length;
+      if (folders && !files) {
+        showOk(folders === 1 ? "Folder removed from the project." : `${folders} folders removed.`);
+      } else if (folders) {
+        showOk(`${files} file(s) and ${folders} folder(s) removed from the project.`);
+      } else {
+        showOk(`${files} file(s) removed from the project.`);
       }
     }
     if (result.ok?.length) reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });

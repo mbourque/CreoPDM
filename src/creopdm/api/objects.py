@@ -18,6 +18,7 @@ from creopdm.logging_setup import get_logger
 from creopdm.schemas.common import (
     BatchItemResult,
     BatchObjectRequest,
+    BatchRemoveRequest,
     BatchOperationResponse,
     CreoMetadataRequest,
     CreoMetadataResponse,
@@ -153,16 +154,34 @@ def purge_workspace_batch(
 
 @router.post("/api/objects/batch/remove", response_model=BatchOperationResponse)
 def remove_batch(
-    payload: BatchObjectRequest,
+    payload: BatchRemoveRequest,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
-    requested = list(dict.fromkeys(payload.object_ids))
-    found = ctx.objects.get_objects(db, requested)
+    folder_paths = list(payload.folder_paths or [])
+    requested = list(dict.fromkeys(payload.object_ids or []))
+    project = None
+    project_id = (payload.project_id or "").strip()
+    if project_id:
+        project = ctx.projects.get_project(db, project_id)
+    if folder_paths:
+        if project is None and requested:
+            found_hint = ctx.objects.get_objects(db, requested[:1])
+            if found_hint:
+                project = found_hint[0].project
+        if project is None:
+            raise ValidationAppError(
+                "Choose a project before removing folders.",
+                details={"folder_paths": folder_paths},
+            )
+        for folder in folder_paths:
+            requested.extend(ctx.objects.uuids_under_folder(db, project.id, folder))
+        requested = list(dict.fromkeys(requested))
+    found = ctx.objects.get_objects(db, requested) if requested else []
     by_uuid = {obj.uuid: obj for obj in found}
-    checkouts = ctx.checkouts.active_map(db, [obj.id for obj in found])
+    checkouts = ctx.checkouts.active_map(db, [obj.id for obj in found]) if found else {}
     user = ctx.users.get_current_user()
     to_remove: list = []
     for object_uuid in requested:
@@ -208,6 +227,27 @@ def remove_batch(
                     BatchItemResult(
                         uuid=item["uuid"],
                         filename=item["filename"],
+                        code=exc.code,
+                        message=exc.message,
+                    )
+                )
+    # Drop empty Create-folder trees (.gitkeep) and leftover vault dirs for selected folders.
+    if folder_paths and project is not None and not failed:
+        for folder in folder_paths:
+            try:
+                ctx.workspaces.remove_project_folder(project, folder, user)
+                ok.append(
+                    BatchItemResult(
+                        uuid="",
+                        filename=folder,
+                        status="folder_removed",
+                    )
+                )
+            except CreoPDMError as exc:
+                failed.append(
+                    BatchItemResult(
+                        uuid="",
+                        filename=folder,
                         code=exc.code,
                         message=exc.message,
                     )
