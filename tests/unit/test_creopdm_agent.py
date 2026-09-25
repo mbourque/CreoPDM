@@ -1066,6 +1066,35 @@ def test_agent_purge_versions_deletes_only_older_than_vault_floor(tmp_path):
         assert (cache / "shaft.prt.3").is_file()
 
 
+def test_agent_purge_versions_flat_cache_for_nested_vault_floor(tmp_path):
+    """Regression: nested vault floor must purge older saves at the flat cache root."""
+    root = tmp_path / "cache"
+    project_id = "proj-purge-flat"
+    cache = root / project_id
+    cache.mkdir(parents=True)
+    (cache / "shaft.prt.1").write_bytes(b"1")
+    (cache / "shaft.prt.2").write_bytes(b"2")
+    (cache / "shaft.prt.3").write_bytes(b"3")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    with TestClient(app) as client:
+        response = client.post(
+            "/purge-versions",
+            json={
+                "project_id": project_id,
+                "model_extensions": [".prt", ".asm", ".drw"],
+                "floors": [{"logical_path": "Documents/shaft.prt", "min_keep": 3}],
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["deleted"] == 2
+        assert {item["filename"] for item in body["ok"]} == {"shaft.prt.1", "shaft.prt.2"}
+        assert (cache / "shaft.prt.3").is_file()
+        assert not (cache / "shaft.prt.1").exists()
+        assert not (cache / "shaft.prt.2").exists()
+
+
 def test_agent_purge_versions_dry_run_lists_without_deleting(tmp_path):
     root = tmp_path / "cache"
     project_id = "proj-purge-dry"

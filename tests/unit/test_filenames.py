@@ -297,12 +297,41 @@ def test_paths_older_than_vault_floors_respects_floor_and_ignores_untracked(tmp_
     )
     relative = [path.relative_to(root).as_posix() for path in obsolete]
     assert relative == ["shaft.prt", "shaft.prt.1", "shaft.prt.2", "sub/pin.prt.1"]
+
+
+def test_paths_older_than_vault_floors_flat_cache_for_nested_vault_path(tmp_path):
+    """Regression: vault Documents/shaft.prt.3, agent cache has flat shaft.prt.1/.2/.3."""
+    root = tmp_path / "cache"
+    root.mkdir()
+    (root / "shaft.prt.1").write_bytes(b"1")
+    (root / "shaft.prt.2").write_bytes(b"2")
+    (root / "shaft.prt.3").write_bytes(b"3")
+    (root / "shaft.prt.4").write_bytes(b"4")
+    (root / "other.prt.1").write_bytes(b"other")
+    obsolete = CreoFileManager.paths_older_than_vault_floors(
+        root,
+        [("Documents/shaft.prt", 3)],
+    )
+    relative = [path.relative_to(root).as_posix() for path in obsolete]
+    assert relative == ["shaft.prt.1", "shaft.prt.2"]
     assert (root / "shaft.prt.3").is_file()
     assert (root / "shaft.prt.4").is_file()
-    assert (root / "shaft.prt.10").is_file()
-    assert (root / "orphan.prt.1").is_file()
-    assert (nested / "pin.prt.2").is_file()
-    assert (nested / "notes.txt").is_file()
+    assert (root / "other.prt.1").is_file()
+
+
+def test_paths_older_than_vault_floors_skips_flat_fallback_when_basename_ambiguous(tmp_path):
+    """Two nested vault objects share a basename — do not purge a flat root sibling."""
+    root = tmp_path / "cache"
+    root.mkdir()
+    (root / "pin.prt.1").write_bytes(b"flat")
+    obsolete = CreoFileManager.paths_older_than_vault_floors(
+        root,
+        [
+            ("Incoming/pin.prt", 2),
+            ("Library/pin.prt", 5),
+        ],
+    )
+    assert obsolete == []
 
 
 def test_latest_numbered_extra_cad_in_directory(tmp_path):

@@ -409,12 +409,17 @@ class CreoFileManager:
 
         Only siblings of listed logical relative paths are considered. Floors with
         ``min_keep <= 0`` are skipped. Non-matching / untracked files are untouched.
+
+        The agent cache is usually flat (basename only) while vault objects may be
+        nested (``Documents/part.prt``). When a nested parent folder is missing —
+        or when the logical basename is unique among floors — also scan the cache
+        root so older ``part.prt.N`` saves are still purged.
         """
         folder = Path(root)
         if not folder.is_dir():
             return []
-        obsolete: list[Path] = []
-        seen: set[str] = set()
+        parsed: list[tuple[str, int, Path]] = []
+        basename_counts: dict[str, int] = {}
         for raw_logical, min_keep in floors:
             floor = int(min_keep or 0)
             if floor <= 0:
@@ -423,24 +428,43 @@ class CreoFileManager:
             if not logical_rel or ".." in logical_rel.split("/"):
                 continue
             logical_path = Path(logical_rel)
-            parent = folder / logical_path.parent
-            if not parent.is_dir():
-                continue
             wanted = cls.logical_filename(logical_path.name, model_extensions).lower()
-            for child in parent.iterdir():
-                if not child.is_file():
-                    continue
-                if not cls.is_cad_save_family(child.name, model_extensions):
-                    continue
-                if cls.logical_filename(child.name, model_extensions).lower() != wanted:
-                    continue
-                if cls.save_number(child.name, model_extensions) >= floor:
-                    continue
-                ident = os.path.normcase(os.path.abspath(child))
-                if ident in seen:
-                    continue
-                seen.add(ident)
-                obsolete.append(child)
+            if not wanted:
+                continue
+            parsed.append((logical_rel, floor, logical_path))
+            basename_counts[wanted] = basename_counts.get(wanted, 0) + 1
+
+        obsolete: list[Path] = []
+        seen: set[str] = set()
+        folder_resolved = folder.resolve()
+        for _logical_rel, floor, logical_path in parsed:
+            wanted = cls.logical_filename(logical_path.name, model_extensions).lower()
+            parents: list[Path] = []
+            nested_parent = folder / logical_path.parent
+            if nested_parent.is_dir():
+                parents.append(nested_parent)
+            # Flat agent cache: Documents/shaft.prt → shaft.prt.1 at cache root.
+            nested = logical_path.parent.as_posix() not in ("", ".")
+            if nested and basename_counts.get(wanted, 0) == 1 and folder.is_dir():
+                if not any(parent.resolve() == folder_resolved for parent in parents):
+                    parents.append(folder)
+            if not parents:
+                continue
+            for parent in parents:
+                for child in parent.iterdir():
+                    if not child.is_file():
+                        continue
+                    if not cls.is_cad_save_family(child.name, model_extensions):
+                        continue
+                    if cls.logical_filename(child.name, model_extensions).lower() != wanted:
+                        continue
+                    if cls.save_number(child.name, model_extensions) >= floor:
+                        continue
+                    ident = os.path.normcase(os.path.abspath(child))
+                    if ident in seen:
+                        continue
+                    seen.add(ident)
+                    obsolete.append(child)
         obsolete.sort(
             key=lambda path: (
                 path.parent.as_posix().lower(),
