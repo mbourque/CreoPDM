@@ -522,7 +522,7 @@ DEFAULT_OPENABLE_CAD_EXTENSIONS = (
     ".lst",
 )
 
-# Local agent-cache Purge workspace: only these extensions get vault floors.
+# Numbered .ext.N saves: omit older on Add; Purge workspace uses the same list.
 DEFAULT_PURGEABLE_EXTENSIONS = (
     ".asm",
     ".dat",

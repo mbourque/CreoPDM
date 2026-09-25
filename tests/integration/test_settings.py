@@ -229,7 +229,7 @@ def test_get_and_update_settings(client, tmp_path):
         "Creo-openable models",
         "Text files",
         "Non openable CAD data",
-        "Purge workspace",
+        "Numbered saves",
         "File type names",
         "Ignored files",
         "Network",
