@@ -1426,8 +1426,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function slugifyVaultFolder(name) {
     const slug = String(name || "")
       .trim()
+      .toLowerCase()
       .replace(/\s+/g, "-")
-      .replace(/[^A-Za-z0-9._-]+/g, "-")
+      .replace(/[^a-z0-9._-]+/g, "-")
       .replace(/-+/g, "-")
       .replace(/^[-.]+|[-.]+$/g, "");
     return slug.slice(0, 200);
@@ -1500,9 +1501,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (useHash) {
         body.vault_folder = projectVaultHash || newProjectVaultHash();
       } else {
-        if (!vaultFolder) vaultFolder = slugifyVaultFolder(body.name);
+        // Custom vault name must be provided (not blank).
         if (!vaultFolder) {
           showError($("#project-error"), "Enter a vault/workspace name, or check Use hash.");
+          $("#project-vault-folder")?.focus();
           return;
         }
         if (/\s/.test(vaultFolder)) {
