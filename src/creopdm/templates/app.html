@@ -369,9 +369,9 @@
                 disabled
                 title="Check in selected files.">Check in selected</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-project-btn"
-                {% if selected %}data-project="{{ selected.uuid }}"{% endif %}
-                {% if not selected or ((pending_saves|default(0)) == 0 and (new_workspace_files|default(0)) == 0) %}disabled{% endif %}
-                title="Check in all modified checkouts and add new files in this project (full project check-in).">Check in project</button>
+                {% if selected %}data-project="{{ selected.uuid }}" data-checkout-count="{{ checkout_count|default(0) }}"{% endif %}
+                {% if not selected or ((pending_saves|default(0)) == 0 and (new_workspace_files|default(0)) == 0 and (checkout_count|default(0)) == 0) %}disabled{% endif %}
+                title="Check in modified files and new files, and release unchanged checkouts so the project looks fully checked in.">Check in project</button>
       </div>
     </div>
     <span class="toolbar-tip" title="Open version history and details for the selected file.">

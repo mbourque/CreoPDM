@@ -279,7 +279,8 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert 'beginCheckin("project")' in script
     assert "function runCheckoutObjects" in script
     assert "pendingProjectSaves" in script
-    assert "canCheckinProject = Boolean(projectId) && (pendingProjectSaves > 0 || pendingProjectNew > 0)" in script
+    assert "projectCheckoutCount" in script
+    assert "pendingProjectSaves > 0 || pendingProjectNew > 0 || projectCheckoutCount > 0" in script
     assert "Nothing to check in for this project" in script
     assert "data-checkoutable" in html
     assert "setCheckoutableCount" in script
@@ -288,6 +289,9 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "pushLocalNewPathsToVault" in script
     assert "localOnlyCacheFiles" in _between(script, "async function beginCheckin(", "$(\"#checkin-cancel\")")
     assert "Preview is vault-only" in script
+    assert "undoIds" in script
+    assert "Releasing unchanged checkouts" in script
+    assert "Undo checkout on" in script
     assert 'id="open-checkout-set-wd"' in base
     assert "Set Creo working directory" in base
     assert "open-checkout-set-wd" in script

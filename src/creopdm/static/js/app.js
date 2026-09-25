@@ -3200,8 +3200,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const pendingProjectNew = Number(
       checkinBtn?.dataset.newFiles || checkinMenuBtn?.dataset.newFiles || 0
     );
-    // Project check-in only when there is queue work (modified checkouts and/or new files).
-    const canCheckinProject = Boolean(projectId) && (pendingProjectSaves > 0 || pendingProjectNew > 0);
+    const projectCheckoutCount = Number(
+      checkinProjectBtn?.dataset.checkoutCount || checkinMenuBtn?.dataset.checkoutCount || 0
+    );
+    // Project check-in when there is queue work and/or active checkouts to release.
+    const canCheckinProject =
+      Boolean(projectId) &&
+      (pendingProjectSaves > 0 || pendingProjectNew > 0 || projectCheckoutCount > 0);
     if (checkoutBtn) checkoutBtn.disabled = !canCheckout;
     if (checkoutProjectBtn) {
       checkoutProjectBtn.disabled = !canCheckoutProject;
@@ -3228,7 +3233,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (checkinProjectBtn) {
       checkinProjectBtn.disabled = !canCheckinProject;
       checkinProjectBtn.title = canCheckinProject
-        ? "Check in all modified checkouts and add new files in this project (full project check-in)."
+        ? "Check in modified files and new files, and release unchanged checkouts so the project looks fully checked in."
         : "Nothing to check in for this project. Check out and save changes, or add new files first.";
     }
     if (checkinMenuBtn) {
@@ -3292,6 +3297,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!tab) return;
     const n = Number(count) || 0;
     tab.textContent = n ? `Files checked out · ${n}` : "Files checked out";
+    if (checkinProjectBtn) checkinProjectBtn.dataset.checkoutCount = String(n);
+    if (checkinMenuBtn) checkinMenuBtn.dataset.checkoutCount = String(n);
   }
 
   function setCheckoutableCount(count) {
@@ -5331,7 +5338,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         checkinBtn?.dataset.pendingSaves || checkinMenuBtn?.dataset.pendingSaves || 0
       );
       const news = Number(checkinBtn?.dataset.newFiles || checkinMenuBtn?.dataset.newFiles || 0);
-      if (pending <= 0 && news <= 0) {
+      const checkouts = Number(
+        checkinProjectBtn?.dataset.checkoutCount || checkinMenuBtn?.dataset.checkoutCount || 0
+      );
+      if (pending <= 0 && news <= 0 && checkouts <= 0) {
         showError(
           $("#toolbar-error"),
           "Nothing to check in for this project. Modified checkouts and new files appear under New files."
@@ -5513,6 +5523,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (objectValue) objectValue.hidden = Boolean(addOnly);
     }
     $("#checkin-comment").value = "";
+    let projectUndoIds = [];
+    if (projectScope && projectId) {
+      try {
+        const checkoutResp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/checkouts`);
+        if (checkoutResp.ok) {
+          const listed = await checkoutResp.json();
+          const pendingSet = new Set(data.object_ids || []);
+          projectUndoIds = (Array.isArray(listed) ? listed : [])
+            .filter((item) => item && item.owned_by_me && item.uuid && !pendingSet.has(String(item.uuid)))
+            .map((item) => String(item.uuid));
+        }
+      } catch {
+        projectUndoIds = [];
+      }
+    }
     if (checkinDialog) {
       checkinDialog.dataset.force = data.force_checkin ? "1" : "";
       checkinDialog.dataset.queue = useQueue ? "1" : "";
@@ -5541,6 +5566,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       checkinDialog.dataset.objectIds = JSON.stringify(checkinIds);
       checkinDialog.dataset.projectScope = projectScope ? "1" : "";
+      checkinDialog.dataset.undoIds = JSON.stringify(projectUndoIds);
     }
     const forceWarn = $("#checkin-force-warn");
     if (forceWarn) {
@@ -5586,19 +5612,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           list.appendChild(item);
           canSubmit = false;
         }
-      } else if (!names.length && !newCount) {
+      } else if (!names.length && !newCount && !projectUndoIds.length) {
         const item = document.createElement("li");
         item.textContent = projectScope
           ? "– Nothing to check in. Local workspace files need creopdm-agent to sync into the vault first."
           : "– Nothing to check in. Use Undo Checkout to release locks without a new version.";
         list.appendChild(item);
         canSubmit = false;
-      } else if (projectScope && newCount && !names.length) {
-        (data.new_files || []).forEach((file) => {
+      } else {
+        if (projectScope && newCount && !names.length) {
+          (data.new_files || []).forEach((file) => {
+            const item = document.createElement("li");
+            item.textContent = `✓ Add ${file.filename || file.relative_path || "file"}`;
+            list.appendChild(item);
+          });
+        }
+        if (projectUndoIds.length) {
           const item = document.createElement("li");
-          item.textContent = `✓ Add ${file.filename || file.relative_path || "file"}`;
+          item.textContent =
+            projectUndoIds.length === 1
+              ? "✓ Undo checkout on 1 unchanged file (no new version)"
+              : `✓ Undo checkout on ${projectUndoIds.length} unchanged files (no new version)`;
           list.appendChild(item);
-        });
+        }
       }
     } else {
       [
@@ -5620,15 +5656,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (submitBtn) {
       submitBtn.textContent = addOnly
         ? "Add"
-        : data.force_checkin
-          ? "Check In anyway"
-          : "Check In";
+        : projectScope && !((data.object_ids || []).length) && !((data.new_files || []).length) && projectUndoIds.length
+          ? "Release checkouts"
+          : data.force_checkin
+            ? "Check In anyway"
+            : "Check In";
       submitBtn.disabled = !canSubmit;
     }
     const commentBox = $("#checkin-comment");
+    const needsComment =
+      canSubmit &&
+      (addOnly ||
+        Boolean((data.object_ids || []).length) ||
+        Boolean((data.new_files || []).length) ||
+        !projectScope);
     if (commentBox) {
       commentBox.disabled = !canSubmit;
+      commentBox.required = needsComment;
       if (!canSubmit) commentBox.value = "";
+      if (canSubmit && !needsComment) {
+        commentBox.value = commentBox.value || "Release unchanged checkouts";
+      }
     }
     if (checkinDialog) {
       checkinDialog.dataset.canSubmit = canSubmit ? "1" : "0";
@@ -5847,18 +5895,61 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       } catch {
         objectIds = [];
       }
-      if (!objectIds.length && !added.length) {
+      let undoIds = [];
+      try {
+        undoIds = JSON.parse(checkinDialog.dataset.undoIds || "[]");
+      } catch {
+        undoIds = [];
+      }
+      const projectScopeSubmit = checkinDialog.dataset.projectScope === "1";
+      if (!objectIds.length && !added.length && !(projectScopeSubmit && undoIds.length)) {
         showError(
           $("#checkin-error"),
           "Nothing to check in. Use Undo Checkout to release locks without a new version."
         );
         return;
       }
-      result = await postAction(`/api/projects/${projectId}/checkin-queue`, {
-        comment,
-        object_ids: objectIds,
-        add_relative_paths: added,
-      }, "POST", busyLabel);
+      if (objectIds.length || added.length) {
+        result = await postAction(`/api/projects/${projectId}/checkin-queue`, {
+          comment,
+          object_ids: objectIds,
+          add_relative_paths: added,
+        }, "POST", busyLabel);
+        if (!result) return;
+      } else {
+        result = { ok: [], failed: [] };
+      }
+      if (projectScopeSubmit && undoIds.length) {
+        const UNDO_CHUNK = 50;
+        const undoResult = await withBusy(
+          `Releasing unchanged checkouts… 0 of ${undoIds.length}`,
+          async () => {
+            const merged = { ok: [], failed: [] };
+            for (let start = 0; start < undoIds.length; start += UNDO_CHUNK) {
+              const chunk = undoIds.slice(start, start + UNDO_CHUNK);
+              setBusyMessage(
+                `Releasing unchanged checkouts… ${Math.min(start + chunk.length, undoIds.length)} of ${undoIds.length}`
+              );
+              const part = await postAction(
+                "/api/objects/batch/undo-checkout",
+                { object_ids: chunk },
+                "POST",
+                ""
+              );
+              if (!part) return null;
+              if (Array.isArray(part.ok)) merged.ok.push(...part.ok);
+              if (Array.isArray(part.failed)) merged.failed.push(...part.failed);
+            }
+            return merged;
+          }
+        );
+        if (!undoResult) return;
+        result = {
+          ok: [...(result.ok || []), ...(undoResult.ok || [])],
+          failed: [...(result.failed || []), ...(undoResult.failed || [])],
+        };
+        applyUndoCheckoutOnRows(undoResult.ok.map((item) => item.uuid).filter(Boolean));
+      }
     } else {
       if (!id) return;
       result = await postAction(`/api/objects/${id}/checkin`, {
