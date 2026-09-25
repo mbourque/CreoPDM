@@ -3209,8 +3209,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         ? "Check out every file in this project that is available (not locked by someone else)."
         : "Nothing left to check out in this project.";
     }
+    if (undoBtn) undoBtn.disabled = !canUndo;
     if (checkoutMenuBtn) {
-      checkoutMenuBtn.disabled = !(canCheckout || canCheckoutProject);
+      checkoutMenuBtn.disabled = !(canCheckout || canCheckoutProject || canUndo);
       if (checkoutMenuBtn.disabled) closeCheckoutMenu();
     }
     if (checkinBtn) {
@@ -3234,7 +3235,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       checkinMenuBtn.disabled = !(canCheckin || canCheckinProject);
       if (checkinMenuBtn.disabled) closeCheckinMenu();
     }
-    setToolbarActionVisible(undoBtn, canUndo);
     if (workspaceBtn) workspaceBtn.disabled = !selected.some((row) => row.dataset.inWorkspace !== "1");
     const localNewSelected = selected.filter(
       (row) => isNewFileQueueRow(row) && row.dataset.localCache === "1"

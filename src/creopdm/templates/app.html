@@ -344,7 +344,7 @@
     <div class="toolbar-menu" id="checkout-menu">
       <button type="button" class="btn toolbar-menu-toggle" id="checkout-menu-btn"
               aria-haspopup="menu" aria-expanded="false" disabled
-              title="Check out selected files, or every available file in this project.">Checkout ▾</button>
+              title="Check out selected or project files, or undo your checkout.">Checkout ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-btn"
                 disabled
@@ -353,6 +353,9 @@
                 {% if selected %}data-project="{{ selected.uuid }}" data-checkoutable="{{ checkoutable_count|default(0) }}"{% endif %}
                 {% if not selected or (checkoutable_count|default(0)) == 0 %}disabled{% endif %}
                 title="Check out every file in this project that is available (not locked by someone else).">Checkout project</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="undo-btn"
+                disabled
+                title="Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward.">Undo Checkout</button>
       </div>
     </div>
     <div class="toolbar-menu" id="checkin-menu">
@@ -371,9 +374,6 @@
                 title="Check in all modified checkouts and add new files in this project (full project check-in).">Check in project</button>
       </div>
     </div>
-    <span class="toolbar-tip" title="Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward.">
-      <button type="button" class="btn" id="undo-btn" disabled>Undo Checkout</button>
-    </span>
     <span class="toolbar-tip" title="Open version history and details for the selected file.">
       <button type="button" class="btn" id="history-btn" disabled>History</button>
     </span>

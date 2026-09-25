@@ -314,6 +314,9 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert 'id="checkout-project-btn"' in home.text
     assert "Checkout selected" in home.text
     assert "Checkout project" in home.text
+    assert 'id="undo-btn"' in home.text
+    assert home.text.index('id="checkout-menu"') < home.text.index('id="undo-btn"')
+    assert home.text.index('id="undo-btn"') < home.text.index('id="checkin-menu"')
     assert "data-checkoutable" in home.text
     assert "setCheckoutableCount" in script.text
     assert "Nothing left to check out in this project" in script.text
