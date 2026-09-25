@@ -252,6 +252,9 @@ def remove_batch(
                         message=exc.message,
                     )
                 )
+    # Commit before the response leaves the process. FastAPI yield-deps commit after
+    # the body is sent — soft reload would otherwise re-paint deleted folders/files.
+    db.commit()
     return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.config.workspace_root()))
 
 
@@ -383,4 +386,6 @@ def delete_object(
     obj = ctx.objects.get_object(db, object_id)
     _purge_and_release(ctx, db, obj, ignore_locked=True)
     ctx.objects.delete_object(db, object_id)
+    # See batch/remove — commit before 204 so a follow-up soft reload sees the delete.
+    db.commit()
     return Response(status_code=204)

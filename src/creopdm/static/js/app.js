@@ -248,7 +248,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   let softNavBusy = false;
-  let softNavQueued = null;
+  // Serialize soft navigations so a refresh after Remove is never dropped, and
+  // callers can await the real shell swap (the old queue resolved too early).
+  let softNavTail = Promise.resolve();
 
   function softNavigate(url, historyMode = "push") {
     const absolute = new URL(url, window.location.href);
@@ -256,57 +258,52 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       window.location.href = absolute.href;
       return Promise.resolve();
     }
-    // Queue — never hard-reload soft-nav pages (SSR flashes Not Connected and drops Creo.JS).
-    if (window.__creopdmSoftNavBusy || softNavBusy) {
-      softNavQueued = { href: absolute.href, historyMode };
-      return Promise.resolve();
-    }
-    softNavBusy = true;
-    window.__creopdmSoftNavBusy = true;
-    return (async () => {
-    try {
-      const response = await fetch(absolute.href, {
-        headers: { Accept: "text/html", "X-CreoPDM-Soft": "1" },
-        credentials: "same-origin",
-        // After remove/add the prior GET is often still in the HTTP cache; without
-        // this, soft reload paints the deleted folder/file until a hard refresh.
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        window.location.href = absolute.href;
-        return;
+    const href = absolute.href;
+    const mode = historyMode;
+    const run = async () => {
+      softNavBusy = true;
+      window.__creopdmSoftNavBusy = true;
+      try {
+        const response = await fetch(href, {
+          headers: { Accept: "text/html", "X-CreoPDM-Soft": "1" },
+          credentials: "same-origin",
+          // After remove/add the prior GET is often still in the HTTP cache; without
+          // this, soft reload paints the deleted folder/file until a hard refresh.
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          window.location.href = href;
+          return;
+        }
+        const html = await response.text();
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        const nextShell = doc.querySelector("main.shell");
+        const curShell = document.querySelector("main.shell");
+        if (!nextShell || !curShell) {
+          window.location.href = href;
+          return;
+        }
+        curShell.innerHTML = nextShell.innerHTML;
+        if (doc.title) document.title = doc.title;
+        const nextUrl = response.url || href;
+        if (mode === "push") {
+          history.pushState({ creopdmSoft: 1 }, "", nextUrl);
+        } else if (mode === "replace") {
+          history.replaceState({ creopdmSoft: 1 }, "", nextUrl);
+        }
+        // Keep the live Creo.JS bridge — rebind UI only.
+        EventTarget.prototype.addEventListener = origAddEventListener;
+        window.__creopdmBoot({ soft: true });
+      } catch {
+        window.location.href = href;
+      } finally {
+        softNavBusy = false;
+        window.__creopdmSoftNavBusy = false;
       }
-      const html = await response.text();
-      const doc = new DOMParser().parseFromString(html, "text/html");
-      const nextShell = doc.querySelector("main.shell");
-      const curShell = document.querySelector("main.shell");
-      if (!nextShell || !curShell) {
-        window.location.href = absolute.href;
-        return;
-      }
-      curShell.innerHTML = nextShell.innerHTML;
-      if (doc.title) document.title = doc.title;
-      const nextUrl = response.url || absolute.href;
-      if (historyMode === "push") {
-        history.pushState({ creopdmSoft: 1 }, "", nextUrl);
-      } else if (historyMode === "replace") {
-        history.replaceState({ creopdmSoft: 1 }, "", nextUrl);
-      }
-      // Keep the live Creo.JS bridge — rebind UI only.
-      EventTarget.prototype.addEventListener = origAddEventListener;
-      window.__creopdmBoot({ soft: true });
-    } catch {
-      window.location.href = absolute.href;
-    } finally {
-      softNavBusy = false;
-      window.__creopdmSoftNavBusy = false;
-      const queued = softNavQueued;
-      softNavQueued = null;
-      if (queued) {
-        void softNavigate(queued.href, queued.historyMode);
-      }
-    }
-    })();
+    };
+    const done = softNavTail.then(run, run);
+    softNavTail = done.catch(() => {});
+    return done;
   }
 
   function leavePage(url) {
@@ -351,13 +348,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // and Creo.JS stays alive. Hard assign/form is often ignored there, which left a
     // stale Files table after Remove until the user hard-refreshed.
     if (isSoftNavUrl(next)) {
-      void withBusy(busyMessage, () => softNavigate(next, "replace"));
-      return;
+      return withBusy(busyMessage, () => softNavigate(next, "replace"));
     }
     // Non-shell pages: normal browsers assign; Creo needs a GET form submit.
     if (!inCreoBrowser()) {
       window.location.assign(next);
-      return;
+      return Promise.resolve();
     }
     const form = document.createElement("form");
     form.method = "GET";
@@ -372,6 +368,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
     document.body.appendChild(form);
     form.submit();
+    return Promise.resolve();
   }
 
   function reloadPageAfterDialog() {
@@ -6388,6 +6385,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     refreshTabMetrics();
     syncToolbar();
   }
+
+  function stripRemovedListRows(objectIds, folderPaths) {
+    /** Re-drop rows after soft reload in case SSR briefly lagged the DB commit. */
+    const idSet = new Set((objectIds || []).map(String).filter(Boolean));
+    const folderSet = new Set(
+      (folderPaths || []).map((path) => String(path || "").replace(/\\/g, "/")).filter(Boolean)
+    );
+    if (!idSet.size && !folderSet.size) return;
+    const rowsToStrip = rows().filter((row) => {
+      if (idSet.has(String(row.dataset.uuid || ""))) return true;
+      if (!row.classList.contains("folder-row")) return false;
+      return folderSet.has(String(row.dataset.folder || "").replace(/\\/g, "/"));
+    });
+    if (rowsToStrip.length) removeSelectedRowsFromDom(rowsToStrip);
+  }
+  // Soft boot replaces closures — Remove awaits reload then calls this global.
+  window.__creopdmStripRemovedListRows = stripRemovedListRows;
+
   function formatPurgeConfirmDetails(preview) {
     const deleted = [...(Array.isArray(preview?.ok) ? preview.ok : [])].sort((a, b) => {
       const left = String(a.message || a.filename || a.path || "");
@@ -6823,7 +6838,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         showOk(`${files} file(s) removed from the project.`);
       }
     }
-    if (result.ok?.length) reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
+    if (result.ok?.length) {
+      await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
+      // Soft SSR can still briefly include deleted rows; keep the list honest.
+      // Use the post-boot global — this handler's closure is from the prior boot.
+      window.__creopdmStripRemovedListRows?.(ids, folderPaths);
+    }
   });
 
   async function loadChangesTab(options = {}) {

@@ -97,19 +97,29 @@ def test_remove_rows_update_folder_tbody_cache_and_soft_reload():
     """Regression: folder stayed visible after remove until hard refresh.
 
     removeSelectedRowsFromDom must refresh folderTbodyHtml (showFolderView restores it),
-    and reloadPage must soft-nav with no-store so Creo gets fresh SSR.
+    reloadPage must soft-nav with no-store, and stripRemovedListRows covers SSR lag.
     """
     script = _app_js()
     remove_dom = _between(
         script,
         "function removeSelectedRowsFromDom(",
-        "function formatPurgeConfirmDetails(",
+        "function stripRemovedListRows(",
     )
     assert "folderTbodyHtml = objectTbody.innerHTML" in remove_dom
+    assert "function stripRemovedListRows(" in script
     soft = _between(script, "function softNavigate(", "function leavePage(")
     assert 'cache: "no-store"' in soft
+    assert "softNavTail" in soft
     reload = _between(script, "function reloadPage(", "function reloadPageAfterDialog(")
     assert 'softNavigate(next, "replace")' in reload
+    remove = _between(
+        script,
+        "removeBtn?.addEventListener(\"click\"",
+        "async function loadChangesTab",
+    )
+    assert "await reloadPage(" in remove
+    assert "__creopdmStripRemovedListRows" in remove
+    assert "window.__creopdmStripRemovedListRows" in script
 
 
 def test_choose_folder_uses_agent_before_browser_picker():
@@ -245,16 +255,23 @@ def test_delete_project_dialog_offers_local_workspace_checkbox():
 
 
 def test_soft_nav_does_not_silently_drop_when_busy():
-    """Regression: soft-nav busy used to no-op or hard-reload (SSR Not Connected flash)."""
+    """Regression: soft-nav must serialize refreshes (never no-op or hard-reload)."""
     body = _between(_app_js(), "function softNavigate(", "function leavePage(")
     assert "__creopdmSoftNavBusy" in body
-    assert "softNavQueued" in body
-    assert "never hard-reload" in body.lower()
-    # Busy path must queue — not location.href for soft-nav pages.
-    busy = body.split("if (window.__creopdmSoftNavBusy || softNavBusy)")[1].split("softNavBusy = true")[0]
-    assert "softNavQueued" in busy
-    assert "window.location.href" not in busy
+    assert "softNavTail" in body
+    assert "Serialize" in body or "softNavTail.then" in body
+    # Must not early-resolve while dropping a queued refresh.
+    assert "softNavQueued" not in body
     assert "window.__creopdmBoot({ soft: true })" in body
+
+
+def test_batch_remove_commits_before_response():
+    """Remove-from-project soft reload raced FastAPI's post-response commit."""
+    text = (ROOT / "src" / "creopdm" / "api" / "objects.py").read_text(encoding="utf-8")
+    body = text.split("def remove_batch(", 1)[1].split("\n@router", 1)[0]
+    assert "db.commit()" in body
+    assert body.index("db.commit()") < body.index("return BatchOperationResponse")
+    assert "soft reload would otherwise re-paint" in body or "Commit before the response" in body
 
 
 def test_soft_nav_skips_creojs_reconnect():
@@ -282,7 +299,7 @@ def test_soft_nav_skips_creojs_reconnect():
     soft_nav = _between(script, "function softNavigate(", "function leavePage(")
     assert "window.__creopdmBoot({ soft: true })" in soft_nav
     assert "Keep the live Creo.JS bridge" in soft_nav
-    assert "softNavQueued" in soft_nav
+    assert "softNavTail" in soft_nav
     assert "isSoftNavUrl" in soft_nav
     assert 'cache: "no-store"' in soft_nav
 
