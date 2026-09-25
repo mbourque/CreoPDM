@@ -25,6 +25,19 @@ _SAFE_NAME = re.compile(r"[^A-Za-z0-9._\-]+")
 _CACHE_INDEX_NAME = "_creopdm_cache_index.json"
 
 
+def _safe_segment(value: str, fallback: str = "file") -> str:
+    text = _SAFE_NAME.sub("_", (value or "").strip()) or fallback
+    return text[:180]
+
+
+def _project_cache_key(project_id: str = "", vault_folder: str = "") -> str:
+    """Local agent-cache folder name: prefer vault_folder, else project UUID."""
+    folder = (vault_folder or "").strip()
+    if folder:
+        return _safe_segment(folder, "local")
+    return _safe_segment((project_id or "").strip() or "local", "local")
+
+
 class MaterializeItem(BaseModel):
     object_id: str | None = None
     project_id: str | None = None
@@ -37,6 +50,7 @@ class MaterializeRequest(BaseModel):
     pdm_url: str = ""
     object_id: str | None = None
     project_id: str | None = None
+    vault_folder: str = ""
     relative_path: str | None = None
     filename: str | None = None
     disk_name: str | None = None
@@ -56,6 +70,7 @@ class MaterializeResponse(BaseModel):
 class MaterializeZipRequest(BaseModel):
     pdm_url: str = ""
     project_id: str = ""
+    vault_folder: str = ""
     object_ids: list[str] = Field(min_length=1)
     token: str | None = None
 
@@ -80,6 +95,7 @@ class CachePlanItem(BaseModel):
 class CachePlanRequest(BaseModel):
     pdm_url: str = ""
     project_id: str = ""
+    vault_folder: str = ""
     object_ids: list[str] = Field(min_length=1)
     token: str | None = None
 
@@ -105,6 +121,7 @@ class OpenLocalResponse(BaseModel):
 
 class OpenFolderRequest(BaseModel):
     project_id: str = ""
+    vault_folder: str = ""
     folder: str = ""
 
 
@@ -146,6 +163,7 @@ class PushItem(BaseModel):
 class PushRequest(BaseModel):
     pdm_url: str = ""
     project_id: str = ""
+    vault_folder: str = ""
     token: str | None = None
     items: list[PushItem] = Field(default_factory=list)
 
@@ -167,6 +185,7 @@ class PushResponse(BaseModel):
 class PushPathsRequest(BaseModel):
     pdm_url: str = ""
     project_id: str = ""
+    vault_folder: str = ""
     token: str | None = None
     relative_paths: list[str] = Field(default_factory=list)
 
@@ -215,6 +234,7 @@ class CacheFilesResponse(BaseModel):
 
 class DeletePathsRequest(BaseModel):
     project_id: str = ""
+    vault_folder: str = ""
     relative_paths: list[str] = Field(default_factory=list)
 
 
@@ -230,6 +250,7 @@ class PurgeFloor(BaseModel):
 
 class PurgeVersionsRequest(BaseModel):
     project_id: str = ""
+    vault_folder: str = ""
     model_extensions: list[str] = Field(default_factory=list)
     floors: list[PurgeFloor] = Field(default_factory=list)
     dry_run: bool = False
@@ -239,11 +260,6 @@ class PurgeVersionsResponse(BaseModel):
     ok: list[PushItemResult] = Field(default_factory=list)
     failed: list[PushItemResult] = Field(default_factory=list)
     deleted: int = 0
-
-
-def _safe_segment(value: str, fallback: str = "file") -> str:
-    text = _SAFE_NAME.sub("_", (value or "").strip()) or fallback
-    return text[:180]
 
 
 def _normalize_base(url: str) -> str:
@@ -490,24 +506,25 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         }
 
     @app.get("/workdir")
-    def workdir(project_id: str = "") -> dict[str, str]:
+    def workdir(project_id: str = "", vault_folder: str = "") -> dict[str, str]:
         """Return (and create) the local cache folder Creo should use as WD."""
         base = settings.ensure_dirs()
-        key = (project_id or "").strip()
-        if key:
-            path = base / _safe_segment(key, "local")
-            path.mkdir(parents=True, exist_ok=True)
-        else:
-            path = base
+        key = _project_cache_key(project_id, vault_folder)
+        path = base / key
+        path.mkdir(parents=True, exist_ok=True)
         return {
             "path": str(path.resolve()),
             "local_root": str(base.resolve()),
         }
 
-    def _project_cache_dir(project_id: str = "", folder: str = "") -> Path:
+    def _project_cache_dir(
+        project_id: str = "",
+        folder: str = "",
+        vault_folder: str = "",
+    ) -> Path:
         base = settings.ensure_dirs().resolve()
-        key = (project_id or "").strip()
-        target = base / _safe_segment(key, "local") if key else base
+        key = _project_cache_key(project_id, vault_folder)
+        target = base / key
         target.mkdir(parents=True, exist_ok=True)
         rel = (folder or "").replace("\\", "/").strip().strip("/")
         if rel:
@@ -528,7 +545,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         """Open the local agent cache folder in Explorer (client PC, not CreoPDM server)."""
         from creopdm.utils.launch import open_windows_folder
 
-        target = _project_cache_dir(payload.project_id, payload.folder)
+        target = _project_cache_dir(payload.project_id, payload.folder, payload.vault_folder)
         try:
             open_windows_folder(target)
         except OSError as exc:
@@ -629,7 +646,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
     def push_to_vault(payload: PushRequest) -> PushResponse:
         """Upload local agent-cache files into the CreoPDM vault working copies."""
         base = _normalize_base(payload.pdm_url or settings.pdm_url)
-        project_key = _safe_segment(payload.project_id or "local", "local")
+        project_key = _project_cache_key(payload.project_id, payload.vault_folder)
         cache_dir = root / project_key
         headers: dict[str, str] = {}
         token = (payload.token or settings.token or "").strip()
@@ -710,13 +727,13 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         return PushResponse(ok=ok, failed=failed)
 
     @app.get("/files", response_model=CacheFilesResponse)
-    def list_cache_files(project_id: str = "") -> CacheFilesResponse:
+    def list_cache_files(project_id: str = "", vault_folder: str = "") -> CacheFilesResponse:
         """List files under the project agent-cache folder (local workspace)."""
         from datetime import datetime
 
         from creopdm.creo.file_manager import CreoFileManager
 
-        target = _project_cache_dir(project_id)
+        target = _project_cache_dir(project_id, vault_folder=vault_folder)
         files: list[CacheFileInfo] = []
         skip_dirs = {".git", ".creopdm", "__pycache__"}
         for dirpath, dirnames, filenames in os.walk(target):
@@ -758,7 +775,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         project_id = (payload.project_id or "").strip()
         if not project_id:
             raise HTTPException(status_code=400, detail="project_id is required.")
-        cache_dir = _project_cache_dir(project_id)
+        cache_dir = _project_cache_dir(project_id, vault_folder=payload.vault_folder)
         headers: dict[str, str] = {}
         token = (payload.token or settings.token or "").strip()
         if token:
@@ -1119,7 +1136,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         project_id = (payload.project_id or "").strip()
         if not project_id:
             raise HTTPException(status_code=400, detail="project_id is required.")
-        cache_dir = _project_cache_dir(project_id)
+        cache_dir = _project_cache_dir(project_id, vault_folder=payload.vault_folder)
         cache_resolved = cache_dir.resolve()
         ok: list[PushItemResult] = []
         failed: list[PushItemResult] = []
@@ -1217,7 +1234,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         project_id = (payload.project_id or "").strip()
         if not project_id:
             raise HTTPException(status_code=400, detail="project_id is required.")
-        cache_dir = _project_cache_dir(project_id)
+        cache_dir = _project_cache_dir(project_id, vault_folder=payload.vault_folder)
         models = [str(item or "").strip() for item in payload.model_extensions if str(item or "").strip()]
         if not models:
             models = list(DEFAULT_CREO_MODEL_EXTENSIONS)
@@ -1294,7 +1311,10 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             filename=payload.filename,
             disk_name=payload.disk_name,
         )
-        project_key = _safe_segment(payload.project_id or payload.object_id or "local", "local")
+        project_key = _project_cache_key(
+            payload.project_id or payload.object_id or "local",
+            payload.vault_folder,
+        )
         target_dir = root / project_key
         target_dir.mkdir(parents=True, exist_ok=True)
         headers: dict[str, str] = {}
@@ -1343,7 +1363,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
     @app.post("/materialize-zip", response_model=MaterializeZipResponse)
     def materialize_zip(payload: MaterializeZipRequest) -> MaterializeZipResponse:
         base = _normalize_base(payload.pdm_url or settings.pdm_url)
-        project_key = _safe_segment(payload.project_id or "local", "local")
+        project_key = _project_cache_key(payload.project_id, payload.vault_folder)
         target_dir = root / project_key
         target_dir.mkdir(parents=True, exist_ok=True)
         headers: dict[str, str] = {}

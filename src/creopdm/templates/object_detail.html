@@ -77,7 +77,7 @@
     </span>
     <button type="button" class="btn" id="open-btn" data-uuid="{{ object.uuid }}">Open</button>
     <span class="toolbar-tip" title="Open this project's local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">
-      <button type="button" class="btn" id="open-workspace-btn" data-project="{{ project.uuid }}" data-folder="{{ workspace_folder }}">Open Workspace</button>
+      <button type="button" class="btn" id="open-workspace-btn" data-project="{{ project.uuid }}" data-vault-folder="{{ project.vault_folder or project.uuid }}" data-folder="{{ workspace_folder }}">Open Workspace</button>
     </span>
     <button type="button" class="btn" id="checkout-btn" data-uuid="{{ object.uuid }}" {% if not object.can_checkout %}disabled{% endif %}>Checkout</button>
     <button type="button" class="btn" id="checkin-btn" data-uuid="{{ object.uuid }}" data-project="{{ project.uuid }}" {% if not object.can_checkin %}disabled{% endif %}>Check In</button>

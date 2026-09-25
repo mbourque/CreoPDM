@@ -3221,10 +3221,26 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       $("#rebuild-where-used-btn")?.dataset.project ||
       $("#open-workspace-btn")?.dataset.project ||
       $("#checkin-btn")?.dataset.project ||
+      document.getElementById("metric-filters")?.dataset?.project ||
       (fromPath && fromPath[1]) ||
       new URLSearchParams(window.location.search).get("project") ||
       ""
     );
+  }
+
+  function currentVaultFolder() {
+    const raw =
+      document.getElementById("metric-filters")?.dataset?.vaultFolder ||
+      $("#open-workspace-btn")?.dataset?.vaultFolder ||
+      "";
+    return String(raw || "").trim() || currentProjectId();
+  }
+
+  function agentProjectFields() {
+    return {
+      project_id: currentProjectId() || null,
+      vault_folder: currentVaultFolder() || "",
+    };
   }
 
   function sortStoreKey(table) {
@@ -3882,8 +3898,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     })();
   });
 
-  async function agentWorkdir(projectId) {
-    const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+  async function agentWorkdir(projectId, vaultFolder) {
+    const params = new URLSearchParams();
+    if (projectId) params.set("project_id", projectId);
+    const folder = vaultFolder || currentVaultFolder();
+    if (folder) params.set("vault_folder", folder);
+    const query = params.toString() ? `?${params}` : "";
     const response = await fetch(`${agentBase()}/workdir${query}`, { method: "GET" });
     if (!response.ok) {
       throw new Error("Local CreoPDM agent could not provide a cache folder.");
@@ -3920,7 +3940,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         );
         return;
       }
-      const directory = await agentWorkdir(currentProjectId());
+      const directory = await agentWorkdir(currentProjectId(), currentVaultFolder());
       await whenCreoJSReady();
       const result = await window.CreoJS.setWorkingDirectory(directory);
       const text = result == null ? "" : String(result);
@@ -4129,6 +4149,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       body: JSON.stringify({
         pdm_url: window.location.origin,
         project_id: projectId,
+        vault_folder: currentVaultFolder(),
         items: list.map((item) => ({
           object_id: String(item.object_id),
           filename: String(item.filename || ""),
@@ -4145,8 +4166,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!projectId) return [];
     const agent = await probeCreoAgent();
     if (!agent) return [];
+    const vaultFolder = currentVaultFolder();
+    const params = new URLSearchParams({ project_id: projectId });
+    if (vaultFolder) params.set("vault_folder", vaultFolder);
     const response = await fetch(
-      `${agentBase()}/files?project_id=${encodeURIComponent(projectId)}`,
+      `${agentBase()}/files?${params}`,
       { method: "GET" }
     );
     if (!response.ok) return [];
@@ -4165,6 +4189,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       body: JSON.stringify({
         pdm_url: window.location.origin,
         project_id: projectId,
+        vault_folder: currentVaultFolder(),
         relative_paths: paths,
       }),
     });
@@ -4184,6 +4209,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         project_id: projectId,
+        vault_folder: currentVaultFolder(),
         relative_paths: paths,
       }),
     });
@@ -4210,7 +4236,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ project_id: projectId, relative_paths: slice }),
+          body: JSON.stringify({
+            project_id: projectId,
+            vault_folder: currentVaultFolder(),
+            relative_paths: slice,
+          }),
           keepalive: true,
         });
       } catch {
@@ -4242,6 +4272,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         project_id: projectId,
+        vault_folder: currentVaultFolder(),
         model_extensions: modelExtensions,
         dry_run: Boolean(dryRun),
         floors: floors.map((item) => ({
@@ -4455,6 +4486,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         pdm_url: window.location.origin,
         object_id: prepared.object_id || null,
         project_id: prepared.project_id || currentProjectId() || null,
+        vault_folder: currentVaultFolder(),
         relative_path: prepared.relative_path || null,
         filename: prepared.filename || null,
         disk_name: prepared.disk_name || prepared.filename || null,
@@ -4483,6 +4515,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       body: JSON.stringify({
         pdm_url: window.location.origin,
         project_id: currentProjectId() || null,
+        vault_folder: currentVaultFolder(),
         object_ids: objectIds,
       }),
     });
@@ -4829,7 +4862,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const response = await fetch(`${agentBase()}/open-folder`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ project_id: projectId, folder }),
+          body: JSON.stringify({
+            project_id: projectId,
+            vault_folder: openWorkspaceBtn.dataset.vaultFolder || currentVaultFolder(),
+            folder,
+          }),
         });
         if (!response.ok) {
           showError($("#toolbar-error"), await readError(response));

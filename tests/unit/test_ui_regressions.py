@@ -158,8 +158,11 @@ def test_project_dialog_has_vault_folder_and_use_hash():
     assert 'for="project-use-hash"' in html
     # Use hash is the default — uncheck to type a custom vault folder.
     assert 'id="project-use-hash" checked' in html
+    assert "data-vault-folder=" in html
     script = _app_js()
     assert "syncProjectVaultFolderField" in script
+    assert "currentVaultFolder" in script
+    assert "vault_folder: currentVaultFolder()" in script
     assert "slugifyVaultFolder" in script
     assert ".toLowerCase()" in _between(script, "function slugifyVaultFolder(", "function fillVaultFolderFromName(")
     assert "Enter a vault/workspace name, or check Use hash." in script

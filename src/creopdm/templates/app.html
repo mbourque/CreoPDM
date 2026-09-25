@@ -79,7 +79,7 @@
     </div>
 
     {% if selected and status %}
-    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}" data-type-icons='{{ type_icons | tojson }}'>
+    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-project="{{ selected.uuid }}" data-type-icons='{{ type_icons | tojson }}'>
       <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Show and select all files. Clears type chips. Click again to clear."><strong>{{ status.files }}</strong> Files</button></li>
       <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Filter to Creo models and select them. Click again to clear."><strong>{{ status.cad_models }}</strong> Creo Models</button></li>
       <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Filter to parts and select them. Click again to clear."><strong>{{ status.creo_parts }}</strong> Parts</button></li>
@@ -336,7 +336,7 @@
     </span>
     <button type="button" class="btn" id="add-files-btn" {% if not selected %}disabled{% endif %}>Add Files</button>
     <span class="toolbar-tip" title="Open this project's local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">
-      <button type="button" class="btn" id="open-workspace-btn" {% if selected %}data-project="{{ selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}>Open Workspace</button>
+      <button type="button" class="btn" id="open-workspace-btn" {% if selected %}data-project="{{ selected.uuid }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}>Open Workspace</button>
     </span>
     <span class="toolbar-tip" title="Open the selected file in Creo or its Windows associated program.">
       <button type="button" class="btn" id="open-btn" disabled>Open</button>
