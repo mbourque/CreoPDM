@@ -844,10 +844,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const typeActive = selecting.filter((btn) => !isCheckoutMetric(metricKey(btn)));
     const checkoutOn = selecting.some((btn) => isCheckoutMetric(metricKey(btn)));
     rows().forEach((row) => {
-      if (row.classList.contains("folder-row")) {
-        markRowSelected(row, false);
-        return;
-      }
+      // Folder rows are selected by click for Remove — do not clear them here.
+      if (row.classList.contains("folder-row")) return;
       const matchesType = !typeActive.length || typeActive.some((btn) => rowMatchesMetric(row, metricKey(btn)));
       const matchesCheckout = !checkoutOn || rowMatchesMetric(row, "checked_out");
       markRowSelected(row, matchesType && matchesCheckout && !rowIsHidden(row));
@@ -3584,6 +3582,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function toggleRow(row) {
     const snapshot = snapshotMetricModes();
+    if (row.classList.contains("folder-row")) {
+      markRowSelected(row, !row.classList.contains("is-selected"));
+      lastSelectRow = row;
+      syncToolbar();
+      return;
+    }
     // While a pill is sticky, ignore ctrl-toggle so the group stays selected.
     if (metricSelectionActive()) {
       lastSelectRow = row;
@@ -3598,6 +3602,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function selectOnly(row) {
     const snapshot = snapshotMetricModes();
     lastSelectRow = row;
+    // Folder click always selects that folder (Remove / Checkout); metrics apply to files only.
+    if (row.classList.contains("folder-row")) {
+      rows().forEach((item) => markRowSelected(item, item === row));
+      syncToolbar();
+      return;
+    }
     // Sticky pill: keep filtered/selected group; do not collapse to one row.
     if (metricSelectionActive()) {
       afterRowSelectionChange(snapshot);
@@ -3610,7 +3620,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function selectRange(toRow, additive = false) {
     const snapshot = snapshotMetricModes();
     // Sticky pill: range clicks keep the metric group, not a custom range.
-    if (metricSelectionActive()) {
+    // Folder rows still use normal range selection (Remove / bulk).
+    if (
+      metricSelectionActive()
+      && !toRow.classList.contains("folder-row")
+      && !(lastSelectRow && lastSelectRow.classList.contains("folder-row"))
+    ) {
       lastSelectRow = toRow;
       afterRowSelectionChange(snapshot);
       return;
@@ -3626,7 +3641,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     visible.slice(from, until + 1).forEach((row) => markRowSelected(row, true));
     lastSelectRow = toRow;
-    afterRowSelectionChange(snapshot);
+    if (metricSelectionActive() && !toRow.classList.contains("folder-row")) {
+      afterRowSelectionChange(snapshot);
+      return;
+    }
+    syncToolbar();
   }
 
   let lastSelectRow = null;
@@ -3921,10 +3940,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function onFileTableClick(event) {
     const target = eventEl(event);
-    const folderLink = target?.closest?.("a.folder-open, button.folder-open") || null;
     const folderRow = target?.closest?.(".folder-row") || null;
-    // Folder name link opens; anywhere else on the row only selects (for Remove, etc.).
-    if (folderLink && folderRow) {
+    // Same as files: single-click selects (for Remove, etc.); double-click opens.
+    if (folderRow) {
+      // Capture soft-nav also listens for a[href] — stop it so the row stays selected.
       event.preventDefault();
       event.stopPropagation();
       cancelPendingOpen();
@@ -3933,21 +3952,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         return;
       }
       if (event.ctrlKey || event.metaKey) {
-        toggleRow(folderRow);
-        return;
-      }
-      openFolderRow(folderRow);
-      return;
-    }
-    if (folderRow) {
-      cancelPendingOpen();
-      if (event.shiftKey) {
-        event.preventDefault();
-        selectRange(folderRow, event.ctrlKey || event.metaKey);
-        return;
-      }
-      if (event.ctrlKey || event.metaKey) {
-        event.preventDefault();
         toggleRow(folderRow);
         return;
       }
@@ -3988,14 +3992,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function onFileTableDblclick(event) {
     cancelPendingOpen();
     const target = eventEl(event);
-    // Double-click opens folder only on the name link — not the rest of the row.
-    if (target?.closest("a.folder-open, button.folder-open")) {
+    // Double-click opens the folder (name or anywhere on the row).
+    const folder = target?.closest?.(".folder-row");
+    if (folder) {
       event.preventDefault();
-      const folder = target.closest(".folder-row");
-      if (folder) openFolderRow(folder);
+      openFolderRow(folder);
       return;
     }
-    if (target?.closest(".folder-row")) return;
     const row = target?.closest(".object-row, .queue-row");
     const href = rowHistoryHref(row);
     if (!href) return;
@@ -7501,6 +7504,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       if (event.button != null && event.button !== 0) return;
       if (link.target && link.target !== "_self") return;
+      // Folder name is a real <a href="/?…&folder=">; single-click selects the row,
+      // double-click opens. Soft-nav here would steal the click in capture phase.
+      if (link.classList.contains("folder-open") || link.closest("tr.folder-row")) return;
       const href = link.getAttribute("href");
       if (!href || !isSoftNavUrl(href)) return;
       event.preventDefault();

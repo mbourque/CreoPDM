@@ -365,16 +365,31 @@ def test_creo_and_filetype_icons_exist_on_disk():
         assert path.stat().st_size > 20
 
 
-def test_folder_row_click_selects_link_opens():
-    """Regression: row click selects for Remove; only the folder name link navigates."""
+def test_folder_row_click_selects_double_click_opens():
+    """Regression: single-click selects for Remove; double-click opens the folder."""
     script = _app_js()
-    body = _between(script, "function onFileTableClick(", "function onFileTableDblclick(")
-    assert "Folder name link opens" in body or "anywhere else on the row only selects" in body
-    assert "openFolderRow(folderRow)" in body
-    assert "selectOnly(folderRow)" in body
-    assert 'closest?.("a.folder-open, button.folder-open")' in body
-    assert body.index("openFolderRow(folderRow)") < body.index("selectOnly(folderRow)")
-    assert 'closest(".object-row, .queue-row")' in body
+    click = _between(script, "function onFileTableClick(", "function onFileTableDblclick(")
+    assert "selectOnly(folderRow)" in click
+    assert "openFolderRow(folderRow)" not in click
+    assert "stopPropagation()" in click
+    assert 'closest?.(".folder-row")' in click
+    assert 'closest(".object-row, .queue-row")' in click
+    dbl = _between(script, "function onFileTableDblclick(", "function rowHistoryHref(")
+    assert "openFolderRow(folder)" in dbl
+    assert 'closest?.(".folder-row")' in dbl
+    soft = script.split("Keep Creo.JS connected: soft-navigate shell pages", 1)[1]
+    soft = soft.split('window.addEventListener("popstate"', 1)[0]
+    assert "folder-open" in soft
+    assert "tr.folder-row" in soft
+    assert "return;" in soft
+    html = APP_HTML.read_text(encoding="utf-8")
+    assert "Click to select this folder. Double-click to open it." in html
+    select_only = _between(script, "function selectOnly(", "function selectRange(")
+    assert 'classList.contains("folder-row")' in select_only
+    assert "syncToolbar()" in select_only
+    apply_sel = _between(script, "function applyMetricSelection(", "function metricSelectionActive(")
+    assert 'classList.contains("folder-row")) return' in apply_sel or 'folder-row")) return' in apply_sel
+    assert "markRowSelected(row, false)" not in apply_sel
     css = APP_CSS.read_text(encoding="utf-8")
     assert "cursor: default" in css.split(".folder-row {", 1)[1].split("}", 1)[0]
     assert "width: fit-content" in css
