@@ -261,6 +261,28 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "Session offline" in pill_fn
 
 
+def test_checkout_checkin_toolbar_menus_and_open_wd():
+    """Checkout/Check In fly-up menus and open-dialog Set working directory."""
+    html = APP_HTML.read_text(encoding="utf-8")
+    base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
+    script = _app_js()
+    assert 'id="checkout-menu"' in html
+    assert 'id="checkout-project-btn"' in html
+    assert "Checkout project" in html
+    assert 'id="checkin-menu"' in html
+    assert 'id="checkin-project-btn"' in html
+    assert "Check in project" in html
+    assert "function beginCheckin" in script
+    assert 'beginCheckin("project")' in script
+    assert "function runCheckoutObjects" in script
+    assert 'id="open-checkout-set-wd"' in base
+    assert "Set Creo working directory" in base
+    assert "open-checkout-set-wd" in script
+    assert "setWorkingDirectory" in _between(
+        script, "async function openPdmObjectFromUi(", "function agentBase("
+    )
+
+
 def test_new_project_and_sidebar_collapse_handlers_present():
     script = _app_js()
     assert '$("#new-project-btn")?.addEventListener("click"' in script

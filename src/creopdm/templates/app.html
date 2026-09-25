@@ -341,12 +341,36 @@
     <span class="toolbar-tip" title="Open the selected file in Creo or its Windows associated program.">
       <button type="button" class="btn" id="open-btn" disabled>Open</button>
     </span>
-    <button type="button" class="btn" id="checkout-btn" disabled>Checkout</button>
-    <span class="toolbar-tip" title="Check in selected files.">
-      <button type="button" class="btn" id="checkin-btn"
+    <div class="toolbar-menu" id="checkout-menu">
+      <button type="button" class="btn toolbar-menu-toggle" id="checkout-menu-btn"
+              aria-haspopup="menu" aria-expanded="false" disabled
+              title="Check out selected files, or every available file in this project.">Checkout ▾</button>
+      <div class="toolbar-menu-panel" role="menu" hidden>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-btn"
+                disabled
+                title="Check out the selected files and download them to the local workspace.">Checkout selected</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-project-btn"
+                {% if selected %}data-project="{{ selected.uuid }}"{% endif %}
+                {% if not selected %}disabled{% endif %}
+                title="Check out every file in this project that is available (not locked by someone else).">Checkout project</button>
+      </div>
+    </div>
+    <div class="toolbar-menu" id="checkin-menu">
+      <button type="button" class="btn toolbar-menu-toggle" id="checkin-menu-btn"
+              aria-haspopup="menu" aria-expanded="false" disabled
               {% if selected %}data-project="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
-              disabled>Check In</button>
-    </span>
+              title="Check in selected files, or everything pending in this project.">Check In ▾</button>
+      <div class="toolbar-menu-panel" role="menu" hidden>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-btn"
+                {% if selected %}data-project="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
+                disabled
+                title="Check in selected files.">Check in selected</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-project-btn"
+                {% if selected %}data-project="{{ selected.uuid }}"{% endif %}
+                {% if not selected %}disabled{% endif %}
+                title="Check in all modified checkouts and add new files in this project (full project check-in).">Check in project</button>
+      </div>
+    </div>
     <span class="toolbar-tip" title="Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward.">
       <button type="button" class="btn" id="undo-btn" disabled>Undo Checkout</button>
     </span>

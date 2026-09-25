@@ -2896,7 +2896,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const historyBtn = $("#history-btn");
   const openBtn = $("#open-btn");
   const checkoutBtn = $("#checkout-btn");
+  const checkoutProjectBtn = $("#checkout-project-btn");
+  const checkoutMenu = $("#checkout-menu");
+  const checkoutMenuBtn = $("#checkout-menu-btn");
+  const checkoutMenuPanel = checkoutMenu?.querySelector(".toolbar-menu-panel");
   const checkinBtn = $("#checkin-btn");
+  const checkinProjectBtn = $("#checkin-project-btn");
+  const checkinMenu = $("#checkin-menu");
+  const checkinMenuBtn = $("#checkin-menu-btn");
+  const checkinMenuPanel = checkinMenu?.querySelector(".toolbar-menu-panel");
   const undoBtn = $("#undo-btn");
   const workspaceBtn = $("#workspace-btn");
   const openWorkspaceBtn = $("#open-workspace-btn");
@@ -2909,23 +2917,70 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const removeMenuBtn = $("#remove-menu-btn");
   const removeMenuPanel = removeMenu?.querySelector(".toolbar-menu-panel");
 
+  function closeToolbarMenu(menu, btn, panel) {
+    if (!menu || !btn || !panel) return;
+    menu.classList.remove("is-open");
+    panel.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+  }
+
+  function openToolbarMenu(menu, btn, panel) {
+    if (!menu || !btn || !panel || btn.disabled) return;
+    menu.classList.add("is-open");
+    panel.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+  }
+
+  function toggleToolbarMenu(menu, btn, panel) {
+    if (menu?.classList.contains("is-open")) closeToolbarMenu(menu, btn, panel);
+    else openToolbarMenu(menu, btn, panel);
+  }
+
   function closeRemoveMenu() {
-    if (!removeMenu || !removeMenuBtn || !removeMenuPanel) return;
-    removeMenu.classList.remove("is-open");
-    removeMenuPanel.hidden = true;
-    removeMenuBtn.setAttribute("aria-expanded", "false");
+    closeToolbarMenu(removeMenu, removeMenuBtn, removeMenuPanel);
+  }
+
+  function closeCheckoutMenu() {
+    closeToolbarMenu(checkoutMenu, checkoutMenuBtn, checkoutMenuPanel);
+  }
+
+  function closeCheckinMenu() {
+    closeToolbarMenu(checkinMenu, checkinMenuBtn, checkinMenuPanel);
+  }
+
+  function closeAllToolbarMenus() {
+    closeRemoveMenu();
+    closeCheckoutMenu();
+    closeCheckinMenu();
   }
 
   function openRemoveMenu() {
-    if (!removeMenu || !removeMenuBtn || !removeMenuPanel || removeMenuBtn.disabled) return;
-    removeMenu.classList.add("is-open");
-    removeMenuPanel.hidden = false;
-    removeMenuBtn.setAttribute("aria-expanded", "true");
+    closeCheckoutMenu();
+    closeCheckinMenu();
+    openToolbarMenu(removeMenu, removeMenuBtn, removeMenuPanel);
   }
 
   function toggleRemoveMenu() {
     if (removeMenu?.classList.contains("is-open")) closeRemoveMenu();
     else openRemoveMenu();
+  }
+
+  function toggleCheckoutMenu() {
+    if (checkoutMenu?.classList.contains("is-open")) closeCheckoutMenu();
+    else {
+      closeRemoveMenu();
+      closeCheckinMenu();
+      openToolbarMenu(checkoutMenu, checkoutMenuBtn, checkoutMenuPanel);
+    }
+  }
+
+  function toggleCheckinMenu() {
+    if (checkinMenu?.classList.contains("is-open")) closeCheckinMenu();
+    else {
+      closeRemoveMenu();
+      closeCheckoutMenu();
+      openToolbarMenu(checkinMenu, checkinMenuBtn, checkinMenuPanel);
+    }
   }
 
   function rowObjectIds(row) {
@@ -3130,25 +3185,36 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const canCheckin = selectionCanCheckin(selected);
     const canUndo = selected.length > 0 && selected.every((row) => row.dataset.owned === "1");
     const addOnly = selectionIsAddOnly(selected);
+    const projectId =
+      checkinBtn?.dataset.project ||
+      checkinMenuBtn?.dataset.project ||
+      openWorkspaceBtn?.dataset.project ||
+      currentProjectId() ||
+      "";
+    const canCheckoutProject = Boolean(projectId);
+    const canCheckinProject = Boolean(projectId);
     if (checkoutBtn) checkoutBtn.disabled = !canCheckout;
-    setToolbarActionVisible(checkoutBtn, canCheckout);
-    if (checkinBtn) {
-      checkinBtn.textContent = addOnly ? "Add" : "Check In";
-      const tip = checkinBtn.closest(".toolbar-tip");
-      if (tip) {
-        if (addOnly) {
-          tip.title = "Add selected new files to the project (uploads local workspace files first).";
-        } else if (canCheckin) {
-          tip.title = "Check in selected files.";
-        } else if (selected.some((row) => row.dataset.canCheckin === "1")) {
-          tip.title =
-            "Nothing to check in for this selection. Save changes in Creo first, or use Undo Checkout to release locks.";
-        } else {
-          tip.title = "Check in selected files.";
-        }
-      }
+    if (checkoutProjectBtn) checkoutProjectBtn.disabled = !canCheckoutProject;
+    if (checkoutMenuBtn) {
+      checkoutMenuBtn.disabled = !(canCheckout || canCheckoutProject);
+      if (checkoutMenuBtn.disabled) closeCheckoutMenu();
     }
-    setToolbarActionVisible(checkinBtn, canCheckin);
+    if (checkinBtn) {
+      checkinBtn.textContent = addOnly ? "Add selected" : "Check in selected";
+      checkinBtn.disabled = !canCheckin;
+      checkinBtn.title = addOnly
+        ? "Add selected new files to the project (uploads local workspace files first)."
+        : canCheckin
+          ? "Check in selected files."
+          : selected.some((row) => row.dataset.canCheckin === "1")
+            ? "Nothing to check in for this selection. Save changes in Creo first, or use Undo Checkout to release locks."
+            : "Check in selected files.";
+    }
+    if (checkinProjectBtn) checkinProjectBtn.disabled = !canCheckinProject;
+    if (checkinMenuBtn) {
+      checkinMenuBtn.disabled = !(canCheckin || canCheckinProject);
+      if (checkinMenuBtn.disabled) closeCheckinMenu();
+    }
     setToolbarActionVisible(undoBtn, canUndo);
     if (workspaceBtn) workspaceBtn.disabled = !selected.some((row) => row.dataset.inWorkspace !== "1");
     const localNewSelected = selected.filter(
@@ -3189,9 +3255,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function setCheckinQueueCounts(pendingSaves, newFiles) {
-    if (!checkinBtn) return;
-    checkinBtn.dataset.pendingSaves = String(pendingSaves || 0);
-    checkinBtn.dataset.newFiles = String(newFiles || 0);
+    for (const el of [checkinBtn, checkinMenuBtn]) {
+      if (!el) continue;
+      el.dataset.pendingSaves = String(pendingSaves || 0);
+      el.dataset.newFiles = String(newFiles || 0);
+    }
     const tab = document.querySelector('.tab[data-tab="changes"]');
     if (tab) {
       const pending = Number(pendingSaves || 0) + Number(newFiles || 0);
@@ -4198,11 +4266,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const fileWrap = $("#open-checkout-file-wrap");
     const companionsWrap = $("#open-checkout-companions-wrap");
     const companionsNote = $("#open-checkout-companions-note");
+    const wdBox = $("#open-checkout-set-wd");
     const openRadio = $("#open-action-open");
     const cancelBtn = $("#open-checkout-cancel");
     const err = $("#open-checkout-error");
     if (!(dialog instanceof HTMLDialogElement) || !form || !openRadio) {
-      return Promise.resolve("open");
+      return Promise.resolve({ action: "open", setWorkingDirectory: false });
     }
     if (lead) {
       lead.textContent = `How do you want to open ${filename}?`;
@@ -4213,6 +4282,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (companionsWrap) companionsWrap.hidden = !allowCheckout;
     if (companionsNote) companionsNote.hidden = !allowCheckout;
     openRadio.checked = true;
+    if (wdBox) wdBox.checked = true;
     const fileRadio = $("#open-action-checkout-file");
     const companionsRadio = $("#open-action-checkout-companions");
     if (fileRadio) fileRadio.disabled = !allowCheckout;
@@ -4228,7 +4298,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         } catch {
           /* ignore */
         }
-        resolve(action);
+        resolve({
+          action,
+          setWorkingDirectory: Boolean(wdBox?.checked),
+        });
       };
       const onCancel = (event) => {
         event?.preventDefault?.();
@@ -4301,11 +4374,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (objectId && owned) {
       return openPdmObject(target);
     }
-    const action = await promptOpenCheckout({
+    const choice = await promptOpenCheckout({
       filename,
       canCheckout: Boolean(objectId) && canCheckout,
       owned: false,
     });
+    const action = typeof choice === "string" ? choice : choice?.action;
+    const setWd = Boolean(choice && typeof choice === "object" && choice.setWorkingDirectory);
     if (action === "cancel") return null;
     if (action === "checkout-file" || action === "checkout-companions") {
       const checkedOutIds = await checkoutBeforeOpen(
@@ -4315,6 +4390,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (!checkedOutIds) return null;
       // Paint before openModel — Creo collapses the embedded browser on Display.
       applyCheckedOutOnRows(checkedOutIds);
+    }
+    if (setWd && hostedCreoJS()) {
+      await setCreoWorkingDirectory();
     }
     return openPdmObject(target);
   }
@@ -4981,17 +5059,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     await openPdmObjectFromUi(spec, row);
   });
 
-  checkoutBtn?.addEventListener("click", async () => {
-    const ids = selectedRows().filter((row) => row.dataset.canCheckout === "1").flatMap(rowObjectIds);
-    const fallback = selectedIds();
-    const objectIds = [...new Set((ids.length ? ids : fallback).filter(Boolean))];
-    if (!objectIds.length) return;
-    if (!confirmLargeBulk("Check out", objectIds.length)) return;
+  async function runCheckoutObjects(objectIds) {
+    const ids = [...new Set((objectIds || []).filter(Boolean))];
+    if (!ids.length) return;
+    if (!confirmLargeBulk("Check out", ids.length)) return;
     showError($("#toolbar-error"), "");
     let checkoutResult = null;
-    if (objectIds.length === 1 && !selectedRows().length) {
+    if (ids.length === 1 && !selectedRows().length) {
       checkoutResult = await postAction(
-        `/api/objects/${objectIds[0]}/checkout`,
+        `/api/objects/${ids[0]}/checkout`,
         undefined,
         "POST",
         "Checking out…"
@@ -4999,11 +5075,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (!checkoutResult) return;
     } else {
       const CHECKOUT_CHUNK = 50;
-      const total = objectIds.length;
+      const total = ids.length;
       checkoutResult = await withBusy(`Checking out… 0 of ${total}`, async () => {
         const merged = { ok: [], failed: [] };
-        for (let start = 0; start < objectIds.length; start += CHECKOUT_CHUNK) {
-          const chunk = objectIds.slice(start, start + CHECKOUT_CHUNK);
+        for (let start = 0; start < ids.length; start += CHECKOUT_CHUNK) {
+          const chunk = ids.slice(start, start + CHECKOUT_CHUNK);
           setBusyMessage(`Checking out… ${Math.min(start + chunk.length, total)} of ${total}`);
           const part = await postAction(
             "/api/objects/batch/checkout",
@@ -5025,7 +5101,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const syncedIds =
       Array.isArray(checkoutResult.ok) && checkoutResult.ok.length
         ? checkoutResult.ok.map((item) => item.uuid).filter(Boolean)
-        : objectIds;
+        : ids;
     const sync = await withBusy("Downloading checked-out files to local workspace…", async () => {
       try {
         return await materializeCheckedOutToAgentCache(syncedIds, (done, total) => {
@@ -5064,6 +5140,43 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // ignore form navigation while a folder view is showing.
     applyCheckedOutOnRows(syncedIds);
     reloadPage({ keepBusy: true });
+  }
+
+  checkoutBtn?.addEventListener("click", async () => {
+    const ids = selectedRows().filter((row) => row.dataset.canCheckout === "1").flatMap(rowObjectIds);
+    const fallback = selectedIds();
+    const objectIds = [...new Set((ids.length ? ids : fallback).filter(Boolean))];
+    await runCheckoutObjects(objectIds);
+  });
+
+  checkoutProjectBtn?.addEventListener("click", async () => {
+    const projectId =
+      checkoutProjectBtn.dataset.project ||
+      openWorkspaceBtn?.dataset.project ||
+      currentProjectId() ||
+      "";
+    if (!projectId) {
+      showError($("#toolbar-error"), "Select a project first.");
+      return;
+    }
+    showError($("#toolbar-error"), "");
+    const listed = await withBusy("Listing project files…", async () => {
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/objects`);
+      if (!response.ok) {
+        showError($("#toolbar-error"), await readError(response));
+        return null;
+      }
+      return response.json();
+    });
+    if (!listed) return;
+    const objectIds = (Array.isArray(listed) ? listed : [])
+      .filter((item) => item && item.can_checkout && item.uuid)
+      .map((item) => String(item.uuid));
+    if (!objectIds.length) {
+      showError($("#toolbar-error"), "No files available to check out in this project.");
+      return;
+    }
+    await runCheckoutObjects(objectIds);
   });
 
   workspaceBtn?.addEventListener("click", async () => {
@@ -5172,9 +5285,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   });
 
-  checkinBtn?.addEventListener("click", async () => {
-    const selected = selectedRows();
-    if (!selectionCanCheckin(selected)) {
+  async function beginCheckin(scope = "selected") {
+    const projectScope = scope === "project";
+    const selected = projectScope ? [] : selectedRows();
+    if (!projectScope && !selectionCanCheckin(selected) && !checkinBtn?.dataset.uuid) {
       showError(
         $("#toolbar-error"),
         "Nothing to check in for this selection. Save changes in Creo first, or use Undo Checkout."
@@ -5185,20 +5299,28 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const owned = selected.filter((row) => {
       return row.dataset.canCheckin === "1" && !row.classList.contains("queue-row");
     });
-    const addOnly = selectionIsAddOnly(selectedRows());
-    const projectId = checkinBtn.dataset.project || openWorkspaceBtn?.dataset.project;
+    const addOnly = projectScope ? false : selectionIsAddOnly(selected);
+    const projectId =
+      checkinBtn?.dataset.project ||
+      checkinMenuBtn?.dataset.project ||
+      checkinProjectBtn?.dataset.project ||
+      openWorkspaceBtn?.dataset.project;
     if (!checkinDialog) return;
-    const fallbackId = checkinBtn.dataset.uuid || "";
+    const fallbackId = checkinBtn?.dataset.uuid || "";
     let objectId = "";
-    if (!queued.length && owned.length === 1) {
-      objectId = owned[0].dataset.uuid;
-    } else if (!queued.length && !owned.length && fallbackId) {
-      objectId = fallbackId;
+    if (!projectScope) {
+      if (!queued.length && owned.length === 1) {
+        objectId = owned[0].dataset.uuid;
+      } else if (!queued.length && !owned.length && fallbackId) {
+        objectId = fallbackId;
+      }
     }
-    const useQueue = !objectId;
+    const useQueue = projectScope || !objectId;
     if (useQueue && !projectId) return;
-    const bulkCount = useQueue ? owned.length + queued.length : 1;
-    if (!confirmLargeBulk(addOnly ? "Add" : "Check in", bulkCount)) return;
+    if (!projectScope) {
+      const bulkCount = useQueue ? owned.length + queued.length : 1;
+      if (!confirmLargeBulk(addOnly ? "Add" : "Check in", bulkCount)) return;
+    }
     showError($("#checkin-error"), "");
     showError($("#toolbar-error"), "");
     const pushItems = [];
@@ -5209,7 +5331,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           document.querySelector(".detail-head .object-open")?.textContent?.trim() ||
           "";
         pushItems.push({ object_id: objectId, filename: name });
-      } else {
+      } else if (!projectScope) {
         owned.forEach((row) => {
           if (row.dataset.uuid) {
             pushItems.push({
@@ -5226,6 +5348,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             });
           }
         });
+      } else if (projectId) {
+        try {
+          const queueResp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/checkin-queue`);
+          if (queueResp.ok) {
+            const queueBody = await queueResp.json();
+            (queueBody.saves || []).forEach((item) => {
+              if (item?.uuid) {
+                pushItems.push({
+                  object_id: String(item.uuid),
+                  filename: String(item.filename || ""),
+                });
+              }
+            });
+          }
+        } catch {
+          /* preview still runs */
+        }
+        if (!confirmLargeBulk("Check in project", Math.max(pushItems.length, 1))) return;
       }
     }
     let agentOffline = false;
@@ -5268,7 +5408,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       );
     }
     const title = $("#checkin-dialog-title");
-    if (title) title.textContent = addOnly ? "Add files" : "Check In";
+    if (title) {
+      title.textContent = addOnly ? "Add files" : projectScope ? "Check in project" : "Check In";
+    }
     $("#checkin-filename").textContent = addOnly
       ? (queued.length === 1 ? queued[0].dataset.filename || data.filename : `${queued.length || (data.new_files || []).length} files`)
       : data.filename;
@@ -5303,7 +5445,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // Only vault-dirty files — not every owned checkout (avoids empty revisions).
       let checkinIds = [];
       if (!addOnly) {
-        if (selectedIdsForQueue.length) {
+        if (projectScope) {
+          checkinIds = pendingIds.slice();
+        } else if (selectedIdsForQueue.length) {
           checkinIds = selectedIdsForQueue.filter((id) => pendingSet.has(id));
         } else if (ownedIds.length) {
           checkinIds = ownedIds.filter((id) => pendingSet.has(id));
@@ -5312,6 +5456,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
       }
       checkinDialog.dataset.objectIds = JSON.stringify(checkinIds);
+      checkinDialog.dataset.projectScope = projectScope ? "1" : "";
     }
     const forceWarn = $("#checkin-force-warn");
     if (forceWarn) {
@@ -5328,7 +5473,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const pendingIds = data.object_ids || [];
       const names = addOnly
         ? []
-        : !queued.length
+        : projectScope || !queued.length
           ? pendingNames
           : pendingIds.map((id, index) => (wantedIds.has(id) ? pendingNames[index] : "")).filter(Boolean);
       names.forEach((name) => {
@@ -5336,9 +5481,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         item.textContent = `✓ Check in ${name}`;
         list.appendChild(item);
       });
-      const newCount = queued.length
-        ? queued.filter((row) => row.dataset.relativePath).length
-        : (data.new_files || []).length;
+      const newCount = projectScope
+        ? (data.new_files || []).length
+        : queued.length
+          ? queued.filter((row) => row.dataset.relativePath).length
+          : (data.new_files || []).length;
       if (addOnly) {
         const selectedPaths = queued
           .map((row) => row.dataset.relativePath)
@@ -5425,7 +5572,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       });
     }
     const selectedNew = new Set(
-      queued.map((row) => row.dataset.relativePath).filter(Boolean)
+      projectScope
+        ? (data.new_files || []).map((item) => item.relative_path).filter(Boolean)
+        : queued.map((row) => row.dataset.relativePath).filter(Boolean)
     );
     if (checkinDialog) {
       checkinDialog.dataset.addPaths = JSON.stringify(
@@ -5481,6 +5630,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
     }
     checkinDialog.showModal();
+  }
+
+  checkinBtn?.addEventListener("click", () => {
+    void beginCheckin("selected");
+  });
+  checkinProjectBtn?.addEventListener("click", () => {
+    void beginCheckin("project");
   });
 
   $("#checkin-cancel")?.addEventListener("click", () => checkinDialog?.close());
@@ -5838,13 +5994,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const item = eventEl(event)?.closest(".toolbar-menu-item");
     if (item && !item.disabled) closeRemoveMenu();
   });
+  checkoutMenuBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleCheckoutMenu();
+  });
+  checkoutMenuPanel?.addEventListener("click", (event) => {
+    const item = eventEl(event)?.closest(".toolbar-menu-item");
+    if (item && !item.disabled) closeCheckoutMenu();
+  });
+  checkinMenuBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleCheckinMenu();
+  });
+  checkinMenuPanel?.addEventListener("click", (event) => {
+    const item = eventEl(event)?.closest(".toolbar-menu-item");
+    if (item && !item.disabled) closeCheckinMenu();
+  });
   document.addEventListener("click", (event) => {
-    if (!removeMenu?.classList.contains("is-open")) return;
-    if (removeMenu.contains(eventEl(event))) return;
-    closeRemoveMenu();
+    const node = eventEl(event);
+    if (removeMenu?.classList.contains("is-open") && !removeMenu.contains(node)) closeRemoveMenu();
+    if (checkoutMenu?.classList.contains("is-open") && !checkoutMenu.contains(node)) closeCheckoutMenu();
+    if (checkinMenu?.classList.contains("is-open") && !checkinMenu.contains(node)) closeCheckinMenu();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeRemoveMenu();
+    if (event.key === "Escape") closeAllToolbarMenus();
   });
 
   purgeBtn?.addEventListener("click", async () => {

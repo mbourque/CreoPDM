@@ -87,6 +87,13 @@
       <p class="muted small" id="open-checkout-companions-note">
         Companions are related models Creo needs nearby (for example parts referenced by an assembly). Checking them out takes locks on those files too.
       </p>
+      <label class="choice" id="open-checkout-wd-wrap">
+        <input type="checkbox" id="open-checkout-set-wd" checked>
+        Set Creo working directory to this project’s local workspace
+      </label>
+      <p class="muted small" id="open-checkout-wd-note">
+        Uses the creopdm-agent cache folder on this PC so Creo opens and saves next to the checked-out files.
+      </p>
       <p class="error" id="open-checkout-error" hidden></p>
       <div class="dialog-actions">
         <button type="button" class="btn" id="open-checkout-cancel">Cancel</button>
@@ -1699,6 +1706,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push124"></script>
+  <script src="/client/app.js?v={{ app_version }}-push125"></script>
 </body>
 </html>

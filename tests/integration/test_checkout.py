@@ -309,6 +309,19 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function closeRemoveMenu" in script.text
     assert "Remove ▾" in home.text
     assert 'id="remove-menu-btn"' in home.text
+    assert 'id="checkout-menu-btn"' in home.text
+    assert "Checkout ▾" in home.text
+    assert 'id="checkout-project-btn"' in home.text
+    assert "Checkout selected" in home.text
+    assert "Checkout project" in home.text
+    assert 'id="checkin-menu-btn"' in home.text
+    assert "Check In ▾" in home.text
+    assert 'id="checkin-project-btn"' in home.text
+    assert "Check in selected" in home.text
+    assert "Check in project" in home.text
+    assert "function beginCheckin" in script.text
+    assert "function runCheckoutObjects" in script.text
+    assert 'beginCheckin("project")' in script.text
     assert 'id="discard-local-btn"' in home.text
     assert 'id="purge-versions-btn"' in home.text
     assert 'id="purge-workspace-btn"' in home.text
@@ -363,6 +376,10 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "Check out this file and its companions" in home.text
     assert 'id="open-checkout-dialog"' in home.text
     assert "Open without checking out" in home.text
+    assert 'id="open-checkout-set-wd"' in home.text
+    assert "Set Creo working directory" in home.text
+    assert "setWorkingDirectory" in script.text
+    assert "open-checkout-set-wd" in script.text
     assert 'link.className = "object-open"' in script.text
     assert "dataset.relativePath" in script.text
     assert "do not Activate it" in home.text
