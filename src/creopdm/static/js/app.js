@@ -420,6 +420,45 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  function applyCheckedOutOnRows(uuids, { label = "Checked out by me" } = {}) {
+    /** Paint Checkout column immediately — Creo often ignores post-checkout reload in folders. */
+    const ids = new Set(
+      (uuids || []).map((id) => String(id || "").trim()).filter(Boolean)
+    );
+    if (!ids.size) return;
+    const text = String(label || "Checked out by me");
+    rows().forEach((row) => {
+      const id = row.dataset.uuid;
+      if (!id || !ids.has(id)) return;
+      row.dataset.owned = "1";
+      row.dataset.checkedOut = "1";
+      row.dataset.canCheckin = "1";
+      row.dataset.canCheckout = "0";
+      const state = row.querySelector(".checkout-state");
+      if (state) {
+        state.dataset.state = "mine";
+        state.textContent = text;
+        const td = state.closest("td");
+        if (td) td.title = text;
+      }
+      const tree = row.dataset.tree || "";
+      if (row.dataset.sortCheckout != null) {
+        row.dataset.sortCheckout = `${tree}/${text}`;
+      }
+    });
+    document.querySelectorAll(".detail-meta .checkout-state").forEach((state) => {
+      state.dataset.state = "mine";
+      state.textContent = text;
+    });
+    try {
+      syncToolbar();
+      updateMetricCounts();
+      reapplyActiveTableSorts();
+    } catch {
+      /* list helpers may not be ready on detail-only pages */
+    }
+  }
+
   async function withHtmlDialogClosed(dialog, work) {
     const wasOpen = Boolean(dialog?.open);
     if (wasOpen) dialog.close();
@@ -4095,7 +4134,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function checkoutBeforeOpen(target, withCompanions) {
     const objectId = openTargetObjectId(target);
-    if (!objectId) return true;
+    if (!objectId) return [];
     if (!withCompanions) {
       const result = await postAction(
         `/api/objects/${objectId}/checkout`,
@@ -4103,7 +4142,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         "POST",
         "Checking out…"
       );
-      return Boolean(result);
+      return result ? [objectId] : null;
     }
     const prepared = await postAction(
       "/api/creo/open",
@@ -4111,7 +4150,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       "POST",
       "Finding companions…"
     );
-    if (!prepared) return false;
+    if (!prepared) return null;
     const ids = [
       objectId,
       ...((prepared.companions || []).map((item) => item.object_id).filter(Boolean)),
@@ -4124,7 +4163,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         "POST",
         "Checking out…"
       );
-      return Boolean(result);
+      return result ? unique : null;
     }
     const result = await postAction(
       "/api/objects/batch/checkout",
@@ -4132,10 +4171,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       "POST",
       `Checking out ${unique.length} files…`
     );
-    if (!result) return false;
+    if (!result) return null;
     const warning = formatBatch(result);
     if (warning) showError($("#toolbar-error"), warning);
-    return Boolean(result.ok?.length);
+    if (!result.ok?.length) return null;
+    return result.ok.map((item) => item.uuid).filter(Boolean);
   }
 
   async function openPdmObjectFromUi(target, row) {
@@ -4154,14 +4194,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
     if (action === "cancel") return null;
     if (action === "checkout-file" || action === "checkout-companions") {
-      const ok = await checkoutBeforeOpen(target, action === "checkout-companions");
-      if (!ok) return null;
-      if (row) {
-        row.dataset.owned = "1";
-        row.dataset.canCheckout = "0";
-        row.dataset.canCheckin = "1";
-        row.dataset.checkedOut = "1";
-      }
+      const checkedOutIds = await checkoutBeforeOpen(
+        target,
+        action === "checkout-companions"
+      );
+      if (!checkedOutIds) return null;
+      // Paint before openModel — Creo collapses the embedded browser on Display.
+      applyCheckedOutOnRows(checkedOutIds);
     }
     return openPdmObject(target);
   }
@@ -4907,6 +4946,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           : `${sync.ok} file(s) downloaded to the local workspace.`;
       showOk(note);
     }
+    // Paint before reload — Creo often collapses the browser on open and may
+    // ignore form navigation while a folder view is showing.
+    applyCheckedOutOnRows(syncedIds);
     reloadPage({ keepBusy: true });
   });
 

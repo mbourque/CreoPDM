@@ -353,6 +353,8 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert ".object-row, .folder-row, .queue-row" in script.text
     assert "function openPdmObjectFromUi" in script.text
     assert "function promptOpenCheckout" in script.text
+    assert "function applyCheckedOutOnRows" in script.text
+    assert "Paint before openModel" in script.text
     assert "checkout-companions" in script.text
     assert "Already mine — no checkout choice needed" in script.text
     assert "Check out this file and its companions" in home.text
@@ -360,6 +362,8 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "Open without checking out" in home.text
     assert 'link.className = "object-open"' in script.text
     assert "dataset.relativePath" in script.text
+    assert "Do not Activate the model window" in home.text
+    assert "collapses Creo's embedded browser" in home.text
     css = client.get("/static/css/app.css")
     assert css.status_code == 200
     assert ".grid tr.is-selected td" in css.text

@@ -408,19 +408,15 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
         try {
             model.Display();
         } catch (err) {}
+        // Create a model window if needed, but do not Activate it. Activate
+        // steals focus and collapses Creo's embedded browser (the CreoPDM UI).
+        // Display() still puts the model on screen; click graphics to focus it.
         try {
             var win = session.GetModelWindow(model);
-            if (!win) {
-                win = session.CreateModelWindow(model);
+            if (!win && typeof session.CreateModelWindow === "function") {
+                session.CreateModelWindow(model);
             }
-            if (win) {
-                win.Activate();
-            }
-        } catch (err) {
-            try {
-                session.CurrentWindow.Activate();
-            } catch (err2) {}
-        }
+        } catch (err) {}
         return filename;
     } catch (errAll) {
         var detail = errAll && errAll.message ? String(errAll.message) : String(errAll || "");
@@ -1703,6 +1699,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push117"></script>
+  <script src="/client/app.js?v={{ app_version }}-push118"></script>
 </body>
 </html>
