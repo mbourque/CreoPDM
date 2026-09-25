@@ -5368,6 +5368,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     showError($("#checkin-error"), "");
     showError($("#toolbar-error"), "");
     const pushItems = [];
+    let projectLocalNewPaths = [];
     if (!addOnly) {
       if (objectId) {
         const name =
@@ -5393,8 +5394,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           }
         });
       } else if (projectId) {
+        // Match New files tab: vault queue + local agent-cache new/newer saves.
+        // Preview is vault-only — push local work first or the dialog shows "0 vault files".
         try {
-          const queueResp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/checkin-queue`);
+          const [queueResp, cacheFiles, objects] = await Promise.all([
+            fetch(`/api/projects/${encodeURIComponent(projectId)}/checkin-queue`),
+            listAgentCacheFiles(projectId),
+            ensureProjectObjects(projectId, { force: true }),
+          ]);
+          let vaultNew = [];
           if (queueResp.ok) {
             const queueBody = await queueResp.json();
             (queueBody.saves || []).forEach((item) => {
@@ -5405,11 +5413,30 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
                 });
               }
             });
+            vaultNew = Array.isArray(queueBody.new_files) ? queueBody.new_files : [];
           }
+          const known = await loadKnownWorkspacePaths(
+            projectId,
+            vaultNew.map((item) => item.relative_path || "")
+          );
+          const localNew = localOnlyCacheFiles(cacheFiles, known);
+          projectLocalNewPaths = localNew
+            .map((item) => String(item.relative_path || item.path || "").replace(/\\/g, "/"))
+            .filter(Boolean);
+          const vaultSaveIds = new Set(pushItems.map((item) => item.object_id));
+          newerLocalCacheSaves(cacheFiles, objects)
+            .filter((item) => item?.uuid && !vaultSaveIds.has(String(item.uuid)))
+            .forEach((item) => {
+              pushItems.push({
+                object_id: String(item.uuid),
+                filename: String(item.filename || ""),
+              });
+            });
         } catch {
           /* preview still runs */
         }
-        if (!confirmLargeBulk("Check in project", Math.max(pushItems.length, 1))) return;
+        const bulkHint = Math.max(pushItems.length + projectLocalNewPaths.length, 1);
+        if (!confirmLargeBulk("Check in project", bulkHint)) return;
       }
     }
     let agentOffline = false;
@@ -5421,6 +5448,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             agentOffline = true;
           } else if (pushed.failed?.length && !pushed.ok?.length) {
             const first = pushed.failed[0]?.message || "Could not sync local files to the vault.";
+            showError($("#toolbar-error"), first);
+          }
+        } catch (err) {
+          showError($("#toolbar-error"), err?.message || String(err));
+        }
+      }
+      if (!addOnly && projectId && projectLocalNewPaths.length) {
+        try {
+          const pushedNew = await pushLocalNewPathsToVault(projectId, projectLocalNewPaths);
+          if (pushedNew === null) {
+            agentOffline = true;
+          } else if (pushedNew.failed?.length && !pushedNew.ok?.length) {
+            const first = pushedNew.failed[0]?.message || "Could not sync new local files to the vault.";
             showError($("#toolbar-error"), first);
           }
         } catch (err) {
@@ -5441,7 +5481,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (
       !addOnly &&
       agentOffline &&
-      pushItems.length &&
+      (pushItems.length || projectLocalNewPaths.length) &&
       !(data.object_ids || []).length &&
       !(data.new_files || []).length &&
       !data.can_checkin
@@ -5548,9 +5588,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
       } else if (!names.length && !newCount) {
         const item = document.createElement("li");
-        item.textContent = "– Nothing to check in. Use Undo Checkout to release locks without a new version.";
+        item.textContent = projectScope
+          ? "– Nothing to check in. Local workspace files need creopdm-agent to sync into the vault first."
+          : "– Nothing to check in. Use Undo Checkout to release locks without a new version.";
         list.appendChild(item);
         canSubmit = false;
+      } else if (projectScope && newCount && !names.length) {
+        (data.new_files || []).forEach((file) => {
+          const item = document.createElement("li");
+          item.textContent = `✓ Add ${file.filename || file.relative_path || "file"}`;
+          list.appendChild(item);
+        });
       }
     } else {
       [
