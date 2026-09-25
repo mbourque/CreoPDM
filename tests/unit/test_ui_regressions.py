@@ -185,11 +185,15 @@ def test_delete_project_dialog_offers_local_workspace_checkbox():
 
 
 def test_soft_nav_does_not_silently_drop_when_busy():
-    """Regression: soft-nav busy used to no-op folder/project clicks."""
+    """Regression: soft-nav busy used to no-op or hard-reload (SSR Not Connected flash)."""
     body = _between(_app_js(), "function softNavigate(", "function leavePage(")
     assert "__creopdmSoftNavBusy" in body
-    assert "window.location.href = absolute.href" in body
-    assert "Never silently drop" in body or "already in flight" in body
+    assert "softNavQueued" in body
+    assert "Never hard-reload list home" in body or "never hard-reload" in body.lower()
+    # Busy path must queue — not location.href for list home.
+    busy = body.split("if (window.__creopdmSoftNavBusy || softNavBusy)")[1].split("softNavBusy = true")[0]
+    assert "softNavQueued" in busy
+    assert "window.location.href" not in busy
     assert "window.__creopdmBoot({ soft: true })" in body
 
 
@@ -198,6 +202,7 @@ def test_soft_nav_skips_creojs_reconnect():
 
     Soft switches only replace main.shell; the status pill and Creo.JS bridge live
     outside it and must stay connected — including when changing projects.
+    Hard reload SSR-paints Not Connected and drops the live bridge.
     """
     script = _app_js()
     base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
@@ -211,10 +216,19 @@ def test_soft_nav_skips_creojs_reconnect():
     soft_nav = _between(script, "function softNavigate(", "function leavePage(")
     assert "window.__creopdmBoot({ soft: true })" in soft_nav
     assert "Keep the live Creo.JS bridge" in soft_nav
+    assert "softNavQueued" in soft_nav
 
-    # Project, folder crumb, and brand clicks soft-navigate in Creo's browser.
-    assert "a.project-item, nav.folder-crumb a, a.brand" in script
+    # leavePage always soft-navs list home (no inCreoBrowser gate — false negatives
+    # caused hard reloads that flashed Not Connected).
+    leave = _between(script, "function leavePage(", "function reloadPage(")
+    assert "isListHomeUrl(url)" in leave
+    assert "softNavigate" in leave
+    assert "inCreoBrowser()" not in leave
+
+    # Project, folder crumb, brand, and folder-open clicks soft-navigate.
+    assert "a.project-item, nav.folder-crumb a, a.brand, a.folder-open" in script
     assert 'softNavigate(href, "push")' in script
+    assert "Do not gate on inCreoBrowser" in script
 
     # Soft boot: toolbar sync only — no agent probe, no bridge reconnect poll.
     assert "syncCreoSessionControlsFromBridge" in script
@@ -229,9 +243,16 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "refreshCreoStatusPill" not in soft_branch
     assert "creoJSReady.then" not in soft_branch
 
-    # Status poll must survive soft boots (those abort pageIntervals).
+    # Status poll must survive soft boots and skip updates while soft-nav busy.
     assert "__creopdmStatusPollId" in block
     assert "Survive soft folder/project boots" in block
+    assert "__creopdmSoftNavBusy" in script.split("window.__creopdmStatusPollId")[1].split("}, interval)")[0]
+
+    # Pill refresh must not flash Session offline during soft nav / bridge flake.
+    pill_fn = _between(script, "async function refreshCreoStatusPill(", "function showCreoSessionControls(")
+    assert "__creopdmSoftNavBusy" in pill_fn
+    assert "Transient bridge flake" in pill_fn
+    assert "Session offline" in pill_fn
 
 
 def test_new_project_and_sidebar_collapse_handlers_present():

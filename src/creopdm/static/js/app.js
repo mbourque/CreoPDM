@@ -67,7 +67,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     } catch {
       /* ignore */
     }
-    return false;
+    // Chromium Creo often omits external.ptc / isAvailable while the session is live.
+    try {
+      if (typeof pfcGetCurrentSession === "function" && pfcGetCurrentSession()) {
+        return true;
+      }
+    } catch {
+      /* not in a Creo session */
+    }
+    return Boolean(window.CreoJS);
   }
 
   const creoJSReady =
@@ -236,6 +244,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   let softNavBusy = false;
+  let softNavQueued = null;
 
   function softNavigate(url, historyMode = "push") {
     const absolute = new URL(url, window.location.href);
@@ -243,9 +252,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       window.location.href = absolute.href;
       return Promise.resolve();
     }
-    // Never silently drop a folder/project navigation if one is already in flight.
+    // Queue — never hard-reload list home (SSR flashes Not Connected and drops Creo.JS).
     if (window.__creopdmSoftNavBusy || softNavBusy) {
-      window.location.href = absolute.href;
+      softNavQueued = { href: absolute.href, historyMode };
       return Promise.resolve();
     }
     softNavBusy = true;
@@ -284,13 +293,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     } finally {
       softNavBusy = false;
       window.__creopdmSoftNavBusy = false;
+      const queued = softNavQueued;
+      softNavQueued = null;
+      if (queued) {
+        void softNavigate(queued.href, queued.historyMode);
+      }
     }
     })();
   }
 
   function leavePage(url) {
     closeOpenDialogs();
-    if (inCreoBrowser() && isListHomeUrl(url)) {
+    // Always soft-nav list home — hard reload SSR-paints Not Connected and kills Creo.JS.
+    if (isListHomeUrl(url)) {
       void withBusy("Loading…", () => softNavigate(url, "push"));
       return;
     }
@@ -3942,6 +3957,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function refreshCreoStatusPill(prefetchedAgent) {
+    // Soft folder/project swap — never flash Session offline / Not Connected.
+    if (window.__creopdmSoftNavBusy || softNavBusy) return null;
     const inSession = hostedCreoJS();
     document.querySelectorAll(".creo-session-only").forEach((el) => {
       el.hidden = false;
@@ -3963,6 +3980,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (modeKey === "embedded") {
       const agent =
         prefetchedAgent !== undefined ? prefetchedAgent : await probeCreoAgent();
+      // Transient bridge flake during nav — keep Connected while CreoJS is still present.
+      if (
+        !inSession &&
+        pill.dataset.state === "ok" &&
+        window.CreoJS &&
+        agent
+      ) {
+        return agent;
+      }
       if (inSession && agent) {
         pill.textContent = `Creo: Connected · ${modeName}`;
         pill.dataset.state = "ok";
@@ -4057,6 +4083,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const interval = Math.min(120000, Math.max(1000, Math.round(seconds * 1000)));
         // Survive soft folder/project boots (those abort pageIntervals).
         window.__creopdmStatusPollId = window.setInterval(() => {
+          if (window.__creopdmSoftNavBusy) return;
           void refreshCreoStatusPill();
         }, interval);
       }
@@ -6763,15 +6790,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   });
 
-  // Keep Creo.JS connected: soft-navigate list home links in the embedded browser.
+  // Keep Creo.JS connected: soft-navigate list home links (projects, crumbs, folders).
+  // Do not gate on inCreoBrowser — a false negative caused hard reloads that SSR-paint
+  // "Not Connected" and drop the live Creo.JS bridge.
   document.addEventListener(
     "click",
     (event) => {
-      const link = eventEl(event)?.closest("a.project-item, nav.folder-crumb a, a.brand");
+      const link = eventEl(event)?.closest(
+        "a.project-item, nav.folder-crumb a, a.brand, a.folder-open"
+      );
       if (!link || event.defaultPrevented) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       if (event.button != null && event.button !== 0) return;
-      if (!inCreoBrowser()) return;
       const href = link.getAttribute("href");
       if (!href || !isListHomeUrl(href)) return;
       event.preventDefault();
@@ -6782,7 +6812,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   );
 
   window.addEventListener("popstate", () => {
-    if (!inCreoBrowser()) return;
     if (!isListHomeUrl(window.location.href)) return;
     void withBusy("Loading…", () => softNavigate(window.location.href, "none"));
   });
