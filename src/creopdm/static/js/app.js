@@ -232,12 +232,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   }
 
-  function isListHomeUrl(url) {
+  /** Same-origin pages that share base.html + main.shell — soft-nav keeps Creo.JS. */
+  function isSoftNavUrl(url) {
     try {
       const parsed = new URL(url, window.location.href);
       if (parsed.origin !== window.location.origin) return false;
       const path = parsed.pathname || "/";
-      return path === "/" || path === "";
+      if (path === "/" || path === "") return true;
+      if (path === "/settings" || path === "/settings/types") return true;
+      if (/^\/projects\/[^/]+\/objects\/[^/]+\/?$/.test(path)) return true;
+      return false;
     } catch {
       return false;
     }
@@ -248,11 +252,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function softNavigate(url, historyMode = "push") {
     const absolute = new URL(url, window.location.href);
-    if (!isListHomeUrl(absolute.href)) {
+    if (!isSoftNavUrl(absolute.href)) {
       window.location.href = absolute.href;
       return Promise.resolve();
     }
-    // Queue — never hard-reload list home (SSR flashes Not Connected and drops Creo.JS).
+    // Queue — never hard-reload soft-nav pages (SSR flashes Not Connected and drops Creo.JS).
     if (window.__creopdmSoftNavBusy || softNavBusy) {
       softNavQueued = { href: absolute.href, historyMode };
       return Promise.resolve();
@@ -304,8 +308,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function leavePage(url) {
     closeOpenDialogs();
-    // Always soft-nav list home — hard reload SSR-paints Not Connected and kills Creo.JS.
-    if (isListHomeUrl(url)) {
+    // Always soft-nav shell pages — hard reload SSR-paints Not Connected and kills Creo.JS.
+    if (isSoftNavUrl(url)) {
       void withBusy("Loading…", () => softNavigate(url, "push"));
       return;
     }
@@ -6790,20 +6794,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   });
 
-  // Keep Creo.JS connected: soft-navigate list home links (projects, crumbs, folders).
+  // Keep Creo.JS connected: soft-navigate shell pages (projects, folders, settings, detail).
   // Do not gate on inCreoBrowser — a false negative caused hard reloads that SSR-paint
   // "Not Connected" and drop the live Creo.JS bridge.
   document.addEventListener(
     "click",
     (event) => {
-      const link = eventEl(event)?.closest(
-        "a.project-item, nav.folder-crumb a, a.brand, a.folder-open"
-      );
+      const link = eventEl(event)?.closest("a[href]");
       if (!link || event.defaultPrevented) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       if (event.button != null && event.button !== 0) return;
+      if (link.target && link.target !== "_self") return;
       const href = link.getAttribute("href");
-      if (!href || !isListHomeUrl(href)) return;
+      if (!href || !isSoftNavUrl(href)) return;
       event.preventDefault();
       event.stopPropagation();
       void withBusy("Loading…", () => softNavigate(href, "push"));
@@ -6812,7 +6815,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   );
 
   window.addEventListener("popstate", () => {
-    if (!isListHomeUrl(window.location.href)) return;
+    if (!isSoftNavUrl(window.location.href)) return;
     void withBusy("Loading…", () => softNavigate(window.location.href, "none"));
   });
 
