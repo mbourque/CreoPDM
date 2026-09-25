@@ -1341,6 +1341,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const btn = $("#delete-project-btn");
     showError($("#delete-project-error"), "");
     if (deleteProjectForm) deleteProjectForm.reset();
+    const deleteLocal = $("#delete-local-workspace");
+    if (deleteLocal) deleteLocal.checked = true;
     deleteProjectDialog?.showModal();
   });
   $("#delete-project-cancel")?.addEventListener("click", () => deleteProjectDialog?.close());
@@ -1350,24 +1352,66 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const projectId = btn?.dataset.project;
     const expected = (btn?.dataset.name || "").trim();
     if (!projectId) return;
-    const typed = String(new FormData(deleteProjectForm).get("confirm_name") || "").trim();
+    const formData = new FormData(deleteProjectForm);
+    const typed = String(formData.get("confirm_name") || "").trim();
     if (typed !== expected) {
       showError($("#delete-project-error"), "Type the project name exactly to delete it.");
       return;
     }
-    const response = await withBusy("Deleting project…", () =>
-      fetch(`/api/projects/${projectId}/forget`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirm_name: typed }),
-      })
-    );
-    if (!response.ok) {
-      showError($("#delete-project-error"), await readError(response));
+    const deleteLocal = Boolean($("#delete-local-workspace")?.checked);
+    const vaultFolder = currentVaultFolder();
+    let result;
+    try {
+      result = await withBusy("Deleting project…", async () => {
+        const notices = [];
+        if (deleteLocal) {
+          const agent = await probeCreoAgent();
+          if (!agent) {
+            notices.push(
+              "creopdm-agent is not running — local workspace on this PC was not deleted."
+            );
+          } else {
+            try {
+              const localResponse = await fetch(`${agentBase()}/delete-project-cache`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  project_id: projectId,
+                  vault_folder: vaultFolder,
+                }),
+              });
+              if (!localResponse.ok) {
+                notices.push(await readError(localResponse));
+              }
+            } catch (exc) {
+              notices.push(
+                exc?.message ||
+                  "Could not reach creopdm-agent to delete the local workspace."
+              );
+            }
+          }
+        }
+        const forgetResponse = await fetch(`/api/projects/${projectId}/forget`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm_name: typed }),
+        });
+        if (!forgetResponse.ok) {
+          throw new Error(await readError(forgetResponse));
+        }
+        const body = await forgetResponse.json().catch(() => ({}));
+        if (body.warning) notices.push(String(body.warning));
+        body.warning = notices.filter(Boolean).join(" ");
+        return body;
+      });
+    } catch (exc) {
+      showError(
+        $("#delete-project-error"),
+        exc?.message || "Could not delete the project."
+      );
       return;
     }
-    const result = await response.json().catch(() => ({}));
-    if (result.warning) sessionStorage.setItem("creopdmNotice", result.warning);
+    if (result?.warning) sessionStorage.setItem("creopdmNotice", result.warning);
     clearProjectViewStorage(projectId);
     leavePage("/");
   });

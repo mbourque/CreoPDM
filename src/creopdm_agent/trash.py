@@ -10,25 +10,39 @@ from pathlib import Path
 def move_to_trash(path: Path) -> None:
     """Send ``path`` to the Recycle Bin on Windows; otherwise delete permanently.
 
-    Under pytest, always unlinks so agent tests do not fill the Recycle Bin.
+    Under pytest, always removes so agent tests do not fill the Recycle Bin.
     If the Shell recycle call fails, falls back to a permanent delete.
     """
+    import shutil
+
     target = Path(path)
     if not target.exists():
         return
     if os.environ.get("PYTEST_CURRENT_TEST"):
-        target.unlink()
+        if target.is_dir():
+            shutil.rmtree(target, ignore_errors=False)
+        else:
+            target.unlink()
         return
     if sys.platform == "win32":
         try:
             _windows_recycle_bin(target)
         except OSError:
-            target.unlink()
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
             return
         if target.exists():
-            target.unlink()
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
         return
-    target.unlink()
+    if target.is_dir():
+        shutil.rmtree(target)
+    else:
+        target.unlink()
 
 
 def _windows_recycle_bin(path: Path) -> None:

@@ -441,6 +441,13 @@
     <label>Type the project name to confirm
       <input name="confirm_name" id="delete-project-confirm" required maxlength="255" autocomplete="off">
     </label>
+    <div class="project-vault-fields">
+      <div class="checkbox-row">
+        <input type="checkbox" name="delete_local_workspace" id="delete-local-workspace" checked>
+        <label for="delete-local-workspace">Also delete local workspace on this PC</label>
+      </div>
+    </div>
+    <p class="muted small">Removes the creopdm-agent cache folder. This can fail if Creo still has files open or its working directory is set to that folder.</p>
     <p class="error" id="delete-project-error" hidden></p>
     <div class="dialog-actions">
       <button type="button" class="btn" id="delete-project-cancel">Cancel</button>

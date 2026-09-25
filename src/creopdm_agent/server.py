@@ -243,6 +243,18 @@ class DeletePathsResponse(BaseModel):
     failed: list[PushItemResult] = Field(default_factory=list)
 
 
+class DeleteProjectCacheRequest(BaseModel):
+    project_id: str = ""
+    vault_folder: str = ""
+
+
+class DeleteProjectCacheResponse(BaseModel):
+    ok: bool = True
+    deleted: bool = False
+    path: str = ""
+    message: str = ""
+
+
 class PurgeFloor(BaseModel):
     logical_path: str = ""
     min_keep: int = 0
@@ -1224,6 +1236,60 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             for path in siblings:
                 trash_one(path, rel)
         return DeletePathsResponse(ok=ok, failed=failed)
+
+    @app.post("/delete-project-cache", response_model=DeleteProjectCacheResponse)
+    def delete_project_cache(payload: DeleteProjectCacheRequest) -> DeleteProjectCacheResponse:
+        """Remove the whole local agent-cache folder for a project (Recycle Bin when possible).
+
+        May fail while Creo still has files open or its working directory is that folder.
+        """
+        project_id = (payload.project_id or "").strip()
+        vault_folder = (payload.vault_folder or "").strip()
+        if not project_id and not vault_folder:
+            raise HTTPException(status_code=400, detail="project_id or vault_folder is required.")
+        cache_dir = _project_cache_dir(project_id, vault_folder=vault_folder)
+        root_resolved = settings.ensure_dirs().resolve()
+        try:
+            cache_dir.resolve().relative_to(root_resolved)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=403,
+                detail="Refusing to delete a path outside the agent cache.",
+            ) from exc
+        if cache_dir.resolve() == root_resolved:
+            raise HTTPException(status_code=400, detail="Refusing to delete the agent cache root.")
+        if not cache_dir.exists():
+            return DeleteProjectCacheResponse(
+                ok=True,
+                deleted=False,
+                path=str(cache_dir),
+                message="Local workspace folder was already gone.",
+            )
+        try:
+            move_to_trash(cache_dir)
+        except OSError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Could not delete the local workspace. Close open files in Creo "
+                    f"(and change Creo's working directory if it still points here): {exc}"
+                ),
+            ) from exc
+        if cache_dir.exists():
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Could not delete the local workspace. Close open files in Creo "
+                    "or change Creo's working directory away from this folder, then try again."
+                ),
+            )
+        logger.info("Deleted local project cache %s", cache_dir)
+        return DeleteProjectCacheResponse(
+            ok=True,
+            deleted=True,
+            path=str(cache_dir),
+            message="Local workspace moved to the Recycle Bin.",
+        )
 
     @app.post("/purge-versions", response_model=PurgeVersionsResponse)
     def purge_older_versions(payload: PurgeVersionsRequest) -> PurgeVersionsResponse:

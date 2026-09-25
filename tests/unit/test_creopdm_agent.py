@@ -810,6 +810,35 @@ def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
         assert not (cache / "nested" / "extra.txt").exists()
 
 
+def test_agent_delete_project_cache_removes_folder(tmp_path):
+    root = tmp_path / "cache"
+    vault = "robot-arm"
+    cache = root / vault
+    cache.mkdir(parents=True)
+    (cache / "shaft.prt.1").write_bytes(b"prt")
+    nested = cache / "docs"
+    nested.mkdir()
+    (nested / "notes.txt").write_text("hi", encoding="utf-8")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    with TestClient(app) as client:
+        response = client.post(
+            "/delete-project-cache",
+            json={"project_id": "ignored-uuid", "vault_folder": vault},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["ok"] is True
+        assert body["deleted"] is True
+        assert not cache.exists()
+        again = client.post(
+            "/delete-project-cache",
+            json={"project_id": "ignored-uuid", "vault_folder": vault},
+        )
+        assert again.status_code == 200, again.text
+        assert again.json()["deleted"] is False
+
+
 def test_agent_delete_paths_trashes_creo_numbered_siblings(tmp_path):
     root = tmp_path / "cache"
     project_id = "proj-del-sib"

@@ -175,6 +175,15 @@ def test_project_dialog_has_vault_folder_and_use_hash():
     assert "flex-direction: row" in css.split(".project-vault-fields .checkbox-row", 1)[1].split("}", 1)[0]
 
 
+def test_delete_project_dialog_offers_local_workspace_checkbox():
+    html = APP_HTML.read_text(encoding="utf-8")
+    assert 'id="delete-local-workspace" checked' in html
+    assert "Also delete local workspace on this PC" in html
+    script = _app_js()
+    assert "/delete-project-cache" in script
+    assert "delete-local-workspace" in script
+
+
 def test_soft_nav_does_not_silently_drop_when_busy():
     """Regression: soft-nav busy used to no-op folder/project clicks."""
     body = _between(_app_js(), "function softNavigate(", "function leavePage(")
