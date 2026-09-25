@@ -1088,9 +1088,14 @@ class ObjectService:
         session: Session,
         project_id: int,
         current_folder: str = "",
+        vault_folder_names: list[str] | None = None,
     ) -> tuple[list[EngineeringObject], list[dict]]:
-        """Folders from the imported catalog; full rows only for files in this folder."""
-        from creopdm.utils.folders import folder_index, normalize_folder_query
+        """Folders from the imported catalog; full rows only for files in this folder.
+
+        Empty vault directories (Create folder / .gitkeep) are merged in when
+        vault_folder_names is provided so they appear in the Files list.
+        """
+        from creopdm.utils.folders import folder_index, merge_disk_folders, normalize_folder_query
 
         current = normalize_folder_query(current_folder)
         stmt = select(
@@ -1102,6 +1107,8 @@ class ObjectService:
             stmt = stmt.where(EngineeringObject.relative_path.startswith(f"{current}/"))
         rows = session.execute(stmt).all()
         folder_entries, file_rels = folder_index(list(rows), current)
+        if vault_folder_names:
+            folder_entries = merge_disk_folders(folder_entries, vault_folder_names, current)
         files: list[EngineeringObject] = []
         if file_rels:
             files = list(

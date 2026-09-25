@@ -247,8 +247,21 @@ class ProjectStatusResponse(BaseModel):
 class ImportLocalRequest(BaseModel):
     paths: list[str] = Field(default_factory=list)
     folder: str | None = None
+    folders: list[str] = Field(default_factory=list)
+    recursive: bool = True
     comment: str | None = None
     base_folder: str | None = None
+
+
+class CreateFolderRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    parent_folder: str = ""
+    comment: str | None = None
+
+
+class CreateFolderResponse(BaseModel):
+    path: str
+    name: str
 
 
 class WorkspaceWatchResponse(BaseModel):
@@ -263,6 +276,7 @@ class WorkspacePickerResponse(BaseModel):
     selected: list[str] = Field(default_factory=list)
     cancelled: bool = False
     folder: str | None = None
+    folders: list[str] = Field(default_factory=list)
     ignored_count: int = 0
     warning: str = ""
     native_picker: bool = Field(default_factory=native_picker_available)

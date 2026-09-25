@@ -334,7 +334,26 @@
               {% if workspace_path %}data-workspace="{{ workspace_path }}"{% endif %}
               disabled>Set Working Directory</button>
     </span>
-    <button type="button" class="btn" id="add-files-btn" {% if not selected %}disabled{% endif %}>Add Files</button>
+    <div class="toolbar-menu" id="add-menu">
+      <button type="button" class="btn toolbar-menu-toggle" id="add-menu-btn"
+              aria-haspopup="menu" aria-expanded="false"
+              {% if not selected %}disabled{% endif %}
+              title="Add files or folders to this project, or create an empty folder.">Add ▾</button>
+      <div class="toolbar-menu-panel" role="menu" hidden>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="add-files-btn"
+                {% if not selected %}disabled{% endif %}
+                title="Pick files to copy into the vault.">Add files</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="add-folders-btn"
+                {% if not selected %}disabled{% endif %}
+                title="Pick one or more folders and import all nested files.">Add folders</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="add-folder-btn"
+                {% if not selected %}disabled{% endif %}
+                title="Pick a folder and import only its top-level files (not subfolders).">Add Folder</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="create-folder-btn"
+                {% if not selected %}disabled{% endif %}
+                title="Create an empty folder in the current project location.">Create folder</button>
+      </div>
+    </div>
     <span class="toolbar-tip" title="Open this project's local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">
       <button type="button" class="btn" id="open-workspace-btn" {% if selected %}data-project="{{ selected.uuid }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}>Open Workspace</button>
     </span>
@@ -481,17 +500,17 @@
 </dialog>
 
 <dialog id="add-dialog" class="dialog">
-  <form method="dialog" id="add-form" {% if selected %}data-project="{{ selected.uuid }}"{% endif %} data-native-picker="{{ '1' if native_picker else '0' }}">
-    <h2>Add files</h2>
-    <p class="muted">Files are copied into the vault. Numbered names such as <code>shaft.prt.3</code> keep only the latest save.</p>
+  <form method="dialog" id="add-form" {% if selected %}data-project="{{ selected.uuid }}"{% endif %} data-native-picker="{{ '1' if native_picker else '0' }}" data-add-mode="files">
+    <h2 id="add-dialog-title">Add files</h2>
+    <p class="muted" id="add-dialog-lead">Files are copied into the vault. Numbered names such as <code>shaft.prt.3</code> keep only the latest save.</p>
     <p class="muted small" id="add-folder-label">{% if selected %}Project: {{ selected.name }}{% endif %}</p>
     <div class="dropzone" id="dropzone">
       <div class="dropzone-actions">
         <button type="button" class="btn" id="choose-workspace-files">Choose Files</button>
-        <button type="button" class="btn" id="choose-workspace-folder">Choose Folder</button>
+        <button type="button" class="btn" id="choose-workspace-folder" hidden>Choose Folder</button>
       </div>
       <p id="chosen-file-summary" class="muted small"></p>
-      <span class="muted small">Drop files or folders here, or choose them. Copies go into the vault. On a LAN http:// address, drop folders instead of Choose Folder to avoid Chrome’s upload warning.</span>
+      <span class="muted small" id="add-drop-hint">Drop files here, or choose them. Copies go into the vault.</span>
     </div>
     <input id="add-file-input" class="sr-file" type="file" multiple>
     <input id="add-folder-input" class="sr-file" type="file" webkitdirectory multiple>
@@ -501,7 +520,22 @@
     <p class="error" id="add-error" hidden></p>
     <div class="dialog-actions">
       <button type="button" class="btn" id="add-cancel">Cancel</button>
-      <button type="submit" class="btn btn-primary">Add</button>
+      <button type="submit" class="btn btn-primary" id="add-submit">Add</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="create-folder-dialog" class="dialog">
+  <form method="dialog" id="create-folder-form" {% if selected %}data-project="{{ selected.uuid }}"{% endif %}>
+    <h2>Create folder</h2>
+    <p class="muted small" id="create-folder-location">Creates a folder in the current project location.</p>
+    <label>Folder name
+      <input name="name" id="create-folder-name" required maxlength="200" autocomplete="off" spellcheck="false" placeholder="Drawings">
+    </label>
+    <p class="error" id="create-folder-error" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="create-folder-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Create</button>
     </div>
   </form>
 </dialog>

@@ -7,6 +7,7 @@ from creopdm.utils.folders import (
     folder_list_entries,
     folder_of,
     folder_view_counts,
+    merge_disk_folders,
     normalize_folder_query,
 )
 
@@ -207,3 +208,25 @@ def test_folder_index_normalizes_backslashes():
     assert folders[0]["path"] == "Incoming"
     assert folders[0]["count"] == 1
 
+
+def test_merge_disk_folders_adds_empty_create_folder():
+    entries, _ = folder_index([("Incoming/pin.prt", None)], "")
+    merged = merge_disk_folders(entries, ["Incoming", "Drawings"], "")
+    names = [item["name"] for item in merged]
+    assert names == ["Drawings", "Incoming"]
+    drawings = next(item for item in merged if item["name"] == "Drawings")
+    assert drawings["count"] == 0
+    assert drawings["path"] == "Drawings"
+    # Nested empty folder under Incoming
+    nested = merge_disk_folders([], ["RevA"], "Incoming")
+    assert nested == [
+        {
+            "kind": "folder",
+            "name": "RevA",
+            "path": "Incoming/RevA",
+            "depth": 0,
+            "count": 0,
+            "modified": None,
+            "object_ids": [],
+        }
+    ]

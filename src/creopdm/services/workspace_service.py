@@ -113,6 +113,85 @@ class WorkspaceService:
             return root
         return target if target.is_dir() else root
 
+    def create_folder(
+        self,
+        project: Project,
+        *,
+        name: str,
+        parent_folder: str = "",
+        user: UserIdentity,
+        comment: str | None = None,
+    ) -> str:
+        """Create an empty vault folder (tracked via .gitkeep) under parent_folder."""
+        from creopdm.utils.folders import normalize_folder_query
+
+        raw_name = str(name or "").strip().strip("/\\")
+        if not raw_name or raw_name in {".", ".."} or "/" in raw_name or "\\" in raw_name:
+            raise PathValidationError(
+                "Enter a folder name without path separators.",
+                details={"name": name},
+            )
+        if raw_name.startswith("."):
+            raise PathValidationError(
+                "Folder names cannot start with a dot.",
+                details={"name": name},
+            )
+        parent = normalize_folder_query(parent_folder)
+        relative = f"{parent}/{raw_name}" if parent else raw_name
+        relative = assert_safe_relative_path(relative).as_posix()
+        vault = self.vault_for(project)
+        target = ensure_within(vault, vault / relative)
+        if target.exists() and not target.is_dir():
+            raise PathValidationError(
+                f"A file already exists at {relative}.",
+                details={"relative_path": relative},
+            )
+        if target.is_dir() and any(target.iterdir()):
+            # Allow re-creating an empty tracked folder; reject if content exists.
+            has_real = any(
+                child.name != ".gitkeep" for child in target.iterdir()
+            )
+            if has_real or (target / ".gitkeep").is_file():
+                raise PathValidationError(
+                    f"Folder already exists: {relative}",
+                    details={"relative_path": relative},
+                )
+        target.mkdir(parents=True, exist_ok=True)
+        keep = target / ".gitkeep"
+        if not keep.is_file():
+            keep.write_text("", encoding="utf-8")
+        keep_rel = f"{relative}/.gitkeep"
+        if self._git is not None and self._git.is_repository(vault):
+            self._git.stage_files(vault, [keep_rel])
+            note = (comment or "").strip() or f"Create folder {relative}"
+            self._git.commit(vault, note, user)
+        logger.info("Created project folder %s", relative)
+        return relative
+
+    def list_immediate_vault_folders(
+        self,
+        project: Project,
+        current_folder: str = "",
+    ) -> list[str]:
+        """Immediate subdirectory names under the vault folder view (disk)."""
+        from creopdm.utils.folders import normalize_folder_query
+
+        root = self.explorer_directory(project, current_folder)
+        if not root.is_dir():
+            return []
+        skip = {".git", ".creopdm", "__pycache__"}
+        names: list[str] = []
+        try:
+            for child in root.iterdir():
+                if not child.is_dir():
+                    continue
+                if child.name.lower() in skip or child.name.startswith("."):
+                    continue
+                names.append(child.name)
+        except OSError:
+            return []
+        return sorted(names, key=str.lower)
+
     def leftover_source(self, project: Project) -> Path | None:
         """Old Creo folder recorded before Git lived in the workspace."""
         raw = (project.repository_path or "").strip()
@@ -654,7 +733,7 @@ class WorkspaceService:
         grouped: dict[str, list[Path]] = {}
         for relative in snapshot.untracked:
             name = Path(relative).name
-            if self._is_ignored(name):
+            if name == ".gitkeep" or self._is_ignored(name):
                 continue
             path = vault / relative
             if not path.is_file():

@@ -431,6 +431,78 @@ def test_from_disk_folder_rejects_empty_directory(client, repo_parent, tmp_path)
 
 
 @requires_git
+def test_from_disk_folder_non_recursive_skips_nested(client, repo_parent, tmp_path, data_dir):
+    """Add Folder mode imports only top-level files."""
+    project, _location = _create_project(client, repo_parent)
+    root = tmp_path / "Kit"
+    nested = root / "lib"
+    nested.mkdir(parents=True)
+    (root / "top.prt").write_bytes(b"top")
+    (nested / "pin.prt").write_bytes(b"pin")
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={
+            "folder": str(root),
+            "base_folder": str(root),
+            "recursive": False,
+            "comment": "Top only",
+        },
+    )
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["failed"] == []
+    listing = {
+        item["filename"]: item["relative_path"]
+        for item in client.get(f"/api/projects/{project['uuid']}/objects").json()
+    }
+    assert listing == {"top.prt": "Kit/top.prt"}
+    assert not (data_dir / "vaults" / project["uuid"] / "Kit" / "lib" / "pin.prt").exists()
+
+
+@requires_git
+def test_from_disk_folders_list_imports_each_tree(client, repo_parent, tmp_path, data_dir):
+    """Add folders mode accepts multiple recursive folder roots."""
+    project, _location = _create_project(client, repo_parent)
+    a = tmp_path / "Alpha"
+    b = tmp_path / "Beta"
+    (a / "lib").mkdir(parents=True)
+    b.mkdir()
+    (a / "lib" / "a.prt").write_bytes(b"a")
+    (b / "b.prt").write_bytes(b"b")
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"folders": [str(a), str(b)], "recursive": True, "comment": "Two trees"},
+    )
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["failed"] == []
+    listing = {
+        item["filename"]: item["relative_path"]
+        for item in client.get(f"/api/projects/{project['uuid']}/objects").json()
+    }
+    assert listing == {"a.prt": "Alpha/lib/a.prt", "b.prt": "Beta/b.prt"}
+
+
+@requires_git
+def test_create_project_folder_empty_appears_on_disk(client, repo_parent, data_dir):
+    project, _location = _create_project(client, repo_parent)
+    created = client.post(
+        f"/api/projects/{project['uuid']}/folders",
+        json={"name": "Drawings", "parent_folder": ""},
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["path"] == "Drawings"
+    vault = data_dir / "vaults" / project["uuid"]
+    assert (vault / "Drawings" / ".gitkeep").is_file()
+    nested = client.post(
+        f"/api/projects/{project['uuid']}/folders",
+        json={"name": "RevA", "parent_folder": "Drawings"},
+    )
+    assert nested.status_code == 201, nested.text
+    assert nested.json()["path"] == "Drawings/RevA"
+    assert (vault / "Drawings" / "RevA" / ".gitkeep").is_file()
+
+
+@requires_git
 def test_choose_folder_from_outside_location(client, repo_parent, tmp_path, monkeypatch, data_dir):
     project, _location = _create_project(client, repo_parent)
     outside = tmp_path / "Elsewhere"

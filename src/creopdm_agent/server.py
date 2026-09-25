@@ -135,6 +135,7 @@ class PickFilesRequest(BaseModel):
     title: str = "Add files to the project"
     # Settings → Purgeable extensions; older .ext.N saves are omitted when set.
     purgeable_extensions: list[str] = Field(default_factory=list)
+    recursive: bool = True
 
 
 def _agent_purgeable_extensions(raw: list[str] | None) -> list[str]:
@@ -644,17 +645,27 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         if chosen is None:
             return PickFilesResponse(selected=[], cancelled=True)
         purgeable = _agent_purgeable_extensions(payload.purgeable_extensions)
+        recursive = bool(payload.recursive)
         try:
-            files = CreoFileManager.list_latest_in_folder(chosen, purgeable)
+            files = CreoFileManager.list_latest_in_folder(
+                chosen, purgeable, recursive=recursive
+            )
         except Exception:
             logger.exception("Listing folder for agent pick failed: %s", chosen)
-            files = [path for path in chosen.rglob("*") if path.is_file()]
+            if recursive:
+                files = [path for path in chosen.rglob("*") if path.is_file()]
+            else:
+                try:
+                    files = [path for path in chosen.iterdir() if path.is_file()]
+                except OSError:
+                    files = []
         paths = [str(path) for path in files if path.is_file()]
         logger.info(
-            "Pick folder %s → %s importable file(s) (purgeable=%s)",
+            "Pick folder %s → %s importable file(s) (purgeable=%s recursive=%s)",
             chosen,
             len(paths),
             len(purgeable),
+            recursive,
         )
         return PickFilesResponse(selected=paths, cancelled=False, folder=str(chosen))
 

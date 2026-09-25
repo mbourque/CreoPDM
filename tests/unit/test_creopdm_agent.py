@@ -161,6 +161,38 @@ def test_agent_pick_folder(tmp_path, monkeypatch):
         assert str(older) not in body["selected"]
 
 
+def test_agent_pick_folder_non_recursive(tmp_path, monkeypatch):
+    """Add Folder mode must not list files under nested subfolders."""
+    root = tmp_path / "cache"
+    root.mkdir()
+    folder = tmp_path / "models"
+    nested = folder / "lib"
+    nested.mkdir(parents=True)
+    top = folder / "top.prt.1"
+    top.write_bytes(b"top")
+    deep = nested / "pin.prt.1"
+    deep.write_bytes(b"pin")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    monkeypatch.setattr(
+        "creopdm.utils.native_dialog.pick_folder",
+        lambda initial_dir, title="Add a folder to the project": folder,
+    )
+    with TestClient(app) as client:
+        picked = client.post(
+            "/pick-folder",
+            json={
+                "initial_directory": str(tmp_path),
+                "purgeable_extensions": [".prt"],
+                "recursive": False,
+            },
+        )
+        assert picked.status_code == 200, picked.text
+        body = picked.json()
+        assert str(top) in body["selected"]
+        assert str(deep) not in body["selected"]
+
+
 def test_agent_pick_folder_cancel(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     root.mkdir()

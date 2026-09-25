@@ -86,11 +86,14 @@ def _enrich_bom_tree(nodes: list, by_logical: dict[str, str]) -> list[dict]:
 def _folder_page(
     ctx: AppContext,
     db: Session,
-    project_id: int,
+    project,
     current_folder: str,
 ) -> tuple[list, list[dict]]:
     """Show imported folders plus only the files that belong in this view."""
-    files, folder_entries = ctx.objects.list_folder_view(db, project_id, current_folder)
+    vault_names = ctx.workspaces.list_immediate_vault_folders(project, current_folder)
+    files, folder_entries = ctx.objects.list_folder_view(
+        db, project.id, current_folder, vault_folder_names=vault_names
+    )
     presented = present_objects(ctx, db, files)
     list_entries = list(folder_entries)
     for obj in presented:
@@ -314,7 +317,7 @@ def home(
     pending_saves = 0
     new_workspace_files = 0
     if project is not None:
-        objects, list_entries = _folder_page(ctx, db, project.id, current_folder)
+        objects, list_entries = _folder_page(ctx, db, project, current_folder)
         checkout_count = ctx.checkouts.count_for_project(db, project.id)
         checkoutable_count = ctx.checkouts.count_checkoutable_for_project(db, project.id)
         known = ctx.objects.list_path_index(db, project.id)

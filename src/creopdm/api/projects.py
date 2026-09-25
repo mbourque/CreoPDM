@@ -20,6 +20,8 @@ from creopdm.logging_setup import get_logger
 from creopdm.schemas.common import (
     BatchItemResult,
     BatchOperationResponse,
+    CreateFolderRequest,
+    CreateFolderResponse,
     ForgetProjectRequest,
     ForgetProjectResponse,
     CheckinPreviewResponse,
@@ -510,18 +512,51 @@ def import_from_disk(
     ignored = ctx.config.ignore_patterns()
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
-    folder = Path(payload.folder) if (payload.folder or "").strip() else None
-    if folder is not None and not folder.is_dir():
-        raise PathValidationError(
-            "The selected folder was not found.",
-            details={"path": str(folder)},
-        )
-    if folder is not None:
-        logger.info("Scanning folder %s", folder)
-        selected = CreoFileManager.list_latest_in_folder(folder, extras, ignored)
-        base_folder = payload.base_folder or str(folder)
-        logger.info("Adding %s file(s) from folder %s", len(selected), folder)
-        missing: list[Path] = []
+    recursive = bool(payload.recursive)
+    folder_paths: list[Path] = []
+    if (payload.folder or "").strip():
+        folder_paths.append(Path(payload.folder))
+    for raw in payload.folders or []:
+        text = str(raw or "").strip()
+        if text:
+            folder_paths.append(Path(text))
+    seen_folders: set[str] = set()
+    unique_folders: list[Path] = []
+    for folder in folder_paths:
+        key = str(folder.resolve()) if folder.exists() else str(folder)
+        if key in seen_folders:
+            continue
+        seen_folders.add(key)
+        unique_folders.append(folder)
+
+    jobs: list[tuple[Path, str, str]] = []
+    missing: list[Path] = []
+    if unique_folders:
+        for folder in unique_folders:
+            if not folder.is_dir():
+                raise PathValidationError(
+                    "The selected folder was not found.",
+                    details={"path": str(folder)},
+                )
+            logger.info("Scanning folder %s (recursive=%s)", folder, recursive)
+            selected = CreoFileManager.list_latest_in_folder(
+                folder, extras, ignored, recursive=recursive
+            )
+            base_folder = payload.base_folder or str(folder)
+            logger.info("Adding %s file(s) from folder %s", len(selected), folder)
+            for path in selected:
+                jobs.append(
+                    (
+                        path,
+                        path.name,
+                        ctx.workspaces.import_relative_path(project, path, base_folder),
+                    )
+                )
+        if not jobs:
+            raise ValidationAppError(
+                "No files to add were found in that folder.",
+                details={"folder": str(unique_folders[0])},
+            )
     else:
         raw_paths = [Path(raw) for raw in payload.paths]
         if not raw_paths:
@@ -540,6 +575,10 @@ def import_from_disk(
             inferred = common_import_root(selected)
             if inferred is not None:
                 base_folder = str(inferred)
+        jobs = [
+            (path, path.name, ctx.workspaces.import_relative_path(project, path, base_folder))
+            for path in selected
+        ]
     for path in missing:
         failed.append(
             BatchItemResult(
@@ -548,15 +587,6 @@ def import_from_disk(
                 code="INVALID_PATH",
                 message="The selected file was not found.",
             )
-        )
-    jobs = [
-        (path, path.name, ctx.workspaces.import_relative_path(project, path, base_folder))
-        for path in selected
-    ]
-    if folder is not None and not jobs:
-        raise ValidationAppError(
-            "No files to add were found in that folder.",
-            details={"folder": str(folder)},
         )
     if jobs:
         for outcome in ctx.objects.import_files(db, project, jobs, comment):
@@ -597,6 +627,31 @@ def import_from_disk(
         workspace_root=str(ctx.workspaces.vault_for(project)),
         where_used_index=index_flag,
     )
+
+
+@router.post(
+    "/api/projects/{project_id}/folders",
+    response_model=CreateFolderResponse,
+    status_code=201,
+)
+def create_project_folder(
+    project_id: str,
+    payload: CreateFolderRequest,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> CreateFolderResponse:
+    """Create an empty folder in the vault at the current Files view location."""
+    project = ctx.projects.get_project(db, project_id)
+    user = ctx.users.get_current_user()
+    created = ctx.workspaces.create_folder(
+        project,
+        name=payload.name,
+        parent_folder=payload.parent_folder or "",
+        user=user,
+        comment=(payload.comment or "").strip() or None,
+    )
+    db.commit()
+    return CreateFolderResponse(path=created, name=Path(created).name)
 
 
 @router.post("/api/projects/{project_id}/objects/from-uploads", response_model=BatchOperationResponse)

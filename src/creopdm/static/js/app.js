@@ -1681,13 +1681,100 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   let chosenPaths = [];
   let chosenBaseFolder = null;
+  let chosenFolders = [];
   let chosenUploads = [];
   let chosenAgentPaths = [];
   let chosenAgentBaseFolder = null;
+  let chosenAgentFolderBatches = [];
   let importIgnorePatterns = [];
   let importExtensions = [];
   let addInitialDirectory = "";
   const UPLOAD_CHUNK = 400;
+
+  function addMode() {
+    return String(addForm?.dataset.addMode || "files").trim() || "files";
+  }
+
+  function isFolderAddMode() {
+    const mode = addMode();
+    return mode === "folders" || mode === "folder";
+  }
+
+  function isRecursiveAddMode() {
+    return addMode() !== "folder";
+  }
+
+  function clearAddSelection() {
+    chosenPaths = [];
+    chosenBaseFolder = null;
+    chosenFolders = [];
+    chosenUploads = [];
+    chosenAgentPaths = [];
+    chosenAgentBaseFolder = null;
+    chosenAgentFolderBatches = [];
+    const summary = $("#chosen-file-summary");
+    if (summary) summary.textContent = "";
+  }
+
+  function configureAddDialog(mode) {
+    const resolved = ["files", "folders", "folder"].includes(mode) ? mode : "files";
+    if (addForm) addForm.dataset.addMode = resolved;
+    const title = $("#add-dialog-title");
+    const lead = $("#add-dialog-lead");
+    const hint = $("#add-drop-hint");
+    const filesBtn = $("#choose-workspace-files");
+    const folderBtn = $("#choose-workspace-folder");
+    if (resolved === "files") {
+      if (title) title.textContent = "Add files";
+      if (lead) {
+        lead.innerHTML =
+          "Files are copied into the vault. Numbered names such as <code>shaft.prt.3</code> keep only the latest save.";
+      }
+      if (hint) {
+        hint.textContent = "Drop files here, or choose them. Copies go into the vault.";
+      }
+      if (filesBtn) filesBtn.hidden = false;
+      if (folderBtn) folderBtn.hidden = true;
+    } else if (resolved === "folders") {
+      if (title) title.textContent = "Add folders";
+      if (lead) {
+        lead.textContent =
+          "Choose one or more folders. Every nested file is imported. Choose Folder again to add another.";
+      }
+      if (hint) {
+        hint.textContent =
+          "Drop folders here, or choose them. Nested subfolders are included. On a LAN http:// address, drop folders instead of Choose Folder to avoid Chrome’s upload warning.";
+      }
+      if (filesBtn) filesBtn.hidden = true;
+      if (folderBtn) {
+        folderBtn.hidden = false;
+        folderBtn.textContent = "Choose Folder";
+      }
+    } else {
+      if (title) title.textContent = "Add Folder";
+      if (lead) {
+        lead.textContent =
+          "Choose a folder. Only files directly inside it are imported — subfolders are skipped.";
+      }
+      if (hint) {
+        hint.textContent =
+          "Drop a folder here, or choose one. Only top-level files are added. On a LAN http:// address, drop the folder instead of Choose Folder to avoid Chrome’s upload warning.";
+      }
+      if (filesBtn) filesBtn.hidden = true;
+      if (folderBtn) {
+        folderBtn.hidden = false;
+        folderBtn.textContent = "Choose Folder";
+      }
+    }
+  }
+
+  function openAddDialog(mode) {
+    showError($("#add-error"), "");
+    clearAddSelection();
+    configureAddDialog(mode);
+    loadAddFolder();
+    addDialog?.showModal();
+  }
 
   async function loadAddFolder() {
     const projectId = addForm?.dataset.project;
@@ -1877,6 +1964,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     chosenUploads = [];
     chosenAgentPaths = [];
     chosenAgentBaseFolder = null;
+    chosenAgentFolderBatches = [];
+    if (addMode() === "folders" && baseFolder) {
+      chosenPaths = [];
+      chosenBaseFolder = null;
+      const key = String(baseFolder);
+      if (!chosenFolders.includes(key)) chosenFolders.push(key);
+      const label = $("#add-folder-label");
+      if (label && labelText) label.textContent = labelText;
+      const summary = $("#chosen-file-summary");
+      if (summary) {
+        summary.textContent =
+          chosenFolders.length === 1
+            ? `Folder: ${chosenFolders[0]}`
+            : `${chosenFolders.length} folders ready to add.`;
+      }
+      return;
+    }
+    chosenFolders = [];
     chosenPaths = paths || [];
     chosenBaseFolder = baseFolder || null;
     const label = $("#add-folder-label");
@@ -1903,8 +2008,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     chosenPaths = [];
     chosenBaseFolder = null;
     chosenUploads = [];
-    chosenAgentPaths = [...new Set((paths || []).map((item) => String(item || "").trim()).filter(Boolean))];
-    chosenAgentBaseFolder = baseFolder ? String(baseFolder) : null;
+    const folder = baseFolder ? String(baseFolder) : "";
+    const picked = [...new Set((paths || []).map((item) => String(item || "").trim()).filter(Boolean))];
+    if (addMode() === "folders" && folder) {
+      chosenAgentPaths = [];
+      chosenAgentBaseFolder = null;
+      chosenFolders = [];
+      const existing = chosenAgentFolderBatches.find((item) => item.folder === folder);
+      if (existing) existing.paths = picked;
+      else chosenAgentFolderBatches.push({ folder, paths: picked });
+      showError($("#add-error"), "");
+      const summary = $("#chosen-file-summary");
+      if (!summary) return;
+      const total = chosenAgentFolderBatches.reduce((sum, item) => sum + item.paths.length, 0);
+      summary.textContent =
+        chosenAgentFolderBatches.length === 1
+          ? `Folder: ${folder}. ${formatReadyToAddSummary(picked.length, countLatestImportNames(picked), 0)}`
+          : `${chosenAgentFolderBatches.length} folders (${fileCountLabel(total)}) ready to add.`;
+      return;
+    }
+    chosenFolders = [];
+    chosenAgentFolderBatches = [];
+    chosenAgentPaths = picked;
+    chosenAgentBaseFolder = folder || null;
     showError($("#add-error"), "");
     const summary = $("#chosen-file-summary");
     if (!summary) return;
@@ -2068,8 +2194,47 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return parts.join("/");
   }
 
+  function filterTopLevelUploads(items) {
+    /** Keep only files whose relative path has a single path segment after the root folder name. */
+    const kept = [];
+    let skipped = 0;
+    for (const item of items || []) {
+      const rel = String(item?.relativePath || item?.file?.name || "").replace(/\\/g, "/");
+      if (!rel || !item?.file) {
+        skipped += 1;
+        continue;
+      }
+      const parts = rel.split("/").filter(Boolean);
+      // webkitRelativePath / walk: FolderName/file.ext → 2 parts (keep); FolderName/sub/file → 3+ (skip)
+      if (parts.length > 2) {
+        skipped += 1;
+        continue;
+      }
+      kept.push(item);
+    }
+    return { kept, skipped };
+  }
+
   function applyDroppedFiles(items, uriPaths) {
-    const uploads = (items || []).filter((item) => item?.file);
+    let uploads = (items || []).filter((item) => item?.file);
+    if (addMode() === "files") {
+      // Files mode: reject nested folder trees so Add files stays file-only.
+      const nested = uploads.some((item) => String(item.relativePath || "").includes("/"));
+      if (nested) {
+        showError($("#add-error"), "Use Add folders or Add Folder to import a folder tree.");
+        return;
+      }
+    } else if (addMode() === "folder") {
+      const filtered = filterTopLevelUploads(uploads);
+      uploads = filtered.kept;
+      if (!uploads.length && filtered.skipped) {
+        showError(
+          $("#add-error"),
+          "No top-level files found in that folder. Subfolder files are skipped for Add Folder."
+        );
+        return;
+      }
+    }
     const nestedUploads = uploads.some((item) => String(item.relativePath || "").includes("/"));
     // Keep browser-relative paths whenever a folder tree was walked — disk paths
     // alone would flatten nested subfolders (Creo / some Chromium builds set .path).
@@ -2077,8 +2242,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const { kept, skipped } = filterUploadItems(uploads);
       chosenPaths = [];
       chosenBaseFolder = null;
+      chosenFolders = [];
       chosenAgentPaths = [];
       chosenAgentBaseFolder = null;
+      chosenAgentFolderBatches = [];
       chosenUploads = kept;
       const summary = $("#chosen-file-summary");
       if (summary) {
@@ -2107,8 +2274,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const { kept, skipped } = filterUploadItems(uploads);
     chosenPaths = [];
     chosenBaseFolder = null;
+    chosenFolders = [];
     chosenAgentPaths = [];
     chosenAgentBaseFolder = null;
+    chosenAgentFolderBatches = [];
     chosenUploads = kept;
     const summary = $("#chosen-file-summary");
     if (summary) {
@@ -2128,12 +2297,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     applyDroppedFiles(uploads, []);
   }
 
-  async function walkDirectoryHandle(dirHandle, prefix) {
+  async function walkDirectoryHandle(dirHandle, prefix, recursive = true) {
     const found = [];
     for await (const [name, handle] of dirHandle.entries()) {
       const relativePath = prefix ? `${prefix}/${name}` : name;
       if (handle.kind === "directory") {
-        found.push(...(await walkDirectoryHandle(handle, relativePath)));
+        if (recursive) found.push(...(await walkDirectoryHandle(handle, relativePath, true)));
       } else if (handle.kind === "file") {
         const file = await handle.getFile();
         found.push({ file, relativePath, path: "" });
@@ -2154,7 +2323,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       try {
         const handle = await window.showDirectoryPicker({ mode: "read" });
         const items = await withBusy("Reading folder…", () =>
-          walkDirectoryHandle(handle, handle.name || "")
+          walkDirectoryHandle(handle, handle.name || "", isRecursiveAddMode())
         );
         applyDroppedFiles(items, []);
         if (addDialog && !addDialog.open) addDialog.showModal();
@@ -2205,16 +2374,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   $("#add-files-btn")?.addEventListener("click", () => {
-    showError($("#add-error"), "");
-    chosenPaths = [];
-    chosenBaseFolder = null;
-    chosenUploads = [];
-    chosenAgentPaths = [];
-    chosenAgentBaseFolder = null;
-    const summary = $("#chosen-file-summary");
-    if (summary) summary.textContent = "";
-    loadAddFolder();
-    addDialog?.showModal();
+    closeAddMenu();
+    openAddDialog("files");
+  });
+  $("#add-folders-btn")?.addEventListener("click", () => {
+    closeAddMenu();
+    openAddDialog("folders");
+  });
+  $("#add-folder-btn")?.addEventListener("click", () => {
+    closeAddMenu();
+    openAddDialog("folder");
   });
   $("#add-cancel")?.addEventListener("click", () => addDialog?.close());
 
@@ -2268,13 +2437,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function browseViaAgentFolderPicker() {
     const agent = await probeCreoAgent();
     if (!agent) return false;
+    const recursive = isRecursiveAddMode();
     const pickResponse = await fetch(`${agentBase()}/pick-folder`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         initial_directory: addInitialDirectory || "",
-        title: "Add a folder to the project",
+        title: recursive ? "Add folders to the project" : "Add a folder to the project",
         purgeable_extensions: [...purgeableExtensionSet()],
+        recursive,
       }),
     });
     if (!pickResponse.ok) {
@@ -2372,22 +2543,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function canAcceptDrops() {
-    const btn = $("#add-files-btn");
+    const btn = $("#add-menu-btn") || $("#add-files-btn");
     return Boolean(btn && !btn.disabled && addForm?.dataset.project);
   }
 
   async function acceptPageDrop(dataTransfer) {
     if (!canAcceptDrops()) return;
     if (!addDialog?.open) {
-      chosenPaths = [];
-      chosenBaseFolder = null;
-      chosenUploads = [];
-      chosenAgentPaths = [];
-      chosenAgentBaseFolder = null;
-      const summary = $("#chosen-file-summary");
-      if (summary) summary.textContent = "";
-      loadAddFolder();
-      addDialog?.showModal();
+      // Default page-drop to Add folders when dropping trees; files otherwise.
+      openAddDialog("folders");
     }
     await handleDroppedTransfer(dataTransfer);
   }
@@ -2436,24 +2600,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (
       !chosenPaths.length
       && !chosenBaseFolder
+      && !chosenFolders.length
       && !chosenUploads.length
       && !chosenAgentPaths.length
+      && !chosenAgentFolderBatches.length
     ) {
-      showError($("#add-error"), "Choose files or a folder first.");
+      showError(
+        $("#add-error"),
+        isFolderAddMode() ? "Choose a folder first." : "Choose files or a folder first."
+      );
       return;
     }
     const comment = String(new FormData(addForm).get("comment") || "").trim();
+    const recursive = isRecursiveAddMode();
     addInFlight = true;
     let result;
     try {
     result = await withBusy(
-      chosenBaseFolder
-        ? "Adding folder…"
+      chosenFolders.length || chosenBaseFolder || chosenAgentFolderBatches.length
+        ? chosenFolders.length > 1 || chosenAgentFolderBatches.length > 1
+          ? "Adding folders…"
+          : "Adding folder…"
         : chosenAgentPaths.length > 100
           ? `Adding ${chosenAgentPaths.length} files…`
           : "Adding files…",
       async () => {
-      if (chosenAgentPaths.length) {
+      async function addAgentPathChunks(paths, baseFolder, commentOnce) {
         const agent = await probeCreoAgent();
         if (!agent) {
           showError(
@@ -2462,8 +2634,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           );
           return null;
         }
-        const paths = [...chosenAgentPaths];
-        const total = paths.length;
+        const list = [...paths];
+        const total = list.length;
         const chunkSize = 25;
         const combined = { ok: [], failed: [] };
         const basenameOf = (path) => {
@@ -2471,8 +2643,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const parts = text.split(/[/\\]/);
           return parts[parts.length - 1] || text;
         };
-        for (let offset = 0; offset < paths.length; offset += chunkSize) {
-          const chunk = paths.slice(offset, offset + chunkSize);
+        for (let offset = 0; offset < list.length; offset += chunkSize) {
+          const chunk = list.slice(offset, offset + chunkSize);
           const done = Math.min(offset + chunk.length, total);
           setBusyMessage(`Adding files… ${done} of ${total}`);
           let response;
@@ -2484,8 +2656,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
                 pdm_url: window.location.origin,
                 project_id: projectId,
                 absolute_paths: chunk,
-                base_folder: chosenAgentBaseFolder || "",
-                comment: offset === 0 ? comment || null : null,
+                base_folder: baseFolder || "",
+                comment: offset === 0 ? commentOnce || null : null,
                 client_offset: offset,
                 client_total: total,
                 purgeable_extensions: [...purgeableExtensionSet()],
@@ -2509,7 +2681,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             } catch {
               /* keep status message */
             }
-            // Keep going — one bad batch must not drop the rest of Documents.
             chunk.forEach((path) => {
               combined.failed.push({
                 filename: basenameOf(path),
@@ -2538,6 +2709,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         return combined;
       }
+      if (chosenAgentFolderBatches.length) {
+        const combined = { ok: [], failed: [] };
+        for (let i = 0; i < chosenAgentFolderBatches.length; i += 1) {
+          const batch = chosenAgentFolderBatches[i];
+          setBusyMessage(
+            `Adding folder ${i + 1} of ${chosenAgentFolderBatches.length}…`
+          );
+          const part = await addAgentPathChunks(
+            batch.paths,
+            batch.folder,
+            i === 0 ? comment : null
+          );
+          if (!part) return combined.ok.length ? combined : null;
+          combined.ok.push(...(part.ok || []));
+          combined.failed.push(...(part.failed || []));
+        }
+        return combined;
+      }
+      if (chosenAgentPaths.length) {
+        return addAgentPathChunks(chosenAgentPaths, chosenAgentBaseFolder, comment);
+      }
       if (chosenUploads.length) {
         const combined = { ok: [], failed: [] };
         const total = chosenUploads.length;
@@ -2565,9 +2757,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         return combined;
       }
-      const payload = chosenBaseFolder
-        ? { folder: chosenBaseFolder, base_folder: chosenBaseFolder, comment: comment || null }
-        : { paths: chosenPaths, comment: comment || null };
+      let payload;
+      if (chosenFolders.length) {
+        payload = {
+          folders: chosenFolders,
+          recursive,
+          comment: comment || null,
+        };
+      } else if (chosenBaseFolder) {
+        payload = {
+          folder: chosenBaseFolder,
+          base_folder: chosenBaseFolder,
+          recursive,
+          comment: comment || null,
+        };
+      } else {
+        payload = { paths: chosenPaths, comment: comment || null };
+      }
       const response = await fetch(`/api/projects/${projectId}/objects/from-disk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2916,6 +3122,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const removeMenu = $("#remove-menu");
   const removeMenuBtn = $("#remove-menu-btn");
   const removeMenuPanel = removeMenu?.querySelector(".toolbar-menu-panel");
+  const addMenu = $("#add-menu");
+  const addMenuBtn = $("#add-menu-btn");
+  const addMenuPanel = addMenu?.querySelector(".toolbar-menu-panel");
+  const createFolderDialog = $("#create-folder-dialog");
+  const createFolderForm = $("#create-folder-form");
 
   function closeToolbarMenu(menu, btn, panel) {
     if (!menu || !btn || !panel) return;
@@ -2948,15 +3159,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     closeToolbarMenu(checkinMenu, checkinMenuBtn, checkinMenuPanel);
   }
 
+  function closeAddMenu() {
+    closeToolbarMenu(addMenu, addMenuBtn, addMenuPanel);
+  }
+
   function closeAllToolbarMenus() {
     closeRemoveMenu();
     closeCheckoutMenu();
     closeCheckinMenu();
+    closeAddMenu();
   }
 
   function openRemoveMenu() {
     closeCheckoutMenu();
     closeCheckinMenu();
+    closeAddMenu();
     openToolbarMenu(removeMenu, removeMenuBtn, removeMenuPanel);
   }
 
@@ -2970,6 +3187,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     else {
       closeRemoveMenu();
       closeCheckinMenu();
+      closeAddMenu();
       openToolbarMenu(checkoutMenu, checkoutMenuBtn, checkoutMenuPanel);
     }
   }
@@ -2979,7 +3197,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     else {
       closeRemoveMenu();
       closeCheckoutMenu();
+      closeAddMenu();
       openToolbarMenu(checkinMenu, checkinMenuBtn, checkinMenuPanel);
+    }
+  }
+
+  function toggleAddMenu() {
+    if (addMenu?.classList.contains("is-open")) closeAddMenu();
+    else {
+      closeRemoveMenu();
+      closeCheckoutMenu();
+      closeCheckinMenu();
+      openToolbarMenu(addMenu, addMenuBtn, addMenuPanel);
     }
   }
 
@@ -6177,6 +6406,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const item = eventEl(event)?.closest(".toolbar-menu-item");
     if (item && !item.disabled) closeRemoveMenu();
   });
+  addMenuBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleAddMenu();
+  });
+  addMenuPanel?.addEventListener("click", (event) => {
+    const item = eventEl(event)?.closest(".toolbar-menu-item");
+    if (item && !item.disabled) closeAddMenu();
+  });
   checkoutMenuBtn?.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -6198,11 +6436,60 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   document.addEventListener("click", (event) => {
     const node = eventEl(event);
     if (removeMenu?.classList.contains("is-open") && !removeMenu.contains(node)) closeRemoveMenu();
+    if (addMenu?.classList.contains("is-open") && !addMenu.contains(node)) closeAddMenu();
     if (checkoutMenu?.classList.contains("is-open") && !checkoutMenu.contains(node)) closeCheckoutMenu();
     if (checkinMenu?.classList.contains("is-open") && !checkinMenu.contains(node)) closeCheckinMenu();
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeAllToolbarMenus();
+  });
+
+  function openCreateFolderDialog() {
+    showError($("#create-folder-error"), "");
+    const nameInput = $("#create-folder-name");
+    if (nameInput) nameInput.value = "";
+    const location = $("#create-folder-location");
+    const folder = currentFolder();
+    if (location) {
+      location.textContent = folder
+        ? `Creates a folder under ${folder}.`
+        : "Creates a folder at the project root.";
+    }
+    createFolderDialog?.showModal();
+    nameInput?.focus();
+  }
+
+  $("#create-folder-btn")?.addEventListener("click", () => {
+    closeAddMenu();
+    openCreateFolderDialog();
+  });
+  $("#create-folder-cancel")?.addEventListener("click", () => createFolderDialog?.close());
+  createFolderForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const projectId = createFolderForm.dataset.project || addForm?.dataset.project;
+    if (!projectId) return;
+    const name = String(new FormData(createFolderForm).get("name") || "").trim();
+    if (!name) {
+      showError($("#create-folder-error"), "Enter a folder name.");
+      return;
+    }
+    showError($("#create-folder-error"), "");
+    const response = await withBusy("Creating folder…", () =>
+      fetch(`/api/projects/${projectId}/folders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          parent_folder: currentFolder() || "",
+        }),
+      })
+    );
+    if (!response.ok) {
+      showError($("#create-folder-error"), await readError(response));
+      return;
+    }
+    createFolderDialog?.close();
+    reloadPage();
   });
 
   purgeBtn?.addEventListener("click", async () => {

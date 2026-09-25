@@ -53,6 +53,24 @@ def test_resolve_type_icon_if_conditions_use_parens():
     assert "if (label || ext || objectType)" in body
 
 
+def test_add_toolbar_is_menu_with_modes():
+    """Add ▾ exposes files / folders / folder / Create folder like Checkout/Check In."""
+    html = APP_HTML.read_text(encoding="utf-8")
+    assert 'id="add-menu"' in html
+    assert "Add ▾" in html
+    assert 'id="add-files-btn"' in html
+    assert 'id="add-folders-btn"' in html
+    assert 'id="add-folder-btn"' in html
+    assert 'id="create-folder-btn"' in html
+    assert 'id="create-folder-dialog"' in html
+    script = _app_js()
+    assert 'openAddDialog("files")' in script
+    assert 'openAddDialog("folders")' in script
+    assert 'openAddDialog("folder")' in script
+    assert "recursive" in script
+    assert "/api/projects/${projectId}/folders" in script or '/api/projects/${projectId}/folders' in script
+
+
 def test_choose_folder_uses_agent_before_browser_picker():
     """LAN http:// cannot use showDirectoryPicker; agent native folder pick must run first."""
     script = _app_js()
@@ -90,7 +108,7 @@ def test_browser_folder_pick_explains_secure_context():
 def test_add_paths_sends_agent_base_folder():
     script = _app_js()
     assert "chosenAgentBaseFolder" in script
-    assert "base_folder: chosenAgentBaseFolder" in script
+    assert "base_folder: baseFolder || \"\"" in script
     assert "applyAgentPickedPaths(paths, folder)" in script
 
 
@@ -105,10 +123,11 @@ def test_add_paths_sends_purgeable_extensions():
         '$("#choose-workspace-files")?.addEventListener("click"',
     )
     assert "purgeable_extensions" in pick_folder
+    assert "recursive" in pick_folder
     add_chunk = _between(
         script,
-        "if (chosenAgentPaths.length)",
-        "if (chosenUploads.length)",
+        "async function addAgentPathChunks(",
+        "if (chosenAgentFolderBatches.length)",
     )
     assert "purgeable_extensions" in add_chunk
     assert "importExtensionSet" in script
@@ -120,12 +139,11 @@ def test_add_paths_sends_purgeable_extensions():
 def test_agent_add_chunks_continue_after_http_error():
     """Regression: one failed /add-paths batch used to abort the rest of a large folder add."""
     script = _app_js()
-    start = script.index("if (chosenAgentPaths.length)")
-    end = script.index("if (chosenUploads.length)", start)
+    start = script.index("async function addAgentPathChunks(")
+    end = script.index("if (chosenAgentFolderBatches.length)", start)
     body = script[start:end]
     assert "continue;" in body
     assert "return combined.ok.length ? combined : null;" not in body
-    assert "Keep going" in body or "must not drop" in body
     assert "addInFlight" in _app_js()
     assert "client_offset" in body
 

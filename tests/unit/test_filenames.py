@@ -169,6 +169,16 @@ def test_list_latest_in_folder_skips_older_transients_and_git(tmp_path):
     assert chosen == {"parallels.prt.3", "bushing.prt.2", "op10.lst", "cut.mbx"}
 
 
+def test_list_latest_in_folder_non_recursive_skips_nested(tmp_path):
+    root = tmp_path / "models"
+    nested = root / "sub"
+    nested.mkdir(parents=True)
+    (root / "top.prt.1").write_bytes(b"top")
+    (nested / "deep.prt.1").write_bytes(b"deep")
+    chosen = {path.name for path in CreoFileManager.list_latest_in_folder(root, recursive=False)}
+    assert chosen == {"top.prt.1"}
+
+
 def test_common_import_root_keeps_sibling_subfolders(tmp_path):
     kit = tmp_path / "Kit"
     lib = kit / "lib"

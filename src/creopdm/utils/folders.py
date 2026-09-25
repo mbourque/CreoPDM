@@ -162,6 +162,31 @@ def folder_index(rows: list[tuple[str, Any]], current: str = "") -> tuple[list[d
     return entries, files
 
 
+def merge_disk_folders(
+    entries: list[dict[str, Any]],
+    disk_names: list[str],
+    current: str = "",
+) -> list[dict[str, Any]]:
+    """Merge immediate vault disk folders into catalog folder rows (empty Create folder)."""
+    current = normalize_folder_query(current)
+    by_name = {str(item.get("name") or ""): item for item in entries}
+    for raw in disk_names or []:
+        name = str(raw or "").strip().strip("/\\")
+        if not name or name in by_name or name.startswith("."):
+            continue
+        path = f"{current}/{name}" if current else name
+        by_name[name] = {
+            "kind": "folder",
+            "name": name,
+            "path": path,
+            "depth": 0,
+            "count": 0,
+            "modified": None,
+            "object_ids": [],
+        }
+    return [by_name[name] for name in sorted(by_name, key=str.lower)]
+
+
 def folder_list_entries(objects: list[Any], current: str = "") -> list[dict[str, Any]]:
     """Immediate folders and files in the current folder view."""
     current = normalize_folder_query(current)

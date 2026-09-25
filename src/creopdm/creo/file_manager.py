@@ -324,10 +324,32 @@ class CreoFileManager:
         root: Path,
         extra_extensions: Iterable[str] | None = None,
         ignore_patterns: Iterable[str] | None = None,
+        *,
+        recursive: bool = True,
     ) -> Iterator[Path]:
         """Walk a folder for files that can be added to a project."""
         folder = Path(root)
         if not folder.is_dir():
+            return
+        if not recursive:
+            try:
+                names = list(folder.iterdir())
+            except OSError:
+                return
+            for path in names:
+                if not path.is_file():
+                    continue
+                name = path.name
+                if name.startswith("."):
+                    continue
+                if cls.is_ignored(name, ignore_patterns):
+                    continue
+                suffix = path.suffix.lower()
+                numbered = cls.normalize_creo_filename(name, extra_extensions)
+                check = Path(numbered).suffix.lower() if numbered != name else suffix
+                if check in _SKIP_IMPORT_SUFFIXES or suffix in _SKIP_IMPORT_SUFFIXES:
+                    continue
+                yield path
             return
         for dirpath, dirnames, filenames in os.walk(folder):
             dirnames[:] = [name for name in dirnames if name.lower() not in _SKIP_IMPORT_DIRS]
@@ -351,9 +373,18 @@ class CreoFileManager:
         root: Path,
         extra_extensions: Iterable[str] | None = None,
         ignore_patterns: Iterable[str] | None = None,
+        *,
+        recursive: bool = True,
     ) -> list[Path]:
         return cls.filter_to_latest_saves(
-            list(cls.iter_importable_files(root, extra_extensions, ignore_patterns)),
+            list(
+                cls.iter_importable_files(
+                    root,
+                    extra_extensions,
+                    ignore_patterns,
+                    recursive=recursive,
+                )
+            ),
             extra_extensions,
             scan_disk_siblings=False,
         )
