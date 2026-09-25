@@ -149,6 +149,17 @@ def test_dropped_folder_keeps_nested_relative_paths():
     assert body.index("nestedUploads") < body.index("uniquePaths")
 
 
+def test_project_dialog_has_vault_folder_and_use_hash():
+    html = APP_HTML.read_text(encoding="utf-8")
+    assert "Vault/Workspace name" in html
+    assert 'id="project-use-hash"' in html
+    assert 'name="vault_folder"' in html
+    script = _app_js()
+    assert "syncProjectVaultFolderField" in script
+    assert "body.vault_folder" in script
+    assert "Vault/workspace name cannot contain spaces" in script
+
+
 def test_soft_nav_does_not_silently_drop_when_busy():
     """Regression: soft-nav busy used to no-op folder/project clicks."""
     body = _between(_app_js(), "function softNavigate(", "function leavePage(")

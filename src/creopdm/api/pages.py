@@ -349,7 +349,7 @@ def home(
             "checkout_count": checkout_count,
             "pending_saves": pending_saves,
             "new_workspace_files": new_workspace_files,
-            "workspace_path": str(ctx.config.workspace_for_project(selected.uuid)) if selected else None,
+            "workspace_path": str(ctx.workspaces.vault_for(selected)) if selected else None,
             "sidebar_collapsed": _sidebar_collapsed(request),
             "object_types": [item.value for item in ObjectType],
             "revision_display": revision_display,
@@ -427,7 +427,7 @@ def object_detail(
             "show_structure_tab": show_structure_tab,
             "bom": bom,
             "where_used": where_used.items,
-            "workspace_path": str(ctx.config.workspace_for_project(project.uuid)),
+            "workspace_path": str(ctx.workspaces.vault_for(project)),
             "workspace_folder": folder_of(obj.relative_path),
         },
     )

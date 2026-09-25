@@ -146,6 +146,59 @@ def test_create_project_rejects_duplicate_name_case_insensitive(client, repo_par
 
 
 @requires_git
+def test_create_project_custom_vault_folder(client, repo_parent, data_dir):
+    response = client.post(
+        "/api/projects",
+        json={"name": "Custom Vault", "vault_folder": "Robot-Arm"},
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["vault_folder"] == "Robot-Arm"
+    assert body["uuid"] != "Robot-Arm"
+    assert (data_dir / "vaults" / "Robot-Arm" / ".git").is_dir()
+    assert not (data_dir / "vaults" / body["uuid"]).exists()
+
+
+@requires_git
+def test_create_project_rejects_vault_folder_with_spaces(client):
+    response = client.post(
+        "/api/projects",
+        json={"name": "Spaced", "vault_folder": "Robot Arm"},
+    )
+    assert response.status_code == 400, response.text
+    assert "space" in response.json()["error"]["message"].lower()
+
+
+@requires_git
+def test_create_project_rejects_duplicate_vault_folder(client, repo_parent):
+    first = client.post(
+        "/api/projects",
+        json={"name": "First", "vault_folder": "Shared-Vault"},
+    )
+    assert first.status_code == 201, first.text
+    again = client.post(
+        "/api/projects",
+        json={"name": "Second", "vault_folder": "shared-vault"},
+    )
+    assert again.status_code == 409, again.text
+    assert "vault" in again.json()["error"]["message"].lower()
+
+
+@requires_git
+def test_create_project_use_hash_uuid_as_folder(client, repo_parent, data_dir):
+    uid = "11111111-2222-4333-8444-555555555555"
+    response = client.post(
+        "/api/projects",
+        json={"name": "Hashed", "vault_folder": uid},
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["uuid"] == uid
+    assert body["vault_folder"] == uid
+    assert (data_dir / "vaults" / uid / ".git").is_dir()
+
+
+@requires_git
 def test_rename_project_rejects_duplicate_name_case_insensitive(client, repo_parent):
     first, _ = _create_project(client, repo_parent, name="Alpha Cell")
     second, _ = _create_project(client, repo_parent, name="Beta Cell")

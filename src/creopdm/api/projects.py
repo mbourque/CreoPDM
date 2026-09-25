@@ -64,6 +64,7 @@ def create_project(
         name=payload.name,
         number=payload.number,
         description=payload.description,
+        vault_folder=payload.vault_folder,
     )
     return project_to_response(project)
 
@@ -110,7 +111,8 @@ def forget_project(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ForgetProjectResponse:
-    workspace = ctx.config.workspace_for_project(project_id)
+    project = ctx.projects.get_project(db, project_id)
+    workspace = ctx.workspaces.vault_for(project)
     result = ctx.projects.forget_project(
         db,
         project_id,
@@ -212,7 +214,7 @@ def project_checkin_queue(
         payload.add_relative_paths,
     )
     return BatchOperationResponse.model_validate(
-        {**result, "workspace_root": str(ctx.workspaces.root_for(project.uuid))}
+        {**result, "workspace_root": str(ctx.workspaces.vault_for(project))}
     )
 
 
@@ -306,7 +308,7 @@ def purge_workspace_paths(
     return BatchOperationResponse(
         ok=ok,
         failed=failed,
-        workspace_root=str(ctx.workspaces.root_for(project.uuid)),
+        workspace_root=str(ctx.workspaces.vault_for(project)),
     )
 
 
@@ -365,7 +367,7 @@ def workspace_add_folder(
     start.mkdir(parents=True, exist_ok=True)
     filters = _picker_filters(ctx)
     return WorkspacePickerResponse(
-        workspace_root=str(ctx.workspaces.root_for(project.uuid)),
+        workspace_root=str(ctx.workspaces.vault_for(project)),
         initial_directory=str(start),
         ignore_patterns=filters["ignore_patterns"],
         import_extensions=filters["import_extensions"],
@@ -398,7 +400,7 @@ def choose_workspace_files(
         scan_disk_siblings=True,
     )
     return WorkspacePickerResponse(
-        workspace_root=str(ctx.workspaces.root_for(project.uuid)),
+        workspace_root=str(ctx.workspaces.vault_for(project)),
         initial_directory=str(start),
         selected=[str(path) for path in selected],
         ignored_count=ignored_count,
@@ -418,13 +420,13 @@ def choose_workspace_folder(
     if chosen is None:
         logger.info("Folder picker cancelled")
         return WorkspacePickerResponse(
-            workspace_root=str(ctx.workspaces.root_for(project.uuid)),
+            workspace_root=str(ctx.workspaces.vault_for(project)),
             initial_directory=str(start),
             cancelled=True,
         )
     logger.info("Chose folder %s", chosen)
     return WorkspacePickerResponse(
-        workspace_root=str(ctx.workspaces.root_for(project.uuid)),
+        workspace_root=str(ctx.workspaces.vault_for(project)),
         initial_directory=str(chosen),
         selected=[],
         folder=str(chosen),
@@ -439,7 +441,7 @@ def open_workspace_folder(
     ctx: AppContext = Depends(get_context),
 ) -> Response:
     project = ctx.projects.get_project(db, project_id)
-    opened = ctx.workspaces.explorer_directory(project.uuid, folder or "")
+    opened = ctx.workspaces.explorer_directory(project, folder or "")
     try:
         open_windows_folder(opened)
     except OSError as exc:
@@ -478,7 +480,7 @@ def workspace_file_content(
     ctx: AppContext = Depends(get_context),
 ) -> FileResponse:
     project = ctx.projects.get_project(db, project_id)
-    target = ctx.workspaces.file_path(project.uuid, path)
+    target = ctx.workspaces.file_path(project, path)
     if not target.is_file():
         raise PathValidationError(
             f"Vault file not found: {Path(path).name}.",
@@ -592,7 +594,7 @@ def import_from_disk(
     return BatchOperationResponse(
         ok=ok,
         failed=failed,
-        workspace_root=str(ctx.workspaces.root_for(project.uuid)),
+        workspace_root=str(ctx.workspaces.vault_for(project)),
         where_used_index=index_flag,
     )
 
@@ -716,6 +718,6 @@ async def import_from_uploads(
     return BatchOperationResponse(
         ok=ok,
         failed=failed,
-        workspace_root=str(ctx.workspaces.root_for(project.uuid)),
+        workspace_root=str(ctx.workspaces.vault_for(project)),
         where_used_index=index_flag,
     )

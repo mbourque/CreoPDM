@@ -1377,6 +1377,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     showError($("#project-error"), "");
     const title = $("#project-dialog-title");
     const submit = $("#project-submit");
+    const vaultFields = $("#project-vault-fields");
     projectForm.dataset.mode = mode;
     if (mode === "rename") {
       const btn = $("#rename-project-btn");
@@ -1384,14 +1385,48 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       projectForm.elements.name.value = btn?.dataset.name || "";
       projectForm.elements.number.value = btn?.dataset.number || "";
       projectForm.elements.description.value = btn?.dataset.description || "";
+      if (vaultFields) vaultFields.hidden = true;
       if (submit) submit.textContent = "Save";
     } else {
       projectForm.reset();
       if (title) title.textContent = "New project";
       if (submit) submit.textContent = "Create";
+      if (vaultFields) vaultFields.hidden = false;
+      projectVaultCustom = "";
+      const useHash = $("#project-use-hash");
+      if (useHash) useHash.checked = true;
+      syncProjectVaultFolderField(true);
     }
     projectDialog.showModal();
   }
+
+  let projectVaultHash = "";
+  let projectVaultCustom = "";
+
+  function newProjectVaultHash() {
+    if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+    return `proj-${Date.now().toString(36)}`;
+  }
+
+  function syncProjectVaultFolderField(resetHash) {
+    const input = $("#project-vault-folder");
+    const useHash = $("#project-use-hash");
+    if (!input || !useHash) return;
+    if (resetHash || !projectVaultHash) projectVaultHash = newProjectVaultHash();
+    if (useHash.checked) {
+      if (!input.readOnly) projectVaultCustom = String(input.value || "").trim();
+      input.value = projectVaultHash;
+      input.readOnly = true;
+    } else {
+      input.readOnly = false;
+      input.value = projectVaultCustom || "";
+      input.focus();
+    }
+  }
+
+  $("#project-use-hash")?.addEventListener("change", () => {
+    syncProjectVaultFolderField(false);
+  });
 
   projectForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1402,6 +1437,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       number: String(data.get("number") || "").trim() || null,
       description: String(data.get("description") || "").trim() || null,
     };
+    if (!renaming) {
+      const useHash = Boolean($("#project-use-hash")?.checked);
+      const vaultFolder = String(data.get("vault_folder") || "").trim();
+      if (!useHash) {
+        if (!vaultFolder) {
+          showError($("#project-error"), "Enter a vault/workspace name, or check Use hash.");
+          return;
+        }
+        if (/\s/.test(vaultFolder)) {
+          showError($("#project-error"), "Vault/workspace name cannot contain spaces.");
+          return;
+        }
+      }
+      body.vault_folder = useHash ? projectVaultHash || vaultFolder : vaultFolder;
+    }
     if (!body.name) {
       showError($("#project-error"), "A project name is required.");
       return;

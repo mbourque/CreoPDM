@@ -23,6 +23,7 @@ from creopdm.exceptions import (
     RepositoryError,
     ValidationAppError,
 )
+from creopdm.utils.vault_folder import normalize_uuid_folder, validate_vault_folder
 from creopdm.logging_setup import get_logger
 from creopdm.models.activity import Activity
 from creopdm.models.checkout import Checkout
@@ -97,18 +98,63 @@ class ProjectService:
                     details={"name": existing.name},
                 )
 
+    def _require_unique_vault_folder(
+        self,
+        session: Session,
+        vault_folder: str,
+        *,
+        exclude_uuid: str | None = None,
+    ) -> None:
+        wanted = vault_folder.casefold()
+        stmt = select(Project).where(Project.active.is_(True))
+        for existing in session.scalars(stmt):
+            if exclude_uuid and existing.uuid == exclude_uuid:
+                continue
+            existing_folder = (existing.vault_folder or existing.uuid).casefold()
+            if existing_folder == wanted:
+                raise DuplicateProjectError(
+                    f'A project already uses vault/workspace name "{existing.vault_folder or existing.uuid}".',
+                    details={"vault_folder": existing.vault_folder or existing.uuid},
+                )
+            if existing.uuid.casefold() == wanted:
+                raise DuplicateProjectError(
+                    f'Vault/workspace name "{vault_folder}" matches another project id.',
+                    details={"vault_folder": vault_folder},
+                )
+
     def create_project(
         self,
         session: Session,
         name: str,
         number: str | None = None,
         description: str | None = None,
+        vault_folder: str | None = None,
     ) -> Project:
         if not name.strip():
             raise PathValidationError("A project name is required.")
         self._require_unique_name(session, name)
 
-        project_uuid = str(uuid.uuid4())
+        requested = (vault_folder or "").strip()
+        if requested:
+            folder = validate_vault_folder(requested)
+            as_uuid = normalize_uuid_folder(folder)
+            project_uuid = as_uuid or str(uuid.uuid4())
+            if as_uuid:
+                folder = as_uuid
+        else:
+            project_uuid = str(uuid.uuid4())
+            folder = project_uuid
+
+        self._require_unique_vault_folder(session, folder)
+
+        vault_root = self._workspaces._config.workspace_root()
+        vault_path = vault_root / folder
+        if vault_path.exists() and any(vault_path.iterdir()):
+            raise DuplicateProjectError(
+                f'Vault folder "{folder}" already exists on disk.',
+                details={"vault_folder": folder, "path": str(vault_path)},
+            )
+
         user = self._users.get_current_user()
         now = datetime.now(timezone.utc)
 
@@ -116,13 +162,14 @@ class ProjectService:
             raise RepositoryError("Git is required to create a project but was not found on PATH.")
 
         with self._locks.acquire(project_uuid):
-            vault = self._workspaces.init_vault(project_uuid, name.strip(), user)
+            vault = self._workspaces.init_vault(folder, project_uuid, name.strip(), user)
 
         project = Project(
             uuid=project_uuid,
             name=name.strip(),
             number=(number or "").strip() or None,
             description=(description or "").strip() or None,
+            vault_folder=folder,
             repository_path="",
             default_branch=DEFAULT_BRANCH,
             created_at=now,
@@ -136,7 +183,7 @@ class ProjectService:
             ActivityAction.PROJECT_CREATED,
             user,
             project_id=project.id,
-            details={"workspace": str(vault), "name": project.name},
+            details={"workspace": str(vault), "name": project.name, "vault_folder": folder},
         )
         logger.info("Created project %s in workspace %s", project.uuid, vault)
         session.commit()

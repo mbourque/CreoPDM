@@ -31,6 +31,8 @@ class ProjectCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     number: str | None = Field(default=None, max_length=25)
     description: str | None = Field(default=None, max_length=256)
+    # Vault folder under vaults/. Blank → server uses the project UUID.
+    vault_folder: str | None = Field(default=None, max_length=200)
 
 
 class ProjectUpdateRequest(BaseModel):
@@ -56,6 +58,7 @@ class ProjectResponse(BaseModel):
     name: str
     number: str | None
     description: str | None
+    vault_folder: str
     repository_path: str
     default_branch: str
     remote_url: str | None

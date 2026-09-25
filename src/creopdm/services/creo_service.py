@@ -52,7 +52,7 @@ class CreoService:
         view = self._checkouts.describe(obj, checkout)
         if checkout is None:
             try:
-                latest = self._workspaces.locate_content(project.uuid, obj)
+                latest = self._workspaces.locate_content(project, obj)
                 if self._workspaces.is_modified(project, obj):
                     path = latest
                 else:
@@ -71,7 +71,7 @@ class CreoService:
                 )
         else:
             try:
-                path = self._workspaces.locate_content(project.uuid, obj)
+                path = self._workspaces.locate_content(project, obj)
             except PathValidationError:
                 path = self._workspaces.materialize(
                     project,
@@ -117,7 +117,7 @@ class CreoService:
         launch: bool = True,
         include_companions: bool = True,
     ) -> dict:
-        path = self._workspaces.file_path(project.uuid, relative_path)
+        path = self._workspaces.file_path(project, relative_path)
         if not path.is_file():
             raise PathValidationError(
                 f"Vault file not found: {Path(relative_path).name}.",
@@ -185,7 +185,7 @@ class CreoService:
             if skip_object_id is not None and obj.id == skip_object_id:
                 continue
             try:
-                companion_path = self._workspaces.locate_content(project.uuid, obj)
+                companion_path = self._workspaces.locate_content(project, obj)
             except PathValidationError:
                 companion_path = self._workspaces.materialize(
                     project,

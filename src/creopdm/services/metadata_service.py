@@ -306,8 +306,7 @@ class MetadataService:
             )
         if vault_scan and self._workspaces is not None:
             project = session.get(Project, obj.project_id)
-            project_uuid = project.uuid if project is not None else ""
-            if project_uuid:
+            if project is not None:
                 for other in asm_candidates:
                     entry: dict[str, object] | None = (
                         {
@@ -318,7 +317,7 @@ class MetadataService:
                         else None
                     )
                     try:
-                        path = self._workspaces.locate_content(project_uuid, other)
+                        path = self._workspaces.locate_content(project, other)
                     except PathValidationError as exc:
                         if entry is not None:
                             entry["locate"] = "missing"
@@ -443,7 +442,7 @@ class MetadataService:
         for parent in chunk:
             scanned.append(parent.filename)
             try:
-                path = self._workspaces.locate_content(project.uuid, parent)
+                path = self._workspaces.locate_content(project, parent)
             except PathValidationError:
                 missing += 1
                 continue

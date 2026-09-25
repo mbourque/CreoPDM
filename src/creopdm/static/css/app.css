@@ -727,11 +727,21 @@ span.object-open:hover { text-decoration: underline; }
 [hidden] { display: none !important; }
 dialog:not([open]) { display: none !important; }
 .dialog label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.88rem; font-weight: 600; }
+.dialog label.checkbox-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+.dialog label.checkbox-row input { width: auto; margin: 0; }
 .dialog input, .dialog textarea {
   font: inherit; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 4px; font-weight: 400;
 }
 .dialog input:disabled, .dialog textarea:disabled {
   background: #eef2f5; color: var(--muted); cursor: not-allowed;
+}
+.dialog input:read-only {
+  background: #eef2f5; color: var(--muted);
 }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .path-picker { display: flex; gap: 0.4rem; align-items: stretch; font-weight: 400; }

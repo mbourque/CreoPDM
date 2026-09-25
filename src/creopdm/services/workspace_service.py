@@ -83,16 +83,27 @@ class WorkspaceService:
         set_hidden(vault / PROJECT_MARKER_DIR)
         set_hidden(vault / ".gitignore")
 
-    def root_for(self, project_uuid: str) -> Path:
-        path = self._config.workspace_for_project(project_uuid)
+    def root_for(self, vault_folder: str) -> Path:
+        path = self._config.workspace_for_project(vault_folder)
         path.mkdir(parents=True, exist_ok=True)
         return path
 
-    def explorer_directory(self, project_uuid: str, folder: str = "") -> Path:
+    def vault_folder_name(self, project: Project) -> str:
+        return (project.vault_folder or "").strip() or project.uuid
+
+    def vault_for(self, project: Project) -> Path:
+        return self.root_for(self.vault_folder_name(project))
+
+    def _vault_root(self, project_or_folder: Project | str) -> Path:
+        if isinstance(project_or_folder, Project):
+            return self.vault_for(project_or_folder)
+        return self.root_for(project_or_folder)
+
+    def explorer_directory(self, project_or_folder: Project | str, folder: str = "") -> Path:
         """Workspace folder currently shown in Files, or the project root."""
         from creopdm.utils.folders import normalize_folder_query
 
-        root = self.root_for(project_uuid)
+        root = self._vault_root(project_or_folder)
         current = normalize_folder_query(folder)
         if not current:
             return root
@@ -101,9 +112,6 @@ class WorkspaceService:
         except PathValidationError:
             return root
         return target if target.is_dir() else root
-
-    def vault_for(self, project: Project) -> Path:
-        return self.root_for(project.uuid)
 
     def leftover_source(self, project: Project) -> Path | None:
         """Old Creo folder recorded before Git lived in the workspace."""
@@ -123,7 +131,7 @@ class WorkspaceService:
 
     def ensure_vault(self, project: Project) -> Path:
         """Git lives in the workspace. Move leftover source-folder repos here once."""
-        vault = self.root_for(project.uuid)
+        vault = self.vault_for(project)
         location = self.leftover_source(project)
         git = self._git
         if git is None:
@@ -152,10 +160,10 @@ class WorkspaceService:
         self._hide_bookkeeping(vault)
         return vault
 
-    def init_vault(self, project_uuid: str, name: str, user: UserIdentity) -> Path:
+    def init_vault(self, vault_folder: str, project_uuid: str, name: str, user: UserIdentity) -> Path:
         if self._git is None:
             raise RepositoryError("Git is required to create a project but was not found on PATH.")
-        vault = self.root_for(project_uuid)
+        vault = self.root_for(vault_folder)
         self._git.init_repository(vault, DEFAULT_BRANCH)
         self.sync_gitignore(vault)
         self._write_project_marker(vault, project_uuid, name, None, None)
@@ -171,10 +179,10 @@ class WorkspaceService:
 
     def _workspace_search_dirs(
         self,
-        project_uuid: str,
+        project_or_folder: Project | str,
         obj: EngineeringObject | None = None,
     ) -> list[Path]:
-        root = self.root_for(project_uuid)
+        root = self._vault_root(project_or_folder)
         ordered: list[Path] = []
         seen: set[str] = set()
 
@@ -186,7 +194,7 @@ class WorkspaceService:
             ordered.append(path)
 
         if obj is not None:
-            add(self.workspace_file_path(project_uuid, obj).parent)
+            add(self.workspace_file_path(project_or_folder, obj).parent)
         add(root)
         for folder in STANDARD_PROJECT_FOLDERS:
             leftover = root / folder
@@ -194,12 +202,12 @@ class WorkspaceService:
                 add(leftover)
         return ordered
 
-    def workspace_file_path(self, project_uuid: str, obj: EngineeringObject) -> Path:
-        return self.file_path(project_uuid, self.workspace_relative(obj))
+    def workspace_file_path(self, project_or_folder: Project | str, obj: EngineeringObject) -> Path:
+        return self.file_path(project_or_folder, self.workspace_relative(obj))
 
-    def file_path(self, project_uuid: str, relative_path: str) -> Path:
+    def file_path(self, project_or_folder: Project | str, relative_path: str) -> Path:
         relative = assert_safe_relative_path(relative_path)
-        root = self.root_for(project_uuid)
+        root = self._vault_root(project_or_folder)
         return ensure_within(root, root / relative)
 
     def repository_file(self, project: Project, relative_path: str) -> Path:
@@ -247,7 +255,7 @@ class WorkspaceService:
                 f"Repository file is missing: {obj.filename}",
                 details={"relative_path": obj.relative_path},
             )
-        destination = self.workspace_file_path(project.uuid, obj)
+        destination = self.workspace_file_path(project, obj)
         extras = self._cad_extensions()
         latest = CreoFileManager.latest_in_directory(
             destination.parent, obj.filename, extras
@@ -294,13 +302,13 @@ class WorkspaceService:
         self._try_set_mode(destination, writable)
         return destination
 
-    def locate_content(self, project_uuid: str, obj: EngineeringObject) -> Path:
+    def locate_content(self, project_or_folder: Project | str, obj: EngineeringObject) -> Path:
         extras = self._cad_extensions()
-        for directory in self._workspace_search_dirs(project_uuid, obj):
+        for directory in self._workspace_search_dirs(project_or_folder, obj):
             latest = CreoFileManager.latest_in_directory(directory, obj.filename, extras)
             if latest is not None and latest.is_file():
                 return latest
-        destination = self.workspace_file_path(project_uuid, obj)
+        destination = self.workspace_file_path(project_or_folder, obj)
         raise PathValidationError(
             f"Vault file not found for {obj.filename}.",
             details={"workspace": str(destination)},
@@ -328,7 +336,7 @@ class WorkspaceService:
                 details={"filename": name, "expected": obj.filename},
             )
         relative = self.sibling_relative(obj, Path(name))
-        destination = self.file_path(project.uuid, relative)
+        destination = self.file_path(project, relative)
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.exists():
             set_file_writable(destination)
@@ -350,7 +358,7 @@ class WorkspaceService:
         name = Path(relative).name
         if self._is_ignored(name):
             raise PathValidationError(f"{name} is ignored and cannot be staged.")
-        destination = self.file_path(project.uuid, relative)
+        destination = self.file_path(project, relative)
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.exists():
             set_file_writable(destination)
@@ -360,13 +368,13 @@ class WorkspaceService:
         return destination
 
     def has_local_copy(self, project: Project, obj: EngineeringObject) -> bool:
-        return self.workspace_file_path(project.uuid, obj).is_file()
+        return self.workspace_file_path(project, obj).is_file()
 
     def local_copy_uuids(self, project: Project, objects: list[EngineeringObject]) -> set[str]:
         """UUIDs whose workspace files exist, from one directory walk."""
         if not objects:
             return set()
-        root = self.root_for(project.uuid)
+        root = self.vault_for(project)
         names: set[str] = set()
         if root.is_dir():
             skip = {".git", ".creopdm", "__pycache__"}
@@ -385,7 +393,7 @@ class WorkspaceService:
 
     def is_modified(self, project: Project, obj: EngineeringObject) -> bool:
         try:
-            path = self.locate_content(project.uuid, obj)
+            path = self.locate_content(project, obj)
         except PathValidationError:
             return False
         return self._file_modified(path, obj)
@@ -421,7 +429,7 @@ class WorkspaceService:
     def pending_workspace_save(self, project: Project, obj: EngineeringObject) -> dict[str, str | int | bool] | None:
         """Describe a workspace copy that is newer than the last checked-in version."""
         try:
-            path = self.locate_content(project.uuid, obj)
+            path = self.locate_content(project, obj)
         except PathValidationError:
             return None
         recorded = obj.filename
@@ -596,12 +604,12 @@ class WorkspaceService:
             logger.exception("Could not copy %s into the workspace", obj.filename)
             return None
 
-    def preferred_add_directory(self, project_uuid: str, owned_relative_paths: list[str] | None = None) -> Path:
+    def preferred_add_directory(self, project_or_folder: Project | str, owned_relative_paths: list[str] | None = None) -> Path:
         """Workspace root: all working copies live in one folder."""
-        return self.root_for(project_uuid)
+        return self._vault_root(project_or_folder)
 
-    def relative_if_inside(self, project_uuid: str, path: Path) -> str | None:
-        root = self.root_for(project_uuid)
+    def relative_if_inside(self, project_or_folder: Project | str, path: Path) -> str | None:
+        root = self._vault_root(project_or_folder)
         try:
             return self._canonical_relative(root, Path(path))
         except ValueError:
@@ -788,7 +796,7 @@ class WorkspaceService:
         extras = self._cad_extensions()
         wanted = CreoFileManager.logical_filename(obj.filename, extras).lower()
         removed: list[str] = []
-        for directory in self._workspace_search_dirs(project.uuid, obj):
+        for directory in self._workspace_search_dirs(project, obj):
             if not directory.is_dir():
                 continue
             for path in list(directory.iterdir()):
@@ -805,7 +813,7 @@ class WorkspaceService:
                         f"Could not delete the vault copy of {obj.filename}.",
                         details={"path": str(path)},
                     )
-        self._prune_empty_workspace_dirs(self.root_for(project.uuid), removed)
+        self._prune_empty_workspace_dirs(self.vault_for(project), removed)
         return removed
 
     def purge_local_many(
@@ -823,7 +831,7 @@ class WorkspaceService:
             CreoFileManager.logical_repo_path(obj.relative_path, extras).lower()
             for obj in objects
         }
-        root = self.root_for(project.uuid)
+        root = self.vault_for(project)
         if not root.is_dir():
             return []
         skip = _RESERVED_WORKSPACE_DIRS

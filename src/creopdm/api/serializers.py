@@ -25,6 +25,7 @@ def project_to_response(project: Project) -> ProjectResponse:
         name=project.name,
         number=project.number,
         description=project.description,
+        vault_folder=(project.vault_folder or project.uuid),
         repository_path=project.repository_path,
         default_branch=project.default_branch,
         remote_url=project.remote_url,

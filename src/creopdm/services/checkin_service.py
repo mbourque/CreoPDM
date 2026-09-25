@@ -68,7 +68,7 @@ class CheckinService:
         view = self._checkouts.describe(obj, checkout, user)
         workspace_name = obj.filename
         try:
-            workspace_name = self._workspaces.locate_content(project.uuid, obj).name
+            workspace_name = self._workspaces.locate_content(project, obj).name
         except PathValidationError:
             pass
         modified = self._workspaces.is_modified(project, obj)
@@ -133,7 +133,7 @@ class CheckinService:
                     )
             if to_add:
                 self._add_workspace_files(session, project, to_add, message, obj.filename)
-            workspace_file = self._workspaces.locate_content(project.uuid, obj)
+            workspace_file = self._workspaces.locate_content(project, obj)
             content_hash = calculate_sha256(workspace_file)
             file_size = workspace_file.stat().st_size
             creo_release = creo_release_for(workspace_file, workspace_file.name)

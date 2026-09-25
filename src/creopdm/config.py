@@ -751,12 +751,14 @@ class ConfigManager:
             return list(DEFAULT_IGNORE_PATTERNS)
         return unique_ignore_patterns(configured)
 
-    def workspace_for_project(self, project_uuid: str) -> Path:
-        if not project_uuid or any(ch in project_uuid for ch in r"/\:"):
-            raise PathValidationError("Invalid project identifier for vault path.")
+    def workspace_for_project(self, vault_folder: str) -> Path:
+        """Return the vault directory for a project folder name (UUID or custom)."""
+        from creopdm.utils.vault_folder import validate_vault_folder
+
+        folder = validate_vault_folder(vault_folder)
         root = self.workspace_root()
         root.mkdir(parents=True, exist_ok=True)
-        return root / project_uuid
+        return root / folder
 
     def remember_project(self, project_uuid: str | None) -> None:
         uuid_value = (project_uuid or "").strip() or None

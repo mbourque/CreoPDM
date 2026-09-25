@@ -18,6 +18,8 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     number: Mapped[str | None] = mapped_column(String(25), nullable=True)
     description: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Single path segment under vaults/ (UUID by default, or a custom name).
+    vault_folder: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     repository_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     default_branch: Mapped[str] = mapped_column(String(128), default="main")
     remote_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)

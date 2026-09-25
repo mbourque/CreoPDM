@@ -52,7 +52,7 @@ def object_content(
     obj = ctx.objects.get_object(db, object_id)
     project = obj.project
     try:
-        path = ctx.workspaces.locate_content(project.uuid, obj)
+        path = ctx.workspaces.locate_content(project, obj)
     except PathValidationError:
         path = ctx.workspaces.materialize(
             project,
