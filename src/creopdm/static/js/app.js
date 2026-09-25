@@ -1446,14 +1446,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const input = $("#project-vault-folder");
     const useHash = $("#project-use-hash");
     if (!input || !useHash) return;
-    input.readOnly = false;
     if (resetHash || !projectVaultHash) projectVaultHash = newProjectVaultHash();
     if (useHash.checked) {
       input.value = projectVaultHash;
-    } else if (!projectVaultCustomTouched) {
-      fillVaultFolderFromName();
+      input.disabled = true;
+      input.readOnly = true;
     } else {
-      input.value = projectVaultCustom || "";
+      input.disabled = false;
+      input.readOnly = false;
+      if (!projectVaultCustomTouched) {
+        fillVaultFolderFromName();
+      } else {
+        input.value = projectVaultCustom || "";
+      }
     }
   }
 
@@ -1474,15 +1479,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
 
   $("#project-vault-folder")?.addEventListener("input", () => {
-    const input = $("#project-vault-folder");
     const useHash = $("#project-use-hash");
-    const value = String(input?.value || "").trim();
-    // Typing a custom name turns off Use hash so Create keeps what they typed.
-    if (useHash?.checked && value !== projectVaultHash) {
-      useHash.checked = false;
-    }
+    if (useHash?.checked) return;
     projectVaultCustomTouched = true;
-    projectVaultCustom = value;
+    projectVaultCustom = String($("#project-vault-folder")?.value || "").trim();
   });
 
   projectForm?.addEventListener("submit", async (event) => {
@@ -1498,11 +1498,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const useHash = Boolean($("#project-use-hash")?.checked);
       let vaultFolder = String(data.get("vault_folder") || "").trim();
       if (useHash) {
-        // Prefer the field value when it still matches the generated hash.
-        body.vault_folder =
-          vaultFolder && vaultFolder === projectVaultHash
-            ? vaultFolder
-            : projectVaultHash || vaultFolder || newProjectVaultHash();
+        body.vault_folder = projectVaultHash || newProjectVaultHash();
       } else {
         if (!vaultFolder) vaultFolder = slugifyVaultFolder(body.name);
         if (!vaultFolder) {
