@@ -1393,6 +1393,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (submit) submit.textContent = "Create";
       if (vaultFields) vaultFields.hidden = false;
       projectVaultCustom = "";
+      projectVaultCustomTouched = false;
+      projectVaultHash = "";
       const useHash = $("#project-use-hash");
       if (useHash) useHash.checked = true;
       syncProjectVaultFolderField(true);
@@ -1402,6 +1404,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   let projectVaultHash = "";
   let projectVaultCustom = "";
+  let projectVaultCustomTouched = false;
 
   function newProjectVaultHash() {
     // Prefer platform UUID; CEF often lacks randomUUID but has getRandomValues.
@@ -1420,24 +1423,61 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
   }
 
+  function slugifyVaultFolder(name) {
+    const slug = String(name || "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^A-Za-z0-9._-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^[-.]+|[-.]+$/g, "");
+    return slug.slice(0, 200);
+  }
+
+  function fillVaultFolderFromName() {
+    const input = $("#project-vault-folder");
+    const useHash = $("#project-use-hash");
+    if (!input || useHash?.checked || projectVaultCustomTouched) return;
+    const slug = slugifyVaultFolder(projectForm?.elements?.name?.value || "");
+    input.value = slug;
+    projectVaultCustom = slug;
+  }
+
   function syncProjectVaultFolderField(resetHash) {
     const input = $("#project-vault-folder");
     const useHash = $("#project-use-hash");
     if (!input || !useHash) return;
     if (resetHash || !projectVaultHash) projectVaultHash = newProjectVaultHash();
     if (useHash.checked) {
-      if (!input.readOnly) projectVaultCustom = String(input.value || "").trim();
+      if (!input.readOnly) {
+        projectVaultCustom = String(input.value || "").trim();
+        projectVaultCustomTouched = Boolean(projectVaultCustom);
+      }
       input.value = projectVaultHash;
       input.readOnly = true;
     } else {
       input.readOnly = false;
-      input.value = projectVaultCustom || "";
+      if (!projectVaultCustomTouched) {
+        fillVaultFolderFromName();
+      } else {
+        input.value = projectVaultCustom || "";
+      }
       input.focus();
     }
   }
 
   $("#project-use-hash")?.addEventListener("change", () => {
     syncProjectVaultFolderField(false);
+  });
+
+  projectForm?.elements?.name?.addEventListener("input", () => {
+    fillVaultFolderFromName();
+  });
+
+  $("#project-vault-folder")?.addEventListener("input", () => {
+    const useHash = $("#project-use-hash");
+    if (useHash?.checked) return;
+    projectVaultCustomTouched = true;
+    projectVaultCustom = String($("#project-vault-folder")?.value || "").trim();
   });
 
   projectForm?.addEventListener("submit", async (event) => {
@@ -1451,8 +1491,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     };
     if (!renaming) {
       const useHash = Boolean($("#project-use-hash")?.checked);
-      const vaultFolder = String(data.get("vault_folder") || "").trim();
-      if (!useHash) {
+      let vaultFolder = String(data.get("vault_folder") || "").trim();
+      if (useHash) {
+        body.vault_folder = projectVaultHash || vaultFolder || newProjectVaultHash();
+      } else {
+        if (!vaultFolder) vaultFolder = slugifyVaultFolder(body.name);
         if (!vaultFolder) {
           showError($("#project-error"), "Enter a vault/workspace name, or check Use hash.");
           return;
@@ -1461,8 +1504,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           showError($("#project-error"), "Vault/workspace name cannot contain spaces.");
           return;
         }
+        body.vault_folder = vaultFolder;
       }
-      body.vault_folder = useHash ? projectVaultHash || vaultFolder : vaultFolder;
     }
     if (!body.name) {
       showError($("#project-error"), "A project name is required.");

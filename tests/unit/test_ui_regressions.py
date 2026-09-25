@@ -156,8 +156,12 @@ def test_project_dialog_has_vault_folder_and_use_hash():
     assert 'name="vault_folder"' in html
     assert 'class="checkbox-row"' in html
     assert 'for="project-use-hash"' in html
+    # Use hash is the default — uncheck to type a custom vault folder.
+    assert 'id="project-use-hash" checked' in html
     script = _app_js()
     assert "syncProjectVaultFolderField" in script
+    assert "slugifyVaultFolder" in script
+    assert "fillVaultFolderFromName" in script
     assert "body.vault_folder" in script
     assert "Vault/workspace name cannot contain spaces" in script
     assert "getRandomValues" in script

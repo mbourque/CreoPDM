@@ -417,13 +417,13 @@
     </label>
     <div id="project-vault-fields" class="project-vault-fields">
       <label>Vault/Workspace name
-        <input name="vault_folder" id="project-vault-folder" maxlength="200" autocomplete="off" spellcheck="false" placeholder="robot-arm">
+        <input name="vault_folder" id="project-vault-folder" maxlength="200" autocomplete="off" spellcheck="false" placeholder="Robot-Arm">
       </label>
-      <p class="muted small" id="project-vault-hint">Folder under the vaults directory. No spaces. Letters, numbers, dots, hyphens, and underscores only.</p>
       <div class="checkbox-row">
         <input type="checkbox" name="use_hash" id="project-use-hash" checked>
         <label for="project-use-hash">Use hash</label>
       </div>
+      <p class="muted small" id="project-vault-hint">Folder under the vaults directory. Default is a UUID. Uncheck Use hash to type a name (no spaces; letters, numbers, dots, hyphens, underscores).</p>
     </div>
     <p class="error" id="project-error" hidden></p>
     <div class="dialog-actions">
