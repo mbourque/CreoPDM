@@ -3950,9 +3950,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function onFileTableClick(event) {
     const target = eventEl(event);
     const folderRow = target?.closest?.(".folder-row") || null;
-    // Same as files: single-click selects (for Remove, etc.); double-click opens.
+    // Folder name link always opens; click elsewhere on the row selects (Remove, etc.).
     if (folderRow) {
-      // Capture soft-nav also listens for a[href] — stop it so the row stays selected.
+      const folderLink = target?.closest?.("a.folder-open");
+      if (folderLink && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        cancelPendingOpen();
+        openFolderRow(folderRow);
+        return;
+      }
+      // Stop soft-nav / default so a non-link click keeps the row selected.
       event.preventDefault();
       event.stopPropagation();
       cancelPendingOpen();
@@ -7518,8 +7526,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       if (event.button != null && event.button !== 0) return;
       if (link.target && link.target !== "_self") return;
-      // Folder name is a real <a href="/?…&folder=">; single-click selects the row,
-      // double-click opens. Soft-nav here would steal the click in capture phase.
+      // Folder name opens via onFileTableClick → leavePage; skip soft-nav here so
+      // row chrome clicks still select without navigating.
       if (link.classList.contains("folder-open") || link.closest("tr.folder-row")) return;
       const href = link.getAttribute("href");
       if (!href || !isSoftNavUrl(href)) return;

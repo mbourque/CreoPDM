@@ -392,11 +392,13 @@ def test_creo_and_filetype_icons_exist_on_disk():
 
 
 def test_folder_row_click_selects_double_click_opens():
-    """Regression: single-click selects for Remove; double-click opens the folder."""
+    """Regression: folder name link opens; row chrome selects; double-click opens."""
     script = _app_js()
     click = _between(script, "function onFileTableClick(", "function onFileTableDblclick(")
+    assert 'closest?.("a.folder-open")' in click
+    assert "openFolderRow(folderRow)" in click
+    assert click.index("openFolderRow(folderRow)") < click.index("selectOnly(folderRow)")
     assert "selectOnly(folderRow)" in click
-    assert "openFolderRow(folderRow)" not in click
     assert "stopPropagation()" in click
     assert 'closest?.(".folder-row")' in click
     assert 'closest(".object-row, .queue-row")' in click
@@ -409,7 +411,7 @@ def test_folder_row_click_selects_double_click_opens():
     assert "tr.folder-row" in soft
     assert "return;" in soft
     html = APP_HTML.read_text(encoding="utf-8")
-    assert "Click to select this folder. Double-click to open it." in html
+    assert "Click the folder name to open" in html
     select_only = _between(script, "function selectOnly(", "function selectRange(")
     assert 'classList.contains("folder-row")' in select_only
     assert "syncToolbar()" in select_only

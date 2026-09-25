@@ -149,7 +149,7 @@
               data-sort-modified="{% if entry.modified %}{{ local_time(entry.modified, '%Y%m%d%H%M%S') }}{% endif %}"
               data-sort-checkout="{{ entry.path }}/"
               style="--depth: {{ entry.depth }}"
-              title="Click to select this folder. Double-click to open it.">
+              title="Click the folder name to open. Click elsewhere to select. Double-click to open.">
             <td title="{{ entry.name }}">
               <a class="folder-open" href="/?project={{ selected.uuid }}&amp;folder={{ entry.path | urlencode }}" data-folder="{{ entry.path }}" title="Open {{ entry.name }}">
                 <span class="folder-label">
