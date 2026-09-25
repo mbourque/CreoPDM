@@ -247,3 +247,7 @@ With the venv active, run `pytest`. Tests use temporary directories. They never 
 ## Data location
 
 On Windows, application data lives in `%LOCALAPPDATA%\CreoPDM\`. On Linux it lives in `~/.local/share/CreoPDM`. Git history and vault copies live in the per-project folder under `vaults` there (older installs used `workspaces`; CreoPDM renames that folder on startup). The Settings vault field should be `~/.local/share/CreoPDM/vaults`, not `~/.local/share/CreoPDM` itself. Pass `--data-dir` or set `CREOPDM_DATA_DIR` only when you want a different store.
+
+## Further reading
+
+- [Creo templates and libraries with CreoPDM](docs/creo-library-templates.md) — Library project, Samba share, and `config.pro` UNC paths
