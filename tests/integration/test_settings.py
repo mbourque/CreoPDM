@@ -117,6 +117,7 @@ def test_get_and_update_settings(client, tmp_path):
     assert "config.pro" in payload["ignore_patterns"]
     assert "creo_parametric_customization.ui" in payload["ignore_patterns"]
     assert ".exe" in payload["ignore_patterns"]
+    assert "Thumbs.db" in payload["ignore_patterns"]
     assert payload["database_url"].startswith("sqlite:///")
     assert payload["default_database_url"].startswith("sqlite:///")
     assert payload["port"] == 0

@@ -67,6 +67,8 @@ def test_workspace_transients_are_ignored():
     assert CreoFileManager.is_workspace_transient("config.pro")
     assert CreoFileManager.is_workspace_transient("config.sup")
     assert CreoFileManager.is_workspace_transient("creo_parametric_customization.ui")
+    assert CreoFileManager.is_workspace_transient("Thumbs.db")
+    assert CreoFileManager.is_workspace_transient("thumbs.db")
     assert not CreoFileManager.is_workspace_transient("cnc-part.mrd.4")
     assert CreoFileManager.is_workspace_transient("747912f5-13ee-41f0-90d7-537c290.idx")
     assert not CreoFileManager.is_workspace_transient("tool.idx")

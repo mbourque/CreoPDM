@@ -859,6 +859,7 @@ DEFAULT_IGNORE_PATTERNS = (
     "config.sup",
     "creo_parametric_customization.ui",
     ".exe",
+    "Thumbs.db",
 )
 
 PREVIOUS_DEFAULT_IGNORE_SETS = (
@@ -900,6 +901,24 @@ PREVIOUS_DEFAULT_IGNORE_SETS = (
             "config.pro",
             "config.sup",
             "creo_parametric_customization.ui",
+        }
+    ),
+    frozenset(
+        {
+            "*.tst",
+            "*.err",
+            "*.acl",
+            "trail.txt*",
+            "std.out",
+            "std.err",
+            "proimpex.errors",
+            "regen_backup_model*.mrd.*",
+            "traceback.log",
+            "mapkeys.pro",
+            "config.pro",
+            "config.sup",
+            "creo_parametric_customization.ui",
+            ".exe",
         }
     ),
 )

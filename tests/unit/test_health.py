@@ -301,6 +301,8 @@ def test_config_layout(data_dir):
     assert "config.pro" in settings.ignore.patterns
     assert "config.sup" in settings.ignore.patterns
     assert "creo_parametric_customization.ui" in settings.ignore.patterns
+    assert ".exe" in settings.ignore.patterns
+    assert "Thumbs.db" in settings.ignore.patterns
     assert settings.database.url == ""
     assert manager.database_url().startswith("sqlite:///")
     assert manager.database_url().endswith("creopdm.db")
@@ -428,6 +430,34 @@ def test_previous_ignore_defaults_migrate(tmp_path):
     assert "traceback.log" in loaded.ignore.patterns
     assert "config.pro" in loaded.ignore.patterns
     assert ".exe" in loaded.ignore.patterns
+    assert "Thumbs.db" in loaded.ignore.patterns
+
+
+def test_previous_ignore_defaults_with_exe_migrate_thumbs_db(tmp_path):
+    """Installs that already had .exe in defaults still pick up Thumbs.db."""
+    manager = ConfigManager(tmp_path / "appdata")
+    manager.ensure_layout()
+    settings = AppSettings()
+    settings.ignore.patterns = [
+        "*.tst",
+        "*.err",
+        "*.acl",
+        "trail.txt*",
+        "std.out",
+        "std.err",
+        "proimpex.errors",
+        "regen_backup_model*.mrd.*",
+        "traceback.log",
+        "mapkeys.pro",
+        "config.pro",
+        "config.sup",
+        "creo_parametric_customization.ui",
+        ".exe",
+    ]
+    manager.save(settings)
+    loaded = manager.load()
+    assert loaded.ignore.patterns == list(DEFAULT_IGNORE_PATTERNS)
+    assert "Thumbs.db" in loaded.ignore.patterns
 
 
 def test_custom_ignore_patterns_are_not_migrated(tmp_path):
