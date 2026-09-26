@@ -35,7 +35,7 @@ def test_create_db_engine_postgres_skips_sqlite_pragmas(monkeypatch):
     assert len(calls) == 1
     assert calls[0]["url"] == url
     assert calls[0]["kwargs"].get("pool_pre_ping") is True
-    assert "connect_args" not in calls[0]["kwargs"]
+    assert calls[0]["kwargs"].get("connect_args") == {"client_encoding": "utf8"}
     assert "poolclass" not in calls[0]["kwargs"]
 
 

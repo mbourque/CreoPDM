@@ -32,6 +32,10 @@ def _is_sqlite(database_url: str) -> bool:
     return database_url.startswith("sqlite:")
 
 
+def _is_postgres(database_url: str) -> bool:
+    return database_url.startswith("postgresql") or database_url.startswith("postgres")
+
+
 def create_db_engine(database_url: str) -> Engine:
     _register_mappers()
     if _is_sqlite(database_url):
@@ -52,7 +56,12 @@ def create_db_engine(database_url: str) -> Engine:
             cursor.close()
 
         return engine
-    return create_engine(database_url, pool_pre_ping=True, future=True)
+    return create_engine(
+        database_url,
+        pool_pre_ping=True,
+        future=True,
+        **({"connect_args": {"client_encoding": "utf8"}} if _is_postgres(database_url) else {}),
+    )
 
 
 def create_session_factory(engine: Engine) -> sessionmaker[Session]:

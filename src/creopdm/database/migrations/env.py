@@ -44,7 +44,16 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     url = config.get_main_option("sqlalchemy.url")
-    connectable = create_engine(url, poolclass=pool.NullPool, future=True)
+    connect_args: dict = {}
+    if url and (url.startswith("postgresql") or url.startswith("postgres")):
+        # Avoid SQL_ASCII → bytes from psycopg3 (breaks SQLAlchemy version parse).
+        connect_args["client_encoding"] = "utf8"
+    connectable = create_engine(
+        url,
+        poolclass=pool.NullPool,
+        future=True,
+        connect_args=connect_args,
+    )
     try:
         with connectable.connect() as connection:
             context.configure(
