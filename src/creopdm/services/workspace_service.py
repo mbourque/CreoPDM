@@ -853,6 +853,49 @@ class WorkspaceService:
             return name.replace("\\", "/")
         return (parent / name).as_posix()
 
+    def purge_newer_creo_saves(self, project: Project, kept: Path) -> list[Path]:
+        """Delete same-logical Creo saves with a higher .N than ``kept`` in its folder.
+
+        Used after revert so locate_content does not prefer an old tip like .prt.3
+        over the restored .prt.1.
+        """
+        extras = self._cad_extensions()
+        if not kept.is_file():
+            return []
+        folder = kept.parent
+        try:
+            kept_resolved = kept.resolve()
+        except OSError:
+            kept_resolved = kept
+        keep_num = CreoFileManager.save_number(kept.name, extras)
+        logical = CreoFileManager.logical_filename(kept.name, extras).lower()
+        removed: list[Path] = []
+        try:
+            children = list(folder.iterdir())
+        except OSError:
+            return []
+        for child in children:
+            if not child.is_file():
+                continue
+            try:
+                if child.resolve() == kept_resolved:
+                    continue
+            except OSError:
+                if child.name == kept.name:
+                    continue
+            if CreoFileManager.logical_filename(child.name, extras).lower() != logical:
+                continue
+            if CreoFileManager.save_number(child.name, extras) <= keep_num:
+                continue
+            try:
+                set_file_writable(child)
+                child.unlink()
+                removed.append(child)
+                logger.info("Removed newer Creo save after revert: %s", child)
+            except OSError as exc:
+                logger.warning("Could not remove newer Creo save %s: %s", child, exc)
+        return removed
+
     @staticmethod
     def _canonical_relative(root: Path, path: Path) -> str:
         relative = path.resolve().relative_to(root.resolve())

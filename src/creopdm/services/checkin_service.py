@@ -30,7 +30,7 @@ from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.storage.base import VersionStore
 from creopdm.utils.creo_header import creo_release_for
-from creopdm.utils.files import copy_file, set_file_readonly
+from creopdm.utils.files import copy_file, set_file_readonly, set_file_writable
 from creopdm.utils.hashing import calculate_sha256
 from creopdm.utils.identity import CurrentUserProvider
 
@@ -282,6 +282,7 @@ class CheckinService:
                 details={"version": version_uuid},
             ) from last_error
 
+        dest_rel = source_rel.replace("\\", "/").lstrip("/")
         with self._locks.acquire(project.uuid):
             existing = self._checkouts.active_for(session, obj.id)
             if existing is not None:
@@ -289,19 +290,39 @@ class CheckinService:
             else:
                 # Need a writable checkout so check-in can record the restored bytes.
                 self._checkouts.checkout(session, object_uuid)
-            workspace_file = self._workspaces.locate_content(project, obj)
-            workspace_file.parent.mkdir(parents=True, exist_ok=True)
-            workspace_file.write_bytes(data)
+
+            # Restore the Git path/name from that commit (e.g. start_part.prt.1), not
+            # overwrite the current tip filename (e.g. start_part.prt.3).
             try:
-                workspace_file.chmod(workspace_file.stat().st_mode | 0o200)
+                self._store.restore_version(repo, dest_rel, target.git_commit_hash)
+            except Exception:
+                logger.warning(
+                    "git checkout of %s@%s failed; writing blob directly",
+                    dest_rel,
+                    (target.git_commit_hash or "")[:8],
+                    exc_info=True,
+                )
+            dest = self._workspaces.file_path(project, dest_rel)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if not dest.is_file() or dest.read_bytes() != data:
+                if dest.exists():
+                    set_file_writable(dest)
+                dest.write_bytes(data)
+            try:
+                set_file_writable(dest)
             except Exception:
                 pass
+
+            # Drop higher .N siblings so locate_content prefers the restored save
+            # (e.g. .prt.1) instead of the tip (.prt.3). Leave obj.filename as the tip
+            # so check-in still git-rms the old tip path when the basename changes.
+            self._workspaces.purge_newer_creo_saves(project, dest)
             logger.info(
                 "Restored %s bytes from %s@%s → %s for revert to %s",
                 len(data),
-                source_rel,
+                dest_rel,
                 (target.git_commit_hash or "")[:8],
-                workspace_file,
+                dest,
                 display,
             )
 
@@ -316,6 +337,7 @@ class CheckinService:
                 "from_version": version_uuid,
                 "from_display": display,
                 "to_iteration": restored.iteration,
+                "restored_path": dest_rel,
             },
         )
         return restored

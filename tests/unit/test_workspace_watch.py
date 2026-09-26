@@ -112,3 +112,21 @@ def test_import_relative_path_nests_under_parent_folder(tmp_path):
         service.import_relative_path(project, part, None, parent_folder="Incoming")
         == "Incoming/top.prt"
     )
+
+
+def test_purge_newer_creo_saves_keeps_restored_tip(tmp_path):
+    """After revert to .prt.1, higher siblings must not remain for locate_content."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    kept = vault / "start_part.prt.1"
+    kept.write_bytes(b"v1")
+    (vault / "start_part.prt.2").write_bytes(b"v2")
+    (vault / "start_part.prt.3").write_bytes(b"v3")
+    (vault / "other.prt.9").write_bytes(b"other")
+    service = WorkspaceService(_Config())
+    removed = service.purge_newer_creo_saves(SimpleNamespace(uuid="p1"), kept)
+    assert {path.name for path in removed} == {"start_part.prt.2", "start_part.prt.3"}
+    assert kept.is_file()
+    assert (vault / "other.prt.9").is_file()
+    assert not (vault / "start_part.prt.2").exists()
+    assert not (vault / "start_part.prt.3").exists()

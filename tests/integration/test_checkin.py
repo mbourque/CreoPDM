@@ -737,11 +737,60 @@ def test_revert_to_older_version_restores_vault_content(client, repo_parent, dat
     body = reverted.json()
     assert body["iteration"] == 4
     assert body["current_version"]["content_hash"] == older["content_hash"]
+    assert body["filename"] == older["filename"]
     vault = data_dir / "vaults" / project["uuid"] / body["filename"]
     assert vault.read_bytes() == b"v1-content"
     new_history = client.get(f"/api/objects/{object_id}/history").json()
     assert new_history[0]["comment"].startswith("Reverted to")
     assert older["display"] in new_history[0]["comment"]
+    assert new_history[0]["filename"] == older["filename"]
+
+
+@requires_git
+def test_revert_restores_creo_save_number_not_current_tip(client, repo_parent, data_dir):
+    """Regression: revert must restore start_part.prt.1, not overwrite .prt.3 in place."""
+    project = client.post("/api/projects", json={"name": "Creo Saves"}).json()
+    created = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("start_part.prt.1", b"v1-bytes", "application/octet-stream")},
+        data={"comment": "Add save 1"},
+    )
+    assert created.status_code == 201, created.text
+    obj = created.json()
+    object_id = obj["uuid"]
+    vault = data_dir / "vaults" / project["uuid"]
+
+    assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
+    (vault / "start_part.prt.1").write_bytes(b"v1-bytes")
+    (vault / "start_part.prt.2").write_bytes(b"v2-bytes")
+    check2 = client.post(
+        f"/api/objects/{object_id}/checkin",
+        json={"comment": "Save 2"},
+    )
+    assert check2.status_code == 200, check2.text
+    assert check2.json()["filename"] == "start_part.prt.2"
+
+    assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
+    (vault / "start_part.prt.2").write_bytes(b"v2-bytes")
+    (vault / "start_part.prt.3").write_bytes(b"v3-bytes")
+    check3 = client.post(
+        f"/api/objects/{object_id}/checkin",
+        json={"comment": "Save 3"},
+    )
+    assert check3.status_code == 200, check3.text
+    assert check3.json()["filename"] == "start_part.prt.3"
+
+    history = client.get(f"/api/objects/{object_id}/history").json()
+    older = next(item for item in history if item["filename"] == "start_part.prt.1")
+    reverted = client.post(
+        f"/api/objects/{object_id}/versions/{older['uuid']}/revert"
+    )
+    assert reverted.status_code == 200, reverted.text
+    body = reverted.json()
+    assert body["filename"] == "start_part.prt.1"
+    assert (vault / "start_part.prt.1").read_bytes() == b"v1-bytes"
+    assert not (vault / "start_part.prt.3").exists()
+    assert not (vault / "start_part.prt.2").exists()
 
 
 @requires_git

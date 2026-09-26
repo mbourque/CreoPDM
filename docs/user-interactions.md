@@ -178,7 +178,7 @@ On a normal office network (`http://…`), the app should try the CreoPDM agent�
 | **Open ▾ → Open workspace…** | Open this project’s local working folder on this PC (falls back to vault if needed) | |
 | **Open ▾ → Open selected…** (or click a file name) | Offer how to open (see below); open in Creo or Windows; when the file is fetched to the local workspace, keep its vault folders (do not flatten); Creo opens from that folder so nested assemblies still resolve | Fail silently with no message; put nested vault files at the workspace root; fail open just because the file lives under a vault subfolder |
 | **History** | Show versions and details for the selected file | |
-| Select an **older** History row → **Revert to selected…** | Restore that version’s content to the vault and local workspace as a new check-in; current tip stays in history | Offer Revert for the current version, a pending unsaved row, or when this file has only one version; revert someone else’s checkout |
+| Select an **older** History row → **Revert to selected…** | Restore that version’s content **and filename** (including Creo `.prt.N` save number) to the vault and local workspace as a new check-in; remove newer numbered siblings so the tip is not left as `.3` after reverting to `.1`; current tip stays in history | Offer Revert for the current version, a pending unsaved row, or when this file has only one version; revert someone else’s checkout; keep a newer `.prt.N` name while only swapping bytes |
 | **Copy to Vault** | Put a copy in the vault without checking out | Check the file out |
 
 ### When you open a file that’s not checked out to you
@@ -314,6 +314,7 @@ Automated coverage lives mainly in:
 - `tests/unit/test_ui_regressions.py`
 - `tests/unit/test_user_interaction_validations.py`
 - `tests/integration/test_objects.py` (create folder / batch remove)
+- `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
 - Related checkout / check-in / soft-nav tests
 
 When you change any behavior above, update **this document** in the same change and add or adjust tests so the “must not” cases stay covered. See `.cursor/rules/user-interactions.mdc`.
