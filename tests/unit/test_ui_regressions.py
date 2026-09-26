@@ -450,15 +450,17 @@ def test_open_model_uses_nested_cache_folder():
 
 
 def test_mobile_browse_css_is_minimal():
-    """Phone browse mode (incl. landscape) hides chrome and trims columns."""
+    """Touch-phone browse mode hides chrome; narrow desktop/Creo window must not match."""
     css = APP_CSS.read_text(encoding="utf-8")
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
-    assert "@media (max-width: 640px)" in css
     assert "pointer: coarse" in css
+    assert "hover: none" in css
     assert "orientation: landscape" in css
     assert "max-height: 560px" in css
-    # Split after the multi-condition media query opener.
-    mobile = css.split("max-height: 560px))", 1)[1]
+    # Do not trigger browse mode on width alone (Creo window can be narrow with a mouse).
+    assert "@media (max-width: 640px)," not in css
+    assert "@media (max-width: 640px) {" not in css
+    mobile = css.split("pointer: coarse", 1)[1]
     assert ".topbar .status-cluster" in mobile
     assert "#new-project-btn" in mobile
     assert ".project-settings" in mobile
@@ -476,7 +478,8 @@ def test_mobile_browse_css_is_minimal():
     assert "only folders" in docs
     assert "browse-only" in docs
     assert "Name** and **Rev**" in docs
-    assert "rotating the phone" in docs
+    assert "touch-only" in docs
+    assert "must **not** switch" in docs
 
 
 def test_details_overview_dedupes_identity_and_unifies_fonts():
