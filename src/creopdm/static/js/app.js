@@ -7191,6 +7191,97 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   }
 
+  function selectedHistoryVersionRow() {
+    return document.querySelector("#panel-history tr.version-row.is-selected");
+  }
+
+  function syncRevertVersionButton() {
+    const btn = $("#revert-version-btn");
+    const hint = $("#revert-version-hint");
+    if (!btn) return;
+    const row = selectedHistoryVersionRow();
+    const canRevert = Boolean(row && row.dataset.canRevert === "1" && row.dataset.versionUuid);
+    btn.disabled = !canRevert;
+    if (hint) {
+      if (!row) {
+        hint.textContent = "Select an older version to restore it.";
+      } else if (row.dataset.canRevert !== "1") {
+        hint.textContent = "That is the current version — choose an older row.";
+      } else {
+        hint.textContent = `Ready to restore ${row.dataset.versionDisplay || "this version"} to vault and local.`;
+      }
+    }
+  }
+
+  function selectHistoryVersionRow(row) {
+    document.querySelectorAll("#panel-history tr.version-row.is-selected").forEach((item) => {
+      item.classList.remove("is-selected");
+      item.removeAttribute("data-selected");
+    });
+    if (row) {
+      row.classList.add("is-selected");
+      row.dataset.selected = "1";
+    }
+    syncRevertVersionButton();
+  }
+
+  $("#panel-history")?.addEventListener("click", (event) => {
+    const row = eventEl(event)?.closest("tr.version-row");
+    if (!row || !row.closest("#panel-history")) return;
+    event.preventDefault();
+    selectHistoryVersionRow(row);
+  });
+
+  $("#revert-version-btn")?.addEventListener("click", async () => {
+    const btn = $("#revert-version-btn");
+    const row = selectedHistoryVersionRow();
+    const objectId = btn?.dataset.object || "";
+    const versionId = row?.dataset.versionUuid || "";
+    const display = row?.dataset.versionDisplay || "this version";
+    if (!btn || btn.disabled || !objectId || !versionId || row?.dataset.canRevert !== "1") return;
+    const ok = window.confirm(
+      `Revert to ${display}?\n\n`
+        + "This restores that content to the vault and local workspace as a new check-in. "
+        + "The current tip stays in history."
+    );
+    if (!ok) return;
+    showError($("#toolbar-error"), "");
+    try {
+      await withBusy(`Reverting to ${display}…`, async () => {
+        const response = await fetch(
+          `/api/objects/${encodeURIComponent(objectId)}/versions/${encodeURIComponent(versionId)}/revert`,
+          { method: "POST" }
+        );
+        if (!response.ok) {
+          throw new Error(await readError(response));
+        }
+        const body = await response.json().catch(() => ({}));
+        try {
+          const agent = await probeCreoAgent();
+          if (agent) {
+            await materializeViaAgent({
+              object_id: objectId,
+              project_id: body.project_uuid || currentProjectId() || null,
+              relative_path: body.relative_path || null,
+              filename: body.filename || null,
+              disk_name: body.filename || null,
+              companions: [],
+            });
+          }
+        } catch {
+          /* vault revert already succeeded; local cache can rematerialize on next open */
+        }
+      });
+      showOk(`Reverted to ${display}. Vault and local workspace updated.`);
+      reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
+    } catch (err) {
+      const message = err && err.message ? err.message : String(err);
+      showError($("#toolbar-error"), message || "Could not revert to that version.");
+    }
+  });
+
+  syncRevertVersionButton();
+
   document.querySelectorAll(".tabs .tab").forEach((tab) => {
     tab.addEventListener("click", () => {
       if (tab.disabled) return;

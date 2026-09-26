@@ -449,6 +449,27 @@ def test_open_model_uses_nested_cache_folder():
     assert "looksLikeLocalWindowsPath(materialized)" in meta
 
 
+def test_history_revert_only_for_older_versions():
+    """Revert control appears only with older history; current row is not reversible."""
+    detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(
+        encoding="utf-8"
+    )
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "{% if history|length > 1 %}" in detail
+    assert 'id="revert-version-btn"' in detail
+    assert 'data-can-revert=' in detail
+    assert "version-row" in detail
+    assert "function syncRevertVersionButton" in script
+    assert "row.dataset.canRevert === \"1\"" in script or "dataset.canRevert === \"1\"" in script
+    assert "/versions/" in script and "/revert" in script
+    assert "Choose an older version to revert" in (
+        (ROOT / "src" / "creopdm" / "services" / "checkin_service.py").read_text(encoding="utf-8")
+    )
+    assert "Revert to selected" in docs
+    assert "Offer Revert for the current version" in docs
+
+
 def test_toolbar_hides_inactive_actions():
     """Inactive toolbar buttons and fly-up items are hidden, not left greyed out."""
     script = _app_js()

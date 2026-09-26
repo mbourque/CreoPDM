@@ -603,6 +603,11 @@ span.object-open:hover { text-decoration: underline; }
 .detail-head .object-open { font-size: inherit; color: inherit; }
 .grid tr.is-latest td { background: #eef6f1; }
 .grid tr.is-pending td { background: #fff6e8; }
+.grid tr.version-row { cursor: pointer; }
+.history-actions {
+  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+  margin: 0.35rem 0 0.75rem;
+}
 .grid tr.object-row:hover td,
 .grid tr.queue-row:hover td,
 .grid tr.is-pending:hover td {

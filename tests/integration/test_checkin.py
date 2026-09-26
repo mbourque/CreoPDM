@@ -707,6 +707,52 @@ def test_checkin_rejects_unchanged_checkout(client, repo_parent, data_dir):
 
 
 @requires_git
+def test_revert_to_older_version_restores_vault_content(client, repo_parent, data_dir):
+    project, obj = _create_part(client, repo_parent)
+    object_id = obj["uuid"]
+    _advance_to_iteration(client, object_id, 3, data_dir)
+    history = client.get(f"/api/objects/{object_id}/history").json()
+    assert len(history) >= 3
+    current = history[0]
+    older = history[-1]
+    assert older["uuid"] != current["uuid"]
+    assert older["content_hash"] != current["content_hash"]
+
+    denied_current = client.post(
+        f"/api/objects/{object_id}/versions/{current['uuid']}/revert"
+    )
+    assert denied_current.status_code == 400, denied_current.text
+    assert "already the current version" in denied_current.json()["error"]["message"].lower()
+
+    detail = client.get(f"/projects/{project['uuid']}/objects/{object_id}")
+    assert detail.status_code == 200
+    assert 'id="revert-version-btn"' in detail.text
+    assert 'data-can-revert="1"' in detail.text
+    assert 'data-can-revert="0"' in detail.text
+
+    reverted = client.post(
+        f"/api/objects/{object_id}/versions/{older['uuid']}/revert"
+    )
+    assert reverted.status_code == 200, reverted.text
+    body = reverted.json()
+    assert body["iteration"] == 4
+    assert body["current_version"]["content_hash"] == older["content_hash"]
+    vault = data_dir / "vaults" / project["uuid"] / body["filename"]
+    assert vault.read_bytes() == b"v1-content"
+    new_history = client.get(f"/api/objects/{object_id}/history").json()
+    assert new_history[0]["comment"].startswith("Reverted to")
+    assert older["display"] in new_history[0]["comment"]
+
+
+@requires_git
+def test_revert_hidden_when_only_one_version(client, repo_parent):
+    project, obj = _create_part(client, repo_parent)
+    detail = client.get(f"/projects/{project['uuid']}/objects/{obj['uuid']}")
+    assert detail.status_code == 200
+    assert 'id="revert-version-btn"' not in detail.text
+
+
+@requires_git
 def test_project_workspace_content_stages_new_file_for_add(client, repo_parent, data_dir):
     project, _obj = _create_part(client, repo_parent)
     uploaded = client.put(

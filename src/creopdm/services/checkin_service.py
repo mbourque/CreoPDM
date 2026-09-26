@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from creopdm.constants import ActivityAction, CheckoutStatus, DEFAULT_REVISION, LifecycleState
 from creopdm.creo.base import CreoConnector, CreoModelRef
@@ -232,6 +233,92 @@ class CheckinService:
             logger.info("Checked in %s as %s.%s", obj.filename, obj.revision, new_iteration)
             session.refresh(obj)
             return obj
+
+    def revert_to_version(
+        self,
+        session: Session,
+        object_uuid: str,
+        version_uuid: str,
+    ) -> EngineeringObject:
+        """Restore an older version onto vault (and rematerialize), as a new check-in."""
+        obj = self._objects.get_object(session, object_uuid)
+        project = obj.project
+        user = self._users.get_current_user()
+        target = session.scalar(
+            select(ObjectVersion).where(ObjectVersion.uuid == version_uuid)
+        )
+        if target is None or target.object_id != obj.id:
+            raise ValidationAppError("Choose a version from this file’s history.")
+        if obj.current_version_id is not None and target.id == obj.current_version_id:
+            raise ValidationAppError(
+                "That is already the current version. Choose an older version to revert."
+            )
+        if not (target.git_commit_hash or "").strip():
+            raise ValidationAppError("This version has no stored vault content to restore.")
+
+        display = f"{target.revision}.{target.iteration}"
+        comment = f"Reverted to {display}"
+        self._workspaces.ensure_vault(project)
+        repo = self._workspaces.vault_for(project)
+        rel_candidates = []
+        for raw in (target.relative_path, obj.relative_path, target.filename, obj.filename):
+            text = str(raw or "").replace("\\", "/").strip().lstrip("/")
+            if text and text not in rel_candidates:
+                rel_candidates.append(text)
+        data: bytes | None = None
+        source_rel = ""
+        last_error: Exception | None = None
+        for rel in rel_candidates:
+            try:
+                data = self._store.get_version(repo, rel, target.git_commit_hash)
+                source_rel = rel
+                break
+            except Exception as exc:
+                last_error = exc
+                continue
+        if data is None:
+            raise ValidationAppError(
+                f"Could not read version {display} from vault history.",
+                details={"version": version_uuid},
+            ) from last_error
+
+        with self._locks.acquire(project.uuid):
+            existing = self._checkouts.active_for(session, obj.id)
+            if existing is not None:
+                self._checkouts.require_owned(session, obj, user)
+            else:
+                # Need a writable checkout so check-in can record the restored bytes.
+                self._checkouts.checkout(session, object_uuid)
+            workspace_file = self._workspaces.locate_content(project, obj)
+            workspace_file.parent.mkdir(parents=True, exist_ok=True)
+            workspace_file.write_bytes(data)
+            try:
+                workspace_file.chmod(workspace_file.stat().st_mode | 0o200)
+            except Exception:
+                pass
+            logger.info(
+                "Restored %s bytes from %s@%s → %s for revert to %s",
+                len(data),
+                source_rel,
+                (target.git_commit_hash or "")[:8],
+                workspace_file,
+                display,
+            )
+
+        restored = self.checkin(session, object_uuid, comment)
+        self._activities.record(
+            session,
+            ActivityAction.VERSION_RESTORED,
+            user,
+            project_id=project.id,
+            object_id=obj.id,
+            details={
+                "from_version": version_uuid,
+                "from_display": display,
+                "to_iteration": restored.iteration,
+            },
+        )
+        return restored
 
     def preview_queue(self, session: Session, project) -> dict[str, str | bool | list]:
         siblings = self._objects.list_objects(session, project.id)

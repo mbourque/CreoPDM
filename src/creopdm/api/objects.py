@@ -278,6 +278,20 @@ def object_history(
     return [item for item in (version_to_response(v) for v in versions) if item is not None]
 
 
+@router.post("/api/objects/{object_id}/versions/{version_id}/revert", response_model=ObjectResponse)
+def revert_object_version(
+    object_id: str,
+    version_id: str,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ObjectResponse:
+    """Restore an older history row onto vault (new check-in) so local can rematerialize."""
+    obj = ctx.checkins.revert_to_version(db, object_id, version_id)
+    db.commit()
+    db.refresh(obj)
+    return present_object(ctx, db, obj)
+
+
 @router.get("/api/objects/{object_id}/creo-metadata", response_model=CreoMetadataResponse)
 def get_creo_metadata(
     object_id: str,

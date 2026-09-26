@@ -460,9 +460,17 @@
       <button type="button" class="subtab is-active" data-subtab="files">File History</button>
       <button type="button" class="subtab" data-subtab="versions">Version History</button>
     </div>
+    {% if history|length > 1 %}
+    <div class="history-actions">
+      <button type="button" class="btn" id="revert-version-btn" disabled
+              data-object="{{ object.uuid }}"
+              title="Select an older version row, then restore that content to the vault and local workspace as a new check-in.">Revert to selected…</button>
+      <span class="muted small" id="revert-version-hint">Select an older version to restore it.</span>
+    </div>
+    {% endif %}
 
     <div class="subtab-panel" id="subpanel-files">
-      <table class="grid">
+      <table class="grid" id="history-files-table">
         <thead>
           <tr>
             <th data-sort="rev" aria-sort="none" title="Sort by revision. Click again to reverse.">Rev</th>
@@ -494,8 +502,12 @@
           </tr>
           {% endif %}
           {% for version in history %}
-          <tr {% if loop.first and not workspace_pending %}class="is-latest"{% endif %}>
-            <td>{{ version.revision }}.{{ version.iteration }}{% if loop.first and not workspace_pending %} · latest{% endif %}</td>
+          <tr class="version-row{% if object.current_version and version.uuid == object.current_version.uuid %} is-latest{% endif %}"
+              data-version-uuid="{{ version.uuid }}"
+              data-version-display="{{ version.revision }}.{{ version.iteration }}"
+              data-can-revert="{% if object.current_version and version.uuid == object.current_version.uuid %}0{% else %}1{% endif %}"
+              title="{% if object.current_version and version.uuid == object.current_version.uuid %}Current version{% else %}Click to select, then Revert to selected…{% endif %}">
+            <td>{{ version.revision }}.{{ version.iteration }}{% if object.current_version and version.uuid == object.current_version.uuid %} · current{% endif %}</td>
             <td class="filename-cell">{% if not loop.last %}{{ version_file_label(version, history[loop.index0 + 1]) }}{% else %}{{ version_file_label(version) }}{% endif %}</td>
             <td>{{ version.creo_release or "" }}</td>
             <td>{{ version.file_size | byte_size }}</td>
@@ -513,7 +525,7 @@
     </div>
 
     <div class="subtab-panel" id="subpanel-versions" hidden>
-      <table class="grid">
+      <table class="grid" id="history-versions-table">
         <thead>
           <tr>
             <th data-sort="rev" aria-sort="none" title="Sort by revision. Click again to reverse.">Rev</th>
@@ -539,8 +551,12 @@
           </tr>
           {% endif %}
           {% for version in history %}
-          <tr {% if loop.first and not workspace_pending %}class="is-latest"{% endif %}>
-            <td>{{ version.revision }}.{{ version.iteration }}{% if loop.first and not workspace_pending %} · latest{% endif %}</td>
+          <tr class="version-row{% if object.current_version and version.uuid == object.current_version.uuid %} is-latest{% endif %}"
+              data-version-uuid="{{ version.uuid }}"
+              data-version-display="{{ version.revision }}.{{ version.iteration }}"
+              data-can-revert="{% if object.current_version and version.uuid == object.current_version.uuid %}0{% else %}1{% endif %}"
+              title="{% if object.current_version and version.uuid == object.current_version.uuid %}Current version{% else %}Click to select, then Revert to selected…{% endif %}">
+            <td>{{ version.revision }}.{{ version.iteration }}{% if object.current_version and version.uuid == object.current_version.uuid %} · current{% endif %}</td>
             <td class="filename-cell">{% if not loop.last %}{{ version_file_label(version, history[loop.index0 + 1]) }}{% else %}{{ version_file_label(version) }}{% endif %}</td>
             <td>{{ version.created_by }}</td>
             <td>{% if version.created_at %}{{ local_time(version.created_at) }}{% else %}—{% endif %}</td>

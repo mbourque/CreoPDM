@@ -178,6 +178,7 @@ On a normal office network (`http://…`), the app should try the CreoPDM agent�
 | **Open ▾ → Open workspace…** | Open this project’s local working folder on this PC (falls back to vault if needed) | |
 | **Open ▾ → Open selected…** (or click a file name) | Offer how to open (see below); open in Creo or Windows; when the file is fetched to the local workspace, keep its vault folders (do not flatten); Creo opens from that folder so nested assemblies still resolve | Fail silently with no message; put nested vault files at the workspace root; fail open just because the file lives under a vault subfolder |
 | **History** | Show versions and details for the selected file | |
+| Select an **older** History row → **Revert to selected…** | Restore that version’s content to the vault and local workspace as a new check-in; current tip stays in history | Offer Revert for the current version, a pending unsaved row, or when this file has only one version; revert someone else’s checkout |
 | **Copy to Vault** | Put a copy in the vault without checking out | Check the file out |
 
 ### When you open a file that’s not checked out to you
