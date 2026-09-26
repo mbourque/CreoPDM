@@ -53,7 +53,7 @@ def test_alembic_config_accepts_url_encoded_password():
     """ConfigParser must not reject %XX in postgresql passwords (e.g. %40 for @)."""
     from creopdm.database.migrate import alembic_config
 
-    url = "postgresql+psycopg://creopdm:M%40v3r1ck@localhost:5432/CreoPDM"
+    url = "postgresql+psycopg://creopdm:P%40ss@localhost:5432/CreoPDM"
     cfg = alembic_config(url)
     assert cfg.get_main_option("sqlalchemy.url") == url
 
@@ -61,8 +61,8 @@ def test_alembic_config_accepts_url_encoded_password():
 def test_database_url_accepts_literal_at_in_password():
     from creopdm.config import database_url_for_connect, database_url_for_display
 
-    typed = "postgresql+psycopg://creopdm:M@v3r1ck@localhost:5432/CreoPDM"
-    encoded = "postgresql+psycopg://creopdm:M%40v3r1ck@localhost:5432/CreoPDM"
+    typed = "postgresql+psycopg://creopdm:P@ss@localhost:5432/CreoPDM"
+    encoded = "postgresql+psycopg://creopdm:P%40ss@localhost:5432/CreoPDM"
     assert database_url_for_connect(typed) == encoded
     assert database_url_for_connect(encoded) == encoded
     assert database_url_for_display(encoded) == typed
@@ -75,8 +75,8 @@ def test_config_manager_encodes_password_for_connect(tmp_path, monkeypatch):
 
     manager = ConfigManager(tmp_path / "appdata")
     settings = manager.load()
-    settings.database.url = "postgresql+psycopg://creopdm:M@v3r1ck@localhost:5432/CreoPDM"
+    settings.database.url = "postgresql+psycopg://creopdm:P@ss@localhost:5432/CreoPDM"
     manager.save(settings)
     loaded = ConfigManager(tmp_path / "appdata")
-    assert loaded.settings.database.url == "postgresql+psycopg://creopdm:M@v3r1ck@localhost:5432/CreoPDM"
-    assert loaded.database_url() == "postgresql+psycopg://creopdm:M%40v3r1ck@localhost:5432/CreoPDM"
+    assert loaded.settings.database.url == "postgresql+psycopg://creopdm:P@ss@localhost:5432/CreoPDM"
+    assert loaded.database_url() == "postgresql+psycopg://creopdm:P%40ss@localhost:5432/CreoPDM"
