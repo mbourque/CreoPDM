@@ -1,0 +1,33 @@
+---
+description: Preserve Files/toolbar user interactions; keep docs/user-interactions.md in sync
+alwaysApply: true
+---
+
+# User interactions doc is the contract
+
+`docs/user-interactions.md` is the source of truth for Files page and toolbar UX (Add ▾, folder open/select, Check In ▾, Remove from Project, soft-nav refresh, field validations, negatives).
+
+## Do not break
+
+When changing `app.js`, `app.html`, `base.html`, objects/projects APIs, or related services:
+
+1. **Read the relevant section** of `docs/user-interactions.md` before changing behavior.
+2. Preserve documented happy paths, validations, and **must-not** negatives (especially: folder name opens / chrome selects; Remove from Project clears the row without hard refresh; soft-nav keeps Creo.JS; empty Create-folder removable via `folder_paths`).
+3. Prefer updating **tests mapped in §15** of that doc in the same change when behavior is intentional.
+
+## Keep the doc updated
+
+When the user asks for a UX / toolbar / Files-list / Add / Checkout / Check In / Remove / soft-nav change (or you change those behaviors):
+
+1. **Edit `docs/user-interactions.md` in the same change** — happy path, validations, negatives, smoke steps, and §15 test mapping as needed.
+2. Do not leave the doc describing old menus, click rules, or stale “must not” rows.
+3. If a regression test is added for a new interaction rule, link it in §15.
+
+## Examples
+
+```text
+# ✅ GOOD — rename Check In menu items → update labels/order in the doc + tests
+# ✅ GOOD — fix remove list refresh → keep §12.4 + §15 commit/strip tests accurate
+# ❌ BAD — change folder click to always select, leave doc saying name opens
+# ❌ BAD — ship Add mode behavior change without touching user-interactions.md
+```

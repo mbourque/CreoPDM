@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from creopdm.utils.files import remove_tree
 from tests.conftest import requires_git
 
@@ -582,6 +584,102 @@ def test_create_project_folder_empty_appears_on_disk(client, repo_parent, data_d
     assert nested.status_code == 201, nested.text
     assert nested.json()["path"] == "Drawings/RevA"
     assert (vault / "Drawings" / "RevA" / ".gitkeep").is_file()
+
+
+@requires_git
+@pytest.mark.parametrize(
+    "name,needle",
+    [
+        ("Foo/Bar", "without path separators"),
+        (r"Foo\Bar", "without path separators"),
+        ("  ", "without path separators"),
+        (".", "without path separators"),
+        ("..", "without path separators"),
+        (".hidden", "cannot start with a dot"),
+    ],
+)
+def test_create_project_folder_rejects_invalid_names(client, repo_parent, name, needle):
+    """docs/user-interactions.md A1–A3 — Create folder field validation."""
+    project, _location = _create_project(client, repo_parent)
+    response = client.post(
+        f"/api/projects/{project['uuid']}/folders",
+        json={"name": name, "parent_folder": ""},
+    )
+    assert response.status_code == 400, response.text
+    assert needle in response.json()["error"]["message"].lower()
+
+
+@requires_git
+def test_create_project_folder_rejects_empty_schema_and_duplicate(client, repo_parent, data_dir):
+    """Empty name is schema 422; duplicate under same parent is PathValidation."""
+    project, _location = _create_project(client, repo_parent)
+    empty = client.post(
+        f"/api/projects/{project['uuid']}/folders",
+        json={"name": "", "parent_folder": ""},
+    )
+    assert empty.status_code == 422, empty.text
+    first = client.post(
+        f"/api/projects/{project['uuid']}/folders",
+        json={"name": "DupBox", "parent_folder": ""},
+    )
+    assert first.status_code == 201, first.text
+    again = client.post(
+        f"/api/projects/{project['uuid']}/folders",
+        json={"name": "DupBox", "parent_folder": ""},
+    )
+    assert again.status_code == 400, again.text
+    assert "already exists" in again.json()["error"]["message"].lower()
+    vault = data_dir / "vaults" / project["uuid"] / "DupBox"
+    assert (vault / ".gitkeep").is_file()
+
+
+@requires_git
+def test_batch_remove_rejects_empty_and_folder_without_project(client, repo_parent):
+    """docs/user-interactions.md N22 — BatchRemoveRequest negatives via API."""
+    project, _location = _create_project(client, repo_parent)
+    empty = client.post("/api/objects/batch/remove", json={})
+    assert empty.status_code == 422, empty.text
+    no_project = client.post(
+        "/api/objects/batch/remove",
+        json={"folder_paths": ["Ghost"], "object_ids": []},
+    )
+    assert no_project.status_code == 422, no_project.text
+    # Valid shape with project but missing folder is ok (noop folder remove after empty ids).
+    ok_shape = client.post(
+        "/api/objects/batch/remove",
+        json={
+            "folder_paths": ["DoesNotExist"],
+            "project_id": project["uuid"],
+            "object_ids": [],
+        },
+    )
+    assert ok_shape.status_code == 200, ok_shape.text
+
+
+@requires_git
+def test_batch_remove_respects_checkout_ownership(client, repo_parent, data_dir, identity):
+    """Other user's checkout must fail that item; file stays in the project."""
+    project, location = _create_project(client, repo_parent)
+    (location / "locked.prt").write_bytes(b"lock-me")
+    added = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(location / "locked.prt")], "comment": "Add"},
+    )
+    assert added.status_code == 200, added.text
+    obj_id = added.json()["ok"][0]["uuid"]
+    assert client.post(f"/api/objects/{obj_id}/checkout").status_code == 200
+    identity.become("Bob", "ENG-PC-18")
+    removed = client.post(
+        "/api/objects/batch/remove",
+        json={"object_ids": [obj_id]},
+    )
+    assert removed.status_code == 200, removed.text
+    body = removed.json()
+    assert body["ok"] == []
+    assert body["failed"]
+    assert body["failed"][0]["code"] == "CHECKOUT_OWNERSHIP"
+    still = client.get(f"/api/objects/{obj_id}")
+    assert still.status_code == 200
 
 
 @requires_git

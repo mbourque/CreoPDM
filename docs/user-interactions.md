@@ -545,13 +545,20 @@ Repeat with **Add folder…** (one top-level file) and **Add folders…** (neste
 | Soft-nav serialize / no-store | `test_soft_nav_does_not_silently_drop_when_busy`, `test_soft_nav_skips_creojs_reconnect` |
 | Agent before browser folder pick | `test_choose_folder_uses_agent_before_browser_picker` |
 | Nested paths on folder add | `test_dropped_folder_keeps_nested_relative_paths`, `test_from_disk_folders_list_imports_each_tree` |
-| Create folder name rules | Unit `create_folder` / PathValidation messages |
-| BatchRemoveRequest empty / no project | Schema: choose files or folder / choose a project |
-| Confirm name mismatch | UI string `Type the project name exactly to confirm.` |
-| Add files rejects folder tree | Client string about Add folders / Add Folder |
-| Checkout ownership on remove | Integration: item in `failed`, not deleted |
+| Create folder invalid names (A1–A3) | `test_create_project_folder_rejects_invalid_names` |
+| Create folder empty / duplicate (A1, A4) | `test_create_project_folder_rejects_empty_schema_and_duplicate` |
+| Create folder nests under parent (A5) | `test_create_project_folder_empty_appears_on_disk` |
+| BatchRemoveRequest schema (N22) | `test_batch_remove_request_*` in `test_user_interaction_validations.py` |
+| Batch remove API empty / no project | `test_batch_remove_rejects_empty_and_folder_without_project` |
+| Checkout ownership on batch remove (N21) | `test_batch_remove_respects_checkout_ownership` |
+| Add / Create / confirm client negatives (A6–A10, D1, V2) | `test_user_interaction_negative_client_guards` |
+| Confirm name mismatch string | `test_user_interaction_negative_client_guards`, checkin HTML |
+| Check-in blank comment | `test_checkin_increments_iteration_and_releases_lock` (whitespace → 422) |
+| Non-recursive Add folder | `test_from_disk_folder_non_recursive_skips_nested`, `filterTopLevelUploads` guard |
+| Vault folder name rules (spaces/paths) | `test_vault_folder.py`, project dialog UI strings |
+| Delete project wrong confirm (P1) | `test_projects.py` confirm_name wrong |
 
-**Suggested additional unit tests:** table-driven A1–A5 (create folder), A6–A9 (add filters), V3–V6 (list honesty after remove), schema N22/V folder-without-project.
+Still manual / no automated browser E2E: §14 smoke click paths in Creo embedded browser, metric chips, full toolbar enablement state machine.
 
 ---
 

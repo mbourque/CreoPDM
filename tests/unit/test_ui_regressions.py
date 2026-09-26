@@ -450,16 +450,42 @@ def test_folder_row_click_selects_double_click_opens():
     assert "width: fit-content" in css
 
 
-def test_newer_local_cache_matches_flat_save_for_nested_vault_path():
-    """Regression: agent cache is flat; vault may be Documents/part.prt.1 while Creo
-    saves part.prt.2 at the cache root — full-path-only matching hid Modified/Check In.
-    """
+def test_user_interaction_negative_client_guards():
+    """docs/user-interactions.md — Add / Create / confirm / check-in negative strings."""
     script = _app_js()
-    body = _between(script, "function newerLocalCacheSaves(", "async function countLocalNewWorkspaceFiles(")
-    assert "bestByBasename" in body
-    assert "vaultBasenameCounts" in body
-    assert "vaultBasenameCounts.get(base) || 0) === 1" in body
-    assert "Agent cache is flat" in body
+    html = APP_HTML.read_text(encoding="utf-8")
+
+    # Create folder… blank name (A1)
+    create = _between(
+        script,
+        'createFolderForm?.addEventListener("submit"',
+        'purgeBtn?.addEventListener("click"',
+    )
+    assert 'Enter a folder name.' in create
+    assert 'id="create-folder-name"' in html
+    assert 'maxlength="200"' in html.split('id="create-folder-name"', 1)[1].split(">", 1)[0]
+
+    # Add mode negatives (A6–A10)
+    assert "Use Add folders or Add Folder to import a folder tree." in script
+    assert "No top-level files found in that folder. Subfolder files are skipped for Add Folder." in script
+    assert "Add is already running — wait for it to finish." in script
+    assert "Choose files or a folder first." in script
+    assert "Choose a folder first." in script
+    assert "function filterTopLevelUploads(" in script
+    filter_body = _between(script, "function filterTopLevelUploads(", "function applyDroppedFiles(")
+    assert "parts.length > 2" in filter_body
+
+    # Danger confirm (D1 / N15)
+    confirm = _between(script, "function confirmByProjectName(", "function workspacePathsForRemovedObjects(")
+    assert "Type the project name exactly to confirm." in confirm
+    assert "typed !== expected" in confirm
+
+    # Check In comment required on dialog
+    assert 'id="checkin-comment"' in html
+    assert "required" in html.split('id="checkin-comment"', 1)[1].split(">", 1)[0]
+
+    # Remove from Project enablement includes empty folders (V2 / N16)
+    assert "canRemoveProject = ids.length > 0 || folderPaths.length > 0" in script
 
 
 def test_newer_local_cache_matches_flat_save_for_nested_vault_path():
