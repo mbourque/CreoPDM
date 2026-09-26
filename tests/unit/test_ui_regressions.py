@@ -466,8 +466,15 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert "show_instance" in overview
     assert 'class="mono"' not in overview
     assert "detail-path" in overview
-    assert "h[:12]" in overview
-    assert ".detail .mono" in css
+    assert "Content hash" not in overview
+    assert "h[:12]" not in overview
+    assert "<dt>Date created</dt>" in overview
+    assert "<dt>Date modified</dt>" in overview
+    assert "local_time(object.created_at)" in overview
+    assert "local_time(object.updated_at)" in overview
+    assert "omits content hash" in docs
+    assert "Date created" in docs and "Date modified" in docs
+    assert "show content hash on Overview" in docs
     assert ".detail .filename-cell" in css
     assert "font-family: inherit" in css
     assert "text-transform: uppercase" in css

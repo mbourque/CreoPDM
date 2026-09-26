@@ -155,15 +155,10 @@
           {% if identity.origin %}
           <dt>Origin</dt><dd class="detail-path">{{ identity.origin }}</dd>
           {% endif %}
-          <dt>Content hash</dt>
-          <dd class="detail-path" title="{{ object.current_version.content_hash if object.current_version else '' }}">
-            {% if object.current_version and object.current_version.content_hash %}
-              {% set h = object.current_version.content_hash %}
-              {{ h[:12] }}…{{ h[-8:] if h|length > 24 else h[12:] }}
-            {% else %}
-              —
-            {% endif %}
-          </dd>
+          <dt>Date created</dt>
+          <dd>{% if object.created_at %}{{ local_time(object.created_at) }}{% else %}—{% endif %}</dd>
+          <dt>Date modified</dt>
+          <dd>{% if object.updated_at %}{{ local_time(object.updated_at) }}{% else %}—{% endif %}</dd>
           <dt>Size</dt><dd>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</dd>
         </dl>
       </section>
