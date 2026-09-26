@@ -863,6 +863,31 @@ body.is-file-drag #file-drop-overlay {
   min-height: 0;
   overflow: auto;
   background: var(--panel);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.detail a,
+.detail .object-open,
+.detail button.object-open,
+.detail span.object-open {
+  color: var(--ink);
+  font: inherit;
+  font-weight: inherit;
+}
+.detail a:hover,
+.detail .object-open:hover,
+.detail button.object-open:hover,
+.detail span.object-open:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.detail .crumb a {
+  color: var(--muted);
+  font-weight: 500;
+}
+.detail .crumb a:hover {
+  color: var(--ink);
 }
 .crumb { display: flex; gap: 0.4rem; color: var(--muted); margin-bottom: 0.55rem; }
 .detail-tab-title {
@@ -882,19 +907,27 @@ body.is-file-drag #file-drop-overlay {
   font-size: 1.15rem;
   font-weight: 650;
 }
+.detail-head .object-open {
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+}
 .detail-meta { display: flex; gap: 0.6rem; align-items: center; }
-.rev { font-weight: 700; font-size: 1.1rem; }
+.detail-meta .rev {
+  font-weight: 650;
+  font-size: inherit;
+}
 .tabs { display: flex; gap: 0.2rem; margin: 0.3rem 0 0.25rem; border-bottom: 1px solid var(--line); }
 .tab {
   border: 0; border-bottom: 2px solid transparent; background: none; padding: 0.45rem 0.7rem;
-  cursor: pointer; color: var(--muted);
+  cursor: pointer; color: var(--muted); font: inherit;
 }
 .tab.is-active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
 .tab:disabled { cursor: not-allowed; opacity: 0.5; }
 .subtabs { display: flex; gap: 0.2rem; margin: 0 0 0.7rem; }
 .subtab {
   border: 1px solid var(--line); background: white; padding: 0.32rem 0.65rem;
-  cursor: pointer; color: var(--muted); border-radius: 4px 4px 0 0;
+  cursor: pointer; color: var(--muted); border-radius: 4px 4px 0 0; font: inherit;
 }
 .subtab.is-active { color: var(--ink); border-bottom-color: white; font-weight: 600; background: white; }
 .detail .filename-cell {
@@ -914,8 +947,8 @@ body.is-file-drag #file-drop-overlay {
   grid-template-columns: 9.5rem 1fr;
   gap: 0.35rem 1rem;
   margin: 0;
-  font-size: 0.92rem;
-  line-height: 1.4;
+  font-size: inherit;
+  line-height: inherit;
 }
 .detail .kv dt {
   color: var(--muted);
@@ -938,28 +971,47 @@ body.is-file-drag #file-drop-overlay {
 }
 .detail-section-title {
   margin: 0 0 0.55rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+  font-size: inherit;
+  font-weight: 650;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--ink);
 }
 .detail .grid {
-  font-size: 0.92rem;
+  font-size: inherit;
 }
 .detail .grid th {
-  font-size: 0.75rem;
+  font-size: inherit;
+  font-weight: 650;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.detail .muted,
+.detail .muted.small {
+  font-size: inherit;
 }
 .detail .bom-branch {
   font-family: inherit;
+  font-size: inherit;
 }
 .detail .bom-line .bom-name,
 .detail .filename-cell .bom-name {
   font-family: inherit;
   font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+}
+.detail .bom-legend-in,
+.detail .bom-legend-out {
+  color: inherit;
+  font-weight: 650;
 }
 .detail .bom-node.is-root > .bom-line .bom-name {
-  font-weight: 600;
+  font-weight: 650;
+}
+.detail .bom-line .object-open.bom-name,
+.detail .filename-cell .object-open.bom-name {
+  color: var(--ink);
 }
 .kv { display: grid; grid-template-columns: 160px 1fr; gap: 0.4rem 1rem; }
 .kv dt { color: var(--muted); }
@@ -969,6 +1021,8 @@ body.is-file-drag #file-drop-overlay {
   white-space: normal; overflow-wrap: anywhere; word-break: break-all;
   text-align: left;
 }
+.rev { font-weight: 700; font-size: 1.1rem; }
+
 .table-scroll {
   overflow: auto;
   max-width: 100%;

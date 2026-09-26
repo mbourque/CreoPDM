@@ -473,6 +473,14 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert "text-transform: uppercase" in css
     assert "skips duplicate identity fields" in docs
     assert "no mixed monospace" in docs
+    assert "regular ink color" in docs
+    assert "accent-colored hyperlinks" in docs
+    assert ".detail a" in css
+    assert "color: var(--ink)" in css
+    assert ".detail .bom-legend-in" in css
+    # One content size on Details — kv/grid inherit, not a smaller rem.
+    assert ".detail .kv" in css and "font-size: inherit" in _between(css, ".detail .kv {", ".detail .kv dt")
+    assert "font-size: inherit" in _between(css, ".detail .grid {", ".detail .grid th")
     # Detail tables no longer force mono class on every value cell.
     assert 'td class="mono"' not in detail
     assert 'th class="mono"' not in detail
