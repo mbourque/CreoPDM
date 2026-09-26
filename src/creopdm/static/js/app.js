@@ -3154,7 +3154,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function openToolbarMenu(menu, btn, panel) {
-    if (!menu || !btn || !panel || btn.disabled) return;
+    if (!menu || !btn || !panel || btn.disabled || btn.hidden || menu.hidden) return;
     menu.classList.add("is-open");
     panel.hidden = false;
     btn.setAttribute("aria-expanded", "true");
@@ -3299,11 +3299,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function setToolbarActionVisible(button, visible) {
     if (!button) return;
-    // Keep the control in layout; only enable/disable so the toolbar does not jump.
-    button.hidden = false;
+    // Hide inactive toolbar actions and fly-up items so the bar stays compact.
+    button.hidden = !visible;
     button.disabled = !visible;
     const tip = button.closest(".toolbar-tip");
-    if (tip) tip.hidden = false;
+    if (tip) tip.hidden = !visible;
+    if (button.classList.contains("toolbar-menu-toggle")) {
+      const menu = button.closest(".toolbar-menu");
+      if (menu) {
+        menu.hidden = !visible;
+        if (!visible) {
+          menu.classList.remove("is-open");
+          const panel = menu.querySelector(".toolbar-menu-panel");
+          if (panel) panel.hidden = true;
+          button.setAttribute("aria-expanded", "false");
+        }
+      }
+    }
   }
 
   function isNewFileQueueRow(row) {
@@ -3455,16 +3467,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const ids = selected.flatMap(rowObjectIds);
     const canOpenFile = Boolean(selectedOpenSpec());
     const canOpenWorkspace = Boolean(openWorkspaceBtn?.dataset.project);
-    if (openBtn) openBtn.disabled = !canOpenFile;
-    if (openWorkspaceBtn) openWorkspaceBtn.disabled = !canOpenWorkspace;
-    if (openMenuBtn) {
-      openMenuBtn.disabled = !(canOpenFile || canOpenWorkspace);
-      if (openMenuBtn.disabled) closeOpenMenu();
-    }
-    if (historyBtn) {
-      const one = selected.length === 1 ? selected[0] : null;
-      historyBtn.disabled = !rowHistoryHref(one);
-    }
+    const canOpenMenu = canOpenFile || canOpenWorkspace;
+    setToolbarActionVisible(openBtn, canOpenFile);
+    setToolbarActionVisible(openWorkspaceBtn, canOpenWorkspace);
+    setToolbarActionVisible(openMenuBtn, canOpenMenu);
+    if (!canOpenMenu) closeOpenMenu();
+    const one = selected.length === 1 ? selected[0] : null;
+    setToolbarActionVisible(historyBtn, Boolean(rowHistoryHref(one)));
     const canCheckout = selected.length > 0 && selected.every((row) => row.dataset.canCheckout === "1");
     const canCheckin = selectionCanCheckin(selected);
     const canUndo = selected.length > 0 && selected.every((row) => row.dataset.owned === "1");
@@ -3475,6 +3484,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       openWorkspaceBtn?.dataset.project ||
       currentProjectId() ||
       "";
+    const canAdd = Boolean(projectId);
+    setToolbarActionVisible(addMenuBtn, canAdd);
+    for (const id of ["create-folder-btn", "add-files-btn", "add-folder-btn", "add-folders-btn"]) {
+      setToolbarActionVisible($("#" + id), canAdd);
+    }
+    if (!canAdd) closeAddMenu();
     const canCheckoutProject =
       Boolean(projectId) &&
       Number(checkoutProjectBtn?.dataset.checkoutable || 0) > 0;
@@ -3491,21 +3506,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const canCheckinProject =
       Boolean(projectId) &&
       (pendingProjectSaves > 0 || pendingProjectNew > 0 || projectCheckoutCount > 0);
-    if (checkoutBtn) checkoutBtn.disabled = !canCheckout;
+    const canCheckoutMenu = canCheckout || canCheckoutProject || canUndo;
+    setToolbarActionVisible(checkoutBtn, canCheckout);
+    setToolbarActionVisible(checkoutProjectBtn, canCheckoutProject);
     if (checkoutProjectBtn) {
-      checkoutProjectBtn.disabled = !canCheckoutProject;
       checkoutProjectBtn.title = canCheckoutProject
         ? "Check out every file in this project that is available (not locked by someone else)."
         : "Nothing left to check out in this project.";
     }
-    if (undoBtn) undoBtn.disabled = !canUndo;
-    if (checkoutMenuBtn) {
-      checkoutMenuBtn.disabled = !(canCheckout || canCheckoutProject || canUndo);
-      if (checkoutMenuBtn.disabled) closeCheckoutMenu();
-    }
+    setToolbarActionVisible(undoBtn, canUndo);
+    setToolbarActionVisible(checkoutMenuBtn, canCheckoutMenu);
+    if (!canCheckoutMenu) closeCheckoutMenu();
     if (checkinBtn) {
       checkinBtn.textContent = addOnly ? "Add selected…" : "Check in selected…";
-      checkinBtn.disabled = !canCheckin;
       checkinBtn.title = addOnly
         ? "Add selected new files to the project (uploads local workspace files first)."
         : canCheckin
@@ -3514,17 +3527,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             ? "Nothing to check in for this selection. Save changes in Creo first, or use Undo Checkout to release locks."
             : "Check in selected files.";
     }
+    setToolbarActionVisible(checkinBtn, canCheckin);
+    setToolbarActionVisible(checkinProjectBtn, canCheckinProject);
     if (checkinProjectBtn) {
-      checkinProjectBtn.disabled = !canCheckinProject;
       checkinProjectBtn.title = canCheckinProject
         ? "Check in modified files and new files, and release unchanged checkouts so the project looks fully checked in."
         : "Nothing to check in for this project. Check out and save changes, or add new files first.";
     }
-    if (checkinMenuBtn) {
-      checkinMenuBtn.disabled = !(canCheckin || canCheckinProject);
-      if (checkinMenuBtn.disabled) closeCheckinMenu();
-    }
-    if (workspaceBtn) workspaceBtn.disabled = !selected.some((row) => row.dataset.inWorkspace !== "1");
+    const canCheckinMenu = canCheckin || canCheckinProject;
+    setToolbarActionVisible(checkinMenuBtn, canCheckinMenu);
+    if (!canCheckinMenu) closeCheckinMenu();
+    setToolbarActionVisible(
+      workspaceBtn,
+      selected.some((row) => row.dataset.inWorkspace !== "1")
+    );
     const localNewSelected = selected.filter(
       (row) => isNewFileQueueRow(row) && row.dataset.localCache === "1"
     );
@@ -3540,14 +3556,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const canPurgeVersions = Boolean(
       purgeVersionsBtn?.dataset.project || openWorkspaceBtn?.dataset.project || checkinBtn?.dataset.project
     );
-    if (discardLocalBtn) discardLocalBtn.disabled = !canDiscardLocal;
-    if (purgeBtn) purgeBtn.disabled = !canPurge;
-    if (purgeVersionsBtn) purgeVersionsBtn.disabled = !canPurgeVersions;
-    if (removeBtn) removeBtn.disabled = !canRemoveProject;
-    if (removeMenuBtn) {
-      removeMenuBtn.disabled = !(canDiscardLocal || canPurge || canRemoveProject || canPurgeVersions);
-      if (removeMenuBtn.disabled) closeRemoveMenu();
-    }
+    const canRemoveMenu = canDiscardLocal || canPurge || canRemoveProject || canPurgeVersions;
+    setToolbarActionVisible(discardLocalBtn, canDiscardLocal);
+    setToolbarActionVisible(purgeBtn, canPurge);
+    setToolbarActionVisible(purgeVersionsBtn, canPurgeVersions);
+    setToolbarActionVisible(removeBtn, canRemoveProject);
+    setToolbarActionVisible(removeMenuBtn, canRemoveMenu);
+    if (!canRemoveMenu) closeRemoveMenu();
     const filtering = metricButtons().some((btn) => metricMode(btn) === "filter");
     const summary = $("#selection-summary");
     if (summary) {
@@ -4362,17 +4377,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (window.__creopdmSoftNavBusy || softNavBusy) return null;
     const inSession = hostedCreoJS();
     document.querySelectorAll(".creo-session-only").forEach((el) => {
-      el.hidden = false;
       const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
-      if (!btn) return;
-      // Reserve space before Creo.JS is ready; enable only in a Creo session.
-      if (!inSession) {
-        btn.disabled = true;
+      if (!btn) {
+        el.hidden = !inSession;
         return;
       }
-      if (btn.id === "set-creo-dir-btn") {
-        btn.disabled = !btn.dataset.workspace;
-      }
+      const active =
+        inSession && (btn.id !== "set-creo-dir-btn" || Boolean(btn.dataset.workspace));
+      el.hidden = !active;
+      btn.hidden = !active;
+      btn.disabled = !active;
     });
     const pill = $("#creo-status");
     if (!pill) return null;
@@ -4430,21 +4444,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function syncCreoSessionControlsFromBridge() {
-    /** Soft nav only: re-enable toolbar Creo buttons. Do not probe or touch the pill. */
+    /** Soft nav only: show/hide toolbar Creo buttons. Do not probe or touch the pill. */
     const inSession = hostedCreoJS();
     document.querySelectorAll(".creo-session-only").forEach((el) => {
-      el.hidden = false;
       const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
-      if (!btn) return;
-      if (!inSession) {
-        btn.disabled = true;
+      if (!btn) {
+        el.hidden = !inSession;
         return;
       }
-      if (btn.id === "set-creo-dir-btn") {
-        btn.disabled = !btn.dataset.workspace;
-      } else {
-        btn.disabled = false;
-      }
+      const active =
+        inSession && (btn.id !== "set-creo-dir-btn" || Boolean(btn.dataset.workspace));
+      el.hidden = !active;
+      btn.hidden = !active;
+      btn.disabled = !active;
     });
   }
 

@@ -99,8 +99,8 @@ Empty folders (no files inside yet) must still be selectable and removable.
 
 Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **Checkout ▾** → **Check In ▾** → **History** → **Copy to Vault** → **Remove ▾**.
 
-| Button | Available when | Greyed out when |
-|--------|----------------|-----------------|
+| Button | Available when | Hidden when |
+|--------|----------------|-------------|
 | Add ▾ | A project is open | No project |
 | Open ▾ | A project is open (workspace) and/or a file can be opened | No project and nothing to open |
 | Open selected… | A file you can open is selected | Nothing useful selected |
@@ -108,8 +108,11 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 | Checkout ▾ | Something can be checked out or undone | Nothing to do |
 | Check In ▾ | Something can be checked in or added | Nothing pending |
 | History | One file selected | No file |
+| Copy to Vault | Selected files are not already in the vault | Nothing to copy |
 | Remove ▾ | Something can be removed | Nothing selected |
 | Remove from Project | Files **and/or folders** selected (including empty folders) | Nothing selected |
+
+Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now.
 
 Only one ▾ menu open at a time. Click outside or press Escape to close.
 

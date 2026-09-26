@@ -305,7 +305,9 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function rowFilename" in script.text
     assert "function setRowHidden" in script.text
     assert "function setToolbarActionVisible" in script.text
-    assert "Keep the control in layout" in script.text
+    assert "Hide inactive toolbar actions and fly-up items so the bar stays compact." in script.text
+    assert "button.hidden = !visible" in script.text
+    assert "Keep the control in layout" not in script.text
     assert "function closeRemoveMenu" in script.text
     assert "Remove ▾" in home.text
     assert 'id="remove-menu-btn"' in home.text

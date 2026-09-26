@@ -427,6 +427,28 @@ def test_creo_and_filetype_icons_exist_on_disk():
         assert path.stat().st_size > 20
 
 
+def test_toolbar_hides_inactive_actions():
+    """Inactive toolbar buttons and fly-up items are hidden, not left greyed out."""
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    visible = _between(script, "function setToolbarActionVisible(", "function isNewFileQueueRow(")
+    assert "button.hidden = !visible" in visible
+    assert "button.disabled = !visible" in visible
+    assert 'button.closest(".toolbar-tip")' in visible
+    assert 'button.classList.contains("toolbar-menu-toggle")' in visible
+    assert "menu.hidden = !visible" in visible
+    sync = _between(script, "function syncToolbar(", "function setCheckinQueueCounts(")
+    assert "setToolbarActionVisible(openMenuBtn," in sync
+    assert "setToolbarActionVisible(checkoutMenuBtn," in sync
+    assert "setToolbarActionVisible(checkinMenuBtn," in sync
+    assert "setToolbarActionVisible(removeMenuBtn," in sync
+    assert "setToolbarActionVisible(historyBtn," in sync
+    assert "setToolbarActionVisible(addMenuBtn," in sync
+    assert "openBtn.disabled =" not in sync
+    assert "| Hidden when |" in docs
+    assert "are **hidden** (not greyed out)" in docs
+
+
 def test_folder_row_click_selects_double_click_opens():
     """Regression: folder name link opens; row chrome selects; double-click opens."""
     script = _app_js()
