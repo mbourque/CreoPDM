@@ -10,6 +10,7 @@ import os
 import shutil
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, unquote
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -110,7 +111,57 @@ class DatabaseConfig(BaseModel):
             raise ValueError(
                 "Database URL must look like sqlite:///path or postgresql+psycopg://user@host/db"
             )
-        return text
+        # Prefer a readable password (@ not %40) in settings.json.
+        return database_url_for_display(text)
+
+
+def _database_url_authority(url: str) -> tuple[str, str, str | None, str] | None:
+    """Return scheme, user, password (None if omitted), host+path — or None."""
+    text = (url or "").strip()
+    if "://" not in text:
+        return None
+    scheme, rest = text.split("://", 1)
+    if scheme.lower().startswith("sqlite"):
+        return None
+    cut = len(rest)
+    for sep in ("/", "?", "#"):
+        idx = rest.find(sep)
+        if idx != -1:
+            cut = min(cut, idx)
+    authority, tail = rest[:cut], rest[cut:]
+    if "@" not in authority:
+        return None
+    userinfo, hostport = authority.rsplit("@", 1)
+    if ":" in userinfo:
+        user, password = userinfo.split(":", 1)
+    else:
+        user, password = userinfo, None
+    return scheme, user, password, f"{hostport}{tail}"
+
+
+def database_url_for_connect(url: str) -> str:
+    """Percent-encode user/password so SQLAlchemy accepts passwords with @, :, etc."""
+    parts = _database_url_authority(url)
+    if parts is None:
+        return (url or "").strip()
+    scheme, user, password, rest = parts
+    user_q = quote(unquote(user), safe="")
+    if password is None:
+        return f"{scheme}://{user_q}@{rest}"
+    pass_q = quote(unquote(password), safe="")
+    return f"{scheme}://{user_q}:{pass_q}@{rest}"
+
+
+def database_url_for_display(url: str) -> str:
+    """Show passwords with literal special characters (e.g. @) in Settings."""
+    parts = _database_url_authority(url)
+    if parts is None:
+        return (url or "").strip()
+    scheme, user, password, rest = parts
+    user_d = unquote(user)
+    if password is None:
+        return f"{scheme}://{user_d}@{rest}"
+    return f"{scheme}://{user_d}:{unquote(password)}@{rest}"
 
 
 class WorkspaceConfig(BaseModel):
@@ -655,10 +706,10 @@ class ConfigManager:
     def database_url(self) -> str:
         env = (os.environ.get("CREOPDM_DATABASE_URL") or "").strip()
         if env:
-            return env
+            return database_url_for_connect(env)
         configured = (self.settings.database.url or "").strip()
         if configured:
-            return configured
+            return database_url_for_connect(configured)
         return self.default_sqlite_url()
 
     def _normalize_workspace_root(self, settings: AppSettings) -> bool:

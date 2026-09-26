@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 
 from creopdm.api.deps import get_context
 from creopdm.api.pages import clear_creo_page_cache
-from creopdm.config import AppSettings
+from creopdm.config import AppSettings, database_url_for_display
 from creopdm.constants import (
     DEFAULT_CAD_MODELS_EXTENSIONS,
     DEFAULT_CREO_MODEL_EXTENSIONS,
@@ -62,7 +62,11 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         type_labels=ctx.config.type_labels(),
         ignore_patterns=ctx.config.ignore_patterns(),
         default_ignore_patterns=list(DEFAULT_IGNORE_PATTERNS),
-        database_url=ctx.config.database_url(),
+        database_url=(
+            database_url_for_display(settings.database.url)
+            if (settings.database.url or "").strip()
+            else ctx.config.default_sqlite_url()
+        ),
         default_database_url=ctx.config.default_sqlite_url(),
         port=settings.server.port,
         agent_base_url=settings.ui.agent_base_url,
@@ -188,7 +192,10 @@ def update_settings(
     if payload.database_url is not None:
         text = payload.database_url.strip()
         default = ctx.config.default_sqlite_url()
-        current.database.url = "" if not text or text == default else text
+        if not text or text == default:
+            current.database.url = ""
+        else:
+            current.database.url = database_url_for_display(text)
     if payload.port is not None:
         current.server.port = payload.port
     if payload.agent_base_url is not None:
