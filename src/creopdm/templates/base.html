@@ -235,6 +235,27 @@ function creoJoinPath(directory, name) {
 function creoNormalizePath(path) {
     return String(path || "").replace(/\\/g, "/");
 }
+function creoParentDir(path) {
+    var norm = creoNormalizePath(path);
+    var idx = norm.lastIndexOf("/");
+    if (idx <= 0) return "";
+    return norm.substring(0, idx);
+}
+function creoBasename(path) {
+    var norm = creoNormalizePath(path);
+    var idx = norm.lastIndexOf("/");
+    return idx >= 0 ? norm.substring(idx + 1) : norm;
+}
+function creoRelativeToDir(fullPath, directory) {
+    var full = creoNormalizePath(fullPath);
+    var dir = creoNormalizePath(directory).replace(/\/+$/, "");
+    if (!full || !dir) return "";
+    if (full.length > dir.length + 1
+        && full.toLowerCase().indexOf(dir.toLowerCase() + "/") === 0) {
+        return full.substring(dir.length + 1);
+    }
+    return "";
+}
 function creoTryOpenName(session, directory, name) {
     if (!name) {
         return null;
@@ -356,11 +377,19 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
           ? pfcGetCurrentSession()
           : pfcGetProESession();
         var versionName = diskName || filename;
+        var shortDisk = creoBasename(diskName || filename || fullPath || "");
+        // Nested agent-cache layout (vault folders preserved): Creo resolves
+        // companions from the file's folder, not the project cache root.
+        var fileDir = fullPath ? creoParentDir(fullPath) : "";
+        var openWd = fileDir || directory || "";
+        var relativeName = (fullPath && directory)
+            ? creoRelativeToDir(fullPath, directory)
+            : "";
         // Native assemblies need the session WD on the cache folder so Creo can
         // resolve companions. Restore the prior WD after the open so the
         // user's session directory is not left on the agent cache.
         // Multi-CAD trails navigate the File Open dialog and must not ChangeDirectory.
-        if (directory && creoIsNativeVersioned(versionName)) {
+        if (openWd && creoIsNativeVersioned(versionName)) {
             try {
                 if (typeof session.GetCurrentDirectory === "function") {
                     previousWd = String(session.GetCurrentDirectory() || "");
@@ -369,13 +398,13 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
                 previousWd = "";
             }
             try {
-                var cacheDir = creoNormalizePath(directory);
+                var cacheDir = creoNormalizePath(openWd);
                 if (!previousWd || creoNormalizePath(previousWd).toLowerCase() !== cacheDir.toLowerCase()) {
                     session.ChangeDirectory(cacheDir);
                     changedWd = true;
                 }
             } catch (errDir) {
-                openDetail = "ChangeDirectory failed for " + directory + ".";
+                openDetail = "ChangeDirectory failed for " + openWd + ".";
             }
         }
         var sessionRelease = creoSessionRelease(session);
@@ -384,24 +413,35 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
             return creoOpenFailed(creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease));
         }
         try {
-            if (openAsmAsMfg(session, diskName || filename)) {
+            if (openAsmAsMfg(session, shortDisk || diskName || filename)) {
                 return filename;
             }
         } catch (errMfg) {}
         var model = null;
-        if (fullPath) {
-            model = creoTryOpenName(session, "", fullPath);
+        // Prefer basename in the file's folder (nested materialize).
+        if (!model && openWd && shortDisk) {
+            model = creoTryOpenName(session, openWd, shortDisk);
         }
-        if (!model && diskName && diskName !== filename) {
+        if (!model && shortDisk) {
+            model = creoTryOpenName(session, "", shortDisk);
+        }
+        // Project-root-relative path (model-templates/start_assy.asm.1).
+        if (!model && relativeName && directory) {
+            model = creoTryOpenName(session, directory, relativeName);
+        }
+        if (fullPath) {
+            model = model || creoTryOpenName(session, "", fullPath);
+        }
+        if (!model && diskName && diskName !== filename && diskName !== shortDisk) {
             model = creoTryOpenName(session, directory, diskName);
         }
         if (!model) {
             model = creoTryOpenName(session, directory, filename);
         }
         if (!model) {
-            var preparedPath = fullPath || creoJoinPath(directory, diskName || filename);
+            var preparedPath = fullPath || creoJoinPath(openWd || directory, shortDisk || diskName || filename);
             if (!creoIsNativeVersioned(versionName)
-                && creoTryOpenViaTrail(session, directory, diskName || filename, preparedPath)) {
+                && creoTryOpenViaTrail(session, openWd || directory, shortDisk || diskName || filename, preparedPath)) {
                 return filename;
             }
             if (!openDetail) {
@@ -1706,6 +1746,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push144"></script>
+  <script src="/client/app.js?v={{ app_version }}-push145"></script>
 </body>
 </html>

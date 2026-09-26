@@ -4244,9 +4244,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         return null;
       }
       const openSpec = await materializeViaAgent(prepared);
+      const materialized = String(openSpec.path || "").trim();
+      if (materialized && looksLikeLocalWindowsPath(materialized)) {
+        return materialized;
+      }
       const workdir = String(openSpec.working_directory || "").trim();
       const diskName = String(openSpec.disk_name || openSpec.filename || "").trim();
       if (workdir && diskName) {
+        const rel = String(diskName).replace(/\//g, "\\");
+        if (rel.includes("\\")) {
+          return `${workdir.replace(/[\\/]+$/, "")}\\${rel}`;
+        }
         return `${workdir.replace(/[\\/]+$/, "")}\\${diskName}`;
       }
       return null;

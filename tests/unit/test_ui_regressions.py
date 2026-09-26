@@ -434,6 +434,21 @@ def test_creo_and_filetype_icons_exist_on_disk():
         assert path.stat().st_size > 20
 
 
+def test_open_model_uses_nested_cache_folder():
+    """Regression: nested agent-cache materialize must open from the file's folder."""
+    base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
+    open_fn = base.split("function openModel(", 1)[1].split("function setWorkingDirectory(", 1)[0]
+    assert "creoParentDir" in open_fn
+    assert "creoRelativeToDir" in open_fn
+    assert "Nested agent-cache layout" in open_fn
+    assert "var openWd = fileDir || directory" in open_fn or "openWd = fileDir || directory" in open_fn
+    assert "ChangeDirectory(cacheDir)" in open_fn
+    script = _app_js()
+    meta = _between(script, "async function prepareLocalPathForMetadata(", "async function gatherCreoMetadataForFilename(")
+    assert "openSpec.path" in meta
+    assert "looksLikeLocalWindowsPath(materialized)" in meta
+
+
 def test_toolbar_hides_inactive_actions():
     """Inactive toolbar buttons and fly-up items are hidden, not left greyed out."""
     script = _app_js()

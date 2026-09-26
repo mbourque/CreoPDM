@@ -75,6 +75,9 @@ def test_home_page(client):
     assert "function creoCannotOpenNewerMessage" in text
     assert "function creoOpenFailedMessage" in text
     assert "function creoTryOpenName" in text
+    assert "function creoParentDir" in text
+    assert "function creoRelativeToDir" in text
+    assert "Nested agent-cache layout" in text
     assert "Older Creo versions cannot open it." in text
     assert "CREOPDM_ERROR:" in text
     assert "catch (errAll)" in text
@@ -85,7 +88,7 @@ def test_home_page(client):
     assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'id="add-menu"' in text
     assert 'src="/client/app.js' in text
-    assert "push144" in text
+    assert "push145" in text
     assert "toolbar24" in text
     assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

@@ -176,7 +176,7 @@ On a normal office network (`http://…`), the app should try the CreoPDM agent�
 | You do | App should | App must not |
 |--------|------------|--------------|
 | **Open ▾ → Open workspace…** | Open this project’s local working folder on this PC (falls back to vault if needed) | |
-| **Open ▾ → Open selected…** (or click a file name) | Offer how to open (see below); open in Creo or Windows; when the file is fetched to the local workspace, keep its vault folders (do not flatten) | Fail silently with no message; put nested vault files at the workspace root |
+| **Open ▾ → Open selected…** (or click a file name) | Offer how to open (see below); open in Creo or Windows; when the file is fetched to the local workspace, keep its vault folders (do not flatten); Creo opens from that folder so nested assemblies still resolve | Fail silently with no message; put nested vault files at the workspace root; fail open just because the file lives under a vault subfolder |
 | **History** | Show versions and details for the selected file | |
 | **Copy to Vault** | Put a copy in the vault without checking out | Check the file out |
 
