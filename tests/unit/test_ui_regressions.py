@@ -466,6 +466,10 @@ def test_mobile_browse_css_is_minimal():
     assert "#changes-table th:nth-child(1)" in mobile
     assert "#changes-table:has(.empty-row) thead" in mobile
     assert "table-layout: fixed" in mobile
+    assert ".object-open" in mobile
+    assert "pointer-events: none" in mobile
+    assert "tr.folder-row" in mobile
+    assert "only folders" in docs
     assert "browse-only" in docs
     assert "Name** and **Rev**" in docs
 

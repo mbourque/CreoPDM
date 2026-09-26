@@ -1280,6 +1280,27 @@ body.is-file-drag #file-drop-overlay {
     display: none;
   }
 
+  /* Browse-only: folders open; file names / rows do not open Creo or Details. */
+  .object-open,
+  button.object-open,
+  span.object-open,
+  a.object-open {
+    pointer-events: none !important;
+    cursor: default !important;
+    text-decoration: none !important;
+  }
+  #object-table tr.object-row,
+  #object-table tr.queue-row,
+  #checked-out-table tr.object-row,
+  #changes-table tr.queue-row {
+    pointer-events: none;
+  }
+  #object-table tr.folder-row,
+  #object-table tr.folder-row .folder-open {
+    pointer-events: auto;
+    cursor: pointer;
+  }
+
   /* Details: no status pills; History Rev + Filename; other grids Name/Value (2 cols) */
   .detail {
     padding: 0.75rem 0.75rem 1rem;
