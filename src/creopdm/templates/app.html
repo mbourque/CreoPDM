@@ -354,12 +354,20 @@
                 title="Pick one or more folders and import all nested files.">Add folders…</button>
       </div>
     </div>
-    <span class="toolbar-tip" title="Open this project's local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">
-      <button type="button" class="btn" id="open-workspace-btn" {% if selected %}data-project="{{ selected.uuid }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}>Open Workspace</button>
-    </span>
-    <span class="toolbar-tip" title="Open the selected file in Creo or its Windows associated program.">
-      <button type="button" class="btn" id="open-btn" disabled>Open</button>
-    </span>
+    <div class="toolbar-menu" id="open-menu">
+      <button type="button" class="btn toolbar-menu-toggle" id="open-menu-btn"
+              aria-haspopup="menu" aria-expanded="false"
+              {% if not selected %}disabled{% endif %}
+              title="Open the selected file, or open this project’s local workspace folder.">Open ▾</button>
+      <div class="toolbar-menu-panel" role="menu" hidden>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="open-btn"
+                disabled
+                title="Open the selected file in Creo or its Windows associated program.">Open selected…</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="open-workspace-btn"
+                {% if selected %}data-project="{{ selected.uuid }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}
+                title="Open this project’s local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">Open workspace…</button>
+      </div>
+    </div>
     <div class="toolbar-menu" id="checkout-menu">
       <button type="button" class="btn toolbar-menu-toggle" id="checkout-menu-btn"
               aria-haspopup="menu" aria-expanded="false" disabled

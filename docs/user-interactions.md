@@ -97,13 +97,14 @@ Empty folders (no files inside yet) must still be selectable and removable.
 
 ## 6. Toolbar buttons (overview)
 
-Typical order: **Set Working Directory** → **Add ▾** → **Open Workspace** → **Open** → **Checkout ▾** → **Check In ▾** → **History** → **Copy to Vault** → **Remove ▾**.
+Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **Checkout ▾** → **Check In ▾** → **History** → **Copy to Vault** → **Remove ▾**.
 
 | Button | Available when | Greyed out when |
 |--------|----------------|-----------------|
 | Add ▾ | A project is open | No project |
-| Open Workspace | A project is open | No project |
-| Open | A file you can open is selected | Nothing useful selected |
+| Open ▾ | A project is open (workspace) and/or a file can be opened | No project and nothing to open |
+| Open selected… | A file you can open is selected | Nothing useful selected |
+| Open workspace… | A project is open | No project |
 | Checkout ▾ | Something can be checked out or undone | Nothing to do |
 | Check In ▾ | Something can be checked in or added | Nothing pending |
 | History | One file selected | No file |
@@ -163,10 +164,15 @@ On a normal office network (`http://…`), the app should try the CreoPDM agent�
 
 ## 8. Open, workspace, history
 
+**Open ▾** menu (top → bottom):
+
+1. **Open selected…**
+2. **Open workspace…**
+
 | You do | App should | App must not |
 |--------|------------|--------------|
-| **Open Workspace** | Open this project’s local working folder on this PC (falls back to vault if needed) | |
-| **Open** (or click a file name) | Offer how to open (see below); open in Creo or Windows | Fail silently with no message |
+| **Open ▾ → Open workspace…** | Open this project’s local working folder on this PC (falls back to vault if needed) | |
+| **Open ▾ → Open selected…** (or click a file name) | Offer how to open (see below); open in Creo or Windows | Fail silently with no message |
 | **History** | Show versions and details for the selected file | |
 | **Copy to Vault** | Put a copy in the vault without checking out | Check the file out |
 

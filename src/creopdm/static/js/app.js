@@ -3116,6 +3116,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   const historyBtn = $("#history-btn");
   const openBtn = $("#open-btn");
+  const openMenu = $("#open-menu");
+  const openMenuBtn = $("#open-menu-btn");
+  const openMenuPanel = openMenu?.querySelector(".toolbar-menu-panel");
   const checkoutBtn = $("#checkout-btn");
   const checkoutProjectBtn = $("#checkout-project-btn");
   const checkoutMenu = $("#checkout-menu");
@@ -3178,17 +3181,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     closeToolbarMenu(addMenu, addMenuBtn, addMenuPanel);
   }
 
+  function closeOpenMenu() {
+    closeToolbarMenu(openMenu, openMenuBtn, openMenuPanel);
+  }
+
   function closeAllToolbarMenus() {
     closeRemoveMenu();
     closeCheckoutMenu();
     closeCheckinMenu();
     closeAddMenu();
+    closeOpenMenu();
   }
 
   function openRemoveMenu() {
     closeCheckoutMenu();
     closeCheckinMenu();
     closeAddMenu();
+    closeOpenMenu();
     openToolbarMenu(removeMenu, removeMenuBtn, removeMenuPanel);
   }
 
@@ -3203,6 +3212,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       closeRemoveMenu();
       closeCheckinMenu();
       closeAddMenu();
+      closeOpenMenu();
       openToolbarMenu(checkoutMenu, checkoutMenuBtn, checkoutMenuPanel);
     }
   }
@@ -3213,6 +3223,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       closeRemoveMenu();
       closeCheckoutMenu();
       closeAddMenu();
+      closeOpenMenu();
       openToolbarMenu(checkinMenu, checkinMenuBtn, checkinMenuPanel);
     }
   }
@@ -3223,10 +3234,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       closeRemoveMenu();
       closeCheckoutMenu();
       closeCheckinMenu();
+      closeOpenMenu();
       openToolbarMenu(addMenu, addMenuBtn, addMenuPanel);
     }
   }
 
+  function toggleOpenMenu() {
+    if (openMenu?.classList.contains("is-open")) closeOpenMenu();
+    else {
+      closeRemoveMenu();
+      closeCheckoutMenu();
+      closeCheckinMenu();
+      closeAddMenu();
+      openToolbarMenu(openMenu, openMenuBtn, openMenuPanel);
+    }
+  }
   function rowObjectIds(row) {
     if (row.classList.contains("folder-row")) {
       return (row.dataset.objectIds || "").split(",").map((item) => item.trim()).filter(Boolean);
@@ -3431,7 +3453,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!isListPage) return;
     const selected = selectedRows();
     const ids = selected.flatMap(rowObjectIds);
-    if (openBtn) openBtn.disabled = !selectedOpenSpec();
+    const canOpenFile = Boolean(selectedOpenSpec());
+    const canOpenWorkspace = Boolean(openWorkspaceBtn?.dataset.project);
+    if (openBtn) openBtn.disabled = !canOpenFile;
+    if (openWorkspaceBtn) openWorkspaceBtn.disabled = !canOpenWorkspace;
+    if (openMenuBtn) {
+      openMenuBtn.disabled = !(canOpenFile || canOpenWorkspace);
+      if (openMenuBtn.disabled) closeOpenMenu();
+    }
     if (historyBtn) {
       const one = selected.length === 1 ? selected[0] : null;
       historyBtn.disabled = !rowHistoryHref(one);
@@ -6472,6 +6501,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const item = eventEl(event)?.closest(".toolbar-menu-item");
     if (item && !item.disabled) closeRemoveMenu();
   });
+  openMenuBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleOpenMenu();
+  });
+  openMenuPanel?.addEventListener("click", (event) => {
+    const item = eventEl(event)?.closest(".toolbar-menu-item");
+    if (item && !item.disabled) closeOpenMenu();
+  });
   addMenuBtn?.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -6503,6 +6541,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const node = eventEl(event);
     if (removeMenu?.classList.contains("is-open") && !removeMenu.contains(node)) closeRemoveMenu();
     if (addMenu?.classList.contains("is-open") && !addMenu.contains(node)) closeAddMenu();
+    if (openMenu?.classList.contains("is-open") && !openMenu.contains(node)) closeOpenMenu();
     if (checkoutMenu?.classList.contains("is-open") && !checkoutMenu.contains(node)) closeCheckoutMenu();
     if (checkinMenu?.classList.contains("is-open") && !checkinMenu.contains(node)) closeCheckinMenu();
   });

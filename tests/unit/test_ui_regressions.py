@@ -350,6 +350,15 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     html = APP_HTML.read_text(encoding="utf-8")
     base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
     script = _app_js()
+    assert 'id="open-menu"' in html
+    assert "Open ▾" in html
+    assert 'id="open-btn"' in html
+    assert 'id="open-workspace-btn"' in html
+    assert html.index('id="open-btn"') < html.index('id="open-workspace-btn"')
+    assert ">Open selected…<" in html
+    assert ">Open workspace…<" in html
+    assert "function toggleOpenMenu" in script
+    assert "closeOpenMenu" in script
     assert 'id="checkout-menu"' in html
     assert 'id="checkout-project-btn"' in html
     assert "Checkout project" in html
