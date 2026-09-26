@@ -1,573 +1,308 @@
-# User interactions — Files page & toolbar
+# User interactions — what you do, what CreoPDM should do
 
-Source of truth for **manual testing** and **unit/regression tests**. Describes correct user-facing behavior after the Add ▾ / folder open / Remove from Project / Check In ▾ / soft-nav refresh work.
+Plain-language guide for **manual testing**. For each action: what you do, what the app **should** do, and what it **must not** do.
 
-**Primary code:** `src/creopdm/templates/app.html`, `src/creopdm/static/js/app.js`, `src/creopdm/api/objects.py`, `src/creopdm/api/projects.py`, `src/creopdm/services/workspace_service.py`, `src/creopdm/schemas/common.py`.
+After you add, remove, or open something, the Files list should update **on its own** — you should not need a hard browser refresh (F5).
 
-**How to use this doc**
-
-- Each subsection: **happy path** → **field validation** → **negative / must-not**.
-- Prefer reproducing in Creo’s embedded browser *and* a normal browser; soft-nav and Creo.JS matter most in Creo.
-- After any mutation that changes the Files list, the list must match the vault **without** a hard refresh.
+Test in Creo’s built-in browser when you can (Creo connection matters there). A normal browser is fine for most list/toolbar checks.
 
 ---
 
-## Table of contents
+## Contents
 
-1. [Global: soft navigation & busy UI](#1-global-soft-navigation--busy-ui)
-2. [Project sidebar & project settings](#2-project-sidebar--project-settings)
-3. [Files list header: crumbs, search, metrics, tabs, sort](#3-files-list-header-crumbs-search-metrics-tabs-sort)
-4. [Folder rows](#4-folder-rows)
-5. [File rows](#5-file-rows)
-6. [Toolbar overview & enablement](#6-toolbar-overview--enablement)
-7. [Set Working Directory](#7-set-working-directory)
-8. [Add ▾](#8-add-)
-9. [Open Workspace / Open / History / Copy to Vault](#9-open-workspace--open--history--copy-to-vault)
-10. [Checkout ▾](#10-checkout-)
-11. [Check In ▾](#11-check-in-)
-12. [Remove ▾](#12-remove-)
-13. [Danger confirm dialog (shared)](#13-danger-confirm-dialog-shared)
-14. [End-to-end smoke scripts](#14-end-to-end-smoke-scripts)
-15. [Regression test mapping](#15-regression-test-mapping)
-16. [Do not regress](#16-do-not-regress)
+1. [Moving around the app](#1-moving-around-the-app)
+2. [Projects (sidebar)](#2-projects-sidebar)
+3. [Finding and filtering files](#3-finding-and-filtering-files)
+4. [Folders in the list](#4-folders-in-the-list)
+5. [Files in the list](#5-files-in-the-list)
+6. [Toolbar buttons (overview)](#6-toolbar-buttons-overview)
+7. [Add ▾](#7-add-)
+8. [Open, workspace, history](#8-open-workspace-history)
+9. [Checkout ▾](#9-checkout-)
+10. [Check In ▾](#10-check-in-)
+11. [Remove ▾](#11-remove-)
+12. [Typing the project name to confirm](#12-typing-the-project-name-to-confirm)
+13. [Quick walkthroughs](#13-quick-walkthroughs)
+14. [For developers (tests)](#14-for-developers-tests)
 
 ---
 
-## 1. Global: soft navigation & busy UI
+## 1. Moving around the app
 
-### Happy path
-
-| User action | Correct behavior |
-|-------------|------------------|
-| Click same-origin shell link (project, folder crumb, Settings, soft-nav `a[href]`) | `main.shell` HTML is fetched and swapped. **Creo.JS stays live.** Status pill does not flash Not Connected. |
-| Soft fetch | `cache: "no-store"`; refresh URLs include cache-bust `r=`. |
-| Several soft navigations / refreshes in a row | Serialized (`softNavTail`). Latest navigation/refresh is **not** dropped. |
-| Action with busy overlay (Add, Remove, Check In, …) | Overlay + message; UI marked busy; workspace-watch pauses while `busyDepth > 0`. |
-| Hard browser refresh | Full document load; Creo may show Not Connected until reconnect. Prefer soft nav in Creo. |
-
-### Negative / must-not
-
-| # | Action | Must not |
-|---|--------|----------|
-| G1 | Soft-nav to folder / project / Settings | Must not hard-reload shell pages (SSR Not Connected flash / kill Creo.JS). |
-| G2 | Soft-nav while another soft-nav is in flight | Must not silently no-op the later navigation. |
-| G3 | Soft list fetch after remove/add | Must not paint a **cached** HTML body that still lists deleted items. |
-| G4 | Soft boot after shell swap | Must not re-probe Creo.JS / agent or rewrite the status pill as offline. |
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Click a project, folder breadcrumb, or Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Not Connected” or drop the Creo link just because you changed folders |
+| Add or remove files/folders | Update the list so it matches reality | Leave old rows on screen until you press F5 |
+| Wait while something big runs (Add, Remove, Check In…) | Show a busy message so you know it’s working | Sit frozen with no feedback |
 
 ---
 
-## 2. Project sidebar & project settings
+## 2. Projects (sidebar)
 
-### Happy path
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Click a project | Open that project’s Files list | Lose track of which project you picked |
+| Collapse / expand the sidebar | Hide or show the project list | Break the Files list |
+| Click **New** | Ask for a project name (and vault name options); then show the new project | Create a project with a blank name |
+| Rename (project settings) | Update the name everywhere you see it | |
+| Delete project | Ask you to type the **exact** project name; remove CreoPDM’s copy of the project | Delete your original CAD folders on disk just because you deleted the project; delete if you typed the wrong name |
 
-| User action | Correct behavior |
-|-------------|------------------|
-| Click a project in the sidebar | Soft-nav to that project’s Files view; selection remembered. |
-| Collapse / expand sidebar | Layout toggles; preference persists as implemented. |
-| **New** project | Project dialog; on success, project appears and can be selected. |
-| Project settings ▾ → Rename | Renames project; UI updates. |
-| Rebuild Where Used | Background index; does not wipe the Files list. |
-| Collect all metadata | Creo session metadata pass (when Creo connected). |
-| Delete project | Danger confirm (type project name). Deletes CreoPDM vault/registry; **does not** delete original CAD source files the user imported from. Optional local workspace delete when offered. |
+**Name rules (new / rename)**
 
-### Field validation (new / rename project — high level)
-
-| Field | Valid | Invalid → expected |
-|-------|-------|---------------------|
-| Project name | Required, non-empty | **“A project name is required.”** (or equivalent) |
-| Vault/workspace name | Single segment; or Use hash | Empty when not using hash → prompt to enter name or check Use hash; **no spaces** in custom vault folder name |
-
-### Negative
-
-| # | Must not |
-|---|----------|
-| P1 | Delete project with wrong confirm name — must not delete. |
-| P2 | Delete project — must not delete the user’s original import folder on disk (only vault / optional agent cache). |
+- Project name is required.
+- Custom vault/workspace name: no spaces; or use the hash option instead.
 
 ---
 
-## 3. Files list header: crumbs, search, metrics, tabs, sort
+## 3. Finding and filtering files
 
-### Folder crumb
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Click a breadcrumb (Home / folder path) | Take you to that folder; Creo stays connected | |
+| Type in Search | Show matching files across the project | |
+| Clear Search | Show the normal folder view again | Bring back folders/files you already removed |
+| Click a metric (Parts, Assemblies, …) | Filter and select those files; click again to clear | Jump into a folder or leave the page |
+| Switch tabs: **Files** / **Checked out** / **New files** | Show that list | |
+| Click a column header | Sort; click again to reverse | |
 
-| User action | Correct behavior |
-|-------------|------------------|
-| Click a crumb segment | Soft-nav to that folder (or project root). Creo stays connected. |
-| Current folder label | Shows the folder you are in; matches URL `folder=` query. |
-
-### Search
-
-| User action | Correct behavior |
-|-------------|------------------|
-| Type a query | Debounced search across project; table shows matches; crumb may hide. |
-| Clear search | Restores **folder view** for the current folder. |
-| Clear search after Remove | Must restore folder view **without** reappearing deleted rows (tbody snapshot updated on remove). |
-
-### Metric chips (Files, Parts, Assemblies, …)
-
-| User action | Correct behavior |
-|-------------|------------------|
-| Click a metric | Filters and selects matching **files** in the current view. Click again clears (per chip title). |
-| Folder rows | Metric selection must **not** clear or steal folder selection incorrectly; folders are not type-filtered as files. |
-
-### Tabs (Files / Checked out / Changes)
-
-| User action | Correct behavior |
-|-------------|------------------|
-| Switch tab | Shows that panel; selection/toolbar rules follow the active list. |
-| Changes tab | Loads vault + local pending changes; can refresh in place when pending counts change. |
-
-### Column sort
-
-| User action | Correct behavior |
-|-------------|------------------|
-| Click sortable column header | Sorts; click again reverses. Preference may persist per table. |
-
-### Negative
-
-| # | Must not |
-|---|----------|
-| H1 | Clearing search after delete — must not resurrect removed folder/file rows from cache. |
-| H2 | Metric chip — must not open a folder or navigate away. |
+**New files tab** shows files waiting in the **vault** (and sometimes local cache) that aren’t fully in the project yet. Deleting only from your PC workspace does **not** clear vault “new” files — those live on the CreoPDM vault until you remove them from there.
 
 ---
 
-## 4. Folder rows
+## 4. Folders in the list
 
-Applies to empty **Create folder** rows and folders that appear after **Add folder…** / **Add folders…** / catalog merge.
+Empty folders you create and folders from Add folder(s) behave the same.
 
-### Happy path
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Click the **folder name** (icon + name) | **Open** that folder | Only highlight the row |
+| Click elsewhere on the folder row (empty cells, “N files”, padding) | **Select** the folder (for Remove, etc.) | Open the folder |
+| Double-click the row | Open the folder | |
+| Ctrl/Cmd-click or Shift-click on the row (not for opening) | Multi-select / range select | |
 
-| User action | Correct behavior |
-|-------------|------------------|
-| Click **folder name link** (icon + name, `a.folder-open`) | **Opens** folder (`/?project=…&folder=…`) via soft-nav (`leavePage`). |
-| Click **row chrome** (file count, empty cells, padding) | **Selects** only (for Remove, etc.). Does **not** open. |
-| Ctrl/Cmd-click row chrome | Toggle multi-select. |
-| Shift-click row chrome | Range select. |
-| Double-click anywhere on the row | **Opens** the folder. |
-| Ctrl/Cmd/Shift + click on the name link | Does **not** open; selection modifiers apply. |
-| Tooltip on row | Explains: name opens; elsewhere selects; double-click opens. |
-
-### Negative / must-not
-
-| # | Action | Must not |
-|---|--------|----------|
-| F1 | Click folder **name** | Must not only select (must open). |
-| F2 | Click folder **row chrome** | Must not navigate/open. |
-| F3 | Soft-nav into folder | Must not flash Not Connected / kill Creo.JS. |
-| F4 | Document-level soft-nav capture on `a.folder-open` | Must not steal the click so open never runs. |
-| F5 | Empty Create-folder row (no `data-object-ids`) | Must not be impossible to select or remove. |
+Empty folders (no files inside yet) must still be selectable and removable.
 
 ---
 
-## 5. File rows
+## 5. Files in the list
 
-### Happy path
-
-| User action | Correct behavior |
-|-------------|------------------|
-| Click row (not the name) | Select only. |
-| Click file name (`object-open`) | Select, then open in Creo or OS after a short delay (~280 ms). |
-| Double-click row | Opens History / object detail (not folder open). |
-| Ctrl/Cmd / Shift | Multi-select / range as with folders. |
-| State “Modified” | Shown when local newer save + owned / can check in. |
-
-### Negative
-
-| # | Must not |
-|---|----------|
-| R1 | Single-click name — must not open History (that is double-click). |
-| R2 | Double-click — must not also fire the delayed Open if cancelled by dblclick. |
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Click the row (not the name) | Select the file | |
+| Click the **file name** | Select, then open in Creo or Windows | Jump straight to History |
+| Double-click the row | Open History / details | Also fire a second “Open” |
+| See **Modified** | Means you have a newer local save that can be checked in | |
 
 ---
 
-## 6. Toolbar overview & enablement
+## 6. Toolbar buttons (overview)
 
-Left → right (typical): **Set Working Directory** (Creo session) → **Add ▾** → **Open Workspace** → **Open** → **Checkout ▾** → **Check In ▾** → **History** → **Copy to Vault** → **Remove ▾**.
+Typical order: **Set Working Directory** → **Add ▾** → **Open Workspace** → **Open** → **Checkout ▾** → **Check In ▾** → **History** → **Copy to Vault** → **Remove ▾**.
 
-| Control | Enabled when | Disabled when |
-|---------|--------------|---------------|
-| Add ▾ | Project selected | No project |
-| Open Workspace | Project selected | No project |
-| Open | One openable selection | None / not openable |
-| Checkout ▾ | Can checkout selected, checkout project, or undo | None of those |
-| Check In ▾ | Can check in selected/add or check in project | Nothing pending for either |
-| History | One selected file with detail href | No file selection |
-| Copy to Vault | Selection not already in workspace as required | N/A / nothing to copy |
-| Remove ▾ | Any remove submenu action available | Nothing selected for any remove action |
-| Remove from Project | `object_ids` **or** `folder_paths` from selection | No files and no folders selected |
+| Button | Available when | Greyed out when |
+|--------|----------------|-----------------|
+| Add ▾ | A project is open | No project |
+| Open Workspace | A project is open | No project |
+| Open | A file you can open is selected | Nothing useful selected |
+| Checkout ▾ | Something can be checked out or undone | Nothing to do |
+| Check In ▾ | Something can be checked in or added | Nothing pending |
+| History | One file selected | No file |
+| Remove ▾ | Something can be removed | Nothing selected |
+| Remove from Project | Files **and/or folders** selected (including empty folders) | Nothing selected |
 
-Only one toolbar fly-up menu open at a time; outside click / Escape closes menus.
-
----
-
-## 7. Set Working Directory
-
-| User action | Correct behavior |
-|-------------|------------------|
-| Click (Creo session) | Sets Creo working directory to this project’s local workspace (agent cache) when possible. |
-| Outside Creo | Control hidden or inactive (`creo-session-only`). |
+Only one ▾ menu open at a time. Click outside or press Escape to close.
 
 ---
 
-## 8. Add ▾
+## 7. Add ▾
 
-### Menu order & labels (top → bottom)
+Menu order:
 
 1. **Create folder…**
 2. **Add files…**
 3. **Add folder…**
 4. **Add folders…**
 
-### 8.1 Create folder…
+### Create folder…
 
-#### Happy path
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Choose Create folder… | Ask for a name; say whether it’s under the current folder or project root | |
+| Enter a good name and Create | New empty folder appears in the list (no F5) | |
+| Create while inside e.g. Drawings | Folder is created **inside Drawings** | Create it at project root by mistake |
+| Leave the name blank | Show an error; stay on the dialog | Create anything |
+| Enter `Foo/Bar` or `.hidden` | Reject with a clear error | Create weird or nested junk from one name |
+| Use a name that already exists | Say it already exists | Overwrite what’s there |
 
-| Step | Correct behavior |
-|------|------------------|
-| Open | Dialog; location line shows current folder or project root. |
-| Enter name → Create | `POST /api/projects/{id}/folders` with `parent_folder` = current Files folder. Empty vault folder + `.gitkeep`. |
-| After success | Dialog closes; list refreshes; folder row appears **without hard refresh**. |
-| Nesting | If you are inside `Drawings/`, new folder is `Drawings/{name}`, not vault root. |
+### Add files…
 
-#### Field validation
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Pick or drop individual files | Copy them into the project at the current location | |
+| Drop a whole folder tree | Tell you to use Add folder… / Add folders… | Quietly import the whole tree as “files” |
+| Click Add with nothing chosen | Ask you to choose files first | Start an empty import |
+| Click Add twice quickly | Say an add is already running | Run two imports at once |
 
-| Field / rule | Valid | Invalid → expected |
-|--------------|-------|---------------------|
-| Name required | 1–200 chars, one segment | Empty/whitespace → **“Enter a folder name.”**; no API call |
-| `maxlength` | ≤ 200 | Browser blocks longer input |
-| Schema | `min_length=1`, `max_length=200` | Empty → 422 |
-| No path separators | `Drawings`, `Assy_01` | `a/b`, `a\b`, `.`, `..` → **“Enter a folder name without path separators.”** |
-| No leading dot | `Drawings` | `.hidden` → **“Folder names cannot start with a dot.”** |
-| Unique under parent | New name | Exists with content/`.gitkeep` → **“Folder already exists: …”** |
-| Not a file path | — | File at path → **“A file already exists at …”** |
+### Add folder… (one folder, top level only)
 
-#### Negative
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Pick one folder | Import only files sitting **directly** in that folder | Pull in files from subfolders |
+| Folder only has files in subfolders | Explain that nothing top-level was found | Import nested files anyway |
 
-| # | Must not |
-|---|----------|
-| A1 | Blank submit — create vault folder or success toast |
-| A2 | `Foo/Bar` — create nested path from one name field |
-| A3 | `.cache` — create dot-folder |
-| A4 | Duplicate — overwrite existing contents |
-| A5 | While in `Drawings/` — create at project root |
+### Add folders… (one or more folders, including subfolders)
 
----
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Pick folder trees | Keep the folder structure (e.g. Alpha/lib/part.prt stays nested) | Flatten everything to the project root |
+| Pick several roots | Import each tree | Lose sibling folders |
 
-### 8.2 Add files…
-
-#### Happy path
-
-| Step | Correct behavior |
-|------|------------------|
-| Open | Add dialog in files mode; pick via agent (preferred), native picker, or drag-drop. |
-| Import | Files copy into vault under current `parent_folder` when nested. |
-| After success | List refresh; new files visible without hard refresh. |
-
-#### Field validation / errors
-
-| Rule | Invalid → expected |
-|------|---------------------|
-| Nothing selected | **“Choose files or a folder first.”** |
-| Double submit | **“Add is already running — wait for it to finish.”** |
-| Dropped folder tree in files mode | **“Use Add folders or Add Folder to import a folder tree.”** |
-| Agent paths, agent down | **“Start creopdm-agent…”** |
-| Empty / ignored files | Skipped or PathValidation; warning as applicable |
-
-#### Negative
-
-| # | Must not |
-|---|----------|
-| A6 | Silently import a nested folder tree as “Add files” |
-| A7 | Start two parallel imports |
-| A8 | Call import API with empty selection |
+On a normal office network (`http://…`), the app should try the CreoPDM agent’s folder picker first (more reliable than the browser’s).
 
 ---
 
-### 8.3 Add folder… (non-recursive)
+## 8. Open, workspace, history
 
-#### Happy path
+| You do | App should | App must not |
+|--------|------------|--------------|
+| **Open Workspace** | Open this project’s local working folder on this PC (falls back to vault if needed) | |
+| **Open** (or click a file name) | Offer how to open (see below); open in Creo or Windows | Fail silently with no message |
+| **History** | Show versions and details for the selected file | |
+| **Copy to Vault** | Put a copy in the vault without checking out | Check the file out |
 
-| Step | Correct behavior |
-|------|------------------|
-| Pick one folder | Imports **top-level files only** (not subfolders). |
-| Nesting | Lands under current Files `parent_folder` when applicable. |
-| Folder row | Appears in parent list; openable/selectable like other folders. |
+### When you open a file that’s not checked out to you
 
-#### Field validation / errors
+The app asks how you want to open it:
 
-| Rule | Invalid → expected |
-|------|---------------------|
-| Nothing chosen | **“Choose a folder first.”** |
-| Only nested files under subfolders | **“No top-level files found in that folder. Subfolder files are skipped for Add Folder.”** |
-| LAN `http://` pick | Agent native folder pick **before** browser directory picker |
+| You choose | App should |
+|------------|------------|
+| **Open without checking out** | Download what Creo needs into the local cache and open for view/reference — **no edit lock** |
+| **Check out this file, then open** | Lock this file, download it, then open |
+| **Check out this file and its companions, then open** | Lock this file plus related models Creo needs, then open |
 
-#### Negative
+Optional: **Set Creo working directory…** (on by default) points Creo at the local workspace folder.
 
-| # | Must not |
-|---|----------|
-| A9 | Import `Folder/sub/file.prt` in Add folder… mode |
-| A10 | Skip agent pick on LAN and jump straight to broken browser picker |
+If open seems to do nothing, check the error line under the toolbar, and that creopdm-agent is running on the Creo PC. Large downloads can take a while.
 
----
-
-### 8.4 Add folders… (recursive)
-
-#### Happy path
-
-| Step | Correct behavior |
-|------|------------------|
-| Pick one or more folder roots | Recursive import; relative paths preserved (`Alpha/lib/a.prt`). |
-| Multi-root | Each tree imported under its root name (and `parent_folder` if nested view). |
-
-#### Negative
-
-| # | Must not |
-|---|----------|
-| A11 | Flatten `Alpha/lib/a.prt` → `a.prt` at vault root |
-| A12 | Lose sibling subfolders when walking a dropped tree |
+**Set Working Directory** (toolbar) does the same WD step on its own; it only applies inside Creo’s browser.
 
 ---
 
-## 9. Open Workspace / Open / History / Copy to Vault
-
-| Control | Happy path | Notes |
-|---------|------------|--------|
-| Open Workspace | Opens local agent cache folder for the project (fallback: vault on host) | Needs project |
-| Open | Opens selected file in Creo or OS association | Delayed after name click |
-| History | Navigates to object detail / history | Single file selection |
-| Copy to Vault | Copies selected into vault without checkout | Does not check out |
-
----
-
-## 10. Checkout ▾
-
-### Menu order
+## 9. Checkout ▾
 
 1. **Checkout selected**  
 2. **Checkout project**  
 3. **Undo Checkout**
 
-| Item | Happy path | Disabled / negative |
-|------|------------|---------------------|
-| Checkout selected | Locks + downloads selection to local workspace | Disabled if nothing checkoutable; other’s lock → fail that item |
-| Checkout project | All available (not locked by others) | Disabled if checkoutable count is 0; title: nothing left to check out |
-| Undo Checkout | Releases **your** lock only; does not delete vault file or create a version | Disabled if you own no checkouts; must not undo someone else’s |
-
-Open-from-UI may offer checkout companions / set working directory in the open dialog when applicable.
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Checkout selected | Lock those files and download them for editing | Steal a file someone else has checked out |
+| Checkout project | Check out everything that’s free | Offer checkout when nothing is left |
+| Undo Checkout | Release **your** locks only | Undo someone else’s checkout; delete the vault file; create a new version |
 
 ---
 
-## 11. Check In ▾
-
-### Menu order & labels
+## 10. Check In ▾
 
 1. **Check in project…**  
-2. **Check in selected…** (becomes **Add selected…** when selection is only new files to add)
+2. **Check in selected…** (may say **Add selected…** if you’re only adding new files)
 
-### Happy path
-
-| Item | Correct behavior |
-|------|------------------|
-| Check in project… | Pending saves + new files; releases unchanged checkouts so project looks fully checked in. |
-| Check in selected… | Check in / add for current selection. |
-| Dialog comment | Required. |
-| After success | Table patches; soft reload; list matches vault. |
-
-### Field validation
-
-| Field / rule | Valid | Invalid → expected |
-|--------------|-------|---------------------|
-| Comment | Non-empty | Browser `required`; API **“A check-in comment is required.”** |
-| Project scope | Pending saves, new files, and/or checkouts | Both menu items disabled with explanatory titles |
-| Agent for local sync | Agent up when pushing local saves | Offline → sync incomplete; toolbar error/warning |
-
-### Negative
-
-| # | Must not |
-|---|----------|
-| C1 | Empty comment — complete check-in |
-| C2 | Nothing pending — succeed as empty project check-in |
-| C3 | Check-in dialog navigation in Creo — rely only on form navigation (table must patch; `reloadPageAfterDialog`) |
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Check in project… | Record pending saves and new files; release unchanged checkouts so the project looks checked in | Run when there’s nothing to do (button should stay disabled) |
+| Check in selected… | Check in / add what you selected | |
+| Leave the comment blank | Block check-in until you write a comment | Save a version with no comment |
+| Finish successfully | List and status update to match the vault | |
 
 ---
 
-## 12. Remove ▾
+## 11. Remove ▾
 
-### Menu order (typical)
+1. **Remove from Workspace** — trash local copies on this PC only; vault and project list unchanged  
+2. **Purge workspace** — trash older local numbered saves that are below the vault version; vault unchanged  
+3. **Remove from Vault** — delete CreoPDM’s vault copies; your original CAD folder stays; checkouts cancelled  
+4. **Remove from Project** — remove from this project and delete vault copies; originals stay  
 
-1. **Remove from Workspace** — agent cache → Recycle Bin; vault/list unchanged  
-2. **Purge workspace** — older local numbered saves below vault floor → Recycle Bin  
-3. **Remove from Vault** — delete vault copies only; originals in project folder stay; cancels checkouts  
-4. **Remove from Project** — unregister from project + delete vault copies; originals stay  
+Destructive actions ask you to type the project name ([§12](#12-typing-the-project-name-to-confirm)).
 
-All destructive list actions that use project-name confirm share [§13](#13-danger-confirm-dialog-shared).
+### Remove from Workspace
 
----
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Select local “new” files on New files and remove | Move them to the Recycle Bin on this PC | Change the vault or project file list |
+| Agent not running | Tell you to start creopdm-agent | |
 
-### 12.1 Remove from Workspace
+### Purge workspace
 
-| Happy path | Negative |
-|------------|----------|
-| Selected **local-new** queue rows with agent cache | Wrong selection type — control disabled |
-| Files move to Recycle Bin on this PC | Must not change vault or project catalog |
-| Agent required | Agent down → start-agent message |
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Confirm purge | Remove only older local saves; keep vault copy and newer local work | Delete anything from the vault |
+| Nothing to purge | Say so; delete nothing | |
 
----
+### Remove from Vault
 
-### 12.2 Purge workspace
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Confirm | Delete vault copies of the selection | Delete files in your original project folder on disk |
 
-| Happy path | Negative |
-|------------|----------|
-| Preview then confirm; deletes older local saves only | Nothing to purge → OK message, no delete |
-| Keeps vault revision and newer local work | Must not delete vault objects |
+### Remove from Project
 
----
-
-### 12.3 Remove from Vault
-
-| Happy path | Negative |
-|------------|----------|
-| Project-name confirm; vault copies deleted | Must not delete user’s original CAD folder files |
-| Checkouts cancelled | — |
-
----
-
-### 12.4 Remove from Project (critical — list refresh regressions)
-
-#### Happy path
-
-| Step | Correct behavior |
-|------|------------------|
-| Select file row(s) | Enabled; API `object_ids`. |
-| Select folder row(s), including **empty Create folder** | Enabled; API `folder_paths` (+ descendant object ids). |
-| Mix | Both `object_ids` and `folder_paths`. |
-| Confirm | Project name; optional “also delete local workspace” for file paths. |
-| Vault vs originals | Vault copies deleted. **Originals in user’s CAD folder are not deleted** (unless workspace checkbox cleans agent cache). |
-| Empty Create folder | Vault tree including `.gitkeep` removed. |
-| Add folder / Add folders tree | Objects under path unregistered; vault folder removed via `folder_paths`. |
-| **UI after success** | Rows **gone immediately**. Soft reload must **not** bring them back. **No hard refresh.** |
-| Server | `POST /api/objects/batch/remove` **`db.commit()` before return** so soft reload cannot race an uncommitted delete. |
-| Client refresh | Await soft-nav (`no-store` + `r=`), then `__creopdmStripRemovedListRows` strips any lagged rows; `folderTbodyHtml` updated on DOM remove. |
-
-#### API / schema validation
-
-| Rule | Invalid → expected |
-|------|---------------------|
-| No ids and no folders | **“Choose files or a folder to remove.”** |
-| Folders only, no `project_id` and no ids | **“Choose a project before removing folders.”** |
-| Object checked out by another user | That item in `failed` (`CHECKOUT_OWNERSHIP`); others may succeed |
-
-#### Negative / must-not
-
-| # | Action | Must not |
-|---|--------|----------|
-| V1 | Wrong confirm name | Call `batch/remove` |
-| V2 | Empty Create-folder selected | Leave Remove from Project disabled |
-| V3 | Successful folder remove | Leave folder visible until hard refresh |
-| V4 | Successful remove | Delete originals in user’s CAD/source folder (unless intentional workspace cleanup) |
-| V5 | Soft reload right after JSON 200 | Re-paint deleted rows due to post-response DB commit |
-| V6 | Clear search after remove | Restore rows from stale `folderTbodyHtml` |
-| V7 | Other user’s checkout | Remove that object |
-| V8 | Cancel confirm | Change vault or list |
-| V9 | API failure mid-batch | Pretend full success; refresh should stay honest |
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Select files and/or folders (including empty folders) | Enable Remove from Project | Stay disabled just because a folder is empty |
+| Confirm with the correct project name | Remove from the project; delete vault copies; **rows disappear right away** | Leave the folder/file visible until F5 |
+| Optionally also delete local workspace | Clean local copies if you checked that box | Delete your original CAD source folder unless you asked for workspace cleanup |
+| Type the wrong project name | Show an error; change nothing | Remove anything |
+| Cancel | Change nothing | |
+| File checked out by someone else | Skip that file with an error; may still remove others | Quietly remove their locked file |
 
 ---
 
-## 13. Danger confirm dialog (shared)
+## 12. Typing the project name to confirm
 
-Used by Delete project, Remove from Project, Remove from Vault, Purge, Discard local, etc.
+Used for delete project, remove from project/vault, purge, and similar.
 
-| Field / rule | Valid | Invalid → expected |
-|--------------|-------|---------------------|
-| Confirm name | Exact project name (trim; case-sensitive match) | **“Type the project name exactly to confirm.”**; stay open |
-| Cancel / Esc / close | — | `{ ok: false }`; no API |
-| Workspace checkbox | When `workspaceOption` | Unchecked = vault/project only; checked = also recycle agent-cache paths |
-
-### Negative
-
-| # | Must not |
-|---|----------|
-| D1 | Proceed on wrong or empty name |
-| D2 | Treat cancel as confirm |
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Type the project name exactly | Allow Continue | |
+| Typo, wrong case, or blank | Show “Type the project name exactly…” | Proceed |
+| Cancel / Escape | Abort | Treat as confirm |
 
 ---
 
-## 14. End-to-end smoke scripts
+## 13. Quick walkthroughs
 
-### 14.1 Create folder → open → remove
+### Create → open → remove a folder
 
-1. Open a project on Files (root or a subfolder).  
-2. **Add ▾ → Create folder…** → `UxTest`.  
-3. Expect: row appears without hard refresh.  
-4. Click **name link** → enters `UxTest`; Creo stays connected if it was.  
-5. Crumb back to parent.  
-6. Click **row chrome** → selected; Remove from Project enabled.  
-7. Confirm with exact project name.  
-8. Expect: success toast; **`UxTest` gone immediately**; vault folder gone; hard refresh not required.  
+1. Open a project (any folder).  
+2. **Add ▾ → Create folder…** → name `UxTest` → Create.  
+3. Folder appears without F5.  
+4. Click the **name** → you enter the folder; Creo stays connected if it was.  
+5. Go up via the breadcrumb.  
+6. Click the row **beside** the name → selected; Remove from Project is available.  
+7. Confirm with the real project name.  
+8. Folder is gone from the list immediately; no F5 needed.
 
-Repeat with **Add folder…** (one top-level file) and **Add folders…** (nested tree).
+Try the same with **Add folder…** and **Add folders…**.
 
-### 14.2 Quick negative pass
+### Things that should fail (and say why)
 
-9. Create folder blank → **Enter a folder name.**  
-10. Create folder `Bad/Name` → error; no junk path.  
-11. Create `UxTest2` twice → second **already exists**.  
-12. Remove → wrong project name → error; row remains.  
-13. Remove → Cancel → no change.  
-14. Click folder chrome only → must not open.  
-15. Click folder name → must open.  
-
-### 14.3 Add mode negatives
-
-16. Add files… drop a folder tree → error to use Add folder(s).  
-17. Add folder… folder with only nested files → no top-level files message.  
-18. Add folders… verify nested relative paths in list after import.  
-
-### 14.4 Check In negative
-
-19. Open check-in with empty comment → blocked.  
-20. With nothing pending, Check In ▾ items stay disabled.  
+- Create folder with blank name, `Bad/Name`, or a duplicate name.  
+- Remove with the wrong project name, or Cancel.  
+- Click folder row chrome → must select, not open; click name → must open.  
+- Add files… by dropping a whole folder tree → told to use Add folder(s).  
+- Check In with an empty comment → blocked.  
+- Check In ▾ with nothing pending → options stay disabled.
 
 ---
 
-## 15. Regression test mapping
+## 14. For developers (tests)
 
-| Behavior | Test hooks |
-|----------|------------|
-| Add menu order & labels | `test_add_toolbar_is_menu_with_modes` |
-| Check In order & labels | `test_checkout_checkin_toolbar_menus_and_open_wd`, checkout integration |
-| Folder link opens / row selects | `test_folder_row_click_selects_double_click_opens` |
-| Remove sends `folder_paths` | `test_remove_from_project_sends_folder_paths` |
-| Create + Add folder removable via API | `test_batch_remove_by_folder_path_removes_created_and_uploaded` |
-| Commit before soft reload | `test_batch_remove_commits_before_response` |
-| Soft reload / strip after remove | `test_remove_rows_update_folder_tbody_cache_and_soft_reload` |
-| Soft-nav serialize / no-store | `test_soft_nav_does_not_silently_drop_when_busy`, `test_soft_nav_skips_creojs_reconnect` |
-| Agent before browser folder pick | `test_choose_folder_uses_agent_before_browser_picker` |
-| Nested paths on folder add | `test_dropped_folder_keeps_nested_relative_paths`, `test_from_disk_folders_list_imports_each_tree` |
-| Create folder invalid names (A1–A3) | `test_create_project_folder_rejects_invalid_names` |
-| Create folder empty / duplicate (A1, A4) | `test_create_project_folder_rejects_empty_schema_and_duplicate` |
-| Create folder nests under parent (A5) | `test_create_project_folder_empty_appears_on_disk` |
-| BatchRemoveRequest schema (N22) | `test_batch_remove_request_*` in `test_user_interaction_validations.py` |
-| Batch remove API empty / no project | `test_batch_remove_rejects_empty_and_folder_without_project` |
-| Checkout ownership on batch remove (N21) | `test_batch_remove_respects_checkout_ownership` |
-| Add / Create / confirm client negatives (A6–A10, D1, V2) | `test_user_interaction_negative_client_guards` |
-| Confirm name mismatch string | `test_user_interaction_negative_client_guards`, checkin HTML |
-| Check-in blank comment | `test_checkin_increments_iteration_and_releases_lock` (whitespace → 422) |
-| Non-recursive Add folder | `test_from_disk_folder_non_recursive_skips_nested`, `filterTopLevelUploads` guard |
-| Vault folder name rules (spaces/paths) | `test_vault_folder.py`, project dialog UI strings |
-| Delete project wrong confirm (P1) | `test_projects.py` confirm_name wrong |
+Automated coverage lives mainly in:
 
-Still manual / no automated browser E2E: §14 smoke click paths in Creo embedded browser, metric chips, full toolbar enablement state machine.
+- `tests/unit/test_ui_regressions.py`
+- `tests/unit/test_user_interaction_validations.py`
+- `tests/integration/test_objects.py` (create folder / batch remove)
+- Related checkout / check-in / soft-nav tests
 
----
-
-## 16. Do not regress
-
-- Soft-nav must not re-probe Creo.JS or flash Not Connected on folder/project/Settings switches.  
-- Soft-nav capture must not steal folder-name clicks (table handler → `leavePage` / `openFolderRow`).  
-- Remove from Project must not require a hard refresh for the Files list to match the vault.  
-- Empty Create-folder rows must be selectable and removable via `folder_paths` without object ids.  
-- Field validation failures must not look like success (no OK toast, no silent API, no vanishing row that “comes back”).  
-- Add folder… must stay non-recursive; Add folders… must keep nested relative paths.  
-- Remove from Project must not delete the user’s original CAD source files (vault only, unless workspace cleanup is explicitly checked).  
+When you change any behavior above, update **this document** in the same change and add or adjust tests so the “must not” cases stay covered. See `.cursor/rules/user-interactions.mdc`.
