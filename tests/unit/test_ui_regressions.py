@@ -316,7 +316,7 @@ def test_soft_nav_skips_creojs_reconnect():
 
     # Any same-origin soft-nav <a href> (Settings pill, crumbs, folders, …).
     assert 'closest("a[href]")' in script
-    assert 'softNavigate(href, "push")' in script
+    assert "api.softNavigate(href, \"push\")" in script or 'softNavigate(href, "push")' in script
     assert "Do not gate on inCreoBrowser" in script
 
     # Soft boot: toolbar sync only — no agent probe, no bridge reconnect poll.
@@ -341,8 +341,15 @@ def test_soft_nav_skips_creojs_reconnect():
     # Pill refresh must not flash Session offline during soft nav / bridge flake.
     pill_fn = _between(script, "async function refreshCreoStatusPill(", "function showCreoSessionControls(")
     assert "__creopdmSoftNavBusy" in pill_fn
-    assert "Transient bridge flake" in pill_fn
+    assert "Transient bridge / agent flake" in pill_fn or "Transient bridge flake" in pill_fn
+    assert "wasConnected" in pill_fn
+    assert "Do not require a healthy agent probe" in pill_fn
     assert "Session offline" in pill_fn
+    # Soft-nav click/popstate must survive soft boots (not pageAbort-bound).
+    assert "__creopdmSoftNavBound" in script
+    assert "__creopdmSoftNavApi" in script
+    assert "origAddEventListener.call" in script
+    assert "abort prior page listeners" in script or "no pageAbort signal" in script
 
 
 def test_checkout_checkin_toolbar_menus_and_open_wd():

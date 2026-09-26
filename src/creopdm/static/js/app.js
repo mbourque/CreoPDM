@@ -4375,7 +4375,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function refreshCreoStatusPill(prefetchedAgent) {
     // Soft folder/project swap — never flash Session offline / Not Connected.
     if (window.__creopdmSoftNavBusy || softNavBusy) return null;
-    const inSession = hostedCreoJS();
+    let inSession = hostedCreoJS();
     document.querySelectorAll(".creo-session-only").forEach((el) => {
       // Keep Set Working Directory in the toolbar (greyed when unusable) so it
       // stays discoverable; other inactive toolbar actions stay hidden.
@@ -4397,16 +4397,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!pill) return null;
     const modeKey = creoOpenMode() || "association";
     const modeName = modeKey === "embedded" ? "Embedded" : modeKey === "association" ? "OS" : modeKey;
+    const wasConnected = pill.dataset.state === "ok";
     if (modeKey === "embedded") {
       const agent =
         prefetchedAgent !== undefined ? prefetchedAgent : await probeCreoAgent();
-      // Transient bridge flake during nav — keep Connected while CreoJS is still present.
-      if (
-        !inSession &&
-        pill.dataset.state === "ok" &&
-        window.CreoJS &&
-        agent
-      ) {
+      // Agent probe can finish after a soft-nav started — don't paint over Connected.
+      if (window.__creopdmSoftNavBusy || softNavBusy) return agent;
+      inSession = hostedCreoJS();
+      // Transient bridge / agent flake — keep Connected while CreoJS is still present.
+      // Do not require a healthy agent probe (that used to flash Not Connected).
+      if (!inSession && wasConnected && window.CreoJS) {
         return agent;
       }
       if (inSession && agent) {
@@ -4431,6 +4431,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           "No Creo.JS bridge and creopdm-agent is offline. Open CreoPDM in Creo's embedded browser and start the agent tray.";
       }
       return agent;
+    }
+    if (window.__creopdmSoftNavBusy || softNavBusy) return null;
+    inSession = hostedCreoJS();
+    if (!inSession && wasConnected && window.CreoJS) {
+      return null;
     }
     if (inSession) {
       pill.textContent = `Creo: Connected · ${modeName}`;
@@ -7596,30 +7601,46 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   // Keep Creo.JS connected: soft-navigate shell pages (projects, folders, settings, detail).
   // Do not gate on inCreoBrowser — a false negative caused hard reloads that SSR-paint
   // "Not Connected" and drop the live Creo.JS bridge.
-  document.addEventListener(
-    "click",
-    (event) => {
-      const link = eventEl(event)?.closest("a[href]");
-      if (!link || event.defaultPrevented) return;
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      if (event.button != null && event.button !== 0) return;
-      if (link.target && link.target !== "_self") return;
-      // Folder name opens via onFileTableClick → leavePage; skip soft-nav here so
-      // row chrome clicks still select without navigating.
-      if (link.classList.contains("folder-open") || link.closest("tr.folder-row")) return;
-      const href = link.getAttribute("href");
-      if (!href || !isSoftNavUrl(href)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      void withBusy("Loading…", () => softNavigate(href, "push"));
-    },
-    true
-  );
-
-  window.addEventListener("popstate", () => {
-    if (!isSoftNavUrl(window.location.href)) return;
-    void withBusy("Loading…", () => softNavigate(window.location.href, "none"));
-  });
+  //
+  // Bind once with the native addEventListener (no pageAbort signal). Soft boots
+  // abort prior page listeners; if soft-nav lived there, a click mid-swap hard-reloaded
+  // and painted Not Connected. Keep the latest handlers on window.__creopdmSoftNavApi.
+  window.__creopdmSoftNavApi = {
+    softNavigate,
+    isSoftNavUrl,
+    withBusy,
+    eventEl,
+  };
+  if (!window.__creopdmSoftNavBound) {
+    window.__creopdmSoftNavBound = true;
+    origAddEventListener.call(
+      document,
+      "click",
+      (event) => {
+        const api = window.__creopdmSoftNavApi;
+        if (!api) return;
+        const link = api.eventEl(event)?.closest("a[href]");
+        if (!link || event.defaultPrevented) return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (event.button != null && event.button !== 0) return;
+        if (link.target && link.target !== "_self") return;
+        // Folder name opens via onFileTableClick → leavePage; skip soft-nav here so
+        // row chrome clicks still select without navigating.
+        if (link.classList.contains("folder-open") || link.closest("tr.folder-row")) return;
+        const href = link.getAttribute("href");
+        if (!href || !api.isSoftNavUrl(href)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void api.withBusy("Loading…", () => api.softNavigate(href, "push"));
+      },
+      true
+    );
+    origAddEventListener.call(window, "popstate", () => {
+      const api = window.__creopdmSoftNavApi;
+      if (!api || !api.isSoftNavUrl(window.location.href)) return;
+      void api.withBusy("Loading…", () => api.softNavigate(window.location.href, "none"));
+    });
+  }
 
   restoreStoredFilters();
   syncToolbar();

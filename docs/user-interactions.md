@@ -31,7 +31,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Click a project, folder breadcrumb, or Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Not Connected” or drop the Creo link just because you changed folders |
+| Click a project, folder breadcrumb, or Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Not Connected” or drop the Creo link just because you changed folders; hard-reload the page during a folder/project switch |
 | Add or remove files/folders | Update the list so it matches reality | Leave old rows on screen until you press F5 |
 | Wait while something big runs (Add, Remove, Check In…) | Show a busy message so you know it’s working | Sit frozen with no feedback |
 
