@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-toolbar41">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-toolbar42">
   <script>
     /* Suppress PTC creojs.js noise outside Creo's browser (and when Creo injects its own copy). */
     (function () {
@@ -31,7 +31,6 @@
     </a>
     <div class="status-cluster">
       <a class="status-pill" href="/settings">Settings</a>
-      <span class="status-pill" data-state="running">Status: Running</span>
       <span id="creo-status" class="status-pill" data-state="{% if creo_label == 'Connected' %}ok{% else %}idle{% endif %}" data-creo-open-mode="{{ creo_open_mode }}" title="{{ creo_open_title }}">
         Creo: {{ creo_label }} · {{ creo_open_name }}
       </span>

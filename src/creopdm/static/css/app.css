@@ -50,7 +50,6 @@ a.brand:hover { text-decoration: none; color: inherit; }
   border: 1px solid #314252; border-radius: 999px; padding: 0.2rem 0.7rem;
   font-size: 0.8rem; background: #1b2732;
 }
-.status-pill[data-state="running"],
 .status-pill[data-state="ok"] { color: #8ee0b0; }
 .status-pill[data-state="idle"] { color: #f0d48a; }
 
@@ -250,7 +249,6 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .muted { color: var(--muted); }
 .small { font-size: 0.75rem; }
 .lede { font-size: 1.05rem; margin: 0.2rem 0; }
-.status-line { font-weight: 600; }
 .search-form {
   margin-left: auto;
   flex: 0 1 16.5rem;

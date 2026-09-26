@@ -63,8 +63,9 @@ def test_home_page(client):
     text = response.text
     assert APP_NAME in text
     assert f"Version {APP_VERSION}" in text
-    assert "Status: Running" in text
+    assert "Status: Running" not in text
     assert 'href="/settings"' in text
+    assert 'id="creo-status"' in text
     assert '<dialog id="busy-overlay"' in text
     assert 'type="text/creojs"' in text
     assert "function setWorkingDirectory" in text
@@ -89,7 +90,7 @@ def test_home_page(client):
     assert 'id="add-menu"' in text
     assert 'src="/client/app.js' in text
     assert "push162" in text
-    assert "toolbar41" in text
+    assert "toolbar42" in text
     assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "folder | urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
