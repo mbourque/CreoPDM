@@ -22,6 +22,7 @@ from creopdm_agent.server import create_agent_app
 
 # Windows: spawn without attaching a console window.
 _CREATE_NO_WINDOW = 0x08000000
+_TRAY_CHILD_ENV = "CREOPDM_AGENT_TRAY_CHILD"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -124,9 +125,16 @@ def _safe_print(message: str) -> None:
 
 
 def _windows_tray_without_console(argv: list[str] | None) -> bool:
-    """If started with python.exe --tray, re-launch via pythonw and exit parent."""
+    """If this process has a console (python.exe), re-launch under pythonw and exit.
+
+    Already-pythonw launchers stay in-process (a second hop flashes another CMD).
+    The child sets ``CREOPDM_AGENT_TRAY_CHILD=1`` so we only hop once.
+    """
     if sys.platform != "win32":
         return False
+    if os.environ.get(_TRAY_CHILD_ENV) == "1":
+        return False
+    # GUI / pythonw entry: no console to leave — do not spawn again.
     if Path(sys.executable).name.lower() == "pythonw.exe":
         return False
     pythonw = Path(sys.executable).with_name("pythonw.exe")
@@ -135,11 +143,19 @@ def _windows_tray_without_console(argv: list[str] | None) -> bool:
     forwarded = list(argv) if argv is not None else list(sys.argv[1:])
     if "--tray" not in forwarded:
         forwarded = ["--tray", *forwarded]
-    cmd = [str(pythonw), "-m", "creopdm_agent", *forwarded]
+    env = os.environ.copy()
+    env[_TRAY_CHILD_ENV] = "1"
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = 0  # SW_HIDE
     subprocess.Popen(
-        cmd,
-        env=os.environ.copy(),
+        [str(pythonw), "-m", "creopdm_agent", *forwarded],
+        env=env,
         close_fds=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        startupinfo=startupinfo,
         creationflags=_CREATE_NO_WINDOW,
     )
     return True
@@ -188,10 +204,16 @@ def run_cli() -> None:
 
 def run_tray_cli() -> None:
     """gui-scripts entry: same as ``creopdm-agent --tray``."""
+    tray_argv = ["--tray", *sys.argv[1:]]
+    # Exit the console launcher ASAP (before loading tray/uvicorn) when hopping.
+    if _windows_tray_without_console(tray_argv):
+        raise SystemExit(0)
     from creopdm_agent.tray import hide_console_window
 
     hide_console_window()
-    raise SystemExit(main(["--tray", *sys.argv[1:]]))
+    # Stay in-process under pythonw; prevent main() from hopping again.
+    os.environ[_TRAY_CHILD_ENV] = "1"
+    raise SystemExit(main(tray_argv))
 
 
 if __name__ == "__main__":

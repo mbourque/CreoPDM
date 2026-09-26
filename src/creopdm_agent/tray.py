@@ -28,15 +28,19 @@ logger = logging.getLogger("creopdm_agent")
 
 
 def hide_console_window() -> None:
-    """Hide the console window Windows attached to this process (SW_HIDE)."""
+    """Detach/hide any console Windows attached to this process."""
     if sys.platform != "win32":
         return
     try:
         import ctypes
 
-        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        kernel32 = ctypes.windll.kernel32
+        user32 = ctypes.windll.user32
+        hwnd = kernel32.GetConsoleWindow()
         if hwnd:
-            ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+            user32.ShowWindow(hwnd, 0)  # SW_HIDE
+        # Drop the console entirely so an empty CMD window cannot linger.
+        kernel32.FreeConsole()
         # Keep process from putting text back on a new console.
         devnull = open(os.devnull, "w", encoding="utf-8")
         sys.stdout = devnull
