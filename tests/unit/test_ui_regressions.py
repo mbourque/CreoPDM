@@ -449,6 +449,36 @@ def test_open_model_uses_nested_cache_folder():
     assert "looksLikeLocalWindowsPath(materialized)" in meta
 
 
+def test_details_overview_dedupes_identity_and_unifies_fonts():
+    """Overview drops header duplicates and Details tabs share one UI font."""
+    detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(
+        encoding="utf-8"
+    )
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    overview = _between(detail, 'id="panel-overview"', 'id="panel-parameters"')
+    assert "<dt>Revision</dt>" not in overview
+    assert "<dt>Lifecycle</dt>" not in overview
+    assert "<dt>Checkout</dt>" not in overview
+    assert "show_name" in overview
+    assert "show_common" in overview
+    assert "show_full" in overview
+    assert "show_instance" in overview
+    assert 'class="mono"' not in overview
+    assert "detail-path" in overview
+    assert "h[:12]" in overview
+    assert ".detail .mono" in css
+    assert ".detail .filename-cell" in css
+    assert "font-family: inherit" in css
+    assert "text-transform: uppercase" in css
+    assert "skips duplicate identity fields" in docs
+    assert "no mixed monospace" in docs
+    # Detail tables no longer force mono class on every value cell.
+    assert 'td class="mono"' not in detail
+    assert 'th class="mono"' not in detail
+    assert "object-open mono bom-name" not in detail
+
+
 def test_history_revert_only_for_older_versions():
     """Revert control appears only with older history; current row is not reversible."""
     detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(

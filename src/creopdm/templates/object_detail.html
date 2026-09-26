@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block title %}{{ object.filename }} — {{ app_name }}{% endblock %}
 {% block content %}
+{% macro _norm(value) -%}
+{{- (value or "")|string|trim|lower -}}
+{%- endmacro %}
+{% macro _stem(value) -%}
+{%- set raw = (value or "")|string|trim|lower -%}
+{%- if raw.endswith('.prt') or raw.endswith('.asm') or raw.endswith('.drw') -%}
+{{- raw[:-4] -}}
+{%- else -%}
+{{- raw -}}
+{%- endif -%}
+{%- endmacro %}
 {% macro version_file_label(version, older=None) %}
   {% set name = version.filename or version.relative_path %}
   {{ name or "—" }}
@@ -13,10 +24,10 @@
 {% endmacro %}
 {% macro bom_name_link(node) %}
   {% if node.object_id %}
-  <button type="button" class="object-open mono bom-name" data-uuid="{{ node.object_id }}"
+  <button type="button" class="object-open bom-name" data-uuid="{{ node.object_id }}"
           title="{% if node.open_as %}Open generic {{ node.open_as }}{% else %}Open {{ node.filename }}{% endif %}">{{ node.filename or "—" }}</button>
   {% else %}
-  <span class="mono bom-name" title="Not in this project">{{ node.filename or "—" }}</span>
+  <span class="bom-name" title="Not in this project">{{ node.filename or "—" }}</span>
   {% endif %}
 {% endmacro %}
 {% macro bom_tree(nodes, depth=0) %}
@@ -103,34 +114,56 @@
   </div>
 
   <section class="tab-panel" id="panel-overview">
+    {% set id_number = (object.number or "")|string|trim %}
+    {% set id_name = (object.name or "")|string|trim %}
+    {% set id_common = (identity.common_name or "")|string|trim %}
+    {% set id_full = (identity.full_name or "")|string|trim %}
+    {% set id_instance = (identity.instance_name or "")|string|trim %}
+    {% set id_generic = (identity.generic_name or "")|string|trim %}
+    {% set show_name = id_name and _norm(id_name) != _norm(id_number) and _stem(id_name) != _stem(id_number) %}
+    {% set show_common = id_common and _norm(id_common) != _norm(id_number) and _norm(id_common) != _norm(id_name)
+         and _stem(id_common) != _stem(id_number) and _stem(id_common) != _stem(id_name) %}
+    {% set show_full = id_full and _norm(id_full) != _norm(id_number) and _norm(id_full) != _norm(id_name)
+         and _norm(id_full) != _norm(id_common) %}
+    {% set show_instance = id_instance and _norm(id_instance) != _norm(id_number) and _norm(id_instance) != _norm(id_name)
+         and _norm(id_instance) != _norm(id_common) and _norm(id_instance) != _norm(id_full) %}
+    {% set show_generic = id_generic and _norm(id_generic) != _norm(id_number) and _norm(id_generic) != _norm(id_name)
+         and _norm(id_generic) != _norm(id_instance) and _norm(id_generic) != _norm(id_full) %}
     <div class="detail-sections">
       <section class="detail-section">
         <h3 class="detail-section-title">Identity</h3>
         <dl class="kv">
-          <dt>Number</dt><dd>{{ object.number or "—" }}</dd>
-          <dt>Name</dt><dd>{{ object.name }}</dd>
-          {% if identity.common_name %}
-          <dt>Common name</dt><dd>{{ identity.common_name }}</dd>
+          <dt>Number</dt><dd>{{ id_number or "—" }}</dd>
+          {% if show_name %}
+          <dt>Name</dt><dd>{{ id_name }}</dd>
           {% endif %}
-          {% if identity.full_name %}
-          <dt>Full name</dt><dd class="mono">{{ identity.full_name }}</dd>
+          {% if show_common %}
+          <dt>Common name</dt><dd>{{ id_common }}</dd>
           {% endif %}
-          {% if identity.instance_name %}
-          <dt>Instance</dt><dd>{{ identity.instance_name }}</dd>
+          {% if show_full %}
+          <dt>Full name</dt><dd>{{ id_full }}</dd>
           {% endif %}
-          {% if identity.generic_name %}
-          <dt>Generic</dt><dd>{{ identity.generic_name }}</dd>
+          {% if show_instance %}
+          <dt>Instance</dt><dd>{{ id_instance }}</dd>
           {% endif %}
-          <dt>Revision</dt><dd>{{ object.display_revision }}</dd>
+          {% if show_generic %}
+          <dt>Generic</dt><dd>{{ id_generic }}</dd>
+          {% endif %}
           {% if object.creo_release %}
           <dt>Creo</dt><dd>{{ object.creo_release }}</dd>
           {% endif %}
-          <dt>Lifecycle</dt><dd>{{ object.lifecycle_state.replace('_', ' ').title() }}</dd>
-          <dt>Checkout</dt><dd>{{ object.checkout_status }}</dd>
           {% if identity.origin %}
-          <dt>Origin</dt><dd class="mono">{{ identity.origin }}</dd>
+          <dt>Origin</dt><dd class="detail-path">{{ identity.origin }}</dd>
           {% endif %}
-          <dt>Content hash</dt><dd class="mono">{{ object.current_version.content_hash if object.current_version else "—" }}</dd>
+          <dt>Content hash</dt>
+          <dd class="detail-path" title="{{ object.current_version.content_hash if object.current_version else '' }}">
+            {% if object.current_version and object.current_version.content_hash %}
+              {% set h = object.current_version.content_hash %}
+              {{ h[:12] }}…{{ h[-8:] if h|length > 24 else h[12:] }}
+            {% else %}
+              —
+            {% endif %}
+          </dd>
           <dt>Size</dt><dd>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</dd>
         </dl>
       </section>
@@ -189,7 +222,7 @@
       <tbody>
         {% for row in metadata.parameters %}
         <tr>
-          <td class="mono">{{ row.name }}</td>
+          <td>{{ row.name }}</td>
           <td>{{ row.value or "" }}</td>
           <td>{{ row.units or "" }}</td>
           <td>{{ row.data_type }}</td>
@@ -243,11 +276,11 @@
       {% if mass.density is not none %}<dt>Density</dt><dd>{{ mass.density }}</dd>{% endif %}
       {% if mass.gravity_center %}
       <dt>Center of gravity</dt>
-      <dd class="mono">{{ mass.gravity_center[0] }}, {{ mass.gravity_center[1] }}, {{ mass.gravity_center[2] }}</dd>
+      <dd>{{ mass.gravity_center[0] }}, {{ mass.gravity_center[1] }}, {{ mass.gravity_center[2] }}</dd>
       {% endif %}
       {% if mass.principal_moments %}
       <dt>Principal moments</dt>
-      <dd class="mono">{{ mass.principal_moments[0] }}, {{ mass.principal_moments[1] }}, {{ mass.principal_moments[2] }}</dd>
+      <dd>{{ mass.principal_moments[0] }}, {{ mass.principal_moments[1] }}, {{ mass.principal_moments[2] }}</dd>
       {% endif %}
     </dl>
     {% else %}
@@ -264,14 +297,14 @@
           <tr>
             <th>Instance</th>
             {% for col in family_table.columns %}
-            <th class="mono">{{ col }}</th>
+            <th>{{ col }}</th>
             {% endfor %}
           </tr>
         </thead>
         <tbody>
           {% for row in family_table.rows %}
           <tr>
-            <td class="mono">{{ row.instance }}</td>
+            <td>{{ row.instance }}</td>
             {% for cell in row.cells %}
             <td>{{ cell }}</td>
             {% endfor %}
@@ -300,8 +333,8 @@
       <tbody>
         {% for feat in features %}
         <tr>
-          <td class="mono">{{ feat.id if feat.id is not none else loop.index }}</td>
-          <td class="mono">{{ feat.name }}</td>
+          <td>{{ feat.id if feat.id is not none else loop.index }}</td>
+          <td>{{ feat.name }}</td>
           <td>{{ feat.type or "" }}</td>
           <td>{{ feat.subtype or "" }}</td>
         </tr>
@@ -358,7 +391,7 @@
       <tbody>
         {% for row in metadata.dependencies %}
         <tr>
-          <td class="filename-cell mono">{{ row.filename }}</td>
+          <td class="filename-cell">{{ row.filename }}</td>
           <td>{{ row.quantity }}</td>
           <td>{{ row.dependency_type }}</td>
         </tr>

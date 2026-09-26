@@ -897,23 +897,77 @@ body.is-file-drag #file-drop-overlay {
   cursor: pointer; color: var(--muted); border-radius: 4px 4px 0 0;
 }
 .subtab.is-active { color: var(--ink); border-bottom-color: white; font-weight: 600; background: white; }
-.filename-cell {
-  font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.88rem;
-  white-space: normal; overflow-wrap: anywhere; word-break: break-all;
+.detail .filename-cell {
+  font-family: inherit;
+  font-size: inherit;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   text-align: left;
 }
-.kv { display: grid; grid-template-columns: 160px 1fr; gap: 0.4rem 1rem; }
-.kv dt { color: var(--muted); }
-.mono { font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.85rem; }
+.detail .mono {
+  font-family: inherit;
+  font-size: inherit;
+}
+.detail .kv {
+  display: grid;
+  grid-template-columns: 9.5rem 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+.detail .kv dt {
+  color: var(--muted);
+  font-weight: 500;
+}
+.detail .kv dd {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.detail .detail-path {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .detail-sections {
   display: grid;
   gap: 1.25rem;
 }
 .detail-section-title {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
-  font-weight: 650;
-  color: var(--ink);
+  margin: 0 0 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.detail .grid {
+  font-size: 0.92rem;
+}
+.detail .grid th {
+  font-size: 0.75rem;
+}
+.detail .bom-branch {
+  font-family: inherit;
+}
+.detail .bom-line .bom-name,
+.detail .filename-cell .bom-name {
+  font-family: inherit;
+  font-size: inherit;
+}
+.detail .bom-node.is-root > .bom-line .bom-name {
+  font-weight: 600;
+}
+.kv { display: grid; grid-template-columns: 160px 1fr; gap: 0.4rem 1rem; }
+.kv dt { color: var(--muted); }
+.mono { font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.85rem; }
+.filename-cell {
+  font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.88rem;
+  white-space: normal; overflow-wrap: anywhere; word-break: break-all;
+  text-align: left;
 }
 .table-scroll {
   overflow: auto;
