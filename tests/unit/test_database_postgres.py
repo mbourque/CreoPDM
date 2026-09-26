@@ -47,3 +47,12 @@ def test_active_checkout_partial_unique_index_compiles_for_postgres():
     assert "uq_checkouts_object_active" in ddl
     assert "WHERE" in ddl.upper()
     assert "ACTIVE" in ddl
+
+
+def test_alembic_config_accepts_url_encoded_password():
+    """ConfigParser must not reject %XX in postgresql passwords (e.g. %40 for @)."""
+    from creopdm.database.migrate import alembic_config
+
+    url = "postgresql+psycopg://creopdm:M%40v3r1ck@localhost:5432/CreoPDM"
+    cfg = alembic_config(url)
+    assert cfg.get_main_option("sqlalchemy.url") == url

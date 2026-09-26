@@ -17,7 +17,8 @@ MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 def alembic_config(database_url: str) -> Config:
     cfg = Config()
     cfg.set_main_option("script_location", str(MIGRATIONS_DIR))
-    cfg.set_main_option("sqlalchemy.url", database_url)
+    # ConfigParser treats % as interpolation; URL-encoded passwords use %XX.
+    cfg.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
     cfg.set_main_option("prepend_sys_path", ".")
     cfg.set_main_option("path_separator", "os")
     return cfg
