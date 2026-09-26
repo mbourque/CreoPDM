@@ -59,8 +59,8 @@
     <span>{{ object.filename }}</span>
   </nav>
 
-  <header class="detail-tab-title" id="detail-tab-title" hidden>
-    <h1 id="detail-tab-title-text">History</h1>
+  <header class="detail-tab-title" id="detail-tab-title">
+    <h1 id="detail-tab-title-text">Details</h1>
   </header>
 
   <header class="detail-head">
@@ -484,36 +484,36 @@
 
 <footer class="toolbar" id="detail-toolbar">
   <div class="toolbar-actions">
-    <span class="toolbar-tip creo-session-only" title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
-      <button type="button" class="btn" id="set-creo-dir-btn" data-workspace="{{ workspace_path }}" disabled>Set Working Directory</button>
+    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
+      <button type="button" class="btn" id="set-creo-dir-btn" data-workspace="{{ workspace_path }}" disabled hidden>Set Working Directory</button>
     </span>
-    <div class="toolbar-menu" id="open-menu">
-      <button type="button" class="btn toolbar-menu-toggle" id="open-menu-btn"
+    <div class="toolbar-menu" id="open-menu" hidden>
+      <button type="button" class="btn toolbar-menu-toggle" id="open-menu-btn" hidden
               aria-haspopup="menu" aria-expanded="false"
               title="Open this file, or open this project’s local workspace folder.">Open ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="open-btn"
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="open-btn" hidden
                 data-uuid="{{ object.uuid }}"
                 title="Open this file in Creo or its Windows associated program.">Open…</button>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="open-workspace-btn"
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="open-workspace-btn" hidden
                 data-project="{{ project.uuid }}" data-vault-folder="{{ project.vault_folder or project.uuid }}" data-folder="{{ workspace_folder }}"
                 title="Open this project’s local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">Open workspace…</button>
       </div>
     </div>
-    <div class="toolbar-menu" id="checkout-menu">
-      <button type="button" class="btn toolbar-menu-toggle" id="checkout-menu-btn"
+    <div class="toolbar-menu" id="checkout-menu" hidden>
+      <button type="button" class="btn toolbar-menu-toggle" id="checkout-menu-btn" hidden
               aria-haspopup="menu" aria-expanded="false"
               title="Check out this file or the project, or undo your checkout.">Checkout ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-btn"
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-btn" hidden
                 data-uuid="{{ object.uuid }}"
                 {% if not object.can_checkout %}disabled{% endif %}
                 title="Check out this file and download it to the local workspace.">Checkout</button>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-project-btn"
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-project-btn" hidden
                 data-project="{{ project.uuid }}" data-checkoutable="{{ checkoutable_count|default(0) }}"
                 {% if (checkoutable_count|default(0)) == 0 %}disabled{% endif %}
                 title="Check out every file in this project that is available (not locked by someone else).">Checkout project</button>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="undo-btn"
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="undo-btn" hidden
                 data-uuid="{{ object.uuid }}"
                 {% if not object.owned_by_me %}disabled{% endif %}
                 title="Release your checkout lock. Does not delete the vault file or record a new version.">Undo Checkout</button>
@@ -546,15 +546,15 @@
               data-project-name="{{ project.name }}">Revert to selected…</button>
     </span>
     {% endif %}
-    <div class="toolbar-menu" id="remove-menu">
-      <button type="button" class="btn btn-danger toolbar-menu-toggle" id="remove-menu-btn"
+    <div class="toolbar-menu" id="remove-menu" hidden>
+      <button type="button" class="btn btn-danger toolbar-menu-toggle" id="remove-menu-btn" hidden
               aria-haspopup="menu" aria-expanded="false"
               title="Remove vault copies or remove this file from the project.">Remove ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn"
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn" hidden
                 data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}"
                 title="Delete CreoPDM vault copies of this file. The original in your project folder is not deleted. If you have it checked out, that checkout is cancelled.">Remove from Vault</button>
-        <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-project-btn"
+        <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-project-btn" hidden
                 data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}"
                 data-relative-path="{{ object.relative_path }}" data-filename="{{ object.filename }}"
                 title="Remove this file from the project list and delete CreoPDM vault copies. The original in your project folder is not deleted.">Remove from Project</button>

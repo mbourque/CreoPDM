@@ -868,7 +868,6 @@ body.is-file-drag #file-drop-overlay {
 .detail-tab-title {
   margin: 0 0 0.35rem;
 }
-.detail-tab-title[hidden] { display: none !important; }
 .detail-tab-title h1 {
   margin: 0;
   font-size: 1.45rem;

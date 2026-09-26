@@ -3014,7 +3014,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               data-sort-creo="${escapeHtml(folder)}/${escapeHtml(creo)}"
               data-sort-modified="${stamp.replace(/[-: ]/g, "")}"
               data-sort-checkout="${escapeHtml(folder)}/${escapeHtml(checkout)}"
-              data-detail="/projects/${escapeHtml(projectId)}/objects/${escapeHtml(obj.uuid)}#history"
+              data-detail="/projects/${escapeHtml(projectId)}/objects/${escapeHtml(obj.uuid)}"
               class="object-row"
               style="--depth: 0">
             <td title="${escapeHtml(filename)}">
@@ -4040,7 +4040,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const spec = openSpecFromRow(row, openLink);
     if (!spec) return;
     cancelPendingOpen();
-    // Delay so a double-click can cancel and open History instead.
+    // Delay so a double-click can cancel and open Details instead.
     pendingOpen = window.setTimeout(() => {
       pendingOpen = 0;
       void openPdmObjectFromUi(spec, row);
@@ -4072,7 +4072,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!uuid) return "";
     const projectId = currentProjectId();
     if (!projectId) return "";
-    return `/projects/${projectId}/objects/${uuid}#history`;
+    // Details page defaults to Overview (first tab); use #history to deep-link History.
+    return `/projects/${projectId}/objects/${uuid}`;
   }
 
   document.querySelector("#object-table")?.addEventListener("click", onFileTableClick);
@@ -4385,12 +4386,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (window.__creopdmSoftNavBusy || softNavBusy) return null;
     let inSession = hostedCreoJS();
     document.querySelectorAll(".creo-session-only").forEach((el) => {
-      // Keep Set Working Directory in the toolbar (greyed when unusable) so it
+      // Keep Set Working Directory in the Files toolbar (greyed when unusable) so it
       // stays discoverable; other inactive toolbar actions stay hidden.
-      // Exception: History tab hides it (revert-focused toolbar).
+      // File Details page hides it (Check In / Revert toolbar only).
       const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
-      const onHistory = Boolean($("#panel-history") && !$("#panel-history").hidden);
-      if (onHistory && btn?.id === "set-creo-dir-btn") {
+      const onDetail = Boolean($("article.detail"));
+      if (onDetail && btn?.id === "set-creo-dir-btn") {
         el.hidden = true;
         if (btn) btn.hidden = true;
         return;
@@ -4473,8 +4474,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const inSession = hostedCreoJS();
     document.querySelectorAll(".creo-session-only").forEach((el) => {
       const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
-      const onHistory = Boolean($("#panel-history") && !$("#panel-history").hidden);
-      if (onHistory && btn?.id === "set-creo-dir-btn") {
+      const onDetail = Boolean($("article.detail"));
+      if (onDetail && btn?.id === "set-creo-dir-btn") {
         el.hidden = true;
         if (btn) btn.hidden = true;
         return;
@@ -7013,7 +7014,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (meta.relativePath) row.dataset.relativePath = meta.relativePath;
         if (meta.localCache) row.dataset.localCache = "1";
         if (meta.uuid && projectId) {
-          row.dataset.detail = `/projects/${projectId}/objects/${meta.uuid}#history`;
+          row.dataset.detail = `/projects/${projectId}/objects/${meta.uuid}`;
         }
         values.forEach((text, index) => {
           const cell = document.createElement("td");
@@ -7215,54 +7216,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (tip) tip.hidden = !canRevert;
   }
 
-  function historyTabActive() {
-    const historyPanel = $("#panel-history");
-    return Boolean(historyPanel && !historyPanel.hidden);
-  }
-
   function syncDetailToolbar() {
     if (isListPage || !$("article.detail")) return;
-    const onHistory = historyTabActive();
-    // History tab: Check In when needed, and Revert. Hide Open, Set WD, Checkout, Remove.
+    // Details page (all tabs): Check In when needed, and Revert on History.
+    // Hide Open, Set WD, Checkout, Remove — open via the file name; Files page has the rest.
     if (setCreoDirBtn) {
       const tip = setCreoDirBtn.closest(".toolbar-tip");
-      if (onHistory) {
-        setCreoDirBtn.hidden = true;
-        if (tip) tip.hidden = true;
-      } else {
-        setCreoDirBtn.hidden = false;
-        if (tip) tip.hidden = false;
-      }
+      setCreoDirBtn.hidden = true;
+      if (tip) tip.hidden = true;
     }
-    if (onHistory) {
-      setToolbarActionVisible(openBtn, false);
-      setToolbarActionVisible(openWorkspaceBtn, false);
-      setToolbarActionVisible(openMenuBtn, false);
-      setToolbarActionVisible(checkoutBtn, false);
-      setToolbarActionVisible(checkoutProjectBtn, false);
-      setToolbarActionVisible(undoBtn, false);
-      setToolbarActionVisible(checkoutMenuBtn, false);
-      setToolbarActionVisible(removeMenuBtn, false);
-    } else {
-      const canOpen = true;
-      const canOpenWorkspace = Boolean(openWorkspaceBtn?.dataset.project);
-      setToolbarActionVisible(openBtn, canOpen);
-      setToolbarActionVisible(openWorkspaceBtn, canOpenWorkspace);
-      setToolbarActionVisible(openMenuBtn, canOpen || canOpenWorkspace);
-      const canCheckout = Boolean(checkoutBtn && !checkoutBtn.disabled);
-      const canCheckoutProject =
-        Boolean(checkoutProjectBtn?.dataset.project) &&
-        Number(checkoutProjectBtn?.dataset.checkoutable || 0) > 0;
-      const canUndo = Boolean(undoBtn && !undoBtn.disabled);
-      setToolbarActionVisible(checkoutBtn, canCheckout);
-      setToolbarActionVisible(checkoutProjectBtn, canCheckoutProject);
-      setToolbarActionVisible(undoBtn, canUndo);
-      setToolbarActionVisible(
-        checkoutMenuBtn,
-        canCheckout || canCheckoutProject || canUndo
-      );
-      setToolbarActionVisible(removeMenuBtn, true);
-    }
+    setToolbarActionVisible(openBtn, false);
+    setToolbarActionVisible(openWorkspaceBtn, false);
+    setToolbarActionVisible(openMenuBtn, false);
+    setToolbarActionVisible(checkoutBtn, false);
+    setToolbarActionVisible(checkoutProjectBtn, false);
+    setToolbarActionVisible(undoBtn, false);
+    setToolbarActionVisible(checkoutMenuBtn, false);
+    setToolbarActionVisible(removeMenuBtn, false);
     const pendingSaves = Number(
       checkinBtn?.dataset.pendingSaves || checkinMenuBtn?.dataset.pendingSaves || 0
     );
@@ -7374,22 +7344,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   });
 
-  function syncDetailTabTitle(tabName) {
-    const title = $("#detail-tab-title");
-    const text = $("#detail-tab-title-text");
-    if (!title) return;
-    const name = tabName || document.querySelector(".tabs .tab.is-active")?.dataset.tab || "";
-    if (name === "history") {
-      if (text) text.textContent = "History";
-      title.hidden = false;
-    } else {
-      title.hidden = true;
-    }
-  }
-
   syncRevertVersionButton();
   syncDetailToolbar();
-  syncDetailTabTitle();
 
   document.querySelectorAll(".tabs .tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -7403,7 +7359,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       else if (name === "checked-out") void loadCheckedOutTab();
       else if (name === "where-used") void loadWhereUsedTab();
       else refreshTabMetrics();
-      syncDetailTabTitle(name);
       syncDetailToolbar();
     });
   });
@@ -7468,6 +7423,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   if (window.location.hash === "#history" || window.location.hash === "#file-history" || window.location.hash === "#versions") {
     document.querySelector('.tab[data-tab="history"]')?.click();
+  } else if (window.location.hash === "#overview" || window.location.hash === "#details") {
+    document.querySelector('.tab[data-tab="overview"]')?.click();
   } else if (window.location.hash === "#changes") {
     document.querySelector('.tab[data-tab="changes"]')?.click();
   } else if (window.location.hash === "#checked-out") {

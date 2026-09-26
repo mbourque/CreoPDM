@@ -89,31 +89,31 @@ Empty folders (no files inside yet) must still be selectable and removable.
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Click the row (not the name) | Select the file | |
-| Click the **file name** | Select, then open in Creo or Windows | Jump straight to History |
-| Double-click the row | Open History / details | Also fire a second “Open” |
+| Click the **file name** | Select, then open in Creo or Windows | Jump straight to Details |
+| Double-click the row | Open **Details** (Overview tab) | Also fire a second “Open” |
 | See **Modified** | Means you have a newer local save that can be checked in | |
 
 ---
 
 ## 6. Toolbar buttons (overview)
 
-Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **Checkout ▾** → **Check In ▾** → **History** → **Copy to Vault** → **Remove ▾**.
+Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **Checkout ▾** → **Check In ▾** → **Details** → **Copy to Vault** → **Remove ▾**.
 
 | Button | Available when | Hidden when |
 |--------|----------------|-------------|
-| Set Working Directory | Inside Creo’s browser with a project workspace (Files / non-History detail tabs) | Hidden on the file History tab; otherwise stays greyed when not usable |
+| Set Working Directory | Inside Creo’s browser with a project workspace (Files page) | Hidden on the file **Details** page; otherwise stays greyed when not usable |
 | Add ▾ | A project is open | No project |
-| Open ▾ | A project is open (workspace) and/or a file can be opened | No project and nothing to open |
+| Open ▾ | A project is open (workspace) and/or a file can be opened (**Files** page) | No project and nothing to open; always hidden on the file **Details** page |
 | Open selected… | A file you can open is selected | Nothing useful selected |
 | Open workspace… | A project is open | No project |
-| Checkout ▾ | Something can be checked out or undone | Nothing to do |
+| Checkout ▾ | Something can be checked out or undone (**Files** page) | Nothing to do; always hidden on the file **Details** page |
 | Check In ▾ | Something can be checked in or added | Nothing pending |
-| History | One file selected | No file |
+| Details | One file selected | No file |
 | Copy to Vault | Selected files are not already in the vault | Nothing to copy |
-| Remove ▾ | Something can be removed | Nothing selected |
+| Remove ▾ | Something can be removed (**Files** page) | Nothing selected; always hidden on the file **Details** page |
 | Remove from Project | Files **and/or folders** selected (including empty folders) | Nothing selected |
 
-Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Exception: **Set Working Directory** always stays visible on the Files page so it remains easy to find; it is greyed out outside Creo’s browser or when no project workspace is ready. On the file **History** tab it is hidden (along with Open, Checkout, and Remove).
+Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Exception: **Set Working Directory** always stays visible on the Files page so it remains easy to find; it is greyed out outside Creo’s browser or when no project workspace is ready. On the file **Details** page (every tab, including History) it is hidden along with Open, Checkout, and Remove — that toolbar is **Check In ▾** and **Revert to selected…** only.
 
 Only one ▾ menu open at a time. Click outside or press Escape to close.
 
@@ -177,8 +177,9 @@ On a normal office network (`http://…`), the app should try the CreoPDM agent�
 |--------|------------|--------------|
 | **Open ▾ → Open workspace…** | Open this project’s local working folder on this PC (falls back to vault if needed) | |
 | **Open ▾ → Open selected…** (or click a file name) | Offer how to open (see below); open in Creo or Windows; when the file is fetched to the local workspace, keep its vault folders (do not flatten); Creo opens from that folder so nested assemblies still resolve; when you are **not** checked out, align the local tip to the vault tip (remove newer local `.N` leftovers) | Fail silently with no message; put nested vault files at the workspace root; fail open just because the file lives under a vault subfolder; leave a newer local `.prt.N` after opening a vault tip you do not have checked out |
-| **History** | Show a clear **History** title near the top (under the breadcrumb, Library-sized), then the file name and one version table (no Version History subtab); same light panel background as Files; bottom toolbar shows Check In / Revert only (hide **Open ▾**, **Set Working Directory**, **Checkout ▾**, and **Remove ▾** on this tab) | Show Open, Set Working Directory, Checkout, or Remove on the History tab; keep a separate Version History view |
-| **Open ▾ → Open current…** (file detail, non-History tabs) | Open the **current** tip of this file | |
+| **Details** (toolbar / double-click) | Open the file **Details** page on the **Overview** tab (first tab); page shows a **Details** title under the breadcrumb | Open the History tab by default; jump to History from a single-click on the file name |
+| **Details** (file page) | Show a clear **Details** title near the top (under the breadcrumb, Library-sized), then the file name and tabs (Overview, History, …); same light panel background as Files; bottom toolbar shows **Check In ▾** when needed and **Revert to selected…** on History only (hide **Open ▾**, **Set Working Directory**, **Checkout ▾**, and **Remove ▾** on every Details tab) | Show Open, Set Working Directory, Checkout, or Remove on Details; keep a separate History page title; keep a separate Version History view |
+| **Open ▾ → Open current…** | (Files page / file name) Open the **current** tip of this file | |
 | Select an **older** History row → **Revert to selected…** (bottom toolbar) | Ask you to type the **exact** project name (same confirm dialog as Remove); explain that content and filename (including Creo `.prt.N`) restore to vault and local **in one step** (new version recorded — no Check In prompt); remove newer numbered siblings so the tip is not left as `.3` after reverting to `.1`; leave the file Available (not checked out); show Revert only when an older row is selected | Offer Revert for the current version, a pending unsaved row, or when this file has only one version; revert someone else’s checkout; proceed if the typed name is wrong or Cancel; keep a newer `.prt.N` name while only swapping bytes; leave Revert greyed at the top of the History list; leave a newer local cache save after vault restore; leave you checked out with a Check In prompt; show floating “choose an older row” hint text in the toolbar; use a plain browser `confirm` instead of typing the project name |
 | **Copy to Vault** | Put a copy in the vault without checking out | Check the file out |
 

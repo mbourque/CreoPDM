@@ -462,7 +462,8 @@ def test_history_revert_only_for_older_versions():
     assert 'id="detail-toolbar"' in detail
     assert 'id="detail-tab-title"' in detail
     assert 'id="detail-tab-title-text"' in detail
-    assert ">History</h1>" in detail
+    assert ">Details</h1>" in detail
+    assert "hidden" not in detail.split('id="detail-tab-title"', 1)[1].split(">", 1)[0]
     assert 'id="open-menu-btn"' in detail and "Open ▾" in detail
     assert 'id="checkout-menu-btn"' in detail and "Checkout ▾" in detail
     assert 'id="checkin-menu-btn"' in detail and "Check In ▾" in detail
@@ -473,21 +474,24 @@ def test_history_revert_only_for_older_versions():
     assert "version-row" in detail
     assert "function syncRevertVersionButton" in script
     assert "function syncDetailToolbar" in script
-    assert "function syncDetailTabTitle" in script
-    assert 'name === "history"' in script
+    assert "function syncDetailTabTitle" not in script
+    assert "historyTabActive" not in script
     assert "setToolbarActionVisible(btn, canRevert)" in script
-    assert "setToolbarActionVisible(openMenuBtn," in script
+    assert 'setToolbarActionVisible(openMenuBtn, false)' in script
     assert "Open ▾" in detail
     assert 'id="open-btn"' in detail
     assert ">Open…</button>" in detail or "Open…</button>" in detail
     assert "revert-version-hint" not in detail
     assert "That is the current version" not in script
     assert "Select an older version to restore it." not in script
-    assert "historyTabActive" in script
     assert "historyOlderRowSelected" not in script
-    assert 'setToolbarActionVisible(openMenuBtn, false)' in script
     assert 'setToolbarActionVisible(checkoutMenuBtn, false)' in script
     assert 'setToolbarActionVisible(removeMenuBtn, false)' in script
+    detail_toolbar = _between(script, "function syncDetailToolbar(", "function selectHistoryVersionRow(")
+    assert 'setToolbarActionVisible(openMenuBtn, false)' in detail_toolbar
+    assert 'setToolbarActionVisible(checkoutMenuBtn, false)' in detail_toolbar
+    assert 'setToolbarActionVisible(removeMenuBtn, false)' in detail_toolbar
+    assert "setCreoDirBtn.hidden = true" in detail_toolbar
     assert "You do not need to Check In afterward" in script
     assert "confirmByProjectName({" in script
     assert 'title: `Revert to ${display}`' in script
@@ -497,7 +501,7 @@ def test_history_revert_only_for_older_versions():
     revert_click = _between(
         script,
         '$("#revert-version-btn")?.addEventListener("click"',
-        "function syncDetailTabTitle(",
+        'document.querySelectorAll(".tabs .tab")',
     )
     assert "confirmByProjectName" in revert_click
     assert "window.confirm" not in revert_click
@@ -505,8 +509,9 @@ def test_history_revert_only_for_older_versions():
     assert "File History" not in detail
     assert "subpanel-versions" not in detail
     assert 'id="history-files-table"' in detail
-    assert "Check In / Revert only" in docs
-    assert "no Version History subtab" in docs
+    assert "every Details tab" in docs
+    assert "**Details** title" in docs
+    assert "separate Version History view" in docs
     assert "left: 0" in css
     assert "#remove-menu .toolbar-menu-panel" in css
     assert "row.dataset.canRevert === \"1\"" in script or "dataset.canRevert === \"1\"" in script
@@ -539,6 +544,18 @@ def test_history_revert_only_for_older_versions():
     assert "History **Revert to selected…**" in docs
     assert "no Check In prompt" in docs
     assert "bottom toolbar" in docs.lower() or "at the bottom" in docs.lower()
+    assert "Open the file **Details** page on the **Overview** tab" in docs
+    assert "Open the History tab by default" in docs
+    html = APP_HTML.read_text(encoding="utf-8")
+    assert 'id="history-btn"' in html
+    assert ">Details</button>" in html
+    assert ">History</button>" not in html
+    assert 'data-detail="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}"' in html
+    assert 'data-detail="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}#history"' not in html
+    assert "Details page defaults to Overview" in script
+    href_fn = _between(script, "function rowHistoryHref(", "document.querySelector(\"#object-table\")")
+    assert "return `/projects/${projectId}/objects/${uuid}`;" in href_fn
+    assert "objects/${uuid}#history" not in href_fn
 
 
 def test_toolbar_hides_inactive_actions():
@@ -561,14 +578,17 @@ def test_toolbar_hides_inactive_actions():
     assert "openBtn.disabled =" not in sync
     assert "| Hidden when |" in docs
     assert "are **hidden** (not greyed out)" in docs
-    # Set Working Directory stays visible (discoverable) even when disabled.
+    # Set Working Directory stays visible on Files (discoverable) even when disabled;
+    # Details page always hides it.
     creo = _between(script, "async function refreshCreoStatusPill(", "function showCreoSessionControls(")
-    assert "Keep Set Working Directory in the toolbar" in creo
+    assert "Keep Set Working Directory in the Files toolbar" in creo
     assert "el.hidden = false" in creo
     assert "btn.hidden = false" in creo
     assert 'btn.id === "set-creo-dir-btn"' in creo
-    assert "History tab hides it" in creo
-    assert "On the file **History** tab it is hidden" in docs
+    assert "File Details page hides it" in creo
+    assert 'Boolean($("article.detail"))' in creo
+    assert "On the file **Details** page" in docs
+    assert "every tab, including History" in docs
 
 
 def test_folder_row_click_selects_double_click_opens():

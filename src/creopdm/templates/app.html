@@ -187,7 +187,7 @@
               data-sort-creo="{{ entry.folder }}/{{ obj.creo_release or '' }}"
               data-sort-modified="{% if obj.updated_at %}{{ local_time(obj.updated_at, '%Y%m%d%H%M%S') }}{% endif %}"
               data-sort-checkout="{{ entry.folder }}/{{ obj.checkout_status }}"
-              data-detail="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}#history"
+              data-detail="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}"
               class="object-row"
               style="--depth: {{ entry.depth }}">
             <td title="{{ obj.filename }}">
@@ -265,7 +265,7 @@
             {% for item in checkin_queue.saves %}
             <tr class="queue-row is-pending" data-uuid="{{ item.uuid }}" data-can-checkin="1" data-checked-out="1"
                 data-object-type="{{ item.object_type or '' }}" data-extension="" data-filename="{{ item.filename }}"
-                data-detail="/projects/{{ selected.uuid }}/objects/{{ item.uuid }}#history">
+                data-detail="/projects/{{ selected.uuid }}/objects/{{ item.uuid }}">
               <td>{% if item.newer_save %}Newer Creo save{% else %}Modified{% endif %}</td>
               <td class="filename-cell">
                 <span class="name-with-icon">
@@ -401,8 +401,8 @@
                 title="Check in selected files.">Check in selected…</button>
       </div>
     </div>
-    <span class="toolbar-tip" title="Open version history and details for the selected file.">
-      <button type="button" class="btn" id="history-btn" disabled>History</button>
+    <span class="toolbar-tip" title="Open Details (Overview) for the selected file.">
+      <button type="button" class="btn" id="history-btn" disabled>Details</button>
     </span>
     <span class="toolbar-tip" title="Copy selected files into the CreoPDM vault if they are not already there. Does not check them out.">
       <button type="button" class="btn" id="workspace-btn" disabled>Copy to Vault</button>

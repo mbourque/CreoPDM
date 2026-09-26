@@ -406,7 +406,9 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     assert 'id="danger-confirm-workspace"' in page.text
     assert "Type the project name exactly to confirm." in script.text
     assert "rowHistoryHref" in script.text
-    assert "objects/${meta.uuid}#history" in script.text
+    assert "objects/${meta.uuid}#history" not in script.text
+    assert "row.dataset.detail = `/projects/${projectId}/objects/${meta.uuid}`;" in script.text
+    assert "Details page defaults to Overview" in script.text
     assert script.text.count('addEventListener("dblclick", onFileTableDblclick)') >= 3
 
 
