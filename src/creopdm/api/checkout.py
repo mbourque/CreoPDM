@@ -157,7 +157,7 @@ def agent_cache_archive(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> FileResponse:
-    """Zip vault files (flat names) for one-shot agent-cache download — no Creo open prep."""
+    """Zip vault files (nested relative paths) for one-shot agent-cache download — no Creo open prep."""
     objects = ctx.objects.get_objects(db, payload.object_ids)
     if len(objects) != len(payload.object_ids):
         found = {obj.uuid for obj in objects}

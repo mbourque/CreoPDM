@@ -175,7 +175,7 @@ On a normal office network (`http://…`), the app should try the CreoPDM agent�
 | You do | App should | App must not |
 |--------|------------|--------------|
 | **Open ▾ → Open workspace…** | Open this project’s local working folder on this PC (falls back to vault if needed) | |
-| **Open ▾ → Open selected…** (or click a file name) | Offer how to open (see below); open in Creo or Windows | Fail silently with no message |
+| **Open ▾ → Open selected…** (or click a file name) | Offer how to open (see below); open in Creo or Windows; when the file is fetched to the local workspace, keep its vault folders (do not flatten) | Fail silently with no message; put nested vault files at the workspace root |
 | **History** | Show versions and details for the selected file | |
 | **Copy to Vault** | Put a copy in the vault without checking out | Check the file out |
 
@@ -205,8 +205,8 @@ If open seems to do nothing, check the error line under the toolbar, and that cr
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Checkout selected | Lock those files and download them for editing | Steal a file someone else has checked out |
-| Checkout project | Check out everything that’s free | Offer checkout when nothing is left |
+| Checkout selected | Lock those files and download them for editing, keeping vault folder paths in the local workspace | Steal a file someone else has checked out; flatten nested files to the workspace root |
+| Checkout project | Check out everything that’s free, keeping vault folder paths locally | Offer checkout when nothing is left; flatten nested files to the workspace root |
 | Undo Checkout | Release **your** locks only | Undo someone else’s checkout; delete the vault file; create a new version |
 
 ---

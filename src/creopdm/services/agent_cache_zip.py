@@ -34,16 +34,18 @@ def _vault_source(workspaces: WorkspaceService, project: Project, obj: Engineeri
 
 
 def manifest_items_for_objects(objects: list[EngineeringObject]) -> list[dict[str, object]]:
-    """Build flat cache identities from loaded objects (order preserved)."""
+    """Build cache identities from loaded objects (order preserved)."""
     items: list[dict[str, object]] = []
     for obj in objects:
         version = obj.current_version
-        disk_name = Path(str(obj.relative_path or obj.filename).replace("\\", "/")).name
+        relative = str(obj.relative_path or obj.filename or "").replace("\\", "/")
+        disk_name = Path(relative).name
         items.append(
             {
                 "object_id": obj.uuid,
                 "filename": obj.filename,
                 "disk_name": disk_name,
+                "relative_path": relative,
                 "content_hash": (version.content_hash if version is not None else "") or "",
                 "file_size": int(version.file_size) if version is not None else 0,
             }
@@ -56,7 +58,7 @@ def build_agent_cache_zip(
     project: Project,
     objects: list[EngineeringObject],
 ) -> tuple[Path, int]:
-    """Write vault files to a temp zip (flat names, matching agent cache layout)."""
+    """Write vault files to a temp zip, preserving nested relative paths."""
     if not objects:
         raise ValidationAppError("No files to download.")
     fd, raw_name = tempfile.mkstemp(suffix=".zip", prefix="creopdm-cache-")
@@ -67,7 +69,12 @@ def build_agent_cache_zip(
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as zf:
             for obj in objects:
                 source = _vault_source(workspaces, project, obj)
-                arcname = source.name
+                relative = str(obj.relative_path or obj.filename or "").replace("\\", "/")
+                parent = Path(relative).parent.as_posix()
+                if parent in {".", ""}:
+                    arcname = source.name
+                else:
+                    arcname = f"{parent}/{source.name}"
                 zf.write(source, arcname=arcname)
                 written += 1
                 if written == 1 or written % 500 == 0:

@@ -8,24 +8,33 @@ from fastapi.testclient import TestClient
 from creopdm_agent.config import AgentConfig
 from creopdm_agent.server import (
     CachePlanItem,
-    _extract_flat_zip,
+    _extract_cache_zip,
     _plan_cache_downloads,
     create_agent_app,
 )
 
 
-def test_extract_flat_zip_writes_basenames_only(tmp_path):
+def test_extract_cache_zip_preserves_nested_folders(tmp_path):
     target = tmp_path / "proj"
     target.mkdir()
     archive = tmp_path / "pack.zip"
     with zipfile.ZipFile(archive, "w") as zf:
-        zf.writestr("nested/part.prt.1", b"nested-part")
+        zf.writestr("lib/step/part.prt.1", b"nested-part")
         zf.writestr("top.asm.2", b"top-asm")
-    extracted, nbytes = _extract_flat_zip(archive, target)
+    extracted, nbytes = _extract_cache_zip(archive, target)
     assert extracted == 2
     assert nbytes == len(b"nested-part") + len(b"top-asm")
-    assert (target / "part.prt.1").read_bytes() == b"nested-part"
+    assert (target / "lib" / "step" / "part.prt.1").read_bytes() == b"nested-part"
     assert (target / "top.asm.2").read_bytes() == b"top-asm"
+    assert not (target / "part.prt.1").exists()
+
+
+def test_cache_dest_relative_keeps_vault_folders():
+    from creopdm_agent.server import _cache_dest_relative
+
+    assert _cache_dest_relative("lib/step/pin.prt", "pin.prt.1").as_posix() == "lib/step/pin.prt.1"
+    assert _cache_dest_relative("pin.prt", "pin.prt.1").as_posix() == "pin.prt.1"
+    assert _cache_dest_relative("", "top.asm.1").as_posix() == "top.asm.1"
 
 
 def test_plan_skips_matching_hash_keeps_newer_save(tmp_path):
@@ -144,7 +153,7 @@ def test_agent_materialize_zip_downloads_and_extracts(tmp_path, monkeypatch):
     app = create_agent_app(settings)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("shaft.prt.1", b"shaft-bytes")
+        zf.writestr("lib/step/shaft.prt.1", b"shaft-bytes")
         zf.writestr("bracket.prt.1", b"bracket-bytes")
     zip_bytes = buf.getvalue()
     seen: list[str] = []
@@ -196,6 +205,7 @@ def test_agent_materialize_zip_downloads_and_extracts(tmp_path, monkeypatch):
                             "object_id": "a",
                             "filename": "shaft.prt.1",
                             "disk_name": "shaft.prt.1",
+                            "relative_path": "lib/step/shaft.prt",
                             "content_hash": hashlib.sha256(b"shaft-bytes").hexdigest(),
                             "file_size": len(b"shaft-bytes"),
                         },
@@ -203,6 +213,7 @@ def test_agent_materialize_zip_downloads_and_extracts(tmp_path, monkeypatch):
                             "object_id": "b",
                             "filename": "bracket.prt.1",
                             "disk_name": "bracket.prt.1",
+                            "relative_path": "bracket.prt",
                             "content_hash": hashlib.sha256(b"bracket-bytes").hexdigest(),
                             "file_size": len(b"bracket-bytes"),
                         },
@@ -232,8 +243,9 @@ def test_agent_materialize_zip_downloads_and_extracts(tmp_path, monkeypatch):
         assert body["bytes_written"] == len(b"shaft-bytes") + len(b"bracket-bytes")
         assert body["download_count"] == 2
         cache = Path(body["working_directory"])
-        assert (cache / "shaft.prt.1").read_bytes() == b"shaft-bytes"
+        assert (cache / "lib" / "step" / "shaft.prt.1").read_bytes() == b"shaft-bytes"
         assert (cache / "bracket.prt.1").read_bytes() == b"bracket-bytes"
+        assert not (cache / "shaft.prt.1").exists()
         assert any("agent-cache-manifest" in url for url in seen)
         assert any("agent-cache-archive" in url for url in seen)
         assert (cache / "_creopdm_cache_index.json").is_file()

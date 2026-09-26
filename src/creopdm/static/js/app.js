@@ -5009,10 +5009,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return created;
   }
 
-  function newerLocalCacheSaves(cacheFiles, objects) {
-    // Agent cache is flat (basename only). Vault paths may be nested
-    // (Documents/part.prt.1); Creo then saves part.prt.2 at the cache root.
-    // Match full logical path first; fall back to unique logical basename.
+    function newerLocalCacheSaves(cacheFiles, objects) {
+    // Prefer full vault-relative path. Older flat agent caches (basename only)
+    // still match when that basename is unique in the project.
     const bestByLogical = new Map();
     const bestByBasename = new Map();
     (cacheFiles || []).forEach((item) => {

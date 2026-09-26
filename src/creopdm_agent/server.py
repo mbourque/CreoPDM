@@ -30,6 +30,22 @@ def _safe_segment(value: str, fallback: str = "file") -> str:
     return text[:180]
 
 
+def _cache_dest_relative(relative_path: str | None, disk_name: str) -> Path:
+    """Relative path under the project cache, preserving vault folders.
+
+    Leaf name is always ``disk_name`` (Creo numbered save when present). Parent
+    folders come from ``relative_path`` so ``lib/step/pin.prt`` + ``pin.prt.1``
+    becomes ``lib/step/pin.prt.1``.
+    """
+    leaf = _safe_segment(Path(disk_name or "").name or "model.bin", "model.bin")
+    rel = (relative_path or "").replace("\\", "/").lstrip("/")
+    parts = [part for part in rel.split("/") if part and part not in {".", ".."}]
+    if len(parts) <= 1:
+        return Path(leaf)
+    dirs = [_safe_segment(part, "x") for part in parts[:-1]]
+    return Path(*dirs) / leaf
+
+
 def _project_cache_key(project_id: str = "", vault_folder: str = "") -> str:
     """Local agent-cache folder name: prefer vault_folder, else project UUID."""
     folder = (vault_folder or "").strip()
@@ -88,6 +104,7 @@ class CachePlanItem(BaseModel):
     object_id: str
     filename: str = ""
     disk_name: str = ""
+    relative_path: str = ""
     content_hash: str = ""
     file_size: int = 0
 
@@ -317,8 +334,10 @@ def _download(
         item.filename or Path(disk_name).stem + Path(disk_name).suffix,
         disk_name,
     )
-    target = target_dir / disk_name
-    logger.info("Downloading %s from CreoPDM…", disk_name)
+    dest_rel = _cache_dest_relative(item.relative_path, disk_name)
+    target = target_dir / dest_rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("Downloading %s from CreoPDM…", dest_rel.as_posix())
     try:
         response = client.get(url, headers=headers)
     except httpx.HTTPError as exc:
@@ -332,16 +351,16 @@ def _download(
             detail=f"CreoPDM returned {response.status_code} for {url}",
         )
     target.write_bytes(response.content)
-    logger.info("Wrote %s (%s bytes) → %s", disk_name, len(response.content), target)
+    logger.info("Wrote %s (%s bytes) → %s", dest_rel.as_posix(), len(response.content), target)
     return target, logical, disk_name, len(response.content)
 
 
-def _extract_flat_zip(
+def _extract_cache_zip(
     zip_path: Path,
     target_dir: Path,
     hashes_by_name: dict[str, str] | None = None,
 ) -> tuple[int, int]:
-    """Extract zip entries into target_dir using basename only (matches /materialize layout)."""
+    """Extract zip entries into target_dir, preserving nested vault folders."""
     target_resolved = target_dir.resolve()
     extracted = 0
     nbytes = 0
@@ -350,10 +369,12 @@ def _extract_flat_zip(
         for info in zf.infolist():
             if info.is_dir():
                 continue
-            name = Path(info.filename).name
-            if not name or name in {".", ".."}:
+            raw = str(info.filename or "").replace("\\", "/")
+            parts = [part for part in raw.split("/") if part and part not in {".", ".."}]
+            if not parts:
                 continue
-            dest = target_dir / _safe_segment(name, "model.bin")
+            safe_parts = [_safe_segment(part, "x") for part in parts]
+            dest = target_dir.joinpath(*safe_parts)
             try:
                 dest.resolve().relative_to(target_resolved)
             except ValueError as exc:
@@ -361,16 +382,27 @@ def _extract_flat_zip(
                     status_code=400,
                     detail=f"Unsafe zip entry: {info.filename}",
                 ) from exc
+            dest.parent.mkdir(parents=True, exist_ok=True)
             data = zf.read(info.filename)
             dest.write_bytes(data)
             extracted += 1
             nbytes += len(data)
-            digest = (hashes_by_name or {}).get(name) or (hashes_by_name or {}).get(dest.name)
+            rel_key = dest.relative_to(target_dir).as_posix()
+            digest = (
+                (hashes_by_name or {}).get(rel_key)
+                or (hashes_by_name or {}).get(dest.name)
+                or (hashes_by_name or {}).get(Path(info.filename).name)
+            )
             if digest:
+                index[rel_key] = {"hash": digest, "size": len(data)}
                 index[dest.name] = {"hash": digest, "size": len(data)}
     if hashes_by_name:
         _save_cache_index(target_dir, index)
     return extracted, nbytes
+
+
+# Older tests/imports may still call the flat name.
+_extract_flat_zip = _extract_cache_zip
 
 
 def _load_cache_index(cache_dir: Path) -> dict[str, dict[str, object]]:
@@ -435,7 +467,7 @@ def _plan_cache_downloads(
         disk_name = (item.disk_name or filename).strip()
         expected_hash = (item.content_hash or "").strip().lower()
         expected_size = int(item.file_size or 0)
-        local = _find_cache_file(cache_dir, filename or disk_name)
+        local = _find_planned_cache_file(cache_dir, item)
         if local is None or not local.is_file():
             download_ids.append(object_id)
             continue
@@ -452,7 +484,11 @@ def _plan_cache_downloads(
             download_ids.append(object_id)
             continue
 
-        cached = index.get(local.name) or index.get(disk_name)
+        try:
+            rel_key = local.resolve().relative_to(cache_dir.resolve()).as_posix()
+        except ValueError:
+            rel_key = local.name
+        cached = index.get(rel_key) or index.get(local.name) or index.get(disk_name)
         if (
             isinstance(cached, dict)
             and str(cached.get("hash") or "").lower() == expected_hash
@@ -469,6 +505,7 @@ def _plan_cache_downloads(
                 download_ids.append(object_id)
                 continue
             if digest == expected_hash:
+                index[rel_key] = {"hash": digest, "size": local_size}
                 index[local.name] = {"hash": digest, "size": local_size}
                 index_dirty = True
                 skipped += 1
@@ -481,29 +518,42 @@ def _plan_cache_downloads(
     return download_ids, skipped, kept_newer
 
 
+def _find_planned_cache_file(cache_dir: Path, item: CachePlanItem) -> Path | None:
+    """Prefer the vault-relative folder; fall back to flat / walk search."""
+    from creopdm.creo.file_manager import CreoFileManager
+
+    filename = (item.filename or item.disk_name or "").strip()
+    disk_name = (item.disk_name or filename).strip()
+    rel = (item.relative_path or "").replace("\\", "/").lstrip("/")
+    if rel and "/" in rel:
+        folder = cache_dir / Path(rel).parent
+        if folder.is_dir():
+            found = CreoFileManager.latest_in_directory(folder, filename or disk_name, None)
+            if found is not None and found.is_file():
+                return found
+            exact = folder / Path(disk_name).name
+            if exact.is_file():
+                return exact
+    return _find_cache_file(cache_dir, filename or disk_name)
+
+
 def _find_cache_file(cache_dir: Path, filename: str) -> Path | None:
     """Latest Creo save (or exact name) for filename under the project cache folder.
 
-    Searches the cache root first, then subfolders. Vault objects may live under
-    a nested relative path while the agent cache keeps a flat basename copy.
+    Searches the whole cache tree (root and subfolders) and returns the highest
+    numbered save. Older flat copies and newer nested materialize can coexist.
     """
     from creopdm.creo.file_manager import CreoFileManager
 
     name = Path(filename or "").name.strip()
     if not name or not cache_dir.is_dir():
         return None
-    # None → built-in versioned CAD set (models + openable + extras), so .tph.N works.
-    latest = CreoFileManager.latest_in_directory(cache_dir, name, None)
-    if latest is not None and latest.is_file():
-        return latest
     wanted = CreoFileManager.logical_filename(name, None).lower()
     matches: list[Path] = []
     skip_dirs = {".git", ".creopdm", "__pycache__"}
     for dirpath, dirnames, filenames in os.walk(cache_dir):
         dirnames[:] = [item for item in dirnames if item.lower() not in skip_dirs]
         folder = Path(dirpath)
-        if folder.resolve() == cache_dir.resolve():
-            continue
         for entry in filenames:
             if CreoFileManager.logical_filename(entry, None).lower() != wanted:
                 continue
@@ -1507,6 +1557,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     object_id=str(item.get("object_id") or ""),
                     filename=str(item.get("filename") or ""),
                     disk_name=str(item.get("disk_name") or ""),
+                    relative_path=str(item.get("relative_path") or ""),
                     content_hash=str(item.get("content_hash") or ""),
                     file_size=int(item.get("file_size") or 0),
                 )
@@ -1530,11 +1581,15 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     download_count=0,
                 )
 
-            hashes_by_name = {
-                item.disk_name: item.content_hash
-                for item in items
-                if item.object_id in set(download_ids) and item.disk_name and item.content_hash
-            }
+            download_set = set(download_ids)
+            hashes_by_name: dict[str, str] = {}
+            for item in items:
+                if item.object_id not in download_set or not item.content_hash:
+                    continue
+                if item.disk_name:
+                    hashes_by_name[item.disk_name] = item.content_hash
+                dest_rel = _cache_dest_relative(item.relative_path, item.disk_name or item.filename)
+                hashes_by_name[dest_rel.as_posix()] = item.content_hash
             fd, raw_tmp = tempfile.mkstemp(suffix=".zip", prefix="creopdm-agent-")
             os.close(fd)
             zip_path = Path(raw_tmp)
@@ -1558,7 +1613,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     with zip_path.open("wb") as handle:
                         for chunk in response.iter_bytes():
                             handle.write(chunk)
-                extracted, nbytes = _extract_flat_zip(zip_path, target_dir, hashes_by_name)
+                extracted, nbytes = _extract_cache_zip(zip_path, target_dir, hashes_by_name)
             except httpx.HTTPError as exc:
                 raise HTTPException(
                     status_code=502,

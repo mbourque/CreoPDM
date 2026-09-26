@@ -327,6 +327,7 @@ class AgentCacheManifestItem(BaseModel):
     object_id: str
     filename: str
     disk_name: str
+    relative_path: str = ""
     content_hash: str
     file_size: int = 0
 

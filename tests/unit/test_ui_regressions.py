@@ -520,12 +520,10 @@ def test_user_interaction_negative_client_guards():
 
 
 def test_newer_local_cache_matches_flat_save_for_nested_vault_path():
-    """Regression: agent cache is flat; vault may be Documents/part.prt.1 while Creo
-    saves part.prt.2 at the cache root — full-path-only matching hid Modified/Check In.
-    """
+    """Regression: older flat agent caches + nested vault paths still detect Modified."""
     script = _app_js()
     body = _between(script, "function newerLocalCacheSaves(", "async function countLocalNewWorkspaceFiles(")
     assert "bestByBasename" in body
     assert "vaultBasenameCounts" in body
     assert "vaultBasenameCounts.get(base) || 0) === 1" in body
-    assert "Agent cache is flat" in body
+    assert "Older flat agent caches" in body

@@ -73,6 +73,52 @@ def test_agent_health_and_materialize(tmp_path, monkeypatch):
         assert workdir.json()["path"].endswith("proj1")
 
 
+def test_agent_materialize_preserves_vault_folders(tmp_path, monkeypatch):
+    """Nested vault relative_path must create matching folders in the agent cache."""
+    root = tmp_path / "cache"
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+
+    class FakeResponse:
+        def __init__(self, body: bytes):
+            self.status_code = 200
+            self.content = body
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers=None):
+            return FakeResponse(b"nested-pin")
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        saved = client.post(
+            "/materialize",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "object_id": "pin",
+                "project_id": "proj-nested",
+                "relative_path": "lib/step/pin.prt",
+                "filename": "pin.prt",
+                "disk_name": "pin.prt.1",
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        body = saved.json()
+        path = Path(body["path"])
+        workdir = Path(body["working_directory"])
+        assert path == workdir / "lib" / "step" / "pin.prt.1"
+        assert path.read_bytes() == b"nested-pin"
+        assert not (workdir / "pin.prt.1").exists()
+
+
 def test_agent_open_folder_uses_project_cache(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
@@ -688,9 +734,7 @@ def test_agent_push_uploads_latest_cache_file(tmp_path, monkeypatch):
 
 
 def test_agent_push_finds_newer_save_in_cache_subfolder(tmp_path, monkeypatch):
-    """Regression: nested vault folders materialize flat, but a save may land in a
-    subfolder; push must still find the highest .ext.N by logical name.
-    """
+    """Push must find the highest .ext.N by logical name across nested cache folders."""
     root = tmp_path / "cache"
     project_id = "proj-nested-push"
     cache = root / project_id

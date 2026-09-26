@@ -102,8 +102,40 @@ def test_agent_cache_archive_zip(client, repo_parent):
     by_name = {item["disk_name"]: item for item in body["items"]}
     assert "shaft.prt" in by_name
     assert "bracket.prt" in by_name
+    assert by_name["shaft.prt"]["relative_path"] == "shaft.prt"
     assert len(by_name["shaft.prt"]["content_hash"]) == 64
     assert by_name["shaft.prt"]["file_size"] == len(b"original-content")
+
+
+@requires_git
+def test_agent_cache_archive_preserves_nested_paths(client, repo_parent):
+    location = repo_parent / "NestedCacheZip"
+    project = client.post("/api/projects", json={"name": "Nested Cache Zip"}).json()
+    lib = location / "lib"
+    nested = lib / "step"
+    nested.mkdir(parents=True)
+    pin = nested / "pin.prt"
+    pin.write_bytes(b"nested-pin-bytes")
+    imported = client.post(
+        f"/api/projects/{project['uuid']}/objects/from-disk",
+        json={"paths": [str(pin)], "comment": "Nested", "base_folder": str(lib)},
+    )
+    assert imported.status_code == 200, imported.text
+    obj = imported.json()["ok"][0]
+    archive = client.post(
+        "/api/objects/batch/agent-cache-archive",
+        json={"object_ids": [obj["uuid"]]},
+    )
+    assert archive.status_code == 200, archive.text
+    with zipfile.ZipFile(io.BytesIO(archive.content)) as zf:
+        assert zf.namelist() == ["lib/step/pin.prt"]
+        assert zf.read("lib/step/pin.prt") == b"nested-pin-bytes"
+    manifest = client.post(
+        "/api/objects/batch/agent-cache-manifest",
+        json={"object_ids": [obj["uuid"]]},
+    ).json()
+    assert manifest["items"][0]["relative_path"] == "lib/step/pin.prt"
+    assert manifest["items"][0]["disk_name"] == "pin.prt"
 
 
 @requires_git
