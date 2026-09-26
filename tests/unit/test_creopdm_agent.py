@@ -119,6 +119,68 @@ def test_agent_materialize_preserves_vault_folders(tmp_path, monkeypatch):
         assert not (workdir / "pin.prt.1").exists()
 
 
+def test_agent_materialize_replace_newer_trashes_higher_local_saves(tmp_path, monkeypatch):
+    """History revert / open-without-checkout must drop local .prt.3 when vault tip is .prt.1."""
+    root = tmp_path / "cache"
+    project_id = "proj-replace"
+    cache = root / project_id
+    nested = cache / "model-templates"
+    nested.mkdir(parents=True)
+    (nested / "start_part.prt.1").write_bytes(b"stale-1")
+    (nested / "start_part.prt.2").write_bytes(b"local-2")
+    (nested / "start_part.prt.3").write_bytes(b"local-3")
+    (cache / "start_part.prt.3").write_bytes(b"flat-3")
+    (nested / "other.prt.9").write_bytes(b"keep")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+
+    class FakeResponse:
+        def __init__(self, body: bytes):
+            self.status_code = 200
+            self.content = body
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers=None):
+            return FakeResponse(b"vault-1")
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        saved = client.post(
+            "/materialize",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "object_id": "part1",
+                "project_id": project_id,
+                "relative_path": "model-templates/start_part.prt.1",
+                "filename": "start_part.prt.1",
+                "disk_name": "start_part.prt.1",
+                "replace_newer": True,
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        body = saved.json()
+        assert body["disk_name"] == "start_part.prt.1"
+        assert Path(body["path"]).read_bytes() == b"vault-1"
+        purged = set(body.get("purged_newer") or [])
+        assert "model-templates/start_part.prt.2" in purged
+        assert "model-templates/start_part.prt.3" in purged
+        assert "start_part.prt.3" in purged
+        assert not (nested / "start_part.prt.2").exists()
+        assert not (nested / "start_part.prt.3").exists()
+        assert not (cache / "start_part.prt.3").exists()
+        assert (nested / "start_part.prt.1").is_file()
+        assert (nested / "other.prt.9").read_bytes() == b"keep"
+
+
 def test_agent_open_folder_uses_project_cache(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))

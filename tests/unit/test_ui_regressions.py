@@ -474,8 +474,13 @@ def test_history_revert_only_for_older_versions():
     assert "Choose an older version to revert" in (
         (ROOT / "src" / "creopdm" / "services" / "checkin_service.py").read_text(encoding="utf-8")
     )
+    assert "replace_newer" in script
+    assert "replace_newer: true" in script or "replace_newer: true," in script
     assert "purge_newer_creo_saves" in (
         (ROOT / "src" / "creopdm" / "services" / "workspace_service.py").read_text(encoding="utf-8")
+    )
+    assert "_purge_newer_local_saves" in (
+        (ROOT / "src" / "creopdm_agent" / "server.py").read_text(encoding="utf-8")
     )
     assert "restore_version" in (
         (ROOT / "src" / "creopdm" / "services" / "checkin_service.py").read_text(encoding="utf-8")
@@ -483,6 +488,7 @@ def test_history_revert_only_for_older_versions():
     assert "Revert to selected" in docs
     assert "Offer Revert for the current version" in docs
     assert "keep a newer `.prt.N` name while only swapping bytes" in docs
+    assert "leave a newer local cache save after vault restore" in docs
     assert "bottom toolbar" in docs.lower() or "at the bottom" in docs.lower()
 
 

@@ -97,7 +97,7 @@ class CreoService:
                 filename=obj.filename,
                 skip_object_id=obj.id,
             )
-        return self._open_resolved(
+        payload = self._open_resolved(
             path,
             launch=launch,
             object_type=obj.object_type,
@@ -108,6 +108,10 @@ class CreoService:
             relative_path=obj.relative_path,
             companions=companions,
         )
+        # Not checked out to me: align local cache to vault tip (drop higher .N leftovers).
+        # Checked out to me: keep local newer Creo saves for check-in.
+        payload["replace_newer"] = not view.owned_by_me
+        return payload
 
     def open_workspace_file(
         self,

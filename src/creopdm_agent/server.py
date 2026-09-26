@@ -72,6 +72,8 @@ class MaterializeRequest(BaseModel):
     disk_name: str | None = None
     token: str | None = None
     companions: list[MaterializeItem] = Field(default_factory=list)
+    # After History revert: download vault tip and trash local higher .N siblings.
+    replace_newer: bool = False
 
 
 class MaterializeResponse(BaseModel):
@@ -81,6 +83,7 @@ class MaterializeResponse(BaseModel):
     disk_name: str
     bytes_written: int = 0
     companions_written: int = 0
+    purged_newer: list[str] = Field(default_factory=list)
 
 
 class MaterializeZipRequest(BaseModel):
@@ -564,6 +567,58 @@ def _find_cache_file(cache_dir: Path, filename: str) -> Path | None:
         return CreoFileManager.select_latest_creo_version(matches, None) or matches[0]
     exact = cache_dir / name
     return exact if exact.is_file() else None
+
+
+def _purge_newer_local_saves(cache_dir: Path, kept: Path) -> list[str]:
+    """Trash same-logical Creo saves with a higher .N than ``kept`` under the cache.
+
+    Used after History revert so local workspace matches the restored vault tip
+    (e.g. drop start_part.prt.3 when vault tip is start_part.prt.1).
+    """
+    from creopdm.creo.file_manager import CreoFileManager
+
+    if not kept.is_file() or not cache_dir.is_dir():
+        return []
+    try:
+        kept_resolved = kept.resolve()
+        cache_resolved = cache_dir.resolve()
+        kept_resolved.relative_to(cache_resolved)
+    except (OSError, ValueError):
+        return []
+    keep_num = CreoFileManager.save_number(kept.name, None)
+    logical = CreoFileManager.logical_filename(kept.name, None).lower()
+    if not logical:
+        return []
+    removed: list[str] = []
+    skip_dirs = {".git", ".creopdm", "__pycache__"}
+    for dirpath, dirnames, filenames in os.walk(cache_dir):
+        dirnames[:] = [item for item in dirnames if item.lower() not in skip_dirs]
+        folder = Path(dirpath)
+        for entry in filenames:
+            if CreoFileManager.logical_filename(entry, None).lower() != logical:
+                continue
+            if CreoFileManager.save_number(entry, None) <= keep_num:
+                continue
+            path = folder / entry
+            try:
+                resolved = path.resolve()
+                resolved.relative_to(cache_resolved)
+            except (OSError, ValueError):
+                continue
+            if resolved == kept_resolved:
+                continue
+            try:
+                rel = resolved.relative_to(cache_resolved).as_posix()
+            except ValueError:
+                rel = entry
+            try:
+                move_to_trash(resolved)
+            except OSError as exc:
+                logger.warning("Could not trash newer local save %s: %s", rel, exc)
+                continue
+            removed.append(rel)
+            logger.info("Trashed newer local save after vault replace: %s", rel)
+    return removed
 
 
 def create_agent_app(settings: AgentConfig) -> FastAPI:
@@ -1498,6 +1553,14 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 )
                 _download(client, base, item, target_dir, headers)
                 companions_written += 1
+        purged_newer: list[str] = []
+        if payload.replace_newer:
+            purged_newer = _purge_newer_local_saves(target_dir, target)
+            logger.info(
+                "replace_newer: kept %s, trashed %s newer local save(s)",
+                disk_name,
+                len(purged_newer),
+            )
         logger.info(
             "Materialize done: %s ready for Creo (%s bytes, %s companion%s) in %s — "
             "metadata save happens on the CreoPDM server after Creo.JS gather, not in the agent",
@@ -1514,6 +1577,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             disk_name=disk_name,
             bytes_written=nbytes,
             companions_written=companions_written,
+            purged_newer=purged_newer,
         )
 
     @app.post("/materialize-zip", response_model=MaterializeZipResponse)

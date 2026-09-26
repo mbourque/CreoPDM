@@ -5153,6 +5153,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         relative_path: prepared.relative_path || null,
         filename: prepared.filename || null,
         disk_name: prepared.disk_name || prepared.filename || null,
+        replace_newer: Boolean(prepared.replace_newer),
         companions: companions.map((item) => ({
           object_id: item.object_id || null,
           project_id: item.project_id || prepared.project_id || currentProjectId() || null,
@@ -7273,7 +7274,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!ok) return;
     showError($("#toolbar-error"), "");
     try {
-      await withBusy(`Reverting to ${display}…`, async () => {
+      const result = await withBusy(`Reverting to ${display}…`, async () => {
         const response = await fetch(
           `/api/objects/${encodeURIComponent(objectId)}/versions/${encodeURIComponent(versionId)}/revert`,
           { method: "POST" }
@@ -7282,6 +7283,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           throw new Error(await readError(response));
         }
         const body = await response.json().catch(() => ({}));
+        let localSynced = false;
+        let localWarning = "";
         try {
           const agent = await probeCreoAgent();
           if (agent) {
@@ -7291,14 +7294,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               relative_path: body.relative_path || null,
               filename: body.filename || null,
               disk_name: body.filename || null,
+              replace_newer: true,
               companions: [],
             });
+            localSynced = true;
+          } else {
+            localWarning =
+              "Vault restored. Start creopdm-agent on this PC, then Open the file to refresh the local workspace.";
           }
-        } catch {
-          /* vault revert already succeeded; local cache can rematerialize on next open */
+        } catch (localErr) {
+          const detail =
+            localErr && localErr.message ? String(localErr.message) : "local sync failed";
+          localWarning =
+            `Vault restored, but the local workspace still has a newer Creo save (${detail}). `
+            + "Open the file again or use Purge workspace after the agent is running.";
         }
+        return { localSynced, localWarning };
       });
-      showOk(`Reverted to ${display}. Vault and local workspace updated.`);
+      if (result?.localWarning) {
+        showError($("#toolbar-error"), result.localWarning);
+      } else {
+        showOk(
+          result?.localSynced
+            ? `Reverted to ${display}. Vault and local workspace updated.`
+            : `Reverted to ${display}.`
+        );
+      }
       reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
