@@ -6,7 +6,7 @@ After you add, remove, or open something, the Files list should update **on its 
 
 Test in Creo’s built-in browser when you can (Creo connection matters there). A normal browser is fine for most list/toolbar checks.
 
-On a **phone / narrow screen** (about 640px wide or less), CreoPDM switches to a **browse-only** layout: Settings / Status / Creo pills, New project, gear, metric chips, and the bottom toolbar are hidden; file tables keep **Name** and **Rev** only (New files keeps Change + Filename) so you should not need sideways scrolling.
+On a **phone / narrow screen** (about 640px wide or less), CreoPDM switches to a **browse-only** layout: Settings / Status / Creo pills, New project, gear, metric chips, and the bottom toolbar are hidden; file tables keep **Name** and **Rev** only (New files keeps Filename only) so you should not need sideways scrolling; empty lists hide the crushed column headers and show a full-width message.
 
 ---
 

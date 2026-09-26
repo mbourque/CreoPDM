@@ -463,10 +463,9 @@ def test_mobile_browse_css_is_minimal():
     assert "#detail-toolbar" in mobile
     assert "#object-table th:nth-child(n + 3)" in mobile
     assert "#checked-out-table th:nth-child(n + 3)" in mobile
-    assert "#changes-table th:nth-child(n + 3)" in mobile
-    assert "#history-files-table th:nth-child(n + 3)" in mobile
-    assert ".detail-meta" in mobile
-    assert "overflow-x: hidden" in mobile
+    assert "#changes-table th:nth-child(1)" in mobile
+    assert "#changes-table:has(.empty-row) thead" in mobile
+    assert "table-layout: fixed" in mobile
     assert "browse-only" in docs
     assert "Name** and **Rev**" in docs
 

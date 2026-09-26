@@ -89,7 +89,7 @@ def test_home_page(client):
     assert 'id="add-menu"' in text
     assert 'src="/client/app.js' in text
     assert "push162" in text
-    assert "toolbar36" in text
+    assert "toolbar37" in text
     assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "folder | urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

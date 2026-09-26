@@ -1184,6 +1184,14 @@ body.is-file-drag #file-drop-overlay {
     overflow-x: hidden;
   }
 
+  #object-table,
+  #checked-out-table,
+  #changes-table,
+  #history-files-table {
+    table-layout: fixed;
+    width: 100%;
+  }
+
   /* Files + checked-out: Name + Rev only */
   #object-table th:nth-child(n + 3),
   #object-table td:nth-child(n + 3),
@@ -1192,29 +1200,79 @@ body.is-file-drag #file-drop-overlay {
     display: none;
   }
 
-  /* New files: Change + Filename only */
+  /* New files: Filename only (Change/Detail/Size/Date hide — avoids crushed headers) */
+  #changes-table th:nth-child(1),
+  #changes-table td:nth-child(1),
   #changes-table th:nth-child(n + 3),
   #changes-table td:nth-child(n + 3) {
     display: none;
   }
 
   #object-table th,
-  #object-table td,
   #checked-out-table th,
-  #checked-out-table td,
   #changes-table th,
+  #history-files-table th {
+    white-space: nowrap;
+    word-break: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #object-table th[data-sort]::after,
+  #checked-out-table th[data-sort]::after,
+  #changes-table th[data-sort]::after,
+  #history-files-table th[data-sort]::after {
+    content: none;
+  }
+
+  #object-table td,
+  #checked-out-table td,
   #changes-table td {
     white-space: normal;
     word-break: break-word;
+  }
+
+  #object-table th:nth-child(1),
+  #object-table td:nth-child(1),
+  #checked-out-table th:nth-child(1),
+  #checked-out-table td:nth-child(1),
+  #changes-table th:nth-child(2),
+  #changes-table td:nth-child(2) {
+    width: auto;
   }
 
   #object-table th:nth-child(2),
   #object-table td:nth-child(2),
   #checked-out-table th:nth-child(2),
   #checked-out-table td:nth-child(2) {
-    width: 3.25rem;
-    max-width: 3.25rem;
+    width: 3.5rem;
+    max-width: 3.5rem;
     white-space: nowrap;
+  }
+
+  /* Empty rows: colspan against hidden columns breaks layout — stack the message full-width */
+  #object-table .empty-row,
+  #checked-out-table .empty-row,
+  #changes-table .empty-row,
+  #history-files-table .empty-row {
+    display: block;
+  }
+  #object-table .empty-row td,
+  #checked-out-table .empty-row td,
+  #changes-table .empty-row td,
+  #history-files-table .empty-row td {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    box-sizing: border-box;
+    border: none;
+    padding: 1rem 0.35rem;
+    color: var(--muted);
+  }
+  #object-table:has(.empty-row) thead,
+  #checked-out-table:has(.empty-row) thead,
+  #changes-table:has(.empty-row) thead,
+  #history-files-table:has(.empty-row) thead {
+    display: none;
   }
 
   #panel-checked-out > .muted.small,
