@@ -71,41 +71,6 @@
     </div>
   </header>
 
-  <div class="toolbar-actions detail-actions">
-    <span class="toolbar-tip creo-session-only" title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
-      <button type="button" class="btn" id="set-creo-dir-btn" data-workspace="{{ workspace_path }}" disabled>Set Working Directory</button>
-    </span>
-    <button type="button" class="btn" id="open-btn" data-uuid="{{ object.uuid }}">Open</button>
-    <span class="toolbar-tip" title="Open this project's local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">
-      <button type="button" class="btn" id="open-workspace-btn" data-project="{{ project.uuid }}" data-vault-folder="{{ project.vault_folder or project.uuid }}" data-folder="{{ workspace_folder }}">Open Workspace</button>
-    </span>
-    <button type="button" class="btn" id="checkout-btn" data-uuid="{{ object.uuid }}" {% if not object.can_checkout %}disabled{% endif %}>Checkout</button>
-    <button type="button" class="btn" id="checkin-btn" data-uuid="{{ object.uuid }}" data-project="{{ project.uuid }}" {% if not object.can_checkin %}disabled{% endif %}>Check In</button>
-    <button type="button" class="btn" id="undo-btn" data-uuid="{{ object.uuid }}" {% if not object.owned_by_me %}disabled{% endif %}>Undo Checkout</button>
-    <div class="toolbar-menu" id="remove-menu">
-      <button type="button" class="btn btn-danger toolbar-menu-toggle" id="remove-menu-btn"
-              aria-haspopup="menu" aria-expanded="false"
-              title="Remove vault copies or remove this file from the project.">Remove ▾</button>
-      <div class="toolbar-menu-panel" role="menu" hidden>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn"
-                data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}"
-                title="Delete CreoPDM vault copies of this file. The original in your project folder is not deleted. If you have it checked out, that checkout is cancelled.">Remove from Vault</button>
-        <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-project-btn"
-                data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}"
-                data-relative-path="{{ object.relative_path }}" data-filename="{{ object.filename }}"
-                title="Remove this file from the project list and delete CreoPDM vault copies. The original in your project folder is not deleted.">Remove from Project</button>
-      </div>
-    </div>
-  </div>
-  <div class="toolbar-messages">
-    <p class="error" id="toolbar-error" hidden></p>
-    <div class="toolbar-ok-row" id="toolbar-ok-row" hidden>
-      <p class="ok" id="toolbar-ok"></p>
-      <button type="button" class="btn btn-primary" id="resume-metadata-collect-btn" hidden>Resume</button>
-      <button type="button" class="btn" id="cancel-metadata-collect-btn" hidden>Cancel</button>
-    </div>
-  </div>
-
   <div class="tabs" role="tablist">
     <button type="button" class="tab is-active" data-tab="overview">Overview</button>
     {% if is_creo %}
@@ -446,6 +411,7 @@
   </section>
 
   <section class="tab-panel" id="panel-history" hidden>
+    <h2 class="detail-section-title">History</h2>
     {% if workspace_pending %}
     <p class="pending-note">
       {% if workspace_pending.newer_save %}
@@ -460,14 +426,6 @@
       <button type="button" class="subtab is-active" data-subtab="files">File History</button>
       <button type="button" class="subtab" data-subtab="versions">Version History</button>
     </div>
-    {% if history|length > 1 %}
-    <div class="history-actions">
-      <button type="button" class="btn" id="revert-version-btn" disabled
-              data-object="{{ object.uuid }}"
-              title="Select an older version row, then restore that content to the vault and local workspace as a new check-in.">Revert to selected…</button>
-      <span class="muted small" id="revert-version-hint">Select an older version to restore it.</span>
-    </div>
-    {% endif %}
 
     <div class="subtab-panel" id="subpanel-files">
       <table class="grid" id="history-files-table">
@@ -572,6 +530,50 @@
     </div>
   </section>
 </article>
+
+<footer class="toolbar" id="detail-toolbar">
+  <div class="toolbar-actions">
+    <span class="toolbar-tip creo-session-only" title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
+      <button type="button" class="btn" id="set-creo-dir-btn" data-workspace="{{ workspace_path }}" disabled>Set Working Directory</button>
+    </span>
+    <button type="button" class="btn" id="open-btn" data-uuid="{{ object.uuid }}">Open</button>
+    <span class="toolbar-tip" title="Open this project's local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">
+      <button type="button" class="btn" id="open-workspace-btn" data-project="{{ project.uuid }}" data-vault-folder="{{ project.vault_folder or project.uuid }}" data-folder="{{ workspace_folder }}">Open Workspace</button>
+    </span>
+    <button type="button" class="btn" id="checkout-btn" data-uuid="{{ object.uuid }}" {% if not object.can_checkout %}disabled{% endif %}>Checkout</button>
+    <button type="button" class="btn" id="checkin-btn" data-uuid="{{ object.uuid }}" data-project="{{ project.uuid }}" {% if not object.can_checkin %}disabled{% endif %}>Check In</button>
+    <button type="button" class="btn" id="undo-btn" data-uuid="{{ object.uuid }}" {% if not object.owned_by_me %}disabled{% endif %}>Undo Checkout</button>
+    {% if history|length > 1 %}
+    <span class="toolbar-tip" id="revert-version-tip" title="Select an older History row, then restore that version’s content and filename to the vault and local workspace as a new check-in.">
+      <button type="button" class="btn" id="revert-version-btn" disabled hidden
+              data-object="{{ object.uuid }}">Revert to selected…</button>
+    </span>
+    <span class="muted small" id="revert-version-hint" hidden>Select an older version to restore it.</span>
+    {% endif %}
+    <div class="toolbar-menu" id="remove-menu">
+      <button type="button" class="btn btn-danger toolbar-menu-toggle" id="remove-menu-btn"
+              aria-haspopup="menu" aria-expanded="false"
+              title="Remove vault copies or remove this file from the project.">Remove ▾</button>
+      <div class="toolbar-menu-panel" role="menu" hidden>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn"
+                data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}"
+                title="Delete CreoPDM vault copies of this file. The original in your project folder is not deleted. If you have it checked out, that checkout is cancelled.">Remove from Vault</button>
+        <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-project-btn"
+                data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}"
+                data-relative-path="{{ object.relative_path }}" data-filename="{{ object.filename }}"
+                title="Remove this file from the project list and delete CreoPDM vault copies. The original in your project folder is not deleted.">Remove from Project</button>
+      </div>
+    </div>
+  </div>
+  <div class="toolbar-messages">
+    <p class="error" id="toolbar-error" hidden></p>
+    <div class="toolbar-ok-row" id="toolbar-ok-row" hidden>
+      <p class="ok" id="toolbar-ok"></p>
+      <button type="button" class="btn btn-primary" id="resume-metadata-collect-btn" hidden>Resume</button>
+      <button type="button" class="btn" id="cancel-metadata-collect-btn" hidden>Cancel</button>
+    </div>
+  </div>
+</footer>
 
 <dialog id="checkin-dialog" class="dialog">
   <form method="dialog" id="checkin-form">

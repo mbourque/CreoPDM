@@ -282,7 +282,25 @@ class CheckinService:
                 details={"version": version_uuid},
             ) from last_error
 
-        dest_rel = source_rel.replace("\\", "/").lstrip("/")
+        # Always restore to the version's recorded path/name (e.g. …/start_part.prt.1),
+        # not whichever path git show happened to accept for reading bytes.
+        dest_rel = ""
+        for raw in (target.relative_path, target.filename):
+            text = str(raw or "").replace("\\", "/").strip().lstrip("/")
+            if not text:
+                continue
+            if "/" not in text:
+                parent = Path(str(obj.relative_path or "").replace("\\", "/")).parent.as_posix()
+                if parent and parent != ".":
+                    text = f"{parent}/{Path(text).name}"
+                else:
+                    text = Path(text).name
+            dest_rel = text
+            break
+        if not dest_rel:
+            dest_rel = source_rel.replace("\\", "/").lstrip("/")
+
+        tip_rel = str(obj.relative_path or "").replace("\\", "/").strip().lstrip("/")
         with self._locks.acquire(project.uuid):
             existing = self._checkouts.active_for(session, obj.id)
             if existing is not None:
@@ -317,10 +335,25 @@ class CheckinService:
             # (e.g. .prt.1) instead of the tip (.prt.3). Leave obj.filename as the tip
             # so check-in still git-rms the old tip path when the basename changes.
             self._workspaces.purge_newer_creo_saves(project, dest)
+            if tip_rel and tip_rel != dest_rel:
+                tip_path = self._workspaces.file_path(project, tip_rel)
+                try:
+                    tip_resolved = tip_path.resolve()
+                    dest_resolved = dest.resolve()
+                except OSError:
+                    tip_resolved = tip_path
+                    dest_resolved = dest
+                if tip_path.is_file() and tip_resolved != dest_resolved:
+                    try:
+                        set_file_writable(tip_path)
+                        tip_path.unlink()
+                        logger.info("Removed tip path after revert: %s", tip_path)
+                    except OSError as exc:
+                        logger.warning("Could not remove tip path %s: %s", tip_path, exc)
             logger.info(
                 "Restored %s bytes from %s@%s → %s for revert to %s",
                 len(data),
-                dest_rel,
+                source_rel,
                 (target.git_commit_hash or "")[:8],
                 dest,
                 display,

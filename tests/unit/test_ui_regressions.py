@@ -456,13 +456,21 @@ def test_history_revert_only_for_older_versions():
     )
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
     assert "{% if history|length > 1 %}" in detail
     assert 'id="revert-version-btn"' in detail
+    assert 'id="detail-toolbar"' in detail
+    assert 'class="detail-section-title">History</h2>' in detail
+    assert "history-actions" not in detail
+    assert "detail-actions" not in detail
     assert 'data-can-revert=' in detail
     assert "version-row" in detail
     assert "function syncRevertVersionButton" in script
+    assert "function syncDetailToolbar" in script
+    assert "setToolbarActionVisible(btn, canRevert)" in script
     assert "row.dataset.canRevert === \"1\"" in script or "dataset.canRevert === \"1\"" in script
     assert "/versions/" in script and "/revert" in script
+    assert "background: var(--panel)" in css
     assert "Choose an older version to revert" in (
         (ROOT / "src" / "creopdm" / "services" / "checkin_service.py").read_text(encoding="utf-8")
     )
@@ -475,6 +483,7 @@ def test_history_revert_only_for_older_versions():
     assert "Revert to selected" in docs
     assert "Offer Revert for the current version" in docs
     assert "keep a newer `.prt.N` name while only swapping bytes" in docs
+    assert "bottom toolbar" in docs.lower() or "at the bottom" in docs.lower()
 
 
 def test_toolbar_hides_inactive_actions():

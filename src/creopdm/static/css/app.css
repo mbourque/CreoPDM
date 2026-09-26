@@ -604,10 +604,6 @@ span.object-open:hover { text-decoration: underline; }
 .grid tr.is-latest td { background: #eef6f1; }
 .grid tr.is-pending td { background: #fff6e8; }
 .grid tr.version-row { cursor: pointer; }
-.history-actions {
-  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
-  margin: 0.35rem 0 0.75rem;
-}
 .grid tr.object-row:hover td,
 .grid tr.queue-row:hover td,
 .grid tr.is-pending:hover td {
@@ -637,7 +633,6 @@ span.object-open:hover { text-decoration: underline; }
 .checkout-state[data-state="other"]::before { background: #9b1c1c; }
 .checkout-state[data-state="available"]::before { background: var(--ok); }
 .detect-list { margin: 0; padding-left: 1.1rem; color: var(--ink); }
-.detail-actions { margin: 0.8rem 0 0.4rem; }
 .state[data-state="IN_WORK"]::before { background: var(--accent-2); }
 .state[data-state="MODIFIED"]::before { background: var(--warn); }
 .state[data-state="RELEASED"]::before { background: var(--ok); }
@@ -853,7 +848,13 @@ body.is-file-drag #file-drop-overlay {
 }
 #chosen-file-summary { text-align: left; margin: 0.35rem 0 0; }
 
-.detail { padding: 1.2rem 1.4rem 2rem; flex: 1; min-height: 0; overflow: auto; }
+.detail {
+  padding: 1.2rem 1.4rem 2rem;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--panel);
+}
 .crumb { display: flex; gap: 0.4rem; color: var(--muted); margin-bottom: 0.8rem; }
 .detail-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
 .detail-meta { display: flex; gap: 0.6rem; align-items: center; }
@@ -870,7 +871,8 @@ body.is-file-drag #file-drop-overlay {
   border: 1px solid var(--line); background: white; padding: 0.32rem 0.65rem;
   cursor: pointer; color: var(--muted); border-radius: 4px 4px 0 0;
 }
-.subtab.is-active { color: var(--ink); border-bottom-color: white; font-weight: 600; background: #f3f6f8; }
+.subtab.is-active { color: var(--ink); border-bottom-color: white; font-weight: 600; background: white; }
+#panel-history .detail-section-title { margin-top: 0.15rem; }
 .filename-cell {
   font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.88rem;
   white-space: normal; overflow-wrap: anywhere; word-break: break-all;

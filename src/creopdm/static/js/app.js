@@ -7198,12 +7198,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function syncRevertVersionButton() {
     const btn = $("#revert-version-btn");
     const hint = $("#revert-version-hint");
+    const tip = $("#revert-version-tip");
     if (!btn) return;
+    const historyPanel = $("#panel-history");
+    const historyVisible = Boolean(historyPanel && !historyPanel.hidden);
     const row = selectedHistoryVersionRow();
-    const canRevert = Boolean(row && row.dataset.canRevert === "1" && row.dataset.versionUuid);
-    btn.disabled = !canRevert;
+    const canRevert = Boolean(
+      historyVisible && row && row.dataset.canRevert === "1" && row.dataset.versionUuid
+    );
+    setToolbarActionVisible(btn, canRevert);
+    if (tip) tip.hidden = !canRevert;
     if (hint) {
-      if (!row) {
+      hint.hidden = !historyVisible;
+      if (!historyVisible) {
+        hint.textContent = "";
+      } else if (!row) {
         hint.textContent = "Select an older version to restore it.";
       } else if (row.dataset.canRevert !== "1") {
         hint.textContent = "That is the current version — choose an older row.";
@@ -7211,6 +7220,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         hint.textContent = `Ready to restore ${row.dataset.versionDisplay || "this version"} to vault and local.`;
       }
     }
+  }
+
+  function syncDetailToolbar() {
+    if (isListPage || !$("article.detail")) return;
+    // Hide inactive actions (same rule as Files). Keep Set Working Directory visible.
+    setToolbarActionVisible(openBtn, true);
+    setToolbarActionVisible(openWorkspaceBtn, true);
+    setToolbarActionVisible(checkoutBtn, Boolean(checkoutBtn && !checkoutBtn.disabled));
+    setToolbarActionVisible(checkinBtn, Boolean(checkinBtn && !checkinBtn.disabled));
+    setToolbarActionVisible(undoBtn, Boolean(undoBtn && !undoBtn.disabled));
+    setToolbarActionVisible(removeMenuBtn, true);
+    if (setCreoDirBtn) {
+      setCreoDirBtn.hidden = false;
+      const tip = setCreoDirBtn.closest(".toolbar-tip");
+      if (tip) tip.hidden = false;
+    }
+    syncRevertVersionButton();
   }
 
   function selectHistoryVersionRow(row) {
@@ -7241,8 +7267,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!btn || btn.disabled || !objectId || !versionId || row?.dataset.canRevert !== "1") return;
     const ok = window.confirm(
       `Revert to ${display}?\n\n`
-        + "This restores that content to the vault and local workspace as a new check-in. "
-        + "The current tip stays in history."
+        + "This restores that content and filename (including Creo .prt.N) to the vault "
+        + "and local workspace as a new check-in. The current tip stays in history."
     );
     if (!ok) return;
     showError($("#toolbar-error"), "");
@@ -7281,6 +7307,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
 
   syncRevertVersionButton();
+  syncDetailToolbar();
 
   document.querySelectorAll(".tabs .tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -7294,6 +7321,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       else if (name === "checked-out") void loadCheckedOutTab();
       else if (name === "where-used") void loadWhereUsedTab();
       else refreshTabMetrics();
+      syncRevertVersionButton();
     });
   });
 

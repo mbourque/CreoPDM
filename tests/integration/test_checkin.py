@@ -752,13 +752,22 @@ def test_revert_restores_creo_save_number_not_current_tip(client, repo_parent, d
     project = client.post("/api/projects", json={"name": "Creo Saves"}).json()
     created = client.post(
         f"/api/projects/{project['uuid']}/objects",
-        files={"file": ("start_part.prt.1", b"v1-bytes", "application/octet-stream")},
-        data={"comment": "Add save 1"},
+        files={
+            "file": (
+                "start_part.prt.1",
+                b"v1-bytes",
+                "application/octet-stream",
+            )
+        },
+        data={"comment": "Add save 1", "relative_path": "model-templates/start_part.prt.1"},
     )
     assert created.status_code == 201, created.text
     obj = created.json()
     object_id = obj["uuid"]
-    vault = data_dir / "vaults" / project["uuid"]
+    assert obj["filename"] == "start_part.prt.1"
+    assert "model-templates" in (obj.get("relative_path") or "")
+    vault = data_dir / "vaults" / project["uuid"] / "model-templates"
+    vault.mkdir(parents=True, exist_ok=True)
 
     assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
     (vault / "start_part.prt.1").write_bytes(b"v1-bytes")
@@ -788,6 +797,7 @@ def test_revert_restores_creo_save_number_not_current_tip(client, repo_parent, d
     assert reverted.status_code == 200, reverted.text
     body = reverted.json()
     assert body["filename"] == "start_part.prt.1"
+    assert body["relative_path"].endswith("start_part.prt.1")
     assert (vault / "start_part.prt.1").read_bytes() == b"v1-bytes"
     assert not (vault / "start_part.prt.3").exists()
     assert not (vault / "start_part.prt.2").exists()
