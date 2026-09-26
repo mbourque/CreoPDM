@@ -447,6 +447,13 @@ def test_toolbar_hides_inactive_actions():
     assert "openBtn.disabled =" not in sync
     assert "| Hidden when |" in docs
     assert "are **hidden** (not greyed out)" in docs
+    # Set Working Directory stays visible (discoverable) even when disabled.
+    creo = _between(script, "async function refreshCreoStatusPill(", "function showCreoSessionControls(")
+    assert "Keep Set Working Directory in the toolbar" in creo
+    assert "el.hidden = false" in creo
+    assert "btn.hidden = false" in creo
+    assert 'btn.id === "set-creo-dir-btn"' in creo
+    assert "Never hidden — stays greyed when not usable" in docs
 
 
 def test_folder_row_click_selects_double_click_opens():

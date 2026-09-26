@@ -4377,16 +4377,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (window.__creopdmSoftNavBusy || softNavBusy) return null;
     const inSession = hostedCreoJS();
     document.querySelectorAll(".creo-session-only").forEach((el) => {
+      // Keep Set Working Directory in the toolbar (greyed when unusable) so it
+      // stays discoverable; other inactive toolbar actions stay hidden.
+      el.hidden = false;
       const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
-      if (!btn) {
-        el.hidden = !inSession;
+      if (!btn) return;
+      btn.hidden = false;
+      if (!inSession) {
+        btn.disabled = true;
         return;
       }
-      const active =
-        inSession && (btn.id !== "set-creo-dir-btn" || Boolean(btn.dataset.workspace));
-      el.hidden = !active;
-      btn.hidden = !active;
-      btn.disabled = !active;
+      if (btn.id === "set-creo-dir-btn") {
+        btn.disabled = !btn.dataset.workspace;
+      } else {
+        btn.disabled = false;
+      }
     });
     const pill = $("#creo-status");
     if (!pill) return null;
@@ -4444,19 +4449,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function syncCreoSessionControlsFromBridge() {
-    /** Soft nav only: show/hide toolbar Creo buttons. Do not probe or touch the pill. */
+    /** Soft nav only: re-enable toolbar Creo buttons. Do not probe or touch the pill. */
     const inSession = hostedCreoJS();
     document.querySelectorAll(".creo-session-only").forEach((el) => {
+      el.hidden = false;
       const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
-      if (!btn) {
-        el.hidden = !inSession;
+      if (!btn) return;
+      btn.hidden = false;
+      if (!inSession) {
+        btn.disabled = true;
         return;
       }
-      const active =
-        inSession && (btn.id !== "set-creo-dir-btn" || Boolean(btn.dataset.workspace));
-      el.hidden = !active;
-      btn.hidden = !active;
-      btn.disabled = !active;
+      if (btn.id === "set-creo-dir-btn") {
+        btn.disabled = !btn.dataset.workspace;
+      } else {
+        btn.disabled = false;
+      }
     });
   }
 

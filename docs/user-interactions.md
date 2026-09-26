@@ -101,6 +101,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 
 | Button | Available when | Hidden when |
 |--------|----------------|-------------|
+| Set Working Directory | Inside Creo’s browser with a project workspace | Never hidden — stays greyed when not usable |
 | Add ▾ | A project is open | No project |
 | Open ▾ | A project is open (workspace) and/or a file can be opened | No project and nothing to open |
 | Open selected… | A file you can open is selected | Nothing useful selected |
@@ -112,7 +113,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 | Remove ▾ | Something can be removed | Nothing selected |
 | Remove from Project | Files **and/or folders** selected (including empty folders) | Nothing selected |
 
-Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now.
+Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Exception: **Set Working Directory** always stays visible so it remains easy to find; it is greyed out outside Creo’s browser or when no project workspace is ready.
 
 Only one ▾ menu open at a time. Click outside or press Escape to close.
 
