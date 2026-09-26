@@ -156,9 +156,11 @@
           <dt>Origin</dt><dd class="detail-path">{{ identity.origin }}</dd>
           {% endif %}
           <dt>Date created</dt>
-          <dd>{% if object.created_at %}{{ local_time(object.created_at) }}{% else %}—{% endif %}</dd>
+          <dd>{% if object.created_at %}<span title="{{ local_time_pretty(object.created_at) }}">{{ local_time(object.created_at) }}</span>{% else %}—{% endif %}</dd>
+          {% if object.updated_at and (not object.created_at or local_time(object.updated_at) != local_time(object.created_at)) %}
           <dt>Date modified</dt>
-          <dd>{% if object.updated_at %}{{ local_time(object.updated_at) }}{% else %}—{% endif %}</dd>
+          <dd><span title="{{ local_time_pretty(object.updated_at) }}">{{ local_time(object.updated_at) }}</span></dd>
+          {% endif %}
           <dt>Size</dt><dd>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</dd>
         </dl>
       </section>
@@ -496,7 +498,7 @@
             <td>{{ version.creo_release or "" }}</td>
             <td>{{ version.file_size | byte_size }}</td>
             <td>{{ version.created_by }}</td>
-            <td>{% if version.created_at %}{{ local_time(version.created_at) }}{% else %}—{% endif %}</td>
+            <td>{% if version.created_at %}<span title="{{ local_time_pretty(version.created_at) }}">{{ local_time(version.created_at) }}</span>{% else %}—{% endif %}</td>
             <td title="{{ version.comment or '' }}">{{ version.comment or "—" }}</td>
           </tr>
           {% else %}

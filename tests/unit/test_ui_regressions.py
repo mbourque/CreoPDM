@@ -469,11 +469,11 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert "Content hash" not in overview
     assert "h[:12]" not in overview
     assert "<dt>Date created</dt>" in overview
-    assert "<dt>Date modified</dt>" in overview
-    assert "local_time(object.created_at)" in overview
-    assert "local_time(object.updated_at)" in overview
+    assert "local_time_pretty(object.created_at)" in overview
+    assert "local_time(object.updated_at) != local_time(object.created_at)" in overview
     assert "omits content hash" in docs
     assert "Date created" in docs and "Date modified" in docs
+    assert "hide Date modified when it matches Date created" in docs or "same as Date created" in docs
     assert "show content hash on Overview" in docs
     assert ".detail .filename-cell" in css
     assert "font-family: inherit" in css
@@ -496,6 +496,10 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert 'td class="mono"' not in detail
     assert 'th class="mono"' not in detail
     assert "object-open mono bom-name" not in detail
+    script = _app_js()
+    assert "function formatStampPretty" in script
+    assert "function formatLocalPrettyDate" in script
+    assert "local_time_pretty" in APP_HTML.read_text(encoding="utf-8")
 
 
 def test_history_revert_only_for_older_versions():

@@ -25,7 +25,7 @@ from creopdm.utils.classify import display_type_label, resolve_type_icon, type_i
 from creopdm.utils.files import format_byte_size
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
 from creopdm.utils.native_dialog import native_picker_available
-from creopdm.utils.timefmt import format_local
+from creopdm.utils.timefmt import format_local, format_local_pretty
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 _template_env = Environment(
@@ -33,9 +33,11 @@ _template_env = Environment(
     autoescape=select_autoescape(),
 )
 _template_env.filters["local_time"] = format_local
+_template_env.filters["local_time_pretty"] = format_local_pretty
 _template_env.filters["byte_size"] = format_byte_size
 _template_env.filters["tojson"] = lambda value: json.dumps(value, separators=(",", ":"))
 _template_env.globals["local_time"] = format_local
+_template_env.globals["local_time_pretty"] = format_local_pretty
 _template_env.globals["byte_size"] = format_byte_size
 _template_env.globals["type_icon"] = resolve_type_icon
 _template_env.globals["type_label"] = display_type_label
@@ -115,6 +117,7 @@ _PAGE_DEFAULTS = {
     "checkoutable_count": 0,
     "checkin_queue": {"saves": [], "new_files": []},
     "local_time": format_local,
+    "local_time_pretty": format_local_pretty,
     "creo_label": "Not Connected",
     "creo_open_name": "OS",
     "creo_open_mode": "association",
@@ -132,8 +135,10 @@ _CREO_OPEN_NAMES = {
 
 def render(request: Request, name: str, context: dict) -> HTMLResponse:
     templates.env.filters["local_time"] = format_local
+    templates.env.filters["local_time_pretty"] = format_local_pretty
     templates.env.filters["byte_size"] = format_byte_size
     templates.env.globals["local_time"] = format_local
+    templates.env.globals["local_time_pretty"] = format_local_pretty
     templates.env.globals["byte_size"] = format_byte_size
     payload = {"request": request, **_PAGE_DEFAULTS, **context}
     try:

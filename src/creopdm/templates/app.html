@@ -163,7 +163,7 @@
             <td></td>
             <td title="Folder">Folder</td>
             <td></td>
-            <td title="{% if entry.modified %}{{ local_time(entry.modified) }}{% else %}—{% endif %}">{% if entry.modified %}{{ local_time(entry.modified) }}{% else %}—{% endif %}</td>
+            <td title="{% if entry.modified %}{{ local_time_pretty(entry.modified) }}{% endif %}">{% if entry.modified %}{{ local_time(entry.modified) }}{% else %}—{% endif %}</td>
             <td></td>
           </tr>
           {% else %}
@@ -206,7 +206,7 @@
             <td title="{{ 'Modified' if state_modified else obj.lifecycle_state.replace('_', ' ').title() }}"><span class="state" data-state="{{ 'MODIFIED' if state_modified else obj.lifecycle_state }}" data-lifecycle-state="{{ obj.lifecycle_state }}">{{ 'Modified' if state_modified else obj.lifecycle_state.replace('_', ' ').title() }}</span></td>
             <td title="{{ obj.type_label }}">{{ obj.type_label }}</td>
             <td title="{{ obj.creo_release or '' }}">{{ obj.creo_release or "" }}</td>
-            <td title="{% if obj.updated_at %}{{ local_time(obj.updated_at) }}{% else %}—{% endif %}">{% if obj.updated_at %}{{ local_time(obj.updated_at) }}{% else %}—{% endif %}</td>
+            <td title="{% if obj.updated_at %}{{ local_time_pretty(obj.updated_at) }}{% endif %}">{% if obj.updated_at %}{{ local_time(obj.updated_at) }}{% else %}—{% endif %}</td>
             <td title="{{ obj.checkout_status }}">
               <span class="checkout-state" data-state="{% if obj.owned_by_me %}mine{% elif obj.checkout_user %}other{% else %}available{% endif %}">
                 {{ obj.checkout_status }}
@@ -282,7 +282,7 @@
               </td>
               <td>{{ item.next_display }} · not checked in</td>
               <td title="{{ item.file_size }} bytes">{{ item.file_size | byte_size }}</td>
-              <td>{{ item.saved_at }}</td>
+              <td{% if item.saved_at %} title="{{ local_time_pretty(item.saved_at) }}"{% endif %}>{{ item.saved_at }}</td>
             </tr>
             {% endfor %}
             {% for item in checkin_queue.new_files %}
@@ -304,7 +304,7 @@
               </td>
               <td>Not in the project yet. Select and click Add.</td>
               <td title="{{ item.size }} bytes">{{ item.size | byte_size }}</td>
-              <td>{{ item.saved_at or "—" }}</td>
+              <td{% if item.saved_at %} title="{{ local_time_pretty(item.saved_at) }}"{% endif %}>{{ item.saved_at or "—" }}</td>
             </tr>
             {% endfor %}
             {% if not checkin_queue.saves and not checkin_queue.new_files %}

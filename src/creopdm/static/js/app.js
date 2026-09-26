@@ -2911,6 +2911,44 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
+  function formatStampPretty(iso) {
+    if (!iso) return "";
+    let raw = String(iso).trim();
+    // Already a short local stamp from the server (YYYY-MM-DD HH:MM).
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(raw)) {
+      const [ymd, hm] = raw.split(" ");
+      const [y, mo, d] = ymd.split("-").map((n) => Number(n));
+      const [hh, mm] = hm.split(":").map((n) => Number(n));
+      const date = new Date(y, mo - 1, d, hh, mm);
+      if (Number.isNaN(date.getTime())) return "";
+      return formatLocalPrettyDate(date);
+    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+      raw += "Z";
+    }
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return "";
+    return formatLocalPrettyDate(date);
+  }
+
+  function formatLocalPrettyDate(date) {
+    const weekdays = [
+      "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+    ];
+    const months = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December",
+    ];
+    const hour24 = date.getHours();
+    const hour12 = hour24 % 12 || 12;
+    const ampm = hour24 < 12 ? "am" : "pm";
+    const minute = String(date.getMinutes()).padStart(2, "0");
+    return (
+      `${weekdays[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()} `
+      + `at ${hour12}:${minute}${ampm}`
+    );
+  }
+
   function padIteration(value) {
     return String(Number(value) || 0).padStart(6, "0");
   }
@@ -2972,6 +3010,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const folder = folderOfPath(relative);
     const filename = String(obj.filename || "");
     const stamp = formatStamp(obj.updated_at);
+    const stampPretty = formatStampPretty(obj.updated_at);
     const state = String(obj.lifecycle_state || "");
     const stateLabel = titleCaseWords(state);
     const typeLabel = String(obj.type_label || "");
@@ -3025,7 +3064,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             <td title="${escapeHtml(stateDisplayLabel)}"><span class="state" data-state="${escapeHtml(stateDisplay)}" data-lifecycle-state="${escapeHtml(state)}">${escapeHtml(stateDisplayLabel)}</span></td>
             <td title="${escapeHtml(typeLabel)}">${escapeHtml(typeLabel)}</td>
             <td title="${escapeHtml(creo)}">${escapeHtml(creo)}</td>
-            <td title="${escapeHtml(stamp || "—")}">${escapeHtml(stamp || "—")}</td>
+            <td title="${escapeHtml(stampPretty || stamp || "")}">${escapeHtml(stamp || "—")}</td>
             <td title="${escapeHtml(checkout)}">
               <span class="checkout-state" data-state="${checkoutKind}">${escapeHtml(checkout)}</span>
             </td>
@@ -7065,6 +7104,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             }
           } else {
             cell.textContent = text;
+            // Date column (last) — pretty hover when the stamp is parseable.
+            if (index === values.length - 1 && text) {
+              const pretty = formatStampPretty(text);
+              if (pretty) cell.title = pretty;
+            }
           }
           row.appendChild(cell);
         });
