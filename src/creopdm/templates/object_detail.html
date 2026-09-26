@@ -59,6 +59,10 @@
     <span>{{ object.filename }}</span>
   </nav>
 
+  <header class="detail-tab-title" id="detail-tab-title" hidden>
+    <h1 id="detail-tab-title-text">History</h1>
+  </header>
+
   <header class="detail-head">
     <div>
       <h1><button type="button" class="object-open" data-uuid="{{ object.uuid }}" title="Open this file">{{ object.filename }}</button></h1>
@@ -411,10 +415,6 @@
   </section>
 
   <section class="tab-panel" id="panel-history" hidden>
-    <header class="panel-heading">
-      <h1>History</h1>
-      <p class="muted">Versions of this file in the vault. Select an older row to restore it.</p>
-    </header>
     {% if workspace_pending %}
     <p class="pending-note">
       {% if workspace_pending.newer_save %}

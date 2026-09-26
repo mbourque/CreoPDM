@@ -855,8 +855,25 @@ body.is-file-drag #file-drop-overlay {
   overflow: auto;
   background: var(--panel);
 }
-.crumb { display: flex; gap: 0.4rem; color: var(--muted); margin-bottom: 0.8rem; }
+.crumb { display: flex; gap: 0.4rem; color: var(--muted); margin-bottom: 0.55rem; }
+.detail-tab-title {
+  margin: 0 0 0.35rem;
+}
+.detail-tab-title[hidden] { display: none !important; }
+.detail-tab-title h1 {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
 .detail-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.detail-head h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 650;
+}
 .detail-meta { display: flex; gap: 0.6rem; align-items: center; }
 .rev { font-weight: 700; font-size: 1.1rem; }
 .tabs { display: flex; gap: 0.2rem; margin: 0.3rem 0 0.25rem; border-bottom: 1px solid var(--line); }
@@ -872,23 +889,6 @@ body.is-file-drag #file-drop-overlay {
   cursor: pointer; color: var(--muted); border-radius: 4px 4px 0 0;
 }
 .subtab.is-active { color: var(--ink); border-bottom-color: white; font-weight: 600; background: white; }
-.panel-heading {
-  margin: 0 0 0.85rem;
-  padding: 0 0 0.65rem;
-  border-bottom: 1px solid var(--line);
-}
-.panel-heading h1 {
-  margin: 0;
-  font-size: 1.45rem;
-  font-weight: 700;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-}
-.panel-heading .muted {
-  margin: 0.35rem 0 0;
-  font-size: 0.92rem;
-}
-#panel-history .detail-section-title { margin-top: 0.15rem; }
 .filename-cell {
   font-family: Consolas, "Cascadia Mono", monospace; font-size: 0.88rem;
   white-space: normal; overflow-wrap: anywhere; word-break: break-all;

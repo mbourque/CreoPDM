@@ -460,24 +460,28 @@ def test_history_revert_only_for_older_versions():
     assert "{% if history|length > 1 %}" in detail
     assert 'id="revert-version-btn"' in detail
     assert 'id="detail-toolbar"' in detail
-    assert 'class="panel-heading"' in detail
-    assert "<h1>History</h1>" in detail
+    assert 'id="detail-tab-title"' in detail
+    assert 'id="detail-tab-title-text"' in detail
+    assert ">History</h1>" in detail
     assert 'id="open-menu-btn"' in detail and "Open ▾" in detail
     assert 'id="checkout-menu-btn"' in detail and "Checkout ▾" in detail
     assert 'id="checkin-menu-btn"' in detail and "Check In ▾" in detail
     assert "history-actions" not in detail
     assert "detail-actions" not in detail
+    assert "panel-heading" not in detail
     assert 'data-can-revert=' in detail
     assert "version-row" in detail
     assert "function syncRevertVersionButton" in script
     assert "function syncDetailToolbar" in script
+    assert "function syncDetailTabTitle" in script
+    assert 'name === "history"' in script
     assert "setToolbarActionVisible(btn, canRevert)" in script
     assert "setToolbarActionVisible(openMenuBtn," in script
     assert "You do not need to Check In afterward" in script
     assert "row.dataset.canRevert === \"1\"" in script or "dataset.canRevert === \"1\"" in script
     assert "/versions/" in script and "/revert" in script
     assert "background: var(--panel)" in css
-    assert ".panel-heading" in css
+    assert ".detail-tab-title" in css
     assert "Choose an older version to revert" in (
         (ROOT / "src" / "creopdm" / "services" / "checkin_service.py").read_text(encoding="utf-8")
     )

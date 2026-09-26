@@ -7356,8 +7356,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   });
 
+  function syncDetailTabTitle(tabName) {
+    const title = $("#detail-tab-title");
+    const text = $("#detail-tab-title-text");
+    if (!title) return;
+    const name = tabName || document.querySelector(".tabs .tab.is-active")?.dataset.tab || "";
+    if (name === "history") {
+      if (text) text.textContent = "History";
+      title.hidden = false;
+    } else {
+      title.hidden = true;
+    }
+  }
+
   syncRevertVersionButton();
   syncDetailToolbar();
+  syncDetailTabTitle();
 
   document.querySelectorAll(".tabs .tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -7371,6 +7385,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       else if (name === "checked-out") void loadCheckedOutTab();
       else if (name === "where-used") void loadWhereUsedTab();
       else refreshTabMetrics();
+      syncDetailTabTitle(name);
       syncRevertVersionButton();
     });
   });
