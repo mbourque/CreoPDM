@@ -450,11 +450,15 @@ def test_open_model_uses_nested_cache_folder():
 
 
 def test_mobile_browse_css_is_minimal():
-    """Narrow screens hide chrome/toolbar and trim file-table columns (no sideways scroll)."""
+    """Phone browse mode (incl. landscape) hides chrome and trims columns."""
     css = APP_CSS.read_text(encoding="utf-8")
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "@media (max-width: 640px)" in css
-    mobile = css.split("@media (max-width: 640px)", 1)[1]
+    assert "pointer: coarse" in css
+    assert "orientation: landscape" in css
+    assert "max-height: 560px" in css
+    # Split after the multi-condition media query opener.
+    mobile = css.split("max-height: 560px))", 1)[1]
     assert ".topbar .status-cluster" in mobile
     assert "#new-project-btn" in mobile
     assert ".project-settings" in mobile
@@ -472,6 +476,7 @@ def test_mobile_browse_css_is_minimal():
     assert "only folders" in docs
     assert "browse-only" in docs
     assert "Name** and **Rev**" in docs
+    assert "rotating the phone" in docs
 
 
 def test_details_overview_dedupes_identity_and_unifies_fonts():
