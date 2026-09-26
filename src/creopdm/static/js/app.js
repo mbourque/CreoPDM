@@ -4387,8 +4387,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     document.querySelectorAll(".creo-session-only").forEach((el) => {
       // Keep Set Working Directory in the toolbar (greyed when unusable) so it
       // stays discoverable; other inactive toolbar actions stay hidden.
-      el.hidden = false;
+      // Exception: History tab hides it (revert-focused toolbar).
       const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
+      const onHistory = Boolean($("#panel-history") && !$("#panel-history").hidden);
+      if (onHistory && btn?.id === "set-creo-dir-btn") {
+        el.hidden = true;
+        if (btn) btn.hidden = true;
+        return;
+      }
+      el.hidden = false;
       if (!btn) return;
       btn.hidden = false;
       if (!inSession) {
@@ -4465,8 +4472,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     /** Soft nav only: re-enable toolbar Creo buttons. Do not probe or touch the pill. */
     const inSession = hostedCreoJS();
     document.querySelectorAll(".creo-session-only").forEach((el) => {
-      el.hidden = false;
       const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
+      const onHistory = Boolean($("#panel-history") && !$("#panel-history").hidden);
+      if (onHistory && btn?.id === "set-creo-dir-btn") {
+        el.hidden = true;
+        if (btn) btn.hidden = true;
+        return;
+      }
+      el.hidden = false;
       if (!btn) return;
       btn.hidden = false;
       if (!inSession) {
@@ -7210,16 +7223,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (tip) tip.hidden = !canRevert;
   }
 
-  function historyOlderRowSelected() {
+  function historyTabActive() {
     const historyPanel = $("#panel-history");
-    if (!historyPanel || historyPanel.hidden) return false;
+    return Boolean(historyPanel && !historyPanel.hidden);
+  }
+
+  function historyOlderRowSelected() {
+    if (!historyTabActive()) return false;
     const row = selectedHistoryVersionRow();
     return Boolean(row && row.dataset.canRevert === "1");
   }
 
   function syncDetailToolbar() {
     if (isListPage || !$("article.detail")) return;
-    // Same ▾ menus and hide-inactive rules as the Files page.
+    const onHistory = historyTabActive();
+    // History tab: only Open (current tip), Check In when needed, and Revert.
+    // Hide Set Working Directory, Checkout ▾, and Remove ▾.
+    if (setCreoDirBtn) {
+      const tip = setCreoDirBtn.closest(".toolbar-tip");
+      if (onHistory) {
+        setCreoDirBtn.hidden = true;
+        if (tip) tip.hidden = true;
+      } else {
+        setCreoDirBtn.hidden = false;
+        if (tip) tip.hidden = false;
+      }
+    }
     // Hide Open ▾ while an older History row is selected — Open is current tip only.
     const olderHistory = historyOlderRowSelected();
     const canOpen = !olderHistory;
@@ -7228,18 +7257,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     setToolbarActionVisible(openBtn, canOpen);
     setToolbarActionVisible(openWorkspaceBtn, canOpenWorkspace);
     setToolbarActionVisible(openMenuBtn, canOpen || canOpenWorkspace);
-    const canCheckout = Boolean(checkoutBtn && !checkoutBtn.disabled);
-    const canCheckoutProject =
-      Boolean(checkoutProjectBtn?.dataset.project) &&
-      Number(checkoutProjectBtn?.dataset.checkoutable || 0) > 0;
-    const canUndo = Boolean(undoBtn && !undoBtn.disabled);
-    setToolbarActionVisible(checkoutBtn, canCheckout);
-    setToolbarActionVisible(checkoutProjectBtn, canCheckoutProject);
-    setToolbarActionVisible(undoBtn, canUndo);
-    setToolbarActionVisible(
-      checkoutMenuBtn,
-      canCheckout || canCheckoutProject || canUndo
-    );
+    if (onHistory) {
+      setToolbarActionVisible(checkoutBtn, false);
+      setToolbarActionVisible(checkoutProjectBtn, false);
+      setToolbarActionVisible(undoBtn, false);
+      setToolbarActionVisible(checkoutMenuBtn, false);
+      setToolbarActionVisible(removeMenuBtn, false);
+    } else {
+      const canCheckout = Boolean(checkoutBtn && !checkoutBtn.disabled);
+      const canCheckoutProject =
+        Boolean(checkoutProjectBtn?.dataset.project) &&
+        Number(checkoutProjectBtn?.dataset.checkoutable || 0) > 0;
+      const canUndo = Boolean(undoBtn && !undoBtn.disabled);
+      setToolbarActionVisible(checkoutBtn, canCheckout);
+      setToolbarActionVisible(checkoutProjectBtn, canCheckoutProject);
+      setToolbarActionVisible(undoBtn, canUndo);
+      setToolbarActionVisible(
+        checkoutMenuBtn,
+        canCheckout || canCheckoutProject || canUndo
+      );
+      setToolbarActionVisible(removeMenuBtn, true);
+    }
     const pendingSaves = Number(
       checkinBtn?.dataset.pendingSaves || checkinMenuBtn?.dataset.pendingSaves || 0
     );
@@ -7256,12 +7294,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     setToolbarActionVisible(checkinBtn, canCheckin);
     setToolbarActionVisible(checkinProjectBtn, canCheckinProject);
     setToolbarActionVisible(checkinMenuBtn, canCheckin || canCheckinProject);
-    setToolbarActionVisible(removeMenuBtn, true);
-    if (setCreoDirBtn) {
-      setCreoDirBtn.hidden = false;
-      const tip = setCreoDirBtn.closest(".toolbar-tip");
-      if (tip) tip.hidden = false;
-    }
     syncRevertVersionButton();
   }
 

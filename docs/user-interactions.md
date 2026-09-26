@@ -101,7 +101,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 
 | Button | Available when | Hidden when |
 |--------|----------------|-------------|
-| Set Working Directory | Inside Creo’s browser with a project workspace | Never hidden — stays greyed when not usable |
+| Set Working Directory | Inside Creo’s browser with a project workspace (Files / non-History detail tabs) | Hidden on the file History tab; otherwise stays greyed when not usable |
 | Add ▾ | A project is open | No project |
 | Open ▾ | A project is open (workspace) and/or a file can be opened | No project and nothing to open |
 | Open selected… | A file you can open is selected | Nothing useful selected |
@@ -113,7 +113,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 | Remove ▾ | Something can be removed | Nothing selected |
 | Remove from Project | Files **and/or folders** selected (including empty folders) | Nothing selected |
 
-Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Exception: **Set Working Directory** always stays visible so it remains easy to find; it is greyed out outside Creo’s browser or when no project workspace is ready.
+Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Exception: **Set Working Directory** always stays visible on the Files page so it remains easy to find; it is greyed out outside Creo’s browser or when no project workspace is ready. On the file **History** tab it is hidden (along with Checkout and Remove).
 
 Only one ▾ menu open at a time. Click outside or press Escape to close.
 
@@ -179,7 +179,7 @@ On a normal office network (`http://…`), the app should try the CreoPDM agent�
 | **Open ▾ → Open selected…** (or click a file name) | Offer how to open (see below); open in Creo or Windows; when the file is fetched to the local workspace, keep its vault folders (do not flatten); Creo opens from that folder so nested assemblies still resolve; when you are **not** checked out, align the local tip to the vault tip (remove newer local `.N` leftovers) | Fail silently with no message; put nested vault files at the workspace root; fail open just because the file lives under a vault subfolder; leave a newer local `.prt.N` after opening a vault tip you do not have checked out |
 | **Open ▾ → Open current…** (file detail) | Open the **current** tip of this file | Stay available while an older History row is selected (hide Open then so it is not mistaken for loading that rev) |
 | Select an **older** History row → **Revert to selected…** (bottom toolbar) | Restore that version’s content **and filename** (including Creo `.prt.N`) to vault and local **in one step** (records a new version automatically — you are not asked to Check In); remove newer numbered siblings so the tip is not left as `.3` after reverting to `.1`; leave the file Available (not checked out); show Revert only when an older row is selected; hide **Open** while that older row is selected | Offer Revert for the current version, a pending unsaved row, or when this file has only one version; revert someone else’s checkout; keep a newer `.prt.N` name while only swapping bytes; leave Revert greyed at the top of the History list; leave a newer local cache save after vault restore; leave you checked out with a Check In prompt; show floating “choose an older row” hint text in the toolbar |
-| **History** | Show a clear **History** title near the top (under the breadcrumb, Library-sized), then the file name and version list; same light panel background as Files; file actions use the same ▾ menus at the bottom as Files (inactive actions hidden) | |
+| **History** | Show a clear **History** title near the top (under the breadcrumb, Library-sized), then the file name and version list; same light panel background as Files; bottom toolbar shows Open / Check In / Revert only (hide **Set Working Directory**, **Checkout ▾**, and **Remove ▾** on this tab) | Show Set Working Directory, Checkout, or Remove on the History tab |
 | **Copy to Vault** | Put a copy in the vault without checking out | Check the file out |
 
 ### When you open a file that’s not checked out to you

@@ -481,13 +481,18 @@ def test_history_revert_only_for_older_versions():
     assert "revert-version-hint" not in detail
     assert "That is the current version" not in script
     assert "Select an older version to restore it." not in script
+    assert "historyTabActive" in script
     assert "historyOlderRowSelected" in script
     assert "olderHistory" in script
     assert "canOpen = !olderHistory" in script
+    assert "onHistory" in script
+    assert 'setToolbarActionVisible(checkoutMenuBtn, false)' in script
+    assert 'setToolbarActionVisible(removeMenuBtn, false)' in script
     assert "You do not need to Check In afterward" in script
     assert "Stay available while an older History row is selected" in docs
     assert "hide **Open** while that older row is selected" in docs
     assert "Open is hidden while this older row is selected" in detail
+    assert "hide **Set Working Directory**, **Checkout ▾**, and **Remove ▾**" in docs
     assert "row.dataset.canRevert === \"1\"" in script or "dataset.canRevert === \"1\"" in script
     assert "/versions/" in script and "/revert" in script
     assert "background: var(--panel)" in css
@@ -543,7 +548,8 @@ def test_toolbar_hides_inactive_actions():
     assert "el.hidden = false" in creo
     assert "btn.hidden = false" in creo
     assert 'btn.id === "set-creo-dir-btn"' in creo
-    assert "Never hidden — stays greyed when not usable" in docs
+    assert "History tab hides it" in creo
+    assert "On the file **History** tab it is hidden" in docs
 
 
 def test_folder_row_click_selects_double_click_opens():
