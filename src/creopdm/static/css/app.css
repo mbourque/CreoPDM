@@ -1140,3 +1140,119 @@ body.is-file-drag #file-drop-overlay {
   .title-row { flex-wrap: wrap; }
   .search-form { flex: 1 1 12rem; }
 }
+
+/* Phone / narrow: read-only browse — no admin chrome, no actions, few columns. */
+@media (max-width: 640px) {
+  .topbar .status-cluster { display: none !important; }
+  .topbar {
+    padding: 0.45rem 0.75rem;
+    border-bottom-width: 2px;
+  }
+  .brand-version { display: none; }
+  .brand-mark { width: 22px; height: 22px; }
+
+  #new-project-btn,
+  .project-settings,
+  .metrics,
+  #selection-summary,
+  footer.toolbar,
+  #detail-toolbar {
+    display: none !important;
+  }
+
+  .shell > .workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .content {
+    padding: 0.45rem 0.65rem 0.55rem;
+  }
+  .content h1 {
+    font-size: 1.15rem;
+  }
+  .search-form {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+  .search-form input {
+    width: 100%;
+  }
+
+  .table-wrap,
+  .table-scroll {
+    overflow-x: hidden;
+  }
+
+  /* Files + checked-out: Name + Rev only */
+  #object-table th:nth-child(n + 3),
+  #object-table td:nth-child(n + 3),
+  #checked-out-table th:nth-child(n + 3),
+  #checked-out-table td:nth-child(n + 3) {
+    display: none;
+  }
+
+  /* New files: Change + Filename only */
+  #changes-table th:nth-child(n + 3),
+  #changes-table td:nth-child(n + 3) {
+    display: none;
+  }
+
+  #object-table th,
+  #object-table td,
+  #checked-out-table th,
+  #checked-out-table td,
+  #changes-table th,
+  #changes-table td {
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  #object-table th:nth-child(2),
+  #object-table td:nth-child(2),
+  #checked-out-table th:nth-child(2),
+  #checked-out-table td:nth-child(2) {
+    width: 3.25rem;
+    max-width: 3.25rem;
+    white-space: nowrap;
+  }
+
+  #panel-checked-out > .muted.small,
+  #panel-changes > .muted.small {
+    display: none;
+  }
+
+  /* Details: no status pills; History Rev + Filename; other grids Name/Value (2 cols) */
+  .detail {
+    padding: 0.75rem 0.75rem 1rem;
+  }
+  .detail-meta {
+    display: none !important;
+  }
+  .detail-tab-title h1 {
+    font-size: 1.2rem;
+  }
+  .detail-head h1 {
+    font-size: 1rem;
+  }
+  #history-files-table th:nth-child(n + 3),
+  #history-files-table td:nth-child(n + 3) {
+    display: none;
+  }
+  .detail .grid th:nth-child(n + 3),
+  .detail .grid td:nth-child(n + 3) {
+    display: none;
+  }
+  .detail .kv {
+    grid-template-columns: 6.5rem 1fr;
+  }
+  .detail .tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  .detail .tab {
+    flex: 0 0 auto;
+    padding: 0.4rem 0.55rem;
+  }
+}

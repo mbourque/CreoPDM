@@ -449,6 +449,28 @@ def test_open_model_uses_nested_cache_folder():
     assert "looksLikeLocalWindowsPath(materialized)" in meta
 
 
+def test_mobile_browse_css_is_minimal():
+    """Narrow screens hide chrome/toolbar and trim file-table columns (no sideways scroll)."""
+    css = APP_CSS.read_text(encoding="utf-8")
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "@media (max-width: 640px)" in css
+    mobile = css.split("@media (max-width: 640px)", 1)[1]
+    assert ".topbar .status-cluster" in mobile
+    assert "#new-project-btn" in mobile
+    assert ".project-settings" in mobile
+    assert ".metrics" in mobile
+    assert "footer.toolbar" in mobile
+    assert "#detail-toolbar" in mobile
+    assert "#object-table th:nth-child(n + 3)" in mobile
+    assert "#checked-out-table th:nth-child(n + 3)" in mobile
+    assert "#changes-table th:nth-child(n + 3)" in mobile
+    assert "#history-files-table th:nth-child(n + 3)" in mobile
+    assert ".detail-meta" in mobile
+    assert "overflow-x: hidden" in mobile
+    assert "browse-only" in docs
+    assert "Name** and **Rev**" in docs
+
+
 def test_details_overview_dedupes_identity_and_unifies_fonts():
     """Overview drops header duplicates and Details tabs share one UI font."""
     detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(
