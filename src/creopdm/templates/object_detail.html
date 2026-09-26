@@ -133,9 +133,9 @@
       <section class="detail-section">
         <h3 class="detail-section-title">Identity</h3>
         <dl class="kv">
-          <dt>Number</dt><dd>{{ id_number or "—" }}</dd>
+          <dt>Name</dt><dd>{{ id_number or id_name or "—" }}</dd>
           {% if show_name %}
-          <dt>Name</dt><dd>{{ id_name }}</dd>
+          <dt>File name</dt><dd>{{ id_name }}</dd>
           {% endif %}
           {% if show_common %}
           <dt>Common name</dt><dd>{{ id_common }}</dd>

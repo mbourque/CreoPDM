@@ -471,6 +471,10 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert ".detail .filename-cell" in css
     assert "font-family: inherit" in css
     assert "text-transform: uppercase" in css
+    assert "<dt>Number</dt>" not in overview
+    assert "<dt>Name</dt>" in overview
+    assert "label the model **Name**" in docs or "model **Name**" in docs
+    assert "label the model identity as Number" in docs
     assert "skips duplicate identity fields" in docs
     assert "no mixed monospace" in docs
     assert "regular ink color" in docs
