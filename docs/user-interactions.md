@@ -4,9 +4,7 @@ Plain-language guide for **manual testing**. For each action: what you do, what 
 
 After you add, remove, or open something, the Files list should update **on its own** — you should not need a hard browser refresh (F5).
 
-Test in Creo’s built-in browser when you can (Creo connection matters there). A normal browser is fine for most list/toolbar checks.
-
-On a **phone** (portrait or landscape), CreoPDM switches to a **browse-only** layout: Settings / Status / Creo pills, New project, gear, metric chips, and the bottom toolbar are hidden; file tables keep **Name** and **Rev** only (New files keeps Filename only) so you should not need sideways scrolling; empty lists hide the crushed column headers and show a full-width message; **only folders** can be opened — file names and rows do not open Creo/Windows or Details. Detection is **touch-only** (`pointer: coarse` and `hover: none`) plus a phone-sized viewport—narrowing Creo’s desktop browser must **not** switch to browse mode.
+Test in Creo’s built-in browser when you can (Creo connection matters there). A normal browser is fine for most list/toolbar checks. On a **phone**, see [§13 Mobile browse](#13-mobile-browse).
 
 ---
 
@@ -24,8 +22,9 @@ On a **phone** (portrait or landscape), CreoPDM switches to a **browse-only** la
 10. [Check In ▾](#10-check-in-)
 11. [Remove ▾](#11-remove-)
 12. [Typing the project name to confirm](#12-typing-the-project-name-to-confirm)
-13. [Quick walkthroughs](#13-quick-walkthroughs)
-14. [For developers (tests)](#14-for-developers-tests)
+13. [Mobile browse](#13-mobile-browse)
+14. [Quick walkthroughs](#14-quick-walkthroughs)
+15. [For developers (tests)](#15-for-developers-tests)
 
 ---
 
@@ -285,7 +284,53 @@ Used for delete project, remove from project/vault, purge, History **Revert to s
 
 ---
 
-## 13. Quick walkthroughs
+## 13. Mobile browse
+
+Phone-only **browse** mode (portrait or landscape). No Add / Checkout / Check In / Remove — look up files and open **folders** only.
+
+### When it turns on
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Open CreoPDM on a **phone** (Safari/Chrome), portrait or landscape | Switch to browse-only layout | Stay in full desktop chrome with pills and bottom toolbar |
+| Rotate the phone to landscape | **Keep** browse-only | Flash back to desktop pills/buttons just because the width got wider |
+| Narrow Creo’s **desktop** browser (mouse) | Keep full desktop UI (toolbar, pills, Settings, Creo status) | Treat a skinny Creo window as a phone |
+
+### What you see / don’t see
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Look at the top bar | Show CreoPDM brand; hide Settings, Status: Running, and Creo: Connected pills | Show those pills on a phone |
+| Look at the project header | Show project name and search; hide **New**, gear, and metric chips (Files / Parts / …) | Show New project, project gear, or filter pills |
+| Look at the bottom | No toolbar | Show Set Working Directory, Add, Open, Checkout, Check In, or Remove |
+| Open a file’s Details page | No bottom Details toolbar (no Revert / Check In chrome) | Show the desktop Details action bar |
+
+### Lists and columns
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Open **Files** or **Files checked out** | Show **Name** and **Rev** only | Force sideways scrolling for State / Type / Creo / Modified / Checkout |
+| Open **New files** | Show **Filename** only | Crush headers into vertical “CHANGE” / “FILENAME ()” text |
+| See an empty list | Full-width message; hide the useless column header row | Leave broken header cells beside the empty message |
+
+### Opening things
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Tap a **folder** name | Open that folder (browse deeper) | |
+| Tap a **file** name or file row | Do nothing (no Creo/Windows open, no jump to Details) | Open the model or Details from a file tap |
+| Double-tap / long-press a file row | Still not open the file or Details | Treat it like desktop double-click → Details |
+
+### Quick phone checks
+
+1. Phone portrait → no Settings/Status/Creo pills; no bottom toolbar; Files shows Name + Rev.  
+2. Rotate to landscape → still browse-only (no pills/buttons coming back).  
+3. Tap a folder → enters folder; tap a file → nothing opens.  
+4. On a PC, shrink Creo’s browser narrow → still full desktop UI (not browse-only).
+
+---
+
+## 14. Quick walkthroughs
 
 ### Create → open → remove a folder
 
@@ -307,18 +352,21 @@ Try the same with **Add folder…** and **Add folders…**.
 - Click folder row chrome → must select, not open; click name → must open.  
 - Add files… by dropping a whole folder tree → told to use Add folder(s).  
 - Check In with an empty comment → blocked.  
-- Check In ▾ with nothing pending → options stay disabled.
+- Check In ▾ with nothing pending → options stay disabled.  
+- On a phone: tap a file name → must not open; shrink Creo on desktop → must not enter browse-only.
 
 ---
 
-## 14. For developers (tests)
+## 15. For developers (tests)
 
 Automated coverage lives mainly in:
 
-- `tests/unit/test_ui_regressions.py`
+- `tests/unit/test_ui_regressions.py` (includes `test_mobile_browse_css_is_minimal`)
 - `tests/unit/test_user_interaction_validations.py`
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
 - Related checkout / check-in / soft-nav tests
+
+Mobile browse is CSS-only in `app.css`: `@media` with `pointer: coarse` and `hover: none` (plus width/height limits). Do **not** gate browse mode on `max-width` alone.
 
 When you change any behavior above, update **this document** in the same change and add or adjust tests so the “must not” cases stay covered. See `.cursor/rules/user-interactions.mdc`.

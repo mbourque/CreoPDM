@@ -475,11 +475,13 @@ def test_mobile_browse_css_is_minimal():
     assert ".object-open" in mobile
     assert "pointer-events: none" in mobile
     assert "tr.folder-row" in mobile
-    assert "only folders" in docs
+    assert "only folders" in docs or "**only folders**" in docs or "Tap a **folder**" in docs
     assert "browse-only" in docs
-    assert "Name** and **Rev**" in docs
-    assert "touch-only" in docs
-    assert "must **not** switch" in docs
+    assert "**Name** and **Rev**" in docs
+    assert "## 13. Mobile browse" in docs
+    assert "`pointer: coarse`" in docs
+    assert "**desktop** browser" in docs
+    assert "Rotate the phone" in docs
 
 
 def test_details_overview_dedupes_identity_and_unifies_fonts():
