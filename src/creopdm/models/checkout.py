@@ -20,6 +20,7 @@ class Checkout(Base):
             "object_id",
             unique=True,
             sqlite_where=text("status = 'ACTIVE'"),
+            postgresql_where=text("status = 'ACTIVE'"),
         ),
     )
 
