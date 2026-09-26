@@ -407,6 +407,12 @@ def object_detail(
     # Features = Creo feature list; Structure = assembly model tree (separate tabs).
     show_features_tab = bool(features)
     show_structure_tab = bool(is_assembly)
+    checkout_count = ctx.checkouts.count_for_project(db, project.id)
+    checkoutable_count = ctx.checkouts.count_checkoutable_for_project(db, project.id)
+    siblings = ctx.objects.list_objects(db, project.id)
+    watch = ctx.workspaces.watch_stamp(project, [(o.relative_path, o.filename) for o in siblings])
+    pending_saves = int(watch.get("pending_saves") or 0)
+    new_workspace_files = int(watch.get("new_files") or 0)
     return render(
         request,
         "object_detail.html",
@@ -436,6 +442,10 @@ def object_detail(
             "where_used": where_used.items,
             "workspace_path": str(ctx.workspaces.vault_for(project)),
             "workspace_folder": folder_of(obj.relative_path),
+            "checkout_count": checkout_count,
+            "checkoutable_count": checkoutable_count,
+            "pending_saves": pending_saves,
+            "new_workspace_files": new_workspace_files,
         },
     )
 

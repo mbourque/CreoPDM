@@ -801,6 +801,56 @@ def test_revert_restores_creo_save_number_not_current_tip(client, repo_parent, d
     assert (vault / "start_part.prt.1").read_bytes() == b"v1-bytes"
     assert not (vault / "start_part.prt.3").exists()
     assert not (vault / "start_part.prt.2").exists()
+    assert body["owned_by_me"] is False
+    assert body["can_checkout"] is True
+
+
+@requires_git
+def test_revert_renames_tip_when_content_already_matches(client, repo_parent, data_dir):
+    """Regression: after a bad tip overwrite, revert must still rename .prt.3 → .prt.1.
+
+    Same bytes must not surface as 'No changes to check in' / leave a checkout.
+    """
+    project = client.post("/api/projects", json={"name": "Creo Rename"}).json()
+    created = client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("start_part.prt.1", b"same-bytes", "application/octet-stream")},
+        data={"comment": "Add save 1", "relative_path": "model-templates/start_part.prt.1"},
+    )
+    assert created.status_code == 201, created.text
+    object_id = created.json()["uuid"]
+    vault = data_dir / "vaults" / project["uuid"] / "model-templates"
+    vault.mkdir(parents=True, exist_ok=True)
+
+    assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
+    (vault / "start_part.prt.1").write_bytes(b"same-bytes")
+    (vault / "start_part.prt.3").write_bytes(b"other-bytes")
+    check3 = client.post(f"/api/objects/{object_id}/checkin", json={"comment": "Save 3"})
+    assert check3.status_code == 200, check3.text
+    assert check3.json()["filename"] == "start_part.prt.3"
+
+    # Simulate prior broken revert: tip name stays .prt.3 but bytes match A.1.
+    assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
+    (vault / "start_part.prt.3").write_bytes(b"same-bytes")
+    bad = client.post(
+        f"/api/objects/{object_id}/checkin",
+        json={"comment": "Reverted to A.1"},
+    )
+    assert bad.status_code == 200, bad.text
+    assert bad.json()["filename"] == "start_part.prt.3"
+
+    history = client.get(f"/api/objects/{object_id}/history").json()
+    older = next(item for item in history if item["filename"] == "start_part.prt.1")
+    reverted = client.post(
+        f"/api/objects/{object_id}/versions/{older['uuid']}/revert"
+    )
+    assert reverted.status_code == 200, reverted.text
+    body = reverted.json()
+    assert body["filename"] == "start_part.prt.1"
+    assert body["owned_by_me"] is False
+    assert "No changes to check in" not in (reverted.text or "")
+    assert (vault / "start_part.prt.1").read_bytes() == b"same-bytes"
+    assert not (vault / "start_part.prt.3").exists()
 
 
 @requires_git

@@ -460,7 +460,11 @@ def test_history_revert_only_for_older_versions():
     assert "{% if history|length > 1 %}" in detail
     assert 'id="revert-version-btn"' in detail
     assert 'id="detail-toolbar"' in detail
-    assert 'class="detail-section-title">History</h2>' in detail
+    assert 'class="panel-heading"' in detail
+    assert "<h1>History</h1>" in detail
+    assert 'id="open-menu-btn"' in detail and "Open ▾" in detail
+    assert 'id="checkout-menu-btn"' in detail and "Checkout ▾" in detail
+    assert 'id="checkin-menu-btn"' in detail and "Check In ▾" in detail
     assert "history-actions" not in detail
     assert "detail-actions" not in detail
     assert 'data-can-revert=' in detail
@@ -468,10 +472,16 @@ def test_history_revert_only_for_older_versions():
     assert "function syncRevertVersionButton" in script
     assert "function syncDetailToolbar" in script
     assert "setToolbarActionVisible(btn, canRevert)" in script
+    assert "setToolbarActionVisible(openMenuBtn," in script
+    assert "You do not need to Check In afterward" in script
     assert "row.dataset.canRevert === \"1\"" in script or "dataset.canRevert === \"1\"" in script
     assert "/versions/" in script and "/revert" in script
     assert "background: var(--panel)" in css
+    assert ".panel-heading" in css
     assert "Choose an older version to revert" in (
+        (ROOT / "src" / "creopdm" / "services" / "checkin_service.py").read_text(encoding="utf-8")
+    )
+    assert "path_changed" in (
         (ROOT / "src" / "creopdm" / "services" / "checkin_service.py").read_text(encoding="utf-8")
     )
     assert "replace_newer" in script
@@ -488,7 +498,8 @@ def test_history_revert_only_for_older_versions():
     assert "Revert to selected" in docs
     assert "Offer Revert for the current version" in docs
     assert "keep a newer `.prt.N` name while only swapping bytes" in docs
-    assert "leave a newer local cache save after vault restore" in docs
+    assert "leave you checked out with a Check In prompt" in docs
+    assert "do not need to Check In" in docs.lower() or "not asked to Check In" in docs
     assert "bottom toolbar" in docs.lower() or "at the bottom" in docs.lower()
 
 

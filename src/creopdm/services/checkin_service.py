@@ -150,8 +150,17 @@ class CheckinService:
             captured_head = self._store.capture_checkpoint(repo)
             previous_git = obj.current_version.git_commit_hash if obj.current_version else None
             copy_file(workspace_file, repo_file)
-            unchanged = obj.current_version is not None and content_hash == obj.current_version.content_hash
-            if unchanged and not to_add:
+            same_bytes = (
+                obj.current_version is not None
+                and content_hash == obj.current_version.content_hash
+            )
+            path_changed = (
+                old_relative != new_relative
+                or workspace_file.name != (obj.filename or "")
+            )
+            # Same content with a Creo save-number rename (e.g. revert .prt.3 → .prt.1)
+            # is still a real check-in.
+            if same_bytes and not to_add and not path_changed:
                 raise ValidationAppError(
                     "No changes to check in. Use Undo Checkout to release the lock without a new version.",
                     details={"filename": obj.filename},
@@ -163,7 +172,7 @@ class CheckinService:
                     [new_relative],
                     message,
                     user,
-                    allow_empty=unchanged,
+                    allow_empty=same_bytes,
                     remove_relative_paths=remove_paths,
                 )
             except Exception:
@@ -359,7 +368,20 @@ class CheckinService:
                 display,
             )
 
-        restored = self.checkin(session, object_uuid, comment)
+        # Revert always records the restored tip as a new version — never leave the
+        # user checked out with a "please check in" prompt.
+        try:
+            restored = self.checkin(session, object_uuid, comment)
+        except Exception:
+            try:
+                self._checkouts.undo_checkout(session, object_uuid)
+            except Exception:
+                logger.warning(
+                    "Could not release checkout after failed revert check-in of %s",
+                    object_uuid,
+                    exc_info=True,
+                )
+            raise
         self._activities.record(
             session,
             ActivityAction.VERSION_RESTORED,

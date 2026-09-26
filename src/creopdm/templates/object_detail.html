@@ -411,7 +411,10 @@
   </section>
 
   <section class="tab-panel" id="panel-history" hidden>
-    <h2 class="detail-section-title">History</h2>
+    <header class="panel-heading">
+      <h1>History</h1>
+      <p class="muted">Versions of this file in the vault. Select an older row to restore it.</p>
+    </header>
     {% if workspace_pending %}
     <p class="pending-note">
       {% if workspace_pending.newer_save %}
@@ -536,13 +539,58 @@
     <span class="toolbar-tip creo-session-only" title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
       <button type="button" class="btn" id="set-creo-dir-btn" data-workspace="{{ workspace_path }}" disabled>Set Working Directory</button>
     </span>
-    <button type="button" class="btn" id="open-btn" data-uuid="{{ object.uuid }}">Open</button>
-    <span class="toolbar-tip" title="Open this project's local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">
-      <button type="button" class="btn" id="open-workspace-btn" data-project="{{ project.uuid }}" data-vault-folder="{{ project.vault_folder or project.uuid }}" data-folder="{{ workspace_folder }}">Open Workspace</button>
-    </span>
-    <button type="button" class="btn" id="checkout-btn" data-uuid="{{ object.uuid }}" {% if not object.can_checkout %}disabled{% endif %}>Checkout</button>
-    <button type="button" class="btn" id="checkin-btn" data-uuid="{{ object.uuid }}" data-project="{{ project.uuid }}" {% if not object.can_checkin %}disabled{% endif %}>Check In</button>
-    <button type="button" class="btn" id="undo-btn" data-uuid="{{ object.uuid }}" {% if not object.owned_by_me %}disabled{% endif %}>Undo Checkout</button>
+    <div class="toolbar-menu" id="open-menu">
+      <button type="button" class="btn toolbar-menu-toggle" id="open-menu-btn"
+              aria-haspopup="menu" aria-expanded="false"
+              title="Open this file, or open this project’s local workspace folder.">Open ▾</button>
+      <div class="toolbar-menu-panel" role="menu" hidden>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="open-btn"
+                data-uuid="{{ object.uuid }}"
+                title="Open this file in Creo or its Windows associated program.">Open…</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="open-workspace-btn"
+                data-project="{{ project.uuid }}" data-vault-folder="{{ project.vault_folder or project.uuid }}" data-folder="{{ workspace_folder }}"
+                title="Open this project’s local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">Open workspace…</button>
+      </div>
+    </div>
+    <div class="toolbar-menu" id="checkout-menu">
+      <button type="button" class="btn toolbar-menu-toggle" id="checkout-menu-btn"
+              aria-haspopup="menu" aria-expanded="false"
+              title="Check out this file or the project, or undo your checkout.">Checkout ▾</button>
+      <div class="toolbar-menu-panel" role="menu" hidden>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-btn"
+                data-uuid="{{ object.uuid }}"
+                {% if not object.can_checkout %}disabled{% endif %}
+                title="Check out this file and download it to the local workspace.">Checkout</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-project-btn"
+                data-project="{{ project.uuid }}" data-checkoutable="{{ checkoutable_count|default(0) }}"
+                {% if (checkoutable_count|default(0)) == 0 %}disabled{% endif %}
+                title="Check out every file in this project that is available (not locked by someone else).">Checkout project</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="undo-btn"
+                data-uuid="{{ object.uuid }}"
+                {% if not object.owned_by_me %}disabled{% endif %}
+                title="Release your checkout lock. Does not delete the vault file or record a new version.">Undo Checkout</button>
+      </div>
+    </div>
+    <div class="toolbar-menu" id="checkin-menu">
+      <button type="button" class="btn toolbar-menu-toggle" id="checkin-menu-btn"
+              aria-haspopup="menu" aria-expanded="false"
+              data-project="{{ project.uuid }}"
+              data-pending-saves="{{ pending_saves|default(0) }}"
+              data-new-files="{{ new_workspace_files|default(0) }}"
+              title="Check in this file, or everything pending in this project.">Check In ▾</button>
+      <div class="toolbar-menu-panel" role="menu" hidden>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-project-btn"
+                data-project="{{ project.uuid }}" data-checkout-count="{{ checkout_count|default(0) }}"
+                {% if (pending_saves|default(0)) == 0 and (new_workspace_files|default(0)) == 0 and (checkout_count|default(0)) == 0 %}disabled{% endif %}
+                title="Check in modified files and new files, and release unchanged checkouts so the project looks fully checked in.">Check in project…</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-btn"
+                data-uuid="{{ object.uuid }}" data-project="{{ project.uuid }}"
+                data-pending-saves="{{ pending_saves|default(0) }}"
+                data-new-files="{{ new_workspace_files|default(0) }}"
+                {% if not object.can_checkin and not workspace_pending %}disabled{% endif %}
+                title="Check in this file.">Check in…</button>
+      </div>
+    </div>
     {% if history|length > 1 %}
     <span class="toolbar-tip" id="revert-version-tip" title="Select an older History row, then restore that version’s content and filename to the vault and local workspace as a new check-in.">
       <button type="button" class="btn" id="revert-version-btn" disabled hidden

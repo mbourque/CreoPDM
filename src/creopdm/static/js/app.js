@@ -7225,12 +7225,40 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function syncDetailToolbar() {
     if (isListPage || !$("article.detail")) return;
-    // Hide inactive actions (same rule as Files). Keep Set Working Directory visible.
-    setToolbarActionVisible(openBtn, true);
-    setToolbarActionVisible(openWorkspaceBtn, true);
-    setToolbarActionVisible(checkoutBtn, Boolean(checkoutBtn && !checkoutBtn.disabled));
-    setToolbarActionVisible(checkinBtn, Boolean(checkinBtn && !checkinBtn.disabled));
-    setToolbarActionVisible(undoBtn, Boolean(undoBtn && !undoBtn.disabled));
+    // Same ▾ menus and hide-inactive rules as the Files page.
+    const canOpen = true;
+    const canOpenWorkspace = Boolean(openWorkspaceBtn?.dataset.project);
+    setToolbarActionVisible(openBtn, canOpen);
+    setToolbarActionVisible(openWorkspaceBtn, canOpenWorkspace);
+    setToolbarActionVisible(openMenuBtn, canOpen || canOpenWorkspace);
+    const canCheckout = Boolean(checkoutBtn && !checkoutBtn.disabled);
+    const canCheckoutProject =
+      Boolean(checkoutProjectBtn?.dataset.project) &&
+      Number(checkoutProjectBtn?.dataset.checkoutable || 0) > 0;
+    const canUndo = Boolean(undoBtn && !undoBtn.disabled);
+    setToolbarActionVisible(checkoutBtn, canCheckout);
+    setToolbarActionVisible(checkoutProjectBtn, canCheckoutProject);
+    setToolbarActionVisible(undoBtn, canUndo);
+    setToolbarActionVisible(
+      checkoutMenuBtn,
+      canCheckout || canCheckoutProject || canUndo
+    );
+    const pendingSaves = Number(
+      checkinBtn?.dataset.pendingSaves || checkinMenuBtn?.dataset.pendingSaves || 0
+    );
+    const pendingNew = Number(
+      checkinBtn?.dataset.newFiles || checkinMenuBtn?.dataset.newFiles || 0
+    );
+    const projectCheckouts = Number(
+      checkinProjectBtn?.dataset.checkoutCount || checkinMenuBtn?.dataset.checkoutCount || 0
+    );
+    const canCheckin = Boolean(checkinBtn && !checkinBtn.disabled);
+    const canCheckinProject =
+      Boolean(checkinMenuBtn?.dataset.project) &&
+      (pendingSaves > 0 || pendingNew > 0 || projectCheckouts > 0);
+    setToolbarActionVisible(checkinBtn, canCheckin);
+    setToolbarActionVisible(checkinProjectBtn, canCheckinProject);
+    setToolbarActionVisible(checkinMenuBtn, canCheckin || canCheckinProject);
     setToolbarActionVisible(removeMenuBtn, true);
     if (setCreoDirBtn) {
       setCreoDirBtn.hidden = false;
@@ -7269,7 +7297,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const ok = window.confirm(
       `Revert to ${display}?\n\n`
         + "This restores that content and filename (including Creo .prt.N) to the vault "
-        + "and local workspace as a new check-in. The current tip stays in history."
+        + "and local workspace now. You do not need to Check In afterward. "
+        + "The current tip stays in history."
     );
     if (!ok) return;
     showError($("#toolbar-error"), "");
