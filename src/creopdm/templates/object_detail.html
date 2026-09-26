@@ -549,19 +549,19 @@
                 title="Release your checkout lock. Does not delete the vault file or record a new version.">Undo Checkout</button>
       </div>
     </div>
-    <div class="toolbar-menu" id="checkin-menu">
-      <button type="button" class="btn toolbar-menu-toggle" id="checkin-menu-btn"
+    <div class="toolbar-menu" id="checkin-menu" hidden>
+      <button type="button" class="btn toolbar-menu-toggle" id="checkin-menu-btn" hidden
               aria-haspopup="menu" aria-expanded="false"
               data-project="{{ project.uuid }}"
               data-pending-saves="{{ pending_saves|default(0) }}"
               data-new-files="{{ new_workspace_files|default(0) }}"
               title="Check in this file, or everything pending in this project.">Check In ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-project-btn"
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-project-btn" hidden
                 data-project="{{ project.uuid }}" data-checkout-count="{{ checkout_count|default(0) }}"
                 {% if (pending_saves|default(0)) == 0 and (new_workspace_files|default(0)) == 0 and (checkout_count|default(0)) == 0 %}disabled{% endif %}
                 title="Check in modified files and new files, and release unchanged checkouts so the project looks fully checked in.">Check in project…</button>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-btn"
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-btn" hidden
                 data-uuid="{{ object.uuid }}" data-project="{{ project.uuid }}"
                 data-pending-saves="{{ pending_saves|default(0) }}"
                 data-new-files="{{ new_workspace_files|default(0) }}"

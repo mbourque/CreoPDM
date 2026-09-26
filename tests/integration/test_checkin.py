@@ -239,7 +239,7 @@ def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_paren
     assert "not checked in" in page.text
     assert "shaft.prt.4" in page.text
     assert "from shaft.prt.3" in page.text
-    assert "Newer Creo save in the vault" in page.text
+    assert "Creo saved a newer file in the vault" in page.text
 
     checked = client.post(
         f"/api/objects/{obj['uuid']}/checkin",
@@ -256,7 +256,7 @@ def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_paren
     assert "shaft.prt.4" in page.text
     assert "from shaft.prt.3" in page.text
     assert "not checked in" not in page.text
-    assert "Newer Creo save in the vault" not in page.text
+    assert "Creo saved a newer file in the vault" not in page.text
 
 
 @requires_git

@@ -4427,7 +4427,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     document.querySelectorAll(".creo-session-only").forEach((el) => {
       // Keep Set Working Directory in the Files toolbar (greyed when unusable) so it
       // stays discoverable; other inactive toolbar actions stay hidden.
-      // File Details page hides it (Check In / Revert toolbar only).
+      // File Details page hides it (Revert-only toolbar).
       const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
       const onDetail = Boolean($("article.detail"));
       if (onDetail && btn?.id === "set-creo-dir-btn") {
@@ -7262,8 +7262,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function syncDetailToolbar() {
     if (isListPage || !$("article.detail")) return;
-    // Details page (all tabs): Check In when needed, and Revert on History.
-    // Hide Open, Set WD, Checkout, Remove — open via the file name; Files page has the rest.
+    // Details page (all tabs): Revert on History only. Check In / Open / Checkout /
+    // Remove / Set WD live on the Files page — do not show a stale Check In here
+    // when this file is Available but other project checkouts keep the menu “alive”.
     if (setCreoDirBtn) {
       const tip = setCreoDirBtn.closest(".toolbar-tip");
       setCreoDirBtn.hidden = true;
@@ -7277,22 +7278,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     setToolbarActionVisible(undoBtn, false);
     setToolbarActionVisible(checkoutMenuBtn, false);
     setToolbarActionVisible(removeMenuBtn, false);
-    const pendingSaves = Number(
-      checkinBtn?.dataset.pendingSaves || checkinMenuBtn?.dataset.pendingSaves || 0
-    );
-    const pendingNew = Number(
-      checkinBtn?.dataset.newFiles || checkinMenuBtn?.dataset.newFiles || 0
-    );
-    const projectCheckouts = Number(
-      checkinProjectBtn?.dataset.checkoutCount || checkinMenuBtn?.dataset.checkoutCount || 0
-    );
-    const canCheckin = Boolean(checkinBtn && !checkinBtn.disabled);
-    const canCheckinProject =
-      Boolean(checkinMenuBtn?.dataset.project) &&
-      (pendingSaves > 0 || pendingNew > 0 || projectCheckouts > 0);
-    setToolbarActionVisible(checkinBtn, canCheckin);
-    setToolbarActionVisible(checkinProjectBtn, canCheckinProject);
-    setToolbarActionVisible(checkinMenuBtn, canCheckin || canCheckinProject);
+    setToolbarActionVisible(checkinBtn, false);
+    setToolbarActionVisible(checkinProjectBtn, false);
+    setToolbarActionVisible(checkinMenuBtn, false);
     syncRevertVersionButton();
   }
 

@@ -546,7 +546,14 @@ def test_history_revert_only_for_older_versions():
     assert 'setToolbarActionVisible(openMenuBtn, false)' in detail_toolbar
     assert 'setToolbarActionVisible(checkoutMenuBtn, false)' in detail_toolbar
     assert 'setToolbarActionVisible(removeMenuBtn, false)' in detail_toolbar
+    assert 'setToolbarActionVisible(checkinMenuBtn, false)' in detail_toolbar
+    assert 'setToolbarActionVisible(checkinBtn, false)' in detail_toolbar
     assert "setCreoDirBtn.hidden = true" in detail_toolbar
+    assert "pendingSaves" not in detail_toolbar
+    assert "canCheckinProject" not in detail_toolbar
+    assert "never **Check In ▾**" in docs or "never **Check In" in docs
+    assert "Check In stays on the Files page" in docs
+    assert "Revert to selected…** only" in docs or "Revert to selected… only" in docs
     assert "You do not need to Check In afterward" in script
     assert "confirmByProjectName({" in script
     assert 'title: `Revert to ${display}`' in script
@@ -564,7 +571,7 @@ def test_history_revert_only_for_older_versions():
     assert "File History" not in detail
     assert "subpanel-versions" not in detail
     assert 'id="history-files-table"' in detail
-    assert "every Details tab" in docs
+    assert "never **Check In ▾**" in docs or "Check In stays on the Files page" in docs
     assert "**Details** title" in docs
     assert "separate Version History view" in docs
     assert "left: 0" in css
@@ -644,6 +651,7 @@ def test_toolbar_hides_inactive_actions():
     assert 'Boolean($("article.detail"))' in creo
     assert "On the file **Details** page" in docs
     assert "every tab, including History" in docs
+    assert "Check In stays on the Files page" in docs
 
 
 def test_folder_row_click_selects_double_click_opens():
