@@ -459,6 +459,8 @@ def test_history_revert_only_for_older_versions():
     css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
     assert "{% if history|length > 1 %}" in detail
     assert 'id="revert-version-btn"' in detail
+    assert 'class="btn btn-danger" id="revert-version-btn"' in detail or 'btn btn-danger' in detail
+    assert "red like Remove" in docs
     assert 'id="detail-toolbar"' in detail
     assert 'id="detail-tab-title"' in detail
     assert 'id="detail-tab-title-text"' in detail
