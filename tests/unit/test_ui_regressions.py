@@ -477,7 +477,17 @@ def test_history_revert_only_for_older_versions():
     assert 'name === "history"' in script
     assert "setToolbarActionVisible(btn, canRevert)" in script
     assert "setToolbarActionVisible(openMenuBtn," in script
+    assert "Open current…" in detail
+    assert "revert-version-hint" not in detail
+    assert "That is the current version" not in script
+    assert "Select an older version to restore it." not in script
+    assert "historyOlderRowSelected" in script
+    assert "olderHistory" in script
+    assert "canOpen = !olderHistory" in script
     assert "You do not need to Check In afterward" in script
+    assert "Stay available while an older History row is selected" in docs
+    assert "hide **Open** while that older row is selected" in docs
+    assert "Open is hidden while this older row is selected" in detail
     assert "row.dataset.canRevert === \"1\"" in script or "dataset.canRevert === \"1\"" in script
     assert "/versions/" in script and "/revert" in script
     assert "background: var(--panel)" in css

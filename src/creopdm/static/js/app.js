@@ -7198,7 +7198,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function syncRevertVersionButton() {
     const btn = $("#revert-version-btn");
-    const hint = $("#revert-version-hint");
     const tip = $("#revert-version-tip");
     if (!btn) return;
     const historyPanel = $("#panel-history");
@@ -7209,25 +7208,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     );
     setToolbarActionVisible(btn, canRevert);
     if (tip) tip.hidden = !canRevert;
-    if (hint) {
-      hint.hidden = !historyVisible;
-      if (!historyVisible) {
-        hint.textContent = "";
-      } else if (!row) {
-        hint.textContent = "Select an older version to restore it.";
-      } else if (row.dataset.canRevert !== "1") {
-        hint.textContent = "That is the current version — choose an older row.";
-      } else {
-        hint.textContent = `Ready to restore ${row.dataset.versionDisplay || "this version"} to vault and local.`;
-      }
-    }
+  }
+
+  function historyOlderRowSelected() {
+    const historyPanel = $("#panel-history");
+    if (!historyPanel || historyPanel.hidden) return false;
+    const row = selectedHistoryVersionRow();
+    return Boolean(row && row.dataset.canRevert === "1");
   }
 
   function syncDetailToolbar() {
     if (isListPage || !$("article.detail")) return;
     // Same ▾ menus and hide-inactive rules as the Files page.
-    const canOpen = true;
-    const canOpenWorkspace = Boolean(openWorkspaceBtn?.dataset.project);
+    // Hide Open ▾ while an older History row is selected — Open is current tip only.
+    const olderHistory = historyOlderRowSelected();
+    const canOpen = !olderHistory;
+    const canOpenWorkspace =
+      !olderHistory && Boolean(openWorkspaceBtn?.dataset.project);
     setToolbarActionVisible(openBtn, canOpen);
     setToolbarActionVisible(openWorkspaceBtn, canOpenWorkspace);
     setToolbarActionVisible(openMenuBtn, canOpen || canOpenWorkspace);
@@ -7277,7 +7274,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       row.classList.add("is-selected");
       row.dataset.selected = "1";
     }
-    syncRevertVersionButton();
+    syncDetailToolbar();
   }
 
   $("#panel-history")?.addEventListener("click", (event) => {
@@ -7386,7 +7383,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       else if (name === "where-used") void loadWhereUsedTab();
       else refreshTabMetrics();
       syncDetailTabTitle(name);
-      syncRevertVersionButton();
+      syncDetailToolbar();
     });
   });
 
