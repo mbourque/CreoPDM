@@ -425,12 +425,7 @@
       {% endif %}
     </p>
     {% endif %}
-    <div class="subtabs" role="tablist">
-      <button type="button" class="subtab is-active" data-subtab="files">File History</button>
-      <button type="button" class="subtab" data-subtab="versions">Version History</button>
-    </div>
-
-    <div class="subtab-panel" id="subpanel-files">
+    <div class="table-scroll">
       <table class="grid" id="history-files-table">
         <thead>
           <tr>
@@ -467,7 +462,7 @@
               data-version-uuid="{{ version.uuid }}"
               data-version-display="{{ version.revision }}.{{ version.iteration }}"
               data-can-revert="{% if object.current_version and version.uuid == object.current_version.uuid %}0{% else %}1{% endif %}"
-              title="{% if object.current_version and version.uuid == object.current_version.uuid %}Current version{% else %}Select for Revert to selected… — Open is hidden while this older row is selected{% endif %}">
+              title="{% if object.current_version and version.uuid == object.current_version.uuid %}Current version{% else %}Select for Revert to selected…{% endif %}">
             <td>{{ version.revision }}.{{ version.iteration }}{% if object.current_version and version.uuid == object.current_version.uuid %} · current{% endif %}</td>
             <td class="filename-cell">{% if not loop.last %}{{ version_file_label(version, history[loop.index0 + 1]) }}{% else %}{{ version_file_label(version) }}{% endif %}</td>
             <td>{{ version.creo_release or "" }}</td>
@@ -479,53 +474,6 @@
           {% else %}
           {% if not workspace_pending %}
           <tr><td colspan="7">No file history yet.</td></tr>
-          {% endif %}
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    <div class="subtab-panel" id="subpanel-versions" hidden>
-      <table class="grid" id="history-versions-table">
-        <thead>
-          <tr>
-            <th data-sort="rev" aria-sort="none" title="Sort by revision. Click again to reverse.">Rev</th>
-            <th data-sort="filename" aria-sort="none" title="Sort by filename. Click again to reverse.">Filename</th>
-            <th data-sort="user" aria-sort="none" title="Sort by user. Click again to reverse.">User</th>
-            <th data-sort="date" aria-sort="none" title="Sort by date. Click again to reverse.">Date</th>
-            <th data-sort="comment" aria-sort="none" title="Sort by comment. Click again to reverse.">Comment</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% if workspace_pending %}
-          <tr class="is-pending">
-            <td>{{ workspace_pending.next_display }} · not checked in</td>
-            <td class="filename-cell">
-              {{ workspace_pending.filename }}
-              {% if workspace_pending.newer_save %}
-              <div class="muted small">from {{ workspace_pending.recorded_filename }} · on disk in vault</div>
-              {% endif %}
-            </td>
-            <td>vault</td>
-            <td>{{ workspace_pending.saved_at }}</td>
-            <td>Newer Creo save in the vault. Check in to record it.</td>
-          </tr>
-          {% endif %}
-          {% for version in history %}
-          <tr class="version-row{% if object.current_version and version.uuid == object.current_version.uuid %} is-latest{% endif %}"
-              data-version-uuid="{{ version.uuid }}"
-              data-version-display="{{ version.revision }}.{{ version.iteration }}"
-              data-can-revert="{% if object.current_version and version.uuid == object.current_version.uuid %}0{% else %}1{% endif %}"
-              title="{% if object.current_version and version.uuid == object.current_version.uuid %}Current version{% else %}Select for Revert to selected… — Open is hidden while this older row is selected{% endif %}">
-            <td>{{ version.revision }}.{{ version.iteration }}{% if object.current_version and version.uuid == object.current_version.uuid %} · current{% endif %}</td>
-            <td class="filename-cell">{% if not loop.last %}{{ version_file_label(version, history[loop.index0 + 1]) }}{% else %}{{ version_file_label(version) }}{% endif %}</td>
-            <td>{{ version.created_by }}</td>
-            <td>{% if version.created_at %}{{ local_time(version.created_at) }}{% else %}—{% endif %}</td>
-            <td title="{{ version.comment or '' }}">{{ version.comment or "—" }}</td>
-          </tr>
-          {% else %}
-          {% if not workspace_pending %}
-          <tr><td colspan="5">No history yet.</td></tr>
           {% endif %}
           {% endfor %}
         </tbody>
@@ -546,7 +494,7 @@
       <div class="toolbar-menu-panel" role="menu" hidden>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-btn"
                 data-uuid="{{ object.uuid }}"
-                title="Open the current tip of this file (not a History row). Use Revert to selected… to restore an older version first.">Open current…</button>
+                title="Open this file in Creo or its Windows associated program.">Open…</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-workspace-btn"
                 data-project="{{ project.uuid }}" data-vault-folder="{{ project.vault_folder or project.uuid }}" data-folder="{{ workspace_folder }}"
                 title="Open this project’s local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">Open workspace…</button>

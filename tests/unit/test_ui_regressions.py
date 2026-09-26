@@ -477,22 +477,26 @@ def test_history_revert_only_for_older_versions():
     assert 'name === "history"' in script
     assert "setToolbarActionVisible(btn, canRevert)" in script
     assert "setToolbarActionVisible(openMenuBtn," in script
-    assert "Open current…" in detail
+    assert "Open ▾" in detail
+    assert 'id="open-btn"' in detail
+    assert ">Open…</button>" in detail or "Open…</button>" in detail
     assert "revert-version-hint" not in detail
     assert "That is the current version" not in script
     assert "Select an older version to restore it." not in script
     assert "historyTabActive" in script
-    assert "historyOlderRowSelected" in script
-    assert "olderHistory" in script
-    assert "canOpen = !olderHistory" in script
-    assert "onHistory" in script
+    assert "historyOlderRowSelected" not in script
+    assert 'setToolbarActionVisible(openMenuBtn, false)' in script
     assert 'setToolbarActionVisible(checkoutMenuBtn, false)' in script
     assert 'setToolbarActionVisible(removeMenuBtn, false)' in script
     assert "You do not need to Check In afterward" in script
-    assert "Stay available while an older History row is selected" in docs
-    assert "hide **Open** while that older row is selected" in docs
-    assert "Open is hidden while this older row is selected" in detail
-    assert "hide **Set Working Directory**, **Checkout ▾**, and **Remove ▾**" in docs
+    assert "Version History" not in detail
+    assert "File History" not in detail
+    assert "subpanel-versions" not in detail
+    assert 'id="history-files-table"' in detail
+    assert "Check In / Revert only" in docs
+    assert "no Version History subtab" in docs
+    assert "left: 0" in css
+    assert "#remove-menu .toolbar-menu-panel" in css
     assert "row.dataset.canRevert === \"1\"" in script or "dataset.canRevert === \"1\"" in script
     assert "/versions/" in script and "/revert" in script
     assert "background: var(--panel)" in css

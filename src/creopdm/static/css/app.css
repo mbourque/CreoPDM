@@ -653,20 +653,29 @@ span.object-open:hover { text-decoration: underline; }
 .toolbar-tip { display: inline-flex; }
 .toolbar-menu { position: relative; display: inline-flex; flex-shrink: 0; z-index: 51; }
 .toolbar-menu-panel {
+  /* Open/Add/Checkout sit on the left — grow right so the fly-up is not clipped. */
   position: absolute;
-  right: 0;
+  left: 0;
+  right: auto;
   bottom: calc(100% + 0.25rem);
   min-width: 12.5rem;
+  max-width: min(22rem, calc(100vw - 2rem));
   padding: 0.25rem;
   background: white;
   border: 1px solid var(--line);
   border-radius: 6px;
   box-shadow: 0 8px 24px rgba(16, 24, 32, 0.18);
-  z-index: 52;
+  z-index: 80;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
 }
+/* Remove sits at the end — grow left so it stays on-screen. */
+#remove-menu .toolbar-menu-panel {
+  left: auto;
+  right: 0;
+}
+.toolbar-menu.is-open { z-index: 90; }
 .toolbar-menu.is-open .toolbar-menu-toggle {
   border-color: #9b1c1c;
   background: #fdf2f2;

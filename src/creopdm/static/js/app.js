@@ -7196,15 +7196,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  function showHistorySubtab(name) {
-    document.querySelectorAll(".subtab").forEach((item) => {
-      item.classList.toggle("is-active", item.dataset.subtab === name);
-    });
-    document.querySelectorAll(".subtab-panel").forEach((panel) => {
-      panel.hidden = panel.id !== `subpanel-${name}`;
-    });
-  }
-
   function selectedHistoryVersionRow() {
     return document.querySelector("#panel-history tr.version-row.is-selected");
   }
@@ -7228,17 +7219,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return Boolean(historyPanel && !historyPanel.hidden);
   }
 
-  function historyOlderRowSelected() {
-    if (!historyTabActive()) return false;
-    const row = selectedHistoryVersionRow();
-    return Boolean(row && row.dataset.canRevert === "1");
-  }
-
   function syncDetailToolbar() {
     if (isListPage || !$("article.detail")) return;
     const onHistory = historyTabActive();
-    // History tab: only Open (current tip), Check In when needed, and Revert.
-    // Hide Set Working Directory, Checkout ▾, and Remove ▾.
+    // History tab: Check In when needed, and Revert. Hide Open, Set WD, Checkout, Remove.
     if (setCreoDirBtn) {
       const tip = setCreoDirBtn.closest(".toolbar-tip");
       if (onHistory) {
@@ -7249,21 +7233,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (tip) tip.hidden = false;
       }
     }
-    // Hide Open ▾ while an older History row is selected — Open is current tip only.
-    const olderHistory = historyOlderRowSelected();
-    const canOpen = !olderHistory;
-    const canOpenWorkspace =
-      !olderHistory && Boolean(openWorkspaceBtn?.dataset.project);
-    setToolbarActionVisible(openBtn, canOpen);
-    setToolbarActionVisible(openWorkspaceBtn, canOpenWorkspace);
-    setToolbarActionVisible(openMenuBtn, canOpen || canOpenWorkspace);
     if (onHistory) {
+      setToolbarActionVisible(openBtn, false);
+      setToolbarActionVisible(openWorkspaceBtn, false);
+      setToolbarActionVisible(openMenuBtn, false);
       setToolbarActionVisible(checkoutBtn, false);
       setToolbarActionVisible(checkoutProjectBtn, false);
       setToolbarActionVisible(undoBtn, false);
       setToolbarActionVisible(checkoutMenuBtn, false);
       setToolbarActionVisible(removeMenuBtn, false);
     } else {
+      const canOpen = true;
+      const canOpenWorkspace = Boolean(openWorkspaceBtn?.dataset.project);
+      setToolbarActionVisible(openBtn, canOpen);
+      setToolbarActionVisible(openWorkspaceBtn, canOpenWorkspace);
+      setToolbarActionVisible(openMenuBtn, canOpen || canOpenWorkspace);
       const canCheckout = Boolean(checkoutBtn && !checkoutBtn.disabled);
       const canCheckoutProject =
         Boolean(checkoutProjectBtn?.dataset.project) &&
@@ -7477,18 +7461,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  document.querySelectorAll(".subtab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      showHistorySubtab(tab.dataset.subtab);
-    });
-  });
-
-  if (window.location.hash === "#history" || window.location.hash === "#file-history") {
+  if (window.location.hash === "#history" || window.location.hash === "#file-history" || window.location.hash === "#versions") {
     document.querySelector('.tab[data-tab="history"]')?.click();
-    showHistorySubtab("files");
-  } else if (window.location.hash === "#versions") {
-    document.querySelector('.tab[data-tab="history"]')?.click();
-    showHistorySubtab("versions");
   } else if (window.location.hash === "#changes") {
     document.querySelector('.tab[data-tab="changes"]')?.click();
   } else if (window.location.hash === "#checked-out") {
