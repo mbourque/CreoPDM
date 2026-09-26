@@ -542,7 +542,8 @@
     {% if history|length > 1 %}
     <span class="toolbar-tip" id="revert-version-tip" title="Select an older History row, then restore that version’s content and filename to the vault and local workspace as a new check-in.">
       <button type="button" class="btn" id="revert-version-btn" disabled hidden
-              data-object="{{ object.uuid }}">Revert to selected…</button>
+              data-object="{{ object.uuid }}"
+              data-project-name="{{ project.name }}">Revert to selected…</button>
     </span>
     {% endif %}
     <div class="toolbar-menu" id="remove-menu">

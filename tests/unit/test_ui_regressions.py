@@ -489,6 +489,18 @@ def test_history_revert_only_for_older_versions():
     assert 'setToolbarActionVisible(checkoutMenuBtn, false)' in script
     assert 'setToolbarActionVisible(removeMenuBtn, false)' in script
     assert "You do not need to Check In afterward" in script
+    assert "confirmByProjectName({" in script
+    assert 'title: `Revert to ${display}`' in script
+    assert 'submitLabel: "Revert"' in script
+    assert 'data-project-name="{{ project.name }}"' in detail
+    assert '$("#revert-version-btn")?.dataset.projectName' in script
+    revert_click = _between(
+        script,
+        '$("#revert-version-btn")?.addEventListener("click"',
+        "function syncDetailTabTitle(",
+    )
+    assert "confirmByProjectName" in revert_click
+    assert "window.confirm" not in revert_click
     assert "Version History" not in detail
     assert "File History" not in detail
     assert "subpanel-versions" not in detail
@@ -522,7 +534,10 @@ def test_history_revert_only_for_older_versions():
     assert "Offer Revert for the current version" in docs
     assert "keep a newer `.prt.N` name while only swapping bytes" in docs
     assert "leave you checked out with a Check In prompt" in docs
-    assert "do not need to Check In" in docs.lower() or "not asked to Check In" in docs
+    assert "type the **exact** project name" in docs
+    assert "plain browser `confirm`" in docs
+    assert "History **Revert to selected…**" in docs
+    assert "no Check In prompt" in docs
     assert "bottom toolbar" in docs.lower() or "at the bottom" in docs.lower()
 
 

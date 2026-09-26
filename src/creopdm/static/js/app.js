@@ -6332,6 +6332,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function expectedProjectName() {
     return (
       $("#delete-project-btn")?.dataset.name
+      || $("#revert-version-btn")?.dataset.projectName
       || purgeVersionsBtn?.dataset.projectName
       || purgeBtn?.dataset.projectName
       || removeBtn?.dataset.projectName
@@ -7307,13 +7308,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const versionId = row?.dataset.versionUuid || "";
     const display = row?.dataset.versionDisplay || "this version";
     if (!btn || btn.disabled || !objectId || !versionId || row?.dataset.canRevert !== "1") return;
-    const ok = window.confirm(
-      `Revert to ${display}?\n\n`
-        + "This restores that content and filename (including Creo .prt.N) to the vault "
+    const confirmed = await confirmByProjectName({
+      title: `Revert to ${display}`,
+      lead:
+        "This restores that content and filename (including Creo .prt.N) to the vault "
         + "and local workspace now. You do not need to Check In afterward. "
-        + "The current tip stays in history."
-    );
-    if (!ok) return;
+        + "Newer numbered siblings are removed so the tip matches the restored name. "
+        + "The current tip stays in History as an older row.",
+      note: "Records a new version automatically. This cannot be undone by Cancel after you confirm.",
+      submitLabel: "Revert",
+    });
+    if (!confirmed.ok) return;
     showError($("#toolbar-error"), "");
     try {
       const result = await withBusy(`Reverting to ${display}…`, async () => {
