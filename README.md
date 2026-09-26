@@ -8,18 +8,19 @@ Git is used internally for history. You do not need to run Git commands.
 
 v0.1 is being built in stages. **Milestones 1–4 are implemented:**
 
-1. Local FastAPI application, SQLite, configuration, logging, health page
+1. Local FastAPI application, PostgreSQL (or SQLite), configuration, logging, health page
 2. Create / list / open / remove projects with a Git-backed repository
 3. Add files, classify them, create PDM objects, and record an initial version
 4. Local checkout / check-in locks, workspace files, and Open in Creo
 
-Locks are stored in the local SQLite database (single-workstation). BOM, live Creo scanning, and remote sync are still later work.
+Locks are stored in the database. **PostgreSQL is the default for a normal install** (especially the Linux CreoPDM host). SQLite still works if you leave the Database URL blank (single-workstation / quick trials). BOM, live Creo scanning, and remote sync are still later work.
 
 ## Requirements
 
 - Python 3.12+
 - Git on `PATH`
 - Windows 10/11 for Creo Parametric / Creo View integration (Linux is fine for the server and development)
+- **PostgreSQL 14+** for a normal CreoPDM server install (see [Database](#database)). The `psycopg` driver is included with CreoPDM. SQLite needs no extra packages if you skip Postgres for local experiments.
 
 ## Install from GitHub
 
@@ -40,7 +41,20 @@ pip install -e ".[dev]"
 
 ### Linux
 
-On Debian/Ubuntu, install Git and the venv package first: `sudo apt install git python3 python3-venv python3-pip`.
+On Debian/Ubuntu, install Git, venv, and PostgreSQL first:
+
+```bash
+sudo apt install git python3 python3-venv python3-pip postgresql
+```
+
+Create the CreoPDM database (once):
+
+```bash
+sudo -u postgres psql -c "CREATE USER creopdm WITH PASSWORD 'YOUR_PASSWORD';"
+sudo -u postgres psql -c "CREATE DATABASE \"CreoPDM\" OWNER creopdm;"
+```
+
+Then clone and install:
 
 ```bash
 git clone https://github.com/mbourque/CreoPDM.git
@@ -50,6 +64,14 @@ source .venv/bin/activate
 python -m pip install -U pip
 pip install -e ".[dev]"
 ```
+
+After the first run (or before enabling systemd), set **Settings → Database URL** (or `CREOPDM_DATABASE_URL`) to:
+
+```text
+postgresql+psycopg://creopdm:YOUR_PASSWORD@localhost:5432/CreoPDM
+```
+
+See [Database](#database) for env-file setup without storing the password in Settings.
 
 `pip install -e ".[dev]"` is an editable install with pytest. To install only the app, without cloning:
 
@@ -158,7 +180,7 @@ systemctl --user enable --now creopdm
 systemctl --user status creopdm
 ```
 
-`creopdm` already binds **52113** and does not open a browser. Git must stay on `PATH` (the unit sets that). On Linux the store is `~/.local/share/CreoPDM` (projects, SQLite, and `vaults`). Do **not** add `--data-dir` unless you mean a different store.
+`creopdm` already binds **52113** and does not open a browser. Git must stay on `PATH` (the unit sets that). On Linux the store is `~/.local/share/CreoPDM` (projects, database settings, and `vaults`). Do **not** add `--data-dir` unless you mean a different store.
 
 If an older run used `~/AppData/Local/CreoPDM`, the next start moves that folder into `~/.local/share/CreoPDM` when the new location does not already have projects. Restart the service after updating CreoPDM:
 
@@ -247,6 +269,84 @@ With the venv active, run `pytest`. Tests use temporary directories. They never 
 ## Data location
 
 On Windows, application data lives in `%LOCALAPPDATA%\CreoPDM\`. On Linux it lives in `~/.local/share/CreoPDM`. Git history and vault copies live in the per-project folder under `vaults` there (older installs used `workspaces`; CreoPDM renames that folder on startup). The Settings vault field should be `~/.local/share/CreoPDM/vaults`, not `~/.local/share/CreoPDM` itself. Pass `--data-dir` or set `CREOPDM_DATA_DIR` only when you want a different store.
+
+## Database
+
+CreoPDM stores projects, objects, versions, checkouts, and activity in a SQL database. **Vault files and Git history stay on disk** under `vaults/` — switching databases does not move CAD files.
+
+### PostgreSQL (default for normal installs)
+
+Use this on the Linux CreoPDM host (and any shared server).
+
+**1. Install and create an empty database** (Debian/Ubuntu):
+
+```bash
+sudo apt install postgresql
+sudo -u postgres psql -c "CREATE USER creopdm WITH PASSWORD 'YOUR_PASSWORD';"
+sudo -u postgres psql -c "CREATE DATABASE \"CreoPDM\" OWNER creopdm;"
+```
+
+Use a UTF-8 cluster (Ubuntu defaults are fine). CreoPDM forces `client_encoding=utf8` on connect.
+
+**2. Point CreoPDM at it** — either:
+
+- **Settings → Database URL** (takes effect on the next start), or
+- Environment variable **`CREOPDM_DATABASE_URL`** (overrides Settings; preferred on systemd hosts)
+
+```text
+postgresql+psycopg://creopdm:PASSWORD@localhost:5432/CreoPDM
+```
+
+You can type special characters in the password (for example `@`); CreoPDM encodes them when connecting. Prefer an env file with mode `600` instead of leaving a password in `settings.json`.
+
+**3. Restart CreoPDM** so migrations create the schema:
+
+```bash
+systemctl --user restart creopdm.service
+journalctl --user -u creopdm -n 40 --no-pager
+```
+
+The service should stay **active**. A new empty database starts with no projects until you create them (or copy an old SQLite catalog).
+
+**4. Optional — systemd env file** (password not in Settings):
+
+```bash
+# Leave Settings Database URL blank only if you are intentionally on SQLite.
+# For Postgres via env:
+umask 077
+cat > ~/.config/creopdm-db.env << 'EOF'
+CREOPDM_DATABASE_URL=postgresql+psycopg://creopdm:PASSWORD@localhost:5432/CreoPDM
+EOF
+chmod 600 ~/.config/creopdm-db.env
+```
+
+Add under `[Service]` in `~/.config/systemd/user/creopdm.service`:
+
+```ini
+EnvironmentFile=-%h/.config/creopdm-db.env
+```
+
+Then:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user restart creopdm.service
+```
+
+### SQLite (optional fallback)
+
+If **Settings → Database URL** is blank and `CREOPDM_DATABASE_URL` is unset, CreoPDM uses a local file:
+
+- Windows: `%LOCALAPPDATA%\CreoPDM\database\creopdm.db`
+- Linux: `~/.local/share/CreoPDM/database/creopdm.db`
+
+No extra software is required. Fine for a quick single-PC trial; prefer PostgreSQL for the real server.
+
+Changing the database URL does **not** migrate existing SQLite rows automatically.
+
+### Driver
+
+`pip install -e .` (or `.[dev]`) installs **`psycopg[binary]`**. No system `libpq-dev` package is required for normal Linux/Windows installs.
 
 ## Further reading
 
