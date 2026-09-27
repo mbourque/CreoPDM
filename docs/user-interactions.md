@@ -199,6 +199,8 @@ Optional: **Set Creo working directory…** (on by default) points Creo at the l
 
 If open seems to do nothing, check the error line under the toolbar, and that creopdm-agent is running on the Creo PC. Large downloads can take a while.
 
+**Settings → Open Creo models with:** **Embedded** only uses Creo.JS when CreoPDM is inside Creo’s embedded browser. Outside Creo (Chrome/Edge/etc.), or when Creo.JS is not connected, Open **always falls back to the OS file association**. Choosing **OS file association** uses that path every time. The Settings page help text states this fallback.
+
 **Set Working Directory** (toolbar) does the same WD step on its own; it only applies inside Creo’s browser.
 
 ---
@@ -367,6 +369,7 @@ Automated coverage lives mainly in:
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
 - `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `data-can-checkout`)
+- `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
 - Related checkout / check-in / soft-nav tests
 
 Mobile browse is CSS-only in `app.css`: `@media` with `pointer: coarse` and `hover: none` (plus width/height limits). Do **not** gate browse mode on `max-width` alone.

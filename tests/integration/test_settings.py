@@ -210,6 +210,7 @@ def test_get_and_update_settings(client, tmp_path):
     assert page.status_code == 200
     assert "Embedded Creo Browser" in page.text
     assert "OS file association" in page.text
+    assert "falls back to the" in page.text
     assert "Creo Parametric" not in page.text
     assert "Creo View" not in page.text
     assert "~/.local/share/CreoPDM/vaults" in page.text
