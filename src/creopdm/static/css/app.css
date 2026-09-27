@@ -359,7 +359,7 @@ a.brand:hover { text-decoration: none; color: inherit; }
   gap: 0.85rem;
   margin: 1.1rem 0 0;
 }
-a.admin-tile {
+.admin-tile {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -367,22 +367,23 @@ a.admin-tile {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: white;
-  color: inherit;
   min-height: 7.5rem;
   box-sizing: border-box;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
-a.admin-tile:hover {
-  border-color: var(--accent-2);
-  box-shadow: 0 1px 0 rgba(47, 111, 143, 0.12);
-}
-a.admin-tile h2 {
+.admin-tile h2 {
   margin: 0;
   font-size: 1.05rem;
   font-weight: 700;
-  color: var(--ink);
 }
-a.admin-tile p {
+.admin-tile h2 a {
+  color: var(--ink);
+  text-decoration: none;
+}
+.admin-tile h2 a:hover {
+  color: var(--accent-2);
+  text-decoration: underline;
+}
+.admin-tile p {
   margin: 0;
   font-size: 0.9rem;
   line-height: 1.4;

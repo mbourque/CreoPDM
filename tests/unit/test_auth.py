@@ -225,6 +225,10 @@ def test_admin_can_open_settings(auth_client):
     assert "Users" in hub.text
     assert 'href="/admin/users"' in hub.text
     assert 'href="/settings"' in hub.text
+    assert "<h2><a href=\"/admin/users\">Users</a></h2>" in hub.text or ">Users</a>" in hub.text
+    assert "Click a user’s name" in hub.text or "Click a user's name" in hub.text
+    # Help copy is plain text, not wrapped in the section link.
+    assert 'href="/admin/users">Add and edit' not in hub.text
     assert auth_client.get("/settings").status_code == 200
     assert auth_client.get("/api/settings").status_code == 200
 

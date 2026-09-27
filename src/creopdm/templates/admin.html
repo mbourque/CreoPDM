@@ -12,16 +12,16 @@
 
   <div class="admin-tile-grid">
     {% if can_manage_users %}
-    <a class="admin-tile" href="/admin/users">
-      <h2>Users</h2>
+    <section class="admin-tile">
+      <h2><a href="/admin/users">Users</a></h2>
       <p>Add and edit accounts, roles, and status. Click a user’s name to open their record.</p>
-    </a>
+    </section>
     {% endif %}
     {% if can_manage_settings %}
-    <a class="admin-tile" href="/settings">
-      <h2>Settings</h2>
+    <section class="admin-tile">
+      <h2><a href="/settings">Settings</a></h2>
       <p>Workstation options: Creo open mode, vault folder, file types, and related defaults.</p>
-    </a>
+    </section>
     {% endif %}
   </div>
 </article>
