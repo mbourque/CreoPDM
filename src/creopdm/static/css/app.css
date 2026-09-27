@@ -769,9 +769,16 @@ span.object-open:hover { text-decoration: underline; }
 }
 .toolbar-note { color: var(--muted); font-size: 0.8rem; }
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   border: 1px solid #b7c3ce; background: white; color: var(--ink);
   padding: 0.38rem 0.7rem; border-radius: 4px; cursor: pointer;
   white-space: nowrap; flex-shrink: 0;
+  font: inherit;
+  line-height: 1.2;
+  text-decoration: none;
 }
 .btn:hover:not(:disabled) { border-color: var(--accent-2); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -824,7 +831,8 @@ dialog:not([open]) { display: none !important; }
 .dialog input:read-only {
   background: #eef2f5; color: var(--muted);
 }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.dialog-actions { display: flex; justify-content: flex-end; align-items: center; gap: 0.5rem; }
+.form-actions { display: flex; justify-content: flex-start; align-items: center; gap: 0.5rem; margin: 0.55rem 0 0; }
 .path-picker { display: flex; gap: 0.4rem; align-items: stretch; font-weight: 400; }
 .path-picker input { flex: 1; min-width: 0; }
 .path-picker .btn { flex-shrink: 0; }

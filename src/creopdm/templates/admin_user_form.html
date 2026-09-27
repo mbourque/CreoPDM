@@ -59,10 +59,10 @@
       </label>
       <p class="muted small">Leave blank to keep the current password. If you set a new password it must be at least 8 characters; the user must change it on next sign-in.</p>
       {% endif %}
-      <p>
+      <div class="form-actions">
         <button type="submit" class="btn btn-primary">{% if mode == 'new' %}Create user{% else %}Save{% endif %}</button>
         <a class="btn" href="/admin/users">Back to list</a>
-      </p>
+      </div>
     </section>
   </form>
 </article>
