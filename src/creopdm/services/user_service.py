@@ -177,6 +177,11 @@ class UserService:
             return ""
         return user.roles[0].name
 
+    def primary_role_uuid(self, user: User) -> str | None:
+        if not user.roles:
+            return None
+        return user.roles[0].uuid
+
     def has_permission(self, user: User, key: str) -> bool:
         return key in self.permission_keys_for_user(user)
 

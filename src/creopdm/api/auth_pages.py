@@ -466,12 +466,14 @@ def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Se
     if _is_blocked(admin):
         return admin
     users = ctx.user_accounts.list_users(db)
+    can_roles = ctx.user_accounts.can_manage_roles(admin)
     rows = [
         {
             "uuid": u.uuid,
             "display_name": u.display_name,
             "username": u.username,
             "role": ctx.user_accounts.primary_role_name(u),
+            "role_uuid": ctx.user_accounts.primary_role_uuid(u),
             "status": u.status,
             "project_access": (
                 "All"
@@ -485,7 +487,14 @@ def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Se
         request,
         "admin_users.html",
         {
-            **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
+            **_base_ctx(
+                request,
+                ctx,
+                current_user=admin,
+                can_manage_users=True,
+                can_manage_roles=can_roles,
+                can_manage_settings=True,
+            ),
             "users": rows,
         },
     )

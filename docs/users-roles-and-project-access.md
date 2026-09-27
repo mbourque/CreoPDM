@@ -26,7 +26,7 @@ Disabled accounts cannot sign in. Checkout, check-in, and activity rows store th
 
 Users with `users.manage`, `roles.manage`, or `settings.manage` see **Administration** (`/admin`):
 
-- **Users** — list accounts (Projects column: **All** or membership count); click a **name** to edit (display name, email, role, status, project access, set/reset password); **Add user** (`users.manage`)
+- **Users** — list accounts (Projects column: **All** or membership count); click a **name** to edit the user, or a **role** name to open that role (`roles.manage`); **Add user** (`users.manage`)
 - **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`)
 - **Settings** — workstation options (Creo open mode, vault, file types, …) (`settings.manage`)
 - After a successful **Add user** / **Save** / role save, you return to the list

@@ -276,14 +276,23 @@ def test_admin_can_edit_user(auth_client, auth_ctx):
         paul = db.scalar(select(User).where(User.username == "paul"))
         assert paul is not None
         paul_uuid = paul.uuid
+        eng_role = auth_ctx.user_accounts.role_by_name(db, BuiltinRole.ENGINEER.value)
+        assert eng_role is not None
+        eng_role_uuid = eng_role.uuid
 
     listed = auth_client.get("/admin/users")
     assert listed.status_code == 200
     assert f'href="/admin/users/{paul_uuid}"' in listed.text
+    assert f'href="/admin/roles/{eng_role_uuid}"' in listed.text
     assert "Click a name to edit" in listed.text
     assert "<th>Projects</th>" in listed.text
     assert ">All<" in listed.text or ">All</td>" in listed.text
     assert ">Edit</a>" not in listed.text
+
+    role_page = auth_client.get(f"/admin/roles/{eng_role_uuid}")
+    assert role_page.status_code == 200
+    assert "Edit role" in role_page.text
+    assert "Engineer" in role_page.text
 
     detail = auth_client.get(f"/admin/users/{paul_uuid}")
     assert detail.status_code == 200
@@ -404,7 +413,7 @@ def test_admin_user_project_access_filters_projects(auth_client, auth_ctx):
     assert "<th>Projects</th>" in users_list.text
     assert "All" in users_list.text
     assert re.search(
-        r">limited</td>\s*<td>[^<]*</td>\s*<td>[^<]*</td>\s*<td>1</td>",
+        r'<td>limited</td>\s*<td>\s*<a href="/admin/roles/[^"]+">Engineer</a>\s*</td>\s*<td>ACTIVE</td>\s*<td>1</td>',
         users_list.text,
     ), users_list.text
 
@@ -1159,13 +1168,18 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
     assert form.status_code == 200
     assert "Project access" in form.text
     assert 'id="access-all-projects"' in form.text
-    assert 'multiple' in form.text and 'name="project_uuid"' in form.text
 
     project = auth_client.post("/api/projects", json={"name": "Role Matrix"}).json()
     project_id = project["uuid"]
     other = auth_client.post("/api/projects", json={"name": "Other Matrix"})
     assert other.status_code == 201, other.text
     other_id = other.json()["uuid"]
+    # Multi-select options appear once projects exist.
+    form_with_projects = auth_client.get("/admin/users/new")
+    assert form_with_projects.status_code == 200
+    assert 'multiple' in form_with_projects.text
+    assert 'name="project_uuid"' in form_with_projects.text
+    assert 'id="project-access-list"' in form_with_projects.text
     created = auth_client.post(
         f"/api/projects/{project_id}/objects",
         files={"file": ("matrix.prt", b"matrix-bytes", "application/octet-stream")},
