@@ -569,7 +569,11 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     overview = _between(detail, 'id="panel-overview"', 'id="panel-parameters"')
     assert "<dt>Revision</dt>" not in overview
     assert "<dt>Lifecycle</dt>" not in overview
-    assert "<dt>Checkout</dt>" not in overview
+    assert "<dt>Checked out by</dt>" in overview
+    assert "<dt>Checked out</dt>" in overview
+    assert "object.checkout_since" in overview
+    assert 'local_time_pretty(object.checkout_since)' in detail
+    assert 'title="Checked out {{ local_time_pretty(object.checkout_since) }}"' in detail
     assert "show_name" in overview
     assert "show_common" in overview
     assert "show_full" in overview
@@ -593,6 +597,8 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert "label the model **Name**" in docs or "model **Name**" in docs
     assert "label the model identity as Number" in docs
     assert "skips duplicate identity fields" in docs
+    assert "Overview → Checkout" in docs or "Checked out by" in docs
+    assert "hide who/when for an active checkout" in docs
     assert "no mixed monospace" in docs
     assert "regular ink color" in docs
     assert "accent-colored hyperlinks" in docs

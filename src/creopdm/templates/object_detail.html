@@ -81,7 +81,9 @@
     </div>
     <div class="detail-meta">
       <span class="state" data-state="{{ object.lifecycle_state }}">{{ object.lifecycle_state.replace('_', ' ').title() }}</span>
-      <span class="checkout-state" data-state="{% if object.owned_by_me %}mine{% elif object.checkout_user %}other{% else %}available{% endif %}">{{ object.checkout_status }}</span>
+      <span class="checkout-state"
+            data-state="{% if object.owned_by_me %}mine{% elif object.checkout_user %}other{% else %}available{% endif %}"
+            {% if object.checkout_since %}title="Checked out {{ local_time_pretty(object.checkout_since) }}"{% endif %}>{{ object.checkout_status }}</span>
       <span class="rev">{{ object.display_revision }}</span>
     </div>
   </header>
@@ -164,6 +166,20 @@
           <dt>Size</dt><dd>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</dd>
         </dl>
       </section>
+
+      {% if object.checkout_user %}
+      <section class="detail-section">
+        <h3 class="detail-section-title">Checkout</h3>
+        <dl class="kv">
+          <dt>Checked out by</dt>
+          <dd>{{ object.checkout_user }}{% if object.owned_by_me %} (you){% endif %}</dd>
+          {% if object.checkout_since %}
+          <dt>Checked out</dt>
+          <dd><span title="{{ local_time_pretty(object.checkout_since) }}">{{ local_time(object.checkout_since) }}</span></dd>
+          {% endif %}
+        </dl>
+      </section>
+      {% endif %}
 
       {% if units.system_name or units.length or units.mass %}
       <section class="detail-section">

@@ -55,6 +55,21 @@ def test_checkout_then_second_user_denied(client, repo_parent, identity, data_di
 
 
 @requires_git
+def test_details_shows_checkout_who_and_when_for_other_user(client, repo_parent, identity):
+    """Details header hover + Overview must show who holds the lock and when."""
+    project, obj, _location = _create_part(client, repo_parent)
+    assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
+    identity.become("Bob", "ENG-PC-18")
+    page = client.get(f"/projects/{project['uuid']}/objects/{obj['uuid']}")
+    assert page.status_code == 200, page.text
+    assert "Checked out by Alice" in page.text
+    assert "<dt>Checked out by</dt>" in page.text
+    assert "<dt>Checked out</dt>" in page.text
+    assert 'title="Checked out ' in page.text
+    assert "(you)" not in page.text
+
+
+@requires_git
 def test_undo_checkout(client, repo_parent):
     _project, obj, _location = _create_part(client, repo_parent)
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
