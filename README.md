@@ -133,6 +133,8 @@ Other PCs:  http://192.168.x.x:54321
 
 `This PC` only works in a browser on the machine running CreoPDM. From another computer, open the **Other PCs** URL printed at startup, for example `http://192.168.1.252:52113`.
 
+**First visit:** if no users exist yet, the browser opens **`/setup`** so you can create the first administrator (no default password). After that, sign in at **`/login`**. See [Users, roles, and project access](docs/users-roles-and-project-access.md).
+
 If that page does not load, the Linux firewall is usually blocking the port. On the Linux host:
 
 ```bash

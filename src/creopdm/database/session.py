@@ -25,6 +25,7 @@ def _register_mappers() -> None:
     from creopdm.models.parameter import Parameter  # noqa: F401
     from creopdm.models.project import Project  # noqa: F401
     from creopdm.models.remote import Remote  # noqa: F401
+    from creopdm.models.user import Permission, Role, User  # noqa: F401
     from creopdm.models.version import ObjectVersion  # noqa: F401
 
 

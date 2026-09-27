@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -18,6 +18,7 @@ from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.services.metadata_service import MetadataService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.project_service import ProjectService
+from creopdm.services.user_service import UserService
 from creopdm.services.where_used_index_jobs import WhereUsedIndexJobs
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.storage.base import VersionStore
@@ -44,3 +45,6 @@ class AppContext:
     creo_service: CreoService
     metadata: MetadataService
     where_used_index: WhereUsedIndexJobs
+    user_accounts: UserService = field(default_factory=UserService)
+    # When False (tests with StaticUserProvider), skip login redirects.
+    auth_enabled: bool = True

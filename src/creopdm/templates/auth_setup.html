@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Create administrator — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page">
+  <h1>Create administrator</h1>
+  <p class="muted">No users exist yet. Create the first administrator account for this CreoPDM server.</p>
+
+  <form method="post" action="/setup" class="settings-form">
+    <section class="settings-card">
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      <label>Display name
+        <input name="display_name" type="text" value="{{ display_name or '' }}" required autocomplete="name" maxlength="255">
+      </label>
+      <label>Username
+        <input name="username" type="text" value="{{ username or 'admin' }}" required autocomplete="username" maxlength="64">
+      </label>
+      <label>Password
+        <input name="password" type="password" required autocomplete="new-password" minlength="8">
+      </label>
+      <label>Confirm password
+        <input name="password_confirm" type="password" required autocomplete="new-password" minlength="8">
+      </label>
+      <p class="muted small">Password must be at least 8 characters. There is no default password.</p>
+      <p><button type="submit" class="btn btn-primary">Create administrator</button></p>
+    </section>
+  </form>
+</article>
+{% endblock %}

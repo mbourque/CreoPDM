@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Users — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page">
+  <nav class="crumb">
+    <a href="/">Projects</a>
+    <span>/</span>
+    <span>Administration</span>
+    <span>/</span>
+    <span>Users</span>
+  </nav>
+  <h1>Users</h1>
+  <p class="muted">Create and manage CreoPDM accounts. Role permissions beyond user administration are enforced in a later phase.</p>
+  <p><a class="btn btn-primary" href="/admin/users/new">Add user</a></p>
+
+  <section class="settings-card settings-form-wide">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Username</th>
+          <th>Role</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td><a href="/admin/users/{{ u.uuid }}">{{ u.display_name }}</a></td>
+          <td>{{ u.username }}</td>
+          <td>{{ u.role }}</td>
+          <td>{{ u.status }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No users yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</article>
+{% endblock %}

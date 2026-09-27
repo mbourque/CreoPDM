@@ -321,6 +321,8 @@ a.brand:hover { text-decoration: none; color: inherit; }
 }
 .settings-form label { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.55rem 0; font-weight: 600; }
 .settings-form input[type="text"],
+.settings-form input[type="password"],
+.settings-form input[type="email"],
 .settings-form select,
 .settings-form textarea {
   font: inherit; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 4px; font-weight: 400;
@@ -334,6 +336,22 @@ a.brand:hover { text-decoration: none; color: inherit; }
   overflow-wrap: anywhere;
 }
 .settings-form .muted.small { overflow-wrap: anywhere; }
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-weight: 400;
+}
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.data-table th {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
 .choice { flex-direction: row !important; align-items: center; gap: 0.45rem !important; font-weight: 500 !important; }
 .open-choice {
   display: flex;

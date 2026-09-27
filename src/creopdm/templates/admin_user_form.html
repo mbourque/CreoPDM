@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'new' %}Add user{% else %}Edit user{% endif %} — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page">
+  <nav class="crumb">
+    <a href="/">Projects</a>
+    <span>/</span>
+    <a href="/admin/users">Users</a>
+    <span>/</span>
+    <span>{% if mode == 'new' %}Add user{% else %}{{ form.username }}{% endif %}</span>
+  </nav>
+  <h1>{% if mode == 'new' %}Add user{% else %}Edit user{% endif %}</h1>
+
+  <form method="post" action="{% if mode == 'new' %}/admin/users/new{% else %}/admin/users/{{ form.uuid }}{% endif %}" class="settings-form">
+    <section class="settings-card">
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      <label>Display name
+        <input name="display_name" type="text" value="{{ form.display_name }}" required maxlength="255" autocomplete="name">
+      </label>
+      <label>Username
+        {% if mode == 'new' %}
+        <input name="username" type="text" value="{{ form.username }}" required maxlength="64" autocomplete="username">
+        {% else %}
+        <input type="text" value="{{ form.username }}" disabled>
+        {% endif %}
+      </label>
+      <label>Email (optional)
+        <input name="email" type="email" value="{{ form.email }}" maxlength="255" autocomplete="email">
+      </label>
+      <label>Role
+        <select name="role">
+          {% for r in roles %}
+          <option value="{{ r.name }}" {% if form.role == r.name %}selected{% endif %}>{{ r.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Status
+        <select name="status">
+          <option value="ACTIVE" {% if form.status == 'ACTIVE' %}selected{% endif %}>ACTIVE</option>
+          <option value="DISABLED" {% if form.status == 'DISABLED' %}selected{% endif %}>DISABLED</option>
+        </select>
+      </label>
+      {% if mode == 'new' %}
+      <label>Password
+        <input name="password" type="password" required autocomplete="new-password" minlength="8">
+      </label>
+      <label>Confirm password
+        <input name="password_confirm" type="password" required autocomplete="new-password" minlength="8">
+      </label>
+      <p class="muted small">The user must change this password on first sign-in.</p>
+      {% else %}
+      <label>New password (optional)
+        <input name="password" type="password" autocomplete="new-password" minlength="8">
+      </label>
+      <label>Confirm new password
+        <input name="password_confirm" type="password" autocomplete="new-password" minlength="8">
+      </label>
+      <p class="muted small">Leave blank to keep the current password. Setting a password requires the user to change it on next sign-in.</p>
+      {% endif %}
+      <p>
+        <button type="submit" class="btn btn-primary">{% if mode == 'new' %}Create user{% else %}Save{% endif %}</button>
+        <a class="btn" href="/admin/users">Cancel</a>
+      </p>
+    </section>
+  </form>
+</article>
+{% endblock %}

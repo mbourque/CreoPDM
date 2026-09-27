@@ -96,6 +96,11 @@ class ValidationAppError(CreoPDMError):
     http_status = 400
 
 
+class NotFoundError(CreoPDMError):
+    code = "NOT_FOUND"
+    http_status = 404
+
+
 class ConfigurationError(CreoPDMError):
     code = "CONFIGURATION_ERROR"
     http_status = 500

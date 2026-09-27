@@ -5,13 +5,17 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
-from creopdm.api import checkout, creo, health, objects, pages, projects, settings
+from creopdm.api import auth_pages, checkout, creo, health, objects, pages, projects, settings
 from creopdm.api.errors import register_error_handlers
+from creopdm.auth_constants import UserStatus
+from creopdm.auth_session import SESSION_USER_KEY, ensure_session_secret
 from creopdm.config import ConfigManager
 from creopdm.constants import APP_NAME, APP_VERSION
 from creopdm.context import AppContext
@@ -28,10 +32,17 @@ from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.services.metadata_service import MetadataService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.project_service import ProjectService
+from creopdm.services.user_service import UserService
 from creopdm.services.where_used_index_jobs import WhereUsedIndexJobs
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.storage.git_store import GitVersionStore
-from creopdm.utils.identity import CurrentUserProvider
+from creopdm.utils.identity import (
+    CurrentUserProvider,
+    SessionAwareUserProvider,
+    StaticUserProvider,
+    UserIdentity,
+    set_request_identity,
+)
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 logger = get_logger("app")
@@ -47,7 +58,8 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
     session_factory = create_session_factory(engine)
     git = GitService(app_settings.git.executable)
     version_store = GitVersionStore(git)
-    identity = users or CurrentUserProvider()
+    auth_enabled = users is None
+    identity: CurrentUserProvider = users if users is not None else SessionAwareUserProvider()
     locks = ProjectLockManager()
     activities = ActivityService()
     workspaces = WorkspaceService(manager, git)
@@ -72,6 +84,10 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         creo_connector,
     )
     metadata = MetadataService(objects, workspaces)
+    user_accounts = UserService()
+    with session_factory() as db:
+        user_accounts.ensure_builtin_roles(db)
+        db.commit()
     return AppContext(
         config=manager,
         settings=app_settings,
@@ -91,6 +107,8 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         creo_service=CreoService(creo_connector, objects, checkouts, workspaces),
         metadata=metadata,
         where_used_index=WhereUsedIndexJobs(session_factory, metadata),
+        user_accounts=user_accounts,
+        auth_enabled=auth_enabled,
     )
 
 
@@ -110,6 +128,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
     app = FastAPI(title=APP_NAME, version=APP_VERSION, docs_url="/api/docs", lifespan=lifespan)
     app.state.ctx = ctx
     register_error_handlers(app)
+    app.include_router(auth_pages.router)
     app.include_router(health.router)
     app.include_router(settings.router)
     app.include_router(projects.router)
@@ -123,7 +142,6 @@ def create_app(context: AppContext | None = None) -> FastAPI:
 
     @app.get("/client/app.js")
     def client_app_js() -> FileResponse:
-        # Distinct path from /static/js/app.js so Creo's browser cannot keep an old cached poller.
         return FileResponse(
             app_js,
             media_type="application/javascript",
@@ -139,5 +157,96 @@ def create_app(context: AppContext | None = None) -> FastAPI:
         if path.endswith("/app.js"):
             response.headers["Cache-Control"] = "no-store"
         return response
+
+    @app.middleware("http")
+    async def auth_guard(request, call_next):
+        set_request_identity(None)
+        request.state.auth_user = None
+        request.state.can_manage_users = False
+        path = request.url.path or "/"
+
+        public = path in {
+            "/login",
+            "/setup",
+            "/logout",
+            "/api/health",
+            "/api/docs",
+            "/openapi.json",
+            "/favicon.ico",
+        } or path.startswith("/static") or path.startswith("/client/")
+
+        if not ctx.auth_enabled:
+            if isinstance(ctx.users, StaticUserProvider):
+                set_request_identity(ctx.users.get_current_user())
+            try:
+                return await call_next(request)
+            finally:
+                set_request_identity(None)
+
+        db = ctx.session_factory()
+        try:
+            needs_setup = ctx.user_accounts.needs_setup(db)
+            user = None
+            user_uuid = request.session.get(SESSION_USER_KEY)
+            if user_uuid:
+                user = ctx.user_accounts.get_by_uuid(db, str(user_uuid))
+                if user is not None and user.status != UserStatus.ACTIVE.value:
+                    request.session.clear()
+                    user = None
+            if user is not None:
+                identity = UserIdentity(
+                    user_name=user.username,
+                    machine_name="web",
+                    user_uuid=user.uuid,
+                    display_name=user.display_name,
+                )
+                set_request_identity(identity)
+                request.state.auth_user = user
+                request.state.can_manage_users = ctx.user_accounts.can_manage_users(user)
+
+            if needs_setup and not public and not path.startswith("/setup"):
+                return RedirectResponse("/setup", status_code=303)
+            if not needs_setup and path.startswith("/setup"):
+                return RedirectResponse("/login", status_code=303)
+
+            if not public and user is None:
+                if path.startswith("/api/"):
+                    return JSONResponse(
+                        {
+                            "error": {
+                                "code": "UNAUTHORIZED",
+                                "message": "Sign in required.",
+                                "details": {},
+                            }
+                        },
+                        status_code=401,
+                    )
+                next_url = quote(path + (("?" + request.url.query) if request.url.query else ""))
+                return RedirectResponse(f"/login?next={next_url}", status_code=303)
+
+            if (
+                user is not None
+                and user.must_change_password
+                and not path.startswith("/account/password")
+                and not path.startswith("/logout")
+                and not path.startswith("/static")
+            ):
+                return RedirectResponse("/account/password", status_code=303)
+
+            return await call_next(request)
+        finally:
+            db.close()
+            set_request_identity(None)
+
+    # Outermost so request.session is available in auth_guard.
+    secret = ensure_session_secret(ctx.config.config_dir)
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=secret,
+        session_cookie="creopdm_session",
+        same_site="lax",
+        https_only=False,
+        max_age=60 * 60 * 24 * 14,
+    )
 
     return app
