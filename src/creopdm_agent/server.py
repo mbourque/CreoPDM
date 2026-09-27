@@ -686,14 +686,20 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
 
     @app.post("/open-folder", response_model=OpenFolderResponse)
     def open_folder(payload: OpenFolderRequest) -> OpenFolderResponse:
-        """Open the local agent cache folder in Explorer (client PC, not CreoPDM server)."""
+        """Open the local agent cache folder in Explorer (client PC, not CreoPDM server).
+
+        Creates the project cache folder when nothing has been materialized yet.
+        """
         from creopdm.utils.launch import open_windows_folder
 
         target = _project_cache_dir(payload.project_id, payload.folder, payload.vault_folder)
         try:
             open_windows_folder(target)
         except OSError as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=500,
+                detail=f"Could not open the local workspace folder: {exc}",
+            ) from exc
         logger.info("Opened local workspace folder %s", target)
         return OpenFolderResponse(path=str(target))
 

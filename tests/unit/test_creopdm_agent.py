@@ -207,6 +207,31 @@ def test_agent_open_folder_uses_project_cache(tmp_path, monkeypatch):
         assert denied.status_code == 403
 
 
+def test_agent_open_folder_creates_cache_when_nothing_materialized(tmp_path, monkeypatch):
+    """Open workspace on an empty project must create the local cache folder."""
+    root = tmp_path / "cache"
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    opened: list[Path] = []
+
+    def fake_open(path):
+        # Mirror production: create then "open".
+        target = Path(path)
+        target.mkdir(parents=True, exist_ok=True)
+        opened.append(target)
+
+    monkeypatch.setattr("creopdm.utils.launch.open_windows_folder", fake_open)
+    with TestClient(app) as client:
+        assert not (root / "brand-new").exists()
+        ok = client.post(
+            "/open-folder",
+            json={"project_id": "brand-new", "vault_folder": "brand-new"},
+        )
+        assert ok.status_code == 200, ok.text
+        assert (root / "brand-new").is_dir()
+        assert opened[-1].resolve() == (root / "brand-new").resolve()
+
+
 def test_agent_pick_files_and_local_file(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     root.mkdir()

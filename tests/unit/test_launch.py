@@ -62,10 +62,18 @@ def test_powershell_start_passes_path_in_env(tmp_path: Path, monkeypatch):
     assert 'start ""' not in str(recorded["command"])
 
 
-def test_open_windows_folder_uses_explorer(tmp_path: Path, monkeypatch):
-    folder = tmp_path / "workspace"
-    folder.mkdir()
+def test_open_windows_folder_creates_missing_and_explores(tmp_path: Path, monkeypatch):
+    """Empty project: cache folder may not exist until Open workspace creates it."""
+    folder = tmp_path / "cache" / "proj-empty"
+    assert not folder.exists()
+    explored: list[str] = []
     recorded: list[list[str]] = []
+
+    def fake_sta(fn):
+        return fn()
+
+    def fake_explore(path: str) -> None:
+        explored.append(path)
 
     def fake_popen(args, **kwargs):
         recorded.append(list(args))
@@ -75,10 +83,39 @@ def test_open_windows_folder_uses_explorer(tmp_path: Path, monkeypatch):
 
         return Proc()
 
+    monkeypatch.setattr("creopdm.utils.launch.run_on_sta", fake_sta)
+    monkeypatch.setattr("creopdm.utils.launch._shell_execute_explore", fake_explore)
+    monkeypatch.setattr("creopdm.utils.launch.subprocess.Popen", fake_popen)
+    open_windows_folder(folder)
+    assert folder.is_dir()
+    if os.name == "nt":
+        assert explored == [str(folder.resolve())]
+    else:
+        assert recorded[0][0] in {"xdg-open", "open"}
+        assert recorded[0][1] == str(folder.resolve())
+
+
+def test_open_windows_folder_falls_back_to_explorer(tmp_path: Path, monkeypatch):
+    folder = tmp_path / "workspace"
+    folder.mkdir()
+    recorded: list[list[str]] = []
+
+    def fake_sta(fn):
+        raise OSError("ShellExecute explore unavailable")
+
+    def fake_popen(args, **kwargs):
+        recorded.append(list(args))
+
+        class Proc:
+            pass
+
+        return Proc()
+
+    monkeypatch.setattr("creopdm.utils.launch.run_on_sta", fake_sta)
     monkeypatch.setattr("creopdm.utils.launch.subprocess.Popen", fake_popen)
     open_windows_folder(folder)
     assert recorded[0][1] == str(folder.resolve())
     if os.name == "nt":
-        assert recorded[0][0] == "explorer.exe"
+        assert recorded[0][0].lower().endswith("explorer.exe")
     else:
         assert recorded[0][0] in {"xdg-open", "open"}

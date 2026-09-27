@@ -65,6 +65,20 @@ def _shell_execute_open(path: str, folder: str | None) -> None:
         raise OSError(f"Windows could not open the file (ShellExecute {code}): {path}")
 
 
+def _shell_execute_explore(path: str) -> None:
+    """Open a folder in Explorer via the explore verb (avoids CreateProcess WinError 50)."""
+    if os.name != "nt":
+        raise OSError("ShellExecute is only available on Windows.")
+    import ctypes
+
+    shell_execute = ctypes.windll.shell32.ShellExecuteW
+    shell_execute.restype = ctypes.c_void_p
+    result = shell_execute(None, "explore", path, None, None, 1)
+    code = int(result or 0)
+    if code <= 32:
+        raise OSError(f"Windows could not open the folder (ShellExecute {code}): {path}")
+
+
 def _powershell_start(path: str, folder: str | None) -> bool:
     env = os.environ.copy()
     env["CREOPDM_OPEN_FILE"] = path
@@ -107,22 +121,43 @@ def _powershell_start(path: str, folder: str | None) -> bool:
 
 
 def open_windows_folder(path: Path) -> None:
-    """Open a folder in Explorer, the same as double-clicking it in the shell."""
-    target = path.resolve()
+    """Open a folder in Explorer, creating it when nothing has materialized yet.
+
+    Empty projects have no agent-cache files until checkout/open. Open workspace
+    still creates the local folder and shows it in Explorer.
+    """
+    target = Path(path)
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise OSError(f"Could not create the folder: {target}: {exc}") from exc
+    target = target.resolve()
     if not target.is_dir():
         raise FileNotFoundError(f"The folder was not found: {target}")
+    folder = os.fspath(target)
     if os.name == "nt":
-        subprocess.Popen(  # noqa: S603 — argument list, no shell
-            ["explorer.exe", str(target)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            shell=False,
-        )
-        logger.info("Opened folder %s in Explorer", target)
-        return
+        try:
+            run_on_sta(lambda: _shell_execute_explore(folder))
+            logger.info("Opened folder %s via ShellExecute explore", target)
+            return
+        except OSError as exc:
+            logger.warning("ShellExecute explore failed for %s: %s", target, exc)
+        explorer = str(Path(os.environ.get("WINDIR", r"C:\Windows")) / "explorer.exe")
+        try:
+            subprocess.Popen(  # noqa: S603 — argument list, no shell
+                [explorer, folder],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                shell=False,
+            )
+            logger.info("Opened folder %s in Explorer", target)
+            return
+        except OSError as exc:
+            logger.warning("explorer.exe failed for %s: %s", target, exc)
+            raise OSError(f"Could not open the folder in Explorer: {exc}") from exc
     opener = "open" if sys.platform == "darwin" else "xdg-open"
     subprocess.Popen(  # noqa: S603 — argument list, no shell
-        [opener, str(target)],
+        [opener, folder],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         shell=False,
