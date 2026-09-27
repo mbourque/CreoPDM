@@ -1192,6 +1192,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         assert admin is not None and eng is not None and clerk is not None
         admin_uuid = admin.uuid
         eng_uuid = eng.uuid
+        clerk_uuid = clerk.uuid
         clerk.must_change_password = False
         db.commit()
 
@@ -1200,8 +1201,10 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
     assert listed.status_code == 200
     assert f'href="/admin/users/{eng_uuid}"' in listed.text
     assert f'href="/admin/users/{admin_uuid}"' not in listed.text
-    assert "Only a full administrator can edit other administrators" in listed.text
+    assert f'href="/admin/users/{clerk_uuid}"' not in listed.text
+    assert "You cannot edit your own account" in listed.text
 
+    assert auth_client.get(f"/admin/users/{clerk_uuid}").status_code == 403
     assert auth_client.get(f"/admin/users/{admin_uuid}").status_code == 403
     denied_edit = auth_client.post(
         f"/admin/users/{admin_uuid}",
@@ -1258,12 +1261,12 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
     )
     assert edit_eng.status_code == 303, edit_eng.text
 
-    # Full admin cannot edit themselves; another full admin can demote them (lockout still applies).
+    # Nobody may edit themselves; another full admin can demote admin (lockout still applies).
     _login(auth_client, "admin", "AdminPass1")
     listed_as_admin = auth_client.get("/admin/users")
     assert listed_as_admin.status_code == 200
     assert f'href="/admin/users/{admin_uuid}"' not in listed_as_admin.text
-    assert "cannot edit their own account" in listed_as_admin.text
+    assert "You cannot edit your own account" in listed_as_admin.text
     self_denied = auth_client.get(f"/admin/users/{admin_uuid}")
     assert self_denied.status_code == 403
     assert "own account" in self_denied.text.lower()

@@ -214,10 +214,10 @@ class UserService:
             return False
 
     def ensure_can_edit_user(self, actor: User, target: User) -> None:
-        """Full admins cannot edit themselves; only full admins may edit other full admins."""
-        if actor.id == target.id and self.is_full_administrator(actor):
+        """Nobody may edit themselves via Users admin; only full admins edit full admins."""
+        if actor.id == target.id:
             raise ValidationAppError(
-                "Administrators cannot edit their own account. Ask another administrator."
+                "You cannot edit your own account. Ask another administrator."
             )
         if self.is_full_administrator(target) and not self.is_full_administrator(actor):
             raise ValidationAppError(
