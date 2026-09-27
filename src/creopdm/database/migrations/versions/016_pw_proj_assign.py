@@ -1,8 +1,10 @@
 """Alembic migration: add users.password and projects.assign for existing installs.
 
-Revision ID: 016_users_password_projects_assign
+Revision ID: 016_pw_proj_assign
 Revises: 015_roles_assign
 Create Date: 2026-09-27
+
+Note: revision id must fit alembic_version.version_num VARCHAR(32).
 """
 
 from __future__ import annotations
@@ -12,7 +14,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "016_users_password_projects_assign"
+revision: str = "016_pw_proj_assign"
 down_revision: Union[str, None] = "015_roles_assign"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
