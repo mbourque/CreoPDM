@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object
-from creopdm.api.deps import get_context, get_db, require_permission
+from creopdm.api.deps import get_context, get_db, load_accessible_project, require_permission, require_project_access
 from creopdm.api.serializers import version_to_response
 from creopdm.auth_constants import (
     PERMISSION_OBJECTS_ADD,
@@ -61,6 +61,7 @@ def object_content(
 ) -> FileResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     obj = ctx.objects.get_object(db, object_id)
+    require_project_access(request, ctx, obj.project)
     project = obj.project
     try:
         path = ctx.workspaces.locate_content(project, obj)
@@ -90,6 +91,7 @@ async def put_workspace_content(
     """Stage a local agent/browser file into the vault working copy (no new version)."""
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     obj = ctx.objects.get_object(db, object_id)
+    require_project_access(request, ctx, obj.project)
     project = obj.project
     user = ctx.users.get_current_user()
     ctx.checkouts.require_owned(db, obj, user)
@@ -115,7 +117,7 @@ async def add_object(
     ctx: AppContext = Depends(get_context),
 ) -> ObjectResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     data = await file.read()
     filename = file.filename or "untitled"
     if not filename:
@@ -150,6 +152,7 @@ def purge_workspace_batch(
         filename = object_uuid
         try:
             obj = ctx.objects.get_object(db, object_uuid)
+            require_project_access(request, ctx, obj.project)
             filename = obj.filename
             _purge_and_release(ctx, db, obj, ignore_locked=False)
             ctx.activities.record(
@@ -183,11 +186,12 @@ def remove_batch(
     project = None
     project_id = (payload.project_id or "").strip()
     if project_id:
-        project = ctx.projects.get_project(db, project_id)
+        project = load_accessible_project(request, ctx, db, project_id)
     if folder_paths:
         if project is None and requested:
             found_hint = ctx.objects.get_objects(db, requested[:1])
             if found_hint:
+                require_project_access(request, ctx, found_hint[0].project)
                 project = found_hint[0].project
         if project is None:
             raise ValidationAppError(
@@ -198,6 +202,8 @@ def remove_batch(
             requested.extend(ctx.objects.uuids_under_folder(db, project.id, folder))
         requested = list(dict.fromkeys(requested))
     found = ctx.objects.get_objects(db, requested) if requested else []
+    for obj in found:
+        require_project_access(request, ctx, obj.project)
     by_uuid = {obj.uuid: obj for obj in found}
     checkouts = ctx.checkouts.active_map(db, [obj.id for obj in found]) if found else {}
     user = ctx.users.get_current_user()
@@ -285,6 +291,7 @@ def get_object(
 ) -> ObjectResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     obj = ctx.objects.get_object(db, object_id)
+    require_project_access(request, ctx, obj.project)
     return present_object(ctx, db, obj)
 
 
@@ -296,6 +303,8 @@ def object_history(
     ctx: AppContext = Depends(get_context),
 ) -> list[ObjectVersionResponse]:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    obj = ctx.objects.get_object(db, object_id)
+    require_project_access(request, ctx, obj.project)
     versions = ctx.objects.object_history(db, object_id)
     return [item for item in (version_to_response(v) for v in versions) if item is not None]
 
@@ -310,6 +319,8 @@ def revert_object_version(
 ) -> ObjectResponse:
     """Restore an older history row onto vault (new check-in) so local can rematerialize."""
     require_permission(request, ctx, PERMISSION_OBJECTS_REVERT)
+    obj = ctx.objects.get_object(db, object_id)
+    require_project_access(request, ctx, obj.project)
     obj = ctx.checkins.revert_to_version(db, object_id, version_id)
     db.commit()
     db.refresh(obj)
@@ -325,6 +336,8 @@ def get_creo_metadata(
     ctx: AppContext = Depends(get_context),
 ) -> CreoMetadataResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    obj = ctx.objects.get_object(db, object_id)
+    require_project_access(request, ctx, obj.project)
     return ctx.metadata.get(db, object_id, version)
 
 
@@ -337,6 +350,8 @@ def post_creo_metadata(
     ctx: AppContext = Depends(get_context),
 ) -> CreoMetadataResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_METADATA)
+    obj = ctx.objects.get_object(db, object_id)
+    require_project_access(request, ctx, obj.project)
     result = ctx.metadata.save(db, object_id, payload)
     params = len(result.parameters or [])
     mats = result.materials if isinstance(result.materials, dict) else {}
@@ -377,6 +392,8 @@ def object_where_used(
     ctx: AppContext = Depends(get_context),
 ) -> WhereUsedResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    obj = ctx.objects.get_object(db, object_id)
+    require_project_access(request, ctx, obj.project)
     return ctx.metadata.where_used(db, object_id, debug=debug, vault_scan=vault_scan)
 
 
@@ -411,6 +428,7 @@ def purge_workspace(
 ) -> Response:
     require_permission(request, ctx, PERMISSION_OBJECTS_REMOVE)
     obj = ctx.objects.get_object(db, object_id)
+    require_project_access(request, ctx, obj.project)
     _purge_and_release(ctx, db, obj, ignore_locked=False)
     ctx.activities.record(
         db,
@@ -432,6 +450,7 @@ def delete_object(
 ) -> Response:
     require_permission(request, ctx, PERMISSION_OBJECTS_REMOVE)
     obj = ctx.objects.get_object(db, object_id)
+    require_project_access(request, ctx, obj.project)
     _purge_and_release(ctx, db, obj, ignore_locked=True)
     ctx.objects.delete_object(db, object_id)
     # See batch/remove — commit before 204 so a follow-up soft reload sees the delete.

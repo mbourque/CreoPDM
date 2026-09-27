@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from creopdm.api.deps import get_context, get_db, require_permission
+from creopdm.api.deps import get_context, get_db, load_accessible_project, require_permission, require_project_access
 from creopdm.auth_constants import PERMISSION_OBJECTS_VIEW
 from creopdm.context import AppContext
 from creopdm.schemas.common import CreoOpenRequest, CreoOpenResponse, CreoStatusResponse
@@ -38,6 +38,8 @@ def open_in_creo(
 ) -> CreoOpenResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     if payload.object_id:
+        obj = ctx.objects.get_object(db, payload.object_id)
+        require_project_access(request, ctx, obj.project)
         result = ctx.creo_service.open_object(
             db,
             payload.object_id,
@@ -45,7 +47,7 @@ def open_in_creo(
             include_companions=payload.include_companions,
         )
     else:
-        project = ctx.projects.get_project(db, payload.project_id or "")
+        project = load_accessible_project(request, ctx, db, payload.project_id or "")
         result = ctx.creo_service.open_workspace_file(
             db,
             project,

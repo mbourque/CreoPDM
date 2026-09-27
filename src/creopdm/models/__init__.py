@@ -5,7 +5,7 @@ from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
 from creopdm.models.project import Project
 from creopdm.models.remote import Remote
-from creopdm.models.user import Permission, Role, RolePermission, User, UserRole
+from creopdm.models.user import Permission, Role, RolePermission, User, UserProject, UserRole
 from creopdm.models.version import ObjectVersion
 
 __all__ = [
@@ -21,5 +21,6 @@ __all__ = [
     "Role",
     "RolePermission",
     "User",
+    "UserProject",
     "UserRole",
 ]

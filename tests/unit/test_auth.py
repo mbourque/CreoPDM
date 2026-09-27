@@ -40,8 +40,10 @@ def test_password_hash_round_trip_never_stores_plaintext():
 
 def test_migration_seeds_builtin_roles(auth_ctx):
     inspector = inspect(auth_ctx.engine)
-    for table in ("users", "roles", "permissions", "user_roles", "role_permissions"):
+    for table in ("users", "roles", "permissions", "user_roles", "role_permissions", "user_projects"):
         assert table in inspector.get_table_names()
+    cols = {c["name"] for c in inspector.get_columns("users")}
+    assert "access_all_projects" in cols
     with auth_ctx.session_factory() as db:
         names = {r.name for r in db.scalars(select(Role)).all()}
     assert names >= {
@@ -306,6 +308,118 @@ def test_admin_can_edit_user(auth_client, auth_ctx):
         assert paul.email == "paul@example.com"
         assert paul.status == UserStatus.DISABLED.value
         assert UserService().primary_role_name(paul) == BuiltinRole.VIEWER.value
+
+
+@requires_git
+def test_admin_user_project_access_filters_projects(auth_client, auth_ctx):
+    """Restricted membership hides other projects; empty list blocks app browse."""
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    alpha_resp = auth_client.post("/api/projects", json={"name": "Alpha"})
+    beta_resp = auth_client.post("/api/projects", json={"name": "Beta"})
+    assert alpha_resp.status_code == 201, alpha_resp.text
+    assert beta_resp.status_code == 201, beta_resp.text
+    alpha = alpha_resp.json()
+    beta = beta_resp.json()
+
+    form = auth_client.get("/admin/users/new")
+    assert form.status_code == 200
+    assert "Project access" in form.text
+    assert 'id="access-all-projects"' in form.text
+    assert 'name="project_uuid"' in form.text
+    assert "project-access-list" in form.text
+
+    created = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Limited",
+            "username": "limited",
+            "email": "",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "Limited1!",
+            "password_confirm": "Limited1!",
+            "project_access_present": "1",
+            "project_uuid": [alpha["uuid"]],
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303, created.text
+
+    with auth_ctx.session_factory() as db:
+        user = db.scalar(select(User).where(User.username == "limited"))
+        assert user is not None
+        assert user.access_all_projects is False
+        assert {p.uuid for p in user.projects} == {alpha["uuid"]}
+        user.must_change_password = False
+        user_uuid = user.uuid
+        db.commit()
+
+    _login(auth_client, "limited", "Limited1!")
+    listed = auth_client.get("/api/projects")
+    assert listed.status_code == 200
+    assert [p["uuid"] for p in listed.json()] == [alpha["uuid"]]
+    assert auth_client.get(f"/api/projects/{alpha['uuid']}").status_code == 200
+    denied = auth_client.get(f"/api/projects/{beta['uuid']}")
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "FORBIDDEN"
+    home = auth_client.get("/")
+    assert home.status_code == 200
+    assert "Alpha" in home.text
+    assert "Beta" not in home.text
+
+    _login(auth_client, "admin", "AdminPass1")
+    cleared = auth_client.post(
+        f"/admin/users/{user_uuid}",
+        data={
+            "display_name": "Limited",
+            "email": "",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+            "project_access_present": "1",
+            # All projects off, no project_uuid → cannot browse
+        },
+        follow_redirects=False,
+    )
+    assert cleared.status_code == 303, cleared.text
+
+    _login(auth_client, "limited", "Limited1!")
+    empty = auth_client.get("/api/projects")
+    assert empty.status_code == 200
+    assert empty.json() == []
+    assert auth_client.get(f"/api/projects/{alpha['uuid']}").status_code == 403
+
+    _login(auth_client, "admin", "AdminPass1")
+    restored = auth_client.post(
+        f"/admin/users/{user_uuid}",
+        data={
+            "display_name": "Limited",
+            "email": "",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+            "project_access_present": "1",
+            "access_all_projects": "1",
+        },
+        follow_redirects=False,
+    )
+    assert restored.status_code == 303, restored.text
+    _login(auth_client, "limited", "Limited1!")
+    all_projects = auth_client.get("/api/projects")
+    assert all_projects.status_code == 200
+    uuids = {p["uuid"] for p in all_projects.json()}
+    assert alpha["uuid"] in uuids and beta["uuid"] in uuids
 
 
 def test_unauthenticated_api_returns_401(auth_client):

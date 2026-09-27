@@ -15,12 +15,19 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object, present_objects
-from creopdm.api.deps import get_context, get_db, require_permission
+from creopdm.api.deps import (
+    accessible_projects,
+    get_context,
+    get_db,
+    load_accessible_project,
+    require_permission,
+    require_project_access,
+)
 from creopdm.api.serializers import project_to_response, revision_display
 from creopdm.auth_constants import PERMISSION_OBJECTS_VIEW
 from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPSED_COOKIE
 from creopdm.context import AppContext
-from creopdm.exceptions import ProjectNotFoundError
+from creopdm.exceptions import PermissionDeniedError, ProjectNotFoundError
 from creopdm.permissions import caps_dict
 from creopdm.utils.bom_match import bom_generic_label, bom_lookup_keys
 from creopdm.utils.classify import display_type_label, resolve_type_icon, type_icon_client_payload
@@ -297,7 +304,7 @@ def home(
     ctx: AppContext = Depends(get_context),
 ) -> HTMLResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    projects = [project_to_response(p) for p in ctx.projects.list_projects(db)]
+    projects = [project_to_response(p) for p in accessible_projects(request, ctx, db)]
     selected_uuid = request.query_params.get("project") or ctx.config.settings.ui.last_project_uuid
     selected = None
     status = None
@@ -305,14 +312,14 @@ def home(
     project = None
     if selected_uuid:
         try:
-            project = ctx.projects.get_project(db, selected_uuid)
+            project = load_accessible_project(request, ctx, db, selected_uuid)
             selected = project_to_response(project)
-        except ProjectNotFoundError:
+        except (ProjectNotFoundError, PermissionDeniedError):
             selected = None
             project = None
     if selected is None and projects:
         selected = projects[0]
-        project = ctx.projects.get_project(db, selected.uuid)
+        project = load_accessible_project(request, ctx, db, selected.uuid)
     if project is not None:
         ctx.config.remember_project(project.uuid)
         if "folder" not in request.query_params:
@@ -390,7 +397,7 @@ def object_detail(
     ctx: AppContext = Depends(get_context),
 ) -> HTMLResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     obj = ctx.objects.get_object(db, object_id)
     history = ctx.objects.object_history(db, object_id)
     payload = present_object(ctx, db, obj)

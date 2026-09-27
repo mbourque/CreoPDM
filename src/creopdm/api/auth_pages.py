@@ -317,6 +317,71 @@ def _parse_permission_keys(raw: list[str] | None) -> list[str]:
     return [key for key in (raw or []) if key in known]
 
 
+def _parse_project_access(
+    *,
+    project_access_present: str | None,
+    access_all_projects: str | None,
+    project_uuid: list[str] | None,
+) -> tuple[bool, list[str]]:
+    """Return (access_all, project_uuids). Legacy posts without the field keep All projects."""
+    if not project_access_present:
+        return True, []
+    access_all = (access_all_projects or "").strip().lower() in {"1", "on", "true", "yes"}
+    if isinstance(project_uuid, str):
+        uuids = [project_uuid.strip()] if project_uuid.strip() else []
+    else:
+        uuids = [str(v).strip() for v in (project_uuid or []) if str(v).strip()]
+    return access_all, uuids
+
+
+def _project_access_form(
+    ctx: AppContext,
+    db: Session,
+    *,
+    access_all: bool = True,
+    selected_uuids: set[str] | None = None,
+) -> dict:
+    selected = selected_uuids or set()
+    projects = [
+        {
+            "uuid": p.uuid,
+            "name": p.name,
+            "number": p.number or "",
+            "checked": p.uuid in selected,
+        }
+        for p in ctx.projects.list_projects(db)
+    ]
+    return {
+        "access_all_projects": access_all,
+        "project_options": projects,
+    }
+
+
+def _user_form_payload(
+    *,
+    display_name: str = "",
+    username: str = "",
+    email: str = "",
+    role: str = BuiltinRole.ENGINEER.value,
+    status: str = UserStatus.ACTIVE.value,
+    uuid: str | None = None,
+    access_all_projects: bool = True,
+    selected_project_uuids: list[str] | None = None,
+) -> dict:
+    payload: dict = {
+        "display_name": display_name,
+        "username": username,
+        "email": email,
+        "role": role,
+        "status": status,
+        "access_all_projects": access_all_projects,
+        "selected_project_uuids": list(selected_project_uuids or []),
+    }
+    if uuid is not None:
+        payload["uuid"] = uuid
+    return payload
+
+
 @router.get("/admin", response_class=HTMLResponse)
 def admin_home(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
     if not ctx.auth_enabled:
@@ -393,6 +458,7 @@ def admin_user_new(request: Request, ctx: AppContext = Depends(get_context), db:
     if _is_blocked(admin):
         return admin
     roles = ctx.user_accounts.list_roles(db)
+    access = _project_access_form(ctx, db, access_all=True)
     return templates.TemplateResponse(
         request,
         "admin_user_form.html",
@@ -401,13 +467,8 @@ def admin_user_new(request: Request, ctx: AppContext = Depends(get_context), db:
             "error": None,
             "mode": "new",
             "roles": [{"name": r.name} for r in roles],
-            "form": {
-                "display_name": "",
-                "username": "",
-                "email": "",
-                "role": BuiltinRole.ENGINEER.value,
-                "status": UserStatus.ACTIVE.value,
-            },
+            "form": _user_form_payload(),
+            **access,
         },
     )
 
@@ -422,6 +483,9 @@ def admin_user_create(
     status: str = Form(UserStatus.ACTIVE.value),
     password: str = Form(""),
     password_confirm: str = Form(""),
+    project_access_present: str | None = Form(default=None),
+    access_all_projects: str | None = Form(default=None),
+    project_uuid: list[str] = Form(default=[]),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -429,6 +493,11 @@ def admin_user_create(
     if _is_blocked(admin):
         return admin
     roles = ctx.user_accounts.list_roles(db)
+    access_all, project_uuids = _parse_project_access(
+        project_access_present=project_access_present,
+        access_all_projects=access_all_projects,
+        project_uuid=project_uuid,
+    )
     error = None
     if password != password_confirm:
         error = "Passwords do not match."
@@ -443,12 +512,20 @@ def admin_user_create(
                 role_name=role,
                 status=status,
                 must_change_password=True,
+                access_all_projects=access_all,
+                project_uuids=project_uuids,
             )
             db.commit()
             return RedirectResponse("/admin/users", status_code=303)
         except CreoPDMError as exc:
             db.rollback()
             error = exc.message
+    access = _project_access_form(
+        ctx,
+        db,
+        access_all=access_all,
+        selected_uuids=set(project_uuids),
+    )
     return templates.TemplateResponse(
         request,
         "admin_user_form.html",
@@ -457,13 +534,16 @@ def admin_user_create(
             "error": error,
             "mode": "new",
             "roles": [{"name": r.name} for r in roles],
-            "form": {
-                "display_name": display_name,
-                "username": username,
-                "email": email,
-                "role": role,
-                "status": status,
-            },
+            "form": _user_form_payload(
+                display_name=display_name,
+                username=username,
+                email=email,
+                role=role,
+                status=status,
+                access_all_projects=access_all,
+                selected_project_uuids=project_uuids,
+            ),
+            **access,
         },
         status_code=400,
     )
@@ -483,6 +563,9 @@ def admin_user_detail(
     if user is None:
         return RedirectResponse("/admin/users", status_code=303)
     roles = ctx.user_accounts.list_roles(db)
+    access_all = bool(user.access_all_projects)
+    selected = {p.uuid for p in (user.projects or [])}
+    access = _project_access_form(ctx, db, access_all=access_all, selected_uuids=selected)
     return templates.TemplateResponse(
         request,
         "admin_user_form.html",
@@ -491,14 +574,17 @@ def admin_user_detail(
             "error": None,
             "mode": "edit",
             "roles": [{"name": r.name} for r in roles],
-            "form": {
-                "uuid": user.uuid,
-                "display_name": user.display_name,
-                "username": user.username,
-                "email": user.email or "",
-                "role": ctx.user_accounts.primary_role_name(user),
-                "status": user.status,
-            },
+            "form": _user_form_payload(
+                uuid=user.uuid,
+                display_name=user.display_name,
+                username=user.username,
+                email=user.email or "",
+                role=ctx.user_accounts.primary_role_name(user),
+                status=user.status,
+                access_all_projects=access_all,
+                selected_project_uuids=list(selected),
+            ),
+            **access,
         },
     )
 
@@ -513,6 +599,9 @@ def admin_user_update(
     status: str = Form(UserStatus.ACTIVE.value),
     password: str = Form(""),
     password_confirm: str = Form(""),
+    project_access_present: str | None = Form(default=None),
+    access_all_projects: str | None = Form(default=None),
+    project_uuid: list[str] = Form(default=[]),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -523,6 +612,11 @@ def admin_user_update(
     if user is None:
         return RedirectResponse("/admin/users", status_code=303)
     roles = ctx.user_accounts.list_roles(db)
+    access_all, project_uuids = _parse_project_access(
+        project_access_present=project_access_present,
+        access_all_projects=access_all_projects,
+        project_uuid=project_uuid,
+    )
     error = None
     if password and password != password_confirm:
         error = "Passwords do not match."
@@ -533,6 +627,8 @@ def admin_user_update(
                 "email": email,
                 "role_name": role,
                 "status": status,
+                "access_all_projects": access_all,
+                "project_uuids": project_uuids,
             }
             if password:
                 kwargs["password"] = password
@@ -543,6 +639,12 @@ def admin_user_update(
         except CreoPDMError as exc:
             db.rollback()
             error = exc.message
+    access = _project_access_form(
+        ctx,
+        db,
+        access_all=access_all,
+        selected_uuids=set(project_uuids),
+    )
     return templates.TemplateResponse(
         request,
         "admin_user_form.html",
@@ -551,14 +653,17 @@ def admin_user_update(
             "error": error,
             "mode": "edit",
             "roles": [{"name": r.name} for r in roles],
-            "form": {
-                "uuid": user_uuid,
-                "display_name": display_name,
-                "username": user.username,
-                "email": email,
-                "role": role,
-                "status": status,
-            },
+            "form": _user_form_payload(
+                uuid=user_uuid,
+                display_name=display_name,
+                username=user.username,
+                email=email,
+                role=role,
+                status=status,
+                access_all_projects=access_all,
+                selected_project_uuids=project_uuids,
+            ),
+            **access,
         },
         status_code=400,
     )

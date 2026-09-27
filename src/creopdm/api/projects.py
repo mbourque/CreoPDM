@@ -10,7 +10,13 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object, present_objects
-from creopdm.api.deps import get_context, get_db, require_permission
+from creopdm.api.deps import (
+    accessible_projects,
+    get_context,
+    get_db,
+    load_accessible_project,
+    require_permission,
+)
 from creopdm.api.serializers import project_to_response
 from creopdm.auth_constants import (
     PERMISSION_OBJECTS_ADD,
@@ -64,7 +70,7 @@ def list_projects(
     ctx: AppContext = Depends(get_context),
 ) -> list[ProjectResponse]:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    return [project_to_response(project) for project in ctx.projects.list_projects(db)]
+    return [project_to_response(project) for project in accessible_projects(request, ctx, db)]
 
 
 @router.post("/api/projects", response_model=ProjectResponse, status_code=201)
@@ -82,6 +88,9 @@ def create_project(
         description=payload.description,
         vault_folder=payload.vault_folder,
     )
+    user = getattr(request.state, "auth_user", None)
+    if user is not None and ctx.auth_enabled:
+        ctx.user_accounts.grant_project_access(db, user, project)
     return project_to_response(project)
 
 
@@ -93,7 +102,7 @@ def get_project(
     ctx: AppContext = Depends(get_context),
 ) -> ProjectResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    return project_to_response(ctx.projects.get_project(db, project_id))
+    return project_to_response(load_accessible_project(request, ctx, db, project_id))
 
 
 @router.patch("/api/projects/{project_id}", response_model=ProjectResponse)
@@ -105,6 +114,7 @@ def update_project(
     ctx: AppContext = Depends(get_context),
 ) -> ProjectResponse:
     require_permission(request, ctx, PERMISSION_PROJECTS_EDIT)
+    load_accessible_project(request, ctx, db, project_id)
     project = ctx.projects.update_project(
         db,
         project_id,
@@ -123,6 +133,7 @@ def delete_project(
     ctx: AppContext = Depends(get_context),
 ) -> None:
     require_permission(request, ctx, PERMISSION_PROJECTS_DELETE)
+    load_accessible_project(request, ctx, db, project_id)
     ctx.projects.delete_project(db, project_id)
 
 
@@ -135,7 +146,7 @@ def forget_project(
     ctx: AppContext = Depends(get_context),
 ) -> ForgetProjectResponse:
     require_permission(request, ctx, PERMISSION_PROJECTS_DELETE)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     workspace = ctx.workspaces.vault_for(project)
     result = ctx.projects.forget_project(
         db,
@@ -160,7 +171,7 @@ def list_objects(
     ctx: AppContext = Depends(get_context),
 ) -> list[ObjectResponse]:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     objects = ctx.objects.search(
         db,
         project,
@@ -179,6 +190,7 @@ def project_status(
     ctx: AppContext = Depends(get_context),
 ) -> ProjectStatusResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    load_accessible_project(request, ctx, db, project_id)
     counts = ctx.projects.project_status(db, project_id)
     return ProjectStatusResponse.model_validate(counts)
 
@@ -191,7 +203,7 @@ def workspace_watch(
     ctx: AppContext = Depends(get_context),
 ) -> WorkspaceWatchResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     known = ctx.objects.list_path_index(db, project.id)
     return WorkspaceWatchResponse.model_validate(ctx.workspaces.watch_stamp(project, known))
 
@@ -204,7 +216,7 @@ def project_checkin_preview(
     ctx: AppContext = Depends(get_context),
 ) -> CheckinPreviewResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     return CheckinPreviewResponse.model_validate(ctx.checkins.preview_queue(db, project))
 
 
@@ -216,7 +228,7 @@ def project_checkin_queue_view(
     ctx: AppContext = Depends(get_context),
 ) -> dict:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     objects = ctx.objects.list_objects(db, project.id)
     return ctx.workspaces.project_checkin_queue(project, objects)
 
@@ -229,7 +241,7 @@ def list_project_checkouts(
     ctx: AppContext = Depends(get_context),
 ) -> list[ObjectResponse]:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     objects = ctx.checkouts.list_for_project(db, project.id)
     return present_objects(ctx, db, objects)
 
@@ -243,7 +255,7 @@ def project_checkin_queue(
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKIN)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     result = ctx.checkins.checkin_queue(
         db,
         project,
@@ -316,7 +328,7 @@ def purge_workspace_paths(
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_REMOVE)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     objects = ctx.objects.list_objects(db, project.id)
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
@@ -362,13 +374,15 @@ def purge_workspace_paths(
 )
 def workspace_purge_floors(
     project_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> PurgeFloorsResponse:
     """Vault save floors for Purge workspace (local agent deletes only older cache saves)."""
     from creopdm.utils.classify import extra_cad_set
 
-    project = ctx.projects.get_project(db, project_id)
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    project = load_accessible_project(request, ctx, db, project_id)
     purgeable = ctx.config.purgeable_cad_extensions()
     allowed = extra_cad_set(purgeable)
     floors: list[PurgeFloorItem] = []
@@ -403,10 +417,12 @@ def _picker_filters(ctx: AppContext) -> dict[str, list[str]]:
 @router.get("/api/projects/{project_id}/workspace/add-folder", response_model=WorkspacePickerResponse)
 def workspace_add_folder(
     project_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WorkspacePickerResponse:
-    project = ctx.projects.get_project(db, project_id)
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    project = load_accessible_project(request, ctx, db, project_id)
     start = ctx.projects.preferred_import_directory(project)
     start.mkdir(parents=True, exist_ok=True)
     filters = _picker_filters(ctx)
@@ -426,7 +442,7 @@ def choose_workspace_files(
     ctx: AppContext = Depends(get_context),
 ) -> WorkspacePickerResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     start = ctx.projects.preferred_import_directory(project)
     start.mkdir(parents=True, exist_ok=True)
     picked = pick_files(start, title="Add files to the project")
@@ -461,7 +477,7 @@ def choose_workspace_folder(
     ctx: AppContext = Depends(get_context),
 ) -> WorkspacePickerResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     start = ctx.projects.preferred_import_directory(project)
     start.mkdir(parents=True, exist_ok=True)
     chosen = pick_folder(start, title="Add a folder to the project")
@@ -490,7 +506,7 @@ def open_workspace_folder(
     ctx: AppContext = Depends(get_context),
 ) -> Response:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     opened = ctx.workspaces.explorer_directory(project, folder or "")
     try:
         open_windows_folder(opened)
@@ -513,7 +529,7 @@ async def put_project_workspace_content(
 ) -> WorkspaceContentResponse:
     """Stage a new local agent file into the vault (no PDM object required yet)."""
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     data = await file.read()
     written = ctx.workspaces.stage_new_workspace_file(project, path, data)
     return WorkspaceContentResponse(
@@ -533,7 +549,7 @@ def workspace_file_content(
     ctx: AppContext = Depends(get_context),
 ) -> FileResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     target = ctx.workspaces.file_path(project, path)
     if not target.is_file():
         raise PathValidationError(
@@ -560,7 +576,7 @@ def import_from_disk(
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     comment = (payload.comment or "").strip() or None
     extras = ctx.config.purgeable_cad_extensions()
     ignored = ctx.config.ignore_patterns()
@@ -706,7 +722,7 @@ def create_project_folder(
 ) -> CreateFolderResponse:
     """Create an empty folder in the vault at the current Files view location."""
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     user = ctx.users.get_current_user()
     created = ctx.workspaces.create_folder(
         project,
@@ -744,7 +760,7 @@ async def import_from_uploads(
     note = str(comment_raw).strip() if comment_raw not in (None, "") else None
     parent_raw = form.get("parent_folder")
     parent_folder = str(parent_raw or "").strip().replace("\\", "/").strip("/")
-    project = ctx.projects.get_project(db, project_id)
+    project = load_accessible_project(request, ctx, db, project_id)
     temps: list[Path] = []
     jobs: list[tuple[Path, str | None, str | None]] = []
     ok: list[BatchItemResult] = []

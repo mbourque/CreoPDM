@@ -31,7 +31,8 @@ from creopdm.auth_constants import (
     UserStatus,
 )
 from creopdm.exceptions import NotFoundError, ValidationAppError
-from creopdm.models.user import Permission, Role, RolePermission, User, UserRole
+from creopdm.models.project import Project
+from creopdm.models.user import Permission, Role, RolePermission, User, UserProject, UserRole
 from creopdm.utils.passwords import hash_password, verify_password
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9._-]{2,64}$")
@@ -367,6 +368,70 @@ class UserService:
         db.delete(role)
         db.flush()
 
+    def user_can_access_project(self, user: User, project: Project) -> bool:
+        """True when the user may browse/use the given project."""
+        if getattr(user, "access_all_projects", True):
+            return True
+        allowed_ids = {p.id for p in (user.projects or [])}
+        return project.id in allowed_ids
+
+    def filter_accessible_projects(self, user: User, projects: list[Project]) -> list[Project]:
+        if getattr(user, "access_all_projects", True):
+            return list(projects)
+        allowed_ids = {p.id for p in (user.projects or [])}
+        return [p for p in projects if p.id in allowed_ids]
+
+    def set_project_access(
+        self,
+        db: Session,
+        user: User,
+        *,
+        access_all: bool,
+        project_uuids: list[str] | None = None,
+    ) -> User:
+        """Set All-projects flag and optional membership list (when not all)."""
+        user.access_all_projects = bool(access_all)
+        if access_all:
+            user.updated_at = datetime.now(timezone.utc)
+            db.flush()
+            return self.get_by_uuid(db, user.uuid) or user
+        # Restricted: replace membership. Empty list = no project access (cannot use app browse).
+        wanted: list[str] = []
+        seen: set[str] = set()
+        for raw in project_uuids or []:
+            uid = (raw or "").strip()
+            if not uid or uid in seen:
+                continue
+            seen.add(uid)
+            wanted.append(uid)
+        projects: list[Project] = []
+        for uid in wanted:
+            project = db.scalar(select(Project).where(Project.uuid == uid))
+            if project is None:
+                raise ValidationAppError(f"Unknown project '{uid}'.")
+            projects.append(project)
+        db.execute(delete(UserProject).where(UserProject.user_id == user.id))
+        for project in projects:
+            db.add(UserProject(user_id=user.id, project_id=project.id))
+        user.updated_at = datetime.now(timezone.utc)
+        db.flush()
+        return self.get_by_uuid(db, user.uuid) or user
+
+    def grant_project_access(self, db: Session, user: User, project: Project) -> None:
+        """Add one project to a restricted user's membership (no-op if all-projects)."""
+        if getattr(user, "access_all_projects", True):
+            return
+        existing = db.scalar(
+            select(UserProject).where(
+                UserProject.user_id == user.id,
+                UserProject.project_id == project.id,
+            )
+        )
+        if existing is not None:
+            return
+        db.add(UserProject(user_id=user.id, project_id=project.id))
+        db.flush()
+
     def create_user(
         self,
         db: Session,
@@ -378,6 +443,8 @@ class UserService:
         role_name: str = StarterRole.ENGINEER.value,
         must_change_password: bool = False,
         status: str = UserStatus.ACTIVE.value,
+        access_all_projects: bool = True,
+        project_uuids: list[str] | None = None,
     ) -> User:
         self.ensure_builtin_roles(db)
         uname = validate_username(username)
@@ -396,11 +463,18 @@ class UserService:
             password_hash=hash_password(pwd),
             status=status,
             must_change_password=must_change_password,
+            access_all_projects=True,
         )
         db.add(user)
         db.flush()
         db.add(UserRole(user_id=user.id, role_id=role.id))
         db.flush()
+        self.set_project_access(
+            db,
+            user,
+            access_all=access_all_projects,
+            project_uuids=project_uuids,
+        )
         return self.get_by_uuid(db, user.uuid) or user
 
     def create_first_admin(
@@ -443,6 +517,8 @@ class UserService:
         status: str | None = None,
         password: str | None = None,
         must_change_password: bool | None = None,
+        access_all_projects: bool | None = None,
+        project_uuids: list[str] | None = None,
     ) -> User:
         user = self.get_by_uuid(db, user_uuid)
         if user is None:
@@ -483,6 +559,14 @@ class UserService:
         if new_role_id is not None:
             db.execute(delete(UserRole).where(UserRole.user_id == user.id))
             db.add(UserRole(user_id=user.id, role_id=new_role_id))
+        if access_all_projects is not None:
+            self.set_project_access(
+                db,
+                user,
+                access_all=access_all_projects,
+                project_uuids=project_uuids if not access_all_projects else None,
+            )
+            return self.get_by_uuid(db, user.uuid) or user
         user.updated_at = datetime.now(timezone.utc)
         db.flush()
         return self.get_by_uuid(db, user.uuid) or user

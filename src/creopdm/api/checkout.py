@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from creopdm.api.deps import get_context, get_db, require_permission
+from creopdm.api.deps import get_context, get_db, load_accessible_project, require_permission, require_project_access
 from creopdm.api.serializers import object_to_response
 from creopdm.auth_constants import (
     PERMISSION_OBJECTS_CHECKIN,
@@ -116,6 +116,9 @@ def checkout_batch(
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
+    if payload.object_ids:
+        sample = ctx.objects.get_object(db, payload.object_ids[0])
+        require_project_access(request, ctx, sample.project)
     result = ctx.checkouts.checkout_many(db, payload.object_ids)
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.config.workspace_root())}
@@ -130,6 +133,9 @@ def undo_checkout_batch(
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
+    if payload.object_ids:
+        sample = ctx.objects.get_object(db, payload.object_ids[0])
+        require_project_access(request, ctx, sample.project)
     result = ctx.checkouts.undo_checkout_many(db, payload.object_ids)
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.config.workspace_root())}
@@ -146,6 +152,8 @@ def agent_cache_manifest(
     """Content identities for agent-cache hit detection (no file bodies)."""
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     objects = ctx.objects.get_objects(db, payload.object_ids)
+    if objects:
+        require_project_access(request, ctx, objects[0].project)
     if len(objects) != len(payload.object_ids):
         found = {obj.uuid for obj in objects}
         missing = [item for item in payload.object_ids if item not in found]
@@ -173,6 +181,8 @@ def agent_cache_archive(
     """Zip vault files (nested relative paths) for one-shot agent-cache download — no Creo open prep."""
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     objects = ctx.objects.get_objects(db, payload.object_ids)
+    if objects:
+        require_project_access(request, ctx, objects[0].project)
     if len(objects) != len(payload.object_ids):
         found = {obj.uuid for obj in objects}
         missing = [item for item in payload.object_ids if item not in found]
@@ -211,6 +221,7 @@ def send_to_workspace(
     pairs = []
     for object_uuid in payload.object_ids:
         obj = ctx.objects.get_object(db, object_uuid)
+        require_project_access(request, ctx, obj.project)
         pairs.append((obj.project, obj))
     result = ctx.workspaces.materialize_many(pairs)
     return BatchOperationResponse.model_validate(
@@ -226,6 +237,8 @@ def checkout_object(
     ctx: AppContext = Depends(get_context),
 ) -> ObjectResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
+    obj = ctx.objects.get_object(db, object_id)
+    require_project_access(request, ctx, obj.project)
     ctx.checkouts.checkout(db, object_id)
     obj = ctx.objects.get_object(db, object_id)
     return present_object(ctx, db, obj)
@@ -239,6 +252,8 @@ def undo_checkout(
     ctx: AppContext = Depends(get_context),
 ) -> ObjectResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
+    obj = ctx.objects.get_object(db, object_id)
+    require_project_access(request, ctx, obj.project)
     ctx.checkouts.undo_checkout(db, object_id)
     obj = ctx.objects.get_object(db, object_id)
     return present_object(ctx, db, obj)
@@ -283,6 +298,8 @@ def checkin_object(
     ctx: AppContext = Depends(get_context),
 ) -> ObjectResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKIN)
+    obj = ctx.objects.get_object(db, object_id)
+    require_project_access(request, ctx, obj.project)
     obj = ctx.checkins.checkin(db, object_id, payload.comment, payload.add_relative_paths)
     obj = ctx.objects.get_object(db, obj.uuid)
     return present_object(ctx, db, obj)
