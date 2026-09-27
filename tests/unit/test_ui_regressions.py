@@ -770,3 +770,17 @@ def test_newer_local_cache_matches_flat_save_for_nested_vault_path():
     assert "vaultBasenameCounts" in body
     assert "vaultBasenameCounts.get(base) || 0) === 1" in body
     assert "Older flat agent caches" in body
+
+
+def test_admin_hub_panel_fills_full_width():
+    """max-width on .admin-hub itself left body --bg showing beside the page."""
+    css = APP_CSS.read_text(encoding="utf-8")
+    hub = _between(css, ".admin-hub {", ".admin-tile-grid {")
+    assert "max-width: none" in hub
+    assert "max-width: 48rem" not in hub
+    grid = _between(css, ".admin-tile-grid {", ".admin-tile {")
+    assert "max-width: 48rem" in grid
+    assert "display: grid" in grid
+    admin = (ROOT / "src" / "creopdm" / "templates" / "admin.html").read_text(encoding="utf-8")
+    assert "admin-hub" in admin
+    assert 'class="detail settings-page admin-hub"' in admin

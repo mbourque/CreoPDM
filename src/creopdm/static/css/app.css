@@ -352,12 +352,17 @@ a.brand:hover { text-decoration: none; color: inherit; }
   font-weight: 700;
   font-size: 0.85rem;
 }
-.admin-hub { max-width: 48rem; }
+.admin-hub {
+  /* Full-width panel fill; constrain tiles only so body --bg does not show beside the page. */
+  width: 100%;
+  max-width: none;
+}
 .admin-tile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
   gap: 0.85rem;
   margin: 1.1rem 0 0;
+  max-width: 48rem;
 }
 .admin-tile {
   display: flex;
