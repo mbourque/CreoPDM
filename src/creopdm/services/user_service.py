@@ -12,7 +12,17 @@ from sqlalchemy.orm import Session, selectinload
 from creopdm.auth_constants import (
     BUILTIN_PERMISSIONS,
     BUILTIN_ROLE_DESCRIPTIONS,
+    ROLE_PERMISSION_KEYS,
     BuiltinRole,
+    PERMISSION_OBJECTS_ADD,
+    PERMISSION_OBJECTS_CHECKIN,
+    PERMISSION_OBJECTS_CHECKOUT,
+    PERMISSION_OBJECTS_METADATA,
+    PERMISSION_OBJECTS_REMOVE,
+    PERMISSION_OBJECTS_REVERT,
+    PERMISSION_PROJECTS_CREATE,
+    PERMISSION_PROJECTS_DELETE,
+    PERMISSION_PROJECTS_EDIT,
     PERMISSION_SETTINGS_MANAGE,
     PERMISSION_USERS_MANAGE,
     UserStatus,
@@ -69,22 +79,33 @@ class UserService:
             if existing is None:
                 db.add(Permission(key=key, description=description))
         db.flush()
-        admin = db.scalar(select(Role).where(Role.name == BuiltinRole.ADMINISTRATOR.value))
-        if admin is None:
-            return
-        for key, _desc in BUILTIN_PERMISSIONS:
-            perm = db.scalar(select(Permission).where(Permission.key == key))
-            if perm is None:
+        for role_name, keys in ROLE_PERMISSION_KEYS.items():
+            role = db.scalar(select(Role).where(Role.name == role_name))
+            if role is None:
                 continue
-            link = db.scalar(
-                select(RolePermission).where(
-                    RolePermission.role_id == admin.id,
-                    RolePermission.permission_id == perm.id,
+            for key in keys:
+                perm = db.scalar(select(Permission).where(Permission.key == key))
+                if perm is None:
+                    continue
+                link = db.scalar(
+                    select(RolePermission).where(
+                        RolePermission.role_id == role.id,
+                        RolePermission.permission_id == perm.id,
+                    )
                 )
-            )
-            if link is None:
-                db.add(RolePermission(role_id=admin.id, permission_id=perm.id))
+                if link is None:
+                    db.add(RolePermission(role_id=role.id, permission_id=perm.id))
         db.flush()
+
+    def permission_keys_for_user(self, user: User) -> frozenset[str]:
+        if any(role.name == BuiltinRole.ADMINISTRATOR.value for role in user.roles):
+            return frozenset(key for key, _ in BUILTIN_PERMISSIONS)
+        keys: set[str] = set()
+        for role in user.roles:
+            for perm in role.permissions:
+                keys.add(perm.key)
+            keys.update(ROLE_PERMISSION_KEYS.get(role.name, ()))
+        return frozenset(keys)
 
     def get_by_uuid(self, db: Session, user_uuid: str) -> User | None:
         return db.scalar(
@@ -134,6 +155,33 @@ class UserService:
 
     def can_manage_settings(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_SETTINGS_MANAGE)
+
+    def can_create_project(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_PROJECTS_CREATE)
+
+    def can_edit_project(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_PROJECTS_EDIT)
+
+    def can_delete_project(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_PROJECTS_DELETE)
+
+    def can_add_objects(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_OBJECTS_ADD)
+
+    def can_checkout(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_OBJECTS_CHECKOUT)
+
+    def can_checkin(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_OBJECTS_CHECKIN)
+
+    def can_remove_objects(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_OBJECTS_REMOVE)
+
+    def can_revert_objects(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_OBJECTS_REVERT)
+
+    def can_update_metadata(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_OBJECTS_METADATA)
 
     def create_user(
         self,

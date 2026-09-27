@@ -19,7 +19,9 @@
           <span class="sidebar-collapse-icon" aria-hidden="true"></span>
         </button>
       </div>
+      {% if can_create_project %}
       <button type="button" class="btn btn-small" id="new-project-btn">New</button>
+      {% endif %}
     </div>
     <ul class="project-list" id="project-list">
       {% for project in projects %}
@@ -42,6 +44,7 @@
     <div class="content-head">
       <div class="title-row">
         <h1{% if workspace_path %} title="{{ workspace_path }}"{% endif %}>{{ selected.name }}</h1>
+        {% if can_edit_project or can_delete_project or can_update_metadata %}
         <div class="project-settings" id="project-settings">
           <button type="button" class="project-settings-btn" id="project-settings-btn"
                   title="Project settings" aria-label="Project settings"
@@ -51,23 +54,30 @@
             </svg>
           </button>
           <div class="project-settings-menu" id="project-settings-menu" role="menu" hidden>
+            {% if can_edit_project %}
             <button type="button" class="project-settings-item" role="menuitem" id="rename-project-btn"
                     data-project="{{ selected.uuid }}"
                     data-name="{{ selected.name }}"
                     data-number="{{ selected.number or '' }}"
                     data-description="{{ selected.description or '' }}">Rename</button>
+            {% endif %}
+            {% if can_update_metadata %}
             <button type="button" class="project-settings-item" role="menuitem" id="rebuild-where-used-btn"
                     data-project="{{ selected.uuid }}"
                     title="Index vault assemblies/drawings into Where Used links in the background.">Rebuild Where Used</button>
             <button type="button" class="project-settings-item" role="menuitem" id="collect-metadata-btn"
                     data-project="{{ selected.uuid }}"
                     title="Open each Creo model in session and capture parameters, materials, BOM, and related metadata.">Collect all metadata</button>
+            {% endif %}
+            {% if can_delete_project %}
             <button type="button" class="project-settings-item is-danger" role="menuitem" id="delete-project-btn"
                     data-project="{{ selected.uuid }}"
                     data-name="{{ selected.name }}"
                     title="Delete the CreoPDM vault (working copies and Git) and unregister the project. Original files you imported from are not deleted.">Delete project</button>
+            {% endif %}
           </div>
         </div>
+        {% endif %}
         <form class="search-form" id="search-form">
           <label class="sr-only" for="search-input">Search</label>
           <input id="search-input" name="q" type="search" placeholder="Search all files in project" autocomplete="off">
@@ -333,6 +343,7 @@
               {% if workspace_path %}data-workspace="{{ workspace_path }}"{% endif %}
               disabled>Set Working Directory</button>
     </span>
+    {% if can_add_objects %}
     <div class="toolbar-menu" id="add-menu">
       <button type="button" class="btn toolbar-menu-toggle" id="add-menu-btn"
               aria-haspopup="menu" aria-expanded="false"
@@ -353,6 +364,7 @@
                 title="Pick one or more folders and import all nested files.">Add folders…</button>
       </div>
     </div>
+    {% endif %}
     <div class="toolbar-menu" id="open-menu">
       <button type="button" class="btn toolbar-menu-toggle" id="open-menu-btn"
               aria-haspopup="menu" aria-expanded="false"
@@ -367,6 +379,7 @@
                 title="Open this project’s local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">Open workspace…</button>
       </div>
     </div>
+    {% if can_checkout %}
     <div class="toolbar-menu" id="checkout-menu">
       <button type="button" class="btn toolbar-menu-toggle" id="checkout-menu-btn"
               aria-haspopup="menu" aria-expanded="false" disabled
@@ -384,6 +397,8 @@
                 title="Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward.">Undo Checkout</button>
       </div>
     </div>
+    {% endif %}
+    {% if can_checkin %}
     <div class="toolbar-menu" id="checkin-menu">
       <button type="button" class="btn toolbar-menu-toggle" id="checkin-menu-btn"
               aria-haspopup="menu" aria-expanded="false" disabled
@@ -400,12 +415,14 @@
                 title="Check in selected files.">Check in selected…</button>
       </div>
     </div>
+    {% endif %}
     <span class="toolbar-tip" title="Open Details (Overview) for the selected file.">
       <button type="button" class="btn" id="history-btn" disabled>Details</button>
     </span>
     <span class="toolbar-tip" title="Copy selected files into the CreoPDM vault if they are not already there. Does not check them out.">
       <button type="button" class="btn" id="workspace-btn" disabled>Copy to Vault</button>
     </span>
+    {% if can_remove_objects %}
     <div class="toolbar-menu" id="remove-menu">
       <button type="button" class="btn btn-danger toolbar-menu-toggle" id="remove-menu-btn"
               aria-haspopup="menu" aria-expanded="false" disabled
@@ -429,6 +446,7 @@
                 title="Remove the selected files from this project list and delete CreoPDM vault copies. Files in your original project folder are not deleted.">Remove from Project</button>
       </div>
     </div>
+    {% endif %}
   </div>
   <div class="toolbar-messages">
     <p class="error" id="toolbar-error" hidden></p>

@@ -38,11 +38,24 @@ Engineers and other roles do not see Administration; direct URLs return **403**.
 
 A file may be checked out by **one** user at a time. If Paul has a checkout, David cannot check out the same file until Paul checks in or undoes the checkout. The checkout row stores the login **username**.
 
-Built-in roles are seeded: **Administrator**, **PDM Manager**, **Engineer**, **Viewer**. Role capability details remain in [initial-built-in-roles.md](initial-built-in-roles.md).
+Built-in roles are seeded: **Administrator**, **PDM Manager**, **Engineer**, **Viewer**. Full capability matrix: [initial-built-in-roles.md](initial-built-in-roles.md).
+
+## Phase 2 (shipped): core role matrix
+
+Permission keys are seeded on roles (`projects.*`, `objects.*`, `users.manage`, `settings.manage`). Mutating APIs return **403** when the signed-in user lacks the key. The Files toolbar and project New/Delete controls hide when the matching capability is false.
+
+| Role | Can do now | Cannot |
+| --- | --- | --- |
+| **Viewer** | Browse projects, open/download, Details | Add / Checkout / Check In / Remove, New project, Administration |
+| **Engineer** | Add, checkout, check-in, remove, revert, metadata | Create/edit/delete projects, users, settings |
+| **PDM Manager** | Create/edit projects + Engineer authoring | Delete project, users, settings |
+| **Administrator** | Everything above + delete project + users + settings | — |
+
+When `auth_enabled` is false (unit tests with a static identity), all authoring and project caps are granted so the existing suite stays green.
 
 ### Deferred (later phases)
 
-- Full permission matrix on every API
-- Project membership / project-level roles
+- Project membership / “assigned projects only” / project-level roles
+- Override-checkout UI; lifecycle / release product surfaces
 - Roles admin UI; Agents / Storage / Audit admin sections
 - Binding Windows agent Bearer tokens to the session user

@@ -10,8 +10,16 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object, present_objects
-from creopdm.api.deps import get_context, get_db
+from creopdm.api.deps import get_context, get_db, require_permission
 from creopdm.api.serializers import project_to_response
+from creopdm.auth_constants import (
+    PERMISSION_OBJECTS_ADD,
+    PERMISSION_OBJECTS_CHECKIN,
+    PERMISSION_OBJECTS_REMOVE,
+    PERMISSION_PROJECTS_CREATE,
+    PERMISSION_PROJECTS_DELETE,
+    PERMISSION_PROJECTS_EDIT,
+)
 from creopdm.context import AppContext
 from creopdm.constants import ActivityAction
 from creopdm.creo.file_manager import CreoFileManager
@@ -58,9 +66,11 @@ def list_projects(
 @router.post("/api/projects", response_model=ProjectResponse, status_code=201)
 def create_project(
     payload: ProjectCreateRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ProjectResponse:
+    require_permission(request, ctx, PERMISSION_PROJECTS_CREATE)
     project = ctx.projects.create_project(
         db,
         name=payload.name,
@@ -84,9 +94,11 @@ def get_project(
 def update_project(
     project_id: str,
     payload: ProjectUpdateRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ProjectResponse:
+    require_permission(request, ctx, PERMISSION_PROJECTS_EDIT)
     project = ctx.projects.update_project(
         db,
         project_id,
@@ -100,9 +112,11 @@ def update_project(
 @router.delete("/api/projects/{project_id}", status_code=204)
 def delete_project(
     project_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> None:
+    require_permission(request, ctx, PERMISSION_PROJECTS_DELETE)
     ctx.projects.delete_project(db, project_id)
 
 
@@ -110,9 +124,11 @@ def delete_project(
 def forget_project(
     project_id: str,
     payload: ForgetProjectRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ForgetProjectResponse:
+    require_permission(request, ctx, PERMISSION_PROJECTS_DELETE)
     project = ctx.projects.get_project(db, project_id)
     workspace = ctx.workspaces.vault_for(project)
     result = ctx.projects.forget_project(
@@ -204,9 +220,11 @@ def list_project_checkouts(
 def project_checkin_queue(
     project_id: str,
     payload: QueueCheckinRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_CHECKIN)
     project = ctx.projects.get_project(db, project_id)
     result = ctx.checkins.checkin_queue(
         db,
@@ -226,12 +244,14 @@ def project_checkin_queue(
 )
 def start_rebuild_where_used(
     project_id: str,
+    request: Request,
     ctx: AppContext = Depends(get_context),
 ) -> WhereUsedIndexJobResponse:
     """Start background vault → Dependency indexing (no-op if already running).
 
     Does not touch the DB here so a busy indexer cannot block Start.
     """
+    require_permission(request, ctx, PERMISSION_OBJECTS_METADATA)
     status = ctx.where_used_index.start(project_id)
     return _where_used_job_response(status)
 
@@ -271,9 +291,11 @@ def _where_used_job_response(status) -> WhereUsedIndexJobResponse:
 def purge_workspace_paths(
     project_id: str,
     payload: PurgeWorkspacePathsRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_REMOVE)
     project = ctx.projects.get_project(db, project_id)
     objects = ctx.objects.list_objects(db, project.id)
     ok: list[BatchItemResult] = []
@@ -379,9 +401,11 @@ def workspace_add_folder(
 @router.post("/api/projects/{project_id}/workspace/choose-files", response_model=WorkspacePickerResponse)
 def choose_workspace_files(
     project_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WorkspacePickerResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
     project = ctx.projects.get_project(db, project_id)
     start = ctx.projects.preferred_import_directory(project)
     start.mkdir(parents=True, exist_ok=True)
@@ -412,9 +436,11 @@ def choose_workspace_files(
 @router.post("/api/projects/{project_id}/workspace/choose-folder", response_model=WorkspacePickerResponse)
 def choose_workspace_folder(
     project_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WorkspacePickerResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
     project = ctx.projects.get_project(db, project_id)
     start = ctx.projects.preferred_import_directory(project)
     start.mkdir(parents=True, exist_ok=True)
@@ -457,12 +483,14 @@ def open_workspace_folder(
 @router.put("/api/projects/{project_id}/workspace-content", response_model=WorkspaceContentResponse)
 async def put_project_workspace_content(
     project_id: str,
+    request: Request,
     path: str = Query(..., min_length=1),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WorkspaceContentResponse:
     """Stage a new local agent file into the vault (no PDM object required yet)."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
     project = ctx.projects.get_project(db, project_id)
     data = await file.read()
     written = ctx.workspaces.stage_new_workspace_file(project, path, data)
@@ -503,9 +531,11 @@ def workspace_file_content(
 def import_from_disk(
     project_id: str,
     payload: ImportLocalRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
     project = ctx.projects.get_project(db, project_id)
     comment = (payload.comment or "").strip() or None
     extras = ctx.config.purgeable_cad_extensions()
@@ -646,10 +676,12 @@ def import_from_disk(
 def create_project_folder(
     project_id: str,
     payload: CreateFolderRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> CreateFolderResponse:
     """Create an empty folder in the vault at the current Files view location."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
     project = ctx.projects.get_project(db, project_id)
     user = ctx.users.get_current_user()
     created = ctx.workspaces.create_folder(
@@ -670,6 +702,7 @@ async def import_from_uploads(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
     # Browser folder picks send many parts; Starlette defaults to 1000 files/fields.
     try:
         form = await request.form(max_files=20000, max_fields=40000)

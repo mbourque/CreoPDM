@@ -356,7 +356,10 @@ def test_checkout_uses_static_provider_username(client, repo_parent, identity, d
         assert row.user_name == "session.alice"
 
 
-def _setup_admin_and_engineers(auth_client, auth_ctx, *usernames: str) -> None:
+def _setup_admin_and_users(
+    auth_client, auth_ctx, *users: tuple[str, str]
+) -> None:
+    """Create admin via setup, then users as (username, role_name). Passwords: {Name}Pass1."""
     auth_client.post(
         "/setup",
         data={
@@ -367,14 +370,14 @@ def _setup_admin_and_engineers(auth_client, auth_ctx, *usernames: str) -> None:
         },
         follow_redirects=False,
     )
-    for name in usernames:
+    for name, role in users:
         created = auth_client.post(
             "/admin/users/new",
             data={
                 "display_name": name.title(),
                 "username": name,
                 "email": "",
-                "role": BuiltinRole.ENGINEER.value,
+                "role": role,
                 "status": UserStatus.ACTIVE.value,
                 "password": f"{name.title()}Pass1",
                 "password_confirm": f"{name.title()}Pass1",
@@ -383,12 +386,20 @@ def _setup_admin_and_engineers(auth_client, auth_ctx, *usernames: str) -> None:
         )
         assert created.status_code == 303, created.text
     with auth_ctx.session_factory() as db:
-        for name in usernames:
+        for name, _role in users:
             user = db.scalar(select(User).where(User.username == name))
             assert user is not None
             user.must_change_password = False
         db.commit()
     auth_client.get("/logout", follow_redirects=False)
+
+
+def _setup_admin_and_engineers(auth_client, auth_ctx, *usernames: str) -> None:
+    _setup_admin_and_users(
+        auth_client,
+        auth_ctx,
+        *((name, BuiltinRole.ENGINEER.value) for name in usernames),
+    )
 
 
 def _login(auth_client, username: str, password: str) -> None:
@@ -401,12 +412,21 @@ def _login(auth_client, username: str, password: str) -> None:
     assert ok.status_code == 303, ok.text
 
 
+def _assert_forbidden(response) -> None:
+    assert response.status_code == 403, response.text
+    assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
 @requires_git
 def test_paul_checkout_blocks_david(auth_client, auth_ctx, repo_parent):
     """Session users: only the holder may own a checkout (Paul vs David)."""
     _setup_admin_and_engineers(auth_client, auth_ctx, "paul", "david")
+    _login(auth_client, "admin", "AdminPass1")
+    created_project = auth_client.post("/api/projects", json={"name": "Shared Part"})
+    assert created_project.status_code == 201, created_project.text
+    project = created_project.json()
+
     _login(auth_client, "paul", "PaulPass1")
-    project = auth_client.post("/api/projects", json={"name": "Shared Part"}).json()
     created = auth_client.post(
         f"/api/projects/{project['uuid']}/objects",
         files={"file": ("shaft.prt", b"payload", "application/octet-stream")},
@@ -428,3 +448,157 @@ def test_paul_checkout_blocks_david(auth_client, auth_ctx, repo_parent):
     listed = auth_client.get(f"/api/objects/{obj['uuid']}")
     assert listed.json()["checkout_user"] == "paul"
     assert listed.json()["owned_by_me"] is False
+
+
+@requires_git
+def test_viewer_is_read_only(auth_client, auth_ctx, repo_parent):
+    """Viewer may browse; mutations and authoring toolbar are forbidden."""
+    _setup_admin_and_users(
+        auth_client, auth_ctx, ("view", BuiltinRole.VIEWER.value)
+    )
+    _login(auth_client, "admin", "AdminPass1")
+    project = auth_client.post("/api/projects", json={"name": "View Only"}).json()
+    created = auth_client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("part.prt", b"payload", "application/octet-stream")},
+        data={"comment": "init"},
+    )
+    assert created.status_code == 201, created.text
+    obj = created.json()
+
+    _login(auth_client, "view", "ViewPass1")
+    assert auth_client.get(f"/api/projects/{project['uuid']}").status_code == 200
+    assert auth_client.get(f"/api/objects/{obj['uuid']}").status_code == 200
+    home = auth_client.get(f"/?project={project['uuid']}")
+    assert home.status_code == 200
+    assert 'id="add-menu"' not in home.text
+    assert 'id="checkout-menu"' not in home.text
+    assert 'id="checkin-menu"' not in home.text
+    assert 'id="remove-menu"' not in home.text
+    assert 'id="new-project-btn"' not in home.text
+    assert "Administration" not in home.text
+
+    _assert_forbidden(auth_client.post("/api/projects", json={"name": "Nope"}))
+    _assert_forbidden(
+        auth_client.post(
+            f"/api/projects/{project['uuid']}/objects",
+            files={"file": ("other.prt", b"x", "application/octet-stream")},
+            data={"comment": "nope"},
+        )
+    )
+    _assert_forbidden(auth_client.post(f"/api/objects/{obj['uuid']}/checkout"))
+
+
+@requires_git
+def test_engineer_can_author_not_manage_projects(auth_client, auth_ctx, repo_parent):
+    """Engineer may add/checkout; cannot create/delete projects or open Administration."""
+    _setup_admin_and_users(
+        auth_client, auth_ctx, ("eng", BuiltinRole.ENGINEER.value)
+    )
+    _login(auth_client, "admin", "AdminPass1")
+    project = auth_client.post("/api/projects", json={"name": "Eng Project"}).json()
+
+    _login(auth_client, "eng", "EngPass1")
+    home = auth_client.get(f"/?project={project['uuid']}")
+    assert home.status_code == 200
+    assert 'id="add-menu"' in home.text
+    assert 'id="checkout-menu"' in home.text
+    assert 'id="new-project-btn"' not in home.text
+    assert "Administration" not in home.text
+    assert auth_client.get("/admin", follow_redirects=False).status_code == 403
+
+    _assert_forbidden(auth_client.post("/api/projects", json={"name": "Nope"}))
+    _assert_forbidden(auth_client.delete(f"/api/projects/{project['uuid']}"))
+
+    created = auth_client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("shaft.prt", b"payload", "application/octet-stream")},
+        data={"comment": "init"},
+    )
+    assert created.status_code == 201, created.text
+    checked = auth_client.post(f"/api/objects/{created.json()['uuid']}/checkout")
+    assert checked.status_code == 200, checked.text
+
+
+@requires_git
+def test_pdm_manager_can_create_not_delete_or_admin(auth_client, auth_ctx, repo_parent):
+    """PDM Manager may create projects; cannot delete or manage users/settings."""
+    _setup_admin_and_users(
+        auth_client, auth_ctx, ("pdm", BuiltinRole.PDM_MANAGER.value)
+    )
+    _login(auth_client, "pdm", "PdmPass1")
+    created = auth_client.post("/api/projects", json={"name": "PDM Project"})
+    assert created.status_code == 201, created.text
+    project = created.json()
+    home = auth_client.get(f"/?project={project['uuid']}")
+    assert home.status_code == 200
+    assert 'id="new-project-btn"' in home.text
+    assert 'id="delete-project-btn"' not in home.text
+    assert "Administration" not in home.text
+
+    _assert_forbidden(auth_client.delete(f"/api/projects/{project['uuid']}"))
+    assert auth_client.get("/admin", follow_redirects=False).status_code == 403
+    assert auth_client.get("/admin/users", follow_redirects=False).status_code == 403
+    assert auth_client.get("/settings", follow_redirects=False).status_code == 403
+    _assert_forbidden(auth_client.get("/api/settings"))
+
+
+@requires_git
+def test_admin_can_create_and_delete_project(auth_client, auth_ctx, repo_parent):
+    """Administrator retains full project create/delete."""
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    created = auth_client.post("/api/projects", json={"name": "Admin Project"})
+    assert created.status_code == 201, created.text
+    project_id = created.json()["uuid"]
+    home = auth_client.get(f"/?project={project_id}")
+    assert home.status_code == 200
+    assert 'id="new-project-btn"' in home.text
+    assert 'id="delete-project-btn"' in home.text
+    deleted = auth_client.delete(f"/api/projects/{project_id}")
+    assert deleted.status_code == 204, deleted.text
+
+
+def test_builtin_role_permission_matrix_seeded(auth_ctx):
+    """Migration/startup seed grants matrix keys (Viewer none; Engineer authoring)."""
+    from creopdm.auth_constants import (
+        PERMISSION_OBJECTS_CHECKOUT,
+        PERMISSION_PROJECTS_CREATE,
+        PERMISSION_PROJECTS_DELETE,
+        PERMISSION_USERS_MANAGE,
+        ROLE_PERMISSION_KEYS,
+    )
+    from creopdm.models.user import Permission, RolePermission
+
+    with auth_ctx.session_factory() as db:
+        auth_ctx.user_accounts.ensure_builtin_roles(db)
+        db.commit()
+        keys_by_role: dict[str, set[str]] = {}
+        for role in db.scalars(select(Role)).all():
+            perm_ids = {
+                link.permission_id
+                for link in db.scalars(
+                    select(RolePermission).where(RolePermission.role_id == role.id)
+                ).all()
+            }
+            keys_by_role[role.name] = {
+                p.key
+                for p in db.scalars(select(Permission)).all()
+                if p.id in perm_ids
+            }
+    assert keys_by_role[BuiltinRole.VIEWER.value] == set()
+    assert PERMISSION_OBJECTS_CHECKOUT in keys_by_role[BuiltinRole.ENGINEER.value]
+    assert PERMISSION_PROJECTS_CREATE not in keys_by_role[BuiltinRole.ENGINEER.value]
+    assert PERMISSION_PROJECTS_CREATE in keys_by_role[BuiltinRole.PDM_MANAGER.value]
+    assert PERMISSION_PROJECTS_DELETE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
+    assert PERMISSION_USERS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
+    for role_name, expected in ROLE_PERMISSION_KEYS.items():
+        assert keys_by_role[role_name] >= set(expected)

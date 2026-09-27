@@ -4,13 +4,14 @@ from collections.abc import Callable
 
 from urllib.parse import quote
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
 from fastapi.responses import FileResponse
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from creopdm.api.deps import get_context, get_db
+from creopdm.api.deps import get_context, get_db, require_permission
 from creopdm.api.serializers import object_to_response
+from creopdm.auth_constants import PERMISSION_OBJECTS_CHECKIN, PERMISSION_OBJECTS_CHECKOUT
 from creopdm.constants import LifecycleState
 from creopdm.context import AppContext
 from creopdm.exceptions import ValidationAppError
@@ -105,9 +106,11 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
 @router.post("/api/objects/batch/checkout", response_model=BatchOperationResponse)
 def checkout_batch(
     payload: BatchObjectRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     result = ctx.checkouts.checkout_many(db, payload.object_ids)
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.config.workspace_root())}
@@ -117,9 +120,11 @@ def checkout_batch(
 @router.post("/api/objects/batch/undo-checkout", response_model=BatchOperationResponse)
 def undo_checkout_batch(
     payload: BatchObjectRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     result = ctx.checkouts.undo_checkout_many(db, payload.object_ids)
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.config.workspace_root())}
@@ -205,9 +210,11 @@ def send_to_workspace(
 @router.post("/api/objects/{object_id}/checkout", response_model=ObjectResponse)
 def checkout_object(
     object_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ObjectResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     ctx.checkouts.checkout(db, object_id)
     obj = ctx.objects.get_object(db, object_id)
     return present_object(ctx, db, obj)
@@ -216,9 +223,11 @@ def checkout_object(
 @router.post("/api/objects/{object_id}/undo-checkout", response_model=ObjectResponse)
 def undo_checkout(
     object_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ObjectResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     ctx.checkouts.undo_checkout(db, object_id)
     obj = ctx.objects.get_object(db, object_id)
     return present_object(ctx, db, obj)
@@ -226,18 +235,22 @@ def undo_checkout(
 
 @router.post("/api/objects/batch/heartbeat", status_code=204)
 def heartbeat_batch(
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> Response:
+    require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     return _run_heartbeat(db, lambda: ctx.checkouts.heartbeat_mine(db))
 
 
 @router.post("/api/objects/{object_id}/heartbeat", status_code=204)
 def heartbeat(
     object_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> Response:
+    require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     return _run_heartbeat(db, lambda: ctx.checkouts.heartbeat(db, object_id))
 
 
@@ -254,9 +267,11 @@ def checkin_preview(
 def checkin_object(
     object_id: str,
     payload: CheckinRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ObjectResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_CHECKIN)
     obj = ctx.checkins.checkin(db, object_id, payload.comment, payload.add_relative_paths)
     obj = ctx.objects.get_object(db, obj.uuid)
     return present_object(ctx, db, obj)

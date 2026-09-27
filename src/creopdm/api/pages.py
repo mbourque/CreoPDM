@@ -20,6 +20,7 @@ from creopdm.api.serializers import project_to_response, revision_display
 from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPSED_COOKIE
 from creopdm.context import AppContext
 from creopdm.exceptions import ProjectNotFoundError
+from creopdm.permissions import caps_dict
 from creopdm.utils.bom_match import bom_generic_label, bom_lookup_keys
 from creopdm.utils.classify import display_type_label, resolve_type_icon, type_icon_client_payload
 from creopdm.utils.files import format_byte_size
@@ -145,8 +146,7 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
         "request": request,
         **_PAGE_DEFAULTS,
         "auth_user": auth_user,
-        "can_manage_users": bool(getattr(request.state, "can_manage_users", False)),
-        "can_manage_settings": bool(getattr(request.state, "can_manage_settings", False)),
+        **caps_dict(request),
         **context,
     }
     try:

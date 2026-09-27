@@ -4,13 +4,20 @@ import mimetypes
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object
-from creopdm.api.deps import get_context, get_db
+from creopdm.api.deps import get_context, get_db, require_permission
 from creopdm.api.serializers import version_to_response
+from creopdm.auth_constants import (
+    PERMISSION_OBJECTS_ADD,
+    PERMISSION_OBJECTS_CHECKOUT,
+    PERMISSION_OBJECTS_METADATA,
+    PERMISSION_OBJECTS_REMOVE,
+    PERMISSION_OBJECTS_REVERT,
+)
 from creopdm.context import AppContext
 from creopdm.constants import ActivityAction
 from creopdm.exceptions import CheckoutOwnershipError, CreoPDMError, PathValidationError, ValidationAppError
@@ -72,11 +79,13 @@ def object_content(
 @router.put("/api/objects/{object_id}/workspace-content", response_model=WorkspaceContentResponse)
 async def put_workspace_content(
     object_id: str,
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WorkspaceContentResponse:
     """Stage a local agent/browser file into the vault working copy (no new version)."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     obj = ctx.objects.get_object(db, object_id)
     project = obj.project
     user = ctx.users.get_current_user()
@@ -95,12 +104,14 @@ async def put_workspace_content(
 @router.post("/api/projects/{project_id}/objects", response_model=ObjectResponse, status_code=201)
 async def add_object(
     project_id: str,
+    request: Request,
     file: UploadFile = File(...),
     comment: str | None = Form(default=None),
     relative_path: str | None = Form(default=None),
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ObjectResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
     project = ctx.projects.get_project(db, project_id)
     data = await file.read()
     filename = file.filename or "untitled"
@@ -125,9 +136,11 @@ async def add_object(
 @router.post("/api/objects/batch/purge-workspace", response_model=BatchOperationResponse)
 def purge_workspace_batch(
     payload: BatchObjectRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_REMOVE)
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
     for object_uuid in payload.object_ids:
@@ -155,9 +168,11 @@ def purge_workspace_batch(
 @router.post("/api/objects/batch/remove", response_model=BatchOperationResponse)
 def remove_batch(
     payload: BatchRemoveRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_REMOVE)
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
     folder_paths = list(payload.folder_paths or [])
@@ -282,10 +297,12 @@ def object_history(
 def revert_object_version(
     object_id: str,
     version_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ObjectResponse:
     """Restore an older history row onto vault (new check-in) so local can rematerialize."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_REVERT)
     obj = ctx.checkins.revert_to_version(db, object_id, version_id)
     db.commit()
     db.refresh(obj)
@@ -306,9 +323,11 @@ def get_creo_metadata(
 def post_creo_metadata(
     object_id: str,
     payload: CreoMetadataRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> CreoMetadataResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_METADATA)
     result = ctx.metadata.save(db, object_id, payload)
     params = len(result.parameters or [])
     mats = result.materials if isinstance(result.materials, dict) else {}
@@ -375,9 +394,11 @@ def _purge_and_release(ctx: AppContext, db: Session, obj, *, ignore_locked: bool
 @router.post("/api/objects/{object_id}/purge-workspace", status_code=204)
 def purge_workspace(
     object_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> Response:
+    require_permission(request, ctx, PERMISSION_OBJECTS_REMOVE)
     obj = ctx.objects.get_object(db, object_id)
     _purge_and_release(ctx, db, obj, ignore_locked=False)
     ctx.activities.record(
@@ -394,9 +415,11 @@ def purge_workspace(
 @router.delete("/api/objects/{object_id}", status_code=204)
 def delete_object(
     object_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> Response:
+    require_permission(request, ctx, PERMISSION_OBJECTS_REMOVE)
     obj = ctx.objects.get_object(db, object_id)
     _purge_and_release(ctx, db, obj, ignore_locked=True)
     ctx.objects.delete_object(db, object_id)

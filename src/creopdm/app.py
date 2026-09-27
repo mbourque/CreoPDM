@@ -23,6 +23,7 @@ from creopdm.creo.connector_factory import create_creo_connector
 from creopdm.database.migrate import run_migrations
 from creopdm.database.session import create_db_engine, create_session_factory
 from creopdm.logging_setup import get_logger, setup_logging
+from creopdm.permissions import apply_caps, empty_caps, caps_for_user, test_auth_caps
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.checkin_service import CheckinService
 from creopdm.services.checkout_service import CheckoutService
@@ -162,8 +163,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
     async def auth_guard(request, call_next):
         set_request_identity(None)
         request.state.auth_user = None
-        request.state.can_manage_users = False
-        request.state.can_manage_settings = False
+        apply_caps(request, empty_caps())
         path = request.url.path or "/"
 
         public = path in {
@@ -177,8 +177,8 @@ def create_app(context: AppContext | None = None) -> FastAPI:
         } or path.startswith("/static") or path.startswith("/client/")
 
         if not ctx.auth_enabled:
-            # Tests / StaticUserProvider: no login gate; keep Settings available.
-            request.state.can_manage_settings = True
+            # Tests / StaticUserProvider: no login gate; full caps for existing suite.
+            apply_caps(request, test_auth_caps())
             if isinstance(ctx.users, StaticUserProvider):
                 set_request_identity(ctx.users.get_current_user())
             try:
@@ -205,8 +205,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
                 )
                 set_request_identity(identity)
                 request.state.auth_user = user
-                request.state.can_manage_users = ctx.user_accounts.can_manage_users(user)
-                request.state.can_manage_settings = ctx.user_accounts.can_manage_settings(user)
+                apply_caps(request, caps_for_user(ctx.user_accounts, user))
 
             if needs_setup and not public and not path.startswith("/setup"):
                 return RedirectResponse("/setup", status_code=303)
