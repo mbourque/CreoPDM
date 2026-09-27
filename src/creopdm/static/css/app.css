@@ -1263,7 +1263,10 @@ body.is-file-drag #file-drop-overlay {
    pointer:coarse + hover:none ≈ phone/tablet; mouse desktops keep full chrome. */
 @media ((pointer: coarse) and (hover: none) and (max-width: 960px)),
   ((pointer: coarse) and (hover: none) and (orientation: landscape) and (max-height: 560px)) {
-  .topbar .status-cluster { display: none !important; }
+  /* Hide desktop chrome pills; keep Logout so phones can sign out. */
+  .topbar .status-cluster > :not(a[href="/logout"]) {
+    display: none !important;
+  }
   .topbar {
     padding: 0.45rem 0.75rem;
     border-bottom-width: 2px;

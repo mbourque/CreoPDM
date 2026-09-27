@@ -311,7 +311,7 @@ Phone-only **browse** mode (portrait or landscape). No Add / Checkout / Check In
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Look at the top bar | Show CreoPDM brand; hide Settings and Creo status pills | Show those pills on a phone |
+| Look at the top bar | Show CreoPDM brand and **Logout**; hide Administration, display name, and Creo status pills | Hide Logout; show Administration / Creo status / name pills on a phone |
 | Look at the project header | Show project name and search; hide **New**, gear, and metric chips (Files / Parts / …) | Show New project, project gear, or filter pills |
 | Look at the bottom | No toolbar | Show Set Working Directory, Add, Open, Checkout, Check In, or Remove |
 | Open a file’s Details page | No bottom Details toolbar (no Revert / Check In chrome) | Show the desktop Details action bar |
@@ -334,8 +334,8 @@ Phone-only **browse** mode (portrait or landscape). No Add / Checkout / Check In
 
 ### Quick phone checks
 
-1. Phone portrait → no Settings/Creo pills; no bottom toolbar; Files shows Name + Rev.  
-2. Rotate to landscape → still browse-only (no pills/buttons coming back).  
+1. Phone portrait → brand + Logout; no Administration/Creo/name pills; no bottom toolbar; Files shows Name + Rev.  
+2. Rotate to landscape → still browse-only (no pills/buttons coming back except Logout).  
 3. Tap a folder → enters folder; tap a file → nothing opens.  
 4. On a PC, shrink Creo’s browser narrow → still full desktop UI (not browse-only).
 

@@ -533,7 +533,10 @@ def test_mobile_browse_css_is_minimal():
     assert "@media (max-width: 640px)," not in css
     assert "@media (max-width: 640px) {" not in css
     mobile = css.split("pointer: coarse", 1)[1]
-    assert ".topbar .status-cluster" in mobile
+    assert "Hide Logout" in docs or "**Logout**" in docs
+    assert 'a[href="/logout"]' in mobile
+    assert ".topbar .status-cluster > :not(" in mobile
+    assert ".topbar .status-cluster { display: none" not in mobile
     assert "#new-project-btn" in mobile
     assert ".project-settings" in mobile
     assert ".metrics" in mobile
