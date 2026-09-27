@@ -11,13 +11,22 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
 
 from creopdm.api.deps import get_context, get_db
-from creopdm.auth_constants import BuiltinRole, UserStatus
+from creopdm.auth_constants import (
+    BUILTIN_PERMISSIONS,
+    PERMISSION_GROUPS,
+    StarterRole,
+    UserStatus,
+)
 from creopdm.auth_session import SESSION_USER_KEY
 from creopdm.constants import APP_NAME, APP_VERSION
 from creopdm.context import AppContext
 from creopdm.exceptions import CreoPDMError
 from creopdm.models.user import User
+from creopdm.permissions import caps_dict
 from creopdm.utils.identity import UserIdentity, set_request_identity
+
+# Back-compat for default form role.
+BuiltinRole = StarterRole
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 _template_env = Environment(
@@ -33,16 +42,23 @@ def _base_ctx(
     ctx: AppContext,
     *,
     current_user: User | None = None,
-    can_manage_users: bool = False,
-    can_manage_settings: bool = False,
+    can_manage_users: bool | None = None,
+    can_manage_roles: bool | None = None,
+    can_manage_settings: bool | None = None,
 ) -> dict:
+    caps = caps_dict(request)
+    if can_manage_users is not None:
+        caps["can_manage_users"] = can_manage_users
+    if can_manage_roles is not None:
+        caps["can_manage_roles"] = can_manage_roles
+    if can_manage_settings is not None:
+        caps["can_manage_settings"] = can_manage_settings
     return {
         "request": request,
         "app_name": APP_NAME,
         "app_version": APP_VERSION,
-        "auth_user": current_user,
-        "can_manage_users": can_manage_users,
-        "can_manage_settings": can_manage_settings,
+        "auth_user": current_user or getattr(request.state, "auth_user", None),
+        **caps,
         "creo_label": "—",
         "creo_open_name": "",
         "creo_open_title": "",
@@ -257,8 +273,47 @@ def _require_admin(request: Request, ctx: AppContext, db: Session) -> User | HTM
     return user
 
 
+def _require_roles_manager(
+    request: Request, ctx: AppContext, db: Session
+) -> User | HTMLResponse | RedirectResponse:
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not ctx.user_accounts.can_manage_roles(user):
+        return HTMLResponse("<h1>403 Forbidden</h1><p>Roles management access required.</p>", status_code=403)
+    return user
+
+
 def _is_blocked(result: User | HTMLResponse | RedirectResponse) -> bool:
     return isinstance(result, (HTMLResponse, RedirectResponse))
+
+
+def _permission_groups(selected: set[str] | None = None) -> list[dict]:
+    selected = selected or set()
+    desc = {key: description for key, description in BUILTIN_PERMISSIONS}
+    groups = []
+    for title, keys in PERMISSION_GROUPS:
+        groups.append(
+            {
+                "title": title,
+                # Use "perms" — Jinja resolves dict.items as the method.
+                "perms": [
+                    {
+                        "key": key,
+                        "description": desc.get(key, key),
+                        "checked": key in selected,
+                    }
+                    for key in keys
+                ],
+            }
+        )
+    return groups
+
+
+def _parse_permission_keys(raw: list[str] | None) -> list[str]:
+    known = {key for key, _ in BUILTIN_PERMISSIONS}
+    return [key for key in (raw or []) if key in known]
 
 
 @router.get("/admin", response_class=HTMLResponse)
@@ -272,6 +327,7 @@ def admin_home(request: Request, ctx: AppContext = Depends(get_context), db: Ses
                     request,
                     ctx,
                     can_manage_users=False,
+                    can_manage_roles=False,
                     can_manage_settings=True,
                 ),
             },
@@ -281,8 +337,9 @@ def admin_home(request: Request, ctx: AppContext = Depends(get_context), db: Ses
     if user is None:
         return RedirectResponse("/login", status_code=303)
     can_users = ctx.user_accounts.can_manage_users(user)
+    can_roles = ctx.user_accounts.can_manage_roles(user)
     can_settings = ctx.user_accounts.can_manage_settings(user)
-    if not can_users and not can_settings:
+    if not can_users and not can_roles and not can_settings:
         return HTMLResponse(
             "<h1>403 Forbidden</h1><p>Administrator access required.</p>",
             status_code=403,
@@ -296,6 +353,7 @@ def admin_home(request: Request, ctx: AppContext = Depends(get_context), db: Ses
                 ctx,
                 current_user=user,
                 can_manage_users=can_users,
+                can_manage_roles=can_roles,
                 can_manage_settings=can_settings,
             ),
         },
@@ -503,3 +561,214 @@ def admin_user_update(
         },
         status_code=400,
     )
+
+
+@router.get("/admin/roles", response_class=HTMLResponse)
+def admin_roles(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
+    manager = _require_roles_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    roles = ctx.user_accounts.list_roles(db)
+    rows = [
+        {
+            "uuid": r.uuid,
+            "name": r.name,
+            "description": r.description or "",
+            "user_count": len(r.users),
+            "permission_count": len(r.permissions),
+        }
+        for r in roles
+    ]
+    return templates.TemplateResponse(
+        request,
+        "admin_roles.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "roles": rows,
+        },
+    )
+
+
+@router.get("/admin/roles/new", response_class=HTMLResponse)
+def admin_role_new(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
+    manager = _require_roles_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return templates.TemplateResponse(
+        request,
+        "admin_role_form.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "error": None,
+            "mode": "new",
+            "permission_groups": _permission_groups(),
+            "form": {"name": "", "description": ""},
+            "can_delete": False,
+        },
+    )
+
+
+@router.post("/admin/roles/new", response_class=HTMLResponse)
+def admin_role_create(
+    request: Request,
+    name: str = Form(""),
+    description: str = Form(""),
+    permission: list[str] = Form(default=[]),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_roles_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    permission_keys = _parse_permission_keys([str(v) for v in permission])
+    error = None
+    try:
+        ctx.user_accounts.create_role(
+            db,
+            name=name,
+            description=description,
+            permission_keys=permission_keys,
+        )
+        db.commit()
+        return RedirectResponse("/admin/roles", status_code=303)
+    except CreoPDMError as exc:
+        db.rollback()
+        error = exc.message
+    return templates.TemplateResponse(
+        request,
+        "admin_role_form.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "error": error,
+            "mode": "new",
+            "permission_groups": _permission_groups(set(permission_keys)),
+            "form": {"name": name, "description": description},
+            "can_delete": False,
+        },
+        status_code=400,
+    )
+
+
+@router.get("/admin/roles/{role_uuid}", response_class=HTMLResponse)
+def admin_role_detail(
+    role_uuid: str,
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_roles_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    role = ctx.user_accounts.get_role_by_uuid(db, role_uuid)
+    if role is None:
+        return RedirectResponse("/admin/roles", status_code=303)
+    selected = {p.key for p in role.permissions}
+    return templates.TemplateResponse(
+        request,
+        "admin_role_form.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "error": None,
+            "mode": "edit",
+            "permission_groups": _permission_groups(selected),
+            "form": {
+                "uuid": role.uuid,
+                "name": role.name,
+                "description": role.description or "",
+            },
+            "can_delete": len(role.users) == 0,
+            "user_count": len(role.users),
+        },
+    )
+
+
+@router.post("/admin/roles/{role_uuid}", response_class=HTMLResponse)
+def admin_role_update(
+    role_uuid: str,
+    request: Request,
+    name: str = Form(""),
+    description: str = Form(""),
+    permission: list[str] = Form(default=[]),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_roles_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    role = ctx.user_accounts.get_role_by_uuid(db, role_uuid)
+    if role is None:
+        return RedirectResponse("/admin/roles", status_code=303)
+    permission_keys = _parse_permission_keys([str(v) for v in permission])
+    error = None
+    try:
+        ctx.user_accounts.update_role(
+            db,
+            role_uuid,
+            name=name,
+            description=description,
+            permission_keys=permission_keys,
+        )
+        db.commit()
+        return RedirectResponse("/admin/roles", status_code=303)
+    except CreoPDMError as exc:
+        db.rollback()
+        error = exc.message
+    role = ctx.user_accounts.get_role_by_uuid(db, role_uuid) or role
+    return templates.TemplateResponse(
+        request,
+        "admin_role_form.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "error": error,
+            "mode": "edit",
+            "permission_groups": _permission_groups(set(permission_keys)),
+            "form": {
+                "uuid": role_uuid,
+                "name": name,
+                "description": description,
+            },
+            "can_delete": len(role.users) == 0,
+            "user_count": len(role.users),
+        },
+        status_code=400,
+    )
+
+
+@router.post("/admin/roles/{role_uuid}/delete", response_class=HTMLResponse)
+def admin_role_delete(
+    role_uuid: str,
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_roles_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    try:
+        ctx.user_accounts.delete_role(db, role_uuid)
+        db.commit()
+        return RedirectResponse("/admin/roles", status_code=303)
+    except CreoPDMError as exc:
+        db.rollback()
+        role = ctx.user_accounts.get_role_by_uuid(db, role_uuid)
+        if role is None:
+            return RedirectResponse("/admin/roles", status_code=303)
+        selected = {p.key for p in role.permissions}
+        return templates.TemplateResponse(
+            request,
+            "admin_role_form.html",
+            {
+                **_base_ctx(request, ctx, current_user=manager),
+                "error": exc.message,
+                "mode": "edit",
+                "permission_groups": _permission_groups(selected),
+                "form": {
+                    "uuid": role.uuid,
+                    "name": role.name,
+                    "description": role.description or "",
+                },
+                "can_delete": len(role.users) == 0,
+                "user_count": len(role.users),
+            },
+            status_code=400,
+        )

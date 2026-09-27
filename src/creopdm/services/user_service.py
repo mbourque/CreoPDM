@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from creopdm.auth_constants import (
     BUILTIN_PERMISSIONS,
-    BUILTIN_ROLE_DESCRIPTIONS,
-    ROLE_PERMISSION_KEYS,
-    BuiltinRole,
+    STARTER_ROLE_DESCRIPTIONS,
+    STARTER_ROLE_PERMISSION_KEYS,
+    StarterRole,
     PERMISSION_OBJECTS_ADD,
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_CHECKOUT,
@@ -23,6 +23,7 @@ from creopdm.auth_constants import (
     PERMISSION_PROJECTS_CREATE,
     PERMISSION_PROJECTS_DELETE,
     PERMISSION_PROJECTS_EDIT,
+    PERMISSION_ROLES_MANAGE,
     PERMISSION_SETTINGS_MANAGE,
     PERMISSION_USERS_MANAGE,
     UserStatus,
@@ -32,6 +33,7 @@ from creopdm.models.user import Permission, Role, RolePermission, User, UserRole
 from creopdm.utils.passwords import hash_password, verify_password
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9._-]{2,64}$")
+_ROLE_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 ._/-]{0,62}[a-zA-Z0-9]$|^[a-zA-Z0-9]$")
 
 
 def _normalize_username(username: str) -> str:
@@ -54,6 +56,17 @@ def validate_password(password: str) -> str:
     return text
 
 
+def validate_role_name(name: str) -> str:
+    value = (name or "").strip()
+    if not value or len(value) > 64:
+        raise ValidationAppError("Role name must be 1–64 characters.")
+    if not _ROLE_NAME_RE.match(value):
+        raise ValidationAppError(
+            "Role name must start and end with a letter or number."
+        )
+    return value
+
+
 class UserService:
     def user_count(self, db: Session) -> int:
         return int(db.scalar(select(func.count()).select_from(User)) or 0)
@@ -61,25 +74,33 @@ class UserService:
     def needs_setup(self, db: Session) -> bool:
         return self.user_count(db) == 0
 
-    def ensure_builtin_roles(self, db: Session) -> None:
-        """Idempotent seed for roles/permissions (migration also seeds; safe to re-run)."""
-        for name, description in BUILTIN_ROLE_DESCRIPTIONS.items():
-            existing = db.scalar(select(Role).where(Role.name == name))
-            if existing is None:
-                db.add(
-                    Role(
-                        uuid=str(uuid.uuid4()),
-                        name=name,
-                        description=description,
-                        is_builtin=True,
-                    )
-                )
+    def ensure_permission_catalog(self, db: Session) -> None:
+        """Idempotent insert of known permission keys (never deletes)."""
         for key, description in BUILTIN_PERMISSIONS:
             existing = db.scalar(select(Permission).where(Permission.key == key))
             if existing is None:
                 db.add(Permission(key=key, description=description))
+            elif existing.description != description:
+                existing.description = description
         db.flush()
-        for role_name, keys in ROLE_PERMISSION_KEYS.items():
+
+    def ensure_builtin_roles(self, db: Session) -> None:
+        """Ensure permission catalog; seed starter roles only when roles table is empty."""
+        self.ensure_permission_catalog(db)
+        role_count = int(db.scalar(select(func.count()).select_from(Role)) or 0)
+        if role_count > 0:
+            return
+        for name, description in STARTER_ROLE_DESCRIPTIONS.items():
+            db.add(
+                Role(
+                    uuid=str(uuid.uuid4()),
+                    name=name,
+                    description=description,
+                    is_builtin=False,
+                )
+            )
+        db.flush()
+        for role_name, keys in STARTER_ROLE_PERMISSION_KEYS.items():
             role = db.scalar(select(Role).where(Role.name == role_name))
             if role is None:
                 continue
@@ -87,24 +108,15 @@ class UserService:
                 perm = db.scalar(select(Permission).where(Permission.key == key))
                 if perm is None:
                     continue
-                link = db.scalar(
-                    select(RolePermission).where(
-                        RolePermission.role_id == role.id,
-                        RolePermission.permission_id == perm.id,
-                    )
-                )
-                if link is None:
-                    db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+                db.add(RolePermission(role_id=role.id, permission_id=perm.id))
         db.flush()
 
     def permission_keys_for_user(self, user: User) -> frozenset[str]:
-        if any(role.name == BuiltinRole.ADMINISTRATOR.value for role in user.roles):
-            return frozenset(key for key, _ in BUILTIN_PERMISSIONS)
+        """Caps from DB role_permissions only (no name-based short-circuit)."""
         keys: set[str] = set()
         for role in user.roles:
             for perm in role.permissions:
                 keys.add(perm.key)
-            keys.update(ROLE_PERMISSION_KEYS.get(role.name, ()))
         return frozenset(keys)
 
     def get_by_uuid(self, db: Session, user_uuid: str) -> User | None:
@@ -131,10 +143,31 @@ class UserService:
         )
 
     def list_roles(self, db: Session) -> list[Role]:
-        return list(db.scalars(select(Role).order_by(Role.name)).all())
+        return list(
+            db.scalars(
+                select(Role)
+                .options(selectinload(Role.permissions), selectinload(Role.users))
+                .order_by(Role.name)
+            ).all()
+        )
+
+    def get_role_by_uuid(self, db: Session, role_uuid: str) -> Role | None:
+        return db.scalar(
+            select(Role)
+            .options(selectinload(Role.permissions), selectinload(Role.users))
+            .where(Role.uuid == role_uuid)
+        )
 
     def role_by_name(self, db: Session, name: str) -> Role | None:
-        return db.scalar(select(Role).where(Role.name == name))
+        return db.scalar(
+            select(Role)
+            .options(selectinload(Role.permissions))
+            .where(Role.name == (name or "").strip())
+        )
+
+    def list_permissions(self, db: Session) -> list[Permission]:
+        self.ensure_permission_catalog(db)
+        return list(db.scalars(select(Permission).order_by(Permission.key)).all())
 
     def primary_role_name(self, user: User) -> str:
         if not user.roles:
@@ -142,16 +175,13 @@ class UserService:
         return user.roles[0].name
 
     def has_permission(self, user: User, key: str) -> bool:
-        for role in user.roles:
-            for perm in role.permissions:
-                if perm.key == key:
-                    return True
-            if role.name == BuiltinRole.ADMINISTRATOR.value:
-                return True
-        return False
+        return key in self.permission_keys_for_user(user)
 
     def can_manage_users(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_USERS_MANAGE)
+
+    def can_manage_roles(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_ROLES_MANAGE)
 
     def can_manage_settings(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_SETTINGS_MANAGE)
@@ -183,6 +213,152 @@ class UserService:
     def can_update_metadata(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_OBJECTS_METADATA)
 
+    def count_active_users_with_permission(self, db: Session, key: str) -> int:
+        users = db.scalars(
+            select(User)
+            .options(selectinload(User.roles).selectinload(Role.permissions))
+            .where(User.status == UserStatus.ACTIVE.value)
+        ).all()
+        return sum(1 for user in users if key in self.permission_keys_for_user(user))
+
+    def _permission_ids_for_keys(self, db: Session, keys: set[str] | frozenset[str]) -> list[int]:
+        if not keys:
+            return []
+        known = {key for key, _ in BUILTIN_PERMISSIONS}
+        unknown = set(keys) - known
+        if unknown:
+            raise ValidationAppError(f"Unknown permission key(s): {', '.join(sorted(unknown))}.")
+        rows = list(db.scalars(select(Permission).where(Permission.key.in_(list(keys)))).all())
+        if len(rows) != len(keys):
+            raise ValidationAppError("One or more permission keys are not in the catalog.")
+        return [row.id for row in rows]
+
+    def _would_leave_zero_users_manage(
+        self,
+        db: Session,
+        *,
+        exclude_user_id: int | None = None,
+        role_id: int | None = None,
+        role_keys: frozenset[str] | None = None,
+        deleting_role_id: int | None = None,
+        user_new_role_id: int | None = None,
+        user_new_status: str | None = None,
+    ) -> bool:
+        """Simulate whether any ACTIVE user would still have users.manage."""
+        users = list(
+            db.scalars(
+                select(User)
+                .options(selectinload(User.roles).selectinload(Role.permissions))
+            ).all()
+        )
+        roles_by_id = {
+            role.id: role
+            for role in db.scalars(
+                select(Role).options(selectinload(Role.permissions))
+            ).all()
+        }
+        for user in users:
+            status = user.status
+            if exclude_user_id is not None and user.id == exclude_user_id and user_new_status is not None:
+                status = user_new_status
+            if status != UserStatus.ACTIVE.value:
+                continue
+            keys: set[str] = set()
+            role_ids = [r.id for r in user.roles]
+            if exclude_user_id is not None and user.id == exclude_user_id and user_new_role_id is not None:
+                role_ids = [user_new_role_id]
+            for rid in role_ids:
+                if deleting_role_id is not None and rid == deleting_role_id:
+                    continue
+                if role_id is not None and rid == role_id and role_keys is not None:
+                    keys.update(role_keys)
+                    continue
+                role = roles_by_id.get(rid)
+                if role is None:
+                    continue
+                keys.update(p.key for p in role.permissions)
+            if PERMISSION_USERS_MANAGE in keys:
+                return False
+        return True
+
+    def create_role(
+        self,
+        db: Session,
+        *,
+        name: str,
+        description: str = "",
+        permission_keys: list[str] | None = None,
+    ) -> Role:
+        self.ensure_permission_catalog(db)
+        rname = validate_role_name(name)
+        if self.role_by_name(db, rname) is not None:
+            raise ValidationAppError(f"Role '{rname}' already exists.")
+        keys = frozenset(permission_keys or [])
+        role = Role(
+            uuid=str(uuid.uuid4()),
+            name=rname,
+            description=(description or "").strip(),
+            is_builtin=False,
+        )
+        db.add(role)
+        db.flush()
+        for perm_id in self._permission_ids_for_keys(db, keys):
+            db.add(RolePermission(role_id=role.id, permission_id=perm_id))
+        db.flush()
+        return self.get_role_by_uuid(db, role.uuid) or role
+
+    def update_role(
+        self,
+        db: Session,
+        role_uuid: str,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        permission_keys: list[str] | None = None,
+    ) -> Role:
+        self.ensure_permission_catalog(db)
+        role = self.get_role_by_uuid(db, role_uuid)
+        if role is None:
+            raise NotFoundError("Role not found.")
+        if name is not None:
+            rname = validate_role_name(name)
+            other = self.role_by_name(db, rname)
+            if other is not None and other.id != role.id:
+                raise ValidationAppError(f"Role '{rname}' already exists.")
+            role.name = rname
+        if description is not None:
+            role.description = description.strip()
+        if permission_keys is not None:
+            keys = frozenset(permission_keys)
+            if self._would_leave_zero_users_manage(
+                db, role_id=role.id, role_keys=keys
+            ):
+                raise ValidationAppError(
+                    "Cannot remove users.manage from the last active administrator path."
+                )
+            db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
+            for perm_id in self._permission_ids_for_keys(db, keys):
+                db.add(RolePermission(role_id=role.id, permission_id=perm_id))
+        role.updated_at = datetime.now(timezone.utc)
+        db.flush()
+        return self.get_role_by_uuid(db, role.uuid) or role
+
+    def delete_role(self, db: Session, role_uuid: str) -> None:
+        role = self.get_role_by_uuid(db, role_uuid)
+        if role is None:
+            raise NotFoundError("Role not found.")
+        if role.users:
+            raise ValidationAppError(
+                "Cannot delete a role that is still assigned to users. Reassign them first."
+            )
+        if self._would_leave_zero_users_manage(db, deleting_role_id=role.id):
+            raise ValidationAppError(
+                "Cannot delete the last role that grants users.manage to an active user."
+            )
+        db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
+        db.delete(role)
+        db.flush()
+
     def create_user(
         self,
         db: Session,
@@ -191,7 +367,7 @@ class UserService:
         display_name: str,
         password: str,
         email: str | None = None,
-        role_name: str = BuiltinRole.ENGINEER.value,
+        role_name: str = StarterRole.ENGINEER.value,
         must_change_password: bool = False,
         status: str = UserStatus.ACTIVE.value,
     ) -> User:
@@ -234,7 +410,7 @@ class UserService:
             username=username,
             display_name=display_name,
             password=password,
-            role_name=BuiltinRole.ADMINISTRATOR.value,
+            role_name=StarterRole.ADMINISTRATOR.value,
             must_change_password=False,
         )
 
@@ -270,20 +446,35 @@ class UserService:
             user.display_name = text
         if email is not None:
             user.email = email.strip() or None
+        new_status = status
         if status is not None:
             if status not in {UserStatus.ACTIVE.value, UserStatus.DISABLED.value}:
                 raise ValidationAppError("Invalid status.")
-            user.status = status
         if password:
             user.password_hash = hash_password(validate_password(password))
         if must_change_password is not None:
             user.must_change_password = must_change_password
+        new_role_id = None
         if role_name is not None:
             role = self.role_by_name(db, role_name)
             if role is None:
                 raise ValidationAppError(f"Unknown role '{role_name}'.")
+            new_role_id = role.id
+        if role_name is not None or new_status is not None:
+            if self._would_leave_zero_users_manage(
+                db,
+                exclude_user_id=user.id,
+                user_new_role_id=new_role_id,
+                user_new_status=new_status if new_status is not None else user.status,
+            ):
+                raise ValidationAppError(
+                    "Cannot leave the system with no active user who can manage users."
+                )
+        if new_status is not None:
+            user.status = new_status
+        if new_role_id is not None:
             db.execute(delete(UserRole).where(UserRole.user_id == user.id))
-            db.add(UserRole(user_id=user.id, role_id=role.id))
+            db.add(UserRole(user_id=user.id, role_id=new_role_id))
         user.updated_at = datetime.now(timezone.utc)
         db.flush()
         return self.get_by_uuid(db, user.uuid) or user

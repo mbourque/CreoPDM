@@ -533,6 +533,8 @@ Administration
 
 For the initial release, built-in role permissions may be fixed.
 
+**Update:** Administrators manage roles and permissions in **Administration → Roles**. Starter roles are seeded once for empty databases; `role_permissions` in the database is the source of truth afterward.
+
 Later versions can allow administrators to create custom roles.
 
 ---
@@ -1043,19 +1045,19 @@ For the first version implement:
 
 - [ ] Users page
 
-- [ ] Basic Roles page
+- [x] Basic Roles page
 
 - [ ] General settings page
 
-- [ ] Server-side authorization
+- [x] Server-side authorization
 
 - [ ] Audit administrative actions
 
-- [ ] Prevent disabling the last Administrator
+- [x] Prevent disabling the last Administrator
 
 Do not initially implement:
 
-- [ ] Complex custom-role editor
+- [x] Complex custom-role editor (Roles admin with permission checkboxes; free-form keys still out of scope)
 
 - [ ] Project-specific role overrides
 

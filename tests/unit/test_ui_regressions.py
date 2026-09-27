@@ -295,10 +295,18 @@ def test_soft_nav_skips_creojs_reconnect():
     soft_fn = _between(script, "function isSoftNavUrl(", "let softNavBusy")
     assert 'path === "/admin"' in soft_fn
     assert 'path === "/admin/users"' in soft_fn
+    assert 'path === "/admin/roles"' in soft_fn
     assert 'path === "/settings"' in soft_fn
     assert 'path === "/settings/types"' in soft_fn
     assert "/projects/" in soft_fn or r"/projects\/" in soft_fn
     assert "objects" in soft_fn
+    assert "userCanCheckout" in script
+    assert "userCanCheckout()" in _between(
+        script, "function promptOpenCheckout(", "function checkoutBeforeOpen("
+    )
+    assert 'data-can-checkout=' in (
+        ROOT / "src" / "creopdm" / "templates" / "base.html"
+    ).read_text(encoding="utf-8")
     soft_nav = _between(script, "function softNavigate(", "function leavePage(")
     assert "window.__creopdmBoot({ soft: true })" in soft_nav
     assert "Keep the live Creo.JS bridge" in soft_nav

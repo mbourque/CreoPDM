@@ -16,6 +16,7 @@ from creopdm.auth_constants import (
     PERMISSION_PROJECTS_CREATE,
     PERMISSION_PROJECTS_DELETE,
     PERMISSION_PROJECTS_EDIT,
+    PERMISSION_ROLES_MANAGE,
     PERMISSION_SETTINGS_MANAGE,
     PERMISSION_USERS_MANAGE,
     TEST_AUTH_PERMISSIONS,
@@ -28,6 +29,7 @@ from creopdm.services.user_service import UserService
 class CapabilityFlags:
     permissions: frozenset[str]
     can_manage_users: bool
+    can_manage_roles: bool
     can_manage_settings: bool
     can_create_project: bool
     can_edit_project: bool
@@ -44,6 +46,7 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
     return CapabilityFlags(
         permissions=keys,
         can_manage_users=PERMISSION_USERS_MANAGE in keys,
+        can_manage_roles=PERMISSION_ROLES_MANAGE in keys,
         can_manage_settings=PERMISSION_SETTINGS_MANAGE in keys,
         can_create_project=PERMISSION_PROJECTS_CREATE in keys,
         can_edit_project=PERMISSION_PROJECTS_EDIT in keys,
@@ -72,6 +75,7 @@ def empty_caps() -> CapabilityFlags:
 def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.permissions = caps.permissions
     request.state.can_manage_users = caps.can_manage_users
+    request.state.can_manage_roles = caps.can_manage_roles
     request.state.can_manage_settings = caps.can_manage_settings
     request.state.can_create_project = caps.can_create_project
     request.state.can_edit_project = caps.can_edit_project
@@ -87,6 +91,7 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
 def caps_dict(request: Request) -> dict:
     return {
         "can_manage_users": bool(getattr(request.state, "can_manage_users", False)),
+        "can_manage_roles": bool(getattr(request.state, "can_manage_roles", False)),
         "can_manage_settings": bool(getattr(request.state, "can_manage_settings", False)),
         "can_create_project": bool(getattr(request.state, "can_create_project", False)),
         "can_edit_project": bool(getattr(request.state, "can_edit_project", False)),

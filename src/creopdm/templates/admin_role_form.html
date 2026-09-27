@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'new' %}Add role{% else %}Edit role{% endif %} — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page">
+  <nav class="crumb">
+    <a href="/">Projects</a>
+    <span>/</span>
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/roles">Roles</a>
+    <span>/</span>
+    <span>{% if mode == 'new' %}Add role{% else %}{{ form.name }}{% endif %}</span>
+  </nav>
+  <h1>{% if mode == 'new' %}Add role{% else %}Edit role{% endif %}</h1>
+
+  <form method="post" action="{% if mode == 'new' %}/admin/roles/new{% else %}/admin/roles/{{ form.uuid }}{% endif %}" class="settings-form settings-form-wide">
+    <section class="settings-card">
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      <label>Name
+        <input name="name" type="text" value="{{ form.name }}" required maxlength="64" autocomplete="off">
+      </label>
+      <label>Description
+        <input name="description" type="text" value="{{ form.description }}" maxlength="500" autocomplete="off">
+      </label>
+      <p class="muted small">Permissions control API and toolbar access. At least one active user must keep <code>users.manage</code>.</p>
+
+      {% for group in permission_groups %}
+      <fieldset class="role-perm-group">
+        <legend>{{ group.title }}</legend>
+        {% for item in group.perms %}
+        <label class="choice">
+          <input type="checkbox" name="permission" value="{{ item.key }}" {% if item.checked %}checked{% endif %}>
+          <span><strong>{{ item.key }}</strong> — {{ item.description }}</span>
+        </label>
+        {% endfor %}
+      </fieldset>
+      {% endfor %}
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{% if mode == 'new' %}Create role{% else %}Save{% endif %}</button>
+        <a class="btn" href="/admin/roles">Back to list</a>
+      </div>
+    </section>
+  </form>
+
+  {% if mode == 'edit' %}
+  <section class="settings-card" style="margin-top: 1rem;">
+    {% if can_delete %}
+    <form method="post" action="/admin/roles/{{ form.uuid }}/delete" onsubmit="return confirm('Delete this role?');">
+      <button type="submit" class="btn btn-danger">Delete role</button>
+    </form>
+    {% else %}
+    <p class="muted small">This role is assigned to {{ user_count }} user{{ 's' if user_count != 1 else '' }}. Reassign them before deleting.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+</article>
+{% endblock %}

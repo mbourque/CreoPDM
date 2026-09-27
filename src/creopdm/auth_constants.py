@@ -10,14 +10,20 @@ class UserStatus(StrEnum):
     DISABLED = "DISABLED"
 
 
-class BuiltinRole(StrEnum):
+# Starter role names seeded only when the roles table is empty.
+class StarterRole(StrEnum):
     ADMINISTRATOR = "Administrator"
     PDM_MANAGER = "PDM Manager"
     ENGINEER = "Engineer"
     VIEWER = "Viewer"
 
 
+# Back-compat alias for imports that still say BuiltinRole.
+BuiltinRole = StarterRole
+
+
 PERMISSION_USERS_MANAGE = "users.manage"
+PERMISSION_ROLES_MANAGE = "roles.manage"
 PERMISSION_SETTINGS_MANAGE = "settings.manage"
 PERMISSION_PROJECTS_CREATE = "projects.create"
 PERMISSION_PROJECTS_EDIT = "projects.edit"
@@ -29,15 +35,19 @@ PERMISSION_OBJECTS_REMOVE = "objects.remove"
 PERMISSION_OBJECTS_REVERT = "objects.revert"
 PERMISSION_OBJECTS_METADATA = "objects.metadata"
 
-BUILTIN_ROLE_DESCRIPTIONS: dict[str, str] = {
-    BuiltinRole.ADMINISTRATOR.value: "Full system administration access.",
-    BuiltinRole.PDM_MANAGER.value: "Manage engineering data without full server administration.",
-    BuiltinRole.ENGINEER.value: "Normal CAD/PDM authoring user.",
-    BuiltinRole.VIEWER.value: "Read-only access to assigned projects.",
+STARTER_ROLE_DESCRIPTIONS: dict[str, str] = {
+    StarterRole.ADMINISTRATOR.value: "Full system administration access.",
+    StarterRole.PDM_MANAGER.value: "Manage engineering data without full server administration.",
+    StarterRole.ENGINEER.value: "Normal CAD/PDM authoring user.",
+    StarterRole.VIEWER.value: "Read-only access to assigned projects.",
 }
+
+# Back-compat alias.
+BUILTIN_ROLE_DESCRIPTIONS = STARTER_ROLE_DESCRIPTIONS
 
 BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_USERS_MANAGE, "Create, edit, and disable users"),
+    (PERMISSION_ROLES_MANAGE, "Create, edit, and delete roles"),
     (PERMISSION_SETTINGS_MANAGE, "Change global CreoPDM settings"),
     (PERMISSION_PROJECTS_CREATE, "Create projects"),
     (PERMISSION_PROJECTS_EDIT, "Edit project properties"),
@@ -50,7 +60,29 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_OBJECTS_METADATA, "Update Creo metadata on objects"),
 )
 
-# Role → permission keys (Administrator gets all via short-circuit + explicit seed).
+# Grouping for Roles admin checkboxes.
+PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Administration",
+        (PERMISSION_USERS_MANAGE, PERMISSION_ROLES_MANAGE, PERMISSION_SETTINGS_MANAGE),
+    ),
+    (
+        "Projects",
+        (PERMISSION_PROJECTS_CREATE, PERMISSION_PROJECTS_EDIT, PERMISSION_PROJECTS_DELETE),
+    ),
+    (
+        "Objects",
+        (
+            PERMISSION_OBJECTS_ADD,
+            PERMISSION_OBJECTS_CHECKOUT,
+            PERMISSION_OBJECTS_CHECKIN,
+            PERMISSION_OBJECTS_REMOVE,
+            PERMISSION_OBJECTS_REVERT,
+            PERMISSION_OBJECTS_METADATA,
+        ),
+    ),
+)
+
 _AUTHORING = (
     PERMISSION_OBJECTS_ADD,
     PERMISSION_OBJECTS_CHECKOUT,
@@ -60,16 +92,20 @@ _AUTHORING = (
     PERMISSION_OBJECTS_METADATA,
 )
 
-ROLE_PERMISSION_KEYS: dict[str, tuple[str, ...]] = {
-    BuiltinRole.ADMINISTRATOR.value: tuple(key for key, _ in BUILTIN_PERMISSIONS),
-    BuiltinRole.PDM_MANAGER.value: (
+# Seed-only templates when the roles table is empty. Runtime caps come from DB.
+STARTER_ROLE_PERMISSION_KEYS: dict[str, tuple[str, ...]] = {
+    StarterRole.ADMINISTRATOR.value: tuple(key for key, _ in BUILTIN_PERMISSIONS),
+    StarterRole.PDM_MANAGER.value: (
         PERMISSION_PROJECTS_CREATE,
         PERMISSION_PROJECTS_EDIT,
         *_AUTHORING,
     ),
-    BuiltinRole.ENGINEER.value: _AUTHORING,
-    BuiltinRole.VIEWER.value: (),
+    StarterRole.ENGINEER.value: _AUTHORING,
+    StarterRole.VIEWER.value: (),
 }
+
+# Back-compat alias (seed path only — do not overlay at runtime).
+ROLE_PERMISSION_KEYS = STARTER_ROLE_PERMISSION_KEYS
 
 # Caps granted when auth is disabled (unit/integration tests).
 TEST_AUTH_PERMISSIONS: frozenset[str] = frozenset(key for key, _ in BUILTIN_PERMISSIONS)

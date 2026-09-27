@@ -14,7 +14,13 @@
     {% if can_manage_users %}
     <section class="admin-tile">
       <h2><a href="/admin/users">Users</a></h2>
-      <p>Add and edit accounts, roles, and status. Click a user’s name to open their record.</p>
+      <p>Add and edit accounts, assign a role, and set status. Click a user’s name to open their record.</p>
+    </section>
+    {% endif %}
+    {% if can_manage_roles %}
+    <section class="admin-tile">
+      <h2><a href="/admin/roles">Roles</a></h2>
+      <p>Create roles and choose what each can do (projects, files, administration).</p>
     </section>
     {% endif %}
     {% if can_manage_settings %}

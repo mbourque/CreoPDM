@@ -9,7 +9,7 @@ CreoPDM uses **session cookie** authentication. Passwords are stored as **Argon2
 When the `users` table has **zero** rows, opening the app redirects to **`/setup`**:
 
 1. Enter display name, username (suggestion: `admin`), password, and confirm.
-2. CreoPDM creates an **ACTIVE** Administrator, signs you in, and sends you to the app.
+2. CreoPDM creates an **ACTIVE** user on the **Administrator** starter role, signs you in, and sends you to the app.
 3. After any user exists, `/setup` is disabled; unauthenticated visitors go to **`/login`**.
 
 ### Sign in / out
@@ -24,38 +24,45 @@ Disabled accounts cannot sign in. Checkout, check-in, and activity rows store th
 
 ### Administration
 
-Administrators see an **Administration** link in the top bar (hub at `/admin`):
+Users with `users.manage`, `roles.manage`, or `settings.manage` see **Administration** (`/admin`):
 
-- **Users** — list accounts; click a **name** to edit (display name, email, role, status, set/reset password); **Add user**
-- **Settings** — workstation options (Creo open mode, vault, file types, …). Only `settings.manage` (built-in Administrator)
-- After a successful **Add user** or **Save** on edit, you return to the users list
+- **Users** — list accounts; click a **name** to edit (display name, email, role, status, set/reset password); **Add user** (`users.manage`)
+- **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`)
+- **Settings** — workstation options (Creo open mode, vault, file types, …) (`settings.manage`)
+- After a successful **Add user** / **Save** / role save, you return to the list
 - New users must change their password on first sign-in
-- More admin sections will be added to this hub later
 
-Engineers and other roles do not see Administration; direct URLs return **403**.
+Others do not see Administration; direct URLs return **403**.
 
 ### Checkout exclusivity
 
 A file may be checked out by **one** user at a time. If Paul has a checkout, David cannot check out the same file until Paul checks in or undoes the checkout. The checkout row stores the login **username**.
 
-Built-in roles are seeded: **Administrator**, **PDM Manager**, **Engineer**, **Viewer**. Full capability matrix: [initial-built-in-roles.md](initial-built-in-roles.md).
+Empty databases seed four **starter** roles (**Administrator**, **PDM Manager**, **Engineer**, **Viewer**) once. After that, permissions live only in the database — see Phase 3. Reference matrix: [initial-built-in-roles.md](initial-built-in-roles.md).
 
 ## Phase 2 (shipped): core role matrix
 
-Permission keys are seeded on roles (`projects.*`, `objects.*`, `users.manage`, `settings.manage`). Mutating APIs return **403** when the signed-in user lacks the key. The Files toolbar and project New/Delete controls hide when the matching capability is false.
+Permission keys (`projects.*`, `objects.*`, `users.manage`, `roles.manage`, `settings.manage`) gate mutating APIs (**403** when missing). The Files toolbar and project New/Delete controls hide when the matching capability is false. Viewer Open dialog offers view-only open (no “Check out … then open”) when `objects.checkout` is missing (`data-can-checkout` on the page).
 
-| Role | Can do now | Cannot |
+| Starter role (default seed) | Can do | Cannot |
 | --- | --- | --- |
-| **Viewer** | Browse projects, open/download, Details | Add / Checkout / Check In / Remove, New project, Administration |
-| **Engineer** | Add, checkout, check-in, remove, revert, metadata | Create/edit/delete projects, users, settings |
-| **PDM Manager** | Create/edit projects + Engineer authoring | Delete project, users, settings |
-| **Administrator** | Everything above + delete project + users + settings | — |
+| **Viewer** | Browse, open/download, Details | Authoring toolbar, checkout-on-open, Administration |
+| **Engineer** | Add, checkout, check-in, remove, revert, metadata | Create/edit/delete projects, users, roles, settings |
+| **PDM Manager** | Create/edit projects + Engineer authoring | Delete project, users, roles, settings |
+| **Administrator** | Everything above + delete project + users + roles + settings | — |
 
 When `auth_enabled` is false (unit tests with a static identity), all authoring and project caps are granted so the existing suite stays green.
+
+## Phase 3 (shipped): Roles admin (DB is source of truth)
+
+- **`/admin/roles`** — create roles, edit name/description/permissions, delete unused roles
+- Runtime caps come only from `role_permissions` (no Administrator-by-name short-circuit; starter templates are not re-applied on restart)
+- Safety: cannot leave zero **ACTIVE** users with `users.manage`; cannot delete a role that is still assigned
+- Starter roles are editable like any other role
 
 ### Deferred (later phases)
 
 - Project membership / “assigned projects only” / project-level roles
 - Override-checkout UI; lifecycle / release product surfaces
-- Roles admin UI; Agents / Storage / Audit admin sections
+- Agents / Storage / Audit admin sections
 - Binding Windows agent Bearer tokens to the session user

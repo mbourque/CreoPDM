@@ -239,7 +239,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (parsed.origin !== window.location.origin) return false;
       const path = parsed.pathname || "/";
       if (path === "/" || path === "") return true;
-      if (path === "/admin" || path === "/admin/users") return true;
+      if (path === "/admin" || path === "/admin/users" || path === "/admin/roles") return true;
+      if (path === "/admin/roles/new" || /^\/admin\/roles\/[^/]+\/?$/.test(path)) return true;
+      if (path === "/admin/users/new" || /^\/admin\/users\/[^/]+\/?$/.test(path)) return true;
       if (path === "/settings" || path === "/settings/types") return true;
       if (/^\/projects\/[^/]+\/objects\/[^/]+\/?$/.test(path)) return true;
       return false;
@@ -4675,6 +4677,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return "file";
   }
 
+  function userCanCheckout() {
+    return document.body?.dataset?.canCheckout === "1";
+  }
+
   function promptOpenCheckout({ filename, canCheckout }) {
     const dialog = $("#open-checkout-dialog");
     const form = $("#open-checkout-form");
@@ -4693,7 +4699,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       lead.textContent = `How do you want to open ${filename}?`;
     }
     showError(err, "");
-    const allowCheckout = Boolean(canCheckout);
+    // Object availability AND signed-in user objects.checkout capability.
+    const allowCheckout = Boolean(canCheckout) && userCanCheckout();
     if (fileWrap) fileWrap.hidden = !allowCheckout;
     if (companionsWrap) companionsWrap.hidden = !allowCheckout;
     if (companionsNote) companionsNote.hidden = !allowCheckout;
@@ -4792,7 +4799,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     const choice = await promptOpenCheckout({
       filename,
-      canCheckout: Boolean(objectId) && canCheckout,
+      canCheckout: Boolean(objectId) && canCheckout && userCanCheckout(),
       owned: false,
     });
     const action = typeof choice === "string" ? choice : choice?.action;
@@ -7782,6 +7789,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     void openPdmObjectFromUi(id, {
       dataset: {
         filename: link.textContent?.trim() || id,
+        // Object may be free; userCap is enforced in promptOpenCheckout via body data-can-checkout.
         canCheckout: "1",
         owned: "0",
       },

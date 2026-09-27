@@ -132,7 +132,16 @@ def test_login_logout_and_disabled_user(auth_client, auth_ctx):
     assert "Administration" in home.text
 
     auth_client.get("/logout", follow_redirects=False)
+    # Keep another ACTIVE users.manage account so disabling admin is allowed.
     with auth_ctx.session_factory() as db:
+        UserService().create_user(
+            db,
+            username="backup",
+            display_name="Backup Admin",
+            password="BackupPass1",
+            role_name=BuiltinRole.ADMINISTRATOR.value,
+            must_change_password=False,
+        )
         admin = db.scalar(select(User).where(User.username == "admin"))
         assert admin is not None
         UserService().update_user(db, admin.uuid, status=UserStatus.DISABLED.value)
@@ -471,12 +480,14 @@ def test_viewer_is_read_only(auth_client, auth_ctx, repo_parent):
     assert auth_client.get(f"/api/objects/{obj['uuid']}").status_code == 200
     home = auth_client.get(f"/?project={project['uuid']}")
     assert home.status_code == 200
+    assert 'data-can-checkout="0"' in home.text
     assert 'id="add-menu"' not in home.text
     assert 'id="checkout-menu"' not in home.text
     assert 'id="checkin-menu"' not in home.text
     assert 'id="remove-menu"' not in home.text
     assert 'id="new-project-btn"' not in home.text
     assert "Administration" not in home.text
+    assert auth_client.get("/admin/roles", follow_redirects=False).status_code == 403
 
     _assert_forbidden(auth_client.post("/api/projects", json={"name": "Nope"}))
     _assert_forbidden(
@@ -573,8 +584,9 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
         PERMISSION_OBJECTS_CHECKOUT,
         PERMISSION_PROJECTS_CREATE,
         PERMISSION_PROJECTS_DELETE,
+        PERMISSION_ROLES_MANAGE,
         PERMISSION_USERS_MANAGE,
-        ROLE_PERMISSION_KEYS,
+        STARTER_ROLE_PERMISSION_KEYS,
     )
     from creopdm.models.user import Permission, RolePermission
 
@@ -600,5 +612,143 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
     assert PERMISSION_PROJECTS_CREATE in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_PROJECTS_DELETE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_USERS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
-    for role_name, expected in ROLE_PERMISSION_KEYS.items():
+    assert PERMISSION_ROLES_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
+    for role_name, expected in STARTER_ROLE_PERMISSION_KEYS.items():
         assert keys_by_role[role_name] >= set(expected)
+
+
+@requires_git
+def test_roles_admin_create_custom_and_gate(auth_client, auth_ctx, repo_parent):
+    """roles.manage can create a custom role; caps follow DB only."""
+    from creopdm.auth_constants import PERMISSION_OBJECTS_CHECKOUT
+
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+    hub = auth_client.get("/admin")
+    assert hub.status_code == 200
+    assert 'href="/admin/roles"' in hub.text
+    listed = auth_client.get("/admin/roles")
+    assert listed.status_code == 200
+    assert "Administrator" in listed.text
+
+    created = auth_client.post(
+        "/admin/roles/new",
+        data={
+            "name": "Checkout Only",
+            "description": "Can lock files only",
+            "permission": PERMISSION_OBJECTS_CHECKOUT,
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303, created.text
+
+    user = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Lock User",
+            "username": "locker",
+            "email": "",
+            "role": "Checkout Only",
+            "status": UserStatus.ACTIVE.value,
+            "password": "LockerPass1",
+            "password_confirm": "LockerPass1",
+        },
+        follow_redirects=False,
+    )
+    assert user.status_code == 303, user.text
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(User).where(User.username == "locker"))
+        assert row is not None
+        row.must_change_password = False
+        db.commit()
+
+    project = auth_client.post("/api/projects", json={"name": "Lock Proj"}).json()
+    part = auth_client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("a.prt", b"x", "application/octet-stream")},
+        data={"comment": "init"},
+    )
+    assert part.status_code == 201, part.text
+
+    _login(auth_client, "locker", "LockerPass1")
+    home = auth_client.get(f"/?project={project['uuid']}")
+    assert 'data-can-checkout="1"' in home.text
+    assert 'id="new-project-btn"' not in home.text
+    assert auth_client.get("/admin/roles", follow_redirects=False).status_code == 403
+    checked = auth_client.post(f"/api/objects/{part.json()['uuid']}/checkout")
+    assert checked.status_code == 200, checked.text
+    _assert_forbidden(auth_client.post("/api/projects", json={"name": "Nope"}))
+
+
+@requires_git
+def test_role_permission_edit_survives_restart(auth_client, auth_ctx, data_dir, repo_parent):
+    """Removing objects.checkout from Engineer is not re-seeded on rebuild."""
+    from creopdm.auth_constants import PERMISSION_OBJECTS_CHECKOUT
+    from creopdm.config import ConfigManager
+
+    _setup_admin_and_users(
+        auth_client, auth_ctx, ("eng", BuiltinRole.ENGINEER.value)
+    )
+    with auth_ctx.session_factory() as db:
+        eng = auth_ctx.user_accounts.role_by_name(db, BuiltinRole.ENGINEER.value)
+        assert eng is not None
+        keys = [p.key for p in eng.permissions if p.key != PERMISSION_OBJECTS_CHECKOUT]
+        auth_ctx.user_accounts.update_role(
+            db, eng.uuid, permission_keys=keys
+        )
+        db.commit()
+
+    rebuilt = build_context(ConfigManager())
+    with rebuilt.session_factory() as db:
+        eng = rebuilt.user_accounts.role_by_name(db, BuiltinRole.ENGINEER.value)
+        assert eng is not None
+        assert PERMISSION_OBJECTS_CHECKOUT not in {p.key for p in eng.permissions}
+
+    with TestClient(create_app(rebuilt)) as client:
+        _login(client, "eng", "EngPass1")
+        home = client.get("/")
+        assert home.status_code == 200
+        assert 'data-can-checkout="0"' in home.text
+        assert 'id="checkout-menu"' not in home.text
+
+
+def test_cannot_strip_last_users_manage(auth_client, auth_ctx):
+    """Saving Admin without users.manage is rejected when it is the only path."""
+    from creopdm.auth_constants import PERMISSION_OBJECTS_CHECKOUT
+
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    with auth_ctx.session_factory() as db:
+        admin_role = auth_ctx.user_accounts.role_by_name(
+            db, BuiltinRole.ADMINISTRATOR.value
+        )
+        assert admin_role is not None
+        role_uuid = admin_role.uuid
+    denied = auth_client.post(
+        f"/admin/roles/{role_uuid}",
+        data={
+            "name": "Administrator",
+            "description": "oops",
+            "permission": PERMISSION_OBJECTS_CHECKOUT,
+        },
+        follow_redirects=False,
+    )
+    assert denied.status_code == 400, denied.text
+    assert "users.manage" in denied.text
+
+
+def test_engineer_cannot_open_roles_admin(auth_client, auth_ctx):
+    _setup_admin_and_users(
+        auth_client, auth_ctx, ("eng", BuiltinRole.ENGINEER.value)
+    )
+    _login(auth_client, "eng", "EngPass1")
+    assert auth_client.get("/admin/roles", follow_redirects=False).status_code == 403
+    assert auth_client.get("/admin/roles/new", follow_redirects=False).status_code == 403

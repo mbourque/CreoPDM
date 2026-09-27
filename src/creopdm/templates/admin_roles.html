@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Roles — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page">
+  <nav class="crumb">
+    <a href="/">Projects</a>
+    <span>/</span>
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <span>Roles</span>
+  </nav>
+  <h1>Roles</h1>
+  <p class="muted">Define what each role can do. Assign roles to users on the Users page.</p>
+  <p><a class="btn btn-primary" href="/admin/roles/new">Add role</a></p>
+
+  <section class="settings-card settings-form-wide">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Description</th>
+          <th>Users</th>
+          <th>Permissions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in roles %}
+        <tr>
+          <td><a href="/admin/roles/{{ r.uuid }}">{{ r.name }}</a></td>
+          <td>{{ r.description }}</td>
+          <td>{{ r.user_count }}</td>
+          <td>{{ r.permission_count }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No roles yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</article>
+{% endblock %}

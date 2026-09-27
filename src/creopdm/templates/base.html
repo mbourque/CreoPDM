@@ -20,6 +20,7 @@
 <body
   data-agent-base="{{ agent_base_url | default('http://127.0.0.1:8766') }}"
   data-workspace-poll-ms="{{ workspace_poll_interval_ms | default('5000') }}"
+  data-can-checkout="{{ '1' if can_checkout else '0' }}"
 >
   <header class="topbar">
     <a class="brand" href="/">
@@ -30,7 +31,7 @@
       </div>
     </a>
     <div class="status-cluster">
-      {% if can_manage_users or can_manage_settings %}
+      {% if can_manage_users or can_manage_settings or can_manage_roles %}
       <a class="status-pill" href="/admin">Administration</a>
       {% endif %}
       <span id="creo-status" class="status-pill" data-state="{% if creo_label == 'Connected' %}ok{% else %}idle{% endif %}" data-creo-open-mode="{{ creo_open_mode }}" title="{{ creo_open_title }}">

@@ -33,7 +33,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Click a project, folder breadcrumb, or Administration / Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Not Connected” or drop the Creo link just because you changed folders; hard-reload the page during a folder/project switch |
-| Sign in as **Viewer** | Browse projects, open/download files, use Details | See Add / Checkout / Check In / Remove, or New project |
+| Sign in as **Viewer** | Browse projects, open/download files, use Details; Open without checking out | See Add / Checkout / Check In / Remove, New project, or “Check out … then open” in the Open dialog |
 | Add or remove files/folders | Update the list so it matches reality | Leave old rows on screen until you press F5 |
 | Wait while something big runs (Add, Remove, Check In…) | Show a busy message so you know it’s working | Sit frozen with no feedback |
 
@@ -366,7 +366,7 @@ Automated coverage lives mainly in:
 - `tests/unit/test_user_interaction_validations.py`
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
-- `tests/unit/test_auth.py` (role matrix: Viewer/Engineer/PDM Manager/Admin toolbar + API 403)
+- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `data-can-checkout`)
 - Related checkout / check-in / soft-nav tests
 
 Mobile browse is CSS-only in `app.css`: `@media` with `pointer: coarse` and `hover: none` (plus width/height limits). Do **not** gate browse mode on `max-width` alone.
