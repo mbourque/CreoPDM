@@ -2662,6 +2662,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 pdm_url: window.location.origin,
+                ...agentPdmAuth(),
                 project_id: projectId,
                 absolute_paths: chunk,
                 base_folder: baseFolder || "",
@@ -4825,6 +4826,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return fromBody || "http://127.0.0.1:8766";
   }
 
+  function agentPdmToken() {
+    return String(document.body?.dataset?.agentToken || "").trim();
+  }
+
+  /** Fields the local agent forwards to CreoPDM (Bearer = signed-in user). */
+  function agentPdmAuth() {
+    const token = agentPdmToken();
+    return token ? { token } : {};
+  }
+
   async function probeCreoAgent() {
     try {
       const response = await fetch(`${agentBase()}/health`, { method: "GET" });
@@ -4846,6 +4857,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         pdm_url: window.location.origin,
+        ...agentPdmAuth(),
         project_id: projectId,
         vault_folder: currentVaultFolder(),
         items: list.map((item) => ({
@@ -4886,6 +4898,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         pdm_url: window.location.origin,
+        ...agentPdmAuth(),
         project_id: projectId,
         vault_folder: currentVaultFolder(),
         relative_paths: paths,
@@ -5208,6 +5221,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         pdm_url: window.location.origin,
+        ...agentPdmAuth(),
         object_id: prepared.object_id || null,
         project_id: prepared.project_id || currentProjectId() || null,
         vault_folder: currentVaultFolder(),
@@ -5239,6 +5253,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         pdm_url: window.location.origin,
+        ...agentPdmAuth(),
         project_id: currentProjectId() || null,
         vault_folder: currentVaultFolder(),
         object_ids: objectIds,
@@ -5319,7 +5334,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function openPdmObject(target) {
     await creoJSReady;
-    const useCreoSession = hostedCreoJS() || creoOpenMode() === "embedded";
+    // Only use Creo.JS when we are actually in Creo's embedded browser.
+    // Outside Creo (Chrome/Edge), always materialize + Windows association.
+    const useCreoSession = hostedCreoJS() && creoOpenMode() === "embedded";
     if (useCreoSession) {
       const prepared = await postAction(
         "/api/creo/open",
@@ -5452,6 +5469,35 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       return prepared;
     }
+
+    // Not in Creo embedded browser: download via agent and open with Windows association.
+    const prepared = await postAction(
+      "/api/creo/open",
+      openRequestBody(target, false),
+      "POST",
+      ""
+    );
+    if (!prepared) return null;
+    try {
+      const agent = await probeCreoAgent();
+      if (agent) {
+        const openSpec = await materializeViaAgent(prepared);
+        if (!openSpec?.path) {
+          showError($("#toolbar-error"), "Local agent did not return a cache path.");
+          return null;
+        }
+        await openViaAgent(openSpec.path, "association");
+        return prepared;
+      }
+    } catch (err) {
+      const message = err && err.message ? err.message : String(err);
+      showError(
+        $("#toolbar-error"),
+        message || "Could not open the file with the local agent."
+      );
+      return null;
+    }
+    // No agent: browser download (OS association after save).
     return openPdmLaunchResult(
       await postAction("/api/creo/open", openRequestBody(target, true), "POST", "")
     );

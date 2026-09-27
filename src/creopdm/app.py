@@ -15,7 +15,13 @@ from starlette.middleware.sessions import SessionMiddleware
 from creopdm.api import auth_pages, checkout, creo, health, objects, pages, projects, settings
 from creopdm.api.errors import register_error_handlers
 from creopdm.auth_constants import UserStatus
-from creopdm.auth_session import SESSION_USER_KEY, ensure_session_secret
+from creopdm.auth_session import (
+    SESSION_USER_KEY,
+    bearer_token_from_header,
+    ensure_session_secret,
+    mint_agent_token,
+    verify_agent_token,
+)
 from creopdm.config import ConfigManager
 from creopdm.constants import APP_NAME, APP_VERSION
 from creopdm.context import AppContext
@@ -159,10 +165,15 @@ def create_app(context: AppContext | None = None) -> FastAPI:
             response.headers["Cache-Control"] = "no-store"
         return response
 
+    # Outermost so request.session is available in auth_guard.
+    secret = ensure_session_secret(ctx.config.config_dir)
+    app.state.session_secret = secret
+
     @app.middleware("http")
     async def auth_guard(request, call_next):
         set_request_identity(None)
         request.state.auth_user = None
+        request.state.agent_token = ""
         apply_caps(request, empty_caps())
         path = request.url.path or "/"
 
@@ -196,6 +207,16 @@ def create_app(context: AppContext | None = None) -> FastAPI:
                 if user is not None and user.status != UserStatus.ACTIVE.value:
                     request.session.clear()
                     user = None
+
+            if user is None:
+                bearer = bearer_token_from_header(request.headers.get("authorization"))
+                if bearer:
+                    token_uid = verify_agent_token(bearer, secret)
+                    if token_uid:
+                        user = ctx.user_accounts.get_by_uuid(db, token_uid)
+                        if user is not None and user.status != UserStatus.ACTIVE.value:
+                            user = None
+
             if user is not None:
                 identity = UserIdentity(
                     user_name=user.username,
@@ -205,6 +226,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
                 )
                 set_request_identity(identity)
                 request.state.auth_user = user
+                request.state.agent_token = mint_agent_token(user.uuid, secret)
                 apply_caps(request, caps_for_user(ctx.user_accounts, user))
 
             if needs_setup and not public and not path.startswith("/setup"):
@@ -233,6 +255,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
                 and not path.startswith("/account/password")
                 and not path.startswith("/logout")
                 and not path.startswith("/static")
+                and not path.startswith("/api/")
             ):
                 return RedirectResponse("/account/password", status_code=303)
 
@@ -241,8 +264,6 @@ def create_app(context: AppContext | None = None) -> FastAPI:
             db.close()
             set_request_identity(None)
 
-    # Outermost so request.session is available in auth_guard.
-    secret = ensure_session_secret(ctx.config.config_dir)
     app.add_middleware(
         SessionMiddleware,
         secret_key=secret,

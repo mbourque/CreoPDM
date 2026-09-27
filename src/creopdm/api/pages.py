@@ -146,6 +146,7 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
         "request": request,
         **_PAGE_DEFAULTS,
         "auth_user": auth_user,
+        "agent_token": getattr(request.state, "agent_token", "") or "",
         **caps_dict(request),
         **context,
     }

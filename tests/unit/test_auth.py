@@ -752,3 +752,47 @@ def test_engineer_cannot_open_roles_admin(auth_client, auth_ctx):
     _login(auth_client, "eng", "EngPass1")
     assert auth_client.get("/admin/roles", follow_redirects=False).status_code == 403
     assert auth_client.get("/admin/roles/new", follow_redirects=False).status_code == 403
+
+
+@requires_git
+def test_agent_bearer_can_download_content(auth_client, auth_ctx, repo_parent):
+    """creopdm-agent Bearer (minted for the signed-in user) unlocks /content."""
+    import re
+
+    from creopdm.auth_session import mint_agent_token
+
+    _setup_admin_and_users(
+        auth_client, auth_ctx, ("view", BuiltinRole.VIEWER.value)
+    )
+    _login(auth_client, "admin", "AdminPass1")
+    project = auth_client.post("/api/projects", json={"name": "Agent Open"}).json()
+    created = auth_client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("part.prt", b"vault-bytes", "application/octet-stream")},
+        data={"comment": "init"},
+    )
+    assert created.status_code == 201, created.text
+    obj_id = created.json()["uuid"]
+
+    _login(auth_client, "view", "ViewPass1")
+    home = auth_client.get("/")
+    assert home.status_code == 200
+    match = re.search(r'data-agent-token="([^"]*)"', home.text)
+    assert match and match.group(1), "signed-in page must expose agent Bearer"
+
+    auth_client.get("/logout", follow_redirects=False)
+    bare = auth_client.get(f"/api/objects/{obj_id}/content")
+    assert bare.status_code == 401
+
+    with auth_ctx.session_factory() as db:
+        user = db.scalar(select(User).where(User.username == "view"))
+        assert user is not None
+        secret = auth_client.app.state.session_secret
+        token = mint_agent_token(user.uuid, secret)
+
+    ok = auth_client.get(
+        f"/api/objects/{obj_id}/content",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.content == b"vault-bytes"

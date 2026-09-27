@@ -65,4 +65,7 @@ When `auth_enabled` is false (unit tests with a static identity), all authoring 
 - Project membership / “assigned projects only” / project-level roles
 - Override-checkout UI; lifecycle / release product surfaces
 - Agents / Storage / Audit admin sections
-- Binding Windows agent Bearer tokens to the session user
+
+### Agent auth (shipped)
+
+Signed-in pages expose a short-lived **agent Bearer** (`data-agent-token`). The browser passes it to creopdm-agent on materialize/push/add; the agent sends `Authorization: Bearer …` to CreoPDM. The server verifies the token as that user (same caps). Open outside Creo’s embedded browser uses agent cache + **Windows association**.

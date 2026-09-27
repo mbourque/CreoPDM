@@ -58,6 +58,7 @@ def _base_ctx(
         "app_name": APP_NAME,
         "app_version": APP_VERSION,
         "auth_user": current_user or getattr(request.state, "auth_user", None),
+        "agent_token": getattr(request.state, "agent_token", "") or "",
         **caps,
         "creo_label": "—",
         "creo_open_name": "",

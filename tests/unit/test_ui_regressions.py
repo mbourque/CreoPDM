@@ -304,7 +304,15 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "userCanCheckout()" in _between(
         script, "function promptOpenCheckout(", "function checkoutBeforeOpen("
     )
+    assert "agentPdmAuth" in script
+    assert "...agentPdmAuth()" in script or "agentPdmAuth()" in script
+    open_fn = _between(script, "async function openPdmObject(", "function openPdmLaunchResult(")
+    assert 'hostedCreoJS() && creoOpenMode() === "embedded"' in open_fn
+    assert 'openViaAgent(openSpec.path, "association")' in open_fn
     assert 'data-can-checkout=' in (
+        ROOT / "src" / "creopdm" / "templates" / "base.html"
+    ).read_text(encoding="utf-8")
+    assert 'data-agent-token=' in (
         ROOT / "src" / "creopdm" / "templates" / "base.html"
     ).read_text(encoding="utf-8")
     soft_nav = _between(script, "function softNavigate(", "function leavePage(")
