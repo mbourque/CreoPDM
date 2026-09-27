@@ -908,6 +908,7 @@ def test_role_with_no_permissions_cannot_browse(auth_client, auth_ctx, repo_pare
 def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ctx):
     """Admin/settings-only role (no objects.view) signs in to /admin, not a JSON error."""
     from creopdm.auth_constants import (
+        PERMISSION_PROJECTS_ASSIGN,
         PERMISSION_PROJECTS_CREATE,
         PERMISSION_PROJECTS_DELETE,
         PERMISSION_PROJECTS_EDIT,
@@ -915,6 +916,7 @@ def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ct
         PERMISSION_ROLES_MANAGE,
         PERMISSION_SETTINGS_MANAGE,
         PERMISSION_USERS_MANAGE,
+        PERMISSION_USERS_PASSWORD,
     )
 
     _setup_admin_and_users(auth_client, auth_ctx)
@@ -926,8 +928,10 @@ def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ct
             "description": "Users/roles/settings/projects only",
             "permission": [
                 PERMISSION_USERS_MANAGE,
+                PERMISSION_USERS_PASSWORD,
                 PERMISSION_ROLES_ASSIGN,
                 PERMISSION_ROLES_MANAGE,
+                PERMISSION_PROJECTS_ASSIGN,
                 PERMISSION_SETTINGS_MANAGE,
                 PERMISSION_PROJECTS_CREATE,
                 PERMISSION_PROJECTS_EDIT,
@@ -1249,6 +1253,10 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
     assert eng_form.status_code == 200
     assert 'name="role"' not in eng_form.text
     assert "cannot change roles" in eng_form.text.lower()
+    assert 'name="password"' not in eng_form.text
+    assert "users.password" in eng_form.text
+    assert 'name="project_uuid"' not in eng_form.text
+    assert "projects.assign" in eng_form.text
 
     # Missing roles.assign: crafted POST cannot change Engineer → Viewer.
     promote = auth_client.post(
@@ -1445,8 +1453,10 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_PROJECTS_EDIT,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_ROLES_ASSIGN,
+        PERMISSION_PROJECTS_ASSIGN,
         PERMISSION_SETTINGS_MANAGE,
         PERMISSION_USERS_MANAGE,
+        PERMISSION_USERS_PASSWORD,
         STARTER_ROLE_PERMISSION_KEYS,
     )
 
@@ -1662,6 +1672,65 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 follow_redirects=False,
             )
             assert restored_role.status_code in (302, 303), restored_role.text
+
+        # users.password: try setting a password on bait (then leave must_change cleared via service).
+        pwd_probe = auth_client.post(
+            f"/admin/users/{bait_uuid}",
+            data={
+                "display_name": bait_display,
+                "email": "",
+                "role": bait_role,
+                "status": UserStatus.ACTIVE.value,
+                "password": "TempPass99",
+                "password_confirm": "TempPass99",
+                "project_access_present": "1",
+                "access_all_projects": "1",
+            },
+            follow_redirects=False,
+        )
+        probes[PERMISSION_USERS_PASSWORD] = pwd_probe
+        if pwd_probe.status_code in (302, 303):
+            with auth_ctx.session_factory() as db:
+                bait = db.scalar(select(User).where(User.uuid == bait_uuid))
+                assert bait is not None
+                bait.must_change_password = False
+                bait.password_hash = hash_password(
+                    "ViewPass1" if bait.username == "view" else "EngPass1"
+                )
+                db.commit()
+
+        # projects.assign: try restricting bait to Role Matrix only, then restore All.
+        mem_probe = auth_client.post(
+            f"/admin/users/{bait_uuid}",
+            data={
+                "display_name": bait_display,
+                "email": "",
+                "role": bait_role,
+                "status": UserStatus.ACTIVE.value,
+                "password": "",
+                "password_confirm": "",
+                "project_access_present": "1",
+                "project_uuid": [project_id],
+            },
+            follow_redirects=False,
+        )
+        probes[PERMISSION_PROJECTS_ASSIGN] = mem_probe
+        if mem_probe.status_code in (302, 303):
+            restored_mem = auth_client.post(
+                f"/admin/users/{bait_uuid}",
+                data={
+                    "display_name": bait_display,
+                    "email": "",
+                    "role": bait_role,
+                    "status": UserStatus.ACTIVE.value,
+                    "password": "",
+                    "password_confirm": "",
+                    "project_access_present": "1",
+                    "access_all_projects": "1",
+                },
+                follow_redirects=False,
+            )
+            assert restored_mem.status_code in (302, 303), restored_mem.text
 
         # Delete: try disposable when allowed; otherwise attempt delete on shared
         # project (must 403 without destroying fixtures).

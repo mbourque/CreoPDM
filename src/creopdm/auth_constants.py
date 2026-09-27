@@ -23,8 +23,10 @@ BuiltinRole = StarterRole
 
 
 PERMISSION_USERS_MANAGE = "users.manage"
+PERMISSION_USERS_PASSWORD = "users.password"
 PERMISSION_ROLES_ASSIGN = "roles.assign"
 PERMISSION_ROLES_MANAGE = "roles.manage"
+PERMISSION_PROJECTS_ASSIGN = "projects.assign"
 PERMISSION_SETTINGS_MANAGE = "settings.manage"
 PERMISSION_PROJECTS_CREATE = "projects.create"
 PERMISSION_PROJECTS_EDIT = "projects.edit"
@@ -50,8 +52,10 @@ BUILTIN_ROLE_DESCRIPTIONS = STARTER_ROLE_DESCRIPTIONS
 
 BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_USERS_MANAGE, "Create, edit, and disable users"),
+    (PERMISSION_USERS_PASSWORD, "Set or reset user passwords"),
     (PERMISSION_ROLES_ASSIGN, "Assign roles to users"),
     (PERMISSION_ROLES_MANAGE, "Create, edit, and delete roles"),
+    (PERMISSION_PROJECTS_ASSIGN, "Assign project membership to users"),
     (PERMISSION_SETTINGS_MANAGE, "Change global CreoPDM settings"),
     (PERMISSION_PROJECTS_CREATE, "Create projects"),
     (PERMISSION_PROJECTS_EDIT, "Edit project properties"),
@@ -66,13 +70,14 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_OBJECTS_COPY_TO_VAULT, "Copy selected files into the vault (Copy to Vault)"),
 )
 
-# CreoPDM Administration caps. At least one ACTIVE user must keep all of them
-# so the system cannot be locked out of Users / role assignment / Roles / Settings.
+# CreoPDM Administration caps. At least one ACTIVE user must keep all of them.
 ADMINISTRATION_PERMISSION_KEYS: frozenset[str] = frozenset(
     (
         PERMISSION_USERS_MANAGE,
+        PERMISSION_USERS_PASSWORD,
         PERMISSION_ROLES_ASSIGN,
         PERMISSION_ROLES_MANAGE,
+        PERMISSION_PROJECTS_ASSIGN,
         PERMISSION_SETTINGS_MANAGE,
     )
 )
@@ -83,8 +88,10 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "CreoPDM Administration",
         (
             PERMISSION_USERS_MANAGE,
+            PERMISSION_USERS_PASSWORD,
             PERMISSION_ROLES_ASSIGN,
             PERMISSION_ROLES_MANAGE,
+            PERMISSION_PROJECTS_ASSIGN,
             PERMISSION_SETTINGS_MANAGE,
         ),
     ),

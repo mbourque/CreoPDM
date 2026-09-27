@@ -503,13 +503,23 @@ def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Se
     )
 
 
+def _user_form_admin_flags(ctx: AppContext, admin: User) -> dict:
+    return {
+        "can_assign_roles": ctx.user_accounts.can_assign_roles(admin),
+        "can_assign_projects": ctx.user_accounts.can_assign_projects(admin),
+        "can_set_passwords": ctx.user_accounts.can_set_passwords(admin),
+    }
+
+
 @router.get("/admin/users/new", response_class=HTMLResponse)
 def admin_user_new(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
     admin = _require_admin(request, ctx, db)
     if _is_blocked(admin):
         return admin
-    can_assign = ctx.user_accounts.can_assign_roles(admin)
-    roles = ctx.user_accounts.assignable_roles_for(db, admin) if can_assign else []
+    flags = _user_form_admin_flags(ctx, admin)
+    roles = (
+        ctx.user_accounts.assignable_roles_for(db, admin) if flags["can_assign_roles"] else []
+    )
     access = _project_access_form(ctx, db, access_all=True)
     return templates.TemplateResponse(
         request,
@@ -518,7 +528,7 @@ def admin_user_new(request: Request, ctx: AppContext = Depends(get_context), db:
             **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": None,
             "mode": "new",
-            "can_assign_roles": can_assign,
+            **flags,
             "roles": [{"name": r.name} for r in roles],
             "form": _user_form_payload(),
             **access,
@@ -542,16 +552,22 @@ def admin_user_create(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
+    from creopdm.exceptions import PermissionDeniedError
+
     admin = _require_admin(request, ctx, db)
     if _is_blocked(admin):
         return admin
-    can_assign = ctx.user_accounts.can_assign_roles(admin)
-    roles = ctx.user_accounts.assignable_roles_for(db, admin) if can_assign else []
+    flags = _user_form_admin_flags(ctx, admin)
+    roles = (
+        ctx.user_accounts.assignable_roles_for(db, admin) if flags["can_assign_roles"] else []
+    )
     access_all, project_uuids = _parse_project_access(
         project_access_present=project_access_present,
         access_all_projects=access_all_projects,
         project_uuid=project_uuid,
     )
+    if not flags["can_assign_projects"]:
+        access_all, project_uuids = True, []
     role_name = (role or "").strip() or BuiltinRole.ENGINEER.value
     error = None
     if password != password_confirm:
@@ -573,6 +589,12 @@ def admin_user_create(
             )
             db.commit()
             return RedirectResponse("/admin/users", status_code=303)
+        except PermissionDeniedError as exc:
+            db.rollback()
+            return HTMLResponse(
+                f"<h1>403 Forbidden</h1><p>{exc.message}</p>",
+                status_code=403,
+            )
         except CreoPDMError as exc:
             db.rollback()
             error = exc.message
@@ -589,7 +611,7 @@ def admin_user_create(
             **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": error,
             "mode": "new",
-            "can_assign_roles": can_assign,
+            **flags,
             "roles": [{"name": r.name} for r in roles],
             "form": _user_form_payload(
                 display_name=display_name,
@@ -626,10 +648,13 @@ def admin_user_detail(
             f"<h1>403 Forbidden</h1><p>{exc.message}</p>",
             status_code=403,
         )
-    can_assign = ctx.user_accounts.can_assign_roles(admin)
-    roles = ctx.user_accounts.assignable_roles_for(db, admin) if can_assign else []
-    # Keep the target's current role visible even if it is full-admin (actor is full admin).
-    if can_assign and not any(r.name == ctx.user_accounts.primary_role_name(user) for r in roles):
+    flags = _user_form_admin_flags(ctx, admin)
+    roles = (
+        ctx.user_accounts.assignable_roles_for(db, admin) if flags["can_assign_roles"] else []
+    )
+    if flags["can_assign_roles"] and not any(
+        r.name == ctx.user_accounts.primary_role_name(user) for r in roles
+    ):
         current = ctx.user_accounts.role_by_name(db, ctx.user_accounts.primary_role_name(user))
         if current is not None:
             roles = list(roles) + [current]
@@ -643,7 +668,7 @@ def admin_user_detail(
             **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": None,
             "mode": "edit",
-            "can_assign_roles": can_assign,
+            **flags,
             "roles": [{"name": r.name} for r in roles],
             "form": _user_form_payload(
                 uuid=user.uuid,
@@ -691,8 +716,10 @@ def admin_user_update(
             f"<h1>403 Forbidden</h1><p>{exc.message}</p>",
             status_code=403,
         )
-    can_assign = ctx.user_accounts.can_assign_roles(admin)
-    roles = ctx.user_accounts.assignable_roles_for(db, admin) if can_assign else []
+    flags = _user_form_admin_flags(ctx, admin)
+    roles = (
+        ctx.user_accounts.assignable_roles_for(db, admin) if flags["can_assign_roles"] else []
+    )
     access_all, project_uuids = _parse_project_access(
         project_access_present=project_access_present,
         access_all_projects=access_all_projects,
@@ -707,10 +734,11 @@ def admin_user_update(
                 "display_name": display_name,
                 "email": email,
                 "status": status,
-                "access_all_projects": access_all,
-                "project_uuids": project_uuids,
                 "actor": admin,
             }
+            if flags["can_assign_projects"] and project_access_present:
+                kwargs["access_all_projects"] = access_all
+                kwargs["project_uuids"] = project_uuids
             if role is not None and str(role).strip():
                 kwargs["role_name"] = str(role).strip()
             if password:
@@ -741,7 +769,7 @@ def admin_user_update(
             **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": error,
             "mode": "edit",
-            "can_assign_roles": can_assign,
+            **flags,
             "roles": [{"name": r.name} for r in roles],
             "form": _user_form_payload(
                 uuid=user_uuid,

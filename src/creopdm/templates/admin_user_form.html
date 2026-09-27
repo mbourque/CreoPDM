@@ -51,24 +51,33 @@
           <option value="DISABLED" {% if form.status == 'DISABLED' %}selected{% endif %}>DISABLED</option>
         </select>
       </label>
-      {% if mode == 'new' %}
-      <label>Password
-        <input name="password" type="password" required autocomplete="new-password" minlength="8">
-      </label>
-      <label>Confirm password
-        <input name="password_confirm" type="password" required autocomplete="new-password" minlength="8">
-      </label>
-      <p class="muted small">The user must change this password on first sign-in.</p>
+      {% if can_set_passwords %}
+        {% if mode == 'new' %}
+        <label>Password
+          <input name="password" type="password" required autocomplete="new-password" minlength="8">
+        </label>
+        <label>Confirm password
+          <input name="password_confirm" type="password" required autocomplete="new-password" minlength="8">
+        </label>
+        <p class="muted small">The user must change this password on first sign-in.</p>
+        {% else %}
+        <label>New password (optional)
+          <input name="password" type="password" autocomplete="new-password">
+        </label>
+        <label>Confirm new password
+          <input name="password_confirm" type="password" autocomplete="new-password">
+        </label>
+        <p class="muted small">Leave blank to keep the current password. If you set a new password it must be at least 8 characters; the user must change it on next sign-in.</p>
+        {% endif %}
       {% else %}
-      <label>New password (optional)
-        <input name="password" type="password" autocomplete="new-password">
-      </label>
-      <label>Confirm new password
-        <input name="password_confirm" type="password" autocomplete="new-password">
-      </label>
-      <p class="muted small">Leave blank to keep the current password. If you set a new password it must be at least 8 characters; the user must change it on next sign-in.</p>
+        {% if mode == 'new' %}
+        <p class="error">You need <code>users.password</code> to create users (initial password).</p>
+        {% else %}
+        <p class="muted small">You cannot set or reset passwords without <code>users.password</code>.</p>
+        {% endif %}
       {% endif %}
 
+      {% if can_assign_projects %}
       <fieldset class="project-access-fieldset">
         <legend>Project access</legend>
         <input type="hidden" name="project_access_present" value="1">
@@ -89,9 +98,12 @@
         <p class="muted small" id="project-access-list">No projects exist yet. Create a project first, or leave All projects checked.</p>
         {% endif %}
       </fieldset>
+      {% else %}
+      <p class="muted small">Project membership is read-only without <code>projects.assign</code>.{% if mode == 'new' %} New users get All projects.{% endif %}</p>
+      {% endif %}
 
       <div class="form-actions">
-        <button type="submit" class="btn btn-primary">{% if mode == 'new' %}Create user{% else %}Save{% endif %}</button>
+        <button type="submit" class="btn btn-primary" {% if mode == 'new' and not can_set_passwords %}disabled{% endif %}>{% if mode == 'new' %}Create user{% else %}Save{% endif %}</button>
         <a class="btn" href="/admin/users">Back to list</a>
       </div>
     </section>

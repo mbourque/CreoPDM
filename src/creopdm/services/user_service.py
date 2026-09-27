@@ -26,10 +26,12 @@ from creopdm.auth_constants import (
     PERMISSION_PROJECTS_CREATE,
     PERMISSION_PROJECTS_DELETE,
     PERMISSION_PROJECTS_EDIT,
+    PERMISSION_PROJECTS_ASSIGN,
     PERMISSION_ROLES_ASSIGN,
     PERMISSION_ROLES_MANAGE,
     PERMISSION_SETTINGS_MANAGE,
     PERMISSION_USERS_MANAGE,
+    PERMISSION_USERS_PASSWORD,
     UserStatus,
 )
 from creopdm.exceptions import NotFoundError, PermissionDeniedError, ValidationAppError
@@ -193,8 +195,14 @@ class UserService:
     def can_manage_users(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_USERS_MANAGE)
 
+    def can_set_passwords(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_USERS_PASSWORD)
+
     def can_assign_roles(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_ROLES_ASSIGN)
+
+    def can_assign_projects(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_PROJECTS_ASSIGN)
 
     def can_manage_roles(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_ROLES_MANAGE)
@@ -226,6 +234,18 @@ class UserService:
         if self.is_full_administrator(target) and not self.is_full_administrator(actor):
             raise ValidationAppError(
                 "Only a full administrator can edit another administrator."
+            )
+
+    def ensure_can_set_password(self, actor: User) -> None:
+        if not self.can_set_passwords(actor):
+            raise PermissionDeniedError(
+                "You do not have permission to set passwords (users.password)."
+            )
+
+    def ensure_can_assign_projects(self, actor: User) -> None:
+        if not self.can_assign_projects(actor):
+            raise PermissionDeniedError(
+                "You do not have permission to assign project membership (projects.assign)."
             )
 
     def ensure_can_assign_role(self, actor: User, role: Role) -> None:
@@ -410,8 +430,9 @@ class UserService:
             ):
                 raise ValidationAppError(
                     "Cannot leave the system with no active user who has full "
-                    "CreoPDM Administration (users.manage, roles.assign, "
-                    "roles.manage, and settings.manage)."
+                    "CreoPDM Administration "
+                    "(users.manage, users.password, roles.assign, roles.manage, "
+                    "projects.assign, and settings.manage)."
                 )
             db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
             for perm_id in self._permission_ids_for_keys(db, keys):
@@ -526,6 +547,7 @@ class UserService:
         if role is None:
             raise ValidationAppError(f"Unknown role '{role_name}'.")
         if actor is not None:
+            self.ensure_can_set_password(actor)
             if not self.can_assign_roles(actor):
                 # Edit-users-only: new accounts always land on Engineer.
                 role = self.role_by_name(db, StarterRole.ENGINEER.value)
@@ -533,6 +555,9 @@ class UserService:
                     raise ValidationAppError("Engineer role is missing.")
             else:
                 self.ensure_can_assign_role(actor, role)
+            if not self.can_assign_projects(actor):
+                access_all_projects = True
+                project_uuids = None
         user = User(
             uuid=str(uuid.uuid4()),
             username=uname,
@@ -616,6 +641,8 @@ class UserService:
             if status not in {UserStatus.ACTIVE.value, UserStatus.DISABLED.value}:
                 raise ValidationAppError("Invalid status.")
         if password:
+            if actor is not None:
+                self.ensure_can_set_password(actor)
             user.password_hash = hash_password(validate_password(password))
         if must_change_password is not None:
             user.must_change_password = must_change_password
@@ -640,8 +667,9 @@ class UserService:
             ):
                 raise ValidationAppError(
                     "Cannot leave the system with no active user who has full "
-                    "CreoPDM Administration (users.manage, roles.assign, "
-                    "roles.manage, and settings.manage)."
+                    "CreoPDM Administration "
+                    "(users.manage, users.password, roles.assign, roles.manage, "
+                    "projects.assign, and settings.manage)."
                 )
         if new_status is not None:
             user.status = new_status
@@ -649,13 +677,27 @@ class UserService:
             db.execute(delete(UserRole).where(UserRole.user_id == user.id))
             db.add(UserRole(user_id=user.id, role_id=new_role_id))
         if access_all_projects is not None:
-            self.set_project_access(
-                db,
-                user,
-                access_all=access_all_projects,
-                project_uuids=project_uuids if not access_all_projects else None,
-            )
-            return self.get_by_uuid(db, user.uuid) or user
+            if actor is not None and not self.can_assign_projects(actor):
+                current_all = bool(getattr(user, "access_all_projects", True))
+                current_ids = {p.uuid for p in (user.projects or [])}
+                wanted_ids = (
+                    set()
+                    if access_all_projects
+                    else {str(u).strip() for u in (project_uuids or []) if str(u).strip()}
+                )
+                if bool(access_all_projects) != current_all or (
+                    not access_all_projects and wanted_ids != current_ids
+                ):
+                    self.ensure_can_assign_projects(actor)
+                access_all_projects = None
+            if access_all_projects is not None:
+                self.set_project_access(
+                    db,
+                    user,
+                    access_all=access_all_projects,
+                    project_uuids=project_uuids if not access_all_projects else None,
+                )
+                return self.get_by_uuid(db, user.uuid) or user
         user.updated_at = datetime.now(timezone.utc)
         db.flush()
         return self.get_by_uuid(db, user.uuid) or user
