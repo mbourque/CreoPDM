@@ -48,6 +48,8 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Click a project | Open that project’s Files list | Lose track of which project you picked |
 | Collapse / expand the sidebar | Hide or show the project list | Break the Files list |
 | Click **New** | Ask for a project name (and vault name options); then show the new project | Create a project with a blank name |
+| Open Files with **no** projects (and you **can** create projects) | Show the empty hero inviting you to create a project | |
+| Open Files with **no** projects (and you **cannot** create projects) | Show that no projects are available; ask an administrator for access | Tell you to “Create a project…” when you have no `projects.create` |
 | Rename (project settings) | Update the name everywhere you see it | |
 | Delete project | Ask you to type the **exact** project name; remove CreoPDM’s copy of the project | Delete your original CAD folders on disk just because you deleted the project; delete if you typed the wrong name |
 

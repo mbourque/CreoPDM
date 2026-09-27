@@ -467,6 +467,13 @@ def test_new_project_and_sidebar_collapse_handlers_present():
     assert "sidebarCollapseBtn?.addEventListener(\"click\"" in script
     assert "is-sidebar-collapsed" in script
     assert 'id="new-project-btn"' in APP_HTML.read_text(encoding="utf-8")
+    html = APP_HTML.read_text(encoding="utf-8")
+    # Empty-home create invite is only for projects.create (not for Viewer, etc.).
+    assert re.search(
+        r"\{%\s*if\s+can_create_project\s*%\}[^%]*Create a project to start managing",
+        html,
+        re.DOTALL,
+    )
     assert 'id="sidebar-collapse-btn"' in APP_HTML.read_text(encoding="utf-8")
 
 

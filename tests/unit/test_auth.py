@@ -613,6 +613,27 @@ def test_paul_checkout_blocks_david(auth_client, auth_ctx, repo_parent):
     assert listed.json()["owned_by_me"] is False
 
 
+def test_empty_home_hero_hides_create_project_without_permission(auth_client, auth_ctx):
+    """Empty Files hero must not invite Create when the user lacks projects.create."""
+    _setup_admin_and_users(
+        auth_client, auth_ctx, ("view", BuiltinRole.VIEWER.value)
+    )
+    # No projects exist — both roles see the empty hero.
+    _login(auth_client, "admin", "AdminPass1")
+    admin_home = auth_client.get("/")
+    assert admin_home.status_code == 200
+    assert "Create a project to start managing engineering files" in admin_home.text
+    assert "Git stays in the background" in admin_home.text
+
+    _login(auth_client, "view", "ViewPass1")
+    view_home = auth_client.get("/")
+    assert view_home.status_code == 200
+    assert "Create a project to start managing engineering files" not in view_home.text
+    assert "Git stays in the background" not in view_home.text
+    assert "No projects are available for your account" in view_home.text
+    assert 'id="new-project-btn"' not in view_home.text
+
+
 @requires_git
 def test_viewer_is_read_only(auth_client, auth_ctx, repo_parent):
     """Viewer may browse; mutations and authoring toolbar are forbidden."""

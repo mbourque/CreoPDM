@@ -330,7 +330,11 @@
     <div class="hero">
       <h1>{{ app_name }}</h1>
       <p class="lede">Version {{ app_version }}</p>
+      {% if can_create_project %}
       <p>Create a project to start managing engineering files. Git stays in the background.</p>
+      {% else %}
+      <p>No projects are available for your account. Ask an administrator to grant project access.</p>
+      {% endif %}
     </div>
     {% endif %}
   </section>
