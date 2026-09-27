@@ -368,7 +368,7 @@ Automated coverage lives mainly in:
 - `tests/unit/test_user_interaction_validations.py`
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
-- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `data-can-checkout`)
+- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `data-can-checkout`; `test_every_starter_role_login_permission_matrix` logs in each starter role and asserts every permission allow/deny)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
 - Related checkout / check-in / soft-nav tests
 

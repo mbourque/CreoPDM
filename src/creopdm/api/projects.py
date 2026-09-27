@@ -15,6 +15,7 @@ from creopdm.api.serializers import project_to_response
 from creopdm.auth_constants import (
     PERMISSION_OBJECTS_ADD,
     PERMISSION_OBJECTS_CHECKIN,
+    PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_PROJECTS_CREATE,
     PERMISSION_PROJECTS_DELETE,

@@ -796,3 +796,187 @@ def test_agent_bearer_can_download_content(auth_client, auth_ctx, repo_parent):
     )
     assert ok.status_code == 200, ok.text
     assert ok.content == b"vault-bytes"
+
+
+def _assert_permission_gate(response, *, allowed: bool, label: str) -> None:
+    """Permission gates return 403; allowed probes may succeed or fail for other reasons."""
+    if allowed:
+        assert response.status_code != 403, (
+            f"{label}: expected allow (not 403), got {response.status_code}: {response.text[:300]}"
+        )
+        return
+    assert response.status_code == 403, (
+        f"{label}: expected 403, got {response.status_code}: {response.text[:300]}"
+    )
+    # API JSON bodies carry FORBIDDEN; HTML admin pages are plain 403 markup.
+    ctype = (response.headers.get("content-type") or "").lower()
+    if "json" in ctype:
+        assert response.json()["error"]["code"] == "FORBIDDEN"
+
+
+@requires_git
+def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_parent):
+    """Create one user per starter role; each logs in; assert every permission allow/deny.
+
+    Ephemeral DB (data_dir fixture) — users do not persist after the test.
+    Driven by STARTER_ROLE_PERMISSION_KEYS so seed drift fails this test.
+    """
+    from uuid import uuid4
+
+    from creopdm.auth_constants import (
+        BUILTIN_PERMISSIONS,
+        PERMISSION_OBJECTS_ADD,
+        PERMISSION_OBJECTS_CHECKIN,
+        PERMISSION_OBJECTS_CHECKOUT,
+        PERMISSION_OBJECTS_METADATA,
+        PERMISSION_OBJECTS_REMOVE,
+        PERMISSION_OBJECTS_REVERT,
+        PERMISSION_PROJECTS_CREATE,
+        PERMISSION_PROJECTS_DELETE,
+        PERMISSION_PROJECTS_EDIT,
+        PERMISSION_ROLES_MANAGE,
+        PERMISSION_SETTINGS_MANAGE,
+        PERMISSION_USERS_MANAGE,
+        STARTER_ROLE_PERMISSION_KEYS,
+    )
+
+    # One account per starter role (admin from /setup; others via Users admin).
+    role_accounts = [
+        ("admin", BuiltinRole.ADMINISTRATOR.value, "AdminPass1"),
+        ("pdm", BuiltinRole.PDM_MANAGER.value, "PdmPass1"),
+        ("eng", BuiltinRole.ENGINEER.value, "EngPass1"),
+        ("view", BuiltinRole.VIEWER.value, "ViewPass1"),
+    ]
+    assert {role for _, role, _ in role_accounts} == set(STARTER_ROLE_PERMISSION_KEYS)
+
+    _setup_admin_and_users(
+        auth_client,
+        auth_ctx,
+        ("pdm", BuiltinRole.PDM_MANAGER.value),
+        ("eng", BuiltinRole.ENGINEER.value),
+        ("view", BuiltinRole.VIEWER.value),
+    )
+
+    # Shared fixtures created as admin (always allowed).
+    _login(auth_client, "admin", "AdminPass1")
+    project = auth_client.post("/api/projects", json={"name": "Role Matrix"}).json()
+    project_id = project["uuid"]
+    created = auth_client.post(
+        f"/api/projects/{project_id}/objects",
+        files={"file": ("matrix.prt", b"matrix-bytes", "application/octet-stream")},
+        data={"comment": "seed"},
+    )
+    assert created.status_code == 201, created.text
+    object_id = created.json()["uuid"]
+    # Disposable project for delete probes (recreated when consumed).
+    disposable = auth_client.post(
+        "/api/projects", json={"name": f"Disposable-{uuid4().hex[:8]}"}
+    )
+    assert disposable.status_code == 201, disposable.text
+    disposable_id = disposable.json()["uuid"]
+
+    all_perm_keys = tuple(key for key, _ in BUILTIN_PERMISSIONS)
+
+    for username, role_name, password in role_accounts:
+        allowed = set(STARTER_ROLE_PERMISSION_KEYS[role_name])
+        _login(auth_client, username, password)
+
+        # Browse is always allowed for signed-in users.
+        assert auth_client.get(f"/api/projects/{project_id}").status_code == 200
+        assert auth_client.get(f"/api/objects/{object_id}").status_code == 200
+        home = auth_client.get(f"/?project={project_id}")
+        assert home.status_code == 200
+        assert f'data-can-checkout="{"1" if PERMISSION_OBJECTS_CHECKOUT in allowed else "0"}"' in home.text
+        if PERMISSION_OBJECTS_ADD in allowed:
+            assert 'id="add-menu"' in home.text
+        else:
+            assert 'id="add-menu"' not in home.text
+        if PERMISSION_PROJECTS_CREATE in allowed:
+            assert 'id="new-project-btn"' in home.text
+        else:
+            assert 'id="new-project-btn"' not in home.text
+        if PERMISSION_USERS_MANAGE in allowed or PERMISSION_ROLES_MANAGE in allowed or PERMISSION_SETTINGS_MANAGE in allowed:
+            assert "Administration" in home.text
+        else:
+            assert "Administration" not in home.text
+
+        probes: dict[str, object] = {
+            PERMISSION_USERS_MANAGE: auth_client.get("/admin/users", follow_redirects=False),
+            PERMISSION_ROLES_MANAGE: auth_client.get("/admin/roles", follow_redirects=False),
+            PERMISSION_SETTINGS_MANAGE: auth_client.get("/api/settings", follow_redirects=False),
+            PERMISSION_PROJECTS_CREATE: auth_client.post(
+                "/api/projects",
+                json={"name": f"Create-{username}-{uuid4().hex[:6]}"},
+            ),
+            PERMISSION_PROJECTS_EDIT: auth_client.patch(
+                f"/api/projects/{project_id}",
+                json={
+                    "name": "Role Matrix",
+                    "description": f"edited-by-{username}",
+                },
+            ),
+            PERMISSION_OBJECTS_ADD: auth_client.post(
+                f"/api/projects/{project_id}/objects",
+                files={
+                    "file": (
+                        f"add-{username}.prt",
+                        b"add-bytes",
+                        "application/octet-stream",
+                    )
+                },
+                data={"comment": "add probe"},
+            ),
+            PERMISSION_OBJECTS_CHECKOUT: auth_client.post(
+                f"/api/objects/{object_id}/checkout"
+            ),
+            PERMISSION_OBJECTS_CHECKIN: auth_client.post(
+                f"/api/objects/{object_id}/checkin",
+                json={"comment": "checkin probe"},
+            ),
+            PERMISSION_OBJECTS_REMOVE: auth_client.post(
+                "/api/objects/batch/remove",
+                json={"object_ids": ["00000000-0000-0000-0000-000000000000"]},
+            ),
+            PERMISSION_OBJECTS_REVERT: auth_client.post(
+                f"/api/objects/{object_id}/versions/{uuid4()}/revert"
+            ),
+            PERMISSION_OBJECTS_METADATA: auth_client.post(
+                f"/api/objects/{object_id}/creo-metadata",
+                json={},
+            ),
+        }
+
+        # Delete: try disposable when allowed; otherwise attempt delete on shared
+        # project (must 403 without destroying fixtures).
+        if PERMISSION_PROJECTS_DELETE in allowed:
+            delete_resp = auth_client.delete(f"/api/projects/{disposable_id}")
+            probes[PERMISSION_PROJECTS_DELETE] = delete_resp
+            # Recreate disposable for the next role that can delete.
+            _login(auth_client, "admin", "AdminPass1")
+            again = auth_client.post(
+                "/api/projects", json={"name": f"Disposable-{uuid4().hex[:8]}"}
+            )
+            assert again.status_code == 201, again.text
+            disposable_id = again.json()["uuid"]
+            _login(auth_client, username, password)
+        else:
+            probes[PERMISSION_PROJECTS_DELETE] = auth_client.delete(
+                f"/api/projects/{project_id}"
+            )
+
+        assert set(probes) == set(all_perm_keys), (
+            f"{role_name}: probe set must cover every built-in permission"
+        )
+
+        for key in all_perm_keys:
+            _assert_permission_gate(
+                probes[key],
+                allowed=key in allowed,
+                label=f"{role_name}/{username} {key}",
+            )
+
+        # Leave shared object Available for the next account's checkout probe.
+        state = auth_client.get(f"/api/objects/{object_id}")
+        if state.status_code == 200 and state.json().get("owned_by_me"):
+            undone = auth_client.post(f"/api/objects/{object_id}/undo-checkout")
+            assert undone.status_code == 200, undone.text

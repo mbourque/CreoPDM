@@ -51,6 +51,8 @@ Permission keys (`projects.*`, `objects.*`, `users.manage`, `roles.manage`, `set
 | **PDM Manager** | Create/edit projects + Engineer authoring | Delete project, users, roles, settings |
 | **Administrator** | Everything above + delete project + users + roles + settings | — |
 
+Automated coverage: `tests/unit/test_auth.py::test_every_starter_role_login_permission_matrix` creates one ephemeral user per starter role, logs each in, and asserts allow/deny for every built-in permission key (plus Files toolbar chrome).
+
 When `auth_enabled` is false (unit tests with a static identity), all authoring and project caps are granted so the existing suite stays green.
 
 ## Phase 3 (shipped): Roles admin (DB is source of truth)
