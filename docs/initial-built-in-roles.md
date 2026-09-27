@@ -9,6 +9,7 @@ Full system administration access.
 Typical permissions:
 
 - Manage users
+- Assign roles to users
 - Manage roles
 - Manage system settings
 - Create projects
@@ -552,13 +553,13 @@ The system should prevent:
 
 - deleting the Administrator role when it is the last full-admin path;
 
-- removing any of `users.manage`, `roles.manage`, or `settings.manage` when that would leave no ACTIVE user with **all three**;
+- removing any of `users.manage`, `roles.assign`, `roles.manage`, or `settings.manage` when that would leave no ACTIVE user with **all** of them;
 
 - disabling or demoting the last active account that has full CreoPDM Administration.
 
-There must always be at least one active user who can manage Users, Roles, and Settings.
+There must always be at least one active user who can manage Users, assign roles, manage Roles, and open Settings.
 
-Only a full administrator (all three of those permissions) may edit another full administrator or assign a full-administrator role. An account with `users.manage` alone can manage non-admin users but cannot change administrator accounts. No user may edit their own record from Users admin — another administrator must change them.
+Only a full administrator (all of those permissions) may edit another full administrator or assign a full-administrator role. An account with `users.manage` alone can manage non-admin users but cannot change their role (`roles.assign` required) and cannot change administrator accounts. No user may edit their own record from Users admin — another administrator must change them.
 
 ---
 

@@ -24,19 +24,21 @@ Disabled accounts cannot sign in. Checkout, check-in, and activity rows store th
 
 ### Administration
 
-Users with `users.manage`, `roles.manage`, or `settings.manage` see **Administration** (`/admin`):
+Users with `users.manage`, `roles.manage`, `roles.assign`, or `settings.manage` see **Administration** (`/admin`):
 
 - **Users** — list accounts (Projects column: **All** or membership count); click a **name** to edit the user, or a **role** name to open that role (`roles.manage`); **Add user** (`users.manage`)
-- **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`). The role editor groups **CreoPDM Administration** (`users.manage`, `roles.manage`, `settings.manage`), **Projects**, and **Objects**.
+- **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`). The role editor groups **CreoPDM Administration** (`users.manage`, `roles.assign`, `roles.manage`, `settings.manage`), **Projects**, and **Objects**.
 - **Settings** — workstation options (Creo open mode, vault, file types, …) (`settings.manage`)
 - After a successful **Add user** / **Save** / role save, you return to the list
 - New users must change their password on first sign-in
 
 Others do not see Administration; direct URLs return **403**.
 
-**Lockout safety:** at least one **ACTIVE** user must keep **all three** CreoPDM Administration permissions on the same account. Saving a role, demoting/disabling a user, or deleting a role is rejected if it would leave nobody who can manage Users, Roles, and Settings.
+**Lockout safety:** at least one **ACTIVE** user must keep **all** CreoPDM Administration permissions on the same account (`users.manage`, `roles.assign`, `roles.manage`, `settings.manage`). Saving a role, demoting/disabling a user, or deleting a role is rejected if it would leave nobody who can manage Users, assign roles, edit Roles, and open Settings.
 
-**Admins edit admins only:** a full administrator (all three caps) may edit **other** full administrators and assign full-admin roles. **Nobody** may edit their own account from Users admin (another admin must change them; use **Account → password** for your own password). An account with only `users.manage` can manage non-admin users, but cannot open/edit an administrator, promote someone to a full-admin role, or see Administrator in the role dropdown.
+**Admins edit admins only:** a full administrator (all Administration caps) may edit **other** full administrators and assign full-admin roles. **Nobody** may edit their own account from Users admin (another admin must change them; use **Account → password** for your own password).
+
+**Assign roles (`roles.assign`):** separate from `users.manage`. With only `users.manage`, you can edit display name, status, password, and project access, but the Role control is read-only (new users default to **Engineer**). Changing another user’s role requires `roles.assign`. Full-admin roles still require a full administrator to assign.
 
 ### Project access (per user)
 
@@ -58,14 +60,14 @@ Empty databases seed four **starter** roles (**Administrator**, **PDM Manager**,
 
 ## Phase 2 (shipped): core role matrix
 
-Permission keys (`projects.*`, `objects.*` including **`objects.view`**, `users.manage`, `roles.manage`, `settings.manage`) gate APIs (**403** when missing). Browse/open/download requires **`objects.view`** — a role with no permissions cannot use the Files page. After sign-in, accounts **without** `objects.view` land on **`/admin`** when they have any Administration capability, otherwise on a plain **`/no-access`** page (not a JSON error). Administration breadcrumbs omit the **Projects** link when `objects.view` is missing. The Files toolbar and project New/Delete controls hide when the matching capability is false. Viewer Open dialog offers view-only open (no “Check out … then open”) when `objects.checkout` is missing (`data-can-checkout` on the page).
+Permission keys (`projects.*`, `objects.*` including **`objects.view`**, `users.manage`, `roles.assign`, `roles.manage`, `settings.manage`) gate APIs (**403** when missing). Browse/open/download requires **`objects.view`** — a role with no permissions cannot use the Files page. After sign-in, accounts **without** `objects.view` land on **`/admin`** when they have any Administration capability, otherwise on a plain **`/no-access`** page (not a JSON error). Administration breadcrumbs omit the **Projects** link when `objects.view` is missing. The Files toolbar and project New/Delete controls hide when the matching capability is false. Viewer Open dialog offers view-only open (no “Check out … then open”) when `objects.checkout` is missing (`data-can-checkout` on the page).
 
 | Starter role (default seed) | Can do | Cannot |
 | --- | --- | --- |
 | **Viewer** | Browse, open/download, Details (`objects.view` only; Open goes straight to open — no checkout dialog) | Authoring toolbar, Copy to Vault, checkout-on-open, Administration |
 | **Engineer** | View + Add, checkout, check-in, remove, revert, metadata | Create/edit/delete projects, Copy to Vault, users, roles, settings |
 | **PDM Manager** | Create/edit projects + Engineer authoring + **Copy to Vault** | Delete project, users, roles, settings |
-| **Administrator** | Everything above + delete project + users + roles + settings | — |
+| **Administrator** | Everything above + delete project + users + assign roles + roles + settings | — |
 
 Automated coverage: `tests/unit/test_auth.py::test_every_starter_role_login_permission_matrix` creates one ephemeral user per starter role, logs each in, and asserts allow/deny for every built-in permission key (plus Files toolbar chrome and **project membership**: All / one project / none). Dedicated UI + lifecycle coverage: `test_admin_user_project_access_filters_projects`.
 
@@ -75,7 +77,7 @@ When `auth_enabled` is false (unit tests with a static identity), all authoring 
 
 - **`/admin/roles`** — create roles, edit name/description/permissions, delete unused roles
 - Runtime caps come only from `role_permissions` (no Administrator-by-name short-circuit; starter templates are not re-applied on restart)
-- Safety: cannot leave zero **ACTIVE** users with full CreoPDM Administration (`users.manage` + `roles.manage` + `settings.manage` on the same account); cannot delete a role that is still assigned
+- Safety: cannot leave zero **ACTIVE** users with full CreoPDM Administration (`users.manage` + `roles.assign` + `roles.manage` + `settings.manage` on the same account); cannot delete a role that is still assigned
 - Starter roles are editable like any other role
 
 ### Deferred (later phases)

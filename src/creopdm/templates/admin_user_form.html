@@ -31,6 +31,7 @@
       <label>Email (optional)
         <input name="email" type="email" value="{{ form.email }}" maxlength="255" autocomplete="email">
       </label>
+      {% if can_assign_roles %}
       <label>Role
         <select name="role">
           {% for r in roles %}
@@ -38,6 +39,12 @@
           {% endfor %}
         </select>
       </label>
+      {% else %}
+      <label>Role
+        <input type="text" value="{% if mode == 'new' %}Engineer (default){% else %}{{ form.role }}{% endif %}" disabled>
+      </label>
+      <p class="muted small">You can edit this account but cannot change roles without <code>roles.assign</code>.{% if mode == 'new' %} New users are created as Engineer.{% endif %}</p>
+      {% endif %}
       <label>Status
         <select name="status">
           <option value="ACTIVE" {% if form.status == 'ACTIVE' %}selected{% endif %}>ACTIVE</option>

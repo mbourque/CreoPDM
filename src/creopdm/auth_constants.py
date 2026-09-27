@@ -23,6 +23,7 @@ BuiltinRole = StarterRole
 
 
 PERMISSION_USERS_MANAGE = "users.manage"
+PERMISSION_ROLES_ASSIGN = "roles.assign"
 PERMISSION_ROLES_MANAGE = "roles.manage"
 PERMISSION_SETTINGS_MANAGE = "settings.manage"
 PERMISSION_PROJECTS_CREATE = "projects.create"
@@ -49,6 +50,7 @@ BUILTIN_ROLE_DESCRIPTIONS = STARTER_ROLE_DESCRIPTIONS
 
 BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_USERS_MANAGE, "Create, edit, and disable users"),
+    (PERMISSION_ROLES_ASSIGN, "Assign roles to users"),
     (PERMISSION_ROLES_MANAGE, "Create, edit, and delete roles"),
     (PERMISSION_SETTINGS_MANAGE, "Change global CreoPDM settings"),
     (PERMISSION_PROJECTS_CREATE, "Create projects"),
@@ -64,11 +66,12 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_OBJECTS_COPY_TO_VAULT, "Copy selected files into the vault (Copy to Vault)"),
 )
 
-# CreoPDM Administration caps (Users / Roles / Settings). At least one ACTIVE
-# user must keep all three so the system cannot be locked out of admin.
+# CreoPDM Administration caps. At least one ACTIVE user must keep all of them
+# so the system cannot be locked out of Users / role assignment / Roles / Settings.
 ADMINISTRATION_PERMISSION_KEYS: frozenset[str] = frozenset(
     (
         PERMISSION_USERS_MANAGE,
+        PERMISSION_ROLES_ASSIGN,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_SETTINGS_MANAGE,
     )
@@ -78,7 +81,12 @@ ADMINISTRATION_PERMISSION_KEYS: frozenset[str] = frozenset(
 PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "CreoPDM Administration",
-        (PERMISSION_USERS_MANAGE, PERMISSION_ROLES_MANAGE, PERMISSION_SETTINGS_MANAGE),
+        (
+            PERMISSION_USERS_MANAGE,
+            PERMISSION_ROLES_ASSIGN,
+            PERMISSION_ROLES_MANAGE,
+            PERMISSION_SETTINGS_MANAGE,
+        ),
     ),
     (
         "Projects",

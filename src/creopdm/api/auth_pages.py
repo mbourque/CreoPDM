@@ -508,7 +508,8 @@ def admin_user_new(request: Request, ctx: AppContext = Depends(get_context), db:
     admin = _require_admin(request, ctx, db)
     if _is_blocked(admin):
         return admin
-    roles = ctx.user_accounts.assignable_roles_for(db, admin)
+    can_assign = ctx.user_accounts.can_assign_roles(admin)
+    roles = ctx.user_accounts.assignable_roles_for(db, admin) if can_assign else []
     access = _project_access_form(ctx, db, access_all=True)
     return templates.TemplateResponse(
         request,
@@ -517,6 +518,7 @@ def admin_user_new(request: Request, ctx: AppContext = Depends(get_context), db:
             **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": None,
             "mode": "new",
+            "can_assign_roles": can_assign,
             "roles": [{"name": r.name} for r in roles],
             "form": _user_form_payload(),
             **access,
@@ -530,7 +532,7 @@ def admin_user_create(
     display_name: str = Form(""),
     username: str = Form(""),
     email: str = Form(""),
-    role: str = Form(BuiltinRole.ENGINEER.value),
+    role: str | None = Form(default=None),
     status: str = Form(UserStatus.ACTIVE.value),
     password: str = Form(""),
     password_confirm: str = Form(""),
@@ -543,12 +545,14 @@ def admin_user_create(
     admin = _require_admin(request, ctx, db)
     if _is_blocked(admin):
         return admin
-    roles = ctx.user_accounts.assignable_roles_for(db, admin)
+    can_assign = ctx.user_accounts.can_assign_roles(admin)
+    roles = ctx.user_accounts.assignable_roles_for(db, admin) if can_assign else []
     access_all, project_uuids = _parse_project_access(
         project_access_present=project_access_present,
         access_all_projects=access_all_projects,
         project_uuid=project_uuid,
     )
+    role_name = (role or "").strip() or BuiltinRole.ENGINEER.value
     error = None
     if password != password_confirm:
         error = "Passwords do not match."
@@ -560,7 +564,7 @@ def admin_user_create(
                 display_name=display_name,
                 password=password,
                 email=email,
-                role_name=role,
+                role_name=role_name,
                 status=status,
                 must_change_password=True,
                 access_all_projects=access_all,
@@ -585,12 +589,13 @@ def admin_user_create(
             **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": error,
             "mode": "new",
+            "can_assign_roles": can_assign,
             "roles": [{"name": r.name} for r in roles],
             "form": _user_form_payload(
                 display_name=display_name,
                 username=username,
                 email=email,
-                role=role,
+                role=role_name,
                 status=status,
                 access_all_projects=access_all,
                 selected_project_uuids=project_uuids,
@@ -621,9 +626,10 @@ def admin_user_detail(
             f"<h1>403 Forbidden</h1><p>{exc.message}</p>",
             status_code=403,
         )
-    roles = ctx.user_accounts.assignable_roles_for(db, admin)
+    can_assign = ctx.user_accounts.can_assign_roles(admin)
+    roles = ctx.user_accounts.assignable_roles_for(db, admin) if can_assign else []
     # Keep the target's current role visible even if it is full-admin (actor is full admin).
-    if not any(r.name == ctx.user_accounts.primary_role_name(user) for r in roles):
+    if can_assign and not any(r.name == ctx.user_accounts.primary_role_name(user) for r in roles):
         current = ctx.user_accounts.role_by_name(db, ctx.user_accounts.primary_role_name(user))
         if current is not None:
             roles = list(roles) + [current]
@@ -637,6 +643,7 @@ def admin_user_detail(
             **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": None,
             "mode": "edit",
+            "can_assign_roles": can_assign,
             "roles": [{"name": r.name} for r in roles],
             "form": _user_form_payload(
                 uuid=user.uuid,
@@ -659,7 +666,7 @@ def admin_user_update(
     request: Request,
     display_name: str = Form(""),
     email: str = Form(""),
-    role: str = Form(BuiltinRole.ENGINEER.value),
+    role: str | None = Form(default=None),
     status: str = Form(UserStatus.ACTIVE.value),
     password: str = Form(""),
     password_confirm: str = Form(""),
@@ -669,6 +676,8 @@ def admin_user_update(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
+    from creopdm.exceptions import PermissionDeniedError
+
     admin = _require_admin(request, ctx, db)
     if _is_blocked(admin):
         return admin
@@ -682,7 +691,8 @@ def admin_user_update(
             f"<h1>403 Forbidden</h1><p>{exc.message}</p>",
             status_code=403,
         )
-    roles = ctx.user_accounts.assignable_roles_for(db, admin)
+    can_assign = ctx.user_accounts.can_assign_roles(admin)
+    roles = ctx.user_accounts.assignable_roles_for(db, admin) if can_assign else []
     access_all, project_uuids = _parse_project_access(
         project_access_present=project_access_present,
         access_all_projects=access_all_projects,
@@ -696,18 +706,25 @@ def admin_user_update(
             kwargs: dict = {
                 "display_name": display_name,
                 "email": email,
-                "role_name": role,
                 "status": status,
                 "access_all_projects": access_all,
                 "project_uuids": project_uuids,
                 "actor": admin,
             }
+            if role is not None and str(role).strip():
+                kwargs["role_name"] = str(role).strip()
             if password:
                 kwargs["password"] = password
                 kwargs["must_change_password"] = True
             ctx.user_accounts.update_user(db, user_uuid, **kwargs)
             db.commit()
             return RedirectResponse("/admin/users", status_code=303)
+        except PermissionDeniedError as exc:
+            db.rollback()
+            return HTMLResponse(
+                f"<h1>403 Forbidden</h1><p>{exc.message}</p>",
+                status_code=403,
+            )
         except CreoPDMError as exc:
             db.rollback()
             error = exc.message
@@ -724,13 +741,18 @@ def admin_user_update(
             **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": error,
             "mode": "edit",
+            "can_assign_roles": can_assign,
             "roles": [{"name": r.name} for r in roles],
             "form": _user_form_payload(
                 uuid=user_uuid,
                 display_name=display_name,
                 username=user.username,
                 email=email,
-                role=role,
+                role=(
+                    str(role).strip()
+                    if role is not None and str(role).strip()
+                    else ctx.user_accounts.primary_role_name(user)
+                ),
                 status=status,
                 access_all_projects=access_all,
                 selected_project_uuids=project_uuids,

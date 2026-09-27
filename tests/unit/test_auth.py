@@ -911,6 +911,7 @@ def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ct
         PERMISSION_PROJECTS_CREATE,
         PERMISSION_PROJECTS_DELETE,
         PERMISSION_PROJECTS_EDIT,
+        PERMISSION_ROLES_ASSIGN,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_SETTINGS_MANAGE,
         PERMISSION_USERS_MANAGE,
@@ -925,6 +926,7 @@ def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ct
             "description": "Users/roles/settings/projects only",
             "permission": [
                 PERMISSION_USERS_MANAGE,
+                PERMISSION_ROLES_ASSIGN,
                 PERMISSION_ROLES_MANAGE,
                 PERMISSION_SETTINGS_MANAGE,
                 PERMISSION_PROJECTS_CREATE,
@@ -1152,7 +1154,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
 
 
 def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
-    """users.manage alone cannot edit/promote full admins; full admins still can."""
+    """users.manage alone cannot edit/promote full admins or assign roles; full admins still can."""
     from creopdm.auth_constants import PERMISSION_USERS_MANAGE
 
     _setup_admin_and_users(
@@ -1239,15 +1241,22 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
 
     new_form = auth_client.get("/admin/users/new")
     assert new_form.status_code == 200
+    assert 'name="role"' not in new_form.text
+    assert "roles.assign" in new_form.text
     assert BuiltinRole.ADMINISTRATOR.value not in new_form.text
-    assert BuiltinRole.ENGINEER.value in new_form.text
 
+    eng_form = auth_client.get(f"/admin/users/{eng_uuid}")
+    assert eng_form.status_code == 200
+    assert 'name="role"' not in eng_form.text
+    assert "cannot change roles" in eng_form.text.lower()
+
+    # Missing roles.assign: crafted POST cannot change Engineer → Viewer.
     promote = auth_client.post(
         f"/admin/users/{eng_uuid}",
         data={
             "display_name": "Eng",
             "email": "",
-            "role": BuiltinRole.ADMINISTRATOR.value,
+            "role": BuiltinRole.VIEWER.value,
             "status": UserStatus.ACTIVE.value,
             "password": "",
             "password_confirm": "",
@@ -1256,16 +1265,19 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         },
         follow_redirects=False,
     )
-    assert promote.status_code == 400, promote.text
-    assert "full administrator" in promote.text.lower()
+    assert promote.status_code == 403, promote.text
+    assert "roles.assign" in promote.text
+    with auth_ctx.session_factory() as db:
+        eng = db.scalar(select(User).where(User.username == "eng"))
+        assert eng is not None
+        assert auth_ctx.user_accounts.primary_role_name(eng) == BuiltinRole.ENGINEER.value
 
-    # Clerk can still edit a non-admin.
+    # Clerk can still edit a non-admin (name only; no role field).
     edit_eng = auth_client.post(
         f"/admin/users/{eng_uuid}",
         data={
             "display_name": "Eng Updated",
             "email": "",
-            "role": BuiltinRole.ENGINEER.value,
             "status": UserStatus.ACTIVE.value,
             "password": "",
             "password_confirm": "",
@@ -1275,6 +1287,11 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         follow_redirects=False,
     )
     assert edit_eng.status_code == 303, edit_eng.text
+    with auth_ctx.session_factory() as db:
+        eng = db.scalar(select(User).where(User.username == "eng"))
+        assert eng is not None
+        assert eng.display_name == "Eng Updated"
+        assert auth_ctx.user_accounts.primary_role_name(eng) == BuiltinRole.ENGINEER.value
 
     # Nobody may edit themselves; another full admin can demote admin (lockout still applies).
     _login(auth_client, "admin", "AdminPass1")
@@ -1427,6 +1444,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_PROJECTS_DELETE,
         PERMISSION_PROJECTS_EDIT,
         PERMISSION_ROLES_MANAGE,
+        PERMISSION_ROLES_ASSIGN,
         PERMISSION_SETTINGS_MANAGE,
         PERMISSION_USERS_MANAGE,
         STARTER_ROLE_PERMISSION_KEYS,
@@ -1493,6 +1511,15 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
     )
     assert disposable.status_code == 201, disposable.text
     disposable_id = disposable.json()["uuid"]
+
+    with auth_ctx.session_factory() as db:
+        eng_row = db.scalar(select(User).where(User.username == "eng"))
+        view_row = db.scalar(select(User).where(User.username == "view"))
+        assert eng_row is not None and view_row is not None
+        eng_uuid = eng_row.uuid
+        view_uuid = view_row.uuid
+        eng_display = eng_row.display_name
+        view_display = view_row.display_name
 
     all_perm_keys = tuple(key for key, _ in BUILTIN_PERMISSIONS)
 
@@ -1588,6 +1615,53 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 json={"object_ids": ["00000000-0000-0000-0000-000000000000"]},
             ),
         }
+
+        # roles.assign: try changing another account's role (not self).
+        if username == "view":
+            bait_uuid, bait_display, bait_role, alt_role = (
+                eng_uuid,
+                eng_display,
+                BuiltinRole.ENGINEER.value,
+                BuiltinRole.VIEWER.value,
+            )
+        else:
+            bait_uuid, bait_display, bait_role, alt_role = (
+                view_uuid,
+                view_display,
+                BuiltinRole.VIEWER.value,
+                BuiltinRole.ENGINEER.value,
+            )
+        assign_probe = auth_client.post(
+            f"/admin/users/{bait_uuid}",
+            data={
+                "display_name": bait_display,
+                "email": "",
+                "role": alt_role,
+                "status": UserStatus.ACTIVE.value,
+                "password": "",
+                "password_confirm": "",
+                "project_access_present": "1",
+                "access_all_projects": "1",
+            },
+            follow_redirects=False,
+        )
+        probes[PERMISSION_ROLES_ASSIGN] = assign_probe
+        if assign_probe.status_code in (302, 303):
+            restored_role = auth_client.post(
+                f"/admin/users/{bait_uuid}",
+                data={
+                    "display_name": bait_display,
+                    "email": "",
+                    "role": bait_role,
+                    "status": UserStatus.ACTIVE.value,
+                    "password": "",
+                    "password_confirm": "",
+                    "project_access_present": "1",
+                    "access_all_projects": "1",
+                },
+                follow_redirects=False,
+            )
+            assert restored_role.status_code in (302, 303), restored_role.text
 
         # Delete: try disposable when allowed; otherwise attempt delete on shared
         # project (must 403 without destroying fixtures).

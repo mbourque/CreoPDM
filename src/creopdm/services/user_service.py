@@ -26,12 +26,13 @@ from creopdm.auth_constants import (
     PERMISSION_PROJECTS_CREATE,
     PERMISSION_PROJECTS_DELETE,
     PERMISSION_PROJECTS_EDIT,
+    PERMISSION_ROLES_ASSIGN,
     PERMISSION_ROLES_MANAGE,
     PERMISSION_SETTINGS_MANAGE,
     PERMISSION_USERS_MANAGE,
     UserStatus,
 )
-from creopdm.exceptions import NotFoundError, ValidationAppError
+from creopdm.exceptions import NotFoundError, PermissionDeniedError, ValidationAppError
 from creopdm.models.project import Project
 from creopdm.models.user import Permission, Role, RolePermission, User, UserProject, UserRole
 from creopdm.utils.passwords import hash_password, verify_password
@@ -192,6 +193,9 @@ class UserService:
     def can_manage_users(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_USERS_MANAGE)
 
+    def can_assign_roles(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_ROLES_ASSIGN)
+
     def can_manage_roles(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_ROLES_MANAGE)
 
@@ -225,7 +229,11 @@ class UserService:
             )
 
     def ensure_can_assign_role(self, actor: User, role: Role) -> None:
-        """Only a full administrator may assign a role that grants full admin."""
+        """Require roles.assign; full-admin roles need a full administrator actor."""
+        if not self.can_assign_roles(actor):
+            raise PermissionDeniedError(
+                "You do not have permission to assign roles (roles.assign)."
+            )
         if self.role_is_full_administrator(role) and not self.is_full_administrator(actor):
             raise ValidationAppError(
                 "Only a full administrator can assign a full administrator role."
@@ -233,6 +241,8 @@ class UserService:
 
     def assignable_roles_for(self, db: Session, actor: User) -> list[Role]:
         """Roles the actor may pick on Add/Edit user (hides full-admin roles for non-admins)."""
+        if not self.can_assign_roles(actor):
+            return []
         roles = self.list_roles(db)
         if self.is_full_administrator(actor):
             return roles
@@ -399,8 +409,9 @@ class UserService:
                 db, role_id=role.id, role_keys=keys
             ):
                 raise ValidationAppError(
-                    "Cannot leave the system with no active user who has "
-                    "users.manage, roles.manage, and settings.manage."
+                    "Cannot leave the system with no active user who has full "
+                    "CreoPDM Administration (users.manage, roles.assign, "
+                    "roles.manage, and settings.manage)."
                 )
             db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
             for perm_id in self._permission_ids_for_keys(db, keys):
@@ -515,7 +526,13 @@ class UserService:
         if role is None:
             raise ValidationAppError(f"Unknown role '{role_name}'.")
         if actor is not None:
-            self.ensure_can_assign_role(actor, role)
+            if not self.can_assign_roles(actor):
+                # Edit-users-only: new accounts always land on Engineer.
+                role = self.role_by_name(db, StarterRole.ENGINEER.value)
+                if role is None:
+                    raise ValidationAppError("Engineer role is missing.")
+            else:
+                self.ensure_can_assign_role(actor, role)
         user = User(
             uuid=str(uuid.uuid4()),
             username=uname,
@@ -604,12 +621,16 @@ class UserService:
             user.must_change_password = must_change_password
         new_role_id = None
         if role_name is not None:
-            role = self.role_by_name(db, role_name)
-            if role is None:
-                raise ValidationAppError(f"Unknown role '{role_name}'.")
-            if actor is not None:
-                self.ensure_can_assign_role(actor, role)
-            new_role_id = role.id
+            current_role = self.primary_role_name(user)
+            if (role_name or "").strip() == current_role:
+                role_name = None
+            else:
+                role = self.role_by_name(db, role_name)
+                if role is None:
+                    raise ValidationAppError(f"Unknown role '{role_name}'.")
+                if actor is not None:
+                    self.ensure_can_assign_role(actor, role)
+                new_role_id = role.id
         if role_name is not None or new_status is not None:
             if self._would_leave_zero_full_administrators(
                 db,
@@ -618,8 +639,9 @@ class UserService:
                 user_new_status=new_status if new_status is not None else user.status,
             ):
                 raise ValidationAppError(
-                    "Cannot leave the system with no active user who has "
-                    "users.manage, roles.manage, and settings.manage."
+                    "Cannot leave the system with no active user who has full "
+                    "CreoPDM Administration (users.manage, roles.assign, "
+                    "roles.manage, and settings.manage)."
                 )
         if new_status is not None:
             user.status = new_status
