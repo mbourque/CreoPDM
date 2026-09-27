@@ -439,7 +439,7 @@ def admin_user_update(
                 kwargs["must_change_password"] = True
             ctx.user_accounts.update_user(db, user_uuid, **kwargs)
             db.commit()
-            return RedirectResponse(f"/admin/users/{user_uuid}", status_code=303)
+            return RedirectResponse("/admin/users", status_code=303)
         except CreoPDMError as exc:
             db.rollback()
             error = exc.message

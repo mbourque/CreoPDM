@@ -221,6 +221,71 @@ def test_admin_can_open_settings(auth_client):
     assert auth_client.get("/api/settings").status_code == 200
 
 
+def test_admin_can_edit_user(auth_client, auth_ctx):
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    created = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Paul",
+            "username": "paul",
+            "email": "",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "PaulPass1",
+            "password_confirm": "PaulPass1",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+
+    with auth_ctx.session_factory() as db:
+        paul = db.scalar(select(User).where(User.username == "paul"))
+        assert paul is not None
+        paul_uuid = paul.uuid
+
+    listed = auth_client.get("/admin/users")
+    assert listed.status_code == 200
+    assert f'href="/admin/users/{paul_uuid}"' in listed.text
+    assert ">Edit</a>" in listed.text
+
+    detail = auth_client.get(f"/admin/users/{paul_uuid}")
+    assert detail.status_code == 200
+    assert "Edit user" in detail.text
+    assert 'value="paul"' in detail.text or ">paul<" in detail.text
+
+    saved = auth_client.post(
+        f"/admin/users/{paul_uuid}",
+        data={
+            "display_name": "Paul Updated",
+            "email": "paul@example.com",
+            "role": BuiltinRole.VIEWER.value,
+            "status": UserStatus.DISABLED.value,
+            "password": "",
+            "password_confirm": "",
+        },
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    assert saved.headers["location"] == "/admin/users"
+
+    with auth_ctx.session_factory() as db:
+        paul = db.scalar(select(User).where(User.username == "paul"))
+        assert paul is not None
+        assert paul.display_name == "Paul Updated"
+        assert paul.email == "paul@example.com"
+        assert paul.status == UserStatus.DISABLED.value
+        assert UserService().primary_role_name(paul) == BuiltinRole.VIEWER.value
+
+
 def test_unauthenticated_api_returns_401(auth_client):
     auth_client.post(
         "/setup",

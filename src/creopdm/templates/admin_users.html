@@ -21,6 +21,7 @@
           <th>Username</th>
           <th>Role</th>
           <th>Status</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -30,9 +31,10 @@
           <td>{{ u.username }}</td>
           <td>{{ u.role }}</td>
           <td>{{ u.status }}</td>
+          <td><a class="btn" href="/admin/users/{{ u.uuid }}">Edit</a></td>
         </tr>
         {% else %}
-        <tr><td colspan="4" class="muted">No users yet.</td></tr>
+        <tr><td colspan="5" class="muted">No users yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>

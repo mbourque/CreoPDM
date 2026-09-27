@@ -50,16 +50,16 @@
       <p class="muted small">The user must change this password on first sign-in.</p>
       {% else %}
       <label>New password (optional)
-        <input name="password" type="password" autocomplete="new-password" minlength="8">
+        <input name="password" type="password" autocomplete="new-password">
       </label>
       <label>Confirm new password
-        <input name="password_confirm" type="password" autocomplete="new-password" minlength="8">
+        <input name="password_confirm" type="password" autocomplete="new-password">
       </label>
-      <p class="muted small">Leave blank to keep the current password. Setting a password requires the user to change it on next sign-in.</p>
+      <p class="muted small">Leave blank to keep the current password. If you set a new password it must be at least 8 characters; the user must change it on next sign-in.</p>
       {% endif %}
       <p>
         <button type="submit" class="btn btn-primary">{% if mode == 'new' %}Create user{% else %}Save{% endif %}</button>
-        <a class="btn" href="/admin/users">Cancel</a>
+        <a class="btn" href="/admin/users">Back to list</a>
       </p>
     </section>
   </form>

@@ -26,9 +26,9 @@ Disabled accounts cannot sign in. Checkout, check-in, and activity rows store th
 
 Administrators (permission `users.manage`) see an **Administration** link in the top bar:
 
-- List users (name, username, role, status)
+- List users (name, username, role, status) with an **Edit** action per row
 - Add / edit user (display name, username, email, role, status, set/reset password)
-- After a successful **Add user**, you return to the users list
+- After a successful **Add user** or **Save** on edit, you return to the users list
 - New users must change their password on first sign-in
 
 ### Settings (administrators only)
