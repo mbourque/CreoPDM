@@ -5,12 +5,12 @@
   <nav class="crumb">
     <a href="/">Projects</a>
     <span>/</span>
-    <span>Administration</span>
+    <a href="/admin">Administration</a>
     <span>/</span>
     <span>Users</span>
   </nav>
   <h1>Users</h1>
-  <p class="muted">Create and manage CreoPDM accounts. Role permissions beyond user administration are enforced in a later phase.</p>
+  <p class="muted">Create and manage CreoPDM accounts. Click a name to edit that user.</p>
   <p><a class="btn btn-primary" href="/admin/users/new">Add user</a></p>
 
   <section class="settings-card settings-form-wide">
@@ -21,7 +21,6 @@
           <th>Username</th>
           <th>Role</th>
           <th>Status</th>
-          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -31,10 +30,9 @@
           <td>{{ u.username }}</td>
           <td>{{ u.role }}</td>
           <td>{{ u.status }}</td>
-          <td><a class="btn" href="/admin/users/{{ u.uuid }}">Edit</a></td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="muted">No users yet.</td></tr>
+        <tr><td colspan="4" class="muted">No users yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>

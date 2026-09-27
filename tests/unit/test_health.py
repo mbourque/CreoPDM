@@ -64,7 +64,8 @@ def test_home_page(client):
     assert APP_NAME in text
     assert f"Version {APP_VERSION}" in text
     assert "Status: Running" not in text
-    assert 'href="/settings"' in text
+    assert 'href="/admin"' in text
+    assert 'href="/settings"' not in text.split('<main')[0]  # Settings lives under Administration
     assert 'id="creo-status"' in text
     assert '<dialog id="busy-overlay"' in text
     assert 'type="text/creojs"' in text

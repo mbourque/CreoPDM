@@ -30,11 +30,8 @@
       </div>
     </a>
     <div class="status-cluster">
-      {% if can_manage_users %}
-      <a class="status-pill" href="/admin/users">Administration</a>
-      {% endif %}
-      {% if can_manage_settings %}
-      <a class="status-pill" href="/settings">Settings</a>
+      {% if can_manage_users or can_manage_settings %}
+      <a class="status-pill" href="/admin">Administration</a>
       {% endif %}
       <span id="creo-status" class="status-pill" data-state="{% if creo_label == 'Connected' %}ok{% else %}idle{% endif %}" data-creo-open-mode="{{ creo_open_mode }}" title="{{ creo_open_title }}">
         Creo: {{ creo_label }} · {{ creo_open_name }}

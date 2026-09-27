@@ -22,18 +22,17 @@ When the `users` table has **zero** rows, opening the app redirects to **`/setup
 
 Disabled accounts cannot sign in. Checkout, check-in, and activity rows store the **login username** as text (same columns as before; no `user_id` FK yet).
 
-### Administration → Users
+### Administration
 
-Administrators (permission `users.manage`) see an **Administration** link in the top bar:
+Administrators see an **Administration** link in the top bar (hub at `/admin`):
 
-- List users (name, username, role, status) with an **Edit** action per row
-- Add / edit user (display name, username, email, role, status, set/reset password)
+- **Users** — list accounts; click a **name** to edit (display name, email, role, status, set/reset password); **Add user**
+- **Settings** — workstation options (Creo open mode, vault, file types, …). Only `settings.manage` (built-in Administrator)
 - After a successful **Add user** or **Save** on edit, you return to the users list
 - New users must change their password on first sign-in
+- More admin sections will be added to this hub later
 
-### Settings (administrators only)
-
-Only users with `settings.manage` (built-in **Administrator**) see the **Settings** link and can open `/settings` or call `/api/settings`. Engineers and other roles get **403**.
+Engineers and other roles do not see Administration; direct URLs return **403**.
 
 ### Checkout exclusivity
 

@@ -239,6 +239,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (parsed.origin !== window.location.origin) return false;
       const path = parsed.pathname || "/";
       if (path === "/" || path === "") return true;
+      if (path === "/admin" || path === "/admin/users") return true;
       if (path === "/settings" || path === "/settings/types") return true;
       if (/^\/projects\/[^/]+\/objects\/[^/]+\/?$/.test(path)) return true;
       return false;

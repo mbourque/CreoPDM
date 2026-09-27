@@ -352,6 +352,43 @@ a.brand:hover { text-decoration: none; color: inherit; }
   font-weight: 700;
   font-size: 0.85rem;
 }
+.admin-hub { max-width: 48rem; }
+.admin-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.85rem;
+  margin: 1.1rem 0 0;
+}
+a.admin-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: inherit;
+  min-height: 7.5rem;
+  box-sizing: border-box;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+a.admin-tile:hover {
+  border-color: var(--accent-2);
+  box-shadow: 0 1px 0 rgba(47, 111, 143, 0.12);
+}
+a.admin-tile h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+a.admin-tile p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: #5a6a78;
+  font-weight: 400;
+}
 .choice { flex-direction: row !important; align-items: center; gap: 0.45rem !important; font-weight: 500 !important; }
 .open-choice {
   display: flex;

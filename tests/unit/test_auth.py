@@ -199,7 +199,9 @@ def test_admin_can_create_user_non_admin_cannot(auth_client, auth_ctx):
     home = auth_client.get("/", follow_redirects=False)
     assert home.status_code == 200
     assert 'href="/settings"' not in home.text
+    assert 'href="/admin"' not in home.text
     assert auth_client.get("/settings", follow_redirects=False).status_code == 403
+    assert auth_client.get("/admin", follow_redirects=False).status_code == 403
     assert auth_client.get("/api/settings", follow_redirects=False).status_code == 403
     assert auth_client.get("/api/settings").json()["error"]["code"] == "FORBIDDEN"
 
@@ -216,7 +218,13 @@ def test_admin_can_open_settings(auth_client):
         follow_redirects=False,
     )
     home = auth_client.get("/")
-    assert 'href="/settings"' in home.text
+    assert 'href="/admin"' in home.text
+    assert 'href="/settings"' not in home.text.split("<main")[0]
+    hub = auth_client.get("/admin")
+    assert hub.status_code == 200
+    assert "Users" in hub.text
+    assert 'href="/admin/users"' in hub.text
+    assert 'href="/settings"' in hub.text
     assert auth_client.get("/settings").status_code == 200
     assert auth_client.get("/api/settings").status_code == 200
 
@@ -255,7 +263,8 @@ def test_admin_can_edit_user(auth_client, auth_ctx):
     listed = auth_client.get("/admin/users")
     assert listed.status_code == 200
     assert f'href="/admin/users/{paul_uuid}"' in listed.text
-    assert ">Edit</a>" in listed.text
+    assert "Click a name to edit" in listed.text
+    assert ">Edit</a>" not in listed.text
 
     detail = auth_client.get(f"/admin/users/{paul_uuid}")
     assert detail.status_code == 200

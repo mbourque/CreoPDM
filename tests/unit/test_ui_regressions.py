@@ -288,10 +288,13 @@ def test_soft_nav_skips_creojs_reconnect():
     assert 'id="creo-status"' in base
     assert base.index("status-cluster") < base.index('<main class="shell">')
     assert base.index('id="creo-status"') < base.index('<main class="shell">')
-    assert 'href="/settings"' in base
+    assert 'href="/admin"' in base
+    assert 'href="/settings"' not in base.split('<main')[0]
 
-    # Soft-nav covers list home, settings, and object detail (not Settings-only hard load).
+    # Soft-nav covers list home, admin hub, settings, and object detail.
     soft_fn = _between(script, "function isSoftNavUrl(", "let softNavBusy")
+    assert 'path === "/admin"' in soft_fn
+    assert 'path === "/admin/users"' in soft_fn
     assert 'path === "/settings"' in soft_fn
     assert 'path === "/settings/types"' in soft_fn
     assert "/projects/" in soft_fn or r"/projects\/" in soft_fn

@@ -261,6 +261,47 @@ def _is_blocked(result: User | HTMLResponse | RedirectResponse) -> bool:
     return isinstance(result, (HTMLResponse, RedirectResponse))
 
 
+@router.get("/admin", response_class=HTMLResponse)
+def admin_home(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
+    if not ctx.auth_enabled:
+        return templates.TemplateResponse(
+            request,
+            "admin.html",
+            {
+                **_base_ctx(
+                    request,
+                    ctx,
+                    can_manage_users=False,
+                    can_manage_settings=True,
+                ),
+            },
+        )
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    can_users = ctx.user_accounts.can_manage_users(user)
+    can_settings = ctx.user_accounts.can_manage_settings(user)
+    if not can_users and not can_settings:
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>Administrator access required.</p>",
+            status_code=403,
+        )
+    return templates.TemplateResponse(
+        request,
+        "admin.html",
+        {
+            **_base_ctx(
+                request,
+                ctx,
+                current_user=user,
+                can_manage_users=can_users,
+                can_manage_settings=can_settings,
+            ),
+        },
+    )
+
+
 @router.get("/admin/users", response_class=HTMLResponse)
 def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
     admin = _require_admin(request, ctx, db)

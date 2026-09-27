@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Administration — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page admin-hub">
+  <nav class="crumb">
+    <a href="/">Projects</a>
+    <span>/</span>
+    <span>Administration</span>
+  </nav>
+  <h1>Administration</h1>
+  <p class="muted">Server and workstation tools. More sections will appear here as they are added.</p>
+
+  <div class="admin-tile-grid">
+    {% if can_manage_users %}
+    <a class="admin-tile" href="/admin/users">
+      <h2>Users</h2>
+      <p>Add and edit accounts, roles, and status. Click a user’s name to open their record.</p>
+    </a>
+    {% endif %}
+    {% if can_manage_settings %}
+    <a class="admin-tile" href="/settings">
+      <h2>Settings</h2>
+      <p>Workstation options: Creo open mode, vault folder, file types, and related defaults.</p>
+    </a>
+    {% endif %}
+  </div>
+</article>
+{% endblock %}
