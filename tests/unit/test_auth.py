@@ -312,7 +312,11 @@ def test_admin_can_edit_user(auth_client, auth_ctx):
 
 @requires_git
 def test_admin_user_project_access_filters_projects(auth_client, auth_ctx):
-    """Restricted membership hides other projects; empty list blocks app browse."""
+    """Admin form multi-select + restrict / empty / restore for one Engineer.
+
+    Broader per-starter-role membership coverage lives in
+    test_every_starter_role_login_permission_matrix.
+    """
     auth_client.post(
         "/setup",
         data={
@@ -845,11 +849,101 @@ def test_role_with_no_permissions_cannot_browse(auth_client, auth_ctx, repo_pare
         db.commit()
     project = auth_client.post("/api/projects", json={"name": "Hidden"}).json()
 
-    _login(auth_client, "nobody", "NobodyPass1")
-    _assert_forbidden(auth_client.get("/"))
+    login = auth_client.post(
+        "/login",
+        data={"username": "nobody", "password": "NobodyPass1"},
+        follow_redirects=False,
+    )
+    assert login.status_code == 303
+    assert login.headers["location"] == "/no-access"
+
+    page = auth_client.get("/no-access")
+    assert page.status_code == 200
+    assert "No Files access" in page.text
+    assert "objects.view" in page.text
+
+    home = auth_client.get("/", follow_redirects=False)
+    assert home.status_code == 303
+    assert home.headers["location"] == "/no-access"
     _assert_forbidden(auth_client.get("/api/projects"))
     _assert_forbidden(auth_client.get(f"/api/projects/{project['uuid']}"))
     assert auth_client.get("/admin", follow_redirects=False).status_code == 403
+
+
+@requires_git
+def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ctx):
+    """Admin/settings-only role (no objects.view) signs in to /admin, not a JSON error."""
+    from creopdm.auth_constants import (
+        PERMISSION_PROJECTS_CREATE,
+        PERMISSION_PROJECTS_DELETE,
+        PERMISSION_PROJECTS_EDIT,
+        PERMISSION_ROLES_MANAGE,
+        PERMISSION_SETTINGS_MANAGE,
+        PERMISSION_USERS_MANAGE,
+    )
+
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+    role = auth_client.post(
+        "/admin/roles/new",
+        data={
+            "name": "Admin Desk",
+            "description": "Users/roles/settings/projects only",
+            "permission": [
+                PERMISSION_USERS_MANAGE,
+                PERMISSION_ROLES_MANAGE,
+                PERMISSION_SETTINGS_MANAGE,
+                PERMISSION_PROJECTS_CREATE,
+                PERMISSION_PROJECTS_EDIT,
+                PERMISSION_PROJECTS_DELETE,
+            ],
+        },
+        follow_redirects=False,
+    )
+    assert role.status_code == 303, role.text
+    created = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Desk Admin",
+            "username": "desk",
+            "email": "",
+            "role": "Admin Desk",
+            "status": UserStatus.ACTIVE.value,
+            "password": "DeskPass1!",
+            "password_confirm": "DeskPass1!",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303, created.text
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(User).where(User.username == "desk"))
+        assert row is not None
+        row.must_change_password = False
+        db.commit()
+
+    login = auth_client.post(
+        "/login",
+        data={"username": "desk", "password": "DeskPass1!"},
+        follow_redirects=False,
+    )
+    assert login.status_code == 303
+    assert login.headers["location"] == "/admin"
+
+    hub = auth_client.get("/admin")
+    assert hub.status_code == 200
+    assert "Administration" in hub.text
+    assert 'href="/">Projects</a>' not in hub.text
+    assert "No Files access" not in hub.text
+    assert '"error"' not in hub.text or "FORBIDDEN" not in hub.text
+
+    home = auth_client.get("/", follow_redirects=False)
+    assert home.status_code == 303
+    assert home.headers["location"] == "/admin"
+
+    users = auth_client.get("/admin/users")
+    assert users.status_code == 200
+    assert 'href="/">Projects</a>' not in users.text
+    assert 'href="/admin">Administration</a>' in users.text
 
 
 @requires_git
@@ -992,6 +1086,9 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
 
     Ephemeral DB (data_dir fixture) — users do not persist after the test.
     Driven by STARTER_ROLE_PERMISSION_KEYS so seed drift fails this test.
+
+    Also asserts per-user project membership (All / selected / none) for each
+    starter account — orthogonal to role permission keys.
     """
     from uuid import uuid4
 
@@ -1033,8 +1130,17 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
 
     # Shared fixtures created as admin (always allowed).
     _login(auth_client, "admin", "AdminPass1")
+    form = auth_client.get("/admin/users/new")
+    assert form.status_code == 200
+    assert "Project access" in form.text
+    assert 'id="access-all-projects"' in form.text
+    assert 'multiple' in form.text and 'name="project_uuid"' in form.text
+
     project = auth_client.post("/api/projects", json={"name": "Role Matrix"}).json()
     project_id = project["uuid"]
+    other = auth_client.post("/api/projects", json={"name": "Other Matrix"})
+    assert other.status_code == 201, other.text
+    other_id = other.json()["uuid"]
     created = auth_client.post(
         f"/api/projects/{project_id}/objects",
         files={"file": ("matrix.prt", b"matrix-bytes", "application/octet-stream")},
@@ -1082,6 +1188,13 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 assert "Administration" in home.text
             else:
                 assert "Administration" not in home.text
+            # Default All projects: both fixtures visible.
+            listed_all = auth_client.get("/api/projects")
+            assert listed_all.status_code == 200
+            listed_uuids = {p["uuid"] for p in listed_all.json()}
+            assert project_id in listed_uuids and other_id in listed_uuids, (
+                f"{role_name}/{username}: default All projects must include both fixtures"
+            )
         else:
             _assert_forbidden(auth_client.get(f"/api/objects/{object_id}"))
             _assert_forbidden(auth_client.get(f"/?project={project_id}"))
@@ -1171,3 +1284,86 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         if state.status_code == 200 and state.json().get("owned_by_me"):
             undone = auth_client.post(f"/api/objects/{object_id}/undo-checkout")
             assert undone.status_code == 200, undone.text
+
+        # Project membership (per user, not per role permission key).
+        with auth_ctx.session_factory() as db:
+            row = db.scalar(select(User).where(User.username == username))
+            assert row is not None
+            user_uuid = row.uuid
+            display_name = row.display_name
+            assert row.access_all_projects is True
+
+        _login(auth_client, "admin", "AdminPass1")
+        restricted = auth_client.post(
+            f"/admin/users/{user_uuid}",
+            data={
+                "display_name": display_name,
+                "email": "",
+                "role": role_name,
+                "status": UserStatus.ACTIVE.value,
+                "password": "",
+                "password_confirm": "",
+                "project_access_present": "1",
+                "project_uuid": [project_id],
+            },
+            follow_redirects=False,
+        )
+        assert restricted.status_code == 303, restricted.text
+
+        _login(auth_client, username, password)
+        if PERMISSION_OBJECTS_VIEW in allowed:
+            only = auth_client.get("/api/projects")
+            assert only.status_code == 200, only.text
+            assert {p["uuid"] for p in only.json()} == {project_id}, (
+                f"{role_name}/{username}: restricted membership must show only Role Matrix"
+            )
+            assert auth_client.get(f"/api/projects/{project_id}").status_code == 200
+            denied_other = auth_client.get(f"/api/projects/{other_id}")
+            assert denied_other.status_code == 403, denied_other.text
+            assert denied_other.json()["error"]["code"] == "FORBIDDEN"
+
+        _login(auth_client, "admin", "AdminPass1")
+        cleared = auth_client.post(
+            f"/admin/users/{user_uuid}",
+            data={
+                "display_name": display_name,
+                "email": "",
+                "role": role_name,
+                "status": UserStatus.ACTIVE.value,
+                "password": "",
+                "password_confirm": "",
+                "project_access_present": "1",
+            },
+            follow_redirects=False,
+        )
+        assert cleared.status_code == 303, cleared.text
+
+        _login(auth_client, username, password)
+        if PERMISSION_OBJECTS_VIEW in allowed:
+            empty = auth_client.get("/api/projects")
+            assert empty.status_code == 200
+            assert empty.json() == [], (
+                f"{role_name}/{username}: no selected projects → empty list"
+            )
+            assert auth_client.get(f"/api/projects/{project_id}").status_code == 403
+
+        # Restore All projects so later roles still share fixtures (and admin stays usable).
+        _login(auth_client, "admin", "AdminPass1")
+        restored = auth_client.post(
+            f"/admin/users/{user_uuid}",
+            data={
+                "display_name": display_name,
+                "email": "",
+                "role": role_name,
+                "status": UserStatus.ACTIVE.value,
+                "password": "",
+                "password_confirm": "",
+                "project_access_present": "1",
+                "access_all_projects": "1",
+            },
+            follow_redirects=False,
+        )
+        assert restored.status_code == 303, restored.text
+        if username == "admin":
+            _login(auth_client, "admin", "AdminPass1")
+            assert auth_client.get("/admin/users").status_code == 200

@@ -289,6 +289,7 @@ def test_soft_nav_skips_creojs_reconnect():
     assert base.index("status-cluster") < base.index('<main class="shell">')
     assert base.index('id="creo-status"') < base.index('<main class="shell">')
     assert 'href="/admin"' in base
+    assert 'can_view_objects' in base
     assert 'href="/settings"' not in base.split('<main')[0]
 
     # Soft-nav covers list home, admin hub, settings, and object detail.

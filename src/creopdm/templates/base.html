@@ -26,7 +26,7 @@
   data-agent-token="{{ agent_token | default('') }}"
 >
   <header class="topbar">
-    <a class="brand" href="/">
+    <a class="brand" href="{% if can_view_objects %}/{% elif can_manage_users or can_manage_roles or can_manage_settings %}/admin{% else %}/no-access{% endif %}">
       <span class="brand-mark" aria-hidden="true"></span>
       <div>
         <div class="brand-name">{{ app_name }}</div>

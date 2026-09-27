@@ -54,7 +54,7 @@ Empty databases seed four **starter** roles (**Administrator**, **PDM Manager**,
 
 ## Phase 2 (shipped): core role matrix
 
-Permission keys (`projects.*`, `objects.*` including **`objects.view`**, `users.manage`, `roles.manage`, `settings.manage`) gate APIs (**403** when missing). Browse/open/download requires **`objects.view`** — a role with no permissions cannot use the Files page. The Files toolbar and project New/Delete controls hide when the matching capability is false. Viewer Open dialog offers view-only open (no “Check out … then open”) when `objects.checkout` is missing (`data-can-checkout` on the page).
+Permission keys (`projects.*`, `objects.*` including **`objects.view`**, `users.manage`, `roles.manage`, `settings.manage`) gate APIs (**403** when missing). Browse/open/download requires **`objects.view`** — a role with no permissions cannot use the Files page. After sign-in, accounts **without** `objects.view` land on **`/admin`** when they have any Administration capability, otherwise on a plain **`/no-access`** page (not a JSON error). Administration breadcrumbs omit the **Projects** link when `objects.view` is missing. The Files toolbar and project New/Delete controls hide when the matching capability is false. Viewer Open dialog offers view-only open (no “Check out … then open”) when `objects.checkout` is missing (`data-can-checkout` on the page).
 
 | Starter role (default seed) | Can do | Cannot |
 | --- | --- | --- |
@@ -63,7 +63,7 @@ Permission keys (`projects.*`, `objects.*` including **`objects.view`**, `users.
 | **PDM Manager** | Create/edit projects + Engineer authoring + **Copy to Vault** | Delete project, users, roles, settings |
 | **Administrator** | Everything above + delete project + users + roles + settings | — |
 
-Automated coverage: `tests/unit/test_auth.py::test_every_starter_role_login_permission_matrix` creates one ephemeral user per starter role, logs each in, and asserts allow/deny for every built-in permission key (plus Files toolbar chrome).
+Automated coverage: `tests/unit/test_auth.py::test_every_starter_role_login_permission_matrix` creates one ephemeral user per starter role, logs each in, and asserts allow/deny for every built-in permission key (plus Files toolbar chrome and **project membership**: All / one project / none). Dedicated UI + lifecycle coverage: `test_admin_user_project_access_filters_projects`.
 
 When `auth_enabled` is false (unit tests with a static identity), all authoring and project caps are granted so the existing suite stays green.
 

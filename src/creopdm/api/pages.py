@@ -303,7 +303,17 @@ def home(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> HTMLResponse:
-    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    if ctx.auth_enabled:
+        perms = getattr(request.state, "permissions", None) or frozenset()
+        if PERMISSION_OBJECTS_VIEW not in perms:
+            # Admin-only accounts (no Files browse) → Administration, not a JSON 403.
+            if (
+                getattr(request.state, "can_manage_users", False)
+                or getattr(request.state, "can_manage_roles", False)
+                or getattr(request.state, "can_manage_settings", False)
+            ):
+                return RedirectResponse("/admin", status_code=303)
+            return RedirectResponse("/no-access", status_code=303)
     projects = [project_to_response(p) for p in accessible_projects(request, ctx, db)]
     selected_uuid = request.query_params.get("project") or ctx.config.settings.ui.last_project_uuid
     selected = None

@@ -113,3 +113,28 @@ def caps_dict(request: Request) -> dict:
         "can_update_metadata": bool(getattr(request.state, "can_update_metadata", False)),
         "can_copy_to_vault": bool(getattr(request.state, "can_copy_to_vault", False)),
     }
+
+
+def can_open_administration(caps: CapabilityFlags) -> bool:
+    return caps.can_manage_users or caps.can_manage_roles or caps.can_manage_settings
+
+
+def default_app_path(caps: CapabilityFlags) -> str:
+    """Where to send a signed-in user when they have no explicit destination."""
+    if caps.can_view_objects:
+        return "/"
+    if can_open_administration(caps):
+        return "/admin"
+    return "/no-access"
+
+
+def resolve_post_login_target(caps: CapabilityFlags, next_url: str | None) -> str:
+    """Honor safe next= when set; otherwise land on Files, Administration, or no-access."""
+    default = default_app_path(caps)
+    nxt = (next_url or "").strip()
+    if not nxt or nxt == "/":
+        return default
+    if nxt.startswith("/") and not nxt.startswith("//"):
+        return nxt
+    return default
+

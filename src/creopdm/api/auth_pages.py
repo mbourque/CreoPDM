@@ -22,7 +22,7 @@ from creopdm.constants import APP_NAME, APP_VERSION
 from creopdm.context import AppContext
 from creopdm.exceptions import CreoPDMError
 from creopdm.models.user import User
-from creopdm.permissions import caps_dict
+from creopdm.permissions import caps_dict, caps_for_user, default_app_path, resolve_post_login_target
 from creopdm.utils.identity import UserIdentity, set_request_identity
 
 # Back-compat for default form role.
@@ -126,7 +126,10 @@ def setup_submit(
             )
             db.commit()
             _login_session(request, user)
-            return RedirectResponse("/", status_code=303)
+            return RedirectResponse(
+                default_app_path(caps_for_user(ctx.user_accounts, user)),
+                status_code=303,
+            )
         except CreoPDMError as exc:
             db.rollback()
             error = exc.message
@@ -149,8 +152,14 @@ def login_page(request: Request, ctx: AppContext = Depends(get_context), db: Ses
         return RedirectResponse("/", status_code=303)
     if ctx.user_accounts.needs_setup(db):
         return RedirectResponse("/setup", status_code=303)
-    if request.session.get(SESSION_USER_KEY):
-        return RedirectResponse("/", status_code=303)
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    if user_uuid:
+        user = ctx.user_accounts.get_by_uuid(db, str(user_uuid))
+        if user is not None:
+            return RedirectResponse(
+                default_app_path(caps_for_user(ctx.user_accounts, user)),
+                status_code=303,
+            )
     return templates.TemplateResponse(
         request,
         "auth_login.html",
@@ -175,7 +184,8 @@ def login_submit(
         _login_session(request, user)
         if user.must_change_password:
             return RedirectResponse("/account/password", status_code=303)
-        target = next.strip() if next and next.startswith("/") and not next.startswith("//") else "/"
+        caps = caps_for_user(ctx.user_accounts, user)
+        target = resolve_post_login_target(caps, next)
         return RedirectResponse(target, status_code=303)
     except CreoPDMError as exc:
         db.rollback()
@@ -197,6 +207,27 @@ def login_submit(
 def logout(request: Request):
     _clear_session(request)
     return RedirectResponse("/login", status_code=303)
+
+
+@router.get("/no-access", response_class=HTMLResponse)
+def no_access_page(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
+    """Friendly HTML when the account has neither Files browse nor Administration."""
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    caps = caps_for_user(ctx.user_accounts, user)
+    # If they gained access, send them to the right place instead of this page.
+    landing = default_app_path(caps)
+    if landing != "/no-access":
+        return RedirectResponse(landing, status_code=303)
+    return templates.TemplateResponse(
+        request,
+        "auth_no_access.html",
+        {
+            **_base_ctx(request, ctx, current_user=user),
+        },
+    )
 
 
 @router.get("/account/password", response_class=HTMLResponse)
@@ -242,7 +273,10 @@ def password_submit(
         try:
             ctx.user_accounts.change_password(db, user, current_password, new_password)
             db.commit()
-            return RedirectResponse("/", status_code=303)
+            return RedirectResponse(
+                default_app_path(caps_for_user(ctx.user_accounts, user)),
+                status_code=303,
+            )
         except CreoPDMError as exc:
             db.rollback()
             error = exc.message
