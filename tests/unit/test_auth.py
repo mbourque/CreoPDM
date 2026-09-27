@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, select
@@ -279,6 +281,8 @@ def test_admin_can_edit_user(auth_client, auth_ctx):
     assert listed.status_code == 200
     assert f'href="/admin/users/{paul_uuid}"' in listed.text
     assert "Click a name to edit" in listed.text
+    assert "<th>Projects</th>" in listed.text
+    assert ">All<" in listed.text or ">All</td>" in listed.text
     assert ">Edit</a>" not in listed.text
 
     detail = auth_client.get(f"/admin/users/{paul_uuid}")
@@ -395,6 +399,15 @@ def test_admin_user_project_access_filters_projects(auth_client, auth_ctx):
     assert "Beta" not in home.text
 
     _login(auth_client, "admin", "AdminPass1")
+    users_list = auth_client.get("/admin/users")
+    assert users_list.status_code == 200
+    assert "<th>Projects</th>" in users_list.text
+    assert "All" in users_list.text
+    assert re.search(
+        r">limited</td>\s*<td>[^<]*</td>\s*<td>[^<]*</td>\s*<td>1</td>",
+        users_list.text,
+    ), users_list.text
+
     cleared = auth_client.post(
         f"/admin/users/{user_uuid}",
         data={

@@ -473,6 +473,11 @@ def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Se
             "username": u.username,
             "role": ctx.user_accounts.primary_role_name(u),
             "status": u.status,
+            "project_access": (
+                "All"
+                if getattr(u, "access_all_projects", True)
+                else str(len(u.projects or []))
+            ),
         }
         for u in users
     ]
