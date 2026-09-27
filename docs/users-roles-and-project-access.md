@@ -27,12 +27,16 @@ Disabled accounts cannot sign in. Checkout, check-in, and activity rows store th
 Users with `users.manage`, `roles.manage`, or `settings.manage` see **Administration** (`/admin`):
 
 - **Users** — list accounts (Projects column: **All** or membership count); click a **name** to edit the user, or a **role** name to open that role (`roles.manage`); **Add user** (`users.manage`)
-- **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`)
+- **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`). The role editor groups **CreoPDM Administration** (`users.manage`, `roles.manage`, `settings.manage`), **Projects**, and **Objects**.
 - **Settings** — workstation options (Creo open mode, vault, file types, …) (`settings.manage`)
 - After a successful **Add user** / **Save** / role save, you return to the list
 - New users must change their password on first sign-in
 
 Others do not see Administration; direct URLs return **403**.
+
+**Lockout safety:** at least one **ACTIVE** user must keep **all three** CreoPDM Administration permissions on the same account. Saving a role, demoting/disabling a user, or deleting a role is rejected if it would leave nobody who can manage Users, Roles, and Settings.
+
+**Admins edit admins only:** a full administrator (all three caps) may edit other full administrators and assign full-admin roles. An account with only `users.manage` can manage non-admin users, but cannot open/edit an administrator, promote someone to a full-admin role, or see Administrator in the role dropdown.
 
 ### Project access (per user)
 
@@ -71,7 +75,7 @@ When `auth_enabled` is false (unit tests with a static identity), all authoring 
 
 - **`/admin/roles`** — create roles, edit name/description/permissions, delete unused roles
 - Runtime caps come only from `role_permissions` (no Administrator-by-name short-circuit; starter templates are not re-applied on restart)
-- Safety: cannot leave zero **ACTIVE** users with `users.manage`; cannot delete a role that is still assigned
+- Safety: cannot leave zero **ACTIVE** users with full CreoPDM Administration (`users.manage` + `roles.manage` + `settings.manage` on the same account); cannot delete a role that is still assigned
 - Starter roles are editable like any other role
 
 ### Deferred (later phases)

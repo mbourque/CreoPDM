@@ -64,10 +64,20 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_OBJECTS_COPY_TO_VAULT, "Copy selected files into the vault (Copy to Vault)"),
 )
 
+# CreoPDM Administration caps (Users / Roles / Settings). At least one ACTIVE
+# user must keep all three so the system cannot be locked out of admin.
+ADMINISTRATION_PERMISSION_KEYS: frozenset[str] = frozenset(
+    (
+        PERMISSION_USERS_MANAGE,
+        PERMISSION_ROLES_MANAGE,
+        PERMISSION_SETTINGS_MANAGE,
+    )
+)
+
 # Grouping for Roles admin checkboxes.
 PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
-        "Administration",
+        "CreoPDM Administration",
         (PERMISSION_USERS_MANAGE, PERMISSION_ROLES_MANAGE, PERMISSION_SETTINGS_MANAGE),
     ),
     (

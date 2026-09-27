@@ -136,7 +136,7 @@ def test_login_logout_and_disabled_user(auth_client, auth_ctx):
     assert "Administration" in home.text
 
     auth_client.get("/logout", follow_redirects=False)
-    # Keep another ACTIVE users.manage account so disabling admin is allowed.
+    # Keep another ACTIVE full-admin account so disabling admin is allowed.
     with auth_ctx.session_factory() as db:
         UserService().create_user(
             db,
@@ -1012,9 +1012,16 @@ def test_role_permission_edit_survives_restart(auth_client, auth_ctx, data_dir, 
         assert 'id="checkout-menu"' not in home.text
 
 
-def test_cannot_strip_last_users_manage(auth_client, auth_ctx):
-    """Saving Admin without users.manage is rejected when it is the only path."""
-    from creopdm.auth_constants import PERMISSION_OBJECTS_CHECKOUT
+def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
+    """Cannot remove any CreoPDM Administration cap from the last full-admin path."""
+    from creopdm.auth_constants import (
+        ADMINISTRATION_PERMISSION_KEYS,
+        PERMISSION_OBJECTS_CHECKOUT,
+        PERMISSION_OBJECTS_VIEW,
+        PERMISSION_ROLES_MANAGE,
+        PERMISSION_SETTINGS_MANAGE,
+        PERMISSION_USERS_MANAGE,
+    )
 
     auth_client.post(
         "/setup",
@@ -1032,7 +1039,19 @@ def test_cannot_strip_last_users_manage(auth_client, auth_ctx):
         )
         assert admin_role is not None
         role_uuid = admin_role.uuid
-    denied = auth_client.post(
+        other_keys = [
+            p.key
+            for p in admin_role.permissions
+            if p.key not in ADMINISTRATION_PERMISSION_KEYS
+        ]
+
+    role_form = auth_client.get(f"/admin/roles/{role_uuid}")
+    assert role_form.status_code == 200
+    assert "CreoPDM Administration" in role_form.text
+    assert "cannot lock themselves out" in role_form.text.lower()
+
+    # Stripping every admin key is rejected.
+    denied_all = auth_client.post(
         f"/admin/roles/{role_uuid}",
         data={
             "name": "Administrator",
@@ -1041,8 +1060,233 @@ def test_cannot_strip_last_users_manage(auth_client, auth_ctx):
         },
         follow_redirects=False,
     )
-    assert denied.status_code == 400, denied.text
-    assert "users.manage" in denied.text
+    assert denied_all.status_code == 400, denied_all.text
+    assert "users.manage" in denied_all.text
+    assert "roles.manage" in denied_all.text
+    assert "settings.manage" in denied_all.text
+
+    # Keeping two of three is still a lockout (must keep all three on someone).
+    for drop in (
+        PERMISSION_USERS_MANAGE,
+        PERMISSION_ROLES_MANAGE,
+        PERMISSION_SETTINGS_MANAGE,
+    ):
+        keep = sorted(ADMINISTRATION_PERMISSION_KEYS - {drop}) + other_keys
+        denied_one = auth_client.post(
+            f"/admin/roles/{role_uuid}",
+            data={
+                "name": "Administrator",
+                "description": "partial",
+                "permission": keep,
+            },
+            follow_redirects=False,
+        )
+        assert denied_one.status_code == 400, f"drop={drop}: {denied_one.text}"
+        assert "users.manage" in denied_one.text
+
+    # Demoting the only full admin is rejected.
+    with auth_ctx.session_factory() as db:
+        admin = db.scalar(select(User).where(User.username == "admin"))
+        assert admin is not None
+        admin_uuid = admin.uuid
+    demote = auth_client.post(
+        f"/admin/users/{admin_uuid}",
+        data={
+            "display_name": "Admin",
+            "email": "",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+            "project_access_present": "1",
+            "access_all_projects": "1",
+        },
+        follow_redirects=False,
+    )
+    assert demote.status_code == 400, demote.text
+
+    # With a second full admin, stripping settings.manage from Administrator is allowed
+    # only if that second account keeps all three (via a dedicated full-admin role).
+    with auth_ctx.session_factory() as db:
+        full = auth_ctx.user_accounts.create_role(
+            db,
+            name="Full Admin Backup",
+            description="Backup path with all three admin caps",
+            permission_keys=sorted(ADMINISTRATION_PERMISSION_KEYS)
+            + [PERMISSION_OBJECTS_VIEW],
+        )
+        auth_ctx.user_accounts.create_user(
+            db,
+            username="backup",
+            display_name="Backup",
+            password="BackupPass1",
+            role_name=full.name,
+            must_change_password=False,
+        )
+        db.commit()
+
+    keep_without_settings = sorted(
+        (ADMINISTRATION_PERMISSION_KEYS - {PERMISSION_SETTINGS_MANAGE})
+        | set(other_keys)
+    )
+    allowed = auth_client.post(
+        f"/admin/roles/{role_uuid}",
+        data={
+            "name": "Administrator",
+            "description": "settings elsewhere",
+            "permission": keep_without_settings,
+        },
+        follow_redirects=False,
+    )
+    assert allowed.status_code in (303, 302), allowed.text
+
+    with auth_ctx.session_factory() as db:
+        admin_role = auth_ctx.user_accounts.role_by_name(
+            db, BuiltinRole.ADMINISTRATOR.value
+        )
+        assert admin_role is not None
+        keys = {p.key for p in admin_role.permissions}
+        assert PERMISSION_SETTINGS_MANAGE not in keys
+        assert PERMISSION_USERS_MANAGE in keys
+        assert PERMISSION_ROLES_MANAGE in keys
+
+
+def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
+    """users.manage alone cannot edit/promote full admins; full admins still can."""
+    from creopdm.auth_constants import PERMISSION_USERS_MANAGE
+
+    _setup_admin_and_users(
+        auth_client, auth_ctx, ("eng", BuiltinRole.ENGINEER.value)
+    )
+    _login(auth_client, "admin", "AdminPass1")
+
+    hr_role = auth_client.post(
+        "/admin/roles/new",
+        data={
+            "name": "User Clerk",
+            "description": "users.manage only — not a full admin",
+            "permission": [PERMISSION_USERS_MANAGE],
+        },
+        follow_redirects=False,
+    )
+    assert hr_role.status_code == 303, hr_role.text
+    created = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Clerk",
+            "username": "clerk",
+            "email": "",
+            "role": "User Clerk",
+            "status": UserStatus.ACTIVE.value,
+            "password": "ClerkPass1",
+            "password_confirm": "ClerkPass1",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303, created.text
+
+    with auth_ctx.session_factory() as db:
+        admin = db.scalar(select(User).where(User.username == "admin"))
+        eng = db.scalar(select(User).where(User.username == "eng"))
+        clerk = db.scalar(select(User).where(User.username == "clerk"))
+        assert admin is not None and eng is not None and clerk is not None
+        admin_uuid = admin.uuid
+        eng_uuid = eng.uuid
+        clerk.must_change_password = False
+        db.commit()
+
+    _login(auth_client, "clerk", "ClerkPass1")
+    listed = auth_client.get("/admin/users")
+    assert listed.status_code == 200
+    assert f'href="/admin/users/{eng_uuid}"' in listed.text
+    assert f'href="/admin/users/{admin_uuid}"' not in listed.text
+    assert "Only a full administrator can edit other administrators" in listed.text
+
+    assert auth_client.get(f"/admin/users/{admin_uuid}").status_code == 403
+    denied_edit = auth_client.post(
+        f"/admin/users/{admin_uuid}",
+        data={
+            "display_name": "Hacked",
+            "email": "",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+            "project_access_present": "1",
+            "access_all_projects": "1",
+        },
+        follow_redirects=False,
+    )
+    assert denied_edit.status_code == 403, denied_edit.text
+
+    new_form = auth_client.get("/admin/users/new")
+    assert new_form.status_code == 200
+    assert BuiltinRole.ADMINISTRATOR.value not in new_form.text
+    assert BuiltinRole.ENGINEER.value in new_form.text
+
+    promote = auth_client.post(
+        f"/admin/users/{eng_uuid}",
+        data={
+            "display_name": "Eng",
+            "email": "",
+            "role": BuiltinRole.ADMINISTRATOR.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+            "project_access_present": "1",
+            "access_all_projects": "1",
+        },
+        follow_redirects=False,
+    )
+    assert promote.status_code == 400, promote.text
+    assert "full administrator" in promote.text.lower()
+
+    # Clerk can still edit a non-admin.
+    edit_eng = auth_client.post(
+        f"/admin/users/{eng_uuid}",
+        data={
+            "display_name": "Eng Updated",
+            "email": "",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+            "project_access_present": "1",
+            "access_all_projects": "1",
+        },
+        follow_redirects=False,
+    )
+    assert edit_eng.status_code == 303, edit_eng.text
+
+    # Full admin can still open/edit another full admin (lockout still blocks last demote).
+    _login(auth_client, "admin", "AdminPass1")
+    assert auth_client.get(f"/admin/users/{admin_uuid}").status_code == 200
+    with auth_ctx.session_factory() as db:
+        auth_ctx.user_accounts.create_user(
+            db,
+            username="backup",
+            display_name="Backup",
+            password="BackupPass1",
+            role_name=BuiltinRole.ADMINISTRATOR.value,
+            must_change_password=False,
+            actor=db.scalar(select(User).where(User.username == "admin")),
+        )
+        db.commit()
+    demote_ok = auth_client.post(
+        f"/admin/users/{admin_uuid}",
+        data={
+            "display_name": "Admin",
+            "email": "",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+            "project_access_present": "1",
+            "access_all_projects": "1",
+        },
+        follow_redirects=False,
+    )
+    assert demote_ok.status_code == 303, demote_ok.text
 
 
 def test_engineer_cannot_open_roles_admin(auth_client, auth_ctx):

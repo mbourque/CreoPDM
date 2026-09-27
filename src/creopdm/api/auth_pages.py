@@ -467,6 +467,7 @@ def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Se
         return admin
     users = ctx.user_accounts.list_users(db)
     can_roles = ctx.user_accounts.can_manage_roles(admin)
+    actor_is_full = ctx.user_accounts.is_full_administrator(admin)
     rows = [
         {
             "uuid": u.uuid,
@@ -480,6 +481,8 @@ def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Se
                 if getattr(u, "access_all_projects", True)
                 else str(len(u.projects or []))
             ),
+            "is_full_admin": ctx.user_accounts.is_full_administrator(u),
+            "can_edit": actor_is_full or not ctx.user_accounts.is_full_administrator(u),
         }
         for u in users
     ]
@@ -496,6 +499,7 @@ def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Se
                 can_manage_settings=True,
             ),
             "users": rows,
+            "actor_is_full_admin": actor_is_full,
         },
     )
 
@@ -505,7 +509,7 @@ def admin_user_new(request: Request, ctx: AppContext = Depends(get_context), db:
     admin = _require_admin(request, ctx, db)
     if _is_blocked(admin):
         return admin
-    roles = ctx.user_accounts.list_roles(db)
+    roles = ctx.user_accounts.assignable_roles_for(db, admin)
     access = _project_access_form(ctx, db, access_all=True)
     return templates.TemplateResponse(
         request,
@@ -540,7 +544,7 @@ def admin_user_create(
     admin = _require_admin(request, ctx, db)
     if _is_blocked(admin):
         return admin
-    roles = ctx.user_accounts.list_roles(db)
+    roles = ctx.user_accounts.assignable_roles_for(db, admin)
     access_all, project_uuids = _parse_project_access(
         project_access_present=project_access_present,
         access_all_projects=access_all_projects,
@@ -562,6 +566,7 @@ def admin_user_create(
                 must_change_password=True,
                 access_all_projects=access_all,
                 project_uuids=project_uuids,
+                actor=admin,
             )
             db.commit()
             return RedirectResponse("/admin/users", status_code=303)
@@ -610,7 +615,19 @@ def admin_user_detail(
     user = ctx.user_accounts.get_by_uuid(db, user_uuid)
     if user is None:
         return RedirectResponse("/admin/users", status_code=303)
-    roles = ctx.user_accounts.list_roles(db)
+    try:
+        ctx.user_accounts.ensure_can_edit_user(admin, user)
+    except CreoPDMError as exc:
+        return HTMLResponse(
+            f"<h1>403 Forbidden</h1><p>{exc.message}</p>",
+            status_code=403,
+        )
+    roles = ctx.user_accounts.assignable_roles_for(db, admin)
+    # Keep the target's current role visible even if it is full-admin (actor is full admin).
+    if not any(r.name == ctx.user_accounts.primary_role_name(user) for r in roles):
+        current = ctx.user_accounts.role_by_name(db, ctx.user_accounts.primary_role_name(user))
+        if current is not None:
+            roles = list(roles) + [current]
     access_all = bool(user.access_all_projects)
     selected = {p.uuid for p in (user.projects or [])}
     access = _project_access_form(ctx, db, access_all=access_all, selected_uuids=selected)
@@ -659,7 +676,14 @@ def admin_user_update(
     user = ctx.user_accounts.get_by_uuid(db, user_uuid)
     if user is None:
         return RedirectResponse("/admin/users", status_code=303)
-    roles = ctx.user_accounts.list_roles(db)
+    try:
+        ctx.user_accounts.ensure_can_edit_user(admin, user)
+    except CreoPDMError as exc:
+        return HTMLResponse(
+            f"<h1>403 Forbidden</h1><p>{exc.message}</p>",
+            status_code=403,
+        )
+    roles = ctx.user_accounts.assignable_roles_for(db, admin)
     access_all, project_uuids = _parse_project_access(
         project_access_present=project_access_present,
         access_all_projects=access_all_projects,
@@ -677,6 +701,7 @@ def admin_user_update(
                 "status": status,
                 "access_all_projects": access_all,
                 "project_uuids": project_uuids,
+                "actor": admin,
             }
             if password:
                 kwargs["password"] = password

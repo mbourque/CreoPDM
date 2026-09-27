@@ -550,13 +550,15 @@ The built-in Administrator role must not be accidentally removed.
 
 The system should prevent:
 
-- deleting the Administrator role;
+- deleting the Administrator role when it is the last full-admin path;
 
-- removing essential administrator permissions from the built-in role;
+- removing any of `users.manage`, `roles.manage`, or `settings.manage` when that would leave no ACTIVE user with **all three**;
 
-- disabling/deleting the last active Administrator account.
+- disabling or demoting the last active account that has full CreoPDM Administration.
 
-There must always be at least one active Administrator.
+There must always be at least one active user who can manage Users, Roles, and Settings.
+
+Only a full administrator (all three of those permissions) may edit another full administrator or assign a full-administrator role. An account with `users.manage` alone can manage non-admin users but cannot change administrator accounts.
 
 ---
 

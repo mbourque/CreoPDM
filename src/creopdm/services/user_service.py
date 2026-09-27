@@ -10,6 +10,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from creopdm.auth_constants import (
+    ADMINISTRATION_PERMISSION_KEYS,
     BUILTIN_PERMISSIONS,
     STARTER_ROLE_DESCRIPTIONS,
     STARTER_ROLE_PERMISSION_KEYS,
@@ -140,7 +141,10 @@ class UserService:
         return list(
             db.scalars(
                 select(User)
-                .options(selectinload(User.roles))
+                .options(
+                    selectinload(User.roles).selectinload(Role.permissions),
+                    selectinload(User.projects),
+                )
                 .order_by(User.username)
             ).all()
         )
@@ -193,6 +197,35 @@ class UserService:
 
     def can_manage_settings(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_SETTINGS_MANAGE)
+
+    def is_full_administrator(self, user: User) -> bool:
+        """True when the user has all CreoPDM Administration caps on one account."""
+        return ADMINISTRATION_PERMISSION_KEYS.issubset(self.permission_keys_for_user(user))
+
+    def role_is_full_administrator(self, role: Role) -> bool:
+        keys = {p.key for p in (role.permissions or [])}
+        return ADMINISTRATION_PERMISSION_KEYS.issubset(keys)
+
+    def ensure_can_edit_user(self, actor: User, target: User) -> None:
+        """Only a full administrator may change another full administrator."""
+        if self.is_full_administrator(target) and not self.is_full_administrator(actor):
+            raise ValidationAppError(
+                "Only a full administrator can edit another administrator."
+            )
+
+    def ensure_can_assign_role(self, actor: User, role: Role) -> None:
+        """Only a full administrator may assign a role that grants full admin."""
+        if self.role_is_full_administrator(role) and not self.is_full_administrator(actor):
+            raise ValidationAppError(
+                "Only a full administrator can assign a full administrator role."
+            )
+
+    def assignable_roles_for(self, db: Session, actor: User) -> list[Role]:
+        """Roles the actor may pick on Add/Edit user (hides full-admin roles for non-admins)."""
+        roles = self.list_roles(db)
+        if self.is_full_administrator(actor):
+            return roles
+        return [r for r in roles if not self.role_is_full_administrator(r)]
 
     def can_create_project(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_PROJECTS_CREATE)
@@ -247,7 +280,7 @@ class UserService:
             raise ValidationAppError("One or more permission keys are not in the catalog.")
         return [row.id for row in rows]
 
-    def _would_leave_zero_users_manage(
+    def _would_leave_zero_full_administrators(
         self,
         db: Session,
         *,
@@ -258,7 +291,11 @@ class UserService:
         user_new_role_id: int | None = None,
         user_new_status: str | None = None,
     ) -> bool:
-        """Simulate whether any ACTIVE user would still have users.manage."""
+        """True when no ACTIVE user would keep all CreoPDM Administration caps.
+
+        Full admin means users.manage + roles.manage + settings.manage on the
+        same account so Users, Roles, and Settings cannot all become unreachable.
+        """
         users = list(
             db.scalars(
                 select(User)
@@ -291,9 +328,12 @@ class UserService:
                 if role is None:
                     continue
                 keys.update(p.key for p in role.permissions)
-            if PERMISSION_USERS_MANAGE in keys:
+            if ADMINISTRATION_PERMISSION_KEYS.issubset(keys):
                 return False
         return True
+
+    # Back-compat alias for callers/tests that used the old name.
+    _would_leave_zero_users_manage = _would_leave_zero_full_administrators
 
     def create_role(
         self,
@@ -344,11 +384,12 @@ class UserService:
             role.description = description.strip()
         if permission_keys is not None:
             keys = frozenset(permission_keys)
-            if self._would_leave_zero_users_manage(
+            if self._would_leave_zero_full_administrators(
                 db, role_id=role.id, role_keys=keys
             ):
                 raise ValidationAppError(
-                    "Cannot remove users.manage from the last active administrator path."
+                    "Cannot leave the system with no active user who has "
+                    "users.manage, roles.manage, and settings.manage."
                 )
             db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
             for perm_id in self._permission_ids_for_keys(db, keys):
@@ -365,9 +406,10 @@ class UserService:
             raise ValidationAppError(
                 "Cannot delete a role that is still assigned to users. Reassign them first."
             )
-        if self._would_leave_zero_users_manage(db, deleting_role_id=role.id):
+        if self._would_leave_zero_full_administrators(db, deleting_role_id=role.id):
             raise ValidationAppError(
-                "Cannot delete the last role that grants users.manage to an active user."
+                "Cannot delete the last role that grants full CreoPDM Administration "
+                "(users, roles, and settings) to an active user."
             )
         db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
         db.delete(role)
@@ -450,6 +492,7 @@ class UserService:
         status: str = UserStatus.ACTIVE.value,
         access_all_projects: bool = True,
         project_uuids: list[str] | None = None,
+        actor: User | None = None,
     ) -> User:
         self.ensure_builtin_roles(db)
         uname = validate_username(username)
@@ -460,6 +503,8 @@ class UserService:
         role = self.role_by_name(db, role_name)
         if role is None:
             raise ValidationAppError(f"Unknown role '{role_name}'.")
+        if actor is not None:
+            self.ensure_can_assign_role(actor, role)
         user = User(
             uuid=str(uuid.uuid4()),
             username=uname,
@@ -524,10 +569,13 @@ class UserService:
         must_change_password: bool | None = None,
         access_all_projects: bool | None = None,
         project_uuids: list[str] | None = None,
+        actor: User | None = None,
     ) -> User:
         user = self.get_by_uuid(db, user_uuid)
         if user is None:
             raise NotFoundError("User not found.")
+        if actor is not None:
+            self.ensure_can_edit_user(actor, user)
         if display_name is not None:
             text = display_name.strip()
             if not text:
@@ -548,16 +596,19 @@ class UserService:
             role = self.role_by_name(db, role_name)
             if role is None:
                 raise ValidationAppError(f"Unknown role '{role_name}'.")
+            if actor is not None:
+                self.ensure_can_assign_role(actor, role)
             new_role_id = role.id
         if role_name is not None or new_status is not None:
-            if self._would_leave_zero_users_manage(
+            if self._would_leave_zero_full_administrators(
                 db,
                 exclude_user_id=user.id,
                 user_new_role_id=new_role_id,
                 user_new_status=new_status if new_status is not None else user.status,
             ):
                 raise ValidationAppError(
-                    "Cannot leave the system with no active user who can manage users."
+                    "Cannot leave the system with no active user who has "
+                    "users.manage, roles.manage, and settings.manage."
                 )
         if new_status is not None:
             user.status = new_status
