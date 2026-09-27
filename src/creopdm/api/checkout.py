@@ -11,7 +11,11 @@ from sqlalchemy.orm import Session
 
 from creopdm.api.deps import get_context, get_db, require_permission
 from creopdm.api.serializers import object_to_response
-from creopdm.auth_constants import PERMISSION_OBJECTS_CHECKIN, PERMISSION_OBJECTS_CHECKOUT
+from creopdm.auth_constants import (
+    PERMISSION_OBJECTS_CHECKIN,
+    PERMISSION_OBJECTS_CHECKOUT,
+    PERMISSION_OBJECTS_COPY_TO_VAULT,
+)
 from creopdm.constants import LifecycleState
 from creopdm.context import AppContext
 from creopdm.exceptions import ValidationAppError
@@ -194,9 +198,11 @@ def agent_cache_archive(
 @router.post("/api/objects/batch/workspace", response_model=BatchOperationResponse)
 def send_to_workspace(
     payload: BatchObjectRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_COPY_TO_VAULT)
     pairs = []
     for object_uuid in payload.object_ids:
         obj = ctx.objects.get_object(db, object_uuid)

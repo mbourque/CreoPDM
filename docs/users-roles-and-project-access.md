@@ -46,9 +46,9 @@ Permission keys (`projects.*`, `objects.*`, `users.manage`, `roles.manage`, `set
 
 | Starter role (default seed) | Can do | Cannot |
 | --- | --- | --- |
-| **Viewer** | Browse, open/download, Details (Open goes straight to open — no checkout dialog) | Authoring toolbar, checkout-on-open, Administration |
-| **Engineer** | Add, checkout, check-in, remove, revert, metadata | Create/edit/delete projects, users, roles, settings |
-| **PDM Manager** | Create/edit projects + Engineer authoring | Delete project, users, roles, settings |
+| **Viewer** | Browse, open/download, Details (Open goes straight to open — no checkout dialog) | Authoring toolbar, Copy to Vault, checkout-on-open, Administration |
+| **Engineer** | Add, checkout, check-in, remove, revert, metadata | Create/edit/delete projects, Copy to Vault, users, roles, settings |
+| **PDM Manager** | Create/edit projects + Engineer authoring + **Copy to Vault** | Delete project, users, roles, settings |
 | **Administrator** | Everything above + delete project + users + roles + settings | — |
 
 Automated coverage: `tests/unit/test_auth.py::test_every_starter_role_login_permission_matrix` creates one ephemeral user per starter role, logs each in, and asserts allow/deny for every built-in permission key (plus Files toolbar chrome).

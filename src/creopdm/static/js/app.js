@@ -3582,7 +3582,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!canCheckinMenu) closeCheckinMenu();
     setToolbarActionVisible(
       workspaceBtn,
-      selected.some((row) => row.dataset.inWorkspace !== "1")
+      document.body?.dataset?.canCopyToVault === "1" &&
+        selected.some((row) => row.dataset.inWorkspace !== "1")
     );
     const localNewSelected = selected.filter(
       (row) => isNewFileQueueRow(row) && row.dataset.localCache === "1"
@@ -4690,7 +4691,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const companionsWrap = $("#open-checkout-companions-wrap");
     const companionsNote = $("#open-checkout-companions-note");
     const wdWrap = $("#open-checkout-wd-wrap");
-    const wdNote = $("#open-checkout-wd-note");
     const wdBox = $("#open-checkout-set-wd");
     const openRadio = $("#open-action-open");
     const cancelBtn = $("#open-checkout-cancel");
@@ -4714,7 +4714,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (companionsWrap) companionsWrap.hidden = false;
     if (companionsNote) companionsNote.hidden = false;
     if (wdWrap) wdWrap.hidden = !showWd;
-    if (wdNote) wdNote.hidden = !showWd;
     openRadio.checked = true;
     if (wdBox) {
       wdBox.disabled = !showWd;

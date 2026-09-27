@@ -21,6 +21,7 @@ Typical permissions:
 - Manage lifecycle states
 - View audit logs
 - Perform normal engineering operations
+- Copy to Vault
 
 Administrators should have access to the complete **Administration** section.
 
@@ -47,6 +48,7 @@ Typical permissions:
 - View history
 - View audit information related to projects
 - Manage project-level configuration
+- Copy to Vault (`objects.copy_to_vault`)
 
 Should NOT normally be able to:
 
@@ -90,6 +92,7 @@ Should NOT normally be able to:
 - Override another user's checkout
 - Change global settings
 - Delete history
+- Copy to Vault
 - Release engineering data unless explicitly granted
 
 ---
@@ -120,6 +123,7 @@ Cannot:
 - Change lifecycle state
 - Manage projects
 - Manage users
+- Copy to Vault
 
 Viewer should be appropriate for users who need access to engineering information but do not author it.
 

@@ -21,6 +21,7 @@
   data-agent-base="{{ agent_base_url | default('http://127.0.0.1:8766') }}"
   data-workspace-poll-ms="{{ workspace_poll_interval_ms | default('5000') }}"
   data-can-checkout="{{ '1' if can_checkout else '0' }}"
+  data-can-copy-to-vault="{{ '1' if can_copy_to_vault else '0' }}"
   data-agent-token="{{ agent_token | default('') }}"
 >
   <header class="topbar">
@@ -98,9 +99,6 @@
         <input type="checkbox" id="open-checkout-set-wd" checked>
         Set Creo working directory to this project’s local workspace
       </label>
-      <p class="muted small" id="open-checkout-wd-note">
-        Uses the creopdm-agent cache folder on this PC so Creo opens and saves next to the checked-out files.
-      </p>
       <p class="error" id="open-checkout-error" hidden></p>
       <div class="dialog-actions">
         <button type="button" class="btn" id="open-checkout-cancel">Cancel</button>
@@ -1753,6 +1751,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push163"></script>
+  <script src="/client/app.js?v={{ app_version }}-push164"></script>
 </body>
 </html>

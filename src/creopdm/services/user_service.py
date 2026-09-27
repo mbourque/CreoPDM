@@ -17,6 +17,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_ADD,
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_CHECKOUT,
+    PERMISSION_OBJECTS_COPY_TO_VAULT,
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
@@ -212,6 +213,9 @@ class UserService:
 
     def can_update_metadata(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_OBJECTS_METADATA)
+
+    def can_copy_to_vault(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_OBJECTS_COPY_TO_VAULT)
 
     def count_active_users_with_permission(self, db: Session, key: str) -> int:
         users = db.scalars(

@@ -422,7 +422,11 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "Undo checkout on" in script
     assert 'id="open-checkout-set-wd"' in base
     assert "Set Creo working directory" in base
+    assert "open-checkout-wd-note" not in base
+    assert "Uses the creopdm-agent cache folder on this PC so Creo opens and saves" not in base
     assert "open-checkout-set-wd" in script
+    assert "data-can-copy-to-vault" in base
+    assert "canCopyToVault" in script
     assert "setWorkingDirectory" in _between(
         script, "async function openPdmObjectFromUi(", "function agentBase("
     )

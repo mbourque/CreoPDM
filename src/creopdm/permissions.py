@@ -10,6 +10,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_ADD,
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_CHECKOUT,
+    PERMISSION_OBJECTS_COPY_TO_VAULT,
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
@@ -40,6 +41,7 @@ class CapabilityFlags:
     can_remove_objects: bool
     can_revert_objects: bool
     can_update_metadata: bool
+    can_copy_to_vault: bool
 
 
 def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
@@ -57,6 +59,7 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_remove_objects=PERMISSION_OBJECTS_REMOVE in keys,
         can_revert_objects=PERMISSION_OBJECTS_REVERT in keys,
         can_update_metadata=PERMISSION_OBJECTS_METADATA in keys,
+        can_copy_to_vault=PERMISSION_OBJECTS_COPY_TO_VAULT in keys,
     )
 
 
@@ -86,6 +89,7 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_remove_objects = caps.can_remove_objects
     request.state.can_revert_objects = caps.can_revert_objects
     request.state.can_update_metadata = caps.can_update_metadata
+    request.state.can_copy_to_vault = caps.can_copy_to_vault
 
 
 def caps_dict(request: Request) -> dict:
@@ -102,4 +106,5 @@ def caps_dict(request: Request) -> dict:
         "can_remove_objects": bool(getattr(request.state, "can_remove_objects", False)),
         "can_revert_objects": bool(getattr(request.state, "can_revert_objects", False)),
         "can_update_metadata": bool(getattr(request.state, "can_update_metadata", False)),
+        "can_copy_to_vault": bool(getattr(request.state, "can_copy_to_vault", False)),
     }

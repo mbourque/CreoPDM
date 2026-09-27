@@ -481,6 +481,8 @@ def test_viewer_is_read_only(auth_client, auth_ctx, repo_parent):
     home = auth_client.get(f"/?project={project['uuid']}")
     assert home.status_code == 200
     assert 'data-can-checkout="0"' in home.text
+    assert 'data-can-copy-to-vault="0"' in home.text
+    assert 'id="workspace-btn"' not in home.text
     assert 'id="add-menu"' not in home.text
     assert 'id="checkout-menu"' not in home.text
     assert 'id="checkin-menu"' not in home.text
@@ -498,6 +500,12 @@ def test_viewer_is_read_only(auth_client, auth_ctx, repo_parent):
         )
     )
     _assert_forbidden(auth_client.post(f"/api/objects/{obj['uuid']}/checkout"))
+    _assert_forbidden(
+        auth_client.post(
+            "/api/objects/batch/workspace",
+            json={"object_ids": [obj["uuid"]]},
+        )
+    )
 
 
 @requires_git
@@ -582,6 +590,7 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
     """Migration/startup seed grants matrix keys (Viewer none; Engineer authoring)."""
     from creopdm.auth_constants import (
         PERMISSION_OBJECTS_CHECKOUT,
+        PERMISSION_OBJECTS_COPY_TO_VAULT,
         PERMISSION_PROJECTS_CREATE,
         PERMISSION_PROJECTS_DELETE,
         PERMISSION_ROLES_MANAGE,
@@ -608,11 +617,14 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
             }
     assert keys_by_role[BuiltinRole.VIEWER.value] == set()
     assert PERMISSION_OBJECTS_CHECKOUT in keys_by_role[BuiltinRole.ENGINEER.value]
+    assert PERMISSION_OBJECTS_COPY_TO_VAULT not in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_PROJECTS_CREATE not in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_PROJECTS_CREATE in keys_by_role[BuiltinRole.PDM_MANAGER.value]
+    assert PERMISSION_OBJECTS_COPY_TO_VAULT in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_PROJECTS_DELETE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_USERS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_ROLES_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
+    assert PERMISSION_OBJECTS_COPY_TO_VAULT in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     for role_name, expected in STARTER_ROLE_PERMISSION_KEYS.items():
         assert keys_by_role[role_name] >= set(expected)
 
@@ -828,6 +840,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_OBJECTS_ADD,
         PERMISSION_OBJECTS_CHECKIN,
         PERMISSION_OBJECTS_CHECKOUT,
+        PERMISSION_OBJECTS_COPY_TO_VAULT,
         PERMISSION_OBJECTS_METADATA,
         PERMISSION_OBJECTS_REMOVE,
         PERMISSION_OBJECTS_REVERT,
@@ -887,6 +900,11 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         home = auth_client.get(f"/?project={project_id}")
         assert home.status_code == 200
         assert f'data-can-checkout="{"1" if PERMISSION_OBJECTS_CHECKOUT in allowed else "0"}"' in home.text
+        assert f'data-can-copy-to-vault="{"1" if PERMISSION_OBJECTS_COPY_TO_VAULT in allowed else "0"}"' in home.text
+        if PERMISSION_OBJECTS_COPY_TO_VAULT in allowed:
+            assert 'id="workspace-btn"' in home.text
+        else:
+            assert 'id="workspace-btn"' not in home.text
         if PERMISSION_OBJECTS_ADD in allowed:
             assert 'id="add-menu"' in home.text
         else:
@@ -943,6 +961,10 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             PERMISSION_OBJECTS_METADATA: auth_client.post(
                 f"/api/objects/{object_id}/creo-metadata",
                 json={},
+            ),
+            PERMISSION_OBJECTS_COPY_TO_VAULT: auth_client.post(
+                "/api/objects/batch/workspace",
+                json={"object_ids": ["00000000-0000-0000-0000-000000000000"]},
             ),
         }
 
