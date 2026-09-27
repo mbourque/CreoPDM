@@ -304,6 +304,12 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "userCanCheckout()" in _between(
         script, "function promptOpenCheckout(", "function checkoutBeforeOpen("
     )
+    prompt_fn = _between(
+        script, "function promptOpenCheckout(", "function checkoutBeforeOpen("
+    )
+    assert "hostedCreoJS()" in prompt_fn
+    assert "skip a one-option dialog" in prompt_fn or "!allowCheckout" in prompt_fn
+    assert "showWd" in prompt_fn
     assert "agentPdmAuth" in script
     assert "...agentPdmAuth()" in script or "agentPdmAuth()" in script
     open_fn = _between(script, "async function openPdmObject(", "function openPdmLaunchResult(")
@@ -420,6 +426,15 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "setWorkingDirectory" in _between(
         script, "async function openPdmObjectFromUi(", "function agentBase("
     )
+    prompt_open = _between(
+        script, "function promptOpenCheckout(", "function checkoutBeforeOpen("
+    )
+    assert "Working directory only applies inside Creo's embedded browser" in prompt_open
+    assert "skip a one-option dialog" in prompt_open
+    assert "showWd && Boolean(wdBox?.checked)" in prompt_open or "showWd && Boolean(wdBox" in prompt_open
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "only inside Creo’s embedded browser" in docs or "only inside Creo's embedded browser" in docs
+    assert "opens immediately" in docs.lower() or "Open dialog" in docs
 
 
 def test_new_project_and_sidebar_collapse_handlers_present():

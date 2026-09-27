@@ -4689,6 +4689,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const fileWrap = $("#open-checkout-file-wrap");
     const companionsWrap = $("#open-checkout-companions-wrap");
     const companionsNote = $("#open-checkout-companions-note");
+    const wdWrap = $("#open-checkout-wd-wrap");
+    const wdNote = $("#open-checkout-wd-note");
     const wdBox = $("#open-checkout-set-wd");
     const openRadio = $("#open-action-open");
     const cancelBtn = $("#open-checkout-cancel");
@@ -4696,21 +4698,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!(dialog instanceof HTMLDialogElement) || !form || !openRadio) {
       return Promise.resolve({ action: "open", setWorkingDirectory: false });
     }
+    // Object availability AND signed-in user objects.checkout capability.
+    const allowCheckout = Boolean(canCheckout) && userCanCheckout();
+    // Working directory only applies inside Creo's embedded browser.
+    const showWd = hostedCreoJS();
+    // Viewer (or any case with no checkout choice): skip a one-option dialog.
+    if (!allowCheckout) {
+      return Promise.resolve({ action: "open", setWorkingDirectory: false });
+    }
     if (lead) {
       lead.textContent = `How do you want to open ${filename}?`;
     }
     showError(err, "");
-    // Object availability AND signed-in user objects.checkout capability.
-    const allowCheckout = Boolean(canCheckout) && userCanCheckout();
-    if (fileWrap) fileWrap.hidden = !allowCheckout;
-    if (companionsWrap) companionsWrap.hidden = !allowCheckout;
-    if (companionsNote) companionsNote.hidden = !allowCheckout;
+    if (fileWrap) fileWrap.hidden = false;
+    if (companionsWrap) companionsWrap.hidden = false;
+    if (companionsNote) companionsNote.hidden = false;
+    if (wdWrap) wdWrap.hidden = !showWd;
+    if (wdNote) wdNote.hidden = !showWd;
     openRadio.checked = true;
-    if (wdBox) wdBox.checked = true;
+    if (wdBox) {
+      wdBox.disabled = !showWd;
+      wdBox.checked = showWd;
+    }
     const fileRadio = $("#open-action-checkout-file");
     const companionsRadio = $("#open-action-checkout-companions");
-    if (fileRadio) fileRadio.disabled = !allowCheckout;
-    if (companionsRadio) companionsRadio.disabled = !allowCheckout;
+    if (fileRadio) fileRadio.disabled = false;
+    if (companionsRadio) companionsRadio.disabled = false;
 
     return new Promise((resolve) => {
       const finish = (action) => {
@@ -4724,7 +4737,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         resolve({
           action,
-          setWorkingDirectory: Boolean(wdBox?.checked),
+          setWorkingDirectory: showWd && Boolean(wdBox?.checked),
         });
       };
       const onCancel = (event) => {

@@ -33,7 +33,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Click a project, folder breadcrumb, or Administration / Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Not Connected” or drop the Creo link just because you changed folders; hard-reload the page during a folder/project switch |
-| Sign in as **Viewer** | Browse projects, open/download files, use Details; Open without checking out | See Add / Checkout / Check In / Remove, New project, or “Check out … then open” in the Open dialog |
+| Sign in as **Viewer** | Browse projects, open/download files, use Details; Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove, New project, or “Check out … then open” in the Open dialog |
 | Add or remove files/folders | Update the list so it matches reality | Leave old rows on screen until you press F5 |
 | Wait while something big runs (Add, Remove, Check In…) | Show a busy message so you know it’s working | Sit frozen with no feedback |
 
@@ -187,7 +187,9 @@ On a normal office network (`http://…`), the app should try the CreoPDM agent�
 
 ### When you open a file that’s not checked out to you
 
-The app asks how you want to open it:
+If you **cannot** check out (Viewer role, no `objects.checkout`, or the file is not free to check out), the app **opens immediately** — no dialog. There is only “open without checking out,” so asking is pointless.
+
+Otherwise the app asks how you want to open it:
 
 | You choose | App should |
 |------------|------------|
@@ -195,7 +197,7 @@ The app asks how you want to open it:
 | **Check out this file, then open** | Lock this file, download it, then open |
 | **Check out this file and its companions, then open** | Lock this file plus related models Creo needs, then open |
 
-Optional: **Set Creo working directory…** (on by default) points Creo at the local workspace folder.
+**Set Creo working directory…** appears on that dialog **only inside Creo’s embedded browser** (on by default). Outside Creo (Chrome/Edge/etc.) it is hidden and is never applied — working directory only exists in Creo. Use the toolbar **Set Working Directory** the same way (Creo only).
 
 If open seems to do nothing, check the error line under the toolbar, and that creopdm-agent is running on the Creo PC. Large downloads can take a while.
 

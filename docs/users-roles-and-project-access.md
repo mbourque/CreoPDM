@@ -46,7 +46,7 @@ Permission keys (`projects.*`, `objects.*`, `users.manage`, `roles.manage`, `set
 
 | Starter role (default seed) | Can do | Cannot |
 | --- | --- | --- |
-| **Viewer** | Browse, open/download, Details | Authoring toolbar, checkout-on-open, Administration |
+| **Viewer** | Browse, open/download, Details (Open goes straight to open — no checkout dialog) | Authoring toolbar, checkout-on-open, Administration |
 | **Engineer** | Add, checkout, check-in, remove, revert, metadata | Create/edit/delete projects, users, roles, settings |
 | **PDM Manager** | Create/edit projects + Engineer authoring | Delete project, users, roles, settings |
 | **Administrator** | Everything above + delete project + users + roles + settings | — |
