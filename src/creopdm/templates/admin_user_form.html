@@ -90,18 +90,4 @@
     </section>
   </form>
 </article>
-<script>
-(function () {
-  var all = document.getElementById("access-all-projects");
-  var list = document.getElementById("project-access-list");
-  if (!all || !list || list.tagName !== "SELECT") return;
-  function sync() {
-    var on = all.checked;
-    list.disabled = on;
-    list.classList.toggle("is-disabled", on);
-  }
-  all.addEventListener("change", sync);
-  sync();
-})();
-</script>
 {% endblock %}

@@ -342,6 +342,18 @@ def test_admin_user_project_access_filters_projects(auth_client, auth_ctx):
     assert 'multiple' in form.text
     assert 'id="project-access-list"' in form.text
     assert "type=\"checkbox\" name=\"project_uuid\"" not in form.text
+    # Soft-nav strips inline scripts; toggle must live in app.js (document-level).
+    assert "getElementById(\"access-all-projects\")" not in form.text
+    from pathlib import Path
+
+    script = (
+        Path(__file__).resolve().parents[2] / "src" / "creopdm" / "static" / "js" / "app.js"
+    ).read_text(encoding="utf-8")
+    assert "function syncProjectAccessUi" in script
+    assert "__creopdmProjectAccessBound" in script
+    assert 'id !== "access-all-projects"' in script
+    assert "list.disabled = locked" in script
+    assert "syncProjectAccessUi();" in script
 
     created = auth_client.post(
         "/admin/users/new",

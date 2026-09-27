@@ -323,6 +323,12 @@ def test_soft_nav_skips_creojs_reconnect():
         ROOT / "src" / "creopdm" / "templates" / "base.html"
     ).read_text(encoding="utf-8")
     soft_nav = _between(script, "function softNavigate(", "function leavePage(")
+    assert "innerHTML = nextShell.innerHTML" in soft_nav or "curShell.innerHTML" in soft_nav
+    # Soft-nav does not execute inline scripts; project-access toggle is document-bound.
+    assert "function syncProjectAccessUi" in script
+    assert "__creopdmProjectAccessBound" in script
+    assert 'id !== "access-all-projects"' in script
+    assert "syncProjectAccessUi();" in script
     assert "window.__creopdmBoot({ soft: true })" in soft_nav
     assert "Keep the live Creo.JS bridge" in soft_nav
     assert "softNavTail" in soft_nav

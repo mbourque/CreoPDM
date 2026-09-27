@@ -54,6 +54,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return node.nodeType === 1 ? node : node.parentElement;
   }
 
+  /** Admin user form: All projects checkbox enables/disables the multi-select. */
+  function syncProjectAccessUi(root = document) {
+    const all = root.querySelector("#access-all-projects");
+    const list = root.querySelector("#project-access-list");
+    if (!all || !list || String(list.tagName || "").toUpperCase() !== "SELECT") return;
+    const locked = Boolean(all.checked);
+    list.disabled = locked;
+    list.classList.toggle("is-disabled", locked);
+    if (locked) list.setAttribute("aria-disabled", "true");
+    else list.removeAttribute("aria-disabled");
+  }
+
   function inCreoBrowser() {
     try {
       if (window.external && window.external.ptc) return true;
@@ -7876,6 +7888,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     isSoftNavUrl,
     withBusy,
     eventEl,
+    syncProjectAccessUi,
   };
   if (!window.__creopdmSoftNavBound) {
     window.__creopdmSoftNavBound = true;
@@ -7907,9 +7920,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       void api.withBusy("Loading…", () => api.softNavigate(window.location.href, "none"));
     });
   }
+  // Soft-nav replaces shell HTML without running inline <script>; keep project-access
+  // toggle alive with a document-level listener (not aborted on soft boot).
+  if (!window.__creopdmProjectAccessBound) {
+    window.__creopdmProjectAccessBound = true;
+    const onProjectAccessToggle = (event) => {
+      const api = window.__creopdmSoftNavApi;
+      const t = event?.target;
+      if (!t || t.id !== "access-all-projects") return;
+      if (api && typeof api.syncProjectAccessUi === "function") api.syncProjectAccessUi();
+      else syncProjectAccessUi();
+    };
+    origAddEventListener.call(document, "change", onProjectAccessToggle, true);
+    origAddEventListener.call(document, "input", onProjectAccessToggle, true);
+  }
 
   restoreStoredFilters();
   syncToolbar();
+  syncProjectAccessUi();
   const pendingProjectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
   if (pendingProjectId) void refreshPendingCheckinIds(pendingProjectId);
 
