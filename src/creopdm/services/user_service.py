@@ -206,8 +206,19 @@ class UserService:
         keys = {p.key for p in (role.permissions or [])}
         return ADMINISTRATION_PERMISSION_KEYS.issubset(keys)
 
+    def can_edit_user(self, actor: User, target: User) -> bool:
+        try:
+            self.ensure_can_edit_user(actor, target)
+            return True
+        except ValidationAppError:
+            return False
+
     def ensure_can_edit_user(self, actor: User, target: User) -> None:
-        """Only a full administrator may change another full administrator."""
+        """Full admins cannot edit themselves; only full admins may edit other full admins."""
+        if actor.id == target.id and self.is_full_administrator(actor):
+            raise ValidationAppError(
+                "Administrators cannot edit their own account. Ask another administrator."
+            )
         if self.is_full_administrator(target) and not self.is_full_administrator(actor):
             raise ValidationAppError(
                 "Only a full administrator can edit another administrator."

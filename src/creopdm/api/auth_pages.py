@@ -467,7 +467,6 @@ def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Se
         return admin
     users = ctx.user_accounts.list_users(db)
     can_roles = ctx.user_accounts.can_manage_roles(admin)
-    actor_is_full = ctx.user_accounts.is_full_administrator(admin)
     rows = [
         {
             "uuid": u.uuid,
@@ -482,7 +481,7 @@ def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Se
                 else str(len(u.projects or []))
             ),
             "is_full_admin": ctx.user_accounts.is_full_administrator(u),
-            "can_edit": actor_is_full or not ctx.user_accounts.is_full_administrator(u),
+            "can_edit": ctx.user_accounts.can_edit_user(admin, u),
         }
         for u in users
     ]
@@ -499,7 +498,7 @@ def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Se
                 can_manage_settings=True,
             ),
             "users": rows,
-            "actor_is_full_admin": actor_is_full,
+            "actor_is_full_admin": ctx.user_accounts.is_full_administrator(admin),
         },
     )
 

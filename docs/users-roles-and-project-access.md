@@ -36,7 +36,7 @@ Others do not see Administration; direct URLs return **403**.
 
 **Lockout safety:** at least one **ACTIVE** user must keep **all three** CreoPDM Administration permissions on the same account. Saving a role, demoting/disabling a user, or deleting a role is rejected if it would leave nobody who can manage Users, Roles, and Settings.
 
-**Admins edit admins only:** a full administrator (all three caps) may edit other full administrators and assign full-admin roles. An account with only `users.manage` can manage non-admin users, but cannot open/edit an administrator, promote someone to a full-admin role, or see Administrator in the role dropdown.
+**Admins edit admins only:** a full administrator (all three caps) may edit **other** full administrators and assign full-admin roles. Full administrators **cannot** edit their own account (another admin must change them). An account with only `users.manage` can manage non-admin users, but cannot open/edit an administrator, promote someone to a full-admin role, or see Administrator in the role dropdown.
 
 ### Project access (per user)
 

@@ -558,7 +558,7 @@ The system should prevent:
 
 There must always be at least one active user who can manage Users, Roles, and Settings.
 
-Only a full administrator (all three of those permissions) may edit another full administrator or assign a full-administrator role. An account with `users.manage` alone can manage non-admin users but cannot change administrator accounts.
+Only a full administrator (all three of those permissions) may edit another full administrator or assign a full-administrator role. An account with `users.manage` alone can manage non-admin users but cannot change administrator accounts. Full administrators cannot edit their own user record — another administrator must change them.
 
 ---
 

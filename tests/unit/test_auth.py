@@ -1103,7 +1103,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
         },
         follow_redirects=False,
     )
-    assert demote.status_code == 400, demote.text
+    assert demote.status_code in (400, 403), demote.text
 
     # With a second full admin, stripping settings.manage from Administrator is allowed
     # only if that second account keeps all three (via a dedicated full-admin role).
@@ -1258,9 +1258,16 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
     )
     assert edit_eng.status_code == 303, edit_eng.text
 
-    # Full admin can still open/edit another full admin (lockout still blocks last demote).
+    # Full admin cannot edit themselves; another full admin can demote them (lockout still applies).
     _login(auth_client, "admin", "AdminPass1")
-    assert auth_client.get(f"/admin/users/{admin_uuid}").status_code == 200
+    listed_as_admin = auth_client.get("/admin/users")
+    assert listed_as_admin.status_code == 200
+    assert f'href="/admin/users/{admin_uuid}"' not in listed_as_admin.text
+    assert "cannot edit their own account" in listed_as_admin.text
+    self_denied = auth_client.get(f"/admin/users/{admin_uuid}")
+    assert self_denied.status_code == 403
+    assert "own account" in self_denied.text.lower()
+
     with auth_ctx.session_factory() as db:
         auth_ctx.user_accounts.create_user(
             db,
@@ -1272,6 +1279,9 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
             actor=db.scalar(select(User).where(User.username == "admin")),
         )
         db.commit()
+
+    _login(auth_client, "backup", "BackupPass1")
+    assert auth_client.get(f"/admin/users/{admin_uuid}").status_code == 200
     demote_ok = auth_client.post(
         f"/admin/users/{admin_uuid}",
         data={
@@ -1405,6 +1415,19 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         ("eng", BuiltinRole.ENGINEER.value),
         ("view", BuiltinRole.VIEWER.value),
     )
+
+    # Spare full admin edits other accounts' membership (admins cannot self-edit).
+    with auth_ctx.session_factory() as db:
+        auth_ctx.user_accounts.create_user(
+            db,
+            username="ops",
+            display_name="Ops Admin",
+            password="OpsPass1",
+            role_name=BuiltinRole.ADMINISTRATOR.value,
+            must_change_password=False,
+            actor=db.scalar(select(User).where(User.username == "admin")),
+        )
+        db.commit()
 
     # Shared fixtures created as admin (always allowed).
     _login(auth_client, "admin", "AdminPass1")
@@ -1569,6 +1592,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             assert undone.status_code == 200, undone.text
 
         # Project membership (per user, not per role permission key).
+        # Use ops (not the signed-in admin) so Administrator can be restricted too.
         with auth_ctx.session_factory() as db:
             row = db.scalar(select(User).where(User.username == username))
             assert row is not None
@@ -1576,7 +1600,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             display_name = row.display_name
             assert row.access_all_projects is True
 
-        _login(auth_client, "admin", "AdminPass1")
+        _login(auth_client, "ops", "OpsPass1")
         restricted = auth_client.post(
             f"/admin/users/{user_uuid}",
             data={
@@ -1605,7 +1629,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             assert denied_other.status_code == 403, denied_other.text
             assert denied_other.json()["error"]["code"] == "FORBIDDEN"
 
-        _login(auth_client, "admin", "AdminPass1")
+        _login(auth_client, "ops", "OpsPass1")
         cleared = auth_client.post(
             f"/admin/users/{user_uuid}",
             data={
@@ -1631,7 +1655,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             assert auth_client.get(f"/api/projects/{project_id}").status_code == 403
 
         # Restore All projects so later roles still share fixtures (and admin stays usable).
-        _login(auth_client, "admin", "AdminPass1")
+        _login(auth_client, "ops", "OpsPass1")
         restored = auth_client.post(
             f"/admin/users/{user_uuid}",
             data={
