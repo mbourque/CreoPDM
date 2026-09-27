@@ -3509,7 +3509,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const selected = selectedRows();
     const ids = selected.flatMap(rowObjectIds);
     const canOpenFile = Boolean(selectedOpenSpec());
-    const canOpenWorkspace = Boolean(openWorkspaceBtn?.dataset.project);
+    // Local Explorer open needs creopdm-agent on this PC — hide when offline
+    // (server vault fallback is useless for remote Linux hosts / unsupported paths).
+    const canOpenWorkspace =
+      Boolean(openWorkspaceBtn?.dataset.project) && agentIsOnline();
     const canOpenMenu = canOpenFile || canOpenWorkspace;
     setToolbarActionVisible(openBtn, canOpenFile);
     setToolbarActionVisible(openWorkspaceBtn, canOpenWorkspace);
@@ -4497,6 +4500,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!inSession && wasConnected && window.CreoJS) {
       return null;
     }
+    // Keep agent online flag fresh so Open workspace… can hide when offline.
+    const agent = await probeCreoAgent();
+    if (window.__creopdmSoftNavBusy || softNavBusy) return agent;
     if (inSession) {
       pill.textContent = `Creo: Connected · ${modeName}`;
       pill.dataset.state = "ok";
@@ -4506,7 +4512,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       pill.dataset.state = "idle";
       pill.title = "Opens Creo models as a browser download for the OS association";
     }
-    return null;
+    return agent;
   }
 
   function showCreoSessionControls() {
@@ -4547,14 +4553,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   void creoJSReady.then(() => {
     void (async () => {
       // CREOPDM_STATUS_POLL_V2: at most one /health on load; repeat only if agent says > 0.
-      const modeKey = creoOpenMode() || "association";
-      let agent = null;
-      if (modeKey === "embedded") {
-        agent = await probeCreoAgent();
-        await refreshCreoStatusPill(agent);
-      } else {
-        await refreshCreoStatusPill(null);
-      }
+      // Always probe once — Open workspace… visibility depends on agent online.
+      const agent = await probeCreoAgent();
+      await refreshCreoStatusPill(agent);
+      syncToolbar();
       // First load: Creo.JS bridge can appear after first paint — re-check a few times.
       if (!hostedCreoJS()) {
         let bridgeTries = 0;
@@ -4562,7 +4564,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           bridgeTries += 1;
           if (hostedCreoJS() || bridgeTries >= 40) {
             window.clearInterval(bridgePoll);
-            void refreshCreoStatusPill(agent);
+            void refreshCreoStatusPill(agent).then(() => syncToolbar());
           }
         }, 250);
       }
@@ -4571,12 +4573,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const parsed = Number(agent.status_poll_interval_seconds);
         seconds = Number.isFinite(parsed) ? parsed : 0;
       }
-      if (modeKey === "embedded" && seconds > 0 && !window.__creopdmStatusPollId) {
+      // Poll agent for Open workspace + Embedded status (any open mode).
+      if (seconds > 0 && !window.__creopdmStatusPollId) {
         const interval = Math.min(120000, Math.max(1000, Math.round(seconds * 1000)));
         // Survive soft folder/project boots (those abort pageIntervals).
         window.__creopdmStatusPollId = window.setInterval(() => {
           if (window.__creopdmSoftNavBusy) return;
-          void refreshCreoStatusPill();
+          void refreshCreoStatusPill().then(() => syncToolbar());
         }, interval);
       }
     })();
@@ -4851,12 +4854,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function probeCreoAgent() {
     try {
       const response = await fetch(`${agentBase()}/health`, { method: "GET" });
-      if (!response.ok) return null;
+      if (!response.ok) {
+        window.__creopdmAgentOnline = false;
+        return null;
+      }
       const body = await response.json().catch(() => null);
-      return body && body.ok ? body : null;
+      const ok = body && body.ok ? body : null;
+      window.__creopdmAgentOnline = Boolean(ok);
+      return ok;
     } catch {
+      window.__creopdmAgentOnline = false;
       return null;
     }
+  }
+
+  function agentIsOnline() {
+    return window.__creopdmAgentOnline === true;
   }
 
   async function pushLocalWorkspaceToVault(projectId, items) {
@@ -5685,34 +5698,31 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     showError($("#toolbar-error"), "");
     showOk("");
     const agent = await probeCreoAgent();
-    if (agent) {
-      const opened = await withBusy("Opening local workspace…", async () => {
-        const response = await fetch(`${agentBase()}/open-folder`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            project_id: projectId,
-            vault_folder: openWorkspaceBtn.dataset.vaultFolder || currentVaultFolder(),
-            folder,
-          }),
-        });
-        if (!response.ok) {
-          showError($("#toolbar-error"), await readError(response));
-          return null;
-        }
-        return response.json();
-      });
-      if (opened) showOk("Opened the local workspace folder.");
+    if (!agent) {
+      showError(
+        $("#toolbar-error"),
+        "Start creopdm-agent on this PC to open the local workspace folder."
+      );
+      syncToolbar();
       return;
     }
-    const query = folder ? `?folder=${encodeURIComponent(folder)}` : "";
-    const result = await postAction(
-      `/api/projects/${projectId}/workspace/open${query}`,
-      undefined,
-      "POST",
-      "Opening vault…"
-    );
-    if (result) showOk("Opened the vault folder on the CreoPDM host.");
+    const opened = await withBusy("Opening local workspace…", async () => {
+      const response = await fetch(`${agentBase()}/open-folder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project_id: projectId,
+          vault_folder: openWorkspaceBtn.dataset.vaultFolder || currentVaultFolder(),
+          folder,
+        }),
+      });
+      if (!response.ok) {
+        showError($("#toolbar-error"), await readError(response));
+        return null;
+      }
+      return response.json();
+    });
+    if (opened) showOk("Opened the local workspace folder.");
   });
 
   undoBtn?.addEventListener("click", async () => {

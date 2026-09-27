@@ -389,6 +389,18 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert html.index('id="open-btn"') < html.index('id="open-workspace-btn"')
     assert ">Open selected…<" in html
     assert ">Open workspace…<" in html
+    assert "Requires creopdm-agent" in html
+    assert "Falls back to the vault folder" not in html
+    assert "agentIsOnline" in script
+    assert "canOpenWorkspace" in script
+    assert "agentIsOnline()" in _between(
+        script, "function syncToolbar(", "function setCheckinQueueCounts("
+    )
+    assert "Start creopdm-agent on this PC to open the local workspace folder" in script
+    assert "Opened the vault folder on the CreoPDM host" not in script
+    assert "do not show the control" in (
+        ROOT / "docs" / "user-interactions.md"
+    ).read_text(encoding="utf-8")
     assert "function toggleOpenMenu" in script
     assert "closeOpenMenu" in script
     assert 'id="checkout-menu"' in html

@@ -376,7 +376,7 @@
                 title="Open the selected file in Creo or its Windows associated program.">Open selected…</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-workspace-btn"
                 {% if selected %}data-project="{{ selected.uuid }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}
-                title="Open this project’s local workspace on this PC (creopdm-agent cache). Falls back to the vault folder on the CreoPDM host if the agent is not running.">Open workspace…</button>
+                title="Open this project’s local workspace on this PC (creopdm-agent cache). Requires creopdm-agent.">Open workspace…</button>
       </div>
     </div>
     {% if can_checkout %}
