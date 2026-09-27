@@ -1,7 +1,10 @@
+from pathlib import Path
+
 from creopdm_agent.config import (
     AgentConfig,
     apply_runtime_settings,
     build_pdm_url,
+    example_path_for_ui,
     load_config,
     save_config,
     split_pdm_url,
@@ -81,9 +84,24 @@ def test_settings_initial_payload_fills_defaults(tmp_path, monkeypatch):
     assert payload["status_poll_interval_seconds"] == "0"
     assert payload["local_root"]
     assert payload["local_root_default"] == payload["local_root"]
+    assert payload["local_root_default_example"] == example_path_for_ui(
+        payload["local_root_default"]
+    )
 
     saved = _initial_payload(
         AgentConfig(pdm_url="http://creopdm.local:52113", port=8766)
     )
     assert saved["pdm_host"] == "creopdm.local"
     assert saved["pdm_port"] == "52113"
+
+
+def test_example_path_for_ui_hides_account_name(tmp_path, monkeypatch):
+    home = tmp_path / "Users" / "micha"
+    home.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: home)
+    cache = home / "AppData" / "Local" / "CreoPDM-agent" / "workspaces"
+    cache.mkdir(parents=True)
+    shown = example_path_for_ui(cache)
+    assert "micha" not in shown
+    assert "<user>" in shown
+    assert shown.endswith(str(Path("AppData") / "Local" / "CreoPDM-agent" / "workspaces"))

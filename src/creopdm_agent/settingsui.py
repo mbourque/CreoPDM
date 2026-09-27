@@ -15,6 +15,7 @@ from creopdm_agent.config import (
     build_pdm_url,
     config_path,
     default_data_dir,
+    example_path_for_ui,
     load_config,
     save_config,
     split_pdm_url,
@@ -99,7 +100,7 @@ $agentPort = Add-Box ([string]$initial.agent_port)
 Add-Note 'Browser calls http://127.0.0.1:<port>. Match CreoPDM → Local Creo agent URL. Restart tray after changing.'
 Add-Label 'Local cache folder'
 $cache = Add-Box ([string]$initial.local_root)
-Add-Note ('Default: ' + [string]$initial.local_root_default)
+Add-Note ('Default: ' + [string]$initial.local_root_default_example)
 Add-Label 'Health check interval (seconds)'
 $health = Add-Box ([string]$initial.health_interval_seconds)
 Add-Note 'How often the tray checks local agent + CreoPDM. 0 = Status menu only. Minimum 5 when enabled.'
@@ -200,6 +201,8 @@ def _initial_payload(settings: AgentConfig) -> dict[str, object]:
         "agent_port": str(settings.port or DEFAULT_PORT),
         "local_root": display_root,
         "local_root_default": default_root,
+        # Example note only — do not put the signed-in account name in UI copy.
+        "local_root_default_example": example_path_for_ui(default_root),
         "health_interval_seconds": str(health),
         "status_poll_interval_seconds": str(status_poll),
     }
@@ -341,7 +344,7 @@ def run_settings_tk(settings: AgentConfig | None = None) -> int:
         "Local cache folder",
         "local_root",
         str(payload["local_root"]),
-        f"Default: {payload['local_root_default']}",
+        f"Default: {payload['local_root_default_example']}",
     )
     row(
         "Health check interval (seconds)",

@@ -24,6 +24,27 @@ def default_data_dir() -> Path:
     return (root / APP_NAME).resolve()
 
 
+def example_path_for_ui(path: Path | str) -> str:
+    """Show home-relative paths with ``<user>`` instead of the signed-in account name."""
+    text = str(path or "").strip()
+    if not text:
+        return text
+    try:
+        home = Path.home().resolve()
+    except OSError:
+        return text
+    try:
+        candidate = Path(text).expanduser()
+        try:
+            candidate = candidate.resolve()
+        except OSError:
+            pass
+        relative = candidate.relative_to(home)
+    except (ValueError, OSError):
+        return text
+    return str(home.parent / "<user>" / relative)
+
+
 def build_pdm_url(host: str, port: int | None = None, *, https: bool = False) -> str:
     """Compose a CreoPDM base URL from host / port fields."""
     text = (host or "").strip()
