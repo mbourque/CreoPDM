@@ -335,7 +335,9 @@ def test_admin_user_project_access_filters_projects(auth_client, auth_ctx):
     assert "Project access" in form.text
     assert 'id="access-all-projects"' in form.text
     assert 'name="project_uuid"' in form.text
-    assert "project-access-list" in form.text
+    assert 'multiple' in form.text
+    assert 'id="project-access-list"' in form.text
+    assert "type=\"checkbox\" name=\"project_uuid\"" not in form.text
 
     created = auth_client.post(
         "/admin/users/new",

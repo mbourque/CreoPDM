@@ -41,8 +41,8 @@ On **Add user** / **Edit user**, admins set which projects the account may open:
 | Control | Behavior |
 | --- | --- |
 | **All projects** (checkbox, default on) | User sees every project; the project list below is disabled |
-| Project checklist (scrollable multi-select) | When All projects is off, only checked projects appear in the app and APIs |
-| None checked (All off) | User can sign in but cannot browse or open any project (**empty** project list / **403** on project URLs) |
+| Project multi-select (scrollable) | When All projects is off, only selected projects appear in the app and APIs |
+| None selected (All off) | User can sign in but cannot browse or open any project (**empty** project list / **403** on project URLs) |
 
 Creating a project while signed in as a restricted user automatically grants that user access to the new project.
 

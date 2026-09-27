@@ -67,19 +67,18 @@
           <input type="checkbox" name="access_all_projects" id="access-all-projects" value="1" {% if access_all_projects %}checked{% endif %}>
           <span>All projects</span>
         </label>
-        <p class="muted small">When All projects is off, choose which projects this user can open. If none are selected, they cannot use the app.</p>
-        <div id="project-access-list" class="project-access-list{% if access_all_projects %} is-disabled{% endif %}" {% if access_all_projects %}aria-disabled="true"{% endif %}>
-          {% if project_options %}
-          {% for p in project_options %}
-          <label class="choice">
-            <input type="checkbox" name="project_uuid" value="{{ p.uuid }}" {% if p.checked %}checked{% endif %} {% if access_all_projects %}disabled{% endif %}>
-            <span>{% if p.number %}{{ p.number }} — {% endif %}{{ p.name }}</span>
-          </label>
-          {% endfor %}
-          {% else %}
-          <p class="muted small">No projects exist yet. Create a project first, or leave All projects checked.</p>
-          {% endif %}
-        </div>
+        <p class="muted small">When All projects is off, multi-select which projects this user can open (Ctrl/Cmd-click). If none are selected, they cannot use the app.</p>
+        {% if project_options %}
+        <label class="project-access-select-label">Projects
+          <select name="project_uuid" id="project-access-list" class="project-access-select{% if access_all_projects %} is-disabled{% endif %}" multiple size="8" {% if access_all_projects %}disabled{% endif %}>
+            {% for p in project_options %}
+            <option value="{{ p.uuid }}" {% if p.checked %}selected{% endif %}>{% if p.number %}{{ p.number }} — {% endif %}{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        {% else %}
+        <p class="muted small" id="project-access-list">No projects exist yet. Create a project first, or leave All projects checked.</p>
+        {% endif %}
       </fieldset>
 
       <div class="form-actions">
@@ -93,15 +92,11 @@
 (function () {
   var all = document.getElementById("access-all-projects");
   var list = document.getElementById("project-access-list");
-  if (!all || !list) return;
+  if (!all || !list || list.tagName !== "SELECT") return;
   function sync() {
     var on = all.checked;
+    list.disabled = on;
     list.classList.toggle("is-disabled", on);
-    if (on) list.setAttribute("aria-disabled", "true");
-    else list.removeAttribute("aria-disabled");
-    list.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
-      cb.disabled = on;
-    });
   }
   all.addEventListener("change", sync);
   sync();
