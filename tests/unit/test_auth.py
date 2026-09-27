@@ -481,6 +481,7 @@ def test_viewer_is_read_only(auth_client, auth_ctx, repo_parent):
     home = auth_client.get(f"/?project={project['uuid']}")
     assert home.status_code == 200
     assert 'data-can-checkout="0"' in home.text
+    assert 'data-can-view="1"' in home.text
     assert 'data-can-copy-to-vault="0"' in home.text
     assert 'id="workspace-btn"' not in home.text
     assert 'id="add-menu"' not in home.text
@@ -591,6 +592,7 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
     from creopdm.auth_constants import (
         PERMISSION_OBJECTS_CHECKOUT,
         PERMISSION_OBJECTS_COPY_TO_VAULT,
+        PERMISSION_OBJECTS_VIEW,
         PERMISSION_PROJECTS_CREATE,
         PERMISSION_PROJECTS_DELETE,
         PERMISSION_ROLES_MANAGE,
@@ -615,7 +617,8 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
                 for p in db.scalars(select(Permission)).all()
                 if p.id in perm_ids
             }
-    assert keys_by_role[BuiltinRole.VIEWER.value] == set()
+    assert keys_by_role[BuiltinRole.VIEWER.value] == {PERMISSION_OBJECTS_VIEW}
+    assert PERMISSION_OBJECTS_VIEW in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_OBJECTS_CHECKOUT in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_OBJECTS_COPY_TO_VAULT not in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_PROJECTS_CREATE not in keys_by_role[BuiltinRole.ENGINEER.value]
@@ -632,7 +635,7 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
 @requires_git
 def test_roles_admin_create_custom_and_gate(auth_client, auth_ctx, repo_parent):
     """roles.manage can create a custom role; caps follow DB only."""
-    from creopdm.auth_constants import PERMISSION_OBJECTS_CHECKOUT
+    from creopdm.auth_constants import PERMISSION_OBJECTS_CHECKOUT, PERMISSION_OBJECTS_VIEW
 
     _setup_admin_and_users(auth_client, auth_ctx)
     _login(auth_client, "admin", "AdminPass1")
@@ -647,8 +650,8 @@ def test_roles_admin_create_custom_and_gate(auth_client, auth_ctx, repo_parent):
         "/admin/roles/new",
         data={
             "name": "Checkout Only",
-            "description": "Can lock files only",
-            "permission": PERMISSION_OBJECTS_CHECKOUT,
+            "description": "Can view and lock files",
+            "permission": [PERMISSION_OBJECTS_VIEW, PERMISSION_OBJECTS_CHECKOUT],
         },
         follow_redirects=False,
     )
@@ -684,12 +687,53 @@ def test_roles_admin_create_custom_and_gate(auth_client, auth_ctx, repo_parent):
 
     _login(auth_client, "locker", "LockerPass1")
     home = auth_client.get(f"/?project={project['uuid']}")
+    assert home.status_code == 200
+    assert 'data-can-view="1"' in home.text
     assert 'data-can-checkout="1"' in home.text
     assert 'id="new-project-btn"' not in home.text
     assert auth_client.get("/admin/roles", follow_redirects=False).status_code == 403
     checked = auth_client.post(f"/api/objects/{part.json()['uuid']}/checkout")
     assert checked.status_code == 200, checked.text
     _assert_forbidden(auth_client.post("/api/projects", json={"name": "Nope"}))
+
+
+@requires_git
+def test_role_with_no_permissions_cannot_browse(auth_client, auth_ctx, repo_parent):
+    """A signed-in user with zero permissions must not browse projects or files."""
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+    created = auth_client.post(
+        "/admin/roles/new",
+        data={"name": "Empty Role", "description": "No caps"},
+        follow_redirects=False,
+    )
+    assert created.status_code == 303, created.text
+    user = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Nobody",
+            "username": "nobody",
+            "email": "",
+            "role": "Empty Role",
+            "status": UserStatus.ACTIVE.value,
+            "password": "NobodyPass1",
+            "password_confirm": "NobodyPass1",
+        },
+        follow_redirects=False,
+    )
+    assert user.status_code == 303, user.text
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(User).where(User.username == "nobody"))
+        assert row is not None
+        row.must_change_password = False
+        db.commit()
+    project = auth_client.post("/api/projects", json={"name": "Hidden"}).json()
+
+    _login(auth_client, "nobody", "NobodyPass1")
+    _assert_forbidden(auth_client.get("/"))
+    _assert_forbidden(auth_client.get("/api/projects"))
+    _assert_forbidden(auth_client.get(f"/api/projects/{project['uuid']}"))
+    assert auth_client.get("/admin", follow_redirects=False).status_code == 403
 
 
 @requires_git
@@ -844,6 +888,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_OBJECTS_METADATA,
         PERMISSION_OBJECTS_REMOVE,
         PERMISSION_OBJECTS_REVERT,
+        PERMISSION_OBJECTS_VIEW,
         PERMISSION_PROJECTS_CREATE,
         PERMISSION_PROJECTS_DELETE,
         PERMISSION_PROJECTS_EDIT,
@@ -894,34 +939,42 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         allowed = set(STARTER_ROLE_PERMISSION_KEYS[role_name])
         _login(auth_client, username, password)
 
-        # Browse is always allowed for signed-in users.
-        assert auth_client.get(f"/api/projects/{project_id}").status_code == 200
-        assert auth_client.get(f"/api/objects/{object_id}").status_code == 200
-        home = auth_client.get(f"/?project={project_id}")
-        assert home.status_code == 200
-        assert f'data-can-checkout="{"1" if PERMISSION_OBJECTS_CHECKOUT in allowed else "0"}"' in home.text
-        assert f'data-can-copy-to-vault="{"1" if PERMISSION_OBJECTS_COPY_TO_VAULT in allowed else "0"}"' in home.text
-        if PERMISSION_OBJECTS_COPY_TO_VAULT in allowed:
-            assert 'id="workspace-btn"' in home.text
+        # Browse requires objects.view.
+        assert auth_client.get(f"/api/projects/{project_id}").status_code == (
+            200 if PERMISSION_OBJECTS_VIEW in allowed else 403
+        )
+        if PERMISSION_OBJECTS_VIEW in allowed:
+            assert auth_client.get(f"/api/objects/{object_id}").status_code == 200
+            home = auth_client.get(f"/?project={project_id}")
+            assert home.status_code == 200
+            assert f'data-can-checkout="{"1" if PERMISSION_OBJECTS_CHECKOUT in allowed else "0"}"' in home.text
+            assert f'data-can-view="1"' in home.text
+            assert f'data-can-copy-to-vault="{"1" if PERMISSION_OBJECTS_COPY_TO_VAULT in allowed else "0"}"' in home.text
+            if PERMISSION_OBJECTS_COPY_TO_VAULT in allowed:
+                assert 'id="workspace-btn"' in home.text
+            else:
+                assert 'id="workspace-btn"' not in home.text
+            if PERMISSION_OBJECTS_ADD in allowed:
+                assert 'id="add-menu"' in home.text
+            else:
+                assert 'id="add-menu"' not in home.text
+            if PERMISSION_PROJECTS_CREATE in allowed:
+                assert 'id="new-project-btn"' in home.text
+            else:
+                assert 'id="new-project-btn"' not in home.text
+            if PERMISSION_USERS_MANAGE in allowed or PERMISSION_ROLES_MANAGE in allowed or PERMISSION_SETTINGS_MANAGE in allowed:
+                assert "Administration" in home.text
+            else:
+                assert "Administration" not in home.text
         else:
-            assert 'id="workspace-btn"' not in home.text
-        if PERMISSION_OBJECTS_ADD in allowed:
-            assert 'id="add-menu"' in home.text
-        else:
-            assert 'id="add-menu"' not in home.text
-        if PERMISSION_PROJECTS_CREATE in allowed:
-            assert 'id="new-project-btn"' in home.text
-        else:
-            assert 'id="new-project-btn"' not in home.text
-        if PERMISSION_USERS_MANAGE in allowed or PERMISSION_ROLES_MANAGE in allowed or PERMISSION_SETTINGS_MANAGE in allowed:
-            assert "Administration" in home.text
-        else:
-            assert "Administration" not in home.text
+            _assert_forbidden(auth_client.get(f"/api/objects/{object_id}"))
+            _assert_forbidden(auth_client.get(f"/?project={project_id}"))
 
         probes: dict[str, object] = {
             PERMISSION_USERS_MANAGE: auth_client.get("/admin/users", follow_redirects=False),
             PERMISSION_ROLES_MANAGE: auth_client.get("/admin/roles", follow_redirects=False),
             PERMISSION_SETTINGS_MANAGE: auth_client.get("/api/settings", follow_redirects=False),
+            PERMISSION_OBJECTS_VIEW: auth_client.get(f"/api/projects/{project_id}"),
             PERMISSION_PROJECTS_CREATE: auth_client.post(
                 "/api/projects",
                 json={"name": f"Create-{username}-{uuid4().hex[:6]}"},

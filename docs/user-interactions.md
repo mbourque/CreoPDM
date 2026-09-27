@@ -33,7 +33,8 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Click a project, folder breadcrumb, or Administration / Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Not Connected” or drop the Creo link just because you changed folders; hard-reload the page during a folder/project switch |
-| Sign in as **Viewer** | Browse projects, open/download files, use Details; Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove, New project, or “Check out … then open” in the Open dialog |
+| Sign in as **Viewer** | Browse projects, open/download files (`objects.view`), use Details; Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove, New project, Copy to Vault, or “Check out … then open” in the Open dialog |
+| Sign in with a role that has **no permissions** | Get **403** on Files / project APIs (not allowed to browse) | Use the app as if signed in with Viewer |
 | Add or remove files/folders | Update the list so it matches reality | Leave old rows on screen until you press F5 |
 | Wait while something big runs (Add, Remove, Check In…) | Show a busy message so you know it’s working | Sit frozen with no feedback |
 
@@ -370,7 +371,7 @@ Automated coverage lives mainly in:
 - `tests/unit/test_user_interaction_validations.py`
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
-- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `data-can-checkout`; `test_every_starter_role_login_permission_matrix` logs in each starter role and asserts every permission allow/deny)
+- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `objects.view` / `data-can-checkout`; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
 - Related checkout / check-in / soft-nav tests
 

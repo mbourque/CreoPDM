@@ -17,6 +17,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
+    PERMISSION_OBJECTS_VIEW,
 )
 from creopdm.context import AppContext
 from creopdm.constants import ActivityAction
@@ -54,9 +55,11 @@ def _file_response(path, filename: str) -> FileResponse:
 @router.get("/api/objects/{object_id}/content")
 def object_content(
     object_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> FileResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     obj = ctx.objects.get_object(db, object_id)
     project = obj.project
     try:
@@ -276,9 +279,11 @@ def remove_batch(
 @router.get("/api/objects/{object_id}", response_model=ObjectResponse)
 def get_object(
     object_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ObjectResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     obj = ctx.objects.get_object(db, object_id)
     return present_object(ctx, db, obj)
 
@@ -286,9 +291,11 @@ def get_object(
 @router.get("/api/objects/{object_id}/history", response_model=list[ObjectVersionResponse])
 def object_history(
     object_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> list[ObjectVersionResponse]:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     versions = ctx.objects.object_history(db, object_id)
     return [item for item in (version_to_response(v) for v in versions) if item is not None]
 
@@ -312,10 +319,12 @@ def revert_object_version(
 @router.get("/api/objects/{object_id}/creo-metadata", response_model=CreoMetadataResponse)
 def get_creo_metadata(
     object_id: str,
+    request: Request,
     version: str | None = Query(default=None),
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> CreoMetadataResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     return ctx.metadata.get(db, object_id, version)
 
 
@@ -361,11 +370,13 @@ def post_creo_metadata(
 @router.get("/api/objects/{object_id}/where-used", response_model=WhereUsedResponse)
 def object_where_used(
     object_id: str,
+    request: Request,
     debug: bool = False,
     vault_scan: bool = True,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WhereUsedResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     return ctx.metadata.where_used(db, object_id, debug=debug, vault_scan=vault_scan)
 
 

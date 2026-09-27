@@ -42,12 +42,12 @@ Empty databases seed four **starter** roles (**Administrator**, **PDM Manager**,
 
 ## Phase 2 (shipped): core role matrix
 
-Permission keys (`projects.*`, `objects.*`, `users.manage`, `roles.manage`, `settings.manage`) gate mutating APIs (**403** when missing). The Files toolbar and project New/Delete controls hide when the matching capability is false. Viewer Open dialog offers view-only open (no “Check out … then open”) when `objects.checkout` is missing (`data-can-checkout` on the page).
+Permission keys (`projects.*`, `objects.*` including **`objects.view`**, `users.manage`, `roles.manage`, `settings.manage`) gate APIs (**403** when missing). Browse/open/download requires **`objects.view`** — a role with no permissions cannot use the Files page. The Files toolbar and project New/Delete controls hide when the matching capability is false. Viewer Open dialog offers view-only open (no “Check out … then open”) when `objects.checkout` is missing (`data-can-checkout` on the page).
 
 | Starter role (default seed) | Can do | Cannot |
 | --- | --- | --- |
-| **Viewer** | Browse, open/download, Details (Open goes straight to open — no checkout dialog) | Authoring toolbar, Copy to Vault, checkout-on-open, Administration |
-| **Engineer** | Add, checkout, check-in, remove, revert, metadata | Create/edit/delete projects, Copy to Vault, users, roles, settings |
+| **Viewer** | Browse, open/download, Details (`objects.view` only; Open goes straight to open — no checkout dialog) | Authoring toolbar, Copy to Vault, checkout-on-open, Administration |
+| **Engineer** | View + Add, checkout, check-in, remove, revert, metadata | Create/edit/delete projects, Copy to Vault, users, roles, settings |
 | **PDM Manager** | Create/edit projects + Engineer authoring + **Copy to Vault** | Delete project, users, roles, settings |
 | **Administrator** | Everything above + delete project + users + roles + settings | — |
 

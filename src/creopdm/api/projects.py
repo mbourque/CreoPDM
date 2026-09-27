@@ -17,6 +17,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
+    PERMISSION_OBJECTS_VIEW,
     PERMISSION_PROJECTS_CREATE,
     PERMISSION_PROJECTS_DELETE,
     PERMISSION_PROJECTS_EDIT,
@@ -58,9 +59,11 @@ logger = get_logger("projects")
 
 @router.get("/api/projects", response_model=list[ProjectResponse])
 def list_projects(
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> list[ProjectResponse]:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     return [project_to_response(project) for project in ctx.projects.list_projects(db)]
 
 
@@ -85,9 +88,11 @@ def create_project(
 @router.get("/api/projects/{project_id}", response_model=ProjectResponse)
 def get_project(
     project_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ProjectResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     return project_to_response(ctx.projects.get_project(db, project_id))
 
 
@@ -147,12 +152,14 @@ def forget_project(
 @router.get("/api/projects/{project_id}/objects", response_model=list[ObjectResponse])
 def list_objects(
     project_id: str,
+    request: Request,
     q: str | None = None,
     object_type: str | None = None,
     lifecycle_state: str | None = None,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> list[ObjectResponse]:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     project = ctx.projects.get_project(db, project_id)
     objects = ctx.objects.search(
         db,
@@ -167,9 +174,11 @@ def list_objects(
 @router.get("/api/projects/{project_id}/status", response_model=ProjectStatusResponse)
 def project_status(
     project_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ProjectStatusResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     counts = ctx.projects.project_status(db, project_id)
     return ProjectStatusResponse.model_validate(counts)
 
@@ -177,9 +186,11 @@ def project_status(
 @router.get("/api/projects/{project_id}/workspace-watch", response_model=WorkspaceWatchResponse)
 def workspace_watch(
     project_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WorkspaceWatchResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     project = ctx.projects.get_project(db, project_id)
     known = ctx.objects.list_path_index(db, project.id)
     return WorkspaceWatchResponse.model_validate(ctx.workspaces.watch_stamp(project, known))
@@ -188,9 +199,11 @@ def workspace_watch(
 @router.get("/api/projects/{project_id}/checkin-preview", response_model=CheckinPreviewResponse)
 def project_checkin_preview(
     project_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> CheckinPreviewResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     project = ctx.projects.get_project(db, project_id)
     return CheckinPreviewResponse.model_validate(ctx.checkins.preview_queue(db, project))
 
@@ -198,9 +211,11 @@ def project_checkin_preview(
 @router.get("/api/projects/{project_id}/checkin-queue")
 def project_checkin_queue_view(
     project_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> dict:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     project = ctx.projects.get_project(db, project_id)
     objects = ctx.objects.list_objects(db, project.id)
     return ctx.workspaces.project_checkin_queue(project, objects)
@@ -209,9 +224,11 @@ def project_checkin_queue_view(
 @router.get("/api/projects/{project_id}/checkouts", response_model=list[ObjectResponse])
 def list_project_checkouts(
     project_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> list[ObjectResponse]:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     project = ctx.projects.get_project(db, project_id)
     objects = ctx.checkouts.list_for_project(db, project.id)
     return present_objects(ctx, db, objects)
@@ -263,9 +280,11 @@ def start_rebuild_where_used(
 )
 def rebuild_where_used_status(
     project_id: str,
+    request: Request,
     ctx: AppContext = Depends(get_context),
 ) -> WhereUsedIndexJobResponse:
     """Poll background Where Used index job status (memory only — never waits on SQLite)."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     return _where_used_job_response(ctx.where_used_index.get(project_id))
 
 
@@ -465,10 +484,12 @@ def choose_workspace_folder(
 @router.post("/api/projects/{project_id}/workspace/open", status_code=204)
 def open_workspace_folder(
     project_id: str,
+    request: Request,
     folder: str | None = Query(default=None),
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> Response:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     project = ctx.projects.get_project(db, project_id)
     opened = ctx.workspaces.explorer_directory(project, folder or "")
     try:
@@ -506,10 +527,12 @@ async def put_project_workspace_content(
 @router.get("/api/projects/{project_id}/workspace/content")
 def workspace_file_content(
     project_id: str,
+    request: Request,
     path: str = Query(..., min_length=1),
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> FileResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     project = ctx.projects.get_project(db, project_id)
     target = ctx.workspaces.file_path(project, path)
     if not target.is_file():

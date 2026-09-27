@@ -29,6 +29,7 @@ PERMISSION_PROJECTS_CREATE = "projects.create"
 PERMISSION_PROJECTS_EDIT = "projects.edit"
 PERMISSION_PROJECTS_DELETE = "projects.delete"
 PERMISSION_OBJECTS_ADD = "objects.add"
+PERMISSION_OBJECTS_VIEW = "objects.view"
 PERMISSION_OBJECTS_CHECKOUT = "objects.checkout"
 PERMISSION_OBJECTS_CHECKIN = "objects.checkin"
 PERMISSION_OBJECTS_REMOVE = "objects.remove"
@@ -53,6 +54,7 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_PROJECTS_CREATE, "Create projects"),
     (PERMISSION_PROJECTS_EDIT, "Edit project properties"),
     (PERMISSION_PROJECTS_DELETE, "Delete or forget projects"),
+    (PERMISSION_OBJECTS_VIEW, "Browse projects and open or download files"),
     (PERMISSION_OBJECTS_ADD, "Add files and folders to projects"),
     (PERMISSION_OBJECTS_CHECKOUT, "Check out objects and undo own checkout"),
     (PERMISSION_OBJECTS_CHECKIN, "Check in objects"),
@@ -75,6 +77,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "Objects",
         (
+            PERMISSION_OBJECTS_VIEW,
             PERMISSION_OBJECTS_ADD,
             PERMISSION_OBJECTS_CHECKOUT,
             PERMISSION_OBJECTS_CHECKIN,
@@ -87,6 +90,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 _AUTHORING = (
+    PERMISSION_OBJECTS_VIEW,
     PERMISSION_OBJECTS_ADD,
     PERMISSION_OBJECTS_CHECKOUT,
     PERMISSION_OBJECTS_CHECKIN,
@@ -105,7 +109,7 @@ STARTER_ROLE_PERMISSION_KEYS: dict[str, tuple[str, ...]] = {
         PERMISSION_OBJECTS_COPY_TO_VAULT,
     ),
     StarterRole.ENGINEER.value: _AUTHORING,
-    StarterRole.VIEWER.value: (),
+    StarterRole.VIEWER.value: (PERMISSION_OBJECTS_VIEW,),
 }
 
 # Back-compat alias (seed path only — do not overlay at runtime).

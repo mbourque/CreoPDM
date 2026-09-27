@@ -112,6 +112,7 @@ Typical permissions:
 - View parameters
 - View history
 - Download permitted files
+- **`objects.view`** (browse / open / download)
 
 Cannot:
 

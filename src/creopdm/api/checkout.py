@@ -15,6 +15,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_CHECKOUT,
     PERMISSION_OBJECTS_COPY_TO_VAULT,
+    PERMISSION_OBJECTS_VIEW,
 )
 from creopdm.constants import LifecycleState
 from creopdm.context import AppContext
@@ -138,10 +139,12 @@ def undo_checkout_batch(
 @router.post("/api/objects/batch/agent-cache-manifest", response_model=AgentCacheManifestResponse)
 def agent_cache_manifest(
     payload: BatchObjectRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> AgentCacheManifestResponse:
     """Content identities for agent-cache hit detection (no file bodies)."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     objects = ctx.objects.get_objects(db, payload.object_ids)
     if len(objects) != len(payload.object_ids):
         found = {obj.uuid for obj in objects}
@@ -162,11 +165,13 @@ def agent_cache_manifest(
 @router.post("/api/objects/batch/agent-cache-archive")
 def agent_cache_archive(
     payload: BatchObjectRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> FileResponse:
     """Zip vault files (nested relative paths) for one-shot agent-cache download — no Creo open prep."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     objects = ctx.objects.get_objects(db, payload.object_ids)
     if len(objects) != len(payload.object_ids):
         found = {obj.uuid for obj in objects}

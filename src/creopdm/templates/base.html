@@ -21,6 +21,7 @@
   data-agent-base="{{ agent_base_url | default('http://127.0.0.1:8766') }}"
   data-workspace-poll-ms="{{ workspace_poll_interval_ms | default('5000') }}"
   data-can-checkout="{{ '1' if can_checkout else '0' }}"
+  data-can-view="{{ '1' if can_view_objects else '0' }}"
   data-can-copy-to-vault="{{ '1' if can_copy_to_vault else '0' }}"
   data-agent-token="{{ agent_token | default('') }}"
 >
@@ -1751,6 +1752,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push165"></script>
+  <script src="/client/app.js?v={{ app_version }}-push166"></script>
 </body>
 </html>

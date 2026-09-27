@@ -21,6 +21,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
+    PERMISSION_OBJECTS_VIEW,
     PERMISSION_PROJECTS_CREATE,
     PERMISSION_PROJECTS_DELETE,
     PERMISSION_PROJECTS_EDIT,
@@ -198,6 +199,9 @@ class UserService:
 
     def can_add_objects(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_OBJECTS_ADD)
+
+    def can_view_objects(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_OBJECTS_VIEW)
 
     def can_checkout(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_OBJECTS_CHECKOUT)

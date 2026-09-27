@@ -15,8 +15,9 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object, present_objects
-from creopdm.api.deps import get_context, get_db
+from creopdm.api.deps import get_context, get_db, require_permission
 from creopdm.api.serializers import project_to_response, revision_display
+from creopdm.auth_constants import PERMISSION_OBJECTS_VIEW
 from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPSED_COOKIE
 from creopdm.context import AppContext
 from creopdm.exceptions import ProjectNotFoundError
@@ -295,6 +296,7 @@ def home(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> HTMLResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     projects = [project_to_response(p) for p in ctx.projects.list_projects(db)]
     selected_uuid = request.query_params.get("project") or ctx.config.settings.ui.last_project_uuid
     selected = None
@@ -387,6 +389,7 @@ def object_detail(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> HTMLResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     project = ctx.projects.get_project(db, project_id)
     obj = ctx.objects.get_object(db, object_id)
     history = ctx.objects.object_history(db, object_id)

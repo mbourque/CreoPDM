@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from creopdm.api.deps import get_context, get_db
+from creopdm.api.deps import get_context, get_db, require_permission
+from creopdm.auth_constants import PERMISSION_OBJECTS_VIEW
 from creopdm.context import AppContext
 from creopdm.schemas.common import CreoOpenRequest, CreoOpenResponse, CreoStatusResponse
 
@@ -31,9 +32,11 @@ def creo_status(ctx: AppContext = Depends(get_context)) -> CreoStatusResponse:
 @router.post("/api/creo/open", response_model=CreoOpenResponse)
 def open_in_creo(
     payload: CreoOpenRequest,
+    request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> CreoOpenResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     if payload.object_id:
         result = ctx.creo_service.open_object(
             db,

@@ -14,6 +14,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
+    PERMISSION_OBJECTS_VIEW,
     PERMISSION_PROJECTS_CREATE,
     PERMISSION_PROJECTS_DELETE,
     PERMISSION_PROJECTS_EDIT,
@@ -35,6 +36,7 @@ class CapabilityFlags:
     can_create_project: bool
     can_edit_project: bool
     can_delete_project: bool
+    can_view_objects: bool
     can_add_objects: bool
     can_checkout: bool
     can_checkin: bool
@@ -53,6 +55,7 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_create_project=PERMISSION_PROJECTS_CREATE in keys,
         can_edit_project=PERMISSION_PROJECTS_EDIT in keys,
         can_delete_project=PERMISSION_PROJECTS_DELETE in keys,
+        can_view_objects=PERMISSION_OBJECTS_VIEW in keys,
         can_add_objects=PERMISSION_OBJECTS_ADD in keys,
         can_checkout=PERMISSION_OBJECTS_CHECKOUT in keys,
         can_checkin=PERMISSION_OBJECTS_CHECKIN in keys,
@@ -83,6 +86,7 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_create_project = caps.can_create_project
     request.state.can_edit_project = caps.can_edit_project
     request.state.can_delete_project = caps.can_delete_project
+    request.state.can_view_objects = caps.can_view_objects
     request.state.can_add_objects = caps.can_add_objects
     request.state.can_checkout = caps.can_checkout
     request.state.can_checkin = caps.can_checkin
@@ -100,6 +104,7 @@ def caps_dict(request: Request) -> dict:
         "can_create_project": bool(getattr(request.state, "can_create_project", False)),
         "can_edit_project": bool(getattr(request.state, "can_edit_project", False)),
         "can_delete_project": bool(getattr(request.state, "can_delete_project", False)),
+        "can_view_objects": bool(getattr(request.state, "can_view_objects", False)),
         "can_add_objects": bool(getattr(request.state, "can_add_objects", False)),
         "can_checkout": bool(getattr(request.state, "can_checkout", False)),
         "can_checkin": bool(getattr(request.state, "can_checkin", False)),
