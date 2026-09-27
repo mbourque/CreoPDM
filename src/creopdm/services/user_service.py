@@ -13,6 +13,7 @@ from creopdm.auth_constants import (
     BUILTIN_PERMISSIONS,
     BUILTIN_ROLE_DESCRIPTIONS,
     BuiltinRole,
+    PERMISSION_SETTINGS_MANAGE,
     PERMISSION_USERS_MANAGE,
     UserStatus,
 )
@@ -130,6 +131,9 @@ class UserService:
 
     def can_manage_users(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_USERS_MANAGE)
+
+    def can_manage_settings(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_SETTINGS_MANAGE)
 
     def create_user(
         self,

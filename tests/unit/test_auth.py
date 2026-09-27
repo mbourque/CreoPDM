@@ -196,6 +196,30 @@ def test_admin_can_create_user_non_admin_cannot(auth_client, auth_ctx):
     denied = auth_client.get("/admin/users", follow_redirects=False)
     assert denied.status_code == 403
 
+    home = auth_client.get("/", follow_redirects=False)
+    assert home.status_code == 200
+    assert 'href="/settings"' not in home.text
+    assert auth_client.get("/settings", follow_redirects=False).status_code == 403
+    assert auth_client.get("/api/settings", follow_redirects=False).status_code == 403
+    assert auth_client.get("/api/settings").json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_admin_can_open_settings(auth_client):
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    home = auth_client.get("/")
+    assert 'href="/settings"' in home.text
+    assert auth_client.get("/settings").status_code == 200
+    assert auth_client.get("/api/settings").status_code == 200
+
 
 def test_unauthenticated_api_returns_401(auth_client):
     auth_client.post(
@@ -252,3 +276,77 @@ def test_checkout_uses_static_provider_username(client, repo_parent, identity, d
         row = db.scalar(select(Checkout).where(Checkout.object_id == eng.id))
         assert row is not None
         assert row.user_name == "session.alice"
+
+
+def _setup_admin_and_engineers(auth_client, auth_ctx, *usernames: str) -> None:
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    for name in usernames:
+        created = auth_client.post(
+            "/admin/users/new",
+            data={
+                "display_name": name.title(),
+                "username": name,
+                "email": "",
+                "role": BuiltinRole.ENGINEER.value,
+                "status": UserStatus.ACTIVE.value,
+                "password": f"{name.title()}Pass1",
+                "password_confirm": f"{name.title()}Pass1",
+            },
+            follow_redirects=False,
+        )
+        assert created.status_code == 303, created.text
+    with auth_ctx.session_factory() as db:
+        for name in usernames:
+            user = db.scalar(select(User).where(User.username == name))
+            assert user is not None
+            user.must_change_password = False
+        db.commit()
+    auth_client.get("/logout", follow_redirects=False)
+
+
+def _login(auth_client, username: str, password: str) -> None:
+    auth_client.get("/logout", follow_redirects=False)
+    ok = auth_client.post(
+        "/login",
+        data={"username": username, "password": password},
+        follow_redirects=False,
+    )
+    assert ok.status_code == 303, ok.text
+
+
+@requires_git
+def test_paul_checkout_blocks_david(auth_client, auth_ctx, repo_parent):
+    """Session users: only the holder may own a checkout (Paul vs David)."""
+    _setup_admin_and_engineers(auth_client, auth_ctx, "paul", "david")
+    _login(auth_client, "paul", "PaulPass1")
+    project = auth_client.post("/api/projects", json={"name": "Shared Part"}).json()
+    created = auth_client.post(
+        f"/api/projects/{project['uuid']}/objects",
+        files={"file": ("shaft.prt", b"payload", "application/octet-stream")},
+        data={"comment": "init"},
+    )
+    assert created.status_code == 201, created.text
+    obj = created.json()
+    checked = auth_client.post(f"/api/objects/{obj['uuid']}/checkout")
+    assert checked.status_code == 200, checked.text
+    assert checked.json()["checkout_user"] == "paul"
+
+    _login(auth_client, "david", "DavidPass1")
+    denied = auth_client.post(f"/api/objects/{obj['uuid']}/checkout")
+    assert denied.status_code == 409, denied.text
+    body = denied.json()["error"]
+    assert body["code"] == "OBJECT_ALREADY_CHECKED_OUT"
+    assert body["details"]["user"] == "paul"
+
+    listed = auth_client.get(f"/api/objects/{obj['uuid']}")
+    assert listed.json()["checkout_user"] == "paul"
+    assert listed.json()["owned_by_me"] is False

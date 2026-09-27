@@ -31,6 +31,14 @@ Administrators (permission `users.manage`) see an **Administration** link in the
 - After a successful **Add user**, you return to the users list
 - New users must change their password on first sign-in
 
+### Settings (administrators only)
+
+Only users with `settings.manage` (built-in **Administrator**) see the **Settings** link and can open `/settings` or call `/api/settings`. Engineers and other roles get **403**.
+
+### Checkout exclusivity
+
+A file may be checked out by **one** user at a time. If Paul has a checkout, David cannot check out the same file until Paul checks in or undoes the checkout. The checkout row stores the login **username**.
+
 Built-in roles are seeded: **Administrator**, **PDM Manager**, **Engineer**, **Viewer**. Role capability details remain in [initial-built-in-roles.md](initial-built-in-roles.md).
 
 ### Deferred (later phases)

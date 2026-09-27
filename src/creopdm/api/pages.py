@@ -146,6 +146,7 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
         **_PAGE_DEFAULTS,
         "auth_user": auth_user,
         "can_manage_users": bool(getattr(request.state, "can_manage_users", False)),
+        "can_manage_settings": bool(getattr(request.state, "can_manage_settings", False)),
         **context,
     }
     try:
@@ -469,6 +470,11 @@ def settings_page(
 ) -> HTMLResponse:
     from creopdm.api.settings import settings_to_response
 
+    if ctx.auth_enabled and not getattr(request.state, "can_manage_settings", False):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>Only administrators can open Settings.</p>",
+            status_code=403,
+        )
     return render(
         request,
         "settings.html",
@@ -488,6 +494,11 @@ def settings_types_page(
 ) -> HTMLResponse:
     from creopdm.api.settings import settings_to_response
 
+    if ctx.auth_enabled and not getattr(request.state, "can_manage_settings", False):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>Only administrators can open Settings.</p>",
+            status_code=403,
+        )
     return render(
         request,
         "settings_types.html",

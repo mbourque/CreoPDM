@@ -163,6 +163,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
         set_request_identity(None)
         request.state.auth_user = None
         request.state.can_manage_users = False
+        request.state.can_manage_settings = False
         path = request.url.path or "/"
 
         public = path in {
@@ -176,6 +177,8 @@ def create_app(context: AppContext | None = None) -> FastAPI:
         } or path.startswith("/static") or path.startswith("/client/")
 
         if not ctx.auth_enabled:
+            # Tests / StaticUserProvider: no login gate; keep Settings available.
+            request.state.can_manage_settings = True
             if isinstance(ctx.users, StaticUserProvider):
                 set_request_identity(ctx.users.get_current_user())
             try:
@@ -203,6 +206,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
                 set_request_identity(identity)
                 request.state.auth_user = user
                 request.state.can_manage_users = ctx.user_accounts.can_manage_users(user)
+                request.state.can_manage_settings = ctx.user_accounts.can_manage_settings(user)
 
             if needs_setup and not public and not path.startswith("/setup"):
                 return RedirectResponse("/setup", status_code=303)

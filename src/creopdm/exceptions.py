@@ -101,6 +101,11 @@ class NotFoundError(CreoPDMError):
     http_status = 404
 
 
+class PermissionDeniedError(CreoPDMError):
+    code = "FORBIDDEN"
+    http_status = 403
+
+
 class ConfigurationError(CreoPDMError):
     code = "CONFIGURATION_ERROR"
     http_status = 500

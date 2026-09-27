@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from creopdm.api.deps import get_context
 from creopdm.api.pages import clear_creo_page_cache
@@ -18,13 +18,17 @@ from creopdm.constants import (
 )
 from creopdm.context import AppContext
 from creopdm.creo.connector_factory import create_creo_connector
-from creopdm.exceptions import PathValidationError
+from creopdm.exceptions import PathValidationError, PermissionDeniedError
 from creopdm.schemas.common import SettingsResponse, SettingsUpdateRequest
 from creopdm.utils.classify import exclude_extensions, unique_type_labels
 from creopdm.utils.paths import validate_project_location
 
 router = APIRouter()
 
+
+def _require_settings_manage(request: Request, ctx: AppContext) -> None:
+    if ctx.auth_enabled and not getattr(request.state, "can_manage_settings", False):
+        raise PermissionDeniedError("Only administrators can change Settings.")
 
 def _resolved_creojs(ctx: AppContext) -> Path | None:
     from creopdm.api.pages import _creojs_library
@@ -92,15 +96,18 @@ def apply_settings(ctx: AppContext, settings: AppSettings) -> None:
 
 
 @router.get("/api/settings", response_model=SettingsResponse)
-def get_settings(ctx: AppContext = Depends(get_context)) -> SettingsResponse:
+def get_settings(request: Request, ctx: AppContext = Depends(get_context)) -> SettingsResponse:
+    _require_settings_manage(request, ctx)
     return settings_to_response(ctx)
 
 
 @router.put("/api/settings", response_model=SettingsResponse)
 def update_settings(
     payload: SettingsUpdateRequest,
+    request: Request,
     ctx: AppContext = Depends(get_context),
 ) -> SettingsResponse:
+    _require_settings_manage(request, ctx)
     current = ctx.settings.model_copy(deep=True)
     current.creo.connector = "auto"
     current.creo.open_mode = payload.creo_open_mode

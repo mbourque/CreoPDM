@@ -34,6 +34,7 @@ def _base_ctx(
     *,
     current_user: User | None = None,
     can_manage_users: bool = False,
+    can_manage_settings: bool = False,
 ) -> dict:
     return {
         "request": request,
@@ -41,6 +42,7 @@ def _base_ctx(
         "app_version": APP_VERSION,
         "auth_user": current_user,
         "can_manage_users": can_manage_users,
+        "can_manage_settings": can_manage_settings,
         "creo_label": "—",
         "creo_open_name": "",
         "creo_open_title": "",
@@ -190,7 +192,13 @@ def password_page(request: Request, ctx: AppContext = Depends(get_context), db: 
         request,
         "auth_password.html",
         {
-            **_base_ctx(request, ctx, current_user=user, can_manage_users=ctx.user_accounts.can_manage_users(user)),
+            **_base_ctx(
+                request,
+                ctx,
+                current_user=user,
+                can_manage_users=ctx.user_accounts.can_manage_users(user),
+                can_manage_settings=ctx.user_accounts.can_manage_settings(user),
+            ),
             "error": None,
             "forced": bool(user.must_change_password),
         },
@@ -225,7 +233,13 @@ def password_submit(
         request,
         "auth_password.html",
         {
-            **_base_ctx(request, ctx, current_user=user, can_manage_users=ctx.user_accounts.can_manage_users(user)),
+            **_base_ctx(
+                request,
+                ctx,
+                current_user=user,
+                can_manage_users=ctx.user_accounts.can_manage_users(user),
+                can_manage_settings=ctx.user_accounts.can_manage_settings(user),
+            ),
             "error": error,
             "forced": bool(user.must_change_password),
         },
@@ -267,7 +281,7 @@ def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Se
         request,
         "admin_users.html",
         {
-            **_base_ctx(request, ctx, current_user=admin, can_manage_users=True),
+            **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "users": rows,
         },
     )
@@ -283,7 +297,7 @@ def admin_user_new(request: Request, ctx: AppContext = Depends(get_context), db:
         request,
         "admin_user_form.html",
         {
-            **_base_ctx(request, ctx, current_user=admin, can_manage_users=True),
+            **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": None,
             "mode": "new",
             "roles": [{"name": r.name} for r in roles],
@@ -339,7 +353,7 @@ def admin_user_create(
         request,
         "admin_user_form.html",
         {
-            **_base_ctx(request, ctx, current_user=admin, can_manage_users=True),
+            **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": error,
             "mode": "new",
             "roles": [{"name": r.name} for r in roles],
@@ -373,7 +387,7 @@ def admin_user_detail(
         request,
         "admin_user_form.html",
         {
-            **_base_ctx(request, ctx, current_user=admin, can_manage_users=True),
+            **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": None,
             "mode": "edit",
             "roles": [{"name": r.name} for r in roles],
@@ -433,7 +447,7 @@ def admin_user_update(
         request,
         "admin_user_form.html",
         {
-            **_base_ctx(request, ctx, current_user=admin, can_manage_users=True),
+            **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": error,
             "mode": "edit",
             "roles": [{"name": r.name} for r in roles],
