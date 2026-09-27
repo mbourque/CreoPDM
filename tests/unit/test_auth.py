@@ -1206,6 +1206,21 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
 
     assert auth_client.get(f"/admin/users/{clerk_uuid}").status_code == 403
     assert auth_client.get(f"/admin/users/{admin_uuid}").status_code == 403
+    self_post = auth_client.post(
+        f"/admin/users/{clerk_uuid}",
+        data={
+            "display_name": "Clerk Hacked",
+            "email": "",
+            "role": "User Clerk",
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+            "project_access_present": "1",
+            "access_all_projects": "1",
+        },
+        follow_redirects=False,
+    )
+    assert self_post.status_code == 403, self_post.text
     denied_edit = auth_client.post(
         f"/admin/users/{admin_uuid}",
         data={
@@ -1270,6 +1285,21 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
     self_denied = auth_client.get(f"/admin/users/{admin_uuid}")
     assert self_denied.status_code == 403
     assert "own account" in self_denied.text.lower()
+    self_post_admin = auth_client.post(
+        f"/admin/users/{admin_uuid}",
+        data={
+            "display_name": "Admin Hacked",
+            "email": "",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+            "project_access_present": "1",
+            "access_all_projects": "1",
+        },
+        follow_redirects=False,
+    )
+    assert self_post_admin.status_code == 403, self_post_admin.text
 
     with auth_ctx.session_factory() as db:
         auth_ctx.user_accounts.create_user(
