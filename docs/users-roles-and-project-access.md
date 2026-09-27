@@ -28,6 +28,7 @@ Administrators (permission `users.manage`) see an **Administration** link in the
 
 - List users (name, username, role, status)
 - Add / edit user (display name, username, email, role, status, set/reset password)
+- After a successful **Add user**, you return to the users list
 - New users must change their password on first sign-in
 
 Built-in roles are seeded: **Administrator**, **PDM Manager**, **Engineer**, **Viewer**. Role capability details remain in [initial-built-in-roles.md](initial-built-in-roles.md).

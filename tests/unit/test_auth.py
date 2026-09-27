@@ -175,7 +175,9 @@ def test_admin_can_create_user_non_admin_cannot(auth_client, auth_ctx):
         },
         follow_redirects=False,
     )
+    # Successful add returns to the users list (not the new user's edit page).
     assert created.status_code == 303
+    assert created.headers["location"] == "/admin/users"
 
     auth_client.get("/logout", follow_redirects=False)
     with auth_ctx.session_factory() as db:

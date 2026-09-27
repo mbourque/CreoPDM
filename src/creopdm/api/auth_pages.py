@@ -320,7 +320,7 @@ def admin_user_create(
         error = "Passwords do not match."
     else:
         try:
-            user = ctx.user_accounts.create_user(
+            ctx.user_accounts.create_user(
                 db,
                 username=username,
                 display_name=display_name,
@@ -331,7 +331,7 @@ def admin_user_create(
                 must_change_password=True,
             )
             db.commit()
-            return RedirectResponse(f"/admin/users/{user.uuid}", status_code=303)
+            return RedirectResponse("/admin/users", status_code=303)
         except CreoPDMError as exc:
             db.rollback()
             error = exc.message
