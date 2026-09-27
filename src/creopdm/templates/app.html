@@ -226,7 +226,7 @@
           {% endif %}
           {% else %}
           <tr class="empty-row">
-            <td colspan="7">{% if current_folder %}This folder is empty.{% else %}No files in this project. Add a Creo model, PDF, or document to get started.{% endif %}</td>
+            <td colspan="7">{% if current_folder %}This folder is empty.{% elif can_add_objects %}No files in this project. Add a Creo model, PDF, or document to get started.{% else %}No files in this project.{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>

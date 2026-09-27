@@ -474,6 +474,14 @@ def test_new_project_and_sidebar_collapse_handlers_present():
         html,
         re.DOTALL,
     )
+    # Empty-project add invite is only for objects.add (not for Viewer, etc.).
+    assert "can_add_objects" in html
+    assert "Add a Creo model, PDF, or document to get started" in html
+    assert re.search(
+        r"\{%\s*elif\s+can_add_objects\s*%\}[^%]*Add a Creo model",
+        html,
+        re.DOTALL,
+    )
     assert 'id="sidebar-collapse-btn"' in APP_HTML.read_text(encoding="utf-8")
 
 

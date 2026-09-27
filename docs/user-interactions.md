@@ -50,6 +50,8 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Click **New** | Ask for a project name (and vault name options); then show the new project | Create a project with a blank name |
 | Open Files with **no** projects (and you **can** create projects) | Show the empty hero inviting you to create a project | |
 | Open Files with **no** projects (and you **cannot** create projects) | Show that no projects are available; ask an administrator for access | Tell you to “Create a project…” when you have no `projects.create` |
+| Open an **empty** project (and you **can** add files) | Show that there are no files and invite you to add a Creo model, PDF, or document | |
+| Open an **empty** project (and you **cannot** add files) | Show that there are no files | Tell you to “Add a Creo model…” when you have no `objects.add` |
 | Rename (project settings) | Update the name everywhere you see it | |
 | Delete project | Ask you to type the **exact** project name; remove CreoPDM’s copy of the project | Delete your original CAD folders on disk just because you deleted the project; delete if you typed the wrong name |
 
@@ -374,7 +376,7 @@ Automated coverage lives mainly in:
 - `tests/unit/test_user_interaction_validations.py`
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
-- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `objects.view` / `data-can-checkout`; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_objects_view_lands_on_administration`)
+- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `objects.view` / `data-can-checkout`; empty-home `projects.create` hero; empty-project `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_objects_view_lands_on_administration`)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
 - Related checkout / check-in / soft-nav tests
 

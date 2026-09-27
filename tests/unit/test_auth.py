@@ -635,6 +635,27 @@ def test_empty_home_hero_hides_create_project_without_permission(auth_client, au
 
 
 @requires_git
+def test_empty_project_hides_add_invite_without_permission(auth_client, auth_ctx, repo_parent):
+    """Empty project Files list must not invite Add when the user lacks objects.add."""
+    _setup_admin_and_users(
+        auth_client, auth_ctx, ("view", BuiltinRole.VIEWER.value)
+    )
+    _login(auth_client, "admin", "AdminPass1")
+    project = auth_client.post("/api/projects", json={"name": "Empty Files"}).json()
+
+    admin_files = auth_client.get(f"/?project={project['uuid']}")
+    assert admin_files.status_code == 200
+    assert "Add a Creo model, PDF, or document to get started" in admin_files.text
+
+    _login(auth_client, "view", "ViewPass1")
+    view_files = auth_client.get(f"/?project={project['uuid']}")
+    assert view_files.status_code == 200
+    assert "Add a Creo model, PDF, or document to get started" not in view_files.text
+    assert "No files in this project." in view_files.text
+    assert 'id="add-menu"' not in view_files.text
+
+
+@requires_git
 def test_viewer_is_read_only(auth_client, auth_ctx, repo_parent):
     """Viewer may browse; mutations and authoring toolbar are forbidden."""
     _setup_admin_and_users(
