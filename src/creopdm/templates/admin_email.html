@@ -12,7 +12,7 @@
     <span>Email</span>
   </nav>
   <h1>Email</h1>
-  <p class="muted">Configure how CreoPDM sends mail for notifications and alerts. Defaults match a Linux host with local Postfix.</p>
+  <p class="muted">Choose how CreoPDM sends mail: local Postfix on this server, or an authenticated SMTP provider.</p>
 
   {% if success %}
   <p class="ok">{{ success }}</p>
@@ -21,14 +21,27 @@
   <p class="error">{{ error }}</p>
   {% endif %}
 
-  <form method="post" action="/admin/email" class="settings-form">
+  <form method="post" action="/admin/email" class="settings-form" id="email-settings-form">
     <section class="settings-card">
       <h2>Notifications</h2>
       <label class="choice">
         <input type="checkbox" name="enabled" value="1" {% if form.enabled %}checked{% endif %}>
         Enable email notifications
       </label>
-      <p class="muted small">When off, CreoPDM does not send notification mail. Test Email still uses the SMTP settings below.</p>
+      <p class="muted small">When off, CreoPDM does not send notification mail. Test Email still uses the delivery settings below.</p>
+    </section>
+
+    <section class="settings-card">
+      <h2>Delivery method</h2>
+      <label class="choice">
+        <input type="radio" name="transport" value="local" {% if form.transport == 'local' %}checked{% endif %} data-email-transport>
+        Local Postfix
+      </label>
+      <label class="choice">
+        <input type="radio" name="transport" value="smtp" {% if form.transport == 'smtp' %}checked{% endif %} data-email-transport>
+        Authenticated SMTP
+      </label>
+      <p class="muted small">Use one method. Switching modes keeps the other method’s saved settings for later.</p>
     </section>
 
     <section class="settings-card">
@@ -45,10 +58,15 @@
       <p class="muted small">Admin-attention alerts (failures, disk space, server errors) go here when notifications are enabled.</p>
     </section>
 
-    <section class="settings-card">
-      <h2>SMTP server</h2>
+    <section class="settings-card" id="email-local-panel" {% if form.transport != 'local' %}hidden{% endif %}>
+      <h2>Local Postfix</h2>
+      <p class="muted small">CreoPDM sends through <code>127.0.0.1:25</code> on the <strong>CreoPDM server</strong> (same idea as <code>mail</code> / Postfix). No username or password. Use a From address your MTA accepts for local send (often the server hostname domain). After saving, use <strong>Send test email</strong>.</p>
+    </section>
+
+    <section class="settings-card" id="email-smtp-panel" {% if form.transport != 'smtp' %}hidden{% endif %}>
+      <h2>Authenticated SMTP</h2>
       <label>SMTP server
-        <input name="smtp_host" type="text" value="{{ form.smtp_host }}" placeholder="localhost">
+        <input name="smtp_host" type="text" value="{{ form.smtp_host }}" placeholder="smtp.gmail.com">
       </label>
       <label>SMTP port
         <input name="smtp_port" type="number" min="1" max="65535" value="{{ form.smtp_port }}">
@@ -67,27 +85,7 @@
       <label>Password
         <input name="smtp_password" type="password" value="" placeholder="{% if form.has_password %}********{% else %}{% endif %}" autocomplete="new-password">
       </label>
-      <p class="muted small">Leave password blank to keep the current value.</p>
-    </section>
-
-    <section class="settings-card">
-      <h2>SMTP setup help</h2>
-      <p><strong>Local Postfix (typical Linux install)</strong></p>
-      <ul class="muted small">
-        <li>Set SMTP server to <code>localhost</code> and port <code>25</code>.</li>
-        <li>Leave TLS and authentication unchecked — local connections usually need no login.</li>
-        <li>CreoPDM talks to Postfix (or Exim/sendmail) on the <strong>CreoPDM server</strong>, not on the user’s PC.</li>
-        <li>Set a From address that your MTA accepts for local send (often the server hostname domain).</li>
-      </ul>
-      <p><strong>External / authenticated SMTP</strong></p>
-      <ul class="muted small">
-        <li>Use your provider’s SMTP host (for example <code>smtp.example.com</code>).</li>
-        <li>Port <strong>587</strong> with <strong>Use TLS (STARTTLS)</strong> is the usual choice. Some providers use 465 (implicit TLS) — prefer 587 with STARTTLS here.</li>
-        <li>Turn on <strong>Use SMTP authentication</strong> and enter the mailbox username and password (or app password).</li>
-        <li>Allow outbound TCP 587 (or 465) from the CreoPDM host through any firewall.</li>
-        <li>The From address should be a mailbox your provider allows; align SPF/DMARC for that domain when sending to the internet.</li>
-      </ul>
-      <p class="muted small">After saving, use <strong>Send test email</strong> before relying on alerts.</p>
+      <p class="muted small">Leave password blank to keep the current value. Typical provider setup: port <strong>587</strong>, TLS on, authentication on (Gmail needs an App password). Allow outbound TCP 587 from this host. From address must be allowed by the provider.</p>
     </section>
 
     <section class="settings-card">
@@ -103,4 +101,22 @@
     </section>
   </form>
 </article>
+<script>
+(function () {
+  var form = document.getElementById("email-settings-form");
+  if (!form) return;
+  var localPanel = document.getElementById("email-local-panel");
+  var smtpPanel = document.getElementById("email-smtp-panel");
+  function sync() {
+    var checked = form.querySelector('input[name="transport"]:checked');
+    var mode = checked ? checked.value : "local";
+    if (localPanel) localPanel.hidden = mode !== "local";
+    if (smtpPanel) smtpPanel.hidden = mode !== "smtp";
+  }
+  form.querySelectorAll("[data-email-transport]").forEach(function (el) {
+    el.addEventListener("change", sync);
+  });
+  sync();
+})();
+</script>
 {% endblock %}

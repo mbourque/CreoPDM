@@ -18,7 +18,8 @@ from creopdm.services.notification_service import (
 def _cfg(**kwargs) -> EmailConfig:
     base = dict(
         enabled=True,
-        smtp_host="localhost",
+        transport="local",
+        smtp_host="127.0.0.1",
         smtp_port=25,
         from_address="creopdm@example.com",
         from_name="CreoPDM",
@@ -32,15 +33,16 @@ def _cfg(**kwargs) -> EmailConfig:
     return EmailConfig.model_validate(base)
 
 
-def test_email_service_local_send_uses_localhost_25():
-    cfg = _cfg()
+def test_email_service_local_send_uses_127_0_0_1_port_25():
+    cfg = _cfg(smtp_host="smtp.example.com", smtp_port=587, smtp_use_tls=True, smtp_use_auth=True)
     service = EmailService(lambda: cfg)
     smtp = MagicMock()
     smtp.__enter__ = MagicMock(return_value=smtp)
     smtp.__exit__ = MagicMock(return_value=False)
     with patch("creopdm.services.email_service.smtplib.SMTP", return_value=smtp) as ctor:
         service.send("user@example.com", "Subject", "Body text")
-    ctor.assert_called_once_with("localhost", 25, timeout=30)
+    # Local transport ignores stored SMTP host/auth (avoids localhost → ::1 relay issues).
+    ctor.assert_called_once_with("127.0.0.1", 25, timeout=30)
     smtp.starttls.assert_not_called()
     smtp.login.assert_not_called()
     smtp.send_message.assert_called_once()
@@ -52,6 +54,7 @@ def test_email_service_local_send_uses_localhost_25():
 
 def test_email_service_auth_tls_path():
     cfg = _cfg(
+        transport="smtp",
         smtp_host="smtp.example.com",
         smtp_port=587,
         smtp_use_tls=True,
@@ -69,6 +72,20 @@ def test_email_service_auth_tls_path():
     smtp.starttls.assert_called_once()
     smtp.login.assert_called_once_with("creopdm@example.com", "secret")
     smtp.send_message.assert_called_once()
+
+
+def test_email_config_infers_smtp_transport_from_legacy_settings():
+    cfg = EmailConfig.model_validate(
+        {
+            "smtp_host": "smtp.gmail.com",
+            "smtp_port": 587,
+            "smtp_use_auth": True,
+            "from_address": "a@b.com",
+        }
+    )
+    assert cfg.transport == "smtp"
+    local = EmailConfig.model_validate({"smtp_host": "localhost", "smtp_port": 25})
+    assert local.transport == "local"
 
 
 def test_email_service_requires_from_and_recipient():

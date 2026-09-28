@@ -1596,9 +1596,11 @@ def _require_email_manager(
 
 def _email_form_from_settings(ctx: AppContext, *, test_to: str = "") -> dict:
     email = ctx.settings.email
+    transport = email.transport if email.transport in {"local", "smtp"} else "local"
     return {
         "enabled": bool(email.enabled),
-        "smtp_host": email.smtp_host or "localhost",
+        "transport": transport,
+        "smtp_host": email.smtp_host or "127.0.0.1",
         "smtp_port": int(email.smtp_port or 25),
         "from_address": email.from_address or "",
         "from_name": email.from_name or "",
@@ -1614,6 +1616,7 @@ def _email_form_from_settings(ctx: AppContext, *, test_to: str = "") -> dict:
 def _email_form_from_post(
     *,
     enabled: str,
+    transport: str,
     smtp_host: str,
     smtp_port: str,
     from_address: str,
@@ -1626,13 +1629,17 @@ def _email_form_from_post(
     test_to: str,
     has_password: bool,
 ) -> dict:
+    mode = (transport or "local").strip().lower()
+    if mode not in {"local", "smtp"}:
+        mode = "local"
     try:
         port = int((smtp_port or "25").strip() or "25")
     except ValueError:
         port = 25
     return {
         "enabled": enabled == "1",
-        "smtp_host": (smtp_host or "").strip() or "localhost",
+        "transport": mode,
+        "smtp_host": (smtp_host or "").strip() or "127.0.0.1",
         "smtp_port": port,
         "from_address": (from_address or "").strip(),
         "from_name": (from_name or "").strip(),
@@ -1669,7 +1676,8 @@ def admin_email_submit(
     request: Request,
     action: str = Form("save"),
     enabled: str = Form(""),
-    smtp_host: str = Form("localhost"),
+    transport: str = Form("local"),
+    smtp_host: str = Form("127.0.0.1"),
     smtp_port: str = Form("25"),
     from_address: str = Form(""),
     from_name: str = Form(""),
@@ -1686,9 +1694,11 @@ def admin_email_submit(
     if _is_blocked(manager):
         return manager
 
-    current_password = ctx.settings.email.smtp_password or ""
+    current = ctx.settings.email
+    current_password = current.smtp_password or ""
     form = _email_form_from_post(
         enabled=enabled,
+        transport=transport,
         smtp_host=smtp_host,
         smtp_port=smtp_port,
         from_address=from_address,
@@ -1715,27 +1725,33 @@ def admin_email_submit(
             status_code=status_code,
         )
 
-    # Apply form fields to settings (password blank keeps existing).
     new_settings = ctx.settings.model_copy(deep=True)
     email = new_settings.email
     email.enabled = form["enabled"]
-    email.smtp_host = form["smtp_host"]
-    email.smtp_port = form["smtp_port"]
+    email.transport = form["transport"]
     email.from_address = form["from_address"]
     email.from_name = form["from_name"]
     email.administrator_email = form["administrator_email"]
-    email.smtp_username = form["smtp_username"]
-    email.smtp_use_tls = form["smtp_use_tls"]
-    email.smtp_use_auth = form["smtp_use_auth"]
-    new_password = (smtp_password or "").strip()
-    if new_password:
-        email.smtp_password = new_password
-    else:
-        email.smtp_password = current_password
+    if form["transport"] == "smtp":
+        email.smtp_host = form["smtp_host"]
+        email.smtp_port = form["smtp_port"]
+        email.smtp_username = form["smtp_username"]
+        email.smtp_use_tls = form["smtp_use_tls"]
+        email.smtp_use_auth = form["smtp_use_auth"]
+        new_password = (smtp_password or "").strip()
+        if new_password:
+            email.smtp_password = new_password
+        else:
+            email.smtp_password = current_password
+    # Local: keep previously saved SMTP credentials for when the admin switches back.
     form["has_password"] = bool(email.smtp_password)
+    form["smtp_host"] = email.smtp_host or "127.0.0.1"
+    form["smtp_port"] = int(email.smtp_port or 25)
+    form["smtp_username"] = email.smtp_username or ""
+    form["smtp_use_tls"] = bool(email.smtp_use_tls)
+    form["smtp_use_auth"] = bool(email.smtp_use_auth)
 
     try:
-        # Validate via pydantic (port range, etc.).
         from creopdm.config import EmailConfig
         from pydantic import ValidationError
 

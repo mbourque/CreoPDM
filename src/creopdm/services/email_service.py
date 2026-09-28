@@ -37,8 +37,7 @@ class EmailService:
         from_addr = (cfg.from_address or "").strip()
         if not from_addr:
             raise ValidationAppError("From address is required before sending email.")
-        host = (cfg.smtp_host or "localhost").strip() or "localhost"
-        port = int(cfg.smtp_port or 25)
+        host, port, use_tls, use_auth = cfg.connection()
 
         msg = EmailMessage()
         if (cfg.from_name or "").strip():
@@ -51,9 +50,9 @@ class EmailService:
 
         try:
             with smtplib.SMTP(host, port, timeout=30) as smtp:
-                if cfg.smtp_use_tls:
+                if use_tls:
                     smtp.starttls()
-                if cfg.smtp_use_auth:
+                if use_auth:
                     username = (cfg.smtp_username or "").strip()
                     if not username:
                         raise ValidationAppError(

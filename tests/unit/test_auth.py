@@ -263,40 +263,61 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
     )
     page = auth_client.get("/admin/email")
     assert page.status_code == 200
-    assert "SMTP setup help" in page.text
-    assert 'value="localhost"' in page.text
-    assert 'value="25"' in page.text
+    assert "Delivery method" in page.text
+    assert "Local Postfix" in page.text
+    assert "Authenticated SMTP" in page.text
+    assert 'value="local"' in page.text
 
     saved = auth_client.post(
         "/admin/email",
         data={
             "action": "save",
             "enabled": "1",
-            "smtp_host": "localhost",
-            "smtp_port": "25",
+            "transport": "local",
             "from_address": "creopdm@example.com",
             "from_name": "CreoPDM",
             "administrator_email": "admin@example.com",
-            "smtp_username": "",
-            "smtp_password": "first-secret",
-            "smtp_use_tls": "",
-            "smtp_use_auth": "",
             "test_to": "",
         },
     )
     assert saved.status_code == 200
     assert "Email settings saved" in saved.text
     assert auth_ctx.settings.email.enabled is True
+    assert auth_ctx.settings.email.transport == "local"
     assert auth_ctx.settings.email.from_address == "creopdm@example.com"
+
+    saved_smtp = auth_client.post(
+        "/admin/email",
+        data={
+            "action": "save",
+            "enabled": "1",
+            "transport": "smtp",
+            "smtp_host": "smtp.example.com",
+            "smtp_port": "587",
+            "from_address": "creopdm@example.com",
+            "from_name": "CreoPDM",
+            "administrator_email": "admin@example.com",
+            "smtp_username": "creopdm@example.com",
+            "smtp_password": "first-secret",
+            "smtp_use_tls": "1",
+            "smtp_use_auth": "1",
+            "test_to": "",
+        },
+    )
+    assert saved_smtp.status_code == 200
+    assert auth_ctx.settings.email.transport == "smtp"
     assert auth_ctx.settings.email.smtp_password == "first-secret"
-    assert auth_ctx.settings.email.smtp_host == "localhost"
-    assert auth_ctx.settings.email.smtp_port == 25
+    assert auth_ctx.settings.email.smtp_host == "smtp.example.com"
+    assert auth_ctx.settings.email.smtp_port == 587
+    assert auth_ctx.settings.email.smtp_use_tls is True
+    assert auth_ctx.settings.email.smtp_use_auth is True
 
     kept = auth_client.post(
         "/admin/email",
         data={
             "action": "save",
             "enabled": "1",
+            "transport": "smtp",
             "smtp_host": "smtp.example.com",
             "smtp_port": "587",
             "from_address": "creopdm@example.com",
@@ -311,10 +332,23 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
     )
     assert kept.status_code == 200
     assert auth_ctx.settings.email.smtp_password == "first-secret"
-    assert auth_ctx.settings.email.smtp_host == "smtp.example.com"
-    assert auth_ctx.settings.email.smtp_port == 587
-    assert auth_ctx.settings.email.smtp_use_tls is True
-    assert auth_ctx.settings.email.smtp_use_auth is True
+
+    # Switching to local keeps stored SMTP password for later.
+    back_local = auth_client.post(
+        "/admin/email",
+        data={
+            "action": "save",
+            "enabled": "1",
+            "transport": "local",
+            "from_address": "creopdm@example.com",
+            "from_name": "CreoPDM",
+            "administrator_email": "admin@example.com",
+            "test_to": "",
+        },
+    )
+    assert back_local.status_code == 200
+    assert auth_ctx.settings.email.transport == "local"
+    assert auth_ctx.settings.email.smtp_password == "first-secret"
 
     # PDM Manager lacks email.manage.
     auth_client.post(

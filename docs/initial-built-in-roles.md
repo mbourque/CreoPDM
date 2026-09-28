@@ -661,25 +661,7 @@ Do not hard-code these as universally required parameters.
 
 ## Email
 
-Administration → Email (`email.manage`) stores SMTP settings in `settings.json`:
-
-```text
-
-Enable email notifications
-
-SMTP server (default localhost)
-
-SMTP port (default 25)
-
-From address / From display name
-
-Administrator email
-
-Optional SMTP authentication and TLS
-
-```
-
-Default Linux installs use local Postfix (`localhost:25`, no auth). Use **Send test email** after saving. Application code sends only through `EmailService` / `NotificationService` so transports can change later without touching producers.
+Administration → Email (`email.manage`) stores delivery settings in `settings.json`. Choose **Local Postfix** (`127.0.0.1:25`, no auth) or **Authenticated SMTP** (provider host, typically port 587 + TLS + username/app password). Also set From address / display name, administrator email, and use **Send test email** after saving. Application code sends only through `EmailService` / `NotificationService`.
 
 ---
 

@@ -284,7 +284,9 @@ class EmailConfig(BaseModel):
     """SMTP settings for notifications (defaults match local Postfix on Linux)."""
 
     enabled: bool = False
-    smtp_host: str = "localhost"
+    # local = Postfix on 127.0.0.1:25 (no auth); smtp = external authenticated relay
+    transport: str = "local"
+    smtp_host: str = "127.0.0.1"
     smtp_port: int = 25
     from_address: str = ""
     from_name: str = ""
@@ -294,10 +296,35 @@ class EmailConfig(BaseModel):
     smtp_use_tls: bool = False
     smtp_use_auth: bool = False
 
+    @model_validator(mode="before")
+    @classmethod
+    def infer_transport(cls, data: object) -> object:
+        """Existing settings.json without transport: treat auth/remote host as smtp."""
+        if not isinstance(data, dict):
+            return data
+        if "transport" in data and (data.get("transport") or "").strip():
+            return data
+        host = str(data.get("smtp_host") or "").strip().lower()
+        if data.get("smtp_use_auth") or (
+            host and host not in {"localhost", "127.0.0.1"}
+        ):
+            data = {**data, "transport": "smtp"}
+        else:
+            data = {**data, "transport": "local"}
+        return data
+
+    @field_validator("transport")
+    @classmethod
+    def valid_transport(cls, value: str) -> str:
+        key = (value or "local").strip().lower()
+        if key not in {"local", "smtp"}:
+            return "local"
+        return key
+
     @field_validator("smtp_host")
     @classmethod
     def default_host(cls, value: str) -> str:
-        return (value or "").strip() or "localhost"
+        return (value or "").strip() or "127.0.0.1"
 
     @field_validator("smtp_port")
     @classmethod
@@ -311,6 +338,13 @@ class EmailConfig(BaseModel):
     @classmethod
     def strip_text(cls, value: str) -> str:
         return (value or "").strip()
+
+    def connection(self) -> tuple[str, int, bool, bool]:
+        """Host, port, use_tls, use_auth for the active transport."""
+        if self.transport == "local":
+            return "127.0.0.1", 25, False, False
+        host = (self.smtp_host or "").strip() or "127.0.0.1"
+        return host, int(self.smtp_port or 25), bool(self.smtp_use_tls), bool(self.smtp_use_auth)
 
 
 class AppSettings(BaseModel):
