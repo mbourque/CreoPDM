@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Membership — {{ app_name }}{% endblock %}
 {% block content %}
-<article class="detail settings-page">
+<article class="detail settings-page admin-hub">
   <nav class="crumb">
     {% if can_view_objects %}
     <a href="/">Projects</a>
@@ -12,37 +12,16 @@
     <span>Membership</span>
   </nav>
   <h1>Membership</h1>
-  <p class="muted">Choose who can open which projects. Use <strong>By project</strong> to add several users to one project, or <strong>By user</strong> for All projects / a personal project list.</p>
+  <p class="muted">Choose who can open which projects.</p>
 
   <div class="admin-tile-grid">
     <section class="admin-tile">
-      <h2>By project</h2>
-      <p class="muted small">Pick a project, then tick which restricted users are members.</p>
-      {% if projects %}
-      <ul class="plain-list">
-        {% for p in projects %}
-        <li><a href="/admin/membership/projects/{{ p.uuid }}">{% if p.number %}{{ p.number }} — {% endif %}{{ p.name }}</a></li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="muted">No projects yet. Create one under Administration → Projects.</p>
-      {% endif %}
+      <h2><a href="/admin/membership/projects">By project</a></h2>
+      <p>Open a project, then tick which restricted users are members.</p>
     </section>
     <section class="admin-tile">
-      <h2>By user</h2>
-      <p class="muted small">Pick a user, then set All projects or a specific list.</p>
-      {% if users %}
-      <ul class="plain-list">
-        {% for u in users %}
-        <li>
-          <a href="/admin/membership/users/{{ u.uuid }}">{{ u.display_name }}</a>
-          <span class="muted small">({{ u.username }} · {% if u.access_all %}All{% else %}{{ u.member_count }}{% endif %})</span>
-        </li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="muted">No users yet.</p>
-      {% endif %}
+      <h2><a href="/admin/membership/users">By user</a></h2>
+      <p>Open a user, then set All projects or a specific project list.</p>
     </section>
   </div>
 </article>

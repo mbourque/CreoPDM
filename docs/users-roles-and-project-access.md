@@ -28,7 +28,7 @@ Users with any CreoPDM Administration capability (`users.manage`, `users.passwor
 
 - **Users** — list accounts (Projects column: **All** or membership count); click a **name** to edit the user, or a **role** name to open that role (`roles.manage`); **Add user** (`users.manage` + `users.password` for the initial password). New users get **All projects**; membership is not edited here.
 - **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`). The role editor groups **CreoPDM Administration** (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `projects.manage`, `settings.manage`), **Projects**, and **Objects**.
-- **Membership** — decide who can open which projects (`projects.assign`): **By project** (tick restricted members) and **By user** (All projects / project multi-select)
+- **Membership** — decide who can open which projects (`projects.assign`): hub with **By project** and **By user** list pages, then edit members / All-projects for one row
 - **Projects** — list every active project on the server; create, edit, and soft-delete (`projects.manage`). Not limited by the signed-in user’s project membership list. (Files-page New/Delete still use `projects.create` / `projects.delete`.)
 - **Settings** — server options (Creo open mode, vault, file types, …) (`settings.manage`)
 - After a successful **Add user** / **Save** / role save / project save / membership save, you return to the list

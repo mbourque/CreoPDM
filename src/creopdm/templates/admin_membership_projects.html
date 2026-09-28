@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Membership by project — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page">
+  <nav class="crumb">
+    {% if can_view_objects %}
+    <a href="/">Projects</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/membership">Membership</a>
+    <span>/</span>
+    <span>By project</span>
+  </nav>
+  <h1>Membership — By project</h1>
+  <p class="muted">Click a project to choose which restricted users can open it.</p>
+
+  <section class="settings-card settings-form-wide">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Number</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in projects %}
+        <tr>
+          <td><a href="/admin/membership/projects/{{ p.uuid }}">{% if p.number %}{{ p.number }} — {% endif %}{{ p.name }}</a></td>
+          <td>{{ p.number or "—" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="2" class="muted">No projects yet. Create one under Administration → Projects.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <p><a class="btn" href="/admin/membership">Back to Membership</a></p>
+</article>
+{% endblock %}

@@ -802,10 +802,43 @@ def admin_membership_home(
     manager = _require_membership_assign(request, ctx, db)
     if _is_blocked(manager):
         return manager
+    return templates.TemplateResponse(
+        request,
+        "admin_membership.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+        },
+    )
+
+
+@router.get("/admin/membership/projects", response_class=HTMLResponse)
+def admin_membership_projects_list(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_membership_assign(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
     projects = [
         {"uuid": p.uuid, "name": p.name, "number": p.number or ""}
         for p in ctx.projects.list_projects(db)
     ]
+    return templates.TemplateResponse(
+        request,
+        "admin_membership_projects.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "projects": projects,
+        },
+    )
+
+
+@router.get("/admin/membership/users", response_class=HTMLResponse)
+def admin_membership_users_list(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_membership_assign(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
     users = []
     for u in ctx.user_accounts.list_users(db):
         if u.status != UserStatus.ACTIVE.value:
@@ -822,10 +855,9 @@ def admin_membership_home(
         )
     return templates.TemplateResponse(
         request,
-        "admin_membership.html",
+        "admin_membership_users.html",
         {
             **_base_ctx(request, ctx, current_user=manager),
-            "projects": projects,
             "users": users,
         },
     )
@@ -843,7 +875,7 @@ def admin_membership_user_detail(
         return manager
     user = ctx.user_accounts.get_by_uuid(db, user_uuid)
     if user is None:
-        return RedirectResponse("/admin/membership", status_code=303)
+        return RedirectResponse("/admin/membership/users", status_code=303)
     access_all = bool(user.access_all_projects)
     selected = {p.uuid for p in (user.projects or [])}
     access = _project_access_form(ctx, db, access_all=access_all, selected_uuids=selected)
@@ -881,7 +913,7 @@ def admin_membership_user_save(
         return manager
     user = ctx.user_accounts.get_by_uuid(db, user_uuid)
     if user is None:
-        return RedirectResponse("/admin/membership", status_code=303)
+        return RedirectResponse("/admin/membership/users", status_code=303)
     access_all, project_uuids = _parse_project_access(
         project_access_present=project_access_present or "1",
         access_all_projects=access_all_projects,
@@ -897,7 +929,7 @@ def admin_membership_user_save(
             project_uuids=project_uuids if not access_all else None,
         )
         db.commit()
-        return RedirectResponse("/admin/membership", status_code=303)
+        return RedirectResponse("/admin/membership/users", status_code=303)
     except PermissionDeniedError as exc:
         db.rollback()
         return HTMLResponse(
@@ -941,7 +973,7 @@ def admin_membership_project_detail(
     try:
         project = ctx.projects.get_project(db, project_uuid)
     except CreoPDMError:
-        return RedirectResponse("/admin/membership", status_code=303)
+        return RedirectResponse("/admin/membership/projects", status_code=303)
     all_projects_users = []
     restricted_users = []
     for u in ctx.user_accounts.list_users(db):
@@ -990,7 +1022,7 @@ def admin_membership_project_save(
     try:
         project = ctx.projects.get_project(db, project_uuid)
     except CreoPDMError:
-        return RedirectResponse("/admin/membership", status_code=303)
+        return RedirectResponse("/admin/membership/projects", status_code=303)
     if isinstance(member_uuid, str):
         members = [member_uuid.strip()] if member_uuid.strip() else []
     else:
@@ -1001,7 +1033,7 @@ def admin_membership_project_save(
             db, project, member_user_uuids=members, actor=manager
         )
         db.commit()
-        return RedirectResponse("/admin/membership", status_code=303)
+        return RedirectResponse("/admin/membership/projects", status_code=303)
     except PermissionDeniedError as exc:
         db.rollback()
         return HTMLResponse(

@@ -384,10 +384,17 @@ def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx)
 
     mem_home = auth_client.get("/admin/membership")
     assert mem_home.status_code == 200
-    assert "By project" in mem_home.text
-    assert "By user" in mem_home.text
-    assert f'href="/admin/membership/users/{user_uuid}"' in mem_home.text
-    assert f'href="/admin/membership/projects/{alpha["uuid"]}"' in mem_home.text
+    assert 'href="/admin/membership/projects"' in mem_home.text
+    assert 'href="/admin/membership/users"' in mem_home.text
+    assert f'href="/admin/membership/users/{user_uuid}"' not in mem_home.text
+
+    users_list = auth_client.get("/admin/membership/users")
+    assert users_list.status_code == 200
+    assert f'href="/admin/membership/users/{user_uuid}"' in users_list.text
+
+    projects_list = auth_client.get("/admin/membership/projects")
+    assert projects_list.status_code == 200
+    assert f'href="/admin/membership/projects/{alpha["uuid"]}"' in projects_list.text
 
     mem_form = auth_client.get(f"/admin/membership/users/{user_uuid}")
     assert mem_form.status_code == 200
@@ -1729,8 +1736,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
     _login(auth_client, "admin", "AdminPass1")
     form = auth_client.get("/admin/membership")
     assert form.status_code == 200
-    assert "By project" in form.text
-    assert "By user" in form.text
+    assert 'href="/admin/membership/projects"' in form.text
+    assert 'href="/admin/membership/users"' in form.text
     user_new = auth_client.get("/admin/users/new")
     assert user_new.status_code == 200
     assert 'id="project-access-list"' not in user_new.text
@@ -1740,8 +1747,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
     other = auth_client.post("/api/projects", json={"name": "Other Matrix"})
     assert other.status_code == 201, other.text
     other_id = other.json()["uuid"]
-    # Membership By-user form lists projects once they exist.
-    form_with_projects = auth_client.get("/admin/membership")
+    # Membership project list names projects once they exist.
+    form_with_projects = auth_client.get("/admin/membership/projects")
     assert form_with_projects.status_code == 200
     assert "Role Matrix" in form_with_projects.text
     assert f'href="/admin/membership/projects/{project_id}"' in form_with_projects.text

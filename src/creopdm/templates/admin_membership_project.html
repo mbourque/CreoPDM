@@ -11,10 +11,12 @@
     <span>/</span>
     <a href="/admin/membership">Membership</a>
     <span>/</span>
+    <a href="/admin/membership/projects">By project</a>
+    <span>/</span>
     <span>{{ project.name }}</span>
   </nav>
   <h1>Membership — {{ project.name }}</h1>
-  <p class="muted">{% if project.number %}{{ project.number }} · {% endif %}Tick restricted users who may open this project. Users with <strong>All projects</strong> already see it — change that under By user.</p>
+  <p class="muted">{% if project.number %}{{ project.number }} · {% endif %}Tick restricted users who may open this project. Users with <strong>All projects</strong> already see it — change that under <a href="/admin/membership/users">By user</a>.</p>
 
   <form method="post" action="/admin/membership/projects/{{ project.uuid }}" class="settings-form settings-form-wide">
     <section class="settings-card">
@@ -43,7 +45,7 @@
       {% endif %}
       <div class="form-actions">
         <button type="submit" class="btn btn-primary" {% if not restricted_users %}disabled{% endif %}>Save members</button>
-        <a class="btn" href="/admin/membership">Back to Membership</a>
+        <a class="btn" href="/admin/membership/projects">Back to list</a>
       </div>
     </section>
   </form>

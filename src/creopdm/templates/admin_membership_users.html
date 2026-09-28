@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Membership by user — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page">
+  <nav class="crumb">
+    {% if can_view_objects %}
+    <a href="/">Projects</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/membership">Membership</a>
+    <span>/</span>
+    <span>By user</span>
+  </nav>
+  <h1>Membership — By user</h1>
+  <p class="muted">Click a user to set All projects or a specific project list.</p>
+
+  <section class="settings-card settings-form-wide">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Username</th>
+          <th>Access</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td><a href="/admin/membership/users/{{ u.uuid }}">{{ u.display_name }}</a></td>
+          <td>{{ u.username }}</td>
+          <td>{% if u.access_all %}All{% else %}{{ u.member_count }}{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="muted">No active users yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <p><a class="btn" href="/admin/membership">Back to Membership</a></p>
+</article>
+{% endblock %}
