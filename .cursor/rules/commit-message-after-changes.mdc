@@ -31,6 +31,16 @@ git push
 - Skip `./pull-restart.ps1` only for docs-only, rules-only, or pure Windows-agent work that does not need a server restart
 - Do **not** also give a separate Linux `git pull` / `systemctl` block — the script replaces that
 
+## After fixing tests (`@pytest-last.log` / red output)
+
+When you fix failing tests (product code or drifted assertions):
+
+1. End with a **focused pytest** command for the failures you touched.
+2. **Also** end with the full **commit + push** block (and `./pull-restart.ps1` when the product change needs the server).
+3. Do **not** stop at “retest only” once the fix is in — the user wants a ready-to-paste commit after test fixes.
+
+Still wait for their green result before they run the commit block; you only supply the commands.
+
 ## Example
 
 ```text

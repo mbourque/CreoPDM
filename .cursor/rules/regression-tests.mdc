@@ -27,4 +27,6 @@ When the user reports a **bug** (including regressions, UI glitches, wrong data,
 
 When the user pastes `@pytest-last.log` (or failed output) after a fix, treat failing tests as the source of truth: fix the product or update assertions that drifted with an intentional change — do not ignore red tests that the fix caused.
 
+After that fix, follow `.cursor/rules/commit-message-after-changes.mdc`: give a focused **pytest** command **and** the **git commit / push** block (plus `./pull-restart.ps1` when the server needs the change). Do not reply with retest-only once the test fix is done.
+
 For Files / toolbar / Add / Checkout / Check In / Remove / open / folder-click bugs: also follow `.cursor/rules/user-interactions.mdc` — do not break `docs/user-interactions.md`, and update that doc if the intended behavior changed.

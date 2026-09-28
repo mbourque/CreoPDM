@@ -35,9 +35,20 @@ git push
 ```
 
 ```text
-# ✅ GOOD — tests only while iterating:
+# ✅ GOOD — tests only while still iterating on red failures:
 python -m pytest tests/unit/test_health.py -q --tb=short
 Get-Content .\pytest-last.log
+```
+
+```text
+# ✅ GOOD — after fixing tests from @pytest-last.log, retest AND give commit:
+python -m pytest tests/unit/test_folders.py -q --tb=short
+# after green:
+git add -A
+git status
+git commit -m "Fix folder metric counts for Modified pill"
+git push
+./pull-restart.ps1
 ```
 
 ```text
