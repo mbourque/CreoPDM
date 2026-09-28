@@ -238,16 +238,25 @@ def _watch_page_flags(request: Request, ctx: AppContext, db: Session, project) -
             "can_watch_project": False,
             "watch_unavailable_reason": None,
         }
-    can_watch, reason = ctx.project_watches.watch_eligibility(auth_user, email_enabled=email_on)
-    watching = False
-    if auth_user is not None:
-        watching = ctx.project_watches.is_watching(db, auth_user.id, project.id)
-    return {
-        "email_notifications_enabled": email_on,
-        "watching_project": watching,
-        "can_watch_project": can_watch,
-        "watch_unavailable_reason": None if can_watch else reason,
-    }
+    # Never let watch/email probes 500 the Files page (missing table, detached user, etc.).
+    try:
+        can_watch, reason = ctx.project_watches.watch_eligibility(auth_user, email_enabled=email_on)
+        watching = False
+        if auth_user is not None:
+            watching = ctx.project_watches.is_watching(db, int(auth_user.id), int(project.id))
+        return {
+            "email_notifications_enabled": email_on,
+            "watching_project": watching,
+            "can_watch_project": can_watch,
+            "watch_unavailable_reason": None if can_watch else reason,
+        }
+    except Exception:
+        return {
+            "email_notifications_enabled": email_on,
+            "watching_project": False,
+            "can_watch_project": False,
+            "watch_unavailable_reason": "Project watch is temporarily unavailable.",
+        }
 
 
 _CREO_PAGE_TTL = 20.0

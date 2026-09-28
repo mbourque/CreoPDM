@@ -206,3 +206,86 @@ def test_project_activity_event_requires_explicit_recipients():
         to="watcher@example.com",
     )
     email.send.assert_called_once_with(["watcher@example.com"], "S", "M")
+
+
+@requires_git
+def test_restricted_user_home_with_email_watch_does_not_500(auth_client, auth_ctx):
+    """One-project membership + email on must render Files, not INTERNAL_ERROR JSON.
+
+    Regression: auth session user loads must include projects; restricted accounts
+    otherwise crash on `/` after login when membership is read.
+    """
+    from creopdm.auth_constants import UserStatus
+    from creopdm.models.user import User
+    from sqlalchemy import select
+
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+    alpha = auth_client.post("/api/projects", json={"name": "Alpha Only"}).json()
+    created = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Tim",
+            "username": "tim",
+            "email": "tim@example.com",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "TimPass1!",
+            "password_confirm": "TimPass1!",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303, created.text
+    with auth_ctx.session_factory() as db:
+        user = db.scalar(select(User).where(User.username == "tim"))
+        assert user is not None
+        user.must_change_password = False
+        user_uuid = user.uuid
+        db.commit()
+
+    restricted = auth_client.post(
+        f"/admin/membership/users/{user_uuid}",
+        data={
+            "project_access_present": "1",
+            "project_uuid": [alpha["uuid"]],
+        },
+        follow_redirects=False,
+    )
+    assert restricted.status_code == 303, restricted.text
+
+    auth_ctx.settings.email.enabled = True
+    login = auth_client.post(
+        "/login",
+        data={"username": "tim", "password": "TimPass1!"},
+        follow_redirects=False,
+    )
+    assert login.status_code == 303
+    assert login.headers["location"] == "/"
+
+    home = auth_client.get("/")
+    assert home.status_code == 200, home.text
+    assert "INTERNAL_ERROR" not in home.text
+    assert "Alpha Only" in home.text
+    assert 'id="project-watch-btn"' in home.text
+
+    with auth_ctx.session_factory() as db:
+        loaded = auth_ctx.user_accounts.get_by_uuid(db, user_uuid)
+        assert loaded is not None
+        assert loaded.access_all_projects is False
+        assert {p.uuid for p in loaded.projects} == {alpha["uuid"]}
+
+
+def test_membership_helper_swallows_unreadable_projects(auth_ctx):
+    """Detached/broken projects collection must not raise (avoids login INTERNAL_ERROR)."""
+
+    class BrokenUser:
+        access_all_projects = False
+        id = 99
+
+        @property
+        def projects(self):
+            raise RuntimeError("detached")
+
+    broken = BrokenUser()
+    assert auth_ctx.user_accounts._membership_project_ids(broken) == set()
+    assert auth_ctx.user_accounts.filter_accessible_projects(broken, []) == []

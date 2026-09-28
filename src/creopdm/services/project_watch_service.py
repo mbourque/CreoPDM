@@ -38,22 +38,31 @@ class ProjectWatchService:
         if user is None:
             return False, "Sign in to watch a project."
         try:
-            validate_email(user.email or "")
+            email = getattr(user, "email", None) or ""
+            validate_email(email)
         except ValidationAppError:
             return (
                 False,
                 "Set a valid email address on your account before watching a project.",
             )
+        except Exception:
+            logger.exception("watch_eligibility email check failed")
+            return False, "Project watch is temporarily unavailable."
         return True, None
 
     def is_watching(self, db: Session, user_id: int, project_id: int) -> bool:
-        row = db.scalar(
-            select(ProjectWatch).where(
-                ProjectWatch.user_id == user_id,
-                ProjectWatch.project_id == project_id,
+        try:
+            row = db.scalar(
+                select(ProjectWatch).where(
+                    ProjectWatch.user_id == user_id,
+                    ProjectWatch.project_id == project_id,
+                )
             )
-        )
-        return row is not None
+            return row is not None
+        except Exception:
+            # Missing project_watches table (migration not applied) must not 500 pages.
+            logger.exception("is_watching failed user_id=%s project_id=%s", user_id, project_id)
+            return False
 
     def subscribe(self, db: Session, user: User, project: Project, *, email_enabled: bool) -> None:
         can, reason = self.watch_eligibility(user, email_enabled=email_enabled)

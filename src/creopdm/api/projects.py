@@ -117,16 +117,24 @@ def get_project_watch(
     project = load_accessible_project(request, ctx, db, project_id)
     email_on = bool(ctx.settings.email.enabled)
     auth_user = getattr(request.state, "auth_user", None)
-    can_watch, reason = ctx.project_watches.watch_eligibility(auth_user, email_enabled=email_on)
-    watching = False
-    if auth_user is not None:
-        watching = ctx.project_watches.is_watching(db, auth_user.id, project.id)
-    return ProjectWatchResponse(
-        watching=watching,
-        can_watch=can_watch,
-        email_notifications_enabled=email_on,
-        reason=None if can_watch else reason,
-    )
+    try:
+        can_watch, reason = ctx.project_watches.watch_eligibility(auth_user, email_enabled=email_on)
+        watching = False
+        if auth_user is not None:
+            watching = ctx.project_watches.is_watching(db, int(auth_user.id), int(project.id))
+        return ProjectWatchResponse(
+            watching=watching,
+            can_watch=can_watch,
+            email_notifications_enabled=email_on,
+            reason=None if can_watch else reason,
+        )
+    except Exception:
+        return ProjectWatchResponse(
+            watching=False,
+            can_watch=False,
+            email_notifications_enabled=email_on,
+            reason="Project watch is temporarily unavailable.",
+        )
 
 
 @router.post("/api/projects/{project_id}/watch", response_model=ProjectWatchResponse)

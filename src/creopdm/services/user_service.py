@@ -37,9 +37,12 @@ from creopdm.auth_constants import (
     UserStatus,
 )
 from creopdm.exceptions import NotFoundError, PermissionDeniedError, ValidationAppError
+from creopdm.logging_setup import get_logger
 from creopdm.models.project import Project
 from creopdm.models.user import Permission, Role, RolePermission, User, UserProject, UserRole
 from creopdm.utils.passwords import hash_password, verify_password
+
+logger = get_logger("user_service")
 
 # Login names: letters, digits, underscore only (no spaces or punctuation).
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{2,64}$")
@@ -156,16 +159,24 @@ class UserService:
         return frozenset(keys)
 
     def get_by_uuid(self, db: Session, user_uuid: str) -> User | None:
+        # Always load projects: restricted users (access_all_projects=False) need
+        # membership on request.state.auth_user after the auth middleware session closes.
         return db.scalar(
             select(User)
-            .options(selectinload(User.roles).selectinload(Role.permissions))
+            .options(
+                selectinload(User.roles).selectinload(Role.permissions),
+                selectinload(User.projects),
+            )
             .where(User.uuid == user_uuid)
         )
 
     def get_by_username(self, db: Session, username: str) -> User | None:
         return db.scalar(
             select(User)
-            .options(selectinload(User.roles).selectinload(Role.permissions))
+            .options(
+                selectinload(User.roles).selectinload(Role.permissions),
+                selectinload(User.projects),
+            )
             .where(User.username == _normalize_username(username))
         )
 
@@ -535,17 +546,30 @@ class UserService:
         db.delete(role)
         db.flush()
 
+    @staticmethod
+    def _membership_project_ids(user: User) -> set[int]:
+        """Project ids from user_projects. Never raises on detached/unloaded ORM state."""
+        try:
+            return {p.id for p in (user.projects or [])}
+        except Exception:
+            # DetachedInstanceError when auth middleware closed its session before
+            # projects were loaded — treat as no membership rather than 500 the UI.
+            logger.exception(
+                "Could not read project membership for user_id=%s; denying access",
+                getattr(user, "id", None),
+            )
+            return set()
+
     def user_can_access_project(self, user: User, project: Project) -> bool:
         """True when the user may browse/use the given project."""
         if getattr(user, "access_all_projects", True):
             return True
-        allowed_ids = {p.id for p in (user.projects or [])}
-        return project.id in allowed_ids
+        return project.id in self._membership_project_ids(user)
 
     def filter_accessible_projects(self, user: User, projects: list[Project]) -> list[Project]:
         if getattr(user, "access_all_projects", True):
             return list(projects)
-        allowed_ids = {p.id for p in (user.projects or [])}
+        allowed_ids = self._membership_project_ids(user)
         return [p for p in projects if p.id in allowed_ids]
 
     def set_project_access(
