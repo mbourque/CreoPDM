@@ -18,7 +18,7 @@ class User(Base):
     uuid: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, index=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=UserStatus.ACTIVE.value, index=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

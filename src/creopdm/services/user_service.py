@@ -43,6 +43,7 @@ from creopdm.utils.passwords import hash_password, verify_password
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9._-]{2,64}$")
 _ROLE_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 ._/-]{0,62}[a-zA-Z0-9]$|^[a-zA-Z0-9]$")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _normalize_username(username: str) -> str:
@@ -63,6 +64,15 @@ def validate_password(password: str) -> str:
     if len(text) < 8:
         raise ValidationAppError("Password must be at least 8 characters.")
     return text
+
+
+def validate_email(email: str) -> str:
+    value = (email or "").strip()
+    if not value:
+        raise ValidationAppError("Email is required.")
+    if len(value) > 255 or not _EMAIL_RE.match(value):
+        raise ValidationAppError("Enter a valid email address.")
+    return value
 
 
 def validate_role_name(name: str) -> str:
@@ -616,7 +626,7 @@ class UserService:
         username: str,
         display_name: str,
         password: str,
-        email: str | None = None,
+        email: str,
         role_name: str = StarterRole.ENGINEER.value,
         must_change_password: bool = False,
         status: str = UserStatus.ACTIVE.value,
@@ -630,6 +640,7 @@ class UserService:
             raise ValidationAppError(f"Username '{uname}' is already taken.")
         display = (display_name or "").strip() or uname
         pwd = validate_password(password)
+        addr = validate_email(email)
         role = self.role_by_name(db, role_name)
         if role is None:
             raise ValidationAppError(f"Unknown role '{role_name}'.")
@@ -650,7 +661,7 @@ class UserService:
             uuid=str(uuid.uuid4()),
             username=uname,
             display_name=display,
-            email=(email or "").strip() or None,
+            email=addr,
             password_hash=hash_password(pwd),
             status=status,
             must_change_password=must_change_password,
@@ -675,6 +686,7 @@ class UserService:
         username: str,
         display_name: str,
         password: str,
+        email: str,
     ) -> User:
         if not self.needs_setup(db):
             raise ValidationAppError("Setup is already complete.")
@@ -683,6 +695,7 @@ class UserService:
             username=username,
             display_name=display_name,
             password=password,
+            email=email,
             role_name=StarterRole.ADMINISTRATOR.value,
             must_change_password=False,
             access_all_projects=True,
@@ -725,7 +738,7 @@ class UserService:
                 raise ValidationAppError("Display name is required.")
             user.display_name = text
         if email is not None:
-            user.email = email.strip() or None
+            user.email = validate_email(email)
         new_status = status
         if status is not None:
             if status not in {UserStatus.ACTIVE.value, UserStatus.DISABLED.value}:

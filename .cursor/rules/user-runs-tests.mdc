@@ -24,17 +24,18 @@ The user **always** runs code and shell commands themselves (tests, git, service
 ## Examples
 
 ```text
-# ✅ GOOD — after a fix:
+# ✅ GOOD — tests first, then commit + deploy from Windows:
+python -m pytest tests/unit/test_health.py -q --tb=short
+# after green:
 git add -A
+git status
 git commit -m "Fix Creo check-in page refresh"
 git push
-# On Linux host:
-git pull
-systemctl --user restart creopdm.service
+./pull-restart.ps1
 ```
 
 ```text
-# ✅ GOOD — tests:
+# ✅ GOOD — tests only while iterating:
 python -m pytest tests/unit/test_health.py -q --tb=short
 Get-Content .\pytest-last.log
 ```
@@ -42,6 +43,7 @@ Get-Content .\pytest-last.log
 ```text
 # ❌ BAD — agent runs pytest/git/systemctl and assumes success
 # ❌ BAD — "Want me to create the commit?" when they said they do that themselves
+# ❌ BAD — separate Linux git pull / systemctl block (use ./pull-restart.ps1 from Windows)
 ```
 
 Still use file tools freely. Prefer one-shot commands over multi-step agent shell chains.

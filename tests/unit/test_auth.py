@@ -66,6 +66,7 @@ def test_setup_creates_first_admin_and_blocks_second(auth_client, auth_ctx):
         data={
             "display_name": "Admin User",
             "username": "admin",
+            "email": "admin@example.com",
             "password": "AdminPass1",
             "password_confirm": "AdminPass1",
         },
@@ -78,6 +79,7 @@ def test_setup_creates_first_admin_and_blocks_second(auth_client, auth_ctx):
         user = db.scalar(select(User).where(User.username == "admin"))
         assert user is not None
         assert user.display_name == "Admin User"
+        assert user.email == "admin@example.com"
         assert "AdminPass1" not in user.password_hash
         assert verify_password("AdminPass1", user.password_hash)
         assert UserService().primary_role_name(user) == BuiltinRole.ADMINISTRATOR.value
@@ -91,6 +93,7 @@ def test_setup_creates_first_admin_and_blocks_second(auth_client, auth_ctx):
         data={
             "display_name": "Other",
             "username": "other",
+            "email": "other@example.com",
             "password": "OtherPass1",
             "password_confirm": "OtherPass1",
         },
@@ -100,12 +103,109 @@ def test_setup_creates_first_admin_and_blocks_second(auth_client, auth_ctx):
     assert again.headers["location"] == "/login"
 
 
+def test_setup_and_admin_user_require_email(auth_client, auth_ctx):
+    """Setup and Add user reject blank email (field is required, not optional)."""
+    setup = auth_client.get("/setup")
+    assert setup.status_code == 200
+    assert 'name="email"' in setup.text
+    assert 'required' in setup.text
+
+    missing = auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "email": "",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    assert missing.status_code == 400
+    assert "Email is required" in missing.text
+
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "email": "admin@example.com",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+
+    form = auth_client.get("/admin/users/new")
+    assert form.status_code == 200
+    assert 'name="email"' in form.text
+    assert "required" in form.text
+
+    created = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "No Email",
+            "username": "noemail",
+            "email": "   ",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "NoemailPass1",
+            "password_confirm": "NoemailPass1",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 400
+    assert "Email is required" in created.text
+
+    with auth_ctx.session_factory() as db:
+        assert db.scalar(select(User).where(User.username == "noemail")) is None
+
+    # Edit must not clear email either.
+    ok_user = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Has Email",
+            "username": "hasemail",
+            "email": "has@example.com",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "HasemailPass1",
+            "password_confirm": "HasemailPass1",
+        },
+        follow_redirects=False,
+    )
+    assert ok_user.status_code == 303
+    with auth_ctx.session_factory() as db:
+        target = db.scalar(select(User).where(User.username == "hasemail"))
+        assert target is not None
+        target_uuid = target.uuid
+    cleared = auth_client.post(
+        f"/admin/users/{target_uuid}",
+        data={
+            "display_name": "Has Email",
+            "email": "",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+        },
+        follow_redirects=False,
+    )
+    assert cleared.status_code == 400
+    assert "Email is required" in cleared.text
+    with auth_ctx.session_factory() as db:
+        target = db.scalar(select(User).where(User.username == "hasemail"))
+        assert target is not None
+        assert target.email == "has@example.com"
+
+
 def test_login_logout_and_disabled_user(auth_client, auth_ctx):
     auth_client.post(
         "/setup",
         data={
             "display_name": "Admin",
             "username": "admin",
+            "email": "admin@example.com",
             "password": "AdminPass1",
             "password_confirm": "AdminPass1",
         },
@@ -142,9 +242,11 @@ def test_login_logout_and_disabled_user(auth_client, auth_ctx):
             db,
             username="backup",
             display_name="Backup Admin",
+            email="backup@example.com",
             password="BackupPass1",
             role_name=BuiltinRole.ADMINISTRATOR.value,
             must_change_password=False,
+            access_all_projects=True,
         )
         admin = db.scalar(select(User).where(User.username == "admin"))
         assert admin is not None
@@ -166,6 +268,7 @@ def test_admin_can_create_user_non_admin_cannot(auth_client, auth_ctx):
         data={
             "display_name": "Admin",
             "username": "admin",
+            "email": "admin@example.com",
             "password": "AdminPass1",
             "password_confirm": "AdminPass1",
         },
@@ -180,7 +283,7 @@ def test_admin_can_create_user_non_admin_cannot(auth_client, auth_ctx):
         data={
             "display_name": "Eng User",
             "username": "engineer1",
-            "email": "",
+            "email": "user@example.com",
             "role": BuiltinRole.ENGINEER.value,
             "status": UserStatus.ACTIVE.value,
             "password": "Engineer1",
@@ -225,6 +328,7 @@ def test_admin_can_open_settings(auth_client):
         data={
             "display_name": "Admin",
             "username": "admin",
+            "email": "admin@example.com",
             "password": "AdminPass1",
             "password_confirm": "AdminPass1",
         },
@@ -256,6 +360,7 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
         data={
             "display_name": "Admin",
             "username": "admin",
+            "email": "admin@example.com",
             "password": "AdminPass1",
             "password_confirm": "AdminPass1",
         },
@@ -372,7 +477,7 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
     assert 'name="test_subject"' in page.text
     assert 'name="test_message"' in page.text
     assert "CreoPDM test email" in page.text
-    assert "Save your changes before sending a test" in page.text
+    assert "Save your delivery settings before sending a test" in page.text
 
     # PDM Manager lacks email.manage.
     auth_client.post(
@@ -380,7 +485,7 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
         data={
             "display_name": "PDM",
             "username": "pdm",
-            "email": "",
+            "email": "user@example.com",
             "role": BuiltinRole.PDM_MANAGER.value,
             "status": UserStatus.ACTIVE.value,
             "password": "PdmPass1",
@@ -409,6 +514,7 @@ def test_admin_can_edit_user(auth_client, auth_ctx):
         data={
             "display_name": "Admin",
             "username": "admin",
+            "email": "admin@example.com",
             "password": "AdminPass1",
             "password_confirm": "AdminPass1",
         },
@@ -419,7 +525,7 @@ def test_admin_can_edit_user(auth_client, auth_ctx):
         data={
             "display_name": "Paul",
             "username": "paul",
-            "email": "",
+            "email": "paul@example.com",
             "role": BuiltinRole.ENGINEER.value,
             "status": UserStatus.ACTIVE.value,
             "password": "PaulPass1",
@@ -432,6 +538,7 @@ def test_admin_can_edit_user(auth_client, auth_ctx):
     with auth_ctx.session_factory() as db:
         paul = db.scalar(select(User).where(User.username == "paul"))
         assert paul is not None
+        assert paul.email == "paul@example.com"
         paul_uuid = paul.uuid
         eng_role = auth_ctx.user_accounts.role_by_name(db, BuiltinRole.ENGINEER.value)
         assert eng_role is not None
@@ -492,6 +599,7 @@ def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx)
         data={
             "display_name": "Admin",
             "username": "admin",
+            "email": "admin@example.com",
             "password": "AdminPass1",
             "password_confirm": "AdminPass1",
         },
@@ -520,7 +628,7 @@ def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx)
         data={
             "display_name": "Limited",
             "username": "limited",
-            "email": "",
+            "email": "user@example.com",
             "role": BuiltinRole.ENGINEER.value,
             "status": UserStatus.ACTIVE.value,
             "password": "Limited1!",
@@ -660,6 +768,7 @@ def test_unauthenticated_api_returns_401(auth_client):
         data={
             "display_name": "Admin",
             "username": "admin",
+            "email": "admin@example.com",
             "password": "AdminPass1",
             "password_confirm": "AdminPass1",
         },
@@ -720,6 +829,7 @@ def _setup_admin_and_users(
         data={
             "display_name": "Admin",
             "username": "admin",
+            "email": "admin@example.com",
             "password": "AdminPass1",
             "password_confirm": "AdminPass1",
         },
@@ -731,7 +841,7 @@ def _setup_admin_and_users(
             data={
                 "display_name": name.title(),
                 "username": name,
-                "email": "",
+                "email": f"{name}@example.com",
                 "role": role,
                 "status": UserStatus.ACTIVE.value,
                 "password": f"{name.title()}Pass1",
@@ -1027,6 +1137,7 @@ def test_admin_can_create_and_delete_project(auth_client, auth_ctx, repo_parent)
         data={
             "display_name": "Admin",
             "username": "admin",
+            "email": "admin@example.com",
             "password": "AdminPass1",
             "password_confirm": "AdminPass1",
         },
@@ -1124,7 +1235,7 @@ def test_roles_admin_create_custom_and_gate(auth_client, auth_ctx, repo_parent):
         data={
             "display_name": "Lock User",
             "username": "locker",
-            "email": "",
+            "email": "user@example.com",
             "role": "Checkout Only",
             "status": UserStatus.ACTIVE.value,
             "password": "LockerPass1",
@@ -1146,6 +1257,14 @@ def test_roles_admin_create_custom_and_gate(auth_client, auth_ctx, repo_parent):
         data={"comment": "init"},
     )
     assert part.status_code == 201, part.text
+    # New users have no project access until Membership grants it.
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(User).where(User.username == "locker"))
+        assert row is not None
+        auth_ctx.user_accounts.set_project_access(
+            db, row, access_all=False, project_uuids=[project["uuid"]]
+        )
+        db.commit()
 
     _login(auth_client, "locker", "LockerPass1")
     home = auth_client.get(f"/?project={project['uuid']}")
@@ -1175,7 +1294,7 @@ def test_role_with_no_permissions_cannot_browse(auth_client, auth_ctx, repo_pare
         data={
             "display_name": "Nobody",
             "username": "nobody",
-            "email": "",
+            "email": "user@example.com",
             "role": "Empty Role",
             "status": UserStatus.ACTIVE.value,
             "password": "NobodyPass1",
@@ -1250,7 +1369,7 @@ def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ct
         data={
             "display_name": "Desk Admin",
             "username": "desk",
-            "email": "",
+            "email": "user@example.com",
             "role": "Admin Desk",
             "status": UserStatus.ACTIVE.value,
             "password": "DeskPass1!",
@@ -1338,6 +1457,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
         data={
             "display_name": "Admin",
             "username": "admin",
+            "email": "admin@example.com",
             "password": "AdminPass1",
             "password_confirm": "AdminPass1",
         },
@@ -1457,7 +1577,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
         f"/admin/users/{admin_uuid}",
         data={
             "display_name": "Admin",
-            "email": "",
+            "email": "user@example.com",
             "role": BuiltinRole.ENGINEER.value,
             "status": UserStatus.ACTIVE.value,
             "password": "",
@@ -1483,6 +1603,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
             db,
             username="backup",
             display_name="Backup",
+            email="backup@example.com",
             password="BackupPass1",
             role_name=full.name,
             must_change_password=False,
@@ -1589,7 +1710,7 @@ def test_role_assign_must_be_strictly_below_actor(auth_client, auth_ctx):
         data={
             "display_name": "Lead",
             "username": "lead",
-            "email": "",
+            "email": "user@example.com",
             "role": "Team Lead",
             "status": UserStatus.ACTIVE.value,
             "password": "LeadPass1",
@@ -1603,7 +1724,7 @@ def test_role_assign_must_be_strictly_below_actor(auth_client, auth_ctx):
         data={
             "display_name": "Bait",
             "username": "bait",
-            "email": "",
+            "email": "user@example.com",
             "role": BuiltinRole.VIEWER.value,
             "status": UserStatus.ACTIVE.value,
             "password": "BaitPass1",
@@ -1634,7 +1755,7 @@ def test_role_assign_must_be_strictly_below_actor(auth_client, auth_ctx):
         f"/admin/users/{bait_uuid}",
         data={
             "display_name": "Bait",
-            "email": "",
+            "email": "user@example.com",
             "role": "Team Lead Twin",
             "status": UserStatus.ACTIVE.value,
             "password": "",
@@ -1649,7 +1770,7 @@ def test_role_assign_must_be_strictly_below_actor(auth_client, auth_ctx):
         f"/admin/users/{bait_uuid}",
         data={
             "display_name": "Bait",
-            "email": "",
+            "email": "user@example.com",
             "role": "Team Lead",
             "status": UserStatus.ACTIVE.value,
             "password": "",
@@ -1663,7 +1784,7 @@ def test_role_assign_must_be_strictly_below_actor(auth_client, auth_ctx):
         f"/admin/users/{bait_uuid}",
         data={
             "display_name": "Bait",
-            "email": "",
+            "email": "user@example.com",
             "role": "Team Viewer",
             "status": UserStatus.ACTIVE.value,
             "password": "",
@@ -1709,7 +1830,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         data={
             "display_name": "Clerk",
             "username": "clerk",
-            "email": "",
+            "email": "user@example.com",
             "role": "User Clerk",
             "status": UserStatus.ACTIVE.value,
             "password": "ClerkPass1",
@@ -1744,7 +1865,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         f"/admin/users/{clerk_uuid}",
         data={
             "display_name": "Clerk Hacked",
-            "email": "",
+            "email": "user@example.com",
             "role": "User Clerk",
             "status": UserStatus.ACTIVE.value,
             "password": "",
@@ -1759,7 +1880,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         f"/admin/users/{admin_uuid}",
         data={
             "display_name": "Hacked",
-            "email": "",
+            "email": "user@example.com",
             "role": BuiltinRole.ENGINEER.value,
             "status": UserStatus.ACTIVE.value,
             "password": "",
@@ -1791,7 +1912,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         f"/admin/users/{eng_uuid}",
         data={
             "display_name": "Eng",
-            "email": "",
+            "email": "user@example.com",
             "role": BuiltinRole.VIEWER.value,
             "status": UserStatus.ACTIVE.value,
             "password": "",
@@ -1813,7 +1934,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         f"/admin/users/{eng_uuid}",
         data={
             "display_name": "Eng Updated",
-            "email": "",
+            "email": "user@example.com",
             "status": UserStatus.ACTIVE.value,
             "password": "",
             "password_confirm": "",
@@ -1846,7 +1967,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         f"/admin/users/{admin_uuid}",
         data={
             "display_name": "Admin Self",
-            "email": "",
+            "email": "user@example.com",
             "password": "",
             "password_confirm": "",
             "project_access_present": "1",
@@ -1867,7 +1988,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         f"/admin/users/{admin_uuid}",
         data={
             "display_name": "Admin Self",
-            "email": "",
+            "email": "user@example.com",
             "role": BuiltinRole.ENGINEER.value,
             "status": UserStatus.ACTIVE.value,
             "password": "",
@@ -1883,7 +2004,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         f"/admin/users/{admin_uuid}",
         data={
             "display_name": "Admin Self",
-            "email": "",
+            "email": "user@example.com",
             "role": BuiltinRole.ADMINISTRATOR.value,
             "status": UserStatus.DISABLED.value,
             "password": "",
@@ -1906,6 +2027,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
             db,
             username="backup",
             display_name="Backup",
+            email="backup@example.com",
             password="BackupPass1",
             role_name=BuiltinRole.ADMINISTRATOR.value,
             must_change_password=False,
@@ -1919,7 +2041,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         f"/admin/users/{admin_uuid}",
         data={
             "display_name": "Admin",
-            "email": "",
+            "email": "user@example.com",
             "role": BuiltinRole.ENGINEER.value,
             "status": UserStatus.ACTIVE.value,
             "password": "",
@@ -2061,6 +2183,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             db,
             username="ops",
             display_name="Ops Admin",
+            email="ops@example.com",
             password="OpsPass1",
             role_name=BuiltinRole.ADMINISTRATOR.value,
             must_change_password=False,
@@ -2237,7 +2360,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             f"/admin/users/{bait_uuid}",
             data={
                 "display_name": bait_display,
-                "email": "",
+                "email": "user@example.com",
                 "role": alt_role,
                 "status": UserStatus.ACTIVE.value,
                 "password": "",
@@ -2253,7 +2376,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 f"/admin/users/{bait_uuid}",
                 data={
                     "display_name": bait_display,
-                    "email": "",
+                    "email": "user@example.com",
                     "role": bait_role,
                     "status": UserStatus.ACTIVE.value,
                     "password": "",
@@ -2270,7 +2393,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             f"/admin/users/{bait_uuid}",
             data={
                 "display_name": bait_display,
-                "email": "",
+                "email": "user@example.com",
                 "role": bait_role,
                 "status": UserStatus.ACTIVE.value,
                 "password": "TempPass99",

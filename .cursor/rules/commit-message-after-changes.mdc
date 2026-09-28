@@ -1,5 +1,5 @@
 ---
-description: After finishing code changes, give copy-paste git add/commit/push (and Linux pull/restart when needed)
+description: After finishing code changes, give pytest first then copy-paste git add/commit/push and ./pull-restart.ps1
 alwaysApply: true
 ---
 
@@ -7,41 +7,40 @@ alwaysApply: true
 
 The user runs git themselves. Whenever you finish a batch of code/test/rule changes (not mid-exploration), end with **copy-paste command blocks**.
 
-## Always include (Windows / this PC)
+## Always: tests first, then commit + deploy from Windows
 
-PowerShell-friendly, from the repo root:
+PowerShell-friendly, from the repo root. **Always** put the pytest (or other focused test) block **before** git.
+
+```powershell
+python -m pytest path/to/relevant_tests.py -q --tb=short
+```
+
+Then, after they confirm green (or `@pytest-last.log`):
 
 ```powershell
 git add -A
 git status
 git commit -m "Short imperative subject"
 git push
+./pull-restart.ps1
 ```
 
 - Subject: one line, ~50–72 chars, imperative, why-focused, no trailing period
 - Do **not** run these unless they explicitly ask you to commit/push
-
-## Include Linux when the change needs the CreoPDM host
-
-If the fix is served by the Linux CreoPDM service (API, `app.js`, templates, settings, etc.), also give:
-
-```bash
-git pull
-systemctl --user restart creopdm.service
-```
-
-Skip the Linux block for docs-only, rules-only, or pure Windows-agent work that does not need a server restart.
+- `./pull-restart.ps1` pulls on the Linux CreoPDM host and restarts the service from this Windows PC — use it whenever the change needs the server (API, `app.js`, templates, settings, migrations, etc.)
+- Skip `./pull-restart.ps1` only for docs-only, rules-only, or pure Windows-agent work that does not need a server restart
+- Do **not** also give a separate Linux `git pull` / `systemctl` block — the script replaces that
 
 ## Example
 
 ```text
-Windows (commit + push):
+# Tests first:
+python -m pytest tests/unit/test_auth.py::test_setup_and_admin_user_require_email -q --tb=short
+
+# After green — commit, push, update server:
 git add -A
 git status
-git commit -m "Disable check-in comment when nothing to submit"
+git commit -m "Require user email; document admin UX"
 git push
-
-Linux (deploy):
-git pull
-systemctl --user restart creopdm.service
+./pull-restart.ps1
 ```

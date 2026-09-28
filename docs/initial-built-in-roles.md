@@ -757,7 +757,7 @@ username
 
 display_name
 
-email
+email  # required
 
 status
 

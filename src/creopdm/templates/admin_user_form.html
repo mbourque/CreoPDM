@@ -28,8 +28,8 @@
         <input type="text" value="{{ form.username }}" disabled>
         {% endif %}
       </label>
-      <label>Email (optional)
-        <input name="email" type="email" value="{{ form.email }}" maxlength="255" autocomplete="email">
+      <label>Email
+        <input name="email" type="email" value="{{ form.email }}" required maxlength="255" autocomplete="email">
       </label>
       {% if can_assign_roles and not editing_self %}
       <label>Role

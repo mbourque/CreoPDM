@@ -104,7 +104,7 @@ def setup_page(request: Request, ctx: AppContext = Depends(get_context), db: Ses
     return templates.TemplateResponse(
         request,
         "auth_setup.html",
-        {**_base_ctx(request, ctx), "error": None, "username": "admin"},
+        {**_base_ctx(request, ctx), "error": None, "username": "admin", "email": ""},
     )
 
 
@@ -113,6 +113,7 @@ def setup_submit(
     request: Request,
     display_name: str = Form(""),
     username: str = Form("admin"),
+    email: str = Form(""),
     password: str = Form(""),
     password_confirm: str = Form(""),
     ctx: AppContext = Depends(get_context),
@@ -131,6 +132,7 @@ def setup_submit(
                 username=username,
                 display_name=display_name,
                 password=password,
+                email=email,
             )
             db.commit()
             _login_session(request, user)
@@ -149,6 +151,7 @@ def setup_submit(
             "error": error,
             "username": username,
             "display_name": display_name,
+            "email": email,
         },
         status_code=400 if error else 200,
     )

@@ -23,8 +23,9 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 11. [Remove ▾](#11-remove-)
 12. [Typing the project name to confirm](#12-typing-the-project-name-to-confirm)
 13. [Mobile browse](#13-mobile-browse)
-14. [Quick walkthroughs](#14-quick-walkthroughs)
-15. [For developers (tests)](#15-for-developers-tests)
+14. [Administration (users, roles, membership, email)](#14-administration-users-roles-membership-email)
+15. [Quick walkthroughs](#15-quick-walkthroughs)
+16. [For developers (tests)](#16-for-developers-tests)
 
 ---
 
@@ -341,7 +342,59 @@ Phone-only **browse** mode (portrait or landscape). No Add / Checkout / Check In
 
 ---
 
-## 14. Quick walkthroughs
+## 14. Administration (users, roles, membership, email)
+
+Use a normal browser for these checks. You need the matching Administration permission for each tile.
+
+### First-run setup
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Open the app when **no users** exist yet | Send you to **Create administrator** (`/setup`) | Let you use Files / login as if accounts already exist |
+| Create the first admin with display name, username, **email**, and password | Create an **Administrator** with **All projects**, sign you in, and take you to the app | Accept a blank or invalid email; leave email optional |
+| Try `/setup` again after any user exists | Redirect to login | Create a second “first” admin |
+
+### Users
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Open **Add user** | Require display name, username, **email**, role (if you can assign), status, and initial password | Treat email as optional; let you set project membership on this form |
+| Save a new user | Create the account with **no project access**; point you to **Membership** to grant access; return to the Users list | Give the new user All projects or any project by default |
+| Edit a user and clear email | Reject with “Email is required” (or equivalent) and keep the previous address | Save a blank email |
+| Open the Role dropdown (with `roles.assign`) | List only roles with **fewer** permissions than yours (not your role, not a peer, not a higher role) | Offer Administrator to another Administrator, or the same role as yours |
+| Try to change **your own** role or status | Block the change and tell you to ask another administrator | Let you demote or disable yourself |
+
+### Membership
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Open **Membership** | Show a hub with **By project** and **By user**, plus a short projects summary | Put project checkboxes on the user Add/Edit form |
+| Open **By user** → a person | Let you set **All projects** or pick specific projects, then Save | Leave Files still showing every project when that user is restricted |
+| Open **By project** → a project | Let you add/remove members for that project | |
+
+### Roles
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Edit permissions on a role | Save when at least one ACTIVE user still has full CreoPDM Administration (including `email.manage`) | Strip the last full admin’s Administration set |
+| Change name / description / Administration checkboxes on **your own** role | Reject the change | Let you lock yourself out of Administration |
+
+### Email (Administration → Email)
+
+Needs `email.manage`.
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Open Email | Show enable, **Local Postfix** vs **Authenticated SMTP**, From address, administrator email, and Test email | |
+| Choose **Local Postfix** | Use `127.0.0.1:25` on the CreoPDM server (no username/password panel) | Require SMTP credentials for Local |
+| Choose **Authenticated SMTP** | Show host, port, TLS, auth, username/password | |
+| Change delivery settings, then **Send test email** without Save | Block with a message to Save first | Send using unsaved settings |
+| Change only To / Subject / Message, then Send test | Send using the **saved** delivery settings (no Save required for those three fields) | |
+| Save, then Send test | Deliver to the test recipient (or administrator email if To is blank) | |
+
+---
+
+## 15. Quick walkthroughs
 
 ### Create → open → remove a folder
 
@@ -364,11 +417,15 @@ Try the same with **Add folder…** and **Add folders…**.
 - Add files… by dropping a whole folder tree → told to use Add folder(s).  
 - Check In with an empty comment → blocked.  
 - Check In ▾ with nothing pending → options stay disabled.  
-- On a phone: tap a file name → must not open; shrink Creo on desktop → must not enter browse-only.
+- On a phone: tap a file name → must not open; shrink Creo on desktop → must not enter browse-only.  
+- Setup / Add user / Edit user with blank email → blocked.  
+- Add user → new account has no projects until Membership grants them.  
+- Role dropdown → your own role / a peer role / a higher role must not appear.  
+- Email admin: change SMTP fields then Send test without Save → blocked.
 
 ---
 
-## 15. For developers (tests)
+## 16. For developers (tests)
 
 Automated coverage lives mainly in:
 
@@ -376,7 +433,7 @@ Automated coverage lives mainly in:
 - `tests/unit/test_user_interaction_validations.py`
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
-- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `objects.view` / `data-can-checkout`; empty-home `projects.create` hero; empty-project `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_objects_view_lands_on_administration`)
+- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `objects.view` / `data-can-checkout`; empty-home `projects.create` hero; empty-project `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_objects_view_lands_on_administration`; `test_setup_and_admin_user_require_email`; `test_admin_email_settings_save_and_gate`; `test_admin_membership_project_access_filters_projects`; `test_role_assign_must_be_strictly_below_actor`; new users default to no project access)
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
 - Related checkout / check-in / soft-nav tests
