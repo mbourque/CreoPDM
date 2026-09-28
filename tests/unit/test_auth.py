@@ -387,6 +387,10 @@ def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx)
     assert 'href="/admin/membership/projects"' in mem_home.text
     assert 'href="/admin/membership/users"' in mem_home.text
     assert f'href="/admin/membership/users/{user_uuid}"' not in mem_home.text
+    assert "Projects summary" in mem_home.text
+    assert "Alpha" in mem_home.text
+    assert "Restricted members" in mem_home.text
+    assert f'href="/admin/membership/projects/{alpha["uuid"]}"' in mem_home.text
 
     users_list = auth_client.get("/admin/membership/users")
     assert users_list.status_code == 200
@@ -425,6 +429,15 @@ def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx)
         assert user is not None
         assert user.access_all_projects is False
         assert {p.uuid for p in user.projects} == {alpha["uuid"]}
+
+    summary = auth_client.get("/admin/membership")
+    assert summary.status_code == 200
+    # Restricted engineer on Alpha only — summary counts explicit members (not All-projects users).
+    assert re.search(
+        rf'href="/admin/membership/projects/{re.escape(alpha["uuid"])}">Alpha</a>.*?<td>1</td>',
+        summary.text,
+        re.S,
+    ), summary.text
 
     _login(auth_client, "limited", "Limited1!")
     listed = auth_client.get("/api/projects")

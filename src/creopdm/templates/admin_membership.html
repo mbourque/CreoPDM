@@ -24,5 +24,32 @@
       <p>Open a user, then set All projects or a specific project list.</p>
     </section>
   </div>
+
+  <section class="settings-card settings-form-wide" style="margin-top: 1.25rem;">
+    <h2 class="h-like" style="margin-top: 0;">Projects summary</h2>
+    <p class="muted small">Restricted members are users without All projects who are explicitly on this project. {% if all_projects_count %}{{ all_projects_count }} active user{% if all_projects_count != 1 %}s have{% else %} has{% endif %} All projects and can open every project.{% else %}No active users currently have All projects.{% endif %}</p>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Number</th>
+          <th>Restricted members</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in projects %}
+        <tr>
+          <td><a href="/admin/membership/projects/{{ p.uuid }}">{{ p.name }}</a></td>
+          <td>{{ p.number or "—" }}</td>
+          <td>{{ p.member_count }}</td>
+          <td><a href="/admin/membership/projects/{{ p.uuid }}">Manage</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No projects yet. Create one under Administration → Projects.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
 </article>
 {% endblock %}
