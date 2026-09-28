@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from creopdm.api import auth_pages, checkout, creo, health, objects, pages, projects, settings
+from creopdm.api import auth_pages, checkout, creo, health, objects, pages, products, settings
 from creopdm.api.errors import register_error_handlers
 from creopdm.auth_constants import UserStatus
 from creopdm.auth_session import (
@@ -36,12 +36,12 @@ from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.creo_service import CreoService
 from creopdm.services.email_service import EmailService
 from creopdm.services.git_service import GitService
-from creopdm.services.lock_manager import ProjectLockManager
+from creopdm.services.lock_manager import ProductLockManager
 from creopdm.services.metadata_service import MetadataService
 from creopdm.services.notification_service import NotificationService
 from creopdm.services.object_service import ObjectService
-from creopdm.services.project_service import ProjectService
-from creopdm.services.project_watch_service import ProjectWatchService
+from creopdm.services.product_service import ProductService
+from creopdm.services.product_watch_service import ProductWatchService
 from creopdm.services.user_service import UserService
 from creopdm.services.where_used_index_jobs import WhereUsedIndexJobs
 from creopdm.services.workspace_service import WorkspaceService
@@ -70,7 +70,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
     version_store = GitVersionStore(git)
     auth_enabled = users is None
     identity: CurrentUserProvider = users if users is not None else SessionAwareUserProvider()
-    locks = ProjectLockManager()
+    locks = ProductLockManager()
     activities = ActivityService()
     workspaces = WorkspaceService(manager, git)
     objects = ObjectService(version_store, locks, activities, identity, manager)
@@ -97,7 +97,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
     user_accounts = UserService()
     email = EmailService()
     notifications = NotificationService(get_config=lambda: manager.settings.email, email=email)
-    project_watches = ProjectWatchService(notifications)
+    product_watches = ProductWatchService(notifications)
     with session_factory() as db:
         user_accounts.ensure_builtin_roles(db)
         db.commit()
@@ -112,7 +112,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         locks=locks,
         creo=creo_connector,
         activities=activities,
-        projects=ProjectService(git, locks, activities, identity, workspaces),
+        products=ProductService(git, locks, activities, identity, workspaces),
         objects=objects,
         workspaces=workspaces,
         checkouts=checkouts,
@@ -122,7 +122,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         where_used_index=WhereUsedIndexJobs(session_factory, metadata),
         email=email,
         notifications=notifications,
-        project_watches=project_watches,
+        product_watches=product_watches,
         user_accounts=user_accounts,
         auth_enabled=auth_enabled,
     )
@@ -152,7 +152,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
     app.include_router(auth_pages.router)
     app.include_router(health.router)
     app.include_router(settings.router)
-    app.include_router(projects.router)
+    app.include_router(products.router)
     app.include_router(objects.router)
     app.include_router(checkout.router)
     app.include_router(creo.router)

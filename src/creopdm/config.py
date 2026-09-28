@@ -1,6 +1,6 @@
 """Application configuration manager.
 
-Settings live in the application data directory, not in project Git repositories.
+Settings live in the application data directory, not in product Git repositories.
 """
 
 from __future__ import annotations
@@ -170,11 +170,11 @@ class WorkspaceConfig(BaseModel):
 
 class UiConfig(BaseModel):
     open_browser_on_start: bool = True
-    last_project_uuid: str | None = None
-    project_folders: dict[str, str] = Field(default_factory=dict)
+    last_product_uuid: str | None = None
+    product_folders: dict[str, str] = Field(default_factory=dict)
     # Embedded Creo browser calls this local agent (materialize / open).
     agent_base_url: str = "http://127.0.0.1:8766"
-    # How often the project page polls workspace-watch for pending saves / new files.
+    # How often the product page polls workspace-watch for pending saves / new files.
     workspace_poll_interval_ms: int = 5000
 
     @field_validator("agent_base_url")
@@ -517,7 +517,7 @@ def _dir_has_entries(path: Path) -> bool:
         return False
 
 
-def _store_has_projects(path: Path) -> bool:
+def _store_has_products(path: Path) -> bool:
     if (path / "database" / "creopdm.db").is_file():
         return True
     return _dir_has_entries(path / VAULTS_DIRNAME) or _dir_has_entries(path / LEGACY_VAULTS_DIRNAME)
@@ -553,7 +553,7 @@ def adopt_legacy_linux_data_dir(target: Path) -> Path:
             return chosen
     except OSError:
         return target
-    if not _store_has_projects(legacy):
+    if not _store_has_products(legacy):
         return chosen
     if not _store_looks_unused(chosen):
         return chosen
@@ -870,8 +870,8 @@ class ConfigManager:
             return list(DEFAULT_IGNORE_PATTERNS)
         return unique_ignore_patterns(configured)
 
-    def workspace_for_project(self, vault_folder: str) -> Path:
-        """Return the vault directory for a project folder name (UUID or custom)."""
+    def workspace_for_product(self, vault_folder: str) -> Path:
+        """Return the vault directory for a product folder name (UUID or custom)."""
         from creopdm.utils.vault_folder import validate_vault_folder
 
         folder = validate_vault_folder(vault_folder)
@@ -879,28 +879,28 @@ class ConfigManager:
         root.mkdir(parents=True, exist_ok=True)
         return root / folder
 
-    def remember_project(self, project_uuid: str | None) -> None:
-        uuid_value = (project_uuid or "").strip() or None
+    def remember_product(self, product_uuid: str | None) -> None:
+        uuid_value = (product_uuid or "").strip() or None
         settings = self.settings
-        if settings.ui.last_project_uuid == uuid_value:
+        if settings.ui.last_product_uuid == uuid_value:
             return
-        settings.ui.last_project_uuid = uuid_value
+        settings.ui.last_product_uuid = uuid_value
         self.save(settings)
 
-    def remembered_folder(self, project_uuid: str) -> str:
+    def remembered_folder(self, product_uuid: str) -> str:
         from creopdm.utils.folders import normalize_folder_query
 
-        return normalize_folder_query(self.settings.ui.project_folders.get(project_uuid, ""))
+        return normalize_folder_query(self.settings.ui.product_folders.get(product_uuid, ""))
 
-    def remember_folder(self, project_uuid: str, folder: str) -> None:
+    def remember_folder(self, product_uuid: str, folder: str) -> None:
         from creopdm.utils.folders import normalize_folder_query
 
-        uuid_value = (project_uuid or "").strip()
+        uuid_value = (product_uuid or "").strip()
         if not uuid_value:
             return
         folder = normalize_folder_query(folder)
         settings = self.settings
-        current = dict(settings.ui.project_folders)
+        current = dict(settings.ui.product_folders)
         stored = current.get(uuid_value, "")
         if stored == folder:
             return
@@ -908,17 +908,17 @@ class ConfigManager:
             current[uuid_value] = folder
         else:
             current.pop(uuid_value, None)
-        settings.ui.project_folders = current
+        settings.ui.product_folders = current
         self.save(settings)
 
-    def forget_project_view(self, project_uuid: str) -> None:
-        uuid_value = (project_uuid or "").strip()
+    def forget_product_view(self, product_uuid: str) -> None:
+        uuid_value = (product_uuid or "").strip()
         if not uuid_value:
             return
         settings = self.settings
-        current = dict(settings.ui.project_folders)
+        current = dict(settings.ui.product_folders)
         if uuid_value not in current:
             return
         current.pop(uuid_value, None)
-        settings.ui.project_folders = current
+        settings.ui.product_folders = current
         self.save(settings)

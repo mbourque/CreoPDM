@@ -7,7 +7,7 @@ from creopdm.utils.paths import (
     ensure_within,
     normalize_fs_path,
     sanitize_filename,
-    validate_project_location,
+    validate_product_location,
 )
 
 __all__ = [
@@ -24,5 +24,5 @@ __all__ = [
     "sanitize_filename",
     "set_file_readonly",
     "set_file_writable",
-    "validate_project_location",
+    "validate_product_location",
 ]

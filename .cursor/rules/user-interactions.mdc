@@ -9,10 +9,10 @@ alwaysApply: true
 
 ## Do not break
 
-When changing `app.js`, `app.html`, `base.html`, objects/projects APIs, or related services:
+When changing `app.js`, `app.html`, `base.html`, objects/products APIs, or related services:
 
 1. **Read the relevant section** of `docs/user-interactions.md` before changing behavior.
-2. Preserve documented “App should” / “App must not” rows (especially: folder name opens / row chrome selects; Remove from Project clears the row without hard refresh; navigating folders keeps Creo connected; empty folders stay removable).
+2. Preserve documented “App should” / “App must not” rows (especially: folder name opens / row chrome selects; Remove from Product clears the row without hard refresh; navigating folders keeps Creo connected; empty folders stay removable).
 3. Prefer updating matching regression tests in the same change when behavior is intentional.
 
 ## Keep the doc updated
@@ -27,7 +27,7 @@ When the user asks for a UX / toolbar / Files-list / Add / Checkout / Check In /
 
 ```text
 # ✅ GOOD — rename Check In menu items → update labels/order in the doc + tests
-# ✅ GOOD — fix remove list refresh → keep Remove from Project “must not leave row until F5”
+# ✅ GOOD — fix remove list refresh → keep Remove from Product “must not leave row until F5”
 # ❌ BAD — change folder click to always select, leave doc saying name opens
 # ❌ BAD — ship Add mode behavior change without touching user-interactions.md
 ```

@@ -15,12 +15,12 @@ from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.creo_service import CreoService
 from creopdm.services.email_service import EmailService
 from creopdm.services.git_service import GitService
-from creopdm.services.lock_manager import ProjectLockManager
+from creopdm.services.lock_manager import ProductLockManager
 from creopdm.services.metadata_service import MetadataService
 from creopdm.services.notification_service import NotificationService
 from creopdm.services.object_service import ObjectService
-from creopdm.services.project_service import ProjectService
-from creopdm.services.project_watch_service import ProjectWatchService
+from creopdm.services.product_service import ProductService
+from creopdm.services.product_watch_service import ProductWatchService
 from creopdm.services.user_service import UserService
 from creopdm.services.where_used_index_jobs import WhereUsedIndexJobs
 from creopdm.services.workspace_service import WorkspaceService
@@ -37,10 +37,10 @@ class AppContext:
     git: GitService
     version_store: VersionStore
     users: CurrentUserProvider
-    locks: ProjectLockManager
+    locks: ProductLockManager
     creo: CreoConnector
     activities: ActivityService
-    projects: ProjectService
+    products: ProductService
     objects: ObjectService
     workspaces: WorkspaceService
     checkouts: CheckoutService
@@ -50,7 +50,7 @@ class AppContext:
     where_used_index: WhereUsedIndexJobs
     email: EmailService
     notifications: NotificationService
-    project_watches: ProjectWatchService
+    product_watches: ProductWatchService
     user_accounts: UserService = field(default_factory=UserService)
     # When False (tests with StaticUserProvider), skip login redirects.
     auth_enabled: bool = True

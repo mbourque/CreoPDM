@@ -5,9 +5,9 @@ from __future__ import annotations
 from creopdm.constants import RemoteMode
 from creopdm.models.checkout import Checkout
 from creopdm.models.object import EngineeringObject
-from creopdm.models.project import Project
+from creopdm.models.product import Product
 from creopdm.models.version import ObjectVersion
-from creopdm.schemas.common import ObjectResponse, ObjectVersionResponse, ProjectResponse
+from creopdm.schemas.common import ObjectResponse, ObjectVersionResponse, ProductResponse
 from creopdm.services.checkout_service import CheckoutView
 from creopdm.utils.classify import display_type_label, resolve_type_icon
 from creopdm.utils.identity import UserIdentity
@@ -18,20 +18,20 @@ def revision_display(revision: str, iteration: int) -> str:
     return f"{revision}.{iteration}"
 
 
-def project_to_response(project: Project) -> ProjectResponse:
-    remote_mode = RemoteMode.LOCAL_WITH_REMOTE if project.remote_url else RemoteMode.LOCAL_ONLY
-    return ProjectResponse(
-        uuid=project.uuid,
-        name=project.name,
-        number=project.number,
-        description=project.description,
-        vault_folder=(project.vault_folder or project.uuid),
-        repository_path=project.repository_path,
-        default_branch=project.default_branch,
-        remote_url=project.remote_url,
-        created_at=as_utc(project.created_at),
-        updated_at=as_utc(project.updated_at),
-        active=project.active,
+def product_to_response(product: Product) -> ProductResponse:
+    remote_mode = RemoteMode.LOCAL_WITH_REMOTE if product.remote_url else RemoteMode.LOCAL_ONLY
+    return ProductResponse(
+        uuid=product.uuid,
+        name=product.name,
+        number=product.number,
+        description=product.description,
+        vault_folder=(product.vault_folder or product.uuid),
+        repository_path=product.repository_path,
+        default_branch=product.default_branch,
+        remote_url=product.remote_url,
+        created_at=as_utc(product.created_at),
+        updated_at=as_utc(product.updated_at),
+        active=product.active,
         remote_mode=remote_mode.value,
     )
 
@@ -62,7 +62,7 @@ def version_to_response(
 
 def object_to_response(
     obj: EngineeringObject,
-    project_uuid: str,
+    product_uuid: str,
     view: CheckoutView | None = None,
     modified_locally: bool = False,
     current_user: UserIdentity | None = None,
@@ -77,7 +77,7 @@ def object_to_response(
     resolved_label = type_label if type_label is not None else display_type_label(obj.filename, obj.object_type)
     return ObjectResponse(
         uuid=obj.uuid,
-        project_uuid=project_uuid,
+        product_uuid=product_uuid,
         number=obj.number,
         name=obj.name,
         filename=obj.filename,

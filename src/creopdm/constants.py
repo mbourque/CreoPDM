@@ -15,11 +15,11 @@ DEFAULT_BRANCH = "main"
 DEFAULT_REVISION = "A"
 INITIAL_ITERATION = 1
 
-PROJECT_MARKER_DIR = ".creopdm"
-PROJECT_JSON_NAME = "project.json"
+PRODUCT_MARKER_DIR = ".creopdm"
+PRODUCT_JSON_NAME = "product.json"
 SCHEMA_VERSION_NAME = "schema_version"
 
-STANDARD_PROJECT_FOLDERS = ("CAD", "Documents", "Exports", "References")
+STANDARD_PRODUCT_FOLDERS = ("CAD", "Documents", "Exports", "References")
 
 
 class ObjectType(StrEnum):
@@ -60,8 +60,8 @@ class DependencyType(StrEnum):
 
 
 class ActivityAction(StrEnum):
-    PROJECT_CREATED = "PROJECT_CREATED"
-    PROJECT_UPDATED = "PROJECT_UPDATED"
+    PRODUCT_CREATED = "PRODUCT_CREATED"
+    PRODUCT_UPDATED = "PRODUCT_UPDATED"
     OBJECT_ADDED = "OBJECT_ADDED"
     OBJECT_REMOVED = "OBJECT_REMOVED"
     WORKSPACE_CLEARED = "WORKSPACE_CLEARED"
@@ -712,7 +712,7 @@ DEFAULT_TYPE_LABELS: tuple[dict[str, str], ...] = (
     },
     {"extension": ".cfg", "label": "Tree Configuration"},
     {"extension": ".ui", "label": "UI Configuration"},
-    {"extension": ".apr", "label": "Ansys Project"},
+    {"extension": ".apr", "label": "Ansys Product"},
     {"extension": ".rwd, .rwt, .mrs, .xdb", "label": "Simulate Results"},
     {"extension": ".neu", "label": "Neutral Model"},
     {"extension": ".tmu, .tmz", "label": "Design Exploration Session"},
@@ -729,7 +729,7 @@ DEFAULT_TYPE_LABELS: tuple[dict[str, str], ...] = (
     {"extension": ".psm", "label": "Solid Edge Assembly"},
     {"extension": ".dft", "label": "Solid Edge Draft"},
     {"extension": ".rtf", "label": "Rich Text Document"},
-    {"extension": ".mpp", "label": "Microsoft Project"},
+    {"extension": ".mpp", "label": "Microsoft Product"},
     {"extension": ".trail", "label": "Trail File"},
     {"extension": "trail.txt*", "label": "Trail"},
     {"extension": ".docm, .dot, .dotx, .dotm", "label": "Word Document"},
@@ -750,7 +750,7 @@ DEFAULT_TYPE_LABELS: tuple[dict[str, str], ...] = (
     {"extension": ".tsv", "label": "CSV File"},
     {"extension": ".pub", "label": "Publisher Document"},
     {"extension": ".one, .onepkg", "label": "OneNote"},
-    {"extension": ".mpt", "label": "Microsoft Project"},
+    {"extension": ".mpt", "label": "Microsoft Product"},
     {"extension": ".tex, .ltx, .bib", "label": "LaTeX"},
     {"extension": ".odg", "label": "OpenDocument Drawing"},
     {"extension": ".psd", "label": "Photoshop"},
@@ -791,7 +791,7 @@ DEFAULT_TYPE_ICON_BY_LABEL: dict[str, str] = {
     "CSV File": "csv.svg",
     "PowerPoint Presentation": "powerpoint.svg",
     "Visio Drawing": "visio.svg",
-    "Microsoft Project": "project.svg",
+    "Microsoft Product": "product.svg",
     "Publisher Document": "publisher.svg",
     "OneNote": "onenote.svg",
     "Webpage": "webpage.svg",

@@ -70,7 +70,7 @@ def test_home_page(client):
     assert '<dialog id="busy-overlay"' in text
     assert 'type="text/creojs"' in text
     assert "function setWorkingDirectory" in text
-    assert "CREOPDM_ERROR:No project is selected." in text
+    assert "CREOPDM_ERROR:No product is selected." in text
     assert "creopdm-agent cache when CreoPDM is remote" in text
     assert "session.OpenFile" in text
     assert "pfcModelType.MDL_MFG" in text
@@ -216,7 +216,7 @@ def test_home_page(client):
     assert "AskUserAboutReps = false" in text
     assert 'id="danger-confirm-workspace"' in text
     assert "Delete workspace files" in text
-    assert 'id="project-menu-btn"' in text
+    assert 'id="product-menu-btn"' in text
     assert 'id="sidebar-collapse-btn"' in text
     assert 'class="workspace"' in text
     assert "is-sidebar-collapsed" not in text
@@ -319,7 +319,7 @@ def test_config_layout(data_dir):
     assert manager.database_url().endswith("creopdm.db")
 
 
-def test_remember_folder_is_per_project(tmp_path):
+def test_remember_folder_is_per_product(tmp_path):
     manager = ConfigManager(tmp_path / "appdata")
     manager.load()
     manager.remember_folder("proj-a", "Incoming/lib")
@@ -329,7 +329,7 @@ def test_remember_folder_is_per_project(tmp_path):
     manager.remember_folder("proj-a", "")
     assert manager.remembered_folder("proj-a") == ""
     assert manager.remembered_folder("proj-b") == "html_tutorials"
-    manager.forget_project_view("proj-b")
+    manager.forget_product_view("proj-b")
     assert manager.remembered_folder("proj-b") == ""
 
 

@@ -1,6 +1,6 @@
 # Creo templates and libraries with CreoPDM
 
-Store shared Creo start parts, assemblies, formats, symbols, and libraries in a CreoPDM project on the Linux host. Windows Creo PCs then open those files over SMB using UNC paths in `config.pro`.
+Store shared Creo start parts, assemblies, formats, symbols, and libraries in a CreoPDM product on the Linux host. Windows Creo PCs then open those files over SMB using UNC paths in `config.pro`.
 
 This guide assumes:
 
@@ -10,13 +10,13 @@ This guide assumes:
 
 ---
 
-## 1. Create a Library project in CreoPDM
+## 1. Create a Library product in CreoPDM
 
 1. Open CreoPDM in the browser and choose **New**.
 2. **Name:** `Library` (display name in CreoPDM).
 3. Uncheck **Use hash**.
 4. **Vault/Workspace name:** `library` (lowercase; this becomes the folder under `vaults/`).
-5. Create the project.
+5. Create the product.
 
 On the Linux host the vault is:
 
@@ -51,7 +51,7 @@ sudo apt update
 sudo apt install samba
 ```
 
-Confirm the vault path exists (after you created the Library project):
+Confirm the vault path exists (after you created the Library product):
 
 ```bash
 ls ~/.local/share/CreoPDM/vaults/library
@@ -83,7 +83,7 @@ At the end of the file, add a share that points at the CreoPDM vaults directory.
     read only = yes
 ```
 
-Sharing `vaults` (not only `library`) keeps UNC paths short and lets you add more shared projects later under the same share.
+Sharing `vaults` (not only `library`) keeps UNC paths short and lets you add more shared products later under the same share.
 
 Check the configuration and start Samba:
 
@@ -109,7 +109,7 @@ In File Explorer:
 \\creopdm\creopdm-vaults
 ```
 
-You should see a `library` folder (and any other project vault folders). The `creopdm` hostname must resolve on your network (DNS, mDNS, or a `hosts` entry).
+You should see a `library` folder (and any other product vault folders). The `creopdm` hostname must resolve on your network (DNS, mDNS, or a `hosts` entry).
 
 If Windows blocks unauthenticated guest access, run PowerShell **as Administrator**:
 
@@ -123,7 +123,7 @@ Guest access may also be blocked when Windows requires SMB signing. The share is
 
 ## 3. Point Creo at the Library vault (`config.pro`)
 
-In Creo Parametric, set search / template options to the UNC paths. Adjust subfolders and filenames to match what you stored in the Library project.
+In Creo Parametric, set search / template options to the UNC paths. Adjust subfolders and filenames to match what you stored in the Library product.
 
 Example (`config.pro`):
 
@@ -149,7 +149,7 @@ After changing `config.pro`, restart Creo (or reload configuration) so the new p
 
 ## 4. Workflow summary
 
-1. Maintain templates and libraries in the CreoPDM **Library** project (`vault` = `library`).
+1. Maintain templates and libraries in the CreoPDM **Library** product (`vault` = `library`).
 2. Check in updates on the Linux CreoPDM host as usual.
 3. Windows Creo reads the same files over `\\creopdm\creopdm-vaults\library` (no separate copy required).
 4. Keep the Samba share **read-only** so day-to-day Creo use does not write around CreoPDM; change library content through CreoPDM check-in.

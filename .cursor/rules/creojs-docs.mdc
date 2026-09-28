@@ -16,7 +16,7 @@ https://support.ptc.com/help/creo_toolkit/creojs_pma/r13/usascii/
 3. Match how CreoPDM already loads Creo.JS (`/creojs.js`, `text/creojs` in `base.html`, `app.js` session helpers); do not add a second bridge style without a reason.
 4. Outside Creo’s browser, Creo.JS is unavailable — fail gracefully (status pill / agent path); do not rely on `alert` for normal UX.
 
-## In this project
+## In this product
 
 - Bundled bridge: `src/creopdm/static/vendor/creojs.js` (served via `/creojs.js`)
 - Hosted open/WD scripts: `src/creopdm/templates/base.html` (`type="text/creojs"`)

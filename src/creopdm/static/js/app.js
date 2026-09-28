@@ -21,7 +21,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     pageIntervals.push(id);
     return id;
   }
-  // Soft project switches re-run this boot; abort prior listeners via signal.
+  // Soft product switches re-run this boot; abort prior listeners via signal.
   EventTarget.prototype.addEventListener = function creopdmAddEventListener(type, listener, options) {
     let opts;
     if (options === true) opts = { capture: true, signal: pageSignal };
@@ -54,10 +54,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return node.nodeType === 1 ? node : node.parentElement;
   }
 
-  /** Admin user form: All projects checkbox enables/disables the multi-select. */
-  function syncProjectAccessUi(root = document) {
-    const all = root.querySelector("#access-all-projects");
-    const list = root.querySelector("#project-access-list");
+  /** Admin user form: All products checkbox enables/disables the multi-select. */
+  function syncProductAccessUi(root = document) {
+    const all = root.querySelector("#access-all-products");
+    const list = root.querySelector("#product-access-list");
     if (!all || !list || String(list.tagName || "").toUpperCase() !== "SELECT") return;
     const locked = Boolean(all.checked);
     list.disabled = locked;
@@ -255,7 +255,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (path === "/admin/roles/new" || /^\/admin\/roles\/[^/]+\/?$/.test(path)) return true;
       if (path === "/admin/users/new" || /^\/admin\/users\/[^/]+\/?$/.test(path)) return true;
       if (path === "/settings" || path === "/settings/types") return true;
-      if (/^\/projects\/[^/]+\/objects\/[^/]+\/?$/.test(path)) return true;
+      if (/^\/products\/[^/]+\/objects\/[^/]+\/?$/.test(path)) return true;
       return false;
     } catch {
       return false;
@@ -905,8 +905,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   }
 
-  const projectDialog = $("#project-dialog");
-  const projectForm = $("#project-form");
+  const productDialog = $("#product-dialog");
+  const productForm = $("#product-form");
   const addDialog = $("#add-dialog");
   const addForm = $("#add-form");
   const checkinDialog = $("#checkin-dialog");
@@ -914,19 +914,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const settingsForm = $("#settings-form");
 
   const workspaceEl = document.querySelector(".workspace");
-  const projectSidebar = document.querySelector(".sidebar");
-  const projectMenuBtn = $("#project-menu-btn");
+  const productSidebar = document.querySelector(".sidebar");
+  const productMenuBtn = $("#product-menu-btn");
   const sidebarCollapseBtn = $("#sidebar-collapse-btn");
-  function closeProjectMenu() {
-    projectSidebar?.classList.remove("is-open");
-    projectMenuBtn?.setAttribute("aria-expanded", "false");
+  function closeProductMenu() {
+    productSidebar?.classList.remove("is-open");
+    productMenuBtn?.setAttribute("aria-expanded", "false");
   }
   function sidebarCollapsed() {
     return Boolean(workspaceEl?.classList.contains("is-sidebar-collapsed"));
   }
   function syncSidebarCollapse() {
     const collapsed = sidebarCollapsed();
-    const label = collapsed ? "Show project list" : "Collapse project list";
+    const label = collapsed ? "Show product list" : "Collapse product list";
     if (!sidebarCollapseBtn) return;
     sidebarCollapseBtn.title = label;
     sidebarCollapseBtn.setAttribute("aria-label", label);
@@ -939,71 +939,71 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   sidebarCollapseBtn?.addEventListener("click", (event) => {
     event.stopPropagation();
     workspaceEl?.classList.toggle("is-sidebar-collapsed");
-    closeProjectMenu();
+    closeProductMenu();
     syncSidebarCollapse();
     rememberSidebarCollapse(sidebarCollapsed());
   });
-  function toggleProjectMenu(event) {
+  function toggleProductMenu(event) {
     event.stopPropagation();
-    const open = projectSidebar?.classList.toggle("is-open");
-    projectMenuBtn?.setAttribute("aria-expanded", open ? "true" : "false");
+    const open = productSidebar?.classList.toggle("is-open");
+    productMenuBtn?.setAttribute("aria-expanded", open ? "true" : "false");
   }
-  projectMenuBtn?.addEventListener("click", toggleProjectMenu);
+  productMenuBtn?.addEventListener("click", toggleProductMenu);
   document.addEventListener("click", (event) => {
-    if (!projectSidebar?.classList.contains("is-open")) return;
-    if (projectSidebar.contains(event.target)) return;
-    closeProjectMenu();
+    if (!productSidebar?.classList.contains("is-open")) return;
+    if (productSidebar.contains(event.target)) return;
+    closeProductMenu();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeProjectMenu();
+    if (event.key === "Escape") closeProductMenu();
   });
 
-  $("#new-project-btn")?.addEventListener("click", () => {
-    closeProjectMenu();
-    showProjectDialog("create");
+  $("#new-product-btn")?.addEventListener("click", () => {
+    closeProductMenu();
+    showProductDialog("create");
   });
-  const projectSettings = $("#project-settings");
-  const projectSettingsBtn = $("#project-settings-btn");
-  const projectSettingsMenu = $("#project-settings-menu");
-  function closeProjectSettings() {
-    projectSettings?.classList.remove("is-open");
-    if (projectSettingsMenu) projectSettingsMenu.hidden = true;
-    projectSettingsBtn?.setAttribute("aria-expanded", "false");
+  const productSettings = $("#product-settings");
+  const productSettingsBtn = $("#product-settings-btn");
+  const productSettingsMenu = $("#product-settings-menu");
+  function closeProductSettings() {
+    productSettings?.classList.remove("is-open");
+    if (productSettingsMenu) productSettingsMenu.hidden = true;
+    productSettingsBtn?.setAttribute("aria-expanded", "false");
   }
-  function toggleProjectSettings(event) {
+  function toggleProductSettings(event) {
     event.stopPropagation();
-    const open = !projectSettings?.classList.contains("is-open");
+    const open = !productSettings?.classList.contains("is-open");
     if (open) {
-      projectSettings?.classList.add("is-open");
-      if (projectSettingsMenu) projectSettingsMenu.hidden = false;
-      projectSettingsBtn?.setAttribute("aria-expanded", "true");
+      productSettings?.classList.add("is-open");
+      if (productSettingsMenu) productSettingsMenu.hidden = false;
+      productSettingsBtn?.setAttribute("aria-expanded", "true");
     } else {
-      closeProjectSettings();
+      closeProductSettings();
     }
   }
-  projectSettingsBtn?.addEventListener("click", toggleProjectSettings);
+  productSettingsBtn?.addEventListener("click", toggleProductSettings);
   document.addEventListener("click", (event) => {
-    if (!projectSettings?.classList.contains("is-open")) return;
-    if (projectSettings.contains(event.target)) return;
-    closeProjectSettings();
+    if (!productSettings?.classList.contains("is-open")) return;
+    if (productSettings.contains(event.target)) return;
+    closeProductSettings();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeProjectSettings();
+    if (event.key === "Escape") closeProductSettings();
   });
 
-  function applyProjectWatchState(btn, watching) {
+  function applyProductWatchState(btn, watching) {
     if (!btn) return;
     const on = Boolean(watching);
     btn.dataset.watching = on ? "1" : "0";
     btn.classList.toggle("is-watching", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
-    btn.setAttribute("aria-label", on ? "Stop watching project" : "Watch project");
+    btn.setAttribute("aria-label", on ? "Stop watching product" : "Watch product");
     if (btn.dataset.canWatch === "1") {
-      btn.title = on ? "Watching — click to stop" : "Watch this project";
+      btn.title = on ? "Watching — click to stop" : "Watch this product";
     }
   }
 
-  function applyProjectWatchPayload(btn, body) {
+  function applyProductWatchPayload(btn, body) {
     if (!btn || !body) return;
     const can = Boolean(body.can_watch);
     btn.dataset.canWatch = can ? "1" : "0";
@@ -1012,41 +1012,41 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!can) {
       btn.title = (body.reason || "").trim() || "Watching unavailable";
     }
-    applyProjectWatchState(btn, Boolean(body.watching));
+    applyProductWatchState(btn, Boolean(body.watching));
   }
 
-  async function syncProjectWatchFromServer() {
-    const btn = $("#project-watch-btn");
+  async function syncProductWatchFromServer() {
+    const btn = $("#product-watch-btn");
     if (!btn) return;
-    const projectId = btn.dataset.project || "";
-    if (!projectId) return;
+    const productId = btn.dataset.product || "";
+    if (!productId) return;
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/watch`, {
+      const response = await fetch(`/api/products/${encodeURIComponent(productId)}/watch`, {
         credentials: "same-origin",
         cache: "no-store",
       });
       if (!response.ok) return;
       const body = await response.json().catch(() => null);
-      if (body) applyProjectWatchPayload(btn, body);
+      if (body) applyProductWatchPayload(btn, body);
     } catch {
       /* best-effort — SSR attributes remain */
     }
   }
 
-  function confirmProjectWatch(watching) {
-    const dialog = $("#project-watch-dialog");
-    const form = $("#project-watch-form");
-    const titleEl = $("#project-watch-title");
-    const leadEl = $("#project-watch-lead");
-    const confirmBtn = $("#project-watch-confirm");
-    const cancelBtn = $("#project-watch-cancel");
+  function confirmProductWatch(watching) {
+    const dialog = $("#product-watch-dialog");
+    const form = $("#product-watch-form");
+    const titleEl = $("#product-watch-title");
+    const leadEl = $("#product-watch-lead");
+    const confirmBtn = $("#product-watch-confirm");
+    const cancelBtn = $("#product-watch-cancel");
     if (!dialog || !form || !titleEl || !leadEl || !confirmBtn) {
       return Promise.resolve(
-        window.confirm(watching ? "Stop watching this project?" : "Watch this project for email updates?")
+        window.confirm(watching ? "Stop watching this product?" : "Watch this product for email updates?")
       );
     }
-    const name = $("#project-watch-btn")?.dataset.projectName || "this project";
-    titleEl.textContent = watching ? "Stop watching" : "Watch project";
+    const name = $("#product-watch-btn")?.dataset.productName || "this product";
+    titleEl.textContent = watching ? "Stop watching" : "Watch product";
     leadEl.textContent = watching
       ? `Stop email notifications for activity in ${name}?`
       : `Get email when files change in ${name}?`;
@@ -1075,21 +1075,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   }
 
-  $("#project-watch-btn")?.addEventListener("click", async () => {
-    const btn = $("#project-watch-btn");
+  $("#product-watch-btn")?.addEventListener("click", async () => {
+    const btn = $("#product-watch-btn");
     if (!btn) return;
     if (btn.dataset.canWatch !== "1") {
       const reason = (btn.dataset.reason || "").trim() || "Watching is unavailable.";
       showError($("#toolbar-error"), reason);
       return;
     }
-    const projectId = btn.dataset.project || currentProjectId();
-    if (!projectId) return;
+    const productId = btn.dataset.product || currentProductId();
+    if (!productId) return;
     const watching = btn.dataset.watching === "1";
-    const ok = await confirmProjectWatch(watching);
+    const ok = await confirmProductWatch(watching);
     if (!ok) return;
     showError($("#toolbar-error"), "");
-    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/watch`, {
+    const response = await fetch(`/api/products/${encodeURIComponent(productId)}/watch`, {
       method: watching ? "DELETE" : "POST",
     });
     if (!response.ok) {
@@ -1097,23 +1097,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     const body = await response.json().catch(() => ({}));
-    applyProjectWatchPayload(btn, body);
-    showOk(body.watching ? "Watching this project." : "Stopped watching this project.");
+    applyProductWatchPayload(btn, body);
+    showOk(body.watching ? "Watching this product." : "Stopped watching this product.");
   });
 
   // Authoritative per-session watch state (avoids stale SSR/cache across logins).
-  void syncProjectWatchFromServer();
+  void syncProductWatchFromServer();
 
-  $("#rename-project-btn")?.addEventListener("click", () => {
-    closeProjectSettings();
-    showProjectDialog("rename");
+  $("#rename-product-btn")?.addEventListener("click", () => {
+    closeProductSettings();
+    showProductDialog("rename");
   });
   $("#rebuild-where-used-btn")?.addEventListener("click", async () => {
-    closeProjectSettings();
-    const projectId = $("#rebuild-where-used-btn")?.dataset.project || currentProjectId();
-    if (!projectId) return;
+    closeProductSettings();
+    const productId = $("#rebuild-where-used-btn")?.dataset.product || currentProductId();
+    if (!productId) return;
     showError($("#toolbar-error"), "");
-    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/rebuild-where-used`, {
+    const response = await fetch(`/api/products/${encodeURIComponent(productId)}/rebuild-where-used`, {
       method: "POST",
     });
     if (!response.ok) {
@@ -1121,16 +1121,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     showOk("Where Used indexing started in the background.");
-    watchWhereUsedIndex(projectId);
+    watchWhereUsedIndex(productId);
   });
 
-  function watchWhereUsedIndex(projectId) {
-    if (!projectId) return;
+  function watchWhereUsedIndex(productId) {
+    if (!productId) return;
     let tries = 0;
     const tick = async () => {
       tries += 1;
       try {
-        const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/rebuild-where-used`);
+        const response = await fetch(`/api/products/${encodeURIComponent(productId)}/rebuild-where-used`);
         if (!response.ok) return;
         const body = await response.json();
         const state = String(body.state || "");
@@ -1162,15 +1162,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function resumeWhereUsedIndexWatch() {
-    const projectId = currentProjectId();
-    if (!projectId) return;
+    const productId = currentProductId();
+    if (!productId) return;
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/rebuild-where-used`);
+      const response = await fetch(`/api/products/${encodeURIComponent(productId)}/rebuild-where-used`);
       if (!response.ok) return;
       const body = await response.json();
       const state = String(body.state || "");
       if (state === "queued" || state === "running") {
-        watchWhereUsedIndex(projectId);
+        watchWhereUsedIndex(productId);
       }
     } catch {
       /* ignore */
@@ -1252,7 +1252,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return Promise.resolve(window.confirm(`Collect Creo metadata for ${total} model(s)?`));
     }
     lead.textContent =
-      `Capture parameters, materials, units, features, and BOM/structure for ${total} Creo model(s) in this project. ` +
+      `Capture parameters, materials, units, features, and BOM/structure for ${total} Creo model(s) in this product. ` +
       "Each model is retrieved in the Creo session when needed. Mass properties are not collected (unsupported in silent Collect).";
     if (warn) {
       if (total > METADATA_COLLECT_WARN_THRESHOLD) {
@@ -1481,7 +1481,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  async function runCollectAllMetadata(projectId) {
+  async function runCollectAllMetadata(productId) {
     if (metadataCollectJob.running) {
       showOk("Metadata collection is already running.");
       return;
@@ -1501,14 +1501,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (
       existing &&
       existing.status === "running" &&
-      existing.projectId === projectId &&
+      existing.productId === productId &&
       Array.isArray(existing.targets) &&
       existing.targets.length
     ) {
       await runMetadataCollectLoop(existing);
       return;
     }
-    const rows = await ensureProjectObjects(projectId, { force: true });
+    const rows = await ensureProductObjects(productId, { force: true });
     const targets = (Array.isArray(rows) ? rows : [])
       .map((row) => ({
         uuid: String(row.uuid || "").trim(),
@@ -1525,7 +1525,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!okToStart) return;
 
     const state = {
-      projectId,
+      productId,
       status: "running",
       index: 0,
       captured: 0,
@@ -1551,10 +1551,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       syncMetadataCollectControls();
       return;
     }
-    const projectId = currentProjectId();
-    if (projectId && state.projectId && projectId !== state.projectId) {
+    const productId = currentProductId();
+    if (productId && state.productId && productId !== state.productId) {
       showOk(
-        `Metadata collection paused for another project (${state.index || 0} of ${state.targets.length}).`
+        `Metadata collection paused for another product (${state.index || 0} of ${state.targets.length}).`
       );
       syncMetadataCollectControls();
       return;
@@ -1576,10 +1576,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   $("#collect-metadata-btn")?.addEventListener("click", async () => {
-    closeProjectSettings();
-    const projectId = $("#collect-metadata-btn")?.dataset.project || currentProjectId();
-    if (!projectId) return;
-    await runCollectAllMetadata(projectId);
+    closeProductSettings();
+    const productId = $("#collect-metadata-btn")?.dataset.product || currentProductId();
+    if (!productId) return;
+    await runCollectAllMetadata(productId);
   });
 
   resumeMetadataCollectIfNeeded();
@@ -1590,37 +1590,37 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     resumeMetadataCollectIfNeeded();
   });
 
-  $("#project-cancel")?.addEventListener("click", () => projectDialog?.close());
+  $("#product-cancel")?.addEventListener("click", () => productDialog?.close());
 
-  const deleteProjectDialog = $("#delete-project-dialog");
-  const deleteProjectForm = $("#delete-project-form");
-  $("#delete-project-btn")?.addEventListener("click", () => {
-    closeProjectSettings();
-    const btn = $("#delete-project-btn");
-    showError($("#delete-project-error"), "");
-    if (deleteProjectForm) deleteProjectForm.reset();
+  const deleteProductDialog = $("#delete-product-dialog");
+  const deleteProductForm = $("#delete-product-form");
+  $("#delete-product-btn")?.addEventListener("click", () => {
+    closeProductSettings();
+    const btn = $("#delete-product-btn");
+    showError($("#delete-product-error"), "");
+    if (deleteProductForm) deleteProductForm.reset();
     const deleteLocal = $("#delete-local-workspace");
     if (deleteLocal) deleteLocal.checked = true;
-    deleteProjectDialog?.showModal();
+    deleteProductDialog?.showModal();
   });
-  $("#delete-project-cancel")?.addEventListener("click", () => deleteProjectDialog?.close());
-  deleteProjectForm?.addEventListener("submit", async (event) => {
+  $("#delete-product-cancel")?.addEventListener("click", () => deleteProductDialog?.close());
+  deleteProductForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const btn = $("#delete-project-btn");
-    const projectId = btn?.dataset.project;
+    const btn = $("#delete-product-btn");
+    const productId = btn?.dataset.product;
     const expected = (btn?.dataset.name || "").trim();
-    if (!projectId) return;
-    const formData = new FormData(deleteProjectForm);
+    if (!productId) return;
+    const formData = new FormData(deleteProductForm);
     const typed = String(formData.get("confirm_name") || "").trim();
     if (typed !== expected) {
-      showError($("#delete-project-error"), "Type the project name exactly to delete it.");
+      showError($("#delete-product-error"), "Type the product name exactly to delete it.");
       return;
     }
     const deleteLocal = Boolean($("#delete-local-workspace")?.checked);
     const vaultFolder = currentVaultFolder();
     let result;
     try {
-      result = await withBusy("Deleting project…", async () => {
+      result = await withBusy("Deleting product…", async () => {
         const notices = [];
         if (deleteLocal) {
           const agent = await probeCreoAgent();
@@ -1630,11 +1630,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             );
           } else {
             try {
-              const localResponse = await fetch(`${agentBase()}/delete-project-cache`, {
+              const localResponse = await fetch(`${agentBase()}/delete-product-cache`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  project_id: projectId,
+                  product_id: productId,
                   vault_folder: vaultFolder,
                 }),
               });
@@ -1649,7 +1649,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             }
           }
         }
-        const forgetResponse = await fetch(`/api/projects/${projectId}/forget`, {
+        const forgetResponse = await fetch(`/api/products/${productId}/forget`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ confirm_name: typed }),
@@ -1664,51 +1664,51 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       });
     } catch (exc) {
       showError(
-        $("#delete-project-error"),
-        exc?.message || "Could not delete the project."
+        $("#delete-product-error"),
+        exc?.message || "Could not delete the product."
       );
       return;
     }
     if (result?.warning) sessionStorage.setItem("creopdmNotice", result.warning);
-    clearProjectViewStorage(projectId);
+    clearProductViewStorage(productId);
     leavePage("/");
   });
 
-  function showProjectDialog(mode) {
-    if (!projectForm || !projectDialog) return;
-    showError($("#project-error"), "");
-    const title = $("#project-dialog-title");
-    const submit = $("#project-submit");
-    const vaultFields = $("#project-vault-fields");
-    projectForm.dataset.mode = mode;
+  function showProductDialog(mode) {
+    if (!productForm || !productDialog) return;
+    showError($("#product-error"), "");
+    const title = $("#product-dialog-title");
+    const submit = $("#product-submit");
+    const vaultFields = $("#product-vault-fields");
+    productForm.dataset.mode = mode;
     if (mode === "rename") {
-      const btn = $("#rename-project-btn");
-      if (title) title.textContent = "Rename project";
-      projectForm.elements.name.value = btn?.dataset.name || "";
-      projectForm.elements.number.value = btn?.dataset.number || "";
-      projectForm.elements.description.value = btn?.dataset.description || "";
+      const btn = $("#rename-product-btn");
+      if (title) title.textContent = "Rename product";
+      productForm.elements.name.value = btn?.dataset.name || "";
+      productForm.elements.number.value = btn?.dataset.number || "";
+      productForm.elements.description.value = btn?.dataset.description || "";
       if (vaultFields) vaultFields.hidden = true;
       if (submit) submit.textContent = "Save";
     } else {
-      projectForm.reset();
-      if (title) title.textContent = "New project";
+      productForm.reset();
+      if (title) title.textContent = "New product";
       if (submit) submit.textContent = "Create";
       if (vaultFields) vaultFields.hidden = false;
-      projectVaultCustom = "";
-      projectVaultCustomTouched = false;
-      projectVaultHash = "";
-      const useHash = $("#project-use-hash");
+      productVaultCustom = "";
+      productVaultCustomTouched = false;
+      productVaultHash = "";
+      const useHash = $("#product-use-hash");
       if (useHash) useHash.checked = true;
-      syncProjectVaultFolderField(true);
+      syncProductVaultFolderField(true);
     }
-    projectDialog.showModal();
+    productDialog.showModal();
   }
 
-  let projectVaultHash = "";
-  let projectVaultCustom = "";
-  let projectVaultCustomTouched = false;
+  let productVaultHash = "";
+  let productVaultCustom = "";
+  let productVaultCustomTouched = false;
 
-  function newProjectVaultHash() {
+  function newProductVaultHash() {
     // Prefer platform UUID; CEF often lacks randomUUID but has getRandomValues.
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
     if (window.crypto?.getRandomValues) {
@@ -1737,92 +1737,92 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function fillVaultFolderFromName() {
-    const input = $("#project-vault-folder");
-    const useHash = $("#project-use-hash");
-    if (!input || useHash?.checked || projectVaultCustomTouched) return;
-    const slug = slugifyVaultFolder(projectForm?.elements?.name?.value || "");
+    const input = $("#product-vault-folder");
+    const useHash = $("#product-use-hash");
+    if (!input || useHash?.checked || productVaultCustomTouched) return;
+    const slug = slugifyVaultFolder(productForm?.elements?.name?.value || "");
     input.value = slug;
-    projectVaultCustom = slug;
+    productVaultCustom = slug;
   }
 
-  function syncProjectVaultFolderField(resetHash) {
-    const input = $("#project-vault-folder");
-    const useHash = $("#project-use-hash");
+  function syncProductVaultFolderField(resetHash) {
+    const input = $("#product-vault-folder");
+    const useHash = $("#product-use-hash");
     if (!input || !useHash) return;
-    if (resetHash || !projectVaultHash) projectVaultHash = newProjectVaultHash();
+    if (resetHash || !productVaultHash) productVaultHash = newProductVaultHash();
     if (useHash.checked) {
-      input.value = projectVaultHash;
+      input.value = productVaultHash;
       input.disabled = true;
       input.readOnly = true;
     } else {
       input.disabled = false;
       input.readOnly = false;
-      if (!projectVaultCustomTouched) {
+      if (!productVaultCustomTouched) {
         fillVaultFolderFromName();
       } else {
-        input.value = projectVaultCustom || "";
+        input.value = productVaultCustom || "";
       }
     }
   }
 
-  $("#project-use-hash")?.addEventListener("change", () => {
-    const useHash = $("#project-use-hash");
+  $("#product-use-hash")?.addEventListener("change", () => {
+    const useHash = $("#product-use-hash");
     if (useHash?.checked) {
-      projectVaultCustomTouched = false;
-      syncProjectVaultFolderField(true);
+      productVaultCustomTouched = false;
+      syncProductVaultFolderField(true);
     } else {
-      syncProjectVaultFolderField(false);
-      $("#project-vault-folder")?.focus();
-      $("#project-vault-folder")?.select();
+      syncProductVaultFolderField(false);
+      $("#product-vault-folder")?.focus();
+      $("#product-vault-folder")?.select();
     }
   });
 
-  projectForm?.elements?.name?.addEventListener("input", () => {
+  productForm?.elements?.name?.addEventListener("input", () => {
     fillVaultFolderFromName();
   });
 
-  $("#project-vault-folder")?.addEventListener("input", () => {
-    const useHash = $("#project-use-hash");
+  $("#product-vault-folder")?.addEventListener("input", () => {
+    const useHash = $("#product-use-hash");
     if (useHash?.checked) return;
-    projectVaultCustomTouched = true;
-    projectVaultCustom = String($("#project-vault-folder")?.value || "").trim();
+    productVaultCustomTouched = true;
+    productVaultCustom = String($("#product-vault-folder")?.value || "").trim();
   });
 
-  projectForm?.addEventListener("submit", async (event) => {
+  productForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const data = new FormData(projectForm);
-    const renaming = projectForm.dataset.mode === "rename";
+    const data = new FormData(productForm);
+    const renaming = productForm.dataset.mode === "rename";
     const body = {
       name: String(data.get("name") || "").trim(),
       number: String(data.get("number") || "").trim() || null,
       description: String(data.get("description") || "").trim() || null,
     };
     if (!renaming) {
-      const useHash = Boolean($("#project-use-hash")?.checked);
+      const useHash = Boolean($("#product-use-hash")?.checked);
       let vaultFolder = String(data.get("vault_folder") || "").trim();
       if (useHash) {
-        body.vault_folder = projectVaultHash || newProjectVaultHash();
+        body.vault_folder = productVaultHash || newProductVaultHash();
       } else {
         // Custom vault name must be provided (not blank).
         if (!vaultFolder) {
-          showError($("#project-error"), "Enter a vault/workspace name, or check Use hash.");
-          $("#project-vault-folder")?.focus();
+          showError($("#product-error"), "Enter a vault/workspace name, or check Use hash.");
+          $("#product-vault-folder")?.focus();
           return;
         }
         if (/\s/.test(vaultFolder)) {
-          showError($("#project-error"), "Vault/workspace name cannot contain spaces.");
+          showError($("#product-error"), "Vault/workspace name cannot contain spaces.");
           return;
         }
         body.vault_folder = vaultFolder;
       }
     }
     if (!body.name) {
-      showError($("#project-error"), "A project name is required.");
+      showError($("#product-error"), "A product name is required.");
       return;
     }
-    const projectId = $("#rename-project-btn")?.dataset.project;
-    const url = renaming ? `/api/projects/${projectId}` : "/api/projects";
-    const response = await withBusy(renaming ? "Saving project…" : "Creating project…", () =>
+    const productId = $("#rename-product-btn")?.dataset.product;
+    const url = renaming ? `/api/products/${productId}` : "/api/products";
+    const response = await withBusy(renaming ? "Saving product…" : "Creating product…", () =>
       fetch(url, {
         method: renaming ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -1830,11 +1830,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       })
     );
     if (!response.ok) {
-      showError($("#project-error"), await readError(response));
+      showError($("#product-error"), await readError(response));
       return;
     }
-    const project = await response.json();
-    leavePage(`/?project=${encodeURIComponent(project.uuid)}`);
+    const product = await response.json();
+    leavePage(`/?product=${encodeURIComponent(product.uuid)}`);
   });
 
   let chosenPaths = [];
@@ -1935,10 +1935,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function loadAddFolder() {
-    const projectId = addForm?.dataset.project;
+    const productId = addForm?.dataset.product;
     const label = $("#add-folder-label");
-    if (!projectId || !label) return;
-    const response = await fetch(`/api/projects/${projectId}/workspace/add-folder`);
+    if (!productId || !label) return;
+    const response = await fetch(`/api/products/${productId}/workspace/add-folder`);
     if (!response.ok) return;
     const data = await response.json();
     if (addForm && data.native_picker !== undefined) {
@@ -2576,7 +2576,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         initial_directory: addInitialDirectory || "",
-        title: "Add files to the project",
+        title: "Add files to the product",
         purgeable_extensions: [...purgeableExtensionSet()],
       }),
     });
@@ -2601,7 +2601,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         initial_directory: addInitialDirectory || "",
-        title: recursive ? "Add folders to the project" : "Add a folder to the project",
+        title: recursive ? "Add folders to the product" : "Add a folder to the product",
         purgeable_extensions: [...purgeableExtensionSet()],
         recursive,
       }),
@@ -2628,8 +2628,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   $("#choose-workspace-files")?.addEventListener("click", async () => {
-    const projectId = addForm?.dataset.project;
-    if (!projectId) return;
+    const productId = addForm?.dataset.product;
+    if (!productId) return;
     showError($("#add-error"), "");
     if (!useNativePicker()) {
       const usedAgent = await withHtmlDialogClosed(addDialog, () => browseViaAgentPicker());
@@ -2638,7 +2638,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     await withHtmlDialogClosed(addDialog, async () => {
-      const response = await fetch(`/api/projects/${projectId}/workspace/choose-files`, { method: "POST" });
+      const response = await fetch(`/api/products/${productId}/workspace/choose-files`, { method: "POST" });
       if (!response.ok) {
         showError($("#add-error"), await readError(response));
         return;
@@ -2655,8 +2655,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
 
   $("#choose-workspace-folder")?.addEventListener("click", async () => {
-    const projectId = addForm?.dataset.project;
-    if (!projectId) return;
+    const productId = addForm?.dataset.product;
+    if (!productId) return;
     showError($("#add-error"), "");
     if (!useNativePicker()) {
       const usedAgent = await withHtmlDialogClosed(addDialog, () => browseViaAgentFolderPicker());
@@ -2666,7 +2666,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     await withHtmlDialogClosed(addDialog, async () => {
       const response = await withBusy("Choosing folder…", () =>
-        fetch(`/api/projects/${projectId}/workspace/choose-folder`, { method: "POST" })
+        fetch(`/api/products/${productId}/workspace/choose-folder`, { method: "POST" })
       );
       if (!response.ok) {
         showError($("#add-error"), await readError(response));
@@ -2702,7 +2702,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function canAcceptDrops() {
     const btn = $("#add-menu-btn") || $("#add-files-btn");
-    return Boolean(btn && !btn.disabled && addForm?.dataset.project);
+    return Boolean(btn && !btn.disabled && addForm?.dataset.product);
   }
 
   async function acceptPageDrop(dataTransfer) {
@@ -2753,8 +2753,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       showError($("#add-error"), "Add is already running — wait for it to finish.");
       return;
     }
-    const projectId = addForm.dataset.project;
-    if (!projectId) return;
+    const productId = addForm.dataset.product;
+    if (!productId) return;
     if (
       !chosenPaths.length
       && !chosenBaseFolder
@@ -2814,7 +2814,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               body: JSON.stringify({
                 pdm_url: window.location.origin,
                 ...agentPdmAuth(),
-                project_id: projectId,
+                product_id: productId,
                 absolute_paths: chunk,
                 base_folder: baseFolder || "",
                 parent_folder: parentFolder,
@@ -2906,7 +2906,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             data.append("files", item.file, item.file.name);
             data.append("relative_paths", item.relativePath || item.file.name);
           });
-          const response = await fetch(`/api/projects/${projectId}/objects/from-uploads`, {
+          const response = await fetch(`/api/products/${productId}/objects/from-uploads`, {
             method: "POST",
             body: data,
           });
@@ -2944,7 +2944,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           comment: comment || null,
         };
       }
-      const response = await fetch(`/api/projects/${projectId}/objects/from-disk`, {
+      const response = await fetch(`/api/products/${productId}/objects/from-disk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -3160,7 +3160,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return `<img class="type-icon" src="/static/icons/${escapeHtml(info.file)}" alt="${label}" title="${label}" width="14" height="14" decoding="async">`;
   }
 
-  function searchRowHtml(obj, projectId) {
+  function searchRowHtml(obj, productId) {
     const relative = String(obj.relative_path || obj.filename || "");
     const folder = folderOfPath(relative);
     const filename = String(obj.filename || "");
@@ -3208,7 +3208,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               data-sort-creo="${escapeHtml(folder)}/${escapeHtml(creo)}"
               data-sort-modified="${stamp.replace(/[-: ]/g, "")}"
               data-sort-checkout="${escapeHtml(folder)}/${escapeHtml(checkout)}"
-              data-detail="/projects/${escapeHtml(projectId)}/objects/${escapeHtml(obj.uuid)}"
+              data-detail="/products/${escapeHtml(productId)}/objects/${escapeHtml(obj.uuid)}"
               class="object-row"
               style="--depth: 0">
             <td title="${escapeHtml(filename)}">
@@ -3235,31 +3235,31 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     updateMetricCounts();
   }
 
-  function showSearchMatches(items, projectId) {
+  function showSearchMatches(items, productId) {
     if (!objectTable || !objectTbody) return;
     objectTable.dataset.searching = "1";
     if (searchScope) searchScope.hidden = false;
     if (folderCrumb) folderCrumb.hidden = true;
     if (!items.length) {
-      objectTbody.innerHTML = `<tr class="empty-row"><td colspan="7">No matching files in this project.</td></tr>`;
+      objectTbody.innerHTML = `<tr class="empty-row"><td colspan="7">No matching files in this product.</td></tr>`;
       updateMetricCounts();
       return;
     }
-    objectTbody.innerHTML = items.map((item) => searchRowHtml(item, projectId)).join("");
+    objectTbody.innerHTML = items.map((item) => searchRowHtml(item, productId)).join("");
     updateMetricCounts();
     syncModifiedStateLabels();
   }
 
   async function searchAllFolders(query) {
-    const projectId = $("#rename-project-btn")?.dataset.project;
-    if (!objectTbody || !projectId) {
+    const productId = $("#rename-product-btn")?.dataset.product;
+    if (!objectTbody || !productId) {
       applyMetricVisibility();
       syncToolbar();
       return;
     }
     const seq = ++searchSeq;
     const response = await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/objects?q=${encodeURIComponent(query)}`
+      `/api/products/${encodeURIComponent(productId)}/objects?q=${encodeURIComponent(query)}`
     );
     if (seq !== searchSeq) return;
     if (!response.ok) {
@@ -3270,7 +3270,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     const items = await response.json();
     if (seq !== searchSeq) return;
-    showSearchMatches(Array.isArray(items) ? items : [], projectId);
+    showSearchMatches(Array.isArray(items) ? items : [], productId);
     applyMetricVisibility();
     applyMetricSelection();
     syncToolbar();
@@ -3314,12 +3314,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const openMenuBtn = $("#open-menu-btn");
   const openMenuPanel = openMenu?.querySelector(".toolbar-menu-panel");
   const checkoutBtn = $("#checkout-btn");
-  const checkoutProjectBtn = $("#checkout-project-btn");
+  const checkoutProductBtn = $("#checkout-product-btn");
   const checkoutMenu = $("#checkout-menu");
   const checkoutMenuBtn = $("#checkout-menu-btn");
   const checkoutMenuPanel = checkoutMenu?.querySelector(".toolbar-menu-panel");
   const checkinBtn = $("#checkin-btn");
-  const checkinProjectBtn = $("#checkin-project-btn");
+  const checkinProductBtn = $("#checkin-product-btn");
   const checkinMenu = $("#checkin-menu");
   const checkinMenuBtn = $("#checkin-menu-btn");
   const checkinMenuPanel = checkinMenu?.querySelector(".toolbar-menu-panel");
@@ -3329,7 +3329,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const setCreoDirBtn = $("#set-creo-dir-btn");
   const purgeBtn = $("#purge-workspace-btn");
   const purgeVersionsBtn = $("#purge-versions-btn");
-  const removeBtn = $("#remove-project-btn");
+  const removeBtn = $("#remove-product-btn");
   const discardLocalBtn = $("#discard-local-btn");
   const removeMenu = $("#remove-menu");
   const removeMenuBtn = $("#remove-menu-btn");
@@ -3482,7 +3482,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (!row.classList.contains("folder-row")) {
         if (row.dataset.uuid) return { objectId: row.dataset.uuid };
         if (row.dataset.relativePath) {
-          return { relativePath: row.dataset.relativePath, projectId: currentProjectId() };
+          return { relativePath: row.dataset.relativePath, productId: currentProductId() };
         }
       }
     }
@@ -3575,8 +3575,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     reapplyActiveTableSorts();
   }
 
-  async function refreshPendingCheckinIds(projectId) {
-    if (!projectId) return;
+  async function refreshPendingCheckinIds(productId) {
+    if (!productId) return;
     const seq = ++pendingCheckinFetch;
     try {
       const ids = [];
@@ -3585,7 +3585,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       });
       // Paint Modified from SSR flags immediately; agent/vault merge follows.
       if (ids.length) rememberPendingCheckinIds(ids, { merge: true });
-      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/checkin-preview`);
+      const response = await fetch(`/api/products/${encodeURIComponent(productId)}/checkin-preview`);
       if (seq !== pendingCheckinFetch) return;
       if (response.ok) {
         const data = await response.json();
@@ -3595,8 +3595,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // Same local-cache signal as the New files tab (Creo often saves there first).
       try {
         const [cacheFiles, objects] = await Promise.all([
-          listAgentCacheFiles(projectId),
-          ensureProjectObjects(projectId),
+          listAgentCacheFiles(productId),
+          ensureProductObjects(productId),
         ]);
         if (seq !== pendingCheckinFetch) return;
         newerLocalCacheSaves(cacheFiles, objects).forEach((item) => {
@@ -3663,7 +3663,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Local Explorer open needs creopdm-agent on this PC — hide when offline
     // (server vault fallback is useless for remote Linux hosts / unsupported paths).
     const canOpenWorkspace =
-      Boolean(openWorkspaceBtn?.dataset.project) && agentIsOnline();
+      Boolean(openWorkspaceBtn?.dataset.product) && agentIsOnline();
     const canOpenMenu = canOpenFile || canOpenWorkspace;
     setToolbarActionVisible(openBtn, canOpenFile);
     setToolbarActionVisible(openWorkspaceBtn, canOpenWorkspace);
@@ -3675,41 +3675,41 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const canCheckin = selectionCanCheckin(selected);
     const canUndo = selected.length > 0 && selected.every((row) => row.dataset.owned === "1");
     const addOnly = selectionIsAddOnly(selected);
-    const projectId =
-      checkinBtn?.dataset.project ||
-      checkinMenuBtn?.dataset.project ||
-      openWorkspaceBtn?.dataset.project ||
-      currentProjectId() ||
+    const productId =
+      checkinBtn?.dataset.product ||
+      checkinMenuBtn?.dataset.product ||
+      openWorkspaceBtn?.dataset.product ||
+      currentProductId() ||
       "";
-    const canAdd = Boolean(projectId);
+    const canAdd = Boolean(productId);
     setToolbarActionVisible(addMenuBtn, canAdd);
     for (const id of ["create-folder-btn", "add-files-btn", "add-folder-btn", "add-folders-btn"]) {
       setToolbarActionVisible($("#" + id), canAdd);
     }
     if (!canAdd) closeAddMenu();
-    const canCheckoutProject =
-      Boolean(projectId) &&
-      Number(checkoutProjectBtn?.dataset.checkoutable || 0) > 0;
-    const pendingProjectSaves = Number(
+    const canCheckoutProduct =
+      Boolean(productId) &&
+      Number(checkoutProductBtn?.dataset.checkoutable || 0) > 0;
+    const pendingProductSaves = Number(
       checkinBtn?.dataset.pendingSaves || checkinMenuBtn?.dataset.pendingSaves || 0
     );
-    const pendingProjectNew = Number(
+    const pendingProductNew = Number(
       checkinBtn?.dataset.newFiles || checkinMenuBtn?.dataset.newFiles || 0
     );
-    const projectCheckoutCount = Number(
-      checkinProjectBtn?.dataset.checkoutCount || checkinMenuBtn?.dataset.checkoutCount || 0
+    const productCheckoutCount = Number(
+      checkinProductBtn?.dataset.checkoutCount || checkinMenuBtn?.dataset.checkoutCount || 0
     );
-    // Project check-in when there is queue work and/or active checkouts to release.
-    const canCheckinProject =
-      Boolean(projectId) &&
-      (pendingProjectSaves > 0 || pendingProjectNew > 0 || projectCheckoutCount > 0);
-    const canCheckoutMenu = canCheckout || canCheckoutProject || canUndo;
+    // Product check-in when there is queue work and/or active checkouts to release.
+    const canCheckinProduct =
+      Boolean(productId) &&
+      (pendingProductSaves > 0 || pendingProductNew > 0 || productCheckoutCount > 0);
+    const canCheckoutMenu = canCheckout || canCheckoutProduct || canUndo;
     setToolbarActionVisible(checkoutBtn, canCheckout);
-    setToolbarActionVisible(checkoutProjectBtn, canCheckoutProject);
-    if (checkoutProjectBtn) {
-      checkoutProjectBtn.title = canCheckoutProject
-        ? "Check out every file in this project that is available (not locked by someone else)."
-        : "Nothing left to check out in this project.";
+    setToolbarActionVisible(checkoutProductBtn, canCheckoutProduct);
+    if (checkoutProductBtn) {
+      checkoutProductBtn.title = canCheckoutProduct
+        ? "Check out every file in this product that is available (not locked by someone else)."
+        : "Nothing left to check out in this product.";
     }
     setToolbarActionVisible(undoBtn, canUndo);
     setToolbarActionVisible(checkoutMenuBtn, canCheckoutMenu);
@@ -3717,7 +3717,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (checkinBtn) {
       checkinBtn.textContent = addOnly ? "Add selected…" : "Check in selected…";
       checkinBtn.title = addOnly
-        ? "Add selected new files to the project (uploads local workspace files first)."
+        ? "Add selected new files to the product (uploads local workspace files first)."
         : canCheckin
           ? "Check in selected files."
           : selected.some((row) => row.dataset.canCheckin === "1")
@@ -3725,13 +3725,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             : "Check in selected files.";
     }
     setToolbarActionVisible(checkinBtn, canCheckin);
-    setToolbarActionVisible(checkinProjectBtn, canCheckinProject);
-    if (checkinProjectBtn) {
-      checkinProjectBtn.title = canCheckinProject
-        ? "Check in modified files and new files, and release unchanged checkouts so the project looks fully checked in."
-        : "Nothing to check in for this project. Check out and save changes, or add new files first.";
+    setToolbarActionVisible(checkinProductBtn, canCheckinProduct);
+    if (checkinProductBtn) {
+      checkinProductBtn.title = canCheckinProduct
+        ? "Check in modified files and new files, and release unchanged checkouts so the product looks fully checked in."
+        : "Nothing to check in for this product. Check out and save changes, or add new files first.";
     }
-    const canCheckinMenu = canCheckin || canCheckinProject;
+    const canCheckinMenu = canCheckin || canCheckinProduct;
     setToolbarActionVisible(checkinMenuBtn, canCheckinMenu);
     if (!canCheckinMenu) closeCheckinMenu();
     setToolbarActionVisible(
@@ -3750,15 +3750,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       vaultNewSelected.length > 0 ||
       selected.some((row) => row.dataset.uuid && row.dataset.inWorkspace !== "0");
     const folderPaths = selectedFolderPaths();
-    const canRemoveProject = ids.length > 0 || folderPaths.length > 0;
+    const canRemoveProduct = ids.length > 0 || folderPaths.length > 0;
     const canPurgeVersions = Boolean(
-      purgeVersionsBtn?.dataset.project || openWorkspaceBtn?.dataset.project || checkinBtn?.dataset.project
+      purgeVersionsBtn?.dataset.product || openWorkspaceBtn?.dataset.product || checkinBtn?.dataset.product
     );
-    const canRemoveMenu = canDiscardLocal || canPurge || canRemoveProject || canPurgeVersions;
+    const canRemoveMenu = canDiscardLocal || canPurge || canRemoveProduct || canPurgeVersions;
     setToolbarActionVisible(discardLocalBtn, canDiscardLocal);
     setToolbarActionVisible(purgeBtn, canPurge);
     setToolbarActionVisible(purgeVersionsBtn, canPurgeVersions);
-    setToolbarActionVisible(removeBtn, canRemoveProject);
+    setToolbarActionVisible(removeBtn, canRemoveProduct);
     setToolbarActionVisible(removeMenuBtn, canRemoveMenu);
     if (!canRemoveMenu) closeRemoveMenu();
     const filtering = metricButtons().some((btn) => metricMode(btn) === "filter");
@@ -3795,12 +3795,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!tab) return;
     const n = Number(count) || 0;
     tab.textContent = n ? `Files checked out · ${n}` : "Files checked out";
-    if (checkinProjectBtn) checkinProjectBtn.dataset.checkoutCount = String(n);
+    if (checkinProductBtn) checkinProductBtn.dataset.checkoutCount = String(n);
     if (checkinMenuBtn) checkinMenuBtn.dataset.checkoutCount = String(n);
   }
 
   function setCheckoutableCount(count) {
-    if (checkoutProjectBtn) checkoutProjectBtn.dataset.checkoutable = String(Number(count) || 0);
+    if (checkoutProductBtn) checkoutProductBtn.dataset.checkoutable = String(Number(count) || 0);
     syncToolbar();
   }
 
@@ -3911,7 +3911,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const uuid = openLink?.dataset?.uuid || row.dataset.uuid || "";
     if (uuid) return { objectId: uuid };
     const relativePath = openLink?.dataset?.relativePath || row.dataset.relativePath || "";
-    if (relativePath) return { relativePath, projectId: currentProjectId() };
+    if (relativePath) return { relativePath, productId: currentProductId() };
     return null;
   }
 
@@ -3972,20 +3972,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   }
 
-  function currentProjectId() {
+  function currentProductId() {
     const fromPath = String(window.location.pathname || "").match(
-      /\/projects\/([0-9a-f-]{36})\//i
+      /\/products\/([0-9a-f-]{36})\//i
     );
     return (
-      $("#rename-project-btn")?.dataset.project ||
-      $("#delete-project-btn")?.dataset.project ||
-      $("#collect-metadata-btn")?.dataset.project ||
-      $("#rebuild-where-used-btn")?.dataset.project ||
-      $("#open-workspace-btn")?.dataset.project ||
-      $("#checkin-btn")?.dataset.project ||
-      document.getElementById("metric-filters")?.dataset?.project ||
+      $("#rename-product-btn")?.dataset.product ||
+      $("#delete-product-btn")?.dataset.product ||
+      $("#collect-metadata-btn")?.dataset.product ||
+      $("#rebuild-where-used-btn")?.dataset.product ||
+      $("#open-workspace-btn")?.dataset.product ||
+      $("#checkin-btn")?.dataset.product ||
+      document.getElementById("metric-filters")?.dataset?.product ||
       (fromPath && fromPath[1]) ||
-      new URLSearchParams(window.location.search).get("project") ||
+      new URLSearchParams(window.location.search).get("product") ||
       ""
     );
   }
@@ -3995,21 +3995,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       document.getElementById("metric-filters")?.dataset?.vaultFolder ||
       $("#open-workspace-btn")?.dataset?.vaultFolder ||
       "";
-    return String(raw || "").trim() || currentProjectId();
+    return String(raw || "").trim() || currentProductId();
   }
 
-  function agentProjectFields() {
+  function agentProductFields() {
     return {
-      project_id: currentProjectId() || null,
+      product_id: currentProductId() || null,
       vault_folder: currentVaultFolder() || "",
     };
   }
 
   function sortStoreKey(table) {
-    const project = currentProjectId();
+    const product = currentProductId();
     const tableId = table.id || "";
-    if (!project || !tableId) return "";
-    return `creopdm.sort.${project}.${tableId}`;
+    if (!product || !tableId) return "";
+    return `creopdm.sort.${product}.${tableId}`;
   }
 
   function readStoredSort(table) {
@@ -4029,14 +4029,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function filterStoreKey(folder) {
-    const project = currentProjectId();
-    if (!project) return "";
-    return `creopdm.filters.${project}.${folder}`;
+    const product = currentProductId();
+    if (!product) return "";
+    return `creopdm.filters.${product}.${folder}`;
   }
 
   function readStoredFilters() {
-    const project = currentProjectId();
-    if (!project) return null;
+    const product = currentProductId();
+    if (!product) return null;
     const keys = [filterStoreKey(currentFolder()), filterStoreKey("_last")];
     for (const key of keys) {
       if (!key) continue;
@@ -4051,8 +4051,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function writeStoredFilters() {
-    const project = currentProjectId();
-    if (!project) return;
+    const product = currentProductId();
+    if (!product) return;
     const modes = {};
     metricButtons().forEach((btn) => {
       const name = metricKey(btn);
@@ -4093,9 +4093,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     applyMetricSelection();
   }
 
-  function clearProjectViewStorage(projectId) {
-    if (!projectId) return;
-    const prefixes = [`creopdm.filters.${projectId}.`, `creopdm.sort.${projectId}.`];
+  function clearProductViewStorage(productId) {
+    if (!productId) return;
+    const prefixes = [`creopdm.filters.${productId}.`, `creopdm.sort.${productId}.`];
     const remove = [];
     try {
       for (let index = 0; index < localStorage.length; index += 1) {
@@ -4176,13 +4176,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       leavePage(href);
       return;
     }
-    const projectId = currentProjectId();
+    const productId = currentProductId();
     const path =
       folder.dataset?.folder
       || folder.querySelector?.(".folder-open")?.dataset?.folder
       || "";
-    if (projectId && path) {
-      leavePage(`/?project=${encodeURIComponent(projectId)}&folder=${encodeURIComponent(path)}`);
+    if (productId && path) {
+      leavePage(`/?product=${encodeURIComponent(productId)}&folder=${encodeURIComponent(path)}`);
     }
   }
 
@@ -4268,10 +4268,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (row.dataset.detail) return row.dataset.detail;
     const uuid = row.dataset.uuid;
     if (!uuid) return "";
-    const projectId = currentProjectId();
-    if (!projectId) return "";
+    const productId = currentProductId();
+    if (!productId) return "";
     // Details page defaults to Overview (first tab); use #history to deep-link History.
-    return `/projects/${projectId}/objects/${uuid}`;
+    return `/products/${productId}/objects/${uuid}`;
   }
 
   document.querySelector("#object-table")?.addEventListener("click", onFileTableClick);
@@ -4580,7 +4580,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function refreshCreoStatusPill(prefetchedAgent) {
-    // Soft folder/project swap — never flash Session offline / Not Connected.
+    // Soft folder/product swap — never flash Session offline / Not Connected.
     if (window.__creopdmSoftNavBusy || softNavBusy) return null;
     let inSession = hostedCreoJS();
     document.querySelectorAll(".creo-session-only").forEach((el) => {
@@ -4695,7 +4695,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   }
 
-  // Soft folder/project switches keep the live Creo.JS bridge and header status
+  // Soft folder/product switches keep the live Creo.JS bridge and header status
   // pill (both live outside main.shell). Never re-probe agent or reconnect.
   if (soft) {
     syncCreoSessionControlsFromBridge();
@@ -4726,7 +4726,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // Poll agent for Open workspace + Embedded status (any open mode).
       if (seconds > 0 && !window.__creopdmStatusPollId) {
         const interval = Math.min(120000, Math.max(1000, Math.round(seconds * 1000)));
-        // Survive soft folder/project boots (those abort pageIntervals).
+        // Survive soft folder/product boots (those abort pageIntervals).
         window.__creopdmStatusPollId = window.setInterval(() => {
           if (window.__creopdmSoftNavBusy) return;
           void refreshCreoStatusPill().then(() => syncToolbar());
@@ -4736,9 +4736,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
   }
 
-  async function agentWorkdir(projectId, vaultFolder) {
+  async function agentWorkdir(productId, vaultFolder) {
     const params = new URLSearchParams();
-    if (projectId) params.set("project_id", projectId);
+    if (productId) params.set("product_id", productId);
     const folder = vaultFolder || currentVaultFolder();
     if (folder) params.set("vault_folder", folder);
     const query = params.toString() ? `?${params}` : "";
@@ -4778,7 +4778,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         );
         return;
       }
-      const directory = await agentWorkdir(currentProjectId(), currentVaultFolder());
+      const directory = await agentWorkdir(currentProductId(), currentVaultFolder());
       await whenCreoJSReady();
       const result = await window.CreoJS.setWorkingDirectory(directory);
       const text = result == null ? "" : String(result);
@@ -4811,7 +4811,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       body.object_id = spec.objectId;
       return body;
     }
-    body.project_id = spec.projectId || currentProjectId();
+    body.product_id = spec.productId || currentProductId();
     body.relative_path = spec.relativePath;
     return body;
   }
@@ -5022,9 +5022,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return window.__creopdmAgentOnline === true;
   }
 
-  async function pushLocalWorkspaceToVault(projectId, items) {
+  async function pushLocalWorkspaceToVault(productId, items) {
     const list = (items || []).filter((item) => item && item.object_id);
-    if (!projectId || !list.length) return { ok: [], failed: [], skipped: true };
+    if (!productId || !list.length) return { ok: [], failed: [], skipped: true };
     const agent = await probeCreoAgent();
     if (!agent) return null;
     const response = await fetch(`${agentBase()}/push`, {
@@ -5033,7 +5033,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       body: JSON.stringify({
         pdm_url: window.location.origin,
         ...agentPdmAuth(),
-        project_id: projectId,
+        product_id: productId,
         vault_folder: currentVaultFolder(),
         items: list.map((item) => ({
           object_id: String(item.object_id),
@@ -5047,12 +5047,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return response.json();
   }
 
-  async function listAgentCacheFiles(projectId) {
-    if (!projectId) return [];
+  async function listAgentCacheFiles(productId) {
+    if (!productId) return [];
     const agent = await probeCreoAgent();
     if (!agent) return [];
     const vaultFolder = currentVaultFolder();
-    const params = new URLSearchParams({ project_id: projectId });
+    const params = new URLSearchParams({ product_id: productId });
     if (vaultFolder) params.set("vault_folder", vaultFolder);
     const response = await fetch(
       `${agentBase()}/files?${params}`,
@@ -5063,9 +5063,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return Array.isArray(body?.files) ? body.files : [];
   }
 
-  async function pushLocalNewPathsToVault(projectId, relativePaths) {
+  async function pushLocalNewPathsToVault(productId, relativePaths) {
     const paths = [...new Set((relativePaths || []).map((item) => String(item || "").replace(/\\/g, "/").replace(/^\/+/, "")).filter(Boolean))];
-    if (!projectId || !paths.length) return { ok: [], failed: [], skipped: true };
+    if (!productId || !paths.length) return { ok: [], failed: [], skipped: true };
     const agent = await probeCreoAgent();
     if (!agent) return null;
     const response = await fetch(`${agentBase()}/push-paths`, {
@@ -5074,7 +5074,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       body: JSON.stringify({
         pdm_url: window.location.origin,
         ...agentPdmAuth(),
-        project_id: projectId,
+        product_id: productId,
         vault_folder: currentVaultFolder(),
         relative_paths: paths,
       }),
@@ -5085,16 +5085,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return response.json();
   }
 
-  async function deleteLocalWorkspacePaths(projectId, relativePaths) {
+  async function deleteLocalWorkspacePaths(productId, relativePaths) {
     const paths = [...new Set((relativePaths || []).map((item) => String(item || "").replace(/\\/g, "/").replace(/^\/+/, "")).filter(Boolean))];
-    if (!projectId || !paths.length) return { ok: [], failed: [], skipped: true };
+    if (!productId || !paths.length) return { ok: [], failed: [], skipped: true };
     const agent = await probeCreoAgent();
     if (!agent) return null;
     const response = await fetch(`${agentBase()}/delete-paths`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        project_id: projectId,
+        product_id: productId,
         vault_folder: currentVaultFolder(),
         relative_paths: paths,
       }),
@@ -5111,9 +5111,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   /** Fire-and-forget trash so Remove can refresh without waiting on thousands of files. */
-  function deleteLocalWorkspacePathsBackground(projectId, relativePaths) {
+  function deleteLocalWorkspacePathsBackground(productId, relativePaths) {
     const paths = [...new Set((relativePaths || []).map((item) => String(item || "").replace(/\\/g, "/").replace(/^\/+/, "")).filter(Boolean))];
-    if (!projectId || !paths.length) return;
+    if (!productId || !paths.length) return;
     const url = `${agentBase()}/delete-paths`;
     const chunkSize = 150;
     for (let i = 0; i < paths.length; i += chunkSize) {
@@ -5123,7 +5123,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            project_id: projectId,
+            product_id: productId,
             vault_folder: currentVaultFolder(),
             relative_paths: slice,
           }),
@@ -5135,10 +5135,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  async function purgeLocalVersionsOlderThanVault(projectId, { dryRun = false } = {}) {
-    if (!projectId) return { ok: [], failed: [], deleted: 0, skipped: true };
+  async function purgeLocalVersionsOlderThanVault(productId, { dryRun = false } = {}) {
+    if (!productId) return { ok: [], failed: [], deleted: 0, skipped: true };
     const floorsResponse = await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/workspace/purge-floors`
+      `/api/products/${encodeURIComponent(productId)}/workspace/purge-floors`
     );
     if (!floorsResponse.ok) {
       throw new Error(await readError(floorsResponse));
@@ -5157,7 +5157,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        project_id: projectId,
+        product_id: productId,
         vault_folder: currentVaultFolder(),
         model_extensions: modelExtensions,
         dry_run: Boolean(dryRun),
@@ -5209,15 +5209,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     basenames.add(logicalUploadName(PathBasename(path)).toLowerCase());
   }
 
-  async function loadKnownWorkspacePaths(projectId, extraRels = []) {
+  async function loadKnownWorkspacePaths(productId, extraRels = []) {
     const exact = new Set();
     const logical = new Set();
     const basenames = new Set();
     (extraRels || []).forEach((rel) => markKnownPath(rel, exact, logical, basenames));
     try {
       const [objectsResponse, queueResponse] = await Promise.all([
-        fetch(`/api/projects/${encodeURIComponent(projectId)}/objects`),
-        fetch(`/api/projects/${encodeURIComponent(projectId)}/checkin-queue`),
+        fetch(`/api/products/${encodeURIComponent(productId)}/objects`),
+        fetch(`/api/products/${encodeURIComponent(productId)}/checkin-queue`),
       ]);
       if (objectsResponse.ok) {
         const objects = await objectsResponse.json().catch(() => []);
@@ -5238,7 +5238,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return knownWorkspacePaths;
   }
 
-  async function ensureKnownWorkspacePaths(projectId, { force = false } = {}) {
+  async function ensureKnownWorkspacePaths(productId, { force = false } = {}) {
     if (
       !force &&
       knownWorkspacePaths.at &&
@@ -5247,7 +5247,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     ) {
       return knownWorkspacePaths;
     }
-    return loadKnownWorkspacePaths(projectId);
+    return loadKnownWorkspacePaths(productId);
   }
 
   function localOnlyCacheFiles(cacheFiles, known) {
@@ -5281,7 +5281,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
     function newerLocalCacheSaves(cacheFiles, objects) {
     // Prefer full vault-relative path. Older flat agent caches (basename only)
-    // still match when that basename is unique in the project.
+    // still match when that basename is unique in the product.
     const bestByLogical = new Map();
     const bestByBasename = new Map();
     (cacheFiles || []).forEach((item) => {
@@ -5345,43 +5345,43 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return rows;
   }
 
-  async function countLocalNewWorkspaceFiles(projectId) {
-    if (!projectId) return 0;
-    const pending = await countLocalWorkspacePending(projectId);
+  async function countLocalNewWorkspaceFiles(productId) {
+    if (!productId) return 0;
+    const pending = await countLocalWorkspacePending(productId);
     return pending.localNew;
   }
 
-  let cachedProjectObjects = { id: "", at: 0, rows: [] };
+  let cachedProductObjects = { id: "", at: 0, rows: [] };
 
-  async function ensureProjectObjects(projectId, { force = false } = {}) {
+  async function ensureProductObjects(productId, { force = false } = {}) {
     if (
       !force &&
-      cachedProjectObjects.id === projectId &&
-      cachedProjectObjects.at &&
-      Date.now() - cachedProjectObjects.at < 15000
+      cachedProductObjects.id === productId &&
+      cachedProductObjects.at &&
+      Date.now() - cachedProductObjects.at < 15000
     ) {
-      return cachedProjectObjects.rows;
+      return cachedProductObjects.rows;
     }
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/objects`);
+      const response = await fetch(`/api/products/${encodeURIComponent(productId)}/objects`);
       const rows = response.ok ? await response.json().catch(() => []) : [];
-      cachedProjectObjects = {
-        id: projectId,
+      cachedProductObjects = {
+        id: productId,
         at: Date.now(),
         rows: Array.isArray(rows) ? rows : [],
       };
     } catch {
-      cachedProjectObjects = { id: projectId, at: Date.now(), rows: [] };
+      cachedProductObjects = { id: productId, at: Date.now(), rows: [] };
     }
-    return cachedProjectObjects.rows;
+    return cachedProductObjects.rows;
   }
 
-  async function countLocalWorkspacePending(projectId) {
-    if (!projectId) return { localNew: 0, newerLocal: 0 };
+  async function countLocalWorkspacePending(productId) {
+    if (!productId) return { localNew: 0, newerLocal: 0 };
     const [cacheFiles, known, objects] = await Promise.all([
-      listAgentCacheFiles(projectId),
-      ensureKnownWorkspacePaths(projectId),
-      ensureProjectObjects(projectId),
+      listAgentCacheFiles(productId),
+      ensureKnownWorkspacePaths(productId),
+      ensureProductObjects(productId),
     ]);
     return {
       localNew: localOnlyCacheFiles(cacheFiles, known).length,
@@ -5398,7 +5398,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         pdm_url: window.location.origin,
         ...agentPdmAuth(),
         object_id: prepared.object_id || null,
-        project_id: prepared.project_id || currentProjectId() || null,
+        product_id: prepared.product_id || currentProductId() || null,
         vault_folder: currentVaultFolder(),
         relative_path: prepared.relative_path || null,
         filename: prepared.filename || null,
@@ -5406,7 +5406,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         replace_newer: Boolean(prepared.replace_newer),
         companions: companions.map((item) => ({
           object_id: item.object_id || null,
-          project_id: item.project_id || prepared.project_id || currentProjectId() || null,
+          product_id: item.product_id || prepared.product_id || currentProductId() || null,
           relative_path: item.relative_path || null,
           filename: item.filename || null,
           disk_name: item.disk_name || item.filename || null,
@@ -5429,7 +5429,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       body: JSON.stringify({
         pdm_url: window.location.origin,
         ...agentPdmAuth(),
-        project_id: currentProjectId() || null,
+        product_id: currentProductId() || null,
         vault_folder: currentVaultFolder(),
         object_ids: objectIds,
       }),
@@ -5785,7 +5785,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     applyCheckedOutOnRows(syncedIds);
     const remaining = Math.max(
       0,
-      Number(checkoutProjectBtn?.dataset.checkoutable || 0) - syncedIds.length
+      Number(checkoutProductBtn?.dataset.checkoutable || 0) - syncedIds.length
     );
     setCheckoutableCount(remaining);
     reloadPage({ keepBusy: true });
@@ -5799,19 +5799,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     await runCheckoutObjects(objectIds);
   });
 
-  checkoutProjectBtn?.addEventListener("click", async () => {
-    const projectId =
-      checkoutProjectBtn.dataset.project ||
-      openWorkspaceBtn?.dataset.project ||
-      currentProjectId() ||
+  checkoutProductBtn?.addEventListener("click", async () => {
+    const productId =
+      checkoutProductBtn.dataset.product ||
+      openWorkspaceBtn?.dataset.product ||
+      currentProductId() ||
       "";
-    if (!projectId) {
-      showError($("#toolbar-error"), "Select a project first.");
+    if (!productId) {
+      showError($("#toolbar-error"), "Select a product first.");
       return;
     }
     showError($("#toolbar-error"), "");
-    const listed = await withBusy("Listing project files…", async () => {
-      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/objects`);
+    const listed = await withBusy("Listing product files…", async () => {
+      const response = await fetch(`/api/products/${encodeURIComponent(productId)}/objects`);
       if (!response.ok) {
         showError($("#toolbar-error"), await readError(response));
         return null;
@@ -5823,7 +5823,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       .filter((item) => item && item.can_checkout && item.uuid)
       .map((item) => String(item.uuid));
     if (!objectIds.length) {
-      showError($("#toolbar-error"), "No files available to check out in this project.");
+      showError($("#toolbar-error"), "No files available to check out in this product.");
       setCheckoutableCount(0);
       return;
     }
@@ -5842,8 +5842,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
 
   openWorkspaceBtn?.addEventListener("click", async () => {
-    const projectId = openWorkspaceBtn.dataset.project;
-    if (!projectId) return;
+    const productId = openWorkspaceBtn.dataset.product;
+    if (!productId) return;
     const folder = openWorkspaceBtn.dataset.folder || currentFolder() || "";
     showError($("#toolbar-error"), "");
     showOk("");
@@ -5861,7 +5861,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          project_id: projectId,
+          product_id: productId,
           vault_folder: openWorkspaceBtn.dataset.vaultFolder || currentVaultFolder(),
           folder,
         }),
@@ -5934,27 +5934,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
 
   async function beginCheckin(scope = "selected") {
-    const projectScope = scope === "project";
-    const selected = projectScope ? [] : selectedRows();
-    if (!projectScope && !selectionCanCheckin(selected) && !checkinBtn?.dataset.uuid) {
+    const productScope = scope === "product";
+    const selected = productScope ? [] : selectedRows();
+    if (!productScope && !selectionCanCheckin(selected) && !checkinBtn?.dataset.uuid) {
       showError(
         $("#toolbar-error"),
         "Nothing to check in for this selection. Save changes in Creo first, or use Undo Checkout."
       );
       return;
     }
-    if (projectScope) {
+    if (productScope) {
       const pending = Number(
         checkinBtn?.dataset.pendingSaves || checkinMenuBtn?.dataset.pendingSaves || 0
       );
       const news = Number(checkinBtn?.dataset.newFiles || checkinMenuBtn?.dataset.newFiles || 0);
       const checkouts = Number(
-        checkinProjectBtn?.dataset.checkoutCount || checkinMenuBtn?.dataset.checkoutCount || 0
+        checkinProductBtn?.dataset.checkoutCount || checkinMenuBtn?.dataset.checkoutCount || 0
       );
       if (pending <= 0 && news <= 0 && checkouts <= 0) {
         showError(
           $("#toolbar-error"),
-          "Nothing to check in for this project. Modified checkouts and new files appear under New files."
+          "Nothing to check in for this product. Modified checkouts and new files appear under New files."
         );
         return;
       }
@@ -5963,32 +5963,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const owned = selected.filter((row) => {
       return row.dataset.canCheckin === "1" && !row.classList.contains("queue-row");
     });
-    const addOnly = projectScope ? false : selectionIsAddOnly(selected);
-    const projectId =
-      checkinBtn?.dataset.project ||
-      checkinMenuBtn?.dataset.project ||
-      checkinProjectBtn?.dataset.project ||
-      openWorkspaceBtn?.dataset.project;
+    const addOnly = productScope ? false : selectionIsAddOnly(selected);
+    const productId =
+      checkinBtn?.dataset.product ||
+      checkinMenuBtn?.dataset.product ||
+      checkinProductBtn?.dataset.product ||
+      openWorkspaceBtn?.dataset.product;
     if (!checkinDialog) return;
     const fallbackId = checkinBtn?.dataset.uuid || "";
     let objectId = "";
-    if (!projectScope) {
+    if (!productScope) {
       if (!queued.length && owned.length === 1) {
         objectId = owned[0].dataset.uuid;
       } else if (!queued.length && !owned.length && fallbackId) {
         objectId = fallbackId;
       }
     }
-    const useQueue = projectScope || !objectId;
-    if (useQueue && !projectId) return;
-    if (!projectScope) {
+    const useQueue = productScope || !objectId;
+    if (useQueue && !productId) return;
+    if (!productScope) {
       const bulkCount = useQueue ? owned.length + queued.length : 1;
       if (!confirmLargeBulk(addOnly ? "Add" : "Check in", bulkCount)) return;
     }
     showError($("#checkin-error"), "");
     showError($("#toolbar-error"), "");
     const pushItems = [];
-    let projectLocalNewPaths = [];
+    let productLocalNewPaths = [];
     if (!addOnly) {
       if (objectId) {
         const name =
@@ -5996,7 +5996,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           document.querySelector(".detail-head .object-open")?.textContent?.trim() ||
           "";
         pushItems.push({ object_id: objectId, filename: name });
-      } else if (!projectScope) {
+      } else if (!productScope) {
         owned.forEach((row) => {
           if (row.dataset.uuid) {
             pushItems.push({
@@ -6013,14 +6013,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             });
           }
         });
-      } else if (projectId) {
+      } else if (productId) {
         // Match New files tab: vault queue + local agent-cache new/newer saves.
         // Preview is vault-only — push local work first or the dialog shows "0 vault files".
         try {
           const [queueResp, cacheFiles, objects] = await Promise.all([
-            fetch(`/api/projects/${encodeURIComponent(projectId)}/checkin-queue`),
-            listAgentCacheFiles(projectId),
-            ensureProjectObjects(projectId, { force: true }),
+            fetch(`/api/products/${encodeURIComponent(productId)}/checkin-queue`),
+            listAgentCacheFiles(productId),
+            ensureProductObjects(productId, { force: true }),
           ]);
           let vaultNew = [];
           if (queueResp.ok) {
@@ -6036,11 +6036,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             vaultNew = Array.isArray(queueBody.new_files) ? queueBody.new_files : [];
           }
           const known = await loadKnownWorkspacePaths(
-            projectId,
+            productId,
             vaultNew.map((item) => item.relative_path || "")
           );
           const localNew = localOnlyCacheFiles(cacheFiles, known);
-          projectLocalNewPaths = localNew
+          productLocalNewPaths = localNew
             .map((item) => String(item.relative_path || item.path || "").replace(/\\/g, "/"))
             .filter(Boolean);
           const vaultSaveIds = new Set(pushItems.map((item) => item.object_id));
@@ -6055,15 +6055,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         } catch {
           /* preview still runs */
         }
-        const bulkHint = Math.max(pushItems.length + projectLocalNewPaths.length, 1);
-        if (!confirmLargeBulk("Check in project", bulkHint)) return;
+        const bulkHint = Math.max(pushItems.length + productLocalNewPaths.length, 1);
+        if (!confirmLargeBulk("Check in product", bulkHint)) return;
       }
     }
     let agentOffline = false;
     const preview = await withBusy(addOnly ? "Preparing…" : "Preparing check-in…", async () => {
-      if (!addOnly && projectId && pushItems.length) {
+      if (!addOnly && productId && pushItems.length) {
         try {
-          const pushed = await pushLocalWorkspaceToVault(projectId, pushItems);
+          const pushed = await pushLocalWorkspaceToVault(productId, pushItems);
           if (pushed === null) {
             agentOffline = true;
           } else if (pushed.failed?.length && !pushed.ok?.length) {
@@ -6074,9 +6074,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           showError($("#toolbar-error"), err?.message || String(err));
         }
       }
-      if (!addOnly && projectId && projectLocalNewPaths.length) {
+      if (!addOnly && productId && productLocalNewPaths.length) {
         try {
-          const pushedNew = await pushLocalNewPathsToVault(projectId, projectLocalNewPaths);
+          const pushedNew = await pushLocalNewPathsToVault(productId, productLocalNewPaths);
           if (pushedNew === null) {
             agentOffline = true;
           } else if (pushedNew.failed?.length && !pushedNew.ok?.length) {
@@ -6089,7 +6089,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       return fetch(
         useQueue
-          ? `/api/projects/${projectId}/checkin-preview`
+          ? `/api/products/${productId}/checkin-preview`
           : `/api/objects/${objectId}/checkin-preview`
       );
     });
@@ -6101,7 +6101,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (
       !addOnly &&
       agentOffline &&
-      (pushItems.length || projectLocalNewPaths.length) &&
+      (pushItems.length || productLocalNewPaths.length) &&
       !(data.object_ids || []).length &&
       !(data.new_files || []).length &&
       !data.can_checkin
@@ -6113,7 +6113,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     const title = $("#checkin-dialog-title");
     if (title) {
-      title.textContent = addOnly ? "Add files" : projectScope ? "Check in project" : "Check In";
+      title.textContent = addOnly ? "Add files" : productScope ? "Check in product" : "Check In";
     }
     $("#checkin-filename").textContent = addOnly
       ? (queued.length === 1 ? queued[0].dataset.filename || data.filename : `${queued.length || (data.new_files || []).length} files`)
@@ -6133,19 +6133,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (objectValue) objectValue.hidden = Boolean(addOnly);
     }
     $("#checkin-comment").value = "";
-    let projectUndoIds = [];
-    if (projectScope && projectId) {
+    let productUndoIds = [];
+    if (productScope && productId) {
       try {
-        const checkoutResp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/checkouts`);
+        const checkoutResp = await fetch(`/api/products/${encodeURIComponent(productId)}/checkouts`);
         if (checkoutResp.ok) {
           const listed = await checkoutResp.json();
           const pendingSet = new Set(data.object_ids || []);
-          projectUndoIds = (Array.isArray(listed) ? listed : [])
+          productUndoIds = (Array.isArray(listed) ? listed : [])
             .filter((item) => item && item.owned_by_me && item.uuid && !pendingSet.has(String(item.uuid)))
             .map((item) => String(item.uuid));
         }
       } catch {
-        projectUndoIds = [];
+        productUndoIds = [];
       }
     }
     if (checkinDialog) {
@@ -6153,7 +6153,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       checkinDialog.dataset.queue = useQueue ? "1" : "";
       checkinDialog.dataset.addOnly = addOnly ? "1" : "";
       checkinDialog.dataset.objectId = useQueue ? "" : objectId;
-      checkinDialog.dataset.projectId = projectId || "";
+      checkinDialog.dataset.productId = productId || "";
       checkinDialog.dataset.pushItems = JSON.stringify(pushItems);
       const selectedIdsForQueue = queued
         .map((row) => row.dataset.uuid)
@@ -6164,7 +6164,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // Only vault-dirty files — not every owned checkout (avoids empty revisions).
       let checkinIds = [];
       if (!addOnly) {
-        if (projectScope) {
+        if (productScope) {
           checkinIds = pendingIds.slice();
         } else if (selectedIdsForQueue.length) {
           checkinIds = selectedIdsForQueue.filter((id) => pendingSet.has(id));
@@ -6175,8 +6175,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
       }
       checkinDialog.dataset.objectIds = JSON.stringify(checkinIds);
-      checkinDialog.dataset.projectScope = projectScope ? "1" : "";
-      checkinDialog.dataset.undoIds = JSON.stringify(projectUndoIds);
+      checkinDialog.dataset.productScope = productScope ? "1" : "";
+      checkinDialog.dataset.undoIds = JSON.stringify(productUndoIds);
     }
     const forceWarn = $("#checkin-force-warn");
     if (forceWarn) {
@@ -6193,7 +6193,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const pendingIds = data.object_ids || [];
       const names = addOnly
         ? []
-        : projectScope || !queued.length
+        : productScope || !queued.length
           ? pendingNames
           : pendingIds.map((id, index) => (wantedIds.has(id) ? pendingNames[index] : "")).filter(Boolean);
       names.forEach((name) => {
@@ -6201,7 +6201,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         item.textContent = `✓ Check in ${name}`;
         list.appendChild(item);
       });
-      const newCount = projectScope
+      const newCount = productScope
         ? (data.new_files || []).length
         : queued.length
           ? queued.filter((row) => row.dataset.relativePath).length
@@ -6222,27 +6222,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           list.appendChild(item);
           canSubmit = false;
         }
-      } else if (!names.length && !newCount && !projectUndoIds.length) {
+      } else if (!names.length && !newCount && !productUndoIds.length) {
         const item = document.createElement("li");
-        item.textContent = projectScope
+        item.textContent = productScope
           ? "– Nothing to check in. Local workspace files need creopdm-agent to sync into the vault first."
           : "– Nothing to check in. Use Undo Checkout to release locks without a new version.";
         list.appendChild(item);
         canSubmit = false;
       } else {
-        if (projectScope && newCount && !names.length) {
+        if (productScope && newCount && !names.length) {
           (data.new_files || []).forEach((file) => {
             const item = document.createElement("li");
             item.textContent = `✓ Add ${file.filename || file.relative_path || "file"}`;
             list.appendChild(item);
           });
         }
-        if (projectUndoIds.length) {
+        if (productUndoIds.length) {
           const item = document.createElement("li");
           item.textContent =
-            projectUndoIds.length === 1
+            productUndoIds.length === 1
               ? "✓ Undo checkout on 1 unchanged file (no new version)"
-              : `✓ Undo checkout on ${projectUndoIds.length} unchanged files (no new version)`;
+              : `✓ Undo checkout on ${productUndoIds.length} unchanged files (no new version)`;
           list.appendChild(item);
         }
       }
@@ -6266,7 +6266,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (submitBtn) {
       submitBtn.textContent = addOnly
         ? "Add"
-        : projectScope && !((data.object_ids || []).length) && !((data.new_files || []).length) && projectUndoIds.length
+        : productScope && !((data.object_ids || []).length) && !((data.new_files || []).length) && productUndoIds.length
           ? "Release checkouts"
           : data.force_checkin
             ? "Check In anyway"
@@ -6279,7 +6279,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       (addOnly ||
         Boolean((data.object_ids || []).length) ||
         Boolean((data.new_files || []).length) ||
-        !projectScope);
+        !productScope);
     if (commentBox) {
       commentBox.disabled = !canSubmit;
       commentBox.required = needsComment;
@@ -6322,7 +6322,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       });
     }
     const selectedNew = new Set(
-      projectScope
+      productScope
         ? (data.new_files || []).map((item) => item.relative_path).filter(Boolean)
         : queued.map((row) => row.dataset.relativePath).filter(Boolean)
     );
@@ -6385,8 +6385,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   checkinBtn?.addEventListener("click", () => {
     void beginCheckin("selected");
   });
-  checkinProjectBtn?.addEventListener("click", () => {
-    void beginCheckin("project");
+  checkinProductBtn?.addEventListener("click", () => {
+    void beginCheckin("product");
   });
 
   $("#checkin-cancel")?.addEventListener("click", () => checkinDialog?.close());
@@ -6433,14 +6433,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       localPaths = localPaths.filter((path) => added.includes(path));
       if (localPaths.length) {
-        const projectId =
-          checkinDialog?.dataset.projectId ||
-          checkinBtn?.dataset.project ||
-          openWorkspaceBtn?.dataset.project ||
+        const productId =
+          checkinDialog?.dataset.productId ||
+          checkinBtn?.dataset.product ||
+          openWorkspaceBtn?.dataset.product ||
           "";
         const synced = await withBusy("Uploading local workspace files to vault…", async () => {
           try {
-            return await pushLocalNewPathsToVault(projectId, localPaths);
+            return await pushLocalNewPathsToVault(productId, localPaths);
           } catch (err) {
             showError($("#checkin-error"), err?.message || String(err));
             return false;
@@ -6472,15 +6472,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       } catch {
         pushItems = [];
       }
-      const projectId =
-        checkinDialog?.dataset.projectId ||
-        checkinBtn?.dataset.project ||
-        openWorkspaceBtn?.dataset.project ||
+      const productId =
+        checkinDialog?.dataset.productId ||
+        checkinBtn?.dataset.product ||
+        openWorkspaceBtn?.dataset.product ||
         "";
-      if (projectId && pushItems.length) {
+      if (productId && pushItems.length) {
         const synced = await withBusy("Syncing local workspace to vault…", async () => {
           try {
-            return await pushLocalWorkspaceToVault(projectId, pushItems);
+            return await pushLocalWorkspaceToVault(productId, pushItems);
           } catch (err) {
             showError($("#checkin-error"), err?.message || String(err));
             return false;
@@ -6497,8 +6497,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
     }
     if (checkinDialog?.dataset.queue === "1") {
-      const projectId = checkinBtn?.dataset.project || checkinDialog?.dataset.projectId;
-      if (!projectId) return;
+      const productId = checkinBtn?.dataset.product || checkinDialog?.dataset.productId;
+      if (!productId) return;
       let objectIds = [];
       try {
         objectIds = JSON.parse(checkinDialog.dataset.objectIds || "[]");
@@ -6511,8 +6511,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       } catch {
         undoIds = [];
       }
-      const projectScopeSubmit = checkinDialog.dataset.projectScope === "1";
-      if (!objectIds.length && !added.length && !(projectScopeSubmit && undoIds.length)) {
+      const productScopeSubmit = checkinDialog.dataset.productScope === "1";
+      if (!objectIds.length && !added.length && !(productScopeSubmit && undoIds.length)) {
         showError(
           $("#checkin-error"),
           "Nothing to check in. Use Undo Checkout to release locks without a new version."
@@ -6520,7 +6520,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         return;
       }
       if (objectIds.length || added.length) {
-        result = await postAction(`/api/projects/${projectId}/checkin-queue`, {
+        result = await postAction(`/api/products/${productId}/checkin-queue`, {
           comment,
           object_ids: objectIds,
           add_relative_paths: added,
@@ -6529,7 +6529,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       } else {
         result = { ok: [], failed: [] };
       }
-      if (projectScopeSubmit && undoIds.length) {
+      if (productScopeSubmit && undoIds.length) {
         const UNDO_CHUNK = 50;
         const undoResult = await withBusy(
           `Releasing unchanged checkouts… 0 of ${undoIds.length}`,
@@ -6595,19 +6595,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (href) window.location.href = href;
   });
 
-  function expectedProjectName() {
+  function expectedProductName() {
     return (
-      $("#delete-project-btn")?.dataset.name
-      || $("#revert-version-btn")?.dataset.projectName
-      || purgeVersionsBtn?.dataset.projectName
-      || purgeBtn?.dataset.projectName
-      || removeBtn?.dataset.projectName
-      || discardLocalBtn?.dataset.projectName
+      $("#delete-product-btn")?.dataset.name
+      || $("#revert-version-btn")?.dataset.productName
+      || purgeVersionsBtn?.dataset.productName
+      || purgeBtn?.dataset.productName
+      || removeBtn?.dataset.productName
+      || discardLocalBtn?.dataset.productName
       || ""
     ).trim();
   }
 
-  function confirmByProjectName({
+  function confirmByProductName({
     title,
     lead,
     note,
@@ -6617,7 +6617,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }) {
     const dialog = $("#danger-confirm-dialog");
     const form = $("#danger-confirm-form");
-    const expected = expectedProjectName();
+    const expected = expectedProductName();
     if (!dialog || !form || !expected) {
       return Promise.resolve({ ok: false, deleteWorkspaceFiles: false });
     }
@@ -6672,7 +6672,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         event.preventDefault();
         const typed = String(new FormData(form).get("confirm_name") || "").trim();
         if (typed !== expected) {
-          showError($("#danger-confirm-error"), "Type the project name exactly to confirm.");
+          showError($("#danger-confirm-error"), "Type the product name exactly to confirm.");
           return;
         }
         finish(true);
@@ -6685,7 +6685,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   }
 
-  function workspacePathsForRemovedObjects(projectId, selected) {
+  function workspacePathsForRemovedObjects(productId, selected) {
     // Sync only — do not list the whole agent cache (that stalled Remove for
     // thousands of files). Agent /delete-paths expands Creo numbered siblings.
     const seeds = new Set();
@@ -6801,7 +6801,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return parts.join("");
   }
 
-  function projectHome() {
+  function productHome() {
     return document.querySelector(".crumb a")?.href || "/";
   }
 
@@ -6871,7 +6871,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (location) {
       location.textContent = folder
         ? `Creates a folder under ${folder}.`
-        : "Creates a folder at the project root.";
+        : "Creates a folder at the product root.";
     }
     createFolderDialog?.showModal();
     nameInput?.focus();
@@ -6884,8 +6884,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   $("#create-folder-cancel")?.addEventListener("click", () => createFolderDialog?.close());
   createFolderForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const projectId = createFolderForm.dataset.project || addForm?.dataset.project;
-    if (!projectId) return;
+    const productId = createFolderForm.dataset.product || addForm?.dataset.product;
+    if (!productId) return;
     const name = String(new FormData(createFolderForm).get("name") || "").trim();
     if (!name) {
       showError($("#create-folder-error"), "Enter a folder name.");
@@ -6893,7 +6893,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     showError($("#create-folder-error"), "");
     const response = await withBusy("Creating folder…", () =>
-      fetch(`/api/projects/${projectId}/folders`, {
+      fetch(`/api/products/${productId}/folders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -6923,12 +6923,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     ];
     const total = ids.length + paths.length;
     if (!total) return;
-    const confirmed = await confirmByProjectName({
+    const confirmed = await confirmByProductName({
       title: total === 1 ? "Remove from vault" : `Remove ${total} files from vault`,
       lead:
         total === 1
-          ? "Only the CreoPDM vault copy is deleted. The original in your project folder stays. If you have it checked out, that checkout is cancelled."
-          : "Only CreoPDM vault copies are deleted. Originals in your project folder stay. Your checkouts on those files are cancelled.",
+          ? "Only the CreoPDM vault copy is deleted. The original in your product folder stays. If you have it checked out, that checkout is cancelled."
+          : "Only CreoPDM vault copies are deleted. Originals in your product folder stay. Your checkouts on those files are cancelled.",
       note: "This cannot be undone from CreoPDM.",
       submitLabel: "Remove from Vault",
     });
@@ -6937,10 +6937,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     let okCount = 0;
     let warning = "";
     if (paths.length) {
-      const projectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
-      if (!projectId) return;
+      const productId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
+      if (!productId) return;
       const result = await postAction(
-        `/api/projects/${projectId}/workspace/purge-paths`,
+        `/api/products/${productId}/workspace/purge-paths`,
         { relative_paths: paths },
         "POST",
         "Removing from vault…"
@@ -6983,14 +6983,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       ...new Set(selected.map((row) => row.dataset.relativePath).filter(Boolean)),
     ];
     if (!paths.length) return;
-    const projectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
-    if (!projectId) return;
-    const confirmed = await confirmByProjectName({
+    const productId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
+    if (!productId) return;
+    const confirmed = await confirmByProductName({
       title: paths.length === 1 ? "Remove from workspace" : `Remove ${paths.length} files from workspace`,
       lead:
         paths.length === 1
-          ? "This moves the file from the local workspace on this PC (creopdm-agent cache) to the Recycle Bin. The vault and project list are unchanged."
-          : "These files move from the local workspace on this PC (creopdm-agent cache) to the Recycle Bin. The vault and project list are unchanged.",
+          ? "This moves the file from the local workspace on this PC (creopdm-agent cache) to the Recycle Bin. The vault and product list are unchanged."
+          : "These files move from the local workspace on this PC (creopdm-agent cache) to the Recycle Bin. The vault and product list are unchanged.",
       note: "This cannot be undone from CreoPDM. Restore from the Recycle Bin on this PC if needed.",
       submitLabel: "Remove from Workspace",
     });
@@ -6998,7 +6998,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     showError($("#toolbar-error"), "");
     const result = await withBusy("Removing from local workspace…", async () => {
       try {
-        return await deleteLocalWorkspacePaths(projectId, paths);
+        return await deleteLocalWorkspacePaths(productId, paths);
       } catch (err) {
         showError($("#toolbar-error"), err?.message || String(err));
         return false;
@@ -7028,15 +7028,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
 
   purgeVersionsBtn?.addEventListener("click", async () => {
-    const projectId =
-      purgeVersionsBtn.dataset.project
-      || checkinBtn?.dataset.project
-      || openWorkspaceBtn?.dataset.project;
-    if (!projectId) return;
+    const productId =
+      purgeVersionsBtn.dataset.product
+      || checkinBtn?.dataset.product
+      || openWorkspaceBtn?.dataset.product;
+    if (!productId) return;
     showError($("#toolbar-error"), "");
     const preview = await withBusy("Checking what Purge workspace would delete…", async () => {
       try {
-        return await purgeLocalVersionsOlderThanVault(projectId, { dryRun: true });
+        return await purgeLocalVersionsOlderThanVault(productId, { dryRun: true });
       } catch (err) {
         showError($("#toolbar-error"), err?.message || String(err));
         return false;
@@ -7061,7 +7061,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       );
       return;
     }
-    const confirmed = await confirmByProjectName({
+    const confirmed = await confirmByProductName({
       title: "Purge workspace",
       lead: `About to move ${wouldDelete} older local Creo model save(s) from the agent cache to the Recycle Bin on this PC. The vault revision and any newer local work stay. The vault is not changed.`,
       detailsHtml: formatPurgeConfirmDetails(preview),
@@ -7072,7 +7072,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     showError($("#toolbar-error"), "");
     const result = await withBusy("Purging older local saves…", async () => {
       try {
-        return await purgeLocalVersionsOlderThanVault(projectId);
+        return await purgeLocalVersionsOlderThanVault(productId);
       } catch (err) {
         showError($("#toolbar-error"), err?.message || String(err));
         return false;
@@ -7112,46 +7112,46 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const removeCount = Math.max(ids.length, folderPaths.length);
     if (!confirmLargeBulk("Remove", removeCount)) return;
     const selected = selectedRows();
-    const projectId =
-      removeBtn.dataset.project
-      || checkinBtn?.dataset.project
-      || openWorkspaceBtn?.dataset.project
-      || currentProjectId();
-    const confirmed = await confirmByProjectName({
+    const productId =
+      removeBtn.dataset.product
+      || checkinBtn?.dataset.product
+      || openWorkspaceBtn?.dataset.product
+      || currentProductId();
+    const confirmed = await confirmByProductName({
       title:
         folderPaths.length && !ids.length
           ? folderPaths.length === 1
-            ? "Remove folder from project"
-            : `Remove ${folderPaths.length} folders from project`
+            ? "Remove folder from product"
+            : `Remove ${folderPaths.length} folders from product`
           : ids.length === 1
-            ? "Remove from project"
-            : `Remove ${ids.length} files from project`,
+            ? "Remove from product"
+            : `Remove ${ids.length} files from product`,
       lead:
         folderPaths.length
-          ? "CreoPDM vault copies under the selected folder(s) are deleted. Originals in your project folder are not deleted."
+          ? "CreoPDM vault copies under the selected folder(s) are deleted. Originals in your product folder are not deleted."
           : ids.length === 1
-            ? "CreoPDM vault copies are deleted. The original in your project folder is not deleted."
-            : "CreoPDM vault copies are deleted. Originals in your project folder are not deleted.",
-      note: "Removed from this project list. This cannot be undone from CreoPDM.",
-      submitLabel: "Remove from Project",
+            ? "CreoPDM vault copies are deleted. The original in your product folder is not deleted."
+            : "CreoPDM vault copies are deleted. Originals in your product folder are not deleted.",
+      note: "Removed from this product list. This cannot be undone from CreoPDM.",
+      submitLabel: "Remove from Product",
       workspaceOption: true,
     });
     if (!confirmed.ok) return;
     const deleteWorkspaceFiles = Boolean(confirmed.deleteWorkspaceFiles);
     const workspacePaths = deleteWorkspaceFiles
-      ? workspacePathsForRemovedObjects(projectId, selected)
+      ? workspacePathsForRemovedObjects(productId, selected)
       : [];
     removeSelectedRowsFromDom(selected);
     if (ids.length === 1 && !folderPaths.length && !isListPage) {
-      const result = await postAction(`/api/objects/${ids[0]}`, null, "DELETE", "Removing from project…");
+      const result = await postAction(`/api/objects/${ids[0]}`, null, "DELETE", "Removing from product…");
       if (!result) {
         reloadPage({ keepBusy: true });
         return;
       }
-      if (deleteWorkspaceFiles && projectId && workspacePaths.length) {
-        deleteLocalWorkspacePathsBackground(projectId, workspacePaths);
+      if (deleteWorkspaceFiles && productId && workspacePaths.length) {
+        deleteLocalWorkspacePathsBackground(productId, workspacePaths);
       }
-      window.location.href = projectHome();
+      window.location.href = productHome();
       return;
     }
     const result = await postAction(
@@ -7159,12 +7159,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       {
         object_ids: ids,
         folder_paths: folderPaths,
-        project_id: projectId || null,
+        product_id: productId || null,
       },
       "POST",
       removeCount > 100
-        ? `Removing ${removeCount} items from project…`
-        : "Removing from project…"
+        ? `Removing ${removeCount} items from product…`
+        : "Removing from product…"
     );
     if (!result) {
       reloadPage({ keepBusy: true });
@@ -7172,22 +7172,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     const warning = formatBatch(result);
     if (warning) showError($("#toolbar-error"), warning);
-    if (result.ok?.length && deleteWorkspaceFiles && projectId && workspacePaths.length) {
-      deleteLocalWorkspacePathsBackground(projectId, workspacePaths);
+    if (result.ok?.length && deleteWorkspaceFiles && productId && workspacePaths.length) {
+      deleteLocalWorkspacePathsBackground(productId, workspacePaths);
       if (!warning) {
         showOk(
-          `${result.ok.length} item(s) removed from the project. Local workspace cleanup continues in the background.`
+          `${result.ok.length} item(s) removed from the product. Local workspace cleanup continues in the background.`
         );
       }
     } else if (result.ok?.length && !warning) {
       const files = (result.ok || []).filter((item) => item.status === "removed").length;
       const folders = (result.ok || []).filter((item) => item.status === "folder_removed").length;
       if (folders && !files) {
-        showOk(folders === 1 ? "Folder removed from the project." : `${folders} folders removed.`);
+        showOk(folders === 1 ? "Folder removed from the product." : `${folders} folders removed.`);
       } else if (folders) {
-        showOk(`${files} file(s) and ${folders} folder(s) removed from the project.`);
+        showOk(`${files} file(s) and ${folders} folder(s) removed from the product.`);
       } else {
-        showOk(`${files} file(s) removed from the project.`);
+        showOk(`${files} file(s) removed from the product.`);
       }
     }
     if (result.ok?.length) {
@@ -7200,10 +7200,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function loadChangesTab(options = {}) {
     const quiet = Boolean(options.quiet);
-    const projectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
+    const productId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
     const body = $("#changes-table tbody");
     const tab = document.querySelector('.tab[data-tab="changes"]');
-    if (!projectId || !body) return 0;
+    if (!productId || !body) return 0;
     if (!quiet) {
       body.replaceChildren();
       const loading = document.createElement("tr");
@@ -7217,24 +7217,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     try {
       const [queueResponse, cacheFiles, objectsResponse] = await Promise.all([
-        fetch(`/api/projects/${projectId}/checkin-queue`),
-        listAgentCacheFiles(projectId),
-        fetch(`/api/projects/${encodeURIComponent(projectId)}/objects`),
+        fetch(`/api/products/${productId}/checkin-queue`),
+        listAgentCacheFiles(productId),
+        fetch(`/api/products/${encodeURIComponent(productId)}/objects`),
       ]);
       if (!queueResponse.ok) throw new Error("queue");
       const data = await queueResponse.json();
       const objects = objectsResponse.ok
         ? await objectsResponse.json().catch(() => [])
         : [];
-      cachedProjectObjects = {
-        id: projectId,
+      cachedProductObjects = {
+        id: productId,
         at: Date.now(),
         rows: Array.isArray(objects) ? objects : [],
       };
       const saves = data.saves || [];
       const vaultNew = data.new_files || [];
       const known = await loadKnownWorkspacePaths(
-        projectId,
+        productId,
         vaultNew.map((item) => item.relative_path || "")
       );
       const created = [...vaultNew, ...localOnlyCacheFiles(cacheFiles, known)];
@@ -7259,7 +7259,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         body.appendChild(row);
         refreshTabMetrics();
         // Still merge vault/agent pending so list State stays accurate without this tab.
-        void refreshPendingCheckinIds(projectId);
+        void refreshPendingCheckinIds(productId);
         return pending;
       }
       const addRow = (values, className, meta = {}) => {
@@ -7278,8 +7278,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (meta.uuid) row.dataset.uuid = meta.uuid;
         if (meta.relativePath) row.dataset.relativePath = meta.relativePath;
         if (meta.localCache) row.dataset.localCache = "1";
-        if (meta.uuid && projectId) {
-          row.dataset.detail = `/projects/${projectId}/objects/${meta.uuid}`;
+        if (meta.uuid && productId) {
+          row.dataset.detail = `/products/${productId}/objects/${meta.uuid}`;
         }
         values.forEach((text, index) => {
           const cell = document.createElement("td");
@@ -7391,7 +7391,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             item.filename || "",
             item.local_cache
               ? "Local workspace — select and Add."
-              : "Not in the project yet. Select and click Add.",
+              : "Not in the product yet. Select and click Add.",
             item.size != null ? formatByteSize(item.size) : "",
             item.saved_at || "—",
           ],
@@ -7429,9 +7429,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function loadCheckedOutTab() {
-    const projectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
+    const productId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
     const body = $("#checked-out-table tbody");
-    if (!projectId || !body) return;
+    if (!productId || !body) return;
     body.replaceChildren();
     const loading = document.createElement("tr");
     loading.className = "empty-row";
@@ -7442,7 +7442,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     body.appendChild(loading);
     refreshTabMetrics();
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/checkouts`);
+      const response = await fetch(`/api/products/${encodeURIComponent(productId)}/checkouts`);
       if (!response.ok) throw new Error("checkouts");
       const items = await response.json();
       const list = Array.isArray(items) ? items : [];
@@ -7452,7 +7452,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         refreshTabMetrics();
         return;
       }
-      body.innerHTML = list.map((item) => searchRowHtml(item, projectId)).join("");
+      body.innerHTML = list.map((item) => searchRowHtml(item, productId)).join("");
       refreshTabMetrics();
       syncModifiedStateLabels();
     } catch {
@@ -7490,7 +7490,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (isListPage || !$("article.detail")) return;
     // Details page (all tabs): Revert on History only. Check In / Open / Checkout /
     // Remove / Set WD live on the Files page — do not show a stale Check In here
-    // when this file is Available but other project checkouts keep the menu “alive”.
+    // when this file is Available but other product checkouts keep the menu “alive”.
     if (setCreoDirBtn) {
       const tip = setCreoDirBtn.closest(".toolbar-tip");
       setCreoDirBtn.hidden = true;
@@ -7500,12 +7500,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     setToolbarActionVisible(openWorkspaceBtn, false);
     setToolbarActionVisible(openMenuBtn, false);
     setToolbarActionVisible(checkoutBtn, false);
-    setToolbarActionVisible(checkoutProjectBtn, false);
+    setToolbarActionVisible(checkoutProductBtn, false);
     setToolbarActionVisible(undoBtn, false);
     setToolbarActionVisible(checkoutMenuBtn, false);
     setToolbarActionVisible(removeMenuBtn, false);
     setToolbarActionVisible(checkinBtn, false);
-    setToolbarActionVisible(checkinProjectBtn, false);
+    setToolbarActionVisible(checkinProductBtn, false);
     setToolbarActionVisible(checkinMenuBtn, false);
     syncRevertVersionButton();
   }
@@ -7536,7 +7536,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const versionId = row?.dataset.versionUuid || "";
     const display = row?.dataset.versionDisplay || "this version";
     if (!btn || btn.disabled || !objectId || !versionId || row?.dataset.canRevert !== "1") return;
-    const confirmed = await confirmByProjectName({
+    const confirmed = await confirmByProductName({
       title: `Revert to ${display}`,
       lead:
         "This restores that content and filename (including Creo .prt.N) to the vault "
@@ -7565,7 +7565,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           if (agent) {
             await materializeViaAgent({
               object_id: objectId,
-              project_id: body.project_uuid || currentProjectId() || null,
+              product_id: body.product_uuid || currentProductId() || null,
               relative_path: body.relative_path || null,
               filename: body.filename || null,
               disk_name: body.filename || null,
@@ -7626,13 +7626,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const panel = $("#panel-where-used");
     if (!panel || panel.dataset.lazyWhereUsed !== "1" || whereUsedLoaded) return;
     const objectId = panel.dataset.objectId || "";
-    const projectId = panel.dataset.projectId || "";
+    const productId = panel.dataset.productId || "";
     if (!objectId) return;
     whereUsedLoaded = true;
     const host = $("#where-used-host");
     try {
       // Fast path first (deps + BOM). Full vault byte-scan is capped server-side
-      // on large projects so this request cannot hang the service.
+      // on large products so this request cannot hang the service.
       const response = await fetch(
         `/api/objects/${encodeURIComponent(objectId)}/where-used`
       );
@@ -7647,13 +7647,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (!host) return;
       if (!items.length) {
         host.innerHTML =
-          '<p class="muted">Not listed in any captured assembly/drawing BOM in this project yet. Open parent assemblies in Creo and Add or Check In to capture Where Used. (Vault byte-scan is skipped when the project has many assemblies, so the server stays responsive.)</p>';
+          '<p class="muted">Not listed in any captured assembly/drawing BOM in this product yet. Open parent assemblies in Creo and Add or Check In to capture Where Used. (Vault byte-scan is skipped when the product has many assemblies, so the server stays responsive.)</p>';
         return;
       }
       const rows = items
         .map((row) => {
-          const href = projectId
-            ? `/projects/${encodeURIComponent(projectId)}/objects/${encodeURIComponent(row.object_id || "")}`
+          const href = productId
+            ? `/products/${encodeURIComponent(productId)}/objects/${encodeURIComponent(row.object_id || "")}`
             : "#";
           const sub =
             row.relative_path && row.relative_path !== row.filename
@@ -7910,17 +7910,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return [...document.querySelectorAll("dialog[open]")].some((dialog) => dialog.id !== "busy-overlay");
   }
 
-  const watchProjectId = openWorkspaceBtn?.dataset.project || addForm?.dataset.project;
+  const watchProductId = openWorkspaceBtn?.dataset.product || addForm?.dataset.product;
   let watchStamp = null;
   let watchReloadTimer = 0;
   let lastPendingCheckinCount = null;
 
   async function pollWorkspaceWatch() {
-    if (!watchProjectId || watchPaused()) return;
+    if (!watchProductId || watchPaused()) return;
     try {
       const [response, localPending] = await Promise.all([
-        fetch(`/api/projects/${watchProjectId}/workspace-watch`),
-        countLocalWorkspacePending(watchProjectId),
+        fetch(`/api/products/${watchProductId}/workspace-watch`),
+        countLocalWorkspacePending(watchProductId),
       ]);
       if (!response.ok) return;
       const data = await response.json();
@@ -7933,7 +7933,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       );
       if (lastPendingCheckinCount === null || lastPendingCheckinCount !== pending) {
         lastPendingCheckinCount = pending;
-        void refreshPendingCheckinIds(watchProjectId);
+        void refreshPendingCheckinIds(watchProductId);
       }
       // Local agent-cache saves do not change the vault stamp — refresh the open tab in place.
       if (activeListTab() === "changes") {
@@ -7942,7 +7942,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         } else if (pending !== lastChangesPending && !changesReloadBusy) {
           changesReloadBusy = true;
           knownWorkspacePaths.at = 0;
-          cachedProjectObjects.at = 0;
+          cachedProductObjects.at = 0;
           try {
             await loadChangesTab({ quiet: true });
           } finally {
@@ -7960,7 +7960,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (next === watchStamp) return;
       watchStamp = next;
       knownWorkspacePaths.at = 0; // vault changed — refresh known paths on next count
-      cachedProjectObjects.at = 0;
+      cachedProductObjects.at = 0;
       window.clearTimeout(watchReloadTimer);
       watchReloadTimer = window.setTimeout(() => {
         if (watchPaused()) return;
@@ -7972,7 +7972,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  if (watchProjectId) {
+  if (watchProductId) {
     const pollMsRaw = Number.parseInt(document.body?.dataset?.workspacePollMs || "5000", 10);
     const pollMs = Number.isFinite(pollMsRaw) ? Math.min(120000, Math.max(500, pollMsRaw)) : 5000;
     trackedInterval(pollWorkspaceWatch, pollMs);
@@ -8014,7 +8014,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   });
 
-  // Keep Creo.JS connected: soft-navigate shell pages (projects, folders, settings, detail).
+  // Keep Creo.JS connected: soft-navigate shell pages (products, folders, settings, detail).
   // Do not gate on inCreoBrowser — a false negative caused hard reloads that SSR-paint
   // "Not Connected" and drop the live Creo.JS bridge.
   //
@@ -8026,7 +8026,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     isSoftNavUrl,
     withBusy,
     eventEl,
-    syncProjectAccessUi,
+    syncProductAccessUi,
   };
   if (!window.__creopdmSoftNavBound) {
     window.__creopdmSoftNavBound = true;
@@ -8058,26 +8058,26 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       void api.withBusy("Loading…", () => api.softNavigate(window.location.href, "none"));
     });
   }
-  // Soft-nav replaces shell HTML without running inline <script>; keep project-access
+  // Soft-nav replaces shell HTML without running inline <script>; keep product-access
   // toggle alive with a document-level listener (not aborted on soft boot).
-  if (!window.__creopdmProjectAccessBound) {
-    window.__creopdmProjectAccessBound = true;
-    const onProjectAccessToggle = (event) => {
+  if (!window.__creopdmProductAccessBound) {
+    window.__creopdmProductAccessBound = true;
+    const onProductAccessToggle = (event) => {
       const api = window.__creopdmSoftNavApi;
       const t = event?.target;
-      if (!t || t.id !== "access-all-projects") return;
-      if (api && typeof api.syncProjectAccessUi === "function") api.syncProjectAccessUi();
-      else syncProjectAccessUi();
+      if (!t || t.id !== "access-all-products") return;
+      if (api && typeof api.syncProductAccessUi === "function") api.syncProductAccessUi();
+      else syncProductAccessUi();
     };
-    origAddEventListener.call(document, "change", onProjectAccessToggle, true);
-    origAddEventListener.call(document, "input", onProjectAccessToggle, true);
+    origAddEventListener.call(document, "change", onProductAccessToggle, true);
+    origAddEventListener.call(document, "input", onProductAccessToggle, true);
   }
 
   restoreStoredFilters();
   syncToolbar();
-  syncProjectAccessUi();
-  const pendingProjectId = checkinBtn?.dataset.project || openWorkspaceBtn?.dataset.project;
-  if (pendingProjectId) void refreshPendingCheckinIds(pendingProjectId);
+  syncProductAccessUi();
+  const pendingProductId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
+  if (pendingProductId) void refreshPendingCheckinIds(pendingProductId);
 
   } finally {
     EventTarget.prototype.addEventListener = origAddEventListener;

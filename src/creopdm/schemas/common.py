@@ -27,33 +27,33 @@ class ErrorResponse(BaseModel):
     error: ErrorBody
 
 
-class ProjectCreateRequest(BaseModel):
+class ProductCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     number: str | None = Field(default=None, max_length=25)
     description: str | None = Field(default=None, max_length=256)
-    # Vault folder under vaults/. Blank → server uses the project UUID.
+    # Vault folder under vaults/. Blank → server uses the product UUID.
     vault_folder: str | None = Field(default=None, max_length=200)
 
 
-class ProjectUpdateRequest(BaseModel):
+class ProductUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=255)
     number: str | None = Field(default=None, max_length=25)
     description: str | None = Field(default=None, max_length=256)
 
-class ForgetProjectRequest(BaseModel):
+class ForgetProductRequest(BaseModel):
     confirm_name: str = Field(min_length=1, max_length=255)
 
 
-class ForgetProjectResponse(BaseModel):
+class ForgetProductResponse(BaseModel):
     uuid: str
     name: str
     repository_path: str
     warning: str = ""
 
 
-class ProjectResponse(BaseModel):
+class ProductResponse(BaseModel):
     uuid: str
     name: str
     number: str | None
@@ -68,7 +68,7 @@ class ProjectResponse(BaseModel):
     remote_mode: str
 
 
-class ProjectWatchResponse(BaseModel):
+class ProductWatchResponse(BaseModel):
     watching: bool
     can_watch: bool
     email_notifications_enabled: bool
@@ -100,7 +100,7 @@ class WorkspaceContentResponse(BaseModel):
 
 class ObjectResponse(BaseModel):
     uuid: str
-    project_uuid: str
+    product_uuid: str
     number: str | None
     name: str
     filename: str
@@ -181,7 +181,7 @@ class CheckinPreviewResponse(BaseModel):
 
 class CreoOpenRequest(BaseModel):
     object_id: str | None = None
-    project_id: str | None = None
+    product_id: str | None = None
     relative_path: str | None = None
     launch: bool = True
     # Bulk checkout→cache fills each selected file once; companions would re-download
@@ -191,13 +191,13 @@ class CreoOpenRequest(BaseModel):
     @model_validator(mode="after")
     def require_open_target(self) -> "CreoOpenRequest":
         object_id = (self.object_id or "").strip()
-        project_id = (self.project_id or "").strip()
+        product_id = (self.product_id or "").strip()
         relative_path = (self.relative_path or "").strip().replace("\\", "/")
         if object_id:
             self.object_id = object_id
             return self
-        if project_id and relative_path:
-            self.project_id = project_id
+        if product_id and relative_path:
+            self.product_id = product_id
             self.relative_path = relative_path
             return self
         raise ValueError("Select a file to open.")
@@ -205,7 +205,7 @@ class CreoOpenRequest(BaseModel):
 
 class CreoOpenCompanion(BaseModel):
     object_id: str | None = None
-    project_id: str | None = None
+    product_id: str | None = None
     relative_path: str | None = None
     filename: str | None = None
     disk_name: str | None = None
@@ -218,7 +218,7 @@ class CreoOpenResponse(BaseModel):
     working_directory: str
     disk_name: str | None = None
     object_id: str | None = None
-    project_id: str | None = None
+    product_id: str | None = None
     relative_path: str | None = None
     creo_object: bool = False
     open_with_creo: bool = False
@@ -235,7 +235,7 @@ class CreoStatusResponse(BaseModel):
     label: str
 
 
-class ProjectStatusResponse(BaseModel):
+class ProductStatusResponse(BaseModel):
     files: int
     cad_models: int = 0
     creo_parts: int
@@ -307,7 +307,7 @@ class BatchRemoveRequest(BaseModel):
 
     object_ids: list[str] = Field(default_factory=list)
     folder_paths: list[str] = Field(default_factory=list)
-    project_id: str | None = None
+    product_id: str | None = None
 
     @model_validator(mode="after")
     def require_remove_target(self) -> "BatchRemoveRequest":
@@ -317,14 +317,14 @@ class BatchRemoveRequest(BaseModel):
             for item in (self.folder_paths or [])
             if str(item or "").strip()
         ]
-        project_id = (self.project_id or "").strip() or None
+        product_id = (self.product_id or "").strip() or None
         self.object_ids = ids
         self.folder_paths = folders
-        self.project_id = project_id
+        self.product_id = product_id
         if not ids and not folders:
             raise ValueError("Choose files or a folder to remove.")
-        if folders and not project_id and not ids:
-            raise ValueError("Choose a project before removing folders.")
+        if folders and not product_id and not ids:
+            raise ValueError("Choose a product before removing folders.")
         return self
 
 
@@ -340,7 +340,7 @@ class AgentCacheManifestItem(BaseModel):
 
 
 class AgentCacheManifestResponse(BaseModel):
-    project_id: str
+    product_id: str
     items: list[AgentCacheManifestItem] = Field(default_factory=list)
 
 
@@ -349,7 +349,7 @@ class PurgeWorkspacePathsRequest(BaseModel):
 
 
 class PurgeFloorItem(BaseModel):
-    """Vault save floor for one project Creo model (agent deletes local saves < min_keep)."""
+    """Vault save floor for one product Creo model (agent deletes local saves < min_keep)."""
 
     logical_path: str
     min_keep: int
@@ -655,7 +655,7 @@ class RebuildWhereUsedResponse(BaseModel):
 class WhereUsedIndexJobResponse(BaseModel):
     """Background Where Used vault index job status."""
 
-    project_id: str
+    product_id: str
     state: str = "idle"
     parents_total: int = 0
     parents_done: int = 0

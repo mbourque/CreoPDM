@@ -16,7 +16,7 @@ from creopdm.exceptions import ObjectNotFoundError, PathValidationError, Validat
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
-from creopdm.models.project import Project
+from creopdm.models.product import Product
 from creopdm.models.version import ObjectVersion
 from creopdm.schemas.common import (
     CreoDependencyPayload,
@@ -208,12 +208,12 @@ class MetadataService:
         """Parents that reference this object.
 
         Order of operations often leaves Dependency empty: assembly metadata is
-        captured before children exist in the project, so edges never get written.
+        captured before children exist in the product, so edges never get written.
         We still answer from (1) Dependency rows, (2) stored BOM JSON on siblings,
         (3) optional vault file bytes for asm/drw that embed this name.
 
         ``vault_scan=False`` skips (3) — use on HTML page render so History/detail
-        stay fast on multi-thousand-file projects (Where Used tab loads via API).
+        stay fast on multi-thousand-file products (Where Used tab loads via API).
         """
         obj = self._objects.get_object(session, object_uuid)
         edges = session.scalars(
@@ -243,7 +243,7 @@ class MetadataService:
                 type_label=display_type_label(parent.filename, parent.object_type),
             )
 
-        siblings = self._objects.list_objects(session, obj.project_id)
+        siblings = self._objects.list_objects(session, obj.product_id)
         target_keys = set(bom_where_used_keys(obj.filename))
         debug_bom_hits: list[str] = []
         debug_vault: list[dict[str, object]] = []
@@ -285,7 +285,7 @@ class MetadataService:
 
         # Vault byte scan: works even when Creo.JS never captured a BOM (add-only
         # order of operations, or metadata gather failed on the parent).
-        # Skip automatically on huge projects — reading every asm/drw hangs the server.
+        # Skip automatically on huge products — reading every asm/drw hangs the server.
         _VAULT_SCAN_ASM_CAP = 80
         asm_candidates = [
             other
@@ -305,8 +305,8 @@ class MetadataService:
                 _VAULT_SCAN_ASM_CAP,
             )
         if vault_scan and self._workspaces is not None:
-            project = session.get(Project, obj.project_id)
-            if project is not None:
+            product = session.get(Product, obj.product_id)
+            if product is not None:
                 for other in asm_candidates:
                     entry: dict[str, object] | None = (
                         {
@@ -317,7 +317,7 @@ class MetadataService:
                         else None
                     )
                     try:
-                        path = self._workspaces.locate_content(project, other)
+                        path = self._workspaces.locate_content(product, other)
                     except PathValidationError as exc:
                         if entry is not None:
                             entry["locate"] = "missing"
@@ -378,7 +378,7 @@ class MetadataService:
     def rebuild_where_used_from_vault(
         self,
         session: Session,
-        project_uuid: str,
+        product_uuid: str,
         *,
         offset: int = 0,
         limit: int = 8,
@@ -393,13 +393,13 @@ class MetadataService:
             raise ValidationAppError(
                 "Vault indexing is not available (workspace service not configured)."
             )
-        project = session.scalar(select(Project).where(Project.uuid == project_uuid))
-        if project is None:
+        product = session.scalar(select(Product).where(Product.uuid == product_uuid))
+        if product is None:
             raise ObjectNotFoundError(
-                "Project not found.",
-                details={"project_id": project_uuid},
+                "Product not found.",
+                details={"product_id": product_uuid},
             )
-        objects = self._objects.list_objects(session, project.id)
+        objects = self._objects.list_objects(session, product.id)
         parents = sorted(
             [row for row in objects if needs_open_companions(row.object_type, row.filename)],
             key=lambda row: (row.filename or "").lower(),
@@ -442,7 +442,7 @@ class MetadataService:
         for parent in chunk:
             scanned.append(parent.filename)
             try:
-                path = self._workspaces.locate_content(project, parent)
+                path = self._workspaces.locate_content(product, parent)
             except PathValidationError:
                 missing += 1
                 continue
@@ -487,7 +487,7 @@ class MetadataService:
         for parent_id, child_id, dep_type in pending:
             existing = session.scalar(
                 select(Dependency).where(
-                    Dependency.project_id == project.id,
+                    Dependency.product_id == product.id,
                     Dependency.parent_object_id == parent_id,
                     Dependency.child_object_id == child_id,
                     Dependency.dependency_type == dep_type,
@@ -498,7 +498,7 @@ class MetadataService:
                 continue
             session.add(
                 Dependency(
-                    project_id=project.id,
+                    product_id=product.id,
                     parent_object_id=parent_id,
                     child_object_id=child_id,
                     dependency_type=dep_type,
@@ -611,7 +611,7 @@ class MetadataService:
         if not refs:
             return
 
-        siblings = self._objects.list_objects(session, parent.project_id)
+        siblings = self._objects.list_objects(session, parent.product_id)
         by_key: dict[str, EngineeringObject] = {}
         for row in siblings:
             if row.id == parent.id:
@@ -636,7 +636,7 @@ class MetadataService:
         for (child_id, dep_type), quantity in by_child.items():
             session.add(
                 Dependency(
-                    project_id=parent.project_id,
+                    product_id=parent.product_id,
                     parent_object_id=parent.id,
                     child_object_id=child_id,
                     dependency_type=dep_type,

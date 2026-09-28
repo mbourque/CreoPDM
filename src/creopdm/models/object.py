@@ -14,12 +14,12 @@ from creopdm.database.base import Base
 class EngineeringObject(Base):
     __tablename__ = "objects"
     __table_args__ = (
-        UniqueConstraint("project_id", "relative_path", name="uq_objects_project_path"),
+        UniqueConstraint("product_id", "relative_path", name="uq_objects_product_path"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -43,7 +43,7 @@ class EngineeringObject(Base):
         onupdate=func.now(),
     )
 
-    project: Mapped["Project"] = relationship(back_populates="objects")  # noqa: F821
+    product: Mapped["Product"] = relationship(back_populates="objects")  # noqa: F821
     versions: Mapped[list["ObjectVersion"]] = relationship(  # noqa: F821
         back_populates="object",
         foreign_keys="ObjectVersion.object_id",

@@ -4,7 +4,7 @@
 <article class="detail settings-page">
   <nav class="crumb">
     {% if can_view_objects %}
-    <a href="/">Projects</a>
+    <a href="/">Products</a>
     <span>/</span>
     {% endif %}
     <a href="/admin">Administration</a>
@@ -19,7 +19,7 @@
     <section class="settings-card">
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
       {% if editing_own_role %}
-      <p class="muted small">This is <strong>your</strong> role. Name, description, and CreoPDM Administration permissions are locked so you cannot lock yourself out. Ask another administrator to change them. You may still adjust Projects and Objects permissions.</p>
+      <p class="muted small">This is <strong>your</strong> role. Name, description, and CreoPDM Administration permissions are locked so you cannot lock yourself out. Ask another administrator to change them. You may still adjust Products and Objects permissions.</p>
       {% endif %}
       <label>Name
         <input name="name" type="text" value="{{ form.name }}" required maxlength="64" autocomplete="off" {% if editing_own_role %}disabled{% endif %}>
@@ -33,7 +33,7 @@
       {% if editing_own_role %}
       <input type="hidden" name="description" value="{{ form.description }}">
       {% endif %}
-      <p class="muted small">Permissions control API and toolbar access. At least one active user must keep full <strong>CreoPDM Administration</strong> (<code>users.manage</code>, <code>users.password</code>, <code>roles.assign</code>, <code>roles.manage</code>, <code>projects.assign</code>, <code>projects.manage</code>, <code>settings.manage</code>, and <code>email.manage</code>) so admins cannot lock themselves out. <code>users.manage</code> alone does not allow changing roles, passwords, or project membership.</p>
+      <p class="muted small">Permissions control API and toolbar access. At least one active user must keep full <strong>CreoPDM Administration</strong> (<code>users.manage</code>, <code>users.password</code>, <code>roles.assign</code>, <code>roles.manage</code>, <code>products.assign</code>, <code>products.manage</code>, <code>settings.manage</code>, and <code>email.manage</code>) so admins cannot lock themselves out. <code>users.manage</code> alone does not allow changing roles, passwords, or product membership.</p>
 
       {% for group in permission_groups %}
       <fieldset class="role-perm-group">

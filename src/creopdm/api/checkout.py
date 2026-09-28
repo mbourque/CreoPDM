@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from creopdm.api.deps import get_context, get_db, load_accessible_project, require_permission, require_project_access
+from creopdm.api.deps import get_context, get_db, load_accessible_product, require_permission, require_product_access
 from creopdm.api.serializers import object_to_response
 from creopdm.auth_constants import (
     PERMISSION_OBJECTS_CHECKIN,
@@ -64,17 +64,17 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
         return []
     user = ctx.users.get_current_user()
     checkouts = ctx.checkouts.active_map(db, [obj.id for obj in objects])
-    project = objects[0].project
-    status = ctx.workspaces._git_status(project)
+    product = objects[0].product
+    status = ctx.workspaces._git_status(product)
     name_labels, ext_labels = type_label_maps(ctx.config.type_labels())
-    in_workspace = ctx.workspaces.local_copy_uuids(project, objects)
-    extras, vault, dirty_paths, untracked_by_logical = ctx.workspaces._status_lookups(project, status)
+    in_workspace = ctx.workspaces.local_copy_uuids(product, objects)
+    extras, vault, dirty_paths, untracked_by_logical = ctx.workspaces._status_lookups(product, status)
     presented: list[ObjectResponse] = []
     for obj in objects:
         checkout = checkouts.get(obj.id)
         view = ctx.checkouts.describe(obj, checkout, user)
         pending = ctx.workspaces._pending_from_status(
-            project,
+            product,
             obj,
             status,
             extras=extras,
@@ -91,7 +91,7 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
         presented.append(
             object_to_response(
                 obj,
-                obj.project.uuid,
+                obj.product.uuid,
                 view=view,
                 modified_locally=modified,
                 current_user=user,
@@ -118,19 +118,19 @@ def checkout_batch(
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     if payload.object_ids:
         sample = ctx.objects.get_object(db, payload.object_ids[0])
-        require_project_access(request, ctx, sample.project)
+        require_product_access(request, ctx, sample.product)
     result = ctx.checkouts.checkout_many(db, payload.object_ids)
     if result.get("ok"):
-        from creopdm.api.watch_notify import notify_project_watchers
+        from creopdm.api.watch_notify import notify_product_watchers
 
         sample = ctx.objects.get_object(db, payload.object_ids[0])
         names = [item["filename"] for item in result["ok"] if item.get("filename")]
         if names:
-            notify_project_watchers(
+            notify_product_watchers(
                 request,
                 ctx,
                 db,
-                sample.project,
+                sample.product,
                 action="Checked out",
                 filenames=names,
             )
@@ -149,19 +149,19 @@ def undo_checkout_batch(
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     if payload.object_ids:
         sample = ctx.objects.get_object(db, payload.object_ids[0])
-        require_project_access(request, ctx, sample.project)
+        require_product_access(request, ctx, sample.product)
     result = ctx.checkouts.undo_checkout_many(db, payload.object_ids)
     if result.get("ok"):
-        from creopdm.api.watch_notify import notify_project_watchers
+        from creopdm.api.watch_notify import notify_product_watchers
 
         sample = ctx.objects.get_object(db, payload.object_ids[0])
         names = [item["filename"] for item in result["ok"] if item.get("filename")]
         if names:
-            notify_project_watchers(
+            notify_product_watchers(
                 request,
                 ctx,
                 db,
-                sample.project,
+                sample.product,
                 action="Checkout canceled",
                 filenames=names,
             )
@@ -181,7 +181,7 @@ def agent_cache_manifest(
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     objects = ctx.objects.get_objects(db, payload.object_ids)
     if objects:
-        require_project_access(request, ctx, objects[0].project)
+        require_product_access(request, ctx, objects[0].product)
     if len(objects) != len(payload.object_ids):
         found = {obj.uuid for obj in objects}
         missing = [item for item in payload.object_ids if item not in found]
@@ -189,11 +189,11 @@ def agent_cache_manifest(
             "One or more objects were not found.",
             details={"missing": missing[:20]},
         )
-    project_ids = {obj.project.uuid for obj in objects}
-    if len(project_ids) != 1:
-        raise ValidationAppError("All files must belong to the same project.")
+    product_ids = {obj.product.uuid for obj in objects}
+    if len(product_ids) != 1:
+        raise ValidationAppError("All files must belong to the same product.")
     return AgentCacheManifestResponse(
-        project_id=objects[0].project.uuid,
+        product_id=objects[0].product.uuid,
         items=[AgentCacheManifestItem.model_validate(item) for item in manifest_items_for_objects(objects)],
     )
 
@@ -210,7 +210,7 @@ def agent_cache_archive(
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     objects = ctx.objects.get_objects(db, payload.object_ids)
     if objects:
-        require_project_access(request, ctx, objects[0].project)
+        require_product_access(request, ctx, objects[0].product)
     if len(objects) != len(payload.object_ids):
         found = {obj.uuid for obj in objects}
         missing = [item for item in payload.object_ids if item not in found]
@@ -218,13 +218,13 @@ def agent_cache_archive(
             "One or more objects were not found.",
             details={"missing": missing[:20]},
         )
-    project_ids = {obj.project.uuid for obj in objects}
-    if len(project_ids) != 1:
-        raise ValidationAppError("All files must belong to the same project.")
-    project = objects[0].project
-    zip_path, count = build_agent_cache_zip(ctx.workspaces, project, objects)
+    product_ids = {obj.product.uuid for obj in objects}
+    if len(product_ids) != 1:
+        raise ValidationAppError("All files must belong to the same product.")
+    product = objects[0].product
+    zip_path, count = build_agent_cache_zip(ctx.workspaces, product, objects)
     background_tasks.add_task(lambda path=zip_path: path.unlink(missing_ok=True))
-    filename = f"creopdm-cache-{project.uuid[:8]}.zip"
+    filename = f"creopdm-cache-{product.uuid[:8]}.zip"
     disposition = f"attachment; filename*=UTF-8''{quote(filename)}"
     return FileResponse(
         zip_path,
@@ -249,8 +249,8 @@ def send_to_workspace(
     pairs = []
     for object_uuid in payload.object_ids:
         obj = ctx.objects.get_object(db, object_uuid)
-        require_project_access(request, ctx, obj.project)
-        pairs.append((obj.project, obj))
+        require_product_access(request, ctx, obj.product)
+        pairs.append((obj.product, obj))
     result = ctx.workspaces.materialize_many(pairs)
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.config.workspace_root())}
@@ -266,16 +266,16 @@ def checkout_object(
 ) -> ObjectResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     obj = ctx.objects.get_object(db, object_id)
-    require_project_access(request, ctx, obj.project)
+    require_product_access(request, ctx, obj.product)
     ctx.checkouts.checkout(db, object_id)
     obj = ctx.objects.get_object(db, object_id)
-    from creopdm.api.watch_notify import notify_project_watchers
+    from creopdm.api.watch_notify import notify_product_watchers
 
-    notify_project_watchers(
+    notify_product_watchers(
         request,
         ctx,
         db,
-        obj.project,
+        obj.product,
         action="Checked out",
         filenames=[obj.filename],
         object_uuid=obj.uuid,
@@ -292,16 +292,16 @@ def undo_checkout(
 ) -> ObjectResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     obj = ctx.objects.get_object(db, object_id)
-    require_project_access(request, ctx, obj.project)
+    require_product_access(request, ctx, obj.product)
     ctx.checkouts.undo_checkout(db, object_id)
     obj = ctx.objects.get_object(db, object_id)
-    from creopdm.api.watch_notify import notify_project_watchers
+    from creopdm.api.watch_notify import notify_product_watchers
 
-    notify_project_watchers(
+    notify_product_watchers(
         request,
         ctx,
         db,
-        obj.project,
+        obj.product,
         action="Checkout canceled",
         filenames=[obj.filename],
         object_uuid=obj.uuid,
@@ -349,16 +349,16 @@ def checkin_object(
 ) -> ObjectResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKIN)
     obj = ctx.objects.get_object(db, object_id)
-    require_project_access(request, ctx, obj.project)
+    require_product_access(request, ctx, obj.product)
     obj = ctx.checkins.checkin(db, object_id, payload.comment, payload.add_relative_paths)
     obj = ctx.objects.get_object(db, obj.uuid)
-    from creopdm.api.watch_notify import notify_project_watchers
+    from creopdm.api.watch_notify import notify_product_watchers
 
-    notify_project_watchers(
+    notify_product_watchers(
         request,
         ctx,
         db,
-        obj.project,
+        obj.product,
         action="Checked in",
         filenames=[obj.filename],
         object_uuid=obj.uuid,

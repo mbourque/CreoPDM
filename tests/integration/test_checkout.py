@@ -8,24 +8,24 @@ from tests.conftest import requires_git
 
 def _create_part(client, repo_parent: Path):
     location = repo_parent / "RobotArm"
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Robot Arm"},
     ).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt", b"original-content", "application/octet-stream")},
         data={"comment": "Initial model"},
     )
     assert created.status_code == 201, created.text
-    return project, created.json(), location
+    return product, created.json(), location
 
 
 @requires_git
 def test_checkout_then_second_user_denied(client, repo_parent, identity, data_dir):
-    project, obj, _location = _create_part(client, repo_parent)
+    product, obj, _location = _create_part(client, repo_parent)
     git = GitService()
-    vault = data_dir / "vaults" / project["uuid"]
+    vault = data_dir / "vaults" / product["uuid"]
     head_before = git.get_head(vault)
 
     first = client.post(f"/api/objects/{obj['uuid']}/checkout")
@@ -57,10 +57,10 @@ def test_checkout_then_second_user_denied(client, repo_parent, identity, data_di
 @requires_git
 def test_details_shows_checkout_who_and_when_for_other_user(client, repo_parent, identity):
     """Details header hover + Overview must show who holds the lock and when."""
-    project, obj, _location = _create_part(client, repo_parent)
+    product, obj, _location = _create_part(client, repo_parent)
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
     identity.become("Bob", "ENG-PC-18")
-    page = client.get(f"/projects/{project['uuid']}/objects/{obj['uuid']}")
+    page = client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
     assert page.status_code == 200, page.text
     assert "Checked out by Alice" in page.text
     assert "<dt>Checked out by</dt>" in page.text
@@ -71,7 +71,7 @@ def test_details_shows_checkout_who_and_when_for_other_user(client, repo_parent,
 
 @requires_git
 def test_undo_checkout(client, repo_parent):
-    _project, obj, _location = _create_part(client, repo_parent)
+    _product, obj, _location = _create_part(client, repo_parent)
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
     undone = client.post(f"/api/objects/{obj['uuid']}/undo-checkout")
     assert undone.status_code == 200, undone.text
@@ -83,9 +83,9 @@ def test_undo_checkout(client, repo_parent):
 
 @requires_git
 def test_agent_cache_archive_zip(client, repo_parent):
-    project, obj1, _location = _create_part(client, repo_parent)
+    product, obj1, _location = _create_part(client, repo_parent)
     created2 = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("bracket.prt", b"bracket-content", "application/octet-stream")},
         data={"comment": "Second part"},
     )
@@ -112,7 +112,7 @@ def test_agent_cache_archive_zip(client, repo_parent):
     )
     assert manifest.status_code == 200, manifest.text
     body = manifest.json()
-    assert body["project_id"] == project["uuid"]
+    assert body["product_id"] == product["uuid"]
     assert len(body["items"]) == 2
     by_name = {item["disk_name"]: item for item in body["items"]}
     assert "shaft.prt" in by_name
@@ -125,14 +125,14 @@ def test_agent_cache_archive_zip(client, repo_parent):
 @requires_git
 def test_agent_cache_archive_preserves_nested_paths(client, repo_parent):
     location = repo_parent / "NestedCacheZip"
-    project = client.post("/api/projects", json={"name": "Nested Cache Zip"}).json()
+    product = client.post("/api/products", json={"name": "Nested Cache Zip"}).json()
     lib = location / "lib"
     nested = lib / "step"
     nested.mkdir(parents=True)
     pin = nested / "pin.prt"
     pin.write_bytes(b"nested-pin-bytes")
     imported = client.post(
-        f"/api/projects/{project['uuid']}/objects/from-disk",
+        f"/api/products/{product['uuid']}/objects/from-disk",
         json={"paths": [str(pin)], "comment": "Nested", "base_folder": str(lib)},
     )
     assert imported.status_code == 200, imported.text
@@ -155,7 +155,7 @@ def test_agent_cache_archive_preserves_nested_paths(client, repo_parent):
 
 @requires_git
 def test_heartbeat_and_batch_heartbeat(client, repo_parent):
-    _project, obj, _location = _create_part(client, repo_parent)
+    _product, obj, _location = _create_part(client, repo_parent)
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
 
     single = client.post(f"/api/objects/{obj['uuid']}/heartbeat")
@@ -171,7 +171,7 @@ def test_heartbeat_soft_fails_when_database_locked(client, repo_parent, monkeypa
 
     from creopdm.services.checkout_service import CheckoutService
 
-    _project, obj, _location = _create_part(client, repo_parent)
+    _product, obj, _location = _create_part(client, repo_parent)
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
 
     def boom(_self, _session, _object_uuid):
@@ -190,22 +190,22 @@ def test_heartbeat_soft_fails_when_database_locked(client, repo_parent, monkeypa
 @requires_git
 def test_batch_checkout_copies_all_selected_files(client, repo_parent, data_dir):
     location = repo_parent / "BatchArm"
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Batch Arm"},
     ).json()
     part = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt", b"part", "application/octet-stream")},
         data={"comment": "Part"},
     ).json()
     notes = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("notes.txt", b"hello", "text/plain")},
         data={"comment": "Notes"},
     ).json()
     assembly = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("arm.asm", b"asm", "application/octet-stream")},
         data={"comment": "Assembly"},
     ).json()
@@ -218,7 +218,7 @@ def test_batch_checkout_copies_all_selected_files(client, repo_parent, data_dir)
     body = result.json()
     assert len(body["ok"]) == 3
     assert body["failed"] == []
-    workspace = data_dir / "vaults" / project["uuid"]
+    workspace = data_dir / "vaults" / product["uuid"]
     assert (workspace / "shaft.prt").is_file()
     assert (workspace / "notes.txt").is_file()
     assert (workspace / "arm.asm").is_file()
@@ -227,22 +227,22 @@ def test_batch_checkout_copies_all_selected_files(client, repo_parent, data_dir)
 @requires_git
 def test_batch_undo_checkout_releases_all_selected_files(client, repo_parent):
     location = repo_parent / "UndoArm"
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Undo Arm"},
     ).json()
     part = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt", b"part", "application/octet-stream")},
         data={"comment": "Part"},
     ).json()
     notes = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("notes.txt", b"hello", "text/plain")},
         data={"comment": "Notes"},
     ).json()
     assembly = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("arm.asm", b"asm", "application/octet-stream")},
         data={"comment": "Assembly"},
     ).json()
@@ -262,8 +262,8 @@ def test_batch_undo_checkout_releases_all_selected_files(client, repo_parent):
 
 @requires_git
 def test_batch_workspace_without_checkout(client, repo_parent, data_dir):
-    project, obj, _location = _create_part(client, repo_parent)
-    copied = data_dir / "vaults" / project["uuid"] / "shaft.prt"
+    product, obj, _location = _create_part(client, repo_parent)
+    copied = data_dir / "vaults" / product["uuid"] / "shaft.prt"
     assert copied.is_file()
     listed = client.get(f"/api/objects/{obj['uuid']}").json()
     assert listed["owned_by_me"] is False
@@ -275,10 +275,10 @@ def test_batch_workspace_without_checkout(client, repo_parent, data_dir):
 
 
 @requires_git
-def test_workspace_keeps_project_folders(client, repo_parent, data_dir):
+def test_workspace_keeps_product_folders(client, repo_parent, data_dir):
     location = repo_parent / "FolderArm"
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Folder Arm"},
     ).json()
     lib = location / "lib"
@@ -287,15 +287,15 @@ def test_workspace_keeps_project_folders(client, repo_parent, data_dir):
     pin = nested / "pin.prt"
     pin.write_bytes(b"pin-bytes")
     imported = client.post(
-        f"/api/projects/{project['uuid']}/objects/from-disk",
+        f"/api/products/{product['uuid']}/objects/from-disk",
         json={"paths": [str(pin)], "comment": "Nested library part", "base_folder": str(lib)},
     )
     assert imported.status_code == 200, imported.text
     obj = imported.json()["ok"][0]
-    listing = client.get(f"/api/projects/{project['uuid']}/objects").json()
+    listing = client.get(f"/api/products/{product['uuid']}/objects").json()
     item = next(row for row in listing if row["uuid"] == obj["uuid"])
     assert item["relative_path"] == "lib/step/pin.prt"
-    workspace = data_dir / "vaults" / project["uuid"]
+    workspace = data_dir / "vaults" / product["uuid"]
     assert (workspace / "lib" / "step" / "pin.prt").is_file()
     assert (workspace / "lib" / "step" / "pin.prt").read_bytes() == b"pin-bytes"
     assert not (workspace / "pin.prt").exists()
@@ -303,13 +303,13 @@ def test_workspace_keeps_project_folders(client, repo_parent, data_dir):
 
 
 @requires_git
-def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
-    project, obj, _location = _create_part(client, repo_parent)
-    empty = client.get(f"/api/projects/{project['uuid']}/checkouts")
+def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
+    product, obj, _location = _create_part(client, repo_parent)
+    empty = client.get(f"/api/products/{product['uuid']}/checkouts")
     assert empty.status_code == 200, empty.text
     assert empty.json() == []
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    listed = client.get(f"/api/projects/{project['uuid']}/checkouts")
+    listed = client.get(f"/api/products/{product['uuid']}/checkouts")
     assert listed.status_code == 200, listed.text
     body = listed.json()
     assert len(body) == 1
@@ -317,18 +317,18 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert body[0]["filename"] == "shaft.prt"
     assert body[0]["owned_by_me"] is True
     assert body[0]["checkout_user"] == "Alice"
-    home_out = client.get(f"/?project={project['uuid']}")
+    home_out = client.get(f"/?product={product['uuid']}")
     assert home_out.status_code == 200
     assert "Files checked out · 1" in home_out.text
     identity.become("Bob", "ENG-PC-18")
-    as_bob = client.get(f"/api/projects/{project['uuid']}/checkouts")
+    as_bob = client.get(f"/api/products/{product['uuid']}/checkouts")
     assert as_bob.status_code == 200, as_bob.text
     assert as_bob.json()[0]["owned_by_me"] is False
     assert as_bob.json()[0]["checkout_user"] == "Alice"
     identity.become("Alice", "ENG-PC-17")
     assert client.post(f"/api/objects/{obj['uuid']}/undo-checkout").status_code == 200
-    assert client.get(f"/api/projects/{project['uuid']}/checkouts").json() == []
-    home = client.get(f"/?project={project['uuid']}")
+    assert client.get(f"/api/products/{product['uuid']}/checkouts").json() == []
+    home = client.get(f"/?product={product['uuid']}")
     assert home.status_code == 200
     assert 'id="checked-out-table"' in home.text
     assert "Files checked out ·" not in home.text
@@ -360,27 +360,27 @@ def test_project_checkouts_lists_active_locks(client, repo_parent, identity):
     assert 'id="remove-menu-btn"' in home.text
     assert 'id="checkout-menu-btn"' in home.text
     assert "Checkout ▾" in home.text
-    assert 'id="checkout-project-btn"' in home.text
+    assert 'id="checkout-product-btn"' in home.text
     assert "Checkout selected" in home.text
-    assert "Checkout project" in home.text
+    assert "Checkout product" in home.text
     assert 'id="undo-btn"' in home.text
     assert home.text.index('id="checkout-menu"') < home.text.index('id="undo-btn"')
     assert home.text.index('id="undo-btn"') < home.text.index('id="checkin-menu"')
     assert "data-checkoutable" in home.text
     assert "setCheckoutableCount" in script.text
-    assert "Nothing left to check out in this project" in script.text
-    assert "count_checkoutable_for_project" in open(
+    assert "Nothing left to check out in this product" in script.text
+    assert "count_checkoutable_for_product" in open(
         "src/creopdm/services/checkout_service.py", encoding="utf-8"
     ).read()
     assert 'id="checkin-menu-btn"' in home.text
     assert "Check In ▾" in home.text
-    assert 'id="checkin-project-btn"' in home.text
-    assert ">Check in project…<" in home.text
+    assert 'id="checkin-product-btn"' in home.text
+    assert ">Check in product…<" in home.text
     assert ">Check in selected…<" in home.text
-    assert home.text.index('id="checkin-project-btn"') < home.text.index('id="checkin-btn"')
+    assert home.text.index('id="checkin-product-btn"') < home.text.index('id="checkin-btn"')
     assert "function beginCheckin" in script.text
     assert "function runCheckoutObjects" in script.text
-    assert 'beginCheckin("project")' in script.text
+    assert 'beginCheckin("product")' in script.text
     assert 'id="discard-local-btn"' in home.text
     assert 'id="purge-versions-btn"' in home.text
     assert 'id="purge-workspace-btn"' in home.text

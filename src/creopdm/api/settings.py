@@ -21,7 +21,7 @@ from creopdm.creo.connector_factory import create_creo_connector
 from creopdm.exceptions import PathValidationError, PermissionDeniedError
 from creopdm.schemas.common import SettingsResponse, SettingsUpdateRequest
 from creopdm.utils.classify import exclude_extensions, unique_type_labels
-from creopdm.utils.paths import validate_project_location
+from creopdm.utils.paths import validate_product_location
 
 router = APIRouter()
 
@@ -155,7 +155,7 @@ def update_settings(
     if "workspace_root" in payload.model_fields_set:
         root = (payload.workspace_root or "").strip()
         if root:
-            location = validate_project_location(root)
+            location = validate_product_location(root)
             location.mkdir(parents=True, exist_ok=True)
             default_root = ctx.config.workspaces_dir.resolve()
             data_root = ctx.config.data_dir.resolve()

@@ -10,19 +10,19 @@ from pathlib import Path
 from creopdm.exceptions import PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.models.object import EngineeringObject
-from creopdm.models.project import Project
+from creopdm.models.product import Product
 from creopdm.services.workspace_service import WorkspaceService
 
 logger = get_logger("agent_cache_zip")
 
 
-def _vault_source(workspaces: WorkspaceService, project: Project, obj: EngineeringObject) -> Path:
-    source = workspaces.repository_file(project, obj.relative_path)
+def _vault_source(workspaces: WorkspaceService, product: Product, obj: EngineeringObject) -> Path:
+    source = workspaces.repository_file(product, obj.relative_path)
     if not source.is_file():
         source = workspaces._case_insensitive_file(source)
     if not source.is_file():
-        workspaces._restore_tracked(project, obj.relative_path)
-        source = workspaces.repository_file(project, obj.relative_path)
+        workspaces._restore_tracked(product, obj.relative_path)
+        source = workspaces.repository_file(product, obj.relative_path)
         if not source.is_file():
             source = workspaces._case_insensitive_file(source)
     if not source.is_file():
@@ -55,7 +55,7 @@ def manifest_items_for_objects(objects: list[EngineeringObject]) -> list[dict[st
 
 def build_agent_cache_zip(
     workspaces: WorkspaceService,
-    project: Project,
+    product: Product,
     objects: list[EngineeringObject],
 ) -> tuple[Path, int]:
     """Write vault files to a temp zip, preserving nested relative paths."""
@@ -68,7 +68,7 @@ def build_agent_cache_zip(
     try:
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as zf:
             for obj in objects:
-                source = _vault_source(workspaces, project, obj)
+                source = _vault_source(workspaces, product, obj)
                 relative = str(obj.relative_path or obj.filename or "").replace("\\", "/")
                 parent = Path(relative).parent.as_posix()
                 if parent in {".", ""}:

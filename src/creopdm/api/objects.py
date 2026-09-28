@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object
-from creopdm.api.deps import get_context, get_db, load_accessible_project, require_permission, require_project_access
+from creopdm.api.deps import get_context, get_db, load_accessible_product, require_permission, require_product_access
 from creopdm.api.serializers import version_to_response
 from creopdm.auth_constants import (
     PERMISSION_OBJECTS_ADD,
@@ -61,13 +61,13 @@ def object_content(
 ) -> FileResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     obj = ctx.objects.get_object(db, object_id)
-    require_project_access(request, ctx, obj.project)
-    project = obj.project
+    require_product_access(request, ctx, obj.product)
+    product = obj.product
     try:
-        path = ctx.workspaces.locate_content(project, obj)
+        path = ctx.workspaces.locate_content(product, obj)
     except PathValidationError:
         path = ctx.workspaces.materialize(
-            project,
+            product,
             obj,
             writable=False,
             overwrite_modified=True,
@@ -91,13 +91,13 @@ async def put_workspace_content(
     """Stage a local agent/browser file into the vault working copy (no new version)."""
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
     obj = ctx.objects.get_object(db, object_id)
-    require_project_access(request, ctx, obj.project)
-    project = obj.project
+    require_product_access(request, ctx, obj.product)
+    product = obj.product
     user = ctx.users.get_current_user()
     ctx.checkouts.require_owned(db, obj, user)
     data = await file.read()
     filename = Path(file.filename or obj.filename).name
-    path = ctx.workspaces.stage_workspace_upload(project, obj, filename, data)
+    path = ctx.workspaces.stage_workspace_upload(product, obj, filename, data)
     return WorkspaceContentResponse(
         object_id=object_id,
         filename=path.name,
@@ -106,9 +106,9 @@ async def put_workspace_content(
     )
 
 
-@router.post("/api/projects/{project_id}/objects", response_model=ObjectResponse, status_code=201)
+@router.post("/api/products/{product_id}/objects", response_model=ObjectResponse, status_code=201)
 async def add_object(
-    project_id: str,
+    product_id: str,
     request: Request,
     file: UploadFile = File(...),
     comment: str | None = Form(default=None),
@@ -117,14 +117,14 @@ async def add_object(
     ctx: AppContext = Depends(get_context),
 ) -> ObjectResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
-    project = load_accessible_project(request, ctx, db, project_id)
+    product = load_accessible_product(request, ctx, db, product_id)
     data = await file.read()
     filename = file.filename or "untitled"
     if not filename:
         raise ValidationAppError("A filename is required.")
     obj = ctx.objects.import_upload(
         db,
-        project,
+        product,
         filename=filename,
         data=data,
         relative_path=relative_path,
@@ -134,14 +134,14 @@ async def add_object(
     obj = ctx.objects.get_object(db, obj.uuid)
     checkout = ctx.checkouts.active_for(db, obj.id)
     mine = checkout is not None and checkout.user_name == ctx.users.get_current_user().user_name
-    ctx.workspaces.copy_into_workspace(project, obj, writable=mine, keep_local=mine)
-    from creopdm.api.watch_notify import notify_project_watchers
+    ctx.workspaces.copy_into_workspace(product, obj, writable=mine, keep_local=mine)
+    from creopdm.api.watch_notify import notify_product_watchers
 
-    notify_project_watchers(
+    notify_product_watchers(
         request,
         ctx,
         db,
-        project,
+        product,
         action="File added",
         filenames=[obj.filename],
         object_uuid=obj.uuid,
@@ -163,14 +163,14 @@ def purge_workspace_batch(
         filename = object_uuid
         try:
             obj = ctx.objects.get_object(db, object_uuid)
-            require_project_access(request, ctx, obj.project)
+            require_product_access(request, ctx, obj.product)
             filename = obj.filename
             _purge_and_release(ctx, db, obj, ignore_locked=False)
             ctx.activities.record(
                 db,
                 ActivityAction.WORKSPACE_CLEARED,
                 ctx.users.get_current_user(),
-                project_id=obj.project.id,
+                product_id=obj.product.id,
                 object_id=obj.id,
                 details={"filename": obj.filename},
             )
@@ -194,27 +194,27 @@ def remove_batch(
     failed: list[BatchItemResult] = []
     folder_paths = list(payload.folder_paths or [])
     requested = list(dict.fromkeys(payload.object_ids or []))
-    project = None
-    project_id = (payload.project_id or "").strip()
-    if project_id:
-        project = load_accessible_project(request, ctx, db, project_id)
+    product = None
+    product_id = (payload.product_id or "").strip()
+    if product_id:
+        product = load_accessible_product(request, ctx, db, product_id)
     if folder_paths:
-        if project is None and requested:
+        if product is None and requested:
             found_hint = ctx.objects.get_objects(db, requested[:1])
             if found_hint:
-                require_project_access(request, ctx, found_hint[0].project)
-                project = found_hint[0].project
-        if project is None:
+                require_product_access(request, ctx, found_hint[0].product)
+                product = found_hint[0].product
+        if product is None:
             raise ValidationAppError(
-                "Choose a project before removing folders.",
+                "Choose a product before removing folders.",
                 details={"folder_paths": folder_paths},
             )
         for folder in folder_paths:
-            requested.extend(ctx.objects.uuids_under_folder(db, project.id, folder))
+            requested.extend(ctx.objects.uuids_under_folder(db, product.id, folder))
         requested = list(dict.fromkeys(requested))
     found = ctx.objects.get_objects(db, requested) if requested else []
     for obj in found:
-        require_project_access(request, ctx, obj.project)
+        require_product_access(request, ctx, obj.product)
     by_uuid = {obj.uuid: obj for obj in found}
     checkouts = ctx.checkouts.active_map(db, [obj.id for obj in found]) if found else {}
     user = ctx.users.get_current_user()
@@ -245,11 +245,11 @@ def remove_batch(
         to_remove.append(obj)
     grouped: dict[int, list] = {}
     for obj in to_remove:
-        grouped.setdefault(obj.project_id, []).append(obj)
+        grouped.setdefault(obj.product_id, []).append(obj)
     for group in grouped.values():
         summaries = [{"uuid": obj.uuid, "filename": obj.filename} for obj in group]
         try:
-            ctx.workspaces.purge_local_many(group[0].project, group, ignore_locked=True)
+            ctx.workspaces.purge_local_many(group[0].product, group, ignore_locked=True)
             ctx.checkouts.release_mine_many(db, group)
             ctx.objects.delete_objects(db, group)
             for item in summaries:
@@ -267,10 +267,10 @@ def remove_batch(
                     )
                 )
     # Drop empty Create-folder trees (.gitkeep) and leftover vault dirs for selected folders.
-    if folder_paths and project is not None and not failed:
+    if folder_paths and product is not None and not failed:
         for folder in folder_paths:
             try:
-                ctx.workspaces.remove_project_folder(project, folder, user)
+                ctx.workspaces.remove_product_folder(product, folder, user)
                 ok.append(
                     BatchItemResult(
                         uuid="",
@@ -291,14 +291,14 @@ def remove_batch(
     # the body is sent — soft reload would otherwise re-paint deleted folders/files.
     db.commit()
     if ok:
-        from creopdm.api.watch_notify import notify_project_watchers
+        from creopdm.api.watch_notify import notify_product_watchers
 
         names = [item.filename for item in ok if item.filename]
-        proj = project
+        proj = product
         if proj is None and to_remove:
-            proj = to_remove[0].project
+            proj = to_remove[0].product
         if proj is not None and names:
-            notify_project_watchers(
+            notify_product_watchers(
                 request,
                 ctx,
                 db,
@@ -318,7 +318,7 @@ def get_object(
 ) -> ObjectResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     obj = ctx.objects.get_object(db, object_id)
-    require_project_access(request, ctx, obj.project)
+    require_product_access(request, ctx, obj.product)
     return present_object(ctx, db, obj)
 
 
@@ -331,7 +331,7 @@ def object_history(
 ) -> list[ObjectVersionResponse]:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     obj = ctx.objects.get_object(db, object_id)
-    require_project_access(request, ctx, obj.project)
+    require_product_access(request, ctx, obj.product)
     versions = ctx.objects.object_history(db, object_id)
     return [item for item in (version_to_response(v) for v in versions) if item is not None]
 
@@ -347,17 +347,17 @@ def revert_object_version(
     """Restore an older history row onto vault (new check-in) so local can rematerialize."""
     require_permission(request, ctx, PERMISSION_OBJECTS_REVERT)
     obj = ctx.objects.get_object(db, object_id)
-    require_project_access(request, ctx, obj.project)
+    require_product_access(request, ctx, obj.product)
     obj = ctx.checkins.revert_to_version(db, object_id, version_id)
     db.commit()
     db.refresh(obj)
-    from creopdm.api.watch_notify import notify_project_watchers
+    from creopdm.api.watch_notify import notify_product_watchers
 
-    notify_project_watchers(
+    notify_product_watchers(
         request,
         ctx,
         db,
-        obj.project,
+        obj.product,
         action="Version restored",
         filenames=[obj.filename],
         object_uuid=obj.uuid,
@@ -375,7 +375,7 @@ def get_creo_metadata(
 ) -> CreoMetadataResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     obj = ctx.objects.get_object(db, object_id)
-    require_project_access(request, ctx, obj.project)
+    require_product_access(request, ctx, obj.product)
     return ctx.metadata.get(db, object_id, version)
 
 
@@ -389,7 +389,7 @@ def post_creo_metadata(
 ) -> CreoMetadataResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_METADATA)
     obj = ctx.objects.get_object(db, object_id)
-    require_project_access(request, ctx, obj.project)
+    require_product_access(request, ctx, obj.product)
     result = ctx.metadata.save(db, object_id, payload)
     params = len(result.parameters or [])
     mats = result.materials if isinstance(result.materials, dict) else {}
@@ -431,7 +431,7 @@ def object_where_used(
 ) -> WhereUsedResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     obj = ctx.objects.get_object(db, object_id)
-    require_project_access(request, ctx, obj.project)
+    require_product_access(request, ctx, obj.product)
     return ctx.metadata.where_used(db, object_id, debug=debug, vault_scan=vault_scan)
 
 
@@ -450,7 +450,7 @@ def _assert_can_remove(ctx: AppContext, db: Session, obj) -> None:
 def _purge_and_release(ctx: AppContext, db: Session, obj, *, ignore_locked: bool) -> None:
     _assert_can_remove(ctx, db, obj)
     try:
-        ctx.workspaces.purge_local(obj.project, obj)
+        ctx.workspaces.purge_local(obj.product, obj)
     except PathValidationError:
         if not ignore_locked:
             raise
@@ -466,13 +466,13 @@ def purge_workspace(
 ) -> Response:
     require_permission(request, ctx, PERMISSION_OBJECTS_REMOVE)
     obj = ctx.objects.get_object(db, object_id)
-    require_project_access(request, ctx, obj.project)
+    require_product_access(request, ctx, obj.product)
     _purge_and_release(ctx, db, obj, ignore_locked=False)
     ctx.activities.record(
         db,
         ActivityAction.WORKSPACE_CLEARED,
         ctx.users.get_current_user(),
-        project_id=obj.project.id,
+        product_id=obj.product.id,
         object_id=obj.id,
         details={"filename": obj.filename},
     )
@@ -488,7 +488,7 @@ def delete_object(
 ) -> Response:
     require_permission(request, ctx, PERMISSION_OBJECTS_REMOVE)
     obj = ctx.objects.get_object(db, object_id)
-    require_project_access(request, ctx, obj.project)
+    require_product_access(request, ctx, obj.product)
     _purge_and_release(ctx, db, obj, ignore_locked=True)
     ctx.objects.delete_object(db, object_id)
     # See batch/remove — commit before 204 so a follow-up soft reload sees the delete.

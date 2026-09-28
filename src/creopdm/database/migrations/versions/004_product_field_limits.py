@@ -1,6 +1,6 @@
-"""Limit project number to 25 and description to 256 characters.
+"""Limit product number to 25 and description to 256 characters.
 
-Revision ID: 004_project_field_limits
+Revision ID: 004_product_field_limits
 Revises: 003_creo_release
 Create Date: 2026-09-19
 """
@@ -12,7 +12,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "004_project_field_limits"
+revision: str = "004_product_field_limits"
 down_revision: Union[str, None] = "003_creo_release"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -20,14 +20,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.execute(
-        "UPDATE projects SET number = substr(number, 1, 25) "
+        "UPDATE products SET number = substr(number, 1, 25) "
         "WHERE number IS NOT NULL AND length(number) > 25"
     )
     op.execute(
-        "UPDATE projects SET description = substr(description, 1, 256) "
+        "UPDATE products SET description = substr(description, 1, 256) "
         "WHERE description IS NOT NULL AND length(description) > 256"
     )
-    with op.batch_alter_table("projects") as batch_op:
+    with op.batch_alter_table("products") as batch_op:
         batch_op.alter_column(
             "number",
             existing_type=sa.String(length=64),
@@ -43,7 +43,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("projects") as batch_op:
+    with op.batch_alter_table("products") as batch_op:
         batch_op.alter_column(
             "description",
             existing_type=sa.String(length=256),

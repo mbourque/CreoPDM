@@ -19,7 +19,7 @@ from creopdm.logging_setup import get_logger
 from creopdm.models.checkout import Checkout
 from creopdm.models.object import EngineeringObject
 from creopdm.services.activity_service import ActivityService
-from creopdm.services.lock_manager import ProjectLockManager
+from creopdm.services.lock_manager import ProductLockManager
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.utils.identity import CurrentUserProvider, UserIdentity
@@ -42,7 +42,7 @@ class CheckoutService:
         self,
         objects: ObjectService,
         workspaces: WorkspaceService,
-        locks: ProjectLockManager,
+        locks: ProductLockManager,
         activities: ActivityService,
         users: CurrentUserProvider,
     ) -> None:
@@ -71,44 +71,44 @@ class CheckoutService:
         )
         return {row.object_id: row for row in rows}
 
-    def list_for_project(self, session: Session, project_id: int) -> list[EngineeringObject]:
-        """Active checkouts in this project, including files other people hold."""
+    def list_for_product(self, session: Session, product_id: int) -> list[EngineeringObject]:
+        """Active checkouts in this product, including files other people hold."""
         rows = session.scalars(
             select(EngineeringObject)
             .options(
                 joinedload(EngineeringObject.current_version),
-                joinedload(EngineeringObject.project),
+                joinedload(EngineeringObject.product),
             )
             .join(Checkout, Checkout.object_id == EngineeringObject.id)
             .where(
-                EngineeringObject.project_id == project_id,
+                EngineeringObject.product_id == product_id,
                 Checkout.status == CheckoutStatus.ACTIVE.value,
             )
             .order_by(EngineeringObject.filename.asc())
         )
         return list(rows.unique())
 
-    def count_for_project(self, session: Session, project_id: int) -> int:
-        """How many files currently have an active checkout in this project."""
+    def count_for_product(self, session: Session, product_id: int) -> int:
+        """How many files currently have an active checkout in this product."""
         value = session.scalar(
             select(func.count())
             .select_from(Checkout)
             .join(EngineeringObject, Checkout.object_id == EngineeringObject.id)
             .where(
-                EngineeringObject.project_id == project_id,
+                EngineeringObject.product_id == product_id,
                 Checkout.status == CheckoutStatus.ACTIVE.value,
             )
         )
         return int(value or 0)
 
-    def count_checkoutable_for_project(self, session: Session, project_id: int) -> int:
-        """IN_WORK files with no active checkout — available for Checkout project."""
+    def count_checkoutable_for_product(self, session: Session, product_id: int) -> int:
+        """IN_WORK files with no active checkout — available for Checkout product."""
         active = select(Checkout.object_id).where(Checkout.status == CheckoutStatus.ACTIVE.value)
         value = session.scalar(
             select(func.count())
             .select_from(EngineeringObject)
             .where(
-                EngineeringObject.project_id == project_id,
+                EngineeringObject.product_id == product_id,
                 EngineeringObject.lifecycle_state == LifecycleState.IN_WORK.value,
                 EngineeringObject.id.not_in(active),
             )
@@ -134,9 +134,9 @@ class CheckoutService:
 
     def checkout(self, session: Session, object_uuid: str) -> Checkout:
         obj = self._objects.get_object(session, object_uuid)
-        project = obj.project
+        product = obj.product
         user = self._users.get_current_user()
-        with self._locks.acquire(project.uuid):
+        with self._locks.acquire(product.uuid):
             if obj.lifecycle_state != LifecycleState.IN_WORK.value:
                 raise ReleasedObjectError(
                     f"{obj.filename} is {obj.lifecycle_state.replace('_', ' ').title()} and cannot be checked out."
@@ -154,7 +154,7 @@ class CheckoutService:
                     },
                 )
             workspace_file = self._workspaces.materialize(
-                project, obj, writable=True, keep_local=True
+                product, obj, writable=True, keep_local=True
             )
             now = datetime.now(timezone.utc)
             record = Checkout(
@@ -172,7 +172,7 @@ class CheckoutService:
                 session,
                 ActivityAction.CHECKED_OUT,
                 user,
-                project_id=project.id,
+                product_id=product.id,
                 object_id=obj.id,
                 details={"workspace": str(workspace_file)},
             )
@@ -211,12 +211,12 @@ class CheckoutService:
 
     def undo_checkout(self, session: Session, object_uuid: str) -> None:
         obj = self._objects.get_object(session, object_uuid)
-        project = obj.project
+        product = obj.product
         user = self._users.get_current_user()
-        with self._locks.acquire(project.uuid):
+        with self._locks.acquire(product.uuid):
             record = self.require_owned(session, obj, user)
             workspace_file = self._workspaces.materialize(
-                project,
+                product,
                 obj,
                 writable=False,
                 overwrite_modified=True,
@@ -227,7 +227,7 @@ class CheckoutService:
                 session,
                 ActivityAction.CHECKOUT_CANCELLED,
                 user,
-                project_id=project.id,
+                product_id=product.id,
                 object_id=obj.id,
                 details={"workspace": str(workspace_file)},
             )

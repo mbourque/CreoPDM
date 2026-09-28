@@ -15,20 +15,20 @@ def test_batch_remove_request_requires_files_or_folder():
     assert "Choose files or a folder to remove." in str(exc.value)
 
 
-def test_batch_remove_request_folders_require_project_when_no_ids():
+def test_batch_remove_request_folders_require_product_when_no_ids():
     with pytest.raises(ValidationError) as exc:
         BatchRemoveRequest(folder_paths=["Drawings"])
-    assert "Choose a project before removing folders." in str(exc.value)
+    assert "Choose a product before removing folders." in str(exc.value)
 
 
-def test_batch_remove_request_accepts_folders_with_project():
-    body = BatchRemoveRequest(folder_paths=["Drawings/RevA", "  Kit\\ "], project_id=" abc ")
+def test_batch_remove_request_accepts_folders_with_product():
+    body = BatchRemoveRequest(folder_paths=["Drawings/RevA", "  Kit\\ "], product_id=" abc ")
     assert body.folder_paths == ["Drawings/RevA", "Kit"]
-    assert body.project_id == "abc"
+    assert body.product_id == "abc"
     assert body.object_ids == []
 
 
-def test_batch_remove_request_accepts_ids_without_project():
+def test_batch_remove_request_accepts_ids_without_product():
     body = BatchRemoveRequest(object_ids=["  u1  ", "", "u2"])
     assert body.object_ids == ["u1", "u2"]
     assert body.folder_paths == []

@@ -1,4 +1,4 @@
-"""Group project files by folder for the list UI."""
+"""Group product files by folder for the list UI."""
 
 from __future__ import annotations
 

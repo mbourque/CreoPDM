@@ -4,7 +4,7 @@
 <article class="detail settings-page">
   <nav class="crumb">
     {% if can_view_objects %}
-    <a href="/">Projects</a>
+    <a href="/">Products</a>
     <span>/</span>
     {% endif %}
     <a href="/admin">Administration</a>
@@ -93,7 +93,7 @@
         {% endif %}
       {% endif %}
 
-      <p class="muted small">New users get <strong>no project access</strong>. Grant All projects or specific projects under <a href="/admin/membership">Administration → Membership</a>{% if not can_assign_projects %} (requires <code>projects.assign</code>){% endif %}.</p>
+      <p class="muted small">New users get <strong>no product access</strong>. Grant All products or specific products under <a href="/admin/membership">Administration → Membership</a>{% if not can_assign_products %} (requires <code>products.assign</code>){% endif %}.</p>
 
       <div class="form-actions">
         <button type="submit" class="btn btn-primary" {% if mode == 'new' and not can_set_passwords %}disabled{% endif %}>{% if mode == 'new' %}Create user{% else %}Save{% endif %}</button>

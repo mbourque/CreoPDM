@@ -1,6 +1,6 @@
-"""Alembic migration: add users.password and projects.assign for existing installs.
+"""Alembic migration: add users.password and products.assign for existing installs.
 
-Revision ID: 016_pw_proj_assign
+Revision ID: 016_pw_prod_assign
 Revises: 015_roles_assign
 Create Date: 2026-09-27
 
@@ -14,14 +14,14 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "016_pw_proj_assign"
+revision: str = "016_pw_prod_assign"
 down_revision: Union[str, None] = "015_roles_assign"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 _NEW = (
     ("users.password", "Set or reset user passwords"),
-    ("projects.assign", "Assign project membership to users"),
+    ("products.assign", "Assign product membership to users"),
 )
 # Prior full-admin set (before this migration) — grant new keys to those roles.
 _PRIOR_ADMIN_KEYS = (

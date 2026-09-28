@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.create_table(
-        "projects",
+        "products",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("uuid", sa.String(length=36), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
@@ -34,13 +34,13 @@ def upgrade() -> None:
         sa.Column("active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.UniqueConstraint("uuid"),
     )
-    op.create_index("ix_projects_uuid", "projects", ["uuid"])
+    op.create_index("ix_products_uuid", "products", ["uuid"])
 
     op.create_table(
         "objects",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("uuid", sa.String(length=36), nullable=False),
-        sa.Column("project_id", sa.Integer(), sa.ForeignKey("projects.id"), nullable=False),
+        sa.Column("product_id", sa.Integer(), sa.ForeignKey("products.id"), nullable=False),
         sa.Column("number", sa.String(length=64), nullable=True),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("filename", sa.String(length=255), nullable=False),
@@ -54,10 +54,10 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.UniqueConstraint("uuid"),
-        sa.UniqueConstraint("project_id", "relative_path", name="uq_objects_project_path"),
+        sa.UniqueConstraint("product_id", "relative_path", name="uq_objects_product_path"),
     )
     op.create_index("ix_objects_uuid", "objects", ["uuid"])
-    op.create_index("ix_objects_project_id", "objects", ["project_id"])
+    op.create_index("ix_objects_product_id", "objects", ["product_id"])
 
     op.create_table(
         "object_versions",
@@ -88,7 +88,7 @@ def upgrade() -> None:
     op.create_table(
         "dependencies",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("project_id", sa.Integer(), sa.ForeignKey("projects.id"), nullable=False),
+        sa.Column("product_id", sa.Integer(), sa.ForeignKey("products.id"), nullable=False),
         sa.Column("parent_object_id", sa.Integer(), sa.ForeignKey("objects.id"), nullable=False),
         sa.Column("child_object_id", sa.Integer(), sa.ForeignKey("objects.id"), nullable=False),
         sa.Column("dependency_type", sa.String(length=32), nullable=False, server_default="ASSEMBLY_MEMBER"),
@@ -96,14 +96,14 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.UniqueConstraint(
-            "project_id",
+            "product_id",
             "parent_object_id",
             "child_object_id",
             "dependency_type",
             name="uq_dependencies_edge",
         ),
     )
-    op.create_index("ix_dependencies_project_id", "dependencies", ["project_id"])
+    op.create_index("ix_dependencies_product_id", "dependencies", ["product_id"])
     op.create_index("ix_dependencies_parent_object_id", "dependencies", ["parent_object_id"])
     op.create_index("ix_dependencies_child_object_id", "dependencies", ["child_object_id"])
 
@@ -141,7 +141,7 @@ def upgrade() -> None:
     op.create_table(
         "activities",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("project_id", sa.Integer(), sa.ForeignKey("projects.id"), nullable=True),
+        sa.Column("product_id", sa.Integer(), sa.ForeignKey("products.id"), nullable=True),
         sa.Column("object_id", sa.Integer(), sa.ForeignKey("objects.id"), nullable=True),
         sa.Column("user", sa.String(length=128), nullable=False),
         sa.Column("machine", sa.String(length=128), nullable=False),
@@ -149,21 +149,21 @@ def upgrade() -> None:
         sa.Column("timestamp", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("details_json", sa.Text(), nullable=True),
     )
-    op.create_index("ix_activities_project_id", "activities", ["project_id"])
+    op.create_index("ix_activities_product_id", "activities", ["product_id"])
     op.create_index("ix_activities_object_id", "activities", ["object_id"])
     op.create_index("ix_activities_action", "activities", ["action"])
 
     op.create_table(
         "remotes",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("project_id", sa.Integer(), sa.ForeignKey("projects.id"), nullable=False),
+        sa.Column("product_id", sa.Integer(), sa.ForeignKey("products.id"), nullable=False),
         sa.Column("name", sa.String(length=64), nullable=False, server_default="origin"),
         sa.Column("url", sa.String(length=1024), nullable=False),
         sa.Column("provider", sa.String(length=64), nullable=False, server_default="generic"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
-    op.create_index("ix_remotes_project_id", "remotes", ["project_id"])
+    op.create_index("ix_remotes_product_id", "remotes", ["product_id"])
 
 
 def downgrade() -> None:
@@ -175,4 +175,4 @@ def downgrade() -> None:
     op.drop_constraint("fk_objects_current_version", "objects", type_="foreignkey")
     op.drop_table("object_versions")
     op.drop_table("objects")
-    op.drop_table("projects")
+    op.drop_table("products")

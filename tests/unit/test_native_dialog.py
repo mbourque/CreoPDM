@@ -39,7 +39,7 @@ def test_pick_folder_cancel_does_not_open_winforms(monkeypatch, tmp_path: Path):
         "creopdm.utils.native_dialog._winforms_folder_dialog",
         lambda *args, **kwargs: called.append(True) or tmp_path,
     )
-    assert pick_folder(tmp_path, title="Add a folder to the project") is None
+    assert pick_folder(tmp_path, title="Add a folder to the product") is None
     assert called == []
 
 

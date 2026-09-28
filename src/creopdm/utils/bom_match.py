@@ -1,4 +1,4 @@
-"""Match Creo BOM / dependency filenames to project objects."""
+"""Match Creo BOM / dependency filenames to product objects."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def extension_of(filename: str) -> str:
 
 
 def bom_lookup_keys(filename: str, *, include_mirror_aliases: bool = False) -> list[str]:
-    """Keys used to match BOM/dependency names to project objects.
+    """Keys used to match BOM/dependency names to product objects.
 
     Family-table display names like ``INSTALLED<SPLIT-RIVET>.prt`` resolve to the
     generic ``SPLIT-RIVET.prt`` (name inside ``<>``), which is what Creo opens.
@@ -103,7 +103,7 @@ def bom_generic_label(filename: str) -> str | None:
 
 
 def filenames_refer_to_same_model(left: str, right: str) -> bool:
-    """True when two Creo filenames likely refer to the same project object."""
+    """True when two Creo filenames likely refer to the same product object."""
     left_keys = set(bom_where_used_keys(left))
     right_keys = set(bom_where_used_keys(right))
     return bool(left_keys and right_keys and (left_keys & right_keys))

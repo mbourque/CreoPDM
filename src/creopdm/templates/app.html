@@ -5,36 +5,36 @@
   <aside class="sidebar">
     <div class="sidebar-head">
       <div class="sidebar-head-start">
-        <button type="button" class="sidebar-menu-btn" id="project-menu-btn"
-                aria-expanded="false" aria-controls="project-list" aria-label="Projects"
+        <button type="button" class="sidebar-menu-btn" id="product-menu-btn"
+                aria-expanded="false" aria-controls="product-list" aria-label="Products"
                 {% if selected %}title="{% if selected.number %}{{ selected.number }}{% else %}Local{% endif %}{% if selected.description %} — {{ selected.description }}{% endif %}"{% endif %}>
           <span class="hamburger" aria-hidden="true"><span></span><span></span><span></span></span>
-          <span class="sidebar-current">{{ selected.name if selected else "Projects" }}</span>
+          <span class="sidebar-current">{{ selected.name if selected else "Products" }}</span>
         </button>
-        <h2 class="sidebar-title">Projects</h2>
+        <h2 class="sidebar-title">Products</h2>
         <button type="button" class="sidebar-collapse-btn" id="sidebar-collapse-btn"
-                title="{% if sidebar_collapsed %}Show project list{% else %}Collapse project list{% endif %}"
-                aria-label="{% if sidebar_collapsed %}Show project list{% else %}Collapse project list{% endif %}"
+                title="{% if sidebar_collapsed %}Show product list{% else %}Collapse product list{% endif %}"
+                aria-label="{% if sidebar_collapsed %}Show product list{% else %}Collapse product list{% endif %}"
                 aria-pressed="{% if sidebar_collapsed %}true{% else %}false{% endif %}">
           <span class="sidebar-collapse-icon" aria-hidden="true"></span>
         </button>
       </div>
-      {% if can_create_project %}
-      <button type="button" class="btn btn-small" id="new-project-btn">New</button>
+      {% if can_create_product %}
+      <button type="button" class="btn btn-small" id="new-product-btn">New</button>
       {% endif %}
     </div>
-    <ul class="project-list" id="project-list">
-      {% for project in projects %}
+    <ul class="product-list" id="product-list">
+      {% for product in products %}
       <li>
-        <a class="project-item {% if selected and project.uuid == selected.uuid %}is-active{% endif %}"
-           href="/?project={{ project.uuid }}"
-           title="{% if project.number %}{{ project.number }}{% else %}Local{% endif %}{% if project.description %} — {{ project.description }}{% endif %}">
-          <span class="project-name">{{ project.name }}</span>
-          <span class="project-number">{{ project.number or "Local" }}</span>
+        <a class="product-item {% if selected and product.uuid == selected.uuid %}is-active{% endif %}"
+           href="/?product={{ product.uuid }}"
+           title="{% if product.number %}{{ product.number }}{% else %}Local{% endif %}{% if product.description %} — {{ product.description }}{% endif %}">
+          <span class="product-name">{{ product.name }}</span>
+          <span class="product-number">{{ product.number or "Local" }}</span>
         </a>
       </li>
       {% else %}
-      <li class="empty">No projects yet.</li>
+      <li class="empty">No products yet.</li>
       {% endfor %}
     </ul>
   </aside>
@@ -45,17 +45,17 @@
       <div class="title-row">
         <h1{% if workspace_path %} title="{{ workspace_path }}"{% endif %}>{{ selected.name }}</h1>
         {% if email_notifications_enabled %}
-        <button type="button" class="project-watch-btn{% if watching_project %} is-watching{% endif %}"
-                id="project-watch-btn"
-                data-project="{{ selected.uuid }}"
-                data-project-name="{{ selected.name }}"
-                data-watching="{{ '1' if watching_project else '0' }}"
-                data-can-watch="{{ '1' if can_watch_project else '0' }}"
+        <button type="button" class="product-watch-btn{% if watching_product %} is-watching{% endif %}"
+                id="product-watch-btn"
+                data-product="{{ selected.uuid }}"
+                data-product-name="{{ selected.name }}"
+                data-watching="{{ '1' if watching_product else '0' }}"
+                data-can-watch="{{ '1' if can_watch_product else '0' }}"
                 data-reason="{{ watch_unavailable_reason or '' }}"
-                title="{% if not can_watch_project %}{{ watch_unavailable_reason or 'Watching unavailable' }}{% elif watching_project %}Watching — click to stop{% else %}Watch this project{% endif %}"
-                aria-label="{% if watching_project %}Stop watching project{% else %}Watch project{% endif %}"
-                aria-pressed="{{ 'true' if watching_project else 'false' }}"
-                {% if not can_watch_project %}disabled{% endif %}>
+                title="{% if not can_watch_product %}{{ watch_unavailable_reason or 'Watching unavailable' }}{% elif watching_product %}Watching — click to stop{% else %}Watch this product{% endif %}"
+                aria-label="{% if watching_product %}Stop watching product{% else %}Watch product{% endif %}"
+                aria-pressed="{{ 'true' if watching_product else 'false' }}"
+                {% if not can_watch_product %}disabled{% endif %}>
           <svg class="bell-icon bell-icon-off" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 22a2.2 2.2 0 0 0 2.2-2.2h-4.4A2.2 2.2 0 0 0 12 22Zm6.4-6.2V11a6.4 6.4 0 0 0-5.1-6.3V4a1.3 1.3 0 1 0-2.6 0v.7A6.4 6.4 0 0 0 5.6 11v4.8L4 17.4V18h16v-.6l-1.6-1.6Z"/>
           </svg>
@@ -64,52 +64,52 @@
           </svg>
         </button>
         {% endif %}
-        {% if can_edit_project or can_delete_project or can_update_metadata %}
-        <div class="project-settings" id="project-settings">
-          <button type="button" class="project-settings-btn" id="project-settings-btn"
-                  title="Project settings" aria-label="Project settings"
-                  aria-expanded="false" aria-haspopup="menu" aria-controls="project-settings-menu">
+        {% if can_edit_product or can_delete_product or can_update_metadata %}
+        <div class="product-settings" id="product-settings">
+          <button type="button" class="product-settings-btn" id="product-settings-btn"
+                  title="Product settings" aria-label="Product settings"
+                  aria-expanded="false" aria-haspopup="menu" aria-controls="product-settings-menu">
             <svg class="gear-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.55-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.77 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.89 14.52a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.43.34.68.22l2.39-.96c.5.39 1.04.7 1.63.94l.36 2.54c.05.24.26.42.5.42h3.84c.24 0 .45-.18.5-.42l.36-2.54c.59-.24 1.13-.55 1.63-.94l2.39.96c.25.12.54.02.68-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z"/>
             </svg>
           </button>
-          <div class="project-settings-menu" id="project-settings-menu" role="menu" hidden>
-            {% if can_edit_project %}
-            <button type="button" class="project-settings-item" role="menuitem" id="rename-project-btn"
-                    data-project="{{ selected.uuid }}"
+          <div class="product-settings-menu" id="product-settings-menu" role="menu" hidden>
+            {% if can_edit_product %}
+            <button type="button" class="product-settings-item" role="menuitem" id="rename-product-btn"
+                    data-product="{{ selected.uuid }}"
                     data-name="{{ selected.name }}"
                     data-number="{{ selected.number or '' }}"
                     data-description="{{ selected.description or '' }}">Rename</button>
             {% endif %}
             {% if can_update_metadata %}
-            <button type="button" class="project-settings-item" role="menuitem" id="rebuild-where-used-btn"
-                    data-project="{{ selected.uuid }}"
+            <button type="button" class="product-settings-item" role="menuitem" id="rebuild-where-used-btn"
+                    data-product="{{ selected.uuid }}"
                     title="Index vault assemblies/drawings into Where Used links in the background.">Rebuild Where Used</button>
-            <button type="button" class="project-settings-item" role="menuitem" id="collect-metadata-btn"
-                    data-project="{{ selected.uuid }}"
+            <button type="button" class="product-settings-item" role="menuitem" id="collect-metadata-btn"
+                    data-product="{{ selected.uuid }}"
                     title="Open each Creo model in session and capture parameters, materials, BOM, and related metadata.">Collect all metadata</button>
             {% endif %}
-            {% if can_delete_project %}
-            <button type="button" class="project-settings-item is-danger" role="menuitem" id="delete-project-btn"
-                    data-project="{{ selected.uuid }}"
+            {% if can_delete_product %}
+            <button type="button" class="product-settings-item is-danger" role="menuitem" id="delete-product-btn"
+                    data-product="{{ selected.uuid }}"
                     data-name="{{ selected.name }}"
-                    title="Delete the CreoPDM vault (working copies and Git) and unregister the project. Original files you imported from are not deleted.">Delete project</button>
+                    title="Delete the CreoPDM vault (working copies and Git) and unregister the product. Original files you imported from are not deleted.">Delete product</button>
             {% endif %}
           </div>
         </div>
         {% endif %}
         <form class="search-form" id="search-form">
           <label class="sr-only" for="search-input">Search</label>
-          <input id="search-input" name="q" type="search" placeholder="Search all files in project" autocomplete="off">
+          <input id="search-input" name="q" type="search" placeholder="Search all files in product" autocomplete="off">
         </form>
       </div>
       {% if selected.number or selected.description %}
-      <p class="muted project-meta">{% if selected.number %}<span class="project-meta-number">{{ selected.number }}</span>{% endif %}{% if selected.number and selected.description %} · {% endif %}{% if selected.description %}{{ selected.description }}{% endif %}</p>
+      <p class="muted product-meta">{% if selected.number %}<span class="product-meta-number">{{ selected.number }}</span>{% endif %}{% if selected.number and selected.description %} · {% endif %}{% if selected.description %}{{ selected.description }}{% endif %}</p>
       {% endif %}
     </div>
 
     {% if selected and status %}
-    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-project="{{ selected.uuid }}" data-type-icons='{{ type_icons | tojson }}'>
+    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-product="{{ selected.uuid }}" data-type-icons='{{ type_icons | tojson }}'>
       <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Show and select all files. Clears type chips. Click again to clear."><strong>{{ status.files }}</strong> Files</button></li>
       <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Filter to Creo models and select them. Click again to clear."><strong>{{ status.cad_models }}</strong> Creo Models</button></li>
       <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Filter to parts and select them. Click again to clear."><strong>{{ status.creo_parts }}</strong> Parts</button></li>
@@ -131,7 +131,7 @@
     <section class="tab-panel" id="panel-files" data-folder="{{ current_folder }}">
     {% if current_folder %}
     <nav class="folder-crumb" aria-label="Folder">
-      <a href="/?project={{ selected.uuid }}&amp;folder=">Files</a>
+      <a href="/?product={{ selected.uuid }}&amp;folder=">Files</a>
       {% for crumb in folder_crumbs %}
       <span class="folder-crumb-sep" aria-hidden="true">/</span>
       {% if loop.last %}
@@ -140,7 +140,7 @@
         {{ crumb.name }}
       </span>
       {% else %}
-      <a href="/?project={{ selected.uuid }}&amp;folder={{ crumb.path | urlencode }}">{{ crumb.name }}</a>
+      <a href="/?product={{ selected.uuid }}&amp;folder={{ crumb.path | urlencode }}">{{ crumb.name }}</a>
       {% endif %}
       {% endfor %}
     </nav>
@@ -181,7 +181,7 @@
               style="--depth: {{ entry.depth }}"
               title="Click the folder name to open. Click elsewhere to select. Double-click to open.">
             <td title="{{ entry.name }}">
-              <a class="folder-open" href="/?project={{ selected.uuid }}&amp;folder={{ entry.path | urlencode }}" data-folder="{{ entry.path }}" title="Open {{ entry.name }}">
+              <a class="folder-open" href="/?product={{ selected.uuid }}&amp;folder={{ entry.path | urlencode }}" data-folder="{{ entry.path }}" title="Open {{ entry.name }}">
                 <span class="folder-label">
                   <svg class="folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.2A2.2 2.2 0 0 1 5.7 5h4.1c.4 0 .8.2 1 .5l1.3 1.4c.3.3.6.5 1 .5h5.2A2.2 2.2 0 0 1 20.5 9.6v8.2a2.2 2.2 0 0 1-2.2 2.2H5.7A2.2 2.2 0 0 1 3.5 17.8V7.2Z"/></svg>
                   <span class="folder-name">{{ entry.name }}</span>
@@ -217,7 +217,7 @@
               data-sort-creo="{{ entry.folder }}/{{ obj.creo_release or '' }}"
               data-sort-modified="{% if obj.updated_at %}{{ local_time(obj.updated_at, '%Y%m%d%H%M%S') }}{% endif %}"
               data-sort-checkout="{{ entry.folder }}/{{ obj.checkout_status }}"
-              data-detail="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}"
+              data-detail="/products/{{ selected.uuid }}/objects/{{ obj.uuid }}"
               class="object-row"
               style="--depth: {{ entry.depth }}">
             <td title="{{ obj.filename }}">
@@ -246,7 +246,7 @@
           {% endif %}
           {% else %}
           <tr class="empty-row">
-            <td colspan="7">{% if current_folder %}This folder is empty.{% elif can_add_objects %}No files in this project. Add a Creo model, PDF, or document to get started.{% else %}No files in this project.{% endif %}</td>
+            <td colspan="7">{% if current_folder %}This folder is empty.{% elif can_add_objects %}No files in this product. Add a Creo model, PDF, or document to get started.{% else %}No files in this product.{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -255,7 +255,7 @@
     </section>
 
     <section class="tab-panel" id="panel-checked-out" hidden>
-      <p class="muted small">Active checkout locks in this project, including files held by other people. Open, Check In, and Undo Checkout still apply to your files.</p>
+      <p class="muted small">Active checkout locks in this product, including files held by other people. Open, Check In, and Undo Checkout still apply to your files.</p>
       <div class="table-wrap">
         <table class="grid" id="checked-out-table">
           <thead>
@@ -295,7 +295,7 @@
             {% for item in checkin_queue.saves %}
             <tr class="queue-row is-pending" data-uuid="{{ item.uuid }}" data-can-checkin="1" data-checked-out="1"
                 data-object-type="{{ item.object_type or '' }}" data-extension="" data-filename="{{ item.filename }}"
-                data-detail="/projects/{{ selected.uuid }}/objects/{{ item.uuid }}">
+                data-detail="/products/{{ selected.uuid }}/objects/{{ item.uuid }}">
               <td>{% if item.newer_save %}Newer Creo save{% else %}Modified{% endif %}</td>
               <td class="filename-cell">
                 <span class="name-with-icon">
@@ -332,7 +332,7 @@
                 <div class="muted small">{{ item.relative_path }}</div>
                 {% endif %}
               </td>
-              <td>Not in the project yet. Select and click Add.</td>
+              <td>Not in the product yet. Select and click Add.</td>
               <td title="{{ item.size }} bytes">{{ item.size | byte_size }}</td>
               <td{% if item.saved_at %} title="{{ local_time_pretty(item.saved_at) }}"{% endif %}>{{ item.saved_at or "—" }}</td>
             </tr>
@@ -350,10 +350,10 @@
     <div class="hero">
       <h1>{{ app_name }}</h1>
       <p class="lede">Version {{ app_version }}</p>
-      {% if can_create_project %}
-      <p>Create a project to start managing engineering files. Git stays in the background.</p>
+      {% if can_create_product %}
+      <p>Create a product to start managing engineering files. Git stays in the background.</p>
       {% else %}
-      <p>No projects are available for your account. Ask an administrator to grant project access.</p>
+      <p>No products are available for your account. Ask an administrator to grant product access.</p>
       {% endif %}
     </div>
     {% endif %}
@@ -362,7 +362,7 @@
 
 <footer class="toolbar">
   <div class="toolbar-actions">
-    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
+    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this product's local workspace (creopdm-agent cache on this PC).">
       <button type="button" class="btn" id="set-creo-dir-btn"
               {% if workspace_path %}data-workspace="{{ workspace_path }}"{% endif %}
               disabled hidden>Set Working Directory</button>
@@ -372,11 +372,11 @@
       <button type="button" class="btn toolbar-menu-toggle" id="add-menu-btn"
               aria-haspopup="menu" aria-expanded="false"
               {% if not selected %}disabled{% endif %}
-              title="Add files or folders to this project, or create an empty folder.">Add ▾</button>
+              title="Add files or folders to this product, or create an empty folder.">Add ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="create-folder-btn"
                 {% if not selected %}disabled{% endif %}
-                title="Create an empty folder in the current project location.">Create folder…</button>
+                title="Create an empty folder in the current product location.">Create folder…</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="add-files-btn"
                 {% if not selected %}disabled{% endif %}
                 title="Pick files to copy into the vault.">Add files…</button>
@@ -393,29 +393,29 @@
       <button type="button" class="btn toolbar-menu-toggle" id="open-menu-btn"
               aria-haspopup="menu" aria-expanded="false"
               {% if not selected %}disabled{% endif %}
-              title="Open the selected file, or open this project’s local workspace folder.">Open ▾</button>
+              title="Open the selected file, or open this product’s local workspace folder.">Open ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-btn"
                 disabled
                 title="Open the selected file in Creo or its Windows associated program.">Open selected…</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-workspace-btn"
-                {% if selected %}data-project="{{ selected.uuid }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}
-                title="Open this project’s local workspace on this PC (creopdm-agent cache). Requires creopdm-agent.">Open workspace…</button>
+                {% if selected %}data-product="{{ selected.uuid }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}
+                title="Open this product’s local workspace on this PC (creopdm-agent cache). Requires creopdm-agent.">Open workspace…</button>
       </div>
     </div>
     {% if can_checkout %}
     <div class="toolbar-menu" id="checkout-menu">
       <button type="button" class="btn toolbar-menu-toggle" id="checkout-menu-btn"
               aria-haspopup="menu" aria-expanded="false" disabled
-              title="Check out selected or project files, or undo your checkout.">Checkout ▾</button>
+              title="Check out selected or product files, or undo your checkout.">Checkout ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-btn"
                 disabled
                 title="Check out the selected files and download them to the local workspace.">Checkout selected</button>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-project-btn"
-                {% if selected %}data-project="{{ selected.uuid }}" data-checkoutable="{{ checkoutable_count|default(0) }}"{% endif %}
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-product-btn"
+                {% if selected %}data-product="{{ selected.uuid }}" data-checkoutable="{{ checkoutable_count|default(0) }}"{% endif %}
                 {% if not selected or (checkoutable_count|default(0)) == 0 %}disabled{% endif %}
-                title="Check out every file in this project that is available (not locked by someone else).">Checkout project</button>
+                title="Check out every file in this product that is available (not locked by someone else).">Checkout product</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="undo-btn"
                 disabled
                 title="Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward.">Undo Checkout</button>
@@ -426,15 +426,15 @@
     <div class="toolbar-menu" id="checkin-menu">
       <button type="button" class="btn toolbar-menu-toggle" id="checkin-menu-btn"
               aria-haspopup="menu" aria-expanded="false" disabled
-              {% if selected %}data-project="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
-              title="Check in selected files, or everything pending in this project.">Check In ▾</button>
+              {% if selected %}data-product="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
+              title="Check in selected files, or everything pending in this product.">Check In ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-project-btn"
-                {% if selected %}data-project="{{ selected.uuid }}" data-checkout-count="{{ checkout_count|default(0) }}"{% endif %}
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-product-btn"
+                {% if selected %}data-product="{{ selected.uuid }}" data-checkout-count="{{ checkout_count|default(0) }}"{% endif %}
                 {% if not selected or ((pending_saves|default(0)) == 0 and (new_workspace_files|default(0)) == 0 and (checkout_count|default(0)) == 0) %}disabled{% endif %}
-                title="Check in modified files and new files, and release unchanged checkouts so the project looks fully checked in.">Check in project…</button>
+                title="Check in modified files and new files, and release unchanged checkouts so the product looks fully checked in.">Check in product…</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-btn"
-                {% if selected %}data-project="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
+                {% if selected %}data-product="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
                 disabled
                 title="Check in selected files.">Check in selected…</button>
       </div>
@@ -452,24 +452,24 @@
     <div class="toolbar-menu" id="remove-menu">
       <button type="button" class="btn btn-danger toolbar-menu-toggle" id="remove-menu-btn"
               aria-haspopup="menu" aria-expanded="false" disabled
-              title="Remove local workspace files, vault copies, or files from the project.">Remove ▾</button>
+              title="Remove local workspace files, vault copies, or files from the product.">Remove ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="discard-local-btn"
-                {% if selected %}data-project-name="{{ selected.name }}"{% endif %}
+                {% if selected %}data-product-name="{{ selected.name }}"{% endif %}
                 disabled
-                title="Move selected files from the local workspace on this PC (creopdm-agent cache) to the Recycle Bin. Does not affect the vault or project list.">Remove from Workspace</button>
+                title="Move selected files from the local workspace on this PC (creopdm-agent cache) to the Recycle Bin. Does not affect the vault or product list.">Remove from Workspace</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-versions-btn"
-                {% if selected %}data-project="{{ selected.uuid }}" data-project-name="{{ selected.name }}"{% endif %}
+                {% if selected %}data-product="{{ selected.uuid }}" data-product-name="{{ selected.name }}"{% endif %}
                 disabled
                 title="Move local agent-cache numbered saves older than the vault copy to the Recycle Bin (configured purgeable extensions). Keeps the vault revision and any newer local work. Does not change the vault.">Purge workspace</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn"
-                {% if selected %}data-project-name="{{ selected.name }}"{% endif %}
+                {% if selected %}data-product-name="{{ selected.name }}"{% endif %}
                 disabled
-                title="Delete CreoPDM vault copies of the selected files only. Files in your original project folder are not deleted. Checkouts on those files are cancelled.">Remove from Vault</button>
-        <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-project-btn"
-                {% if selected %}data-project-name="{{ selected.name }}"{% endif %}
+                title="Delete CreoPDM vault copies of the selected files only. Files in your original product folder are not deleted. Checkouts on those files are cancelled.">Remove from Vault</button>
+        <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-product-btn"
+                {% if selected %}data-product-name="{{ selected.name }}"{% endif %}
                 disabled
-                title="Remove the selected files from this project list and delete CreoPDM vault copies. Files in your original project folder are not deleted.">Remove from Project</button>
+                title="Remove the selected files from this product list and delete CreoPDM vault copies. Files in your original product folder are not deleted.">Remove from Product</button>
       </div>
     </div>
     {% endif %}
@@ -497,9 +497,9 @@
   </form>
 </dialog>
 
-<dialog id="project-dialog" class="dialog">
-  <form method="dialog" id="project-form">
-    <h2 id="project-dialog-title">New project</h2>
+<dialog id="product-dialog" class="dialog">
+  <form method="dialog" id="product-form">
+    <h2 id="product-dialog-title">New product</h2>
     <label>Name
       <input name="name" required maxlength="255" placeholder="Robot Arm">
     </label>
@@ -509,52 +509,52 @@
     <label>Description
       <textarea name="description" rows="3" maxlength="256" placeholder="Prototype robotic arm"></textarea>
     </label>
-    <div id="project-vault-fields" class="project-vault-fields">
+    <div id="product-vault-fields" class="product-vault-fields">
       <label>Vault/Workspace name
-        <input name="vault_folder" id="project-vault-folder" maxlength="200" autocomplete="off" spellcheck="false" placeholder="robot-arm">
+        <input name="vault_folder" id="product-vault-folder" maxlength="200" autocomplete="off" spellcheck="false" placeholder="robot-arm">
       </label>
       <div class="checkbox-row">
-        <input type="checkbox" name="use_hash" id="project-use-hash" checked>
-        <label for="project-use-hash">Use hash</label>
+        <input type="checkbox" name="use_hash" id="product-use-hash" checked>
+        <label for="product-use-hash">Use hash</label>
       </div>
-      <p class="muted small" id="project-vault-hint">Folder under the vaults directory. With Use hash, the UUID is locked in. Uncheck to type your own name (no spaces).</p>
+      <p class="muted small" id="product-vault-hint">Folder under the vaults directory. With Use hash, the UUID is locked in. Uncheck to type your own name (no spaces).</p>
     </div>
-    <p class="error" id="project-error" hidden></p>
+    <p class="error" id="product-error" hidden></p>
     <div class="dialog-actions">
-      <button type="button" class="btn" value="cancel" id="project-cancel">Cancel</button>
-      <button type="submit" class="btn btn-primary" id="project-submit">Create</button>
+      <button type="button" class="btn" value="cancel" id="product-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="product-submit">Create</button>
     </div>
   </form>
 </dialog>
 
-<dialog id="delete-project-dialog" class="dialog">
-  <form method="dialog" id="delete-project-form">
-    <h2>Delete this project</h2>
-    <p>This deletes the CreoPDM vault, including working copies and Git history, and unregisters the project.</p>
+<dialog id="delete-product-dialog" class="dialog">
+  <form method="dialog" id="delete-product-form">
+    <h2>Delete this product</h2>
+    <p>This deletes the CreoPDM vault, including working copies and Git history, and unregisters the product.</p>
     <p><strong>Original files you imported from are not deleted.</strong></p>
-    <label>Type the project name to confirm
-      <input name="confirm_name" id="delete-project-confirm" required maxlength="255" autocomplete="off">
+    <label>Type the product name to confirm
+      <input name="confirm_name" id="delete-product-confirm" required maxlength="255" autocomplete="off">
     </label>
-    <div class="project-vault-fields">
+    <div class="product-vault-fields">
       <div class="checkbox-row">
         <input type="checkbox" name="delete_local_workspace" id="delete-local-workspace" checked>
         <label for="delete-local-workspace">Also delete local workspace on this PC</label>
       </div>
     </div>
     <p class="muted small">Removes the creopdm-agent cache folder. This can fail if Creo still has files open or its working directory is set to that folder.</p>
-    <p class="error" id="delete-project-error" hidden></p>
+    <p class="error" id="delete-product-error" hidden></p>
     <div class="dialog-actions">
-      <button type="button" class="btn" id="delete-project-cancel">Cancel</button>
-      <button type="submit" class="btn btn-danger">Delete project</button>
+      <button type="button" class="btn" id="delete-product-cancel">Cancel</button>
+      <button type="submit" class="btn btn-danger">Delete product</button>
     </div>
   </form>
 </dialog>
 
 <dialog id="add-dialog" class="dialog">
-  <form method="dialog" id="add-form" {% if selected %}data-project="{{ selected.uuid }}"{% endif %} data-native-picker="{{ '1' if native_picker else '0' }}" data-add-mode="files">
+  <form method="dialog" id="add-form" {% if selected %}data-product="{{ selected.uuid }}"{% endif %} data-native-picker="{{ '1' if native_picker else '0' }}" data-add-mode="files">
     <h2 id="add-dialog-title">Add files</h2>
     <p class="muted" id="add-dialog-lead">Files are copied into the vault. Numbered names such as <code>shaft.prt.3</code> keep only the latest save.</p>
-    <p class="muted small" id="add-folder-label">{% if selected %}Project: {{ selected.name }}{% endif %}</p>
+    <p class="muted small" id="add-folder-label">{% if selected %}Product: {{ selected.name }}{% endif %}</p>
     <div class="dropzone" id="dropzone">
       <div class="dropzone-actions">
         <button type="button" class="btn" id="choose-workspace-files">Choose Files</button>
@@ -577,9 +577,9 @@
 </dialog>
 
 <dialog id="create-folder-dialog" class="dialog">
-  <form method="dialog" id="create-folder-form" {% if selected %}data-project="{{ selected.uuid }}"{% endif %}>
+  <form method="dialog" id="create-folder-form" {% if selected %}data-product="{{ selected.uuid }}"{% endif %}>
     <h2>Create folder</h2>
-    <p class="muted small" id="create-folder-location">Creates a folder in the current project location.</p>
+    <p class="muted small" id="create-folder-location">Creates a folder in the current product location.</p>
     <label>Folder name
       <input name="name" id="create-folder-name" required maxlength="200" autocomplete="off" spellcheck="false" placeholder="Drawings">
     </label>
@@ -606,7 +606,7 @@
     <div id="checkin-new-wrap" hidden>
       <p class="muted small" id="checkin-new-help">New files in the vault. They are not added unless you check them.</p>
       <div class="checkin-new-pick" id="checkin-new-pick" hidden>
-        <span class="muted small">Add to project:</span>
+        <span class="muted small">Add to product:</span>
         <label class="choice"><input type="radio" name="checkin-new-pick" value="none" checked> None</label>
         <label class="choice"><input type="radio" name="checkin-new-pick" value="all"> All</label>
       </div>

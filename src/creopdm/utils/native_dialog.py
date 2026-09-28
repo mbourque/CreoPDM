@@ -103,7 +103,7 @@ def native_picker_available() -> bool:
     return _is_windows()
 
 
-def pick_files(initial_dir: Path, title: str = "Add files to the project") -> list[Path]:
+def pick_files(initial_dir: Path, title: str = "Add files to the product") -> list[Path]:
     """Open a native multi-select file dialog starting in initial_dir.
 
     Does not change the PDM process working directory.
@@ -130,7 +130,7 @@ def pick_files(initial_dir: Path, title: str = "Add files to the project") -> li
             ) from exc
 
 
-def pick_folder(initial_dir: Path, title: str = "Choose project folder") -> Path | None:
+def pick_folder(initial_dir: Path, title: str = "Choose product folder") -> Path | None:
     """Open a native folder picker. Returns None if the user cancels."""
     if not _is_windows():
         logger.info("Native folder picker is not available; use the browser folder chooser")
@@ -177,10 +177,10 @@ def _dialog_owner_hwnd():
         return 0
 
 
-def default_project_location_start() -> Path:
-    """Sensible starting folder for the New Project location picker."""
+def default_product_location_start() -> Path:
+    """Sensible starting folder for the New Product location picker."""
     for candidate in (
-        Path(r"D:\Engineering\Projects"),
+        Path(r"D:\Engineering\Products"),
         Path.home() / "Documents",
         Path.home(),
     ):

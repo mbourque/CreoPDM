@@ -78,8 +78,8 @@ def test_plan_skips_matching_hash_keeps_newer_save(tmp_path):
 
 def test_agent_materialize_zip_skips_when_cache_matches(tmp_path, monkeypatch):
     root = tmp_path / "cache"
-    project_id = "proj-zip"
-    cache = root / project_id
+    product_id = "proj-zip"
+    cache = root / product_id
     cache.mkdir(parents=True)
     body = b"already-local"
     digest = hashlib.sha256(body).hexdigest()
@@ -112,7 +112,7 @@ def test_agent_materialize_zip_skips_when_cache_matches(tmp_path, monkeypatch):
             assert "agent-cache-manifest" in url
             return FakeResponse(
                 {
-                    "project_id": project_id,
+                    "product_id": product_id,
                     "items": [
                         {
                             "object_id": "a",
@@ -134,7 +134,7 @@ def test_agent_materialize_zip_skips_when_cache_matches(tmp_path, monkeypatch):
             "/materialize-zip",
             json={
                 "pdm_url": "http://pdm.example:52113",
-                "project_id": project_id,
+                "product_id": product_id,
                 "object_ids": ["a"],
             },
         )
@@ -148,7 +148,7 @@ def test_agent_materialize_zip_skips_when_cache_matches(tmp_path, monkeypatch):
 
 def test_agent_materialize_zip_downloads_and_extracts(tmp_path, monkeypatch):
     root = tmp_path / "cache"
-    project_id = "proj-zip"
+    product_id = "proj-zip"
     settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
     app = create_agent_app(settings)
     buf = io.BytesIO()
@@ -199,7 +199,7 @@ def test_agent_materialize_zip_downloads_and_extracts(tmp_path, monkeypatch):
             seen.append(url)
             return FakeResponse(
                 {
-                    "project_id": project_id,
+                    "product_id": product_id,
                     "items": [
                         {
                             "object_id": "a",
@@ -233,7 +233,7 @@ def test_agent_materialize_zip_downloads_and_extracts(tmp_path, monkeypatch):
             "/materialize-zip",
             json={
                 "pdm_url": "http://pdm.example:52113",
-                "project_id": project_id,
+                "product_id": product_id,
                 "object_ids": ["a", "b"],
             },
         )

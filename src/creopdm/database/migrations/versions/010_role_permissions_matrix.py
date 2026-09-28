@@ -20,13 +20,13 @@ depends_on: Union[str, Sequence[str], None] = None
 _PERMISSIONS = (
     ("users.manage", "Create, edit, and disable users"),
     ("settings.manage", "Change global CreoPDM settings"),
-    ("projects.create", "Create projects"),
-    ("projects.edit", "Edit project properties"),
-    ("projects.delete", "Delete or forget projects"),
-    ("objects.add", "Add files and folders to projects"),
+    ("products.create", "Create products"),
+    ("products.edit", "Edit product properties"),
+    ("products.delete", "Delete or forget products"),
+    ("objects.add", "Add files and folders to products"),
     ("objects.checkout", "Check out objects and undo own checkout"),
     ("objects.checkin", "Check in objects"),
-    ("objects.remove", "Remove objects from projects"),
+    ("objects.remove", "Remove objects from products"),
     ("objects.revert", "Restore an older version as the working version"),
     ("objects.metadata", "Update Creo metadata on objects"),
 )
@@ -34,8 +34,8 @@ _PERMISSIONS = (
 _ROLE_KEYS = {
     "Administrator": tuple(key for key, _ in _PERMISSIONS),
     "PDM Manager": (
-        "projects.create",
-        "projects.edit",
+        "products.create",
+        "products.edit",
         "objects.add",
         "objects.checkout",
         "objects.checkin",

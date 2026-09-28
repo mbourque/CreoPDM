@@ -1,4 +1,4 @@
-"""Project watch / email subscribe for activity notifications."""
+"""Product watch / email subscribe for activity notifications."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from sqlalchemy.orm import Session
 
 from creopdm.exceptions import ValidationAppError
 from creopdm.logging_setup import get_logger
-from creopdm.models.project import Project
-from creopdm.models.user import ProjectWatch, User
+from creopdm.models.product import Product
+from creopdm.models.user import ProductWatch, User
 from creopdm.services.notification_service import NotificationEvent, NotificationService
 from creopdm.utils.timefmt import format_local
 
-logger = get_logger("project_watch")
+logger = get_logger("product_watch")
 
 _MAX_FILES_IN_EMAIL = 40
 
@@ -40,7 +40,7 @@ def _usable_watch_email(raw: str | None) -> str | None:
     return email
 
 
-class ProjectWatchService:
+class ProductWatchService:
     def __init__(self, notifications: NotificationService) -> None:
         self._notifications = notifications
 
@@ -62,74 +62,74 @@ class ProjectWatchService:
         if not email_enabled:
             return False, "Email notifications are disabled."
         if user is None:
-            return False, "Sign in to watch a project."
+            return False, "Sign in to watch a product."
         try:
             email = _usable_watch_email(getattr(user, "email", None))
         except Exception:
             logger.exception("watch_eligibility could not read user email")
-            return False, "Project watch is temporarily unavailable."
+            return False, "Product watch is temporarily unavailable."
         if email is None:
             return (
                 False,
-                "Set a valid email address on your account before watching a project.",
+                "Set a valid email address on your account before watching a product.",
             )
         return True, None
 
-    def is_watching(self, db: Session, user_id: int, project_id: int) -> bool:
+    def is_watching(self, db: Session, user_id: int, product_id: int) -> bool:
         try:
             row = db.scalar(
-                select(ProjectWatch).where(
-                    ProjectWatch.user_id == user_id,
-                    ProjectWatch.project_id == project_id,
+                select(ProductWatch).where(
+                    ProductWatch.user_id == user_id,
+                    ProductWatch.product_id == product_id,
                 )
             )
             return row is not None
         except Exception:
-            # Missing project_watches table (migration not applied) must not 500 pages.
-            logger.exception("is_watching failed user_id=%s project_id=%s", user_id, project_id)
+            # Missing product_watches table (migration not applied) must not 500 pages.
+            logger.exception("is_watching failed user_id=%s product_id=%s", user_id, product_id)
             return False
 
-    def subscribe(self, db: Session, user: User, project: Project, *, email_enabled: bool) -> None:
+    def subscribe(self, db: Session, user: User, product: Product, *, email_enabled: bool) -> None:
         can, reason = self.watch_eligibility(user, email_enabled=email_enabled)
         if not can:
-            raise ValidationAppError(reason or "Cannot watch this project.")
-        if self.is_watching(db, user.id, project.id):
+            raise ValidationAppError(reason or "Cannot watch this product.")
+        if self.is_watching(db, user.id, product.id):
             return
-        db.add(ProjectWatch(user_id=user.id, project_id=project.id))
+        db.add(ProductWatch(user_id=user.id, product_id=product.id))
         db.flush()
         logger.info(
-            "project_watch subscribe user_id=%s project_id=%s project=%s",
+            "product_watch subscribe user_id=%s product_id=%s product=%s",
             user.id,
-            project.id,
-            project.uuid,
+            product.id,
+            product.uuid,
         )
 
-    def unsubscribe(self, db: Session, user: User, project: Project) -> None:
+    def unsubscribe(self, db: Session, user: User, product: Product) -> None:
         db.execute(
-            delete(ProjectWatch).where(
-                ProjectWatch.user_id == user.id,
-                ProjectWatch.project_id == project.id,
+            delete(ProductWatch).where(
+                ProductWatch.user_id == user.id,
+                ProductWatch.product_id == product.id,
             )
         )
         db.flush()
         logger.info(
-            "project_watch unsubscribe user_id=%s project_id=%s project=%s",
+            "product_watch unsubscribe user_id=%s product_id=%s product=%s",
             user.id,
-            project.id,
-            project.uuid,
+            product.id,
+            product.uuid,
         )
 
     def list_watcher_emails(
         self,
         db: Session,
-        project_id: int,
+        product_id: int,
         *,
         exclude_user_id: int | None = None,
     ) -> list[str]:
         stmt = (
             select(User.email, User.id)
-            .join(ProjectWatch, ProjectWatch.user_id == User.id)
-            .where(ProjectWatch.project_id == project_id)
+            .join(ProductWatch, ProductWatch.user_id == User.id)
+            .where(ProductWatch.product_id == product_id)
         )
         if exclude_user_id is not None:
             stmt = stmt.where(User.id != exclude_user_id)
@@ -149,11 +149,11 @@ class ProjectWatchService:
             unique.append(addr)
         return unique
 
-    def notify_project_activity(
+    def notify_product_activity(
         self,
         db: Session,
         *,
-        project: Project,
+        product: Product,
         action: str,
         actor: User | None,
         actor_label: str,
@@ -164,17 +164,17 @@ class ProjectWatchService:
     ) -> None:
         if not email_enabled:
             logger.info(
-                "project_activity skip project=%s action=%s: email notifications disabled",
-                project.uuid,
+                "product_activity skip product=%s action=%s: email notifications disabled",
+                product.uuid,
                 action,
             )
             return
         exclude_id = actor.id if actor is not None else None
-        recipients = self.list_watcher_emails(db, project.id, exclude_user_id=exclude_id)
+        recipients = self.list_watcher_emails(db, product.id, exclude_user_id=exclude_id)
         if not recipients:
             logger.info(
-                "project_activity skip project=%s action=%s actor_id=%s: no watcher recipients",
-                project.uuid,
+                "product_activity skip product=%s action=%s actor_id=%s: no watcher recipients",
+                product.uuid,
                 action,
                 exclude_id,
             )
@@ -185,12 +185,12 @@ class ProjectWatchService:
         when = format_local(datetime.now(timezone.utc))
         base = (base_url or "").rstrip("/")
         if object_uuid and len(files) == 1:
-            link = f"{base}/projects/{project.uuid}/objects/{object_uuid}"
+            link = f"{base}/products/{product.uuid}/objects/{object_uuid}"
         else:
-            link = f"{base}/?project={project.uuid}"
+            link = f"{base}/?product={product.uuid}"
 
         if not files:
-            files_block = "(project settings)"
+            files_block = "(product settings)"
         elif len(files) == 1:
             files_block = files[0]
         else:
@@ -201,9 +201,9 @@ class ProjectWatchService:
                 lines += f"\n  … and {extra} more"
             files_block = f"{len(files)} files:\n{lines}"
 
-        subject = f"CreoPDM: {action} in {project.name}"
+        subject = f"CreoPDM: {action} in {product.name}"
         message = (
-            f"Project: {project.name}\n"
+            f"Product: {product.name}\n"
             f"Action: {action}\n"
             f"By: {actor_label}\n"
             f"When: {when}\n"
@@ -211,14 +211,14 @@ class ProjectWatchService:
             f"\nOpen: {link}\n"
         )
         logger.info(
-            "project_activity notify project=%s action=%s recipients=%s files=%s",
-            project.uuid,
+            "product_activity notify product=%s action=%s recipients=%s files=%s",
+            product.uuid,
             action,
             recipients,
             files[:5],
         )
         self._notifications.notify(
-            NotificationEvent.PROJECT_ACTIVITY,
+            NotificationEvent.PRODUCT_ACTIVITY,
             subject=subject,
             message=message,
             to=recipients,

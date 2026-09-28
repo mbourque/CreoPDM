@@ -27,7 +27,7 @@
   <button type="button" class="object-open bom-name" data-uuid="{{ node.object_id }}"
           title="{% if node.open_as %}Open generic {{ node.open_as }}{% else %}Open {{ node.filename }}{% endif %}">{{ node.filename or "—" }}</button>
   {% else %}
-  <span class="bom-name" title="Not in this project">{{ node.filename or "—" }}</span>
+  <span class="bom-name" title="Not in this product">{{ node.filename or "—" }}</span>
   {% endif %}
 {% endmacro %}
 {% macro bom_tree(nodes, depth=0) %}
@@ -64,8 +64,8 @@
 {% endmacro %}
 <article class="detail">
   <nav class="crumb">
-    <a href="/?project={{ project.uuid }}"
-       title="{% if project.number %}{{ project.number }}{% else %}Local{% endif %}{% if project.description %} — {{ project.description }}{% endif %}">{{ project.name }}</a>
+    <a href="/?product={{ product.uuid }}"
+       title="{% if product.number %}{{ product.number }}{% else %}Local{% endif %}{% if product.description %} — {{ product.description }}{% endif %}">{{ product.name }}</a>
     <span>/</span>
     <span>{{ object.filename }}</span>
   </nav>
@@ -362,8 +362,8 @@
     {% if bom %}
     <p class="muted small">Model tree — top assembly first, subassemblies and parts indented.</p>
     <p class="muted small bom-legend">
-      <span class="bom-legend-in">Linked names</span> are in this project (click to open).
-      <span class="bom-legend-out">Plain names</span> are not in the project yet.
+      <span class="bom-legend-in">Linked names</span> are in this product (click to open).
+      <span class="bom-legend-out">Plain names</span> are not in the product yet.
     </p>
     <ul class="bom-tree bom-tree-root">{{ bom_tree(bom) }}</ul>
     {% else %}
@@ -377,8 +377,8 @@
     {% if bom %}
     <p class="muted small">Indented BOM with quantity at each level (same hierarchy as Structure).</p>
     <p class="muted small bom-legend">
-      <span class="bom-legend-in">Linked names</span> are in this project (click to open).
-      <span class="bom-legend-out">Plain names</span> are not in the project yet.
+      <span class="bom-legend-in">Linked names</span> are in this product (click to open).
+      <span class="bom-legend-out">Plain names</span> are not in the product yet.
     </p>
     <table class="grid">
       <thead>
@@ -419,7 +419,7 @@
 
   <section class="tab-panel" id="panel-where-used" hidden
            data-object-id="{{ object.uuid }}"
-           data-project-id="{{ project.uuid }}"
+           data-product-id="{{ product.uuid }}"
            data-lazy-where-used="1">
     <div id="where-used-host">
     {% if where_used %}
@@ -437,7 +437,7 @@
         {% for row in where_used %}
         <tr>
           <td class="filename-cell">
-            <a href="/projects/{{ project.uuid }}/objects/{{ row.object_id }}">{{ row.filename }}</a>
+            <a href="/products/{{ product.uuid }}/objects/{{ row.object_id }}">{{ row.filename }}</a>
             {% if row.relative_path and row.relative_path != row.filename %}
             <div class="muted small">{{ row.relative_path }}</div>
             {% endif %}
@@ -456,7 +456,7 @@
     {% endif %}
     </div>
     <p class="muted small" style="margin-top:0.75rem">
-      After a bulk Add, use project settings → <strong>Rebuild Where Used</strong> once so links are stored in the database (fast SQL). Creo Check In still refreshes BOM when you capture metadata.
+      After a bulk Add, use product settings → <strong>Rebuild Where Used</strong> once so links are stored in the database (fast SQL). Creo Check In still refreshes BOM when you capture metadata.
     </p>
   </section>
 
@@ -530,36 +530,36 @@
 
 <footer class="toolbar" id="detail-toolbar">
   <div class="toolbar-actions">
-    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
+    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this product's local workspace (creopdm-agent cache on this PC).">
       <button type="button" class="btn" id="set-creo-dir-btn" data-workspace="{{ workspace_path }}" disabled hidden>Set Working Directory</button>
     </span>
     <div class="toolbar-menu" id="open-menu" hidden>
       <button type="button" class="btn toolbar-menu-toggle" id="open-menu-btn" hidden
               aria-haspopup="menu" aria-expanded="false"
-              title="Open this file, or open this project’s local workspace folder.">Open ▾</button>
+              title="Open this file, or open this product’s local workspace folder.">Open ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-btn" hidden
                 data-uuid="{{ object.uuid }}"
                 title="Open this file in Creo or its Windows associated program.">Open…</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-workspace-btn" hidden
-                data-project="{{ project.uuid }}" data-vault-folder="{{ project.vault_folder or project.uuid }}" data-folder="{{ workspace_folder }}"
-                title="Open this project’s local workspace on this PC (creopdm-agent cache). Requires creopdm-agent.">Open workspace…</button>
+                data-product="{{ product.uuid }}" data-vault-folder="{{ product.vault_folder or product.uuid }}" data-folder="{{ workspace_folder }}"
+                title="Open this product’s local workspace on this PC (creopdm-agent cache). Requires creopdm-agent.">Open workspace…</button>
       </div>
     </div>
     {% if can_checkout %}
     <div class="toolbar-menu" id="checkout-menu" hidden>
       <button type="button" class="btn toolbar-menu-toggle" id="checkout-menu-btn" hidden
               aria-haspopup="menu" aria-expanded="false"
-              title="Check out this file or the project, or undo your checkout.">Checkout ▾</button>
+              title="Check out this file or the product, or undo your checkout.">Checkout ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-btn" hidden
                 data-uuid="{{ object.uuid }}"
                 {% if not object.can_checkout %}disabled{% endif %}
                 title="Check out this file and download it to the local workspace.">Checkout</button>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-project-btn" hidden
-                data-project="{{ project.uuid }}" data-checkoutable="{{ checkoutable_count|default(0) }}"
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-product-btn" hidden
+                data-product="{{ product.uuid }}" data-checkoutable="{{ checkoutable_count|default(0) }}"
                 {% if (checkoutable_count|default(0)) == 0 %}disabled{% endif %}
-                title="Check out every file in this project that is available (not locked by someone else).">Checkout project</button>
+                title="Check out every file in this product that is available (not locked by someone else).">Checkout product</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="undo-btn" hidden
                 data-uuid="{{ object.uuid }}"
                 {% if not object.owned_by_me %}disabled{% endif %}
@@ -571,17 +571,17 @@
     <div class="toolbar-menu" id="checkin-menu" hidden>
       <button type="button" class="btn toolbar-menu-toggle" id="checkin-menu-btn" hidden
               aria-haspopup="menu" aria-expanded="false"
-              data-project="{{ project.uuid }}"
+              data-product="{{ product.uuid }}"
               data-pending-saves="{{ pending_saves|default(0) }}"
               data-new-files="{{ new_workspace_files|default(0) }}"
-              title="Check in this file, or everything pending in this project.">Check In ▾</button>
+              title="Check in this file, or everything pending in this product.">Check In ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-project-btn" hidden
-                data-project="{{ project.uuid }}" data-checkout-count="{{ checkout_count|default(0) }}"
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-product-btn" hidden
+                data-product="{{ product.uuid }}" data-checkout-count="{{ checkout_count|default(0) }}"
                 {% if (pending_saves|default(0)) == 0 and (new_workspace_files|default(0)) == 0 and (checkout_count|default(0)) == 0 %}disabled{% endif %}
-                title="Check in modified files and new files, and release unchanged checkouts so the project looks fully checked in.">Check in project…</button>
+                title="Check in modified files and new files, and release unchanged checkouts so the product looks fully checked in.">Check in product…</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-btn" hidden
-                data-uuid="{{ object.uuid }}" data-project="{{ project.uuid }}"
+                data-uuid="{{ object.uuid }}" data-product="{{ product.uuid }}"
                 data-pending-saves="{{ pending_saves|default(0) }}"
                 data-new-files="{{ new_workspace_files|default(0) }}"
                 {% if not object.can_checkin and not workspace_pending %}disabled{% endif %}
@@ -593,22 +593,22 @@
     <span class="toolbar-tip" id="revert-version-tip" title="Select an older History row, then restore that version’s content and filename to the vault and local workspace as a new check-in.">
       <button type="button" class="btn btn-danger" id="revert-version-btn" disabled hidden
               data-object="{{ object.uuid }}"
-              data-project-name="{{ project.name }}">Revert to selected…</button>
+              data-product-name="{{ product.name }}">Revert to selected…</button>
     </span>
     {% endif %}
     {% if can_remove_objects %}
     <div class="toolbar-menu" id="remove-menu" hidden>
       <button type="button" class="btn btn-danger toolbar-menu-toggle" id="remove-menu-btn" hidden
               aria-haspopup="menu" aria-expanded="false"
-              title="Remove vault copies or remove this file from the project.">Remove ▾</button>
+              title="Remove vault copies or remove this file from the product.">Remove ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn" hidden
-                data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}"
-                title="Delete CreoPDM vault copies of this file. The original in your project folder is not deleted. If you have it checked out, that checkout is cancelled.">Remove from Vault</button>
-        <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-project-btn" hidden
-                data-uuid="{{ object.uuid }}" data-project-name="{{ project.name }}"
+                data-uuid="{{ object.uuid }}" data-product-name="{{ product.name }}"
+                title="Delete CreoPDM vault copies of this file. The original in your product folder is not deleted. If you have it checked out, that checkout is cancelled.">Remove from Vault</button>
+        <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-product-btn" hidden
+                data-uuid="{{ object.uuid }}" data-product-name="{{ product.name }}"
                 data-relative-path="{{ object.relative_path }}" data-filename="{{ object.filename }}"
-                title="Remove this file from the project list and delete CreoPDM vault copies. The original in your project folder is not deleted.">Remove from Project</button>
+                title="Remove this file from the product list and delete CreoPDM vault copies. The original in your product folder is not deleted.">Remove from Product</button>
       </div>
     </div>
     {% endif %}
@@ -638,7 +638,7 @@
     <div id="checkin-new-wrap" hidden>
       <p class="muted small" id="checkin-new-help">New files in the vault. They are not added unless you check them.</p>
       <div class="checkin-new-pick" id="checkin-new-pick" hidden>
-        <span class="muted small">Add to project:</span>
+        <span class="muted small">Add to product:</span>
         <label class="choice"><input type="radio" name="checkin-new-pick" value="none" checked> None</label>
         <label class="choice"><input type="radio" name="checkin-new-pick" value="all"> All</label>
       </div>

@@ -63,7 +63,7 @@ def test_powershell_start_passes_path_in_env(tmp_path: Path, monkeypatch):
 
 
 def test_open_windows_folder_creates_missing_and_explores(tmp_path: Path, monkeypatch):
-    """Empty project: cache folder may not exist until Open workspace creates it."""
+    """Empty product: cache folder may not exist until Open workspace creates it."""
     folder = tmp_path / "cache" / "proj-empty"
     assert not folder.exists()
     explored: list[str] = []

@@ -1,7 +1,7 @@
 """Alembic migration: users, roles, permissions for session auth.
 
 Revision ID: 009_auth_users
-Revises: 008_project_vault_folder
+Revises: 008_product_vault_folder
 Create Date: 2026-09-27
 """
 
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "009_auth_users"
-down_revision: Union[str, None] = "008_project_vault_folder"
+down_revision: Union[str, None] = "008_product_vault_folder"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -22,7 +22,7 @@ _BUILTIN_ROLES = (
     ("Administrator", "Full system administration access."),
     ("PDM Manager", "Manage engineering data without full server administration."),
     ("Engineer", "Normal CAD/PDM authoring user."),
-    ("Viewer", "Read-only access to assigned projects."),
+    ("Viewer", "Read-only access to assigned products."),
 )
 
 _PERMISSIONS = (

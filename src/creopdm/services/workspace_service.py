@@ -13,17 +13,17 @@ from creopdm.constants import (
     APP_NAME,
     APP_SCHEMA_VERSION,
     DEFAULT_BRANCH,
-    PROJECT_JSON_NAME,
-    PROJECT_MARKER_DIR,
+    PRODUCT_JSON_NAME,
+    PRODUCT_MARKER_DIR,
     SCHEMA_VERSION_NAME,
-    STANDARD_PROJECT_FOLDERS,
+    STANDARD_PRODUCT_FOLDERS,
 )
 from creopdm.config import ConfigManager
 from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import PathValidationError, RepositoryError, WorkspaceConflictError
 from creopdm.logging_setup import get_logger
 from creopdm.models.object import EngineeringObject
-from creopdm.models.project import Project
+from creopdm.models.product import Product
 from creopdm.services.git_service import GitService, GitStatus
 from creopdm.utils.classify import classify_filename
 from creopdm.utils.files import (
@@ -80,30 +80,30 @@ class WorkspaceService:
 
     @staticmethod
     def _hide_bookkeeping(vault: Path) -> None:
-        set_hidden(vault / PROJECT_MARKER_DIR)
+        set_hidden(vault / PRODUCT_MARKER_DIR)
         set_hidden(vault / ".gitignore")
 
     def root_for(self, vault_folder: str) -> Path:
-        path = self._config.workspace_for_project(vault_folder)
+        path = self._config.workspace_for_product(vault_folder)
         path.mkdir(parents=True, exist_ok=True)
         return path
 
-    def vault_folder_name(self, project: Project) -> str:
-        return (project.vault_folder or "").strip() or project.uuid
+    def vault_folder_name(self, product: Product) -> str:
+        return (product.vault_folder or "").strip() or product.uuid
 
-    def vault_for(self, project: Project) -> Path:
-        return self.root_for(self.vault_folder_name(project))
+    def vault_for(self, product: Product) -> Path:
+        return self.root_for(self.vault_folder_name(product))
 
-    def _vault_root(self, project_or_folder: Project | str) -> Path:
-        if isinstance(project_or_folder, Project):
-            return self.vault_for(project_or_folder)
-        return self.root_for(project_or_folder)
+    def _vault_root(self, product_or_folder: Product | str) -> Path:
+        if isinstance(product_or_folder, Product):
+            return self.vault_for(product_or_folder)
+        return self.root_for(product_or_folder)
 
-    def explorer_directory(self, project_or_folder: Project | str, folder: str = "") -> Path:
-        """Workspace folder currently shown in Files, or the project root."""
+    def explorer_directory(self, product_or_folder: Product | str, folder: str = "") -> Path:
+        """Workspace folder currently shown in Files, or the product root."""
         from creopdm.utils.folders import normalize_folder_query
 
-        root = self._vault_root(project_or_folder)
+        root = self._vault_root(product_or_folder)
         current = normalize_folder_query(folder)
         if not current:
             return root
@@ -115,7 +115,7 @@ class WorkspaceService:
 
     def create_folder(
         self,
-        project: Project,
+        product: Product,
         *,
         name: str,
         parent_folder: str = "",
@@ -139,7 +139,7 @@ class WorkspaceService:
         parent = normalize_folder_query(parent_folder)
         relative = f"{parent}/{raw_name}" if parent else raw_name
         relative = assert_safe_relative_path(relative).as_posix()
-        vault = self.vault_for(project)
+        vault = self.vault_for(product)
         target = ensure_within(vault, vault / relative)
         if target.exists() and not target.is_dir():
             raise PathValidationError(
@@ -165,12 +165,12 @@ class WorkspaceService:
             self._git.stage_files(vault, [keep_rel])
             note = (comment or "").strip() or f"Create folder {relative}"
             self._git.commit(vault, note, user)
-        logger.info("Created project folder %s", relative)
+        logger.info("Created product folder %s", relative)
         return relative
 
-    def remove_project_folder(
+    def remove_product_folder(
         self,
-        project: Project,
+        product: Product,
         folder: str,
         user: UserIdentity,
     ) -> str:
@@ -181,7 +181,7 @@ class WorkspaceService:
         if not relative:
             raise PathValidationError("A folder path is required to remove a folder.")
         relative = assert_safe_relative_path(relative).as_posix()
-        vault = self.vault_for(project)
+        vault = self.vault_for(product)
         target = ensure_within(vault, vault / relative)
         if not target.exists():
             return relative
@@ -207,18 +207,18 @@ class WorkspaceService:
             except Exception:
                 logger.exception("Could not commit removal of folder %s", relative)
                 # Disk tree is already gone; avoid failing the whole remove.
-        logger.info("Removed project folder %s (%s tracked path(s))", relative, len(tracked))
+        logger.info("Removed product folder %s (%s tracked path(s))", relative, len(tracked))
         return relative
 
     def list_immediate_vault_folders(
         self,
-        project: Project,
+        product: Product,
         current_folder: str = "",
     ) -> list[str]:
         """Immediate subdirectory names under the vault folder view (disk)."""
         from creopdm.utils.folders import normalize_folder_query
 
-        root = self.explorer_directory(project, current_folder)
+        root = self.explorer_directory(product, current_folder)
         if not root.is_dir():
             return []
         skip = {".git", ".creopdm", "__pycache__"}
@@ -234,26 +234,26 @@ class WorkspaceService:
             return []
         return sorted(names, key=str.lower)
 
-    def leftover_source(self, project: Project) -> Path | None:
+    def leftover_source(self, product: Product) -> Path | None:
         """Old Creo folder recorded before Git lived in the workspace."""
-        raw = (project.repository_path or "").strip()
+        raw = (product.repository_path or "").strip()
         if not raw:
             return None
         path = Path(raw)
         try:
-            if path.resolve() == self.vault_for(project).resolve():
+            if path.resolve() == self.vault_for(product).resolve():
                 return None
         except OSError:
             return path
         return path
 
-    def location_for(self, project: Project) -> Path | None:
-        return self.leftover_source(project)
+    def location_for(self, product: Product) -> Path | None:
+        return self.leftover_source(product)
 
-    def ensure_vault(self, project: Project) -> Path:
+    def ensure_vault(self, product: Product) -> Path:
         """Git lives in the workspace. Move leftover source-folder repos here once."""
-        vault = self.vault_for(project)
-        location = self.leftover_source(project)
+        vault = self.vault_for(product)
+        location = self.leftover_source(product)
         git = self._git
         if git is None:
             self._hide_bookkeeping(vault)
@@ -281,29 +281,29 @@ class WorkspaceService:
         self._hide_bookkeeping(vault)
         return vault
 
-    def init_vault(self, vault_folder: str, project_uuid: str, name: str, user: UserIdentity) -> Path:
+    def init_vault(self, vault_folder: str, product_uuid: str, name: str, user: UserIdentity) -> Path:
         if self._git is None:
-            raise RepositoryError("Git is required to create a project but was not found on PATH.")
+            raise RepositoryError("Git is required to create a product but was not found on PATH.")
         vault = self.root_for(vault_folder)
         self._git.init_repository(vault, DEFAULT_BRANCH)
         self.sync_gitignore(vault)
-        self._write_project_marker(vault, project_uuid, name, None, None)
-        with_files = [".gitignore", PROJECT_MARKER_DIR]
+        self._write_product_marker(vault, product_uuid, name, None, None)
+        with_files = [".gitignore", PRODUCT_MARKER_DIR]
         self._git.stage_files(vault, with_files)
-        self._git.commit(vault, f"Initialize project {name}", user)
+        self._git.commit(vault, f"Initialize product {name}", user)
         return vault
 
     def workspace_relative(self, obj: EngineeringObject) -> str:
-        """Keep the project's folder layout in the workspace."""
+        """Keep the product's folder layout in the workspace."""
         relative = str(obj.relative_path or obj.filename).replace("\\", "/")
         return assert_safe_relative_path(relative).as_posix()
 
     def _workspace_search_dirs(
         self,
-        project_or_folder: Project | str,
+        product_or_folder: Product | str,
         obj: EngineeringObject | None = None,
     ) -> list[Path]:
-        root = self._vault_root(project_or_folder)
+        root = self._vault_root(product_or_folder)
         ordered: list[Path] = []
         seen: set[str] = set()
 
@@ -315,25 +315,25 @@ class WorkspaceService:
             ordered.append(path)
 
         if obj is not None:
-            add(self.workspace_file_path(project_or_folder, obj).parent)
+            add(self.workspace_file_path(product_or_folder, obj).parent)
         add(root)
-        for folder in STANDARD_PROJECT_FOLDERS:
+        for folder in STANDARD_PRODUCT_FOLDERS:
             leftover = root / folder
             if leftover.is_dir():
                 add(leftover)
         return ordered
 
-    def workspace_file_path(self, project_or_folder: Project | str, obj: EngineeringObject) -> Path:
-        return self.file_path(project_or_folder, self.workspace_relative(obj))
+    def workspace_file_path(self, product_or_folder: Product | str, obj: EngineeringObject) -> Path:
+        return self.file_path(product_or_folder, self.workspace_relative(obj))
 
-    def file_path(self, project_or_folder: Project | str, relative_path: str) -> Path:
+    def file_path(self, product_or_folder: Product | str, relative_path: str) -> Path:
         relative = assert_safe_relative_path(relative_path)
-        root = self._vault_root(project_or_folder)
+        root = self._vault_root(product_or_folder)
         return ensure_within(root, root / relative)
 
-    def repository_file(self, project: Project, relative_path: str) -> Path:
+    def repository_file(self, product: Product, relative_path: str) -> Path:
         relative = assert_safe_relative_path(relative_path)
-        root = self.vault_for(project)
+        root = self.vault_for(product)
         return ensure_within(root, root / relative)
 
     @staticmethod
@@ -357,18 +357,18 @@ class WorkspaceService:
 
     def materialize(
         self,
-        project: Project,
+        product: Product,
         obj: EngineeringObject,
         writable: bool,
         overwrite_modified: bool = False,
         keep_local: bool = False,
     ) -> Path:
-        source = self.repository_file(project, obj.relative_path)
+        source = self.repository_file(product, obj.relative_path)
         if not source.is_file():
             source = self._case_insensitive_file(source)
         if not source.is_file():
-            self._restore_tracked(project, obj.relative_path)
-            source = self.repository_file(project, obj.relative_path)
+            self._restore_tracked(product, obj.relative_path)
+            source = self.repository_file(product, obj.relative_path)
             if not source.is_file():
                 source = self._case_insensitive_file(source)
         if not source.is_file():
@@ -376,7 +376,7 @@ class WorkspaceService:
                 f"Repository file is missing: {obj.filename}",
                 details={"relative_path": obj.relative_path},
             )
-        destination = self.workspace_file_path(project, obj)
+        destination = self.workspace_file_path(product, obj)
         extras = self._cad_extensions()
         latest = CreoFileManager.latest_in_directory(
             destination.parent, obj.filename, extras
@@ -423,13 +423,13 @@ class WorkspaceService:
         self._try_set_mode(destination, writable)
         return destination
 
-    def locate_content(self, project_or_folder: Project | str, obj: EngineeringObject) -> Path:
+    def locate_content(self, product_or_folder: Product | str, obj: EngineeringObject) -> Path:
         extras = self._cad_extensions()
-        for directory in self._workspace_search_dirs(project_or_folder, obj):
+        for directory in self._workspace_search_dirs(product_or_folder, obj):
             latest = CreoFileManager.latest_in_directory(directory, obj.filename, extras)
             if latest is not None and latest.is_file():
                 return latest
-        destination = self.workspace_file_path(project_or_folder, obj)
+        destination = self.workspace_file_path(product_or_folder, obj)
         raise PathValidationError(
             f"Vault file not found for {obj.filename}.",
             details={"workspace": str(destination)},
@@ -437,7 +437,7 @@ class WorkspaceService:
 
     def stage_workspace_upload(
         self,
-        project: Project,
+        product: Product,
         obj: EngineeringObject,
         filename: str,
         data: bytes,
@@ -457,7 +457,7 @@ class WorkspaceService:
                 details={"filename": name, "expected": obj.filename},
             )
         relative = self.sibling_relative(obj, Path(name))
-        destination = self.file_path(project, relative)
+        destination = self.file_path(product, relative)
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.exists():
             set_file_writable(destination)
@@ -468,7 +468,7 @@ class WorkspaceService:
 
     def stage_new_workspace_file(
         self,
-        project: Project,
+        product: Product,
         relative_path: str,
         data: bytes,
     ) -> Path:
@@ -479,7 +479,7 @@ class WorkspaceService:
         name = Path(relative).name
         if self._is_ignored(name):
             raise PathValidationError(f"{name} is ignored and cannot be staged.")
-        destination = self.file_path(project, relative)
+        destination = self.file_path(product, relative)
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.exists():
             set_file_writable(destination)
@@ -488,14 +488,14 @@ class WorkspaceService:
         logger.info("Staged new vault file %s (%s bytes)", destination, len(data))
         return destination
 
-    def has_local_copy(self, project: Project, obj: EngineeringObject) -> bool:
-        return self.workspace_file_path(project, obj).is_file()
+    def has_local_copy(self, product: Product, obj: EngineeringObject) -> bool:
+        return self.workspace_file_path(product, obj).is_file()
 
-    def local_copy_uuids(self, project: Project, objects: list[EngineeringObject]) -> set[str]:
+    def local_copy_uuids(self, product: Product, objects: list[EngineeringObject]) -> set[str]:
         """UUIDs whose workspace files exist, from one directory walk."""
         if not objects:
             return set()
-        root = self.vault_for(project)
+        root = self.vault_for(product)
         names: set[str] = set()
         if root.is_dir():
             skip = {".git", ".creopdm", "__pycache__"}
@@ -512,33 +512,33 @@ class WorkspaceService:
                 found.add(obj.uuid)
         return found
 
-    def is_modified(self, project: Project, obj: EngineeringObject) -> bool:
+    def is_modified(self, product: Product, obj: EngineeringObject) -> bool:
         try:
-            path = self.locate_content(project, obj)
+            path = self.locate_content(product, obj)
         except PathValidationError:
             return False
         return self._file_modified(path, obj)
 
-    def _git_status(self, project: Project) -> GitStatus:
+    def _git_status(self, product: Product) -> GitStatus:
         empty = GitStatus(branch="main", dirty=False, staged=[], unstaged=[], untracked=[], raw="")
         if self._git is None:
             return empty
-        vault = self.vault_for(project)
+        vault = self.vault_for(product)
         if not self._git.is_repository(vault):
             return empty
         try:
             return self._git.status(vault)
         except Exception as exc:
-            logger.warning("git status failed for %s: %s", project.uuid, exc)
+            logger.warning("git status failed for %s: %s", product.uuid, exc)
             return empty
 
     def _status_lookups(
         self,
-        project: Project,
+        product: Product,
         status: GitStatus,
     ) -> tuple[list[str], Path, set[str], dict[str, list[Path]]]:
         extras = self._cad_extensions()
-        vault = self.vault_for(project)
+        vault = self.vault_for(product)
         dirty_paths = {item.replace("\\", "/") for item in (*status.staged, *status.unstaged)}
         untracked_by_logical: dict[str, list[Path]] = defaultdict(list)
         if status.dirty:
@@ -547,10 +547,10 @@ class WorkspaceService:
                 untracked_by_logical[key].append(vault / item)
         return extras, vault, dirty_paths, untracked_by_logical
 
-    def pending_workspace_save(self, project: Project, obj: EngineeringObject) -> dict[str, str | int | bool] | None:
+    def pending_workspace_save(self, product: Product, obj: EngineeringObject) -> dict[str, str | int | bool] | None:
         """Describe a workspace copy that is newer than the last checked-in version."""
         try:
-            path = self.locate_content(project, obj)
+            path = self.locate_content(product, obj)
         except PathValidationError:
             return None
         recorded = obj.filename
@@ -571,7 +571,7 @@ class WorkspaceService:
 
     def _pending_from_status(
         self,
-        project: Project,
+        product: Product,
         obj: EngineeringObject,
         status: GitStatus,
         extras: list[str] | None = None,
@@ -582,7 +582,7 @@ class WorkspaceService:
         if not status.dirty:
             return None
         if extras is None or vault is None or dirty_paths is None or untracked_by_logical is None:
-            extras, vault, dirty_paths, untracked_by_logical = self._status_lookups(project, status)
+            extras, vault, dirty_paths, untracked_by_logical = self._status_lookups(product, status)
         rel = obj.relative_path.replace("\\", "/")
         logical = CreoFileManager.logical_repo_path(rel, extras)
         siblings = [path for path in untracked_by_logical.get(logical, ()) if path.is_file()]
@@ -611,18 +611,18 @@ class WorkspaceService:
             "saved_at": stamp.strftime("%Y-%m-%d %H:%M"),
         }
 
-    def project_checkin_queue(
+    def product_checkin_queue(
         self,
-        project: Project,
+        product: Product,
         objects: list[EngineeringObject],
     ) -> dict[str, list]:
         """Files in the workspace that would be recorded on check-in."""
-        status = self._git_status(project)
-        extras, vault, dirty_paths, untracked_by_logical = self._status_lookups(project, status)
+        status = self._git_status(product)
+        extras, vault, dirty_paths, untracked_by_logical = self._status_lookups(product, status)
         saves: list[dict[str, str | int | bool]] = []
         for obj in objects:
             pending = self._pending_from_status(
-                project,
+                product,
                 obj,
                 status,
                 extras=extras,
@@ -641,15 +641,15 @@ class WorkspaceService:
                     "extension": obj.extension,
                 }
             )
-        return {"saves": saves, "new_files": self.list_untracked(project, objects, status)}
+        return {"saves": saves, "new_files": self.list_untracked(product, objects, status)}
 
     def watch_stamp(
         self,
-        project: Project,
+        product: Product,
         known_paths: list[tuple[str, str]] | None = None,
     ) -> dict[str, str | int]:
         """Fingerprint of git status so the UI can notice Creo saves without hashing files."""
-        status = self._git_status(project)
+        status = self._git_status(product)
         digest = hashlib.sha256(status.raw.encode("utf-8")).hexdigest()[:20]
         extras = self._cad_extensions()
         known = {
@@ -686,15 +686,15 @@ class WorkspaceService:
 
     def materialize_many(
         self,
-        session_objects: list[tuple[Project, EngineeringObject]],
+        session_objects: list[tuple[Product, EngineeringObject]],
     ) -> dict[str, list]:
         ok: list[dict[str, str]] = []
         failed: list[dict[str, str]] = []
-        for project, obj in session_objects:
+        for product, obj in session_objects:
             try:
-                if self.has_local_copy(project, obj):
+                if self.has_local_copy(product, obj):
                     continue
-                path = self.materialize(project, obj, writable=False)
+                path = self.materialize(product, obj, writable=False)
                 ok.append({"uuid": obj.uuid, "filename": obj.filename, "path": str(path)})
             except Exception as exc:
                 from creopdm.exceptions import CreoPDMError
@@ -713,24 +713,24 @@ class WorkspaceService:
 
     def copy_into_workspace(
         self,
-        project: Project,
+        product: Product,
         obj: EngineeringObject,
         writable: bool = False,
         keep_local: bool = False,
     ) -> Path | None:
         """Copy a newly added vault file into the workspace. Best-effort."""
         try:
-            return self.materialize(project, obj, writable=writable, keep_local=keep_local)
+            return self.materialize(product, obj, writable=writable, keep_local=keep_local)
         except Exception:
             logger.exception("Could not copy %s into the workspace", obj.filename)
             return None
 
-    def preferred_add_directory(self, project_or_folder: Project | str, owned_relative_paths: list[str] | None = None) -> Path:
+    def preferred_add_directory(self, product_or_folder: Product | str, owned_relative_paths: list[str] | None = None) -> Path:
         """Workspace root: all working copies live in one folder."""
-        return self._vault_root(project_or_folder)
+        return self._vault_root(product_or_folder)
 
-    def relative_if_inside(self, project_or_folder: Project | str, path: Path) -> str | None:
-        root = self._vault_root(project_or_folder)
+    def relative_if_inside(self, product_or_folder: Product | str, path: Path) -> str | None:
+        root = self._vault_root(product_or_folder)
         try:
             return self._canonical_relative(root, Path(path))
         except ValueError:
@@ -738,7 +738,7 @@ class WorkspaceService:
 
     def import_relative_path(
         self,
-        project: Project,
+        product: Product,
         source: Path,
         base_folder: Path | str | None = None,
         parent_folder: str | None = None,
@@ -776,15 +776,15 @@ class WorkspaceService:
 
     def list_untracked(
         self,
-        project: Project,
+        product: Product,
         objects: list[EngineeringObject],
         status: GitStatus | None = None,
     ) -> list[dict[str, str | int]]:
         """Find workspace files that are not already PDM objects."""
         extras = self._cad_extensions()
         known = {CreoFileManager.logical_repo_path(obj.relative_path, extras) for obj in objects}
-        snapshot = status if status is not None else self._git_status(project)
-        vault = self.vault_for(project)
+        snapshot = status if status is not None else self._git_status(product)
+        vault = self.vault_for(product)
         grouped: dict[str, list[Path]] = {}
         for relative in snapshot.untracked:
             name = Path(relative).name
@@ -853,7 +853,7 @@ class WorkspaceService:
             return name.replace("\\", "/")
         return (parent / name).as_posix()
 
-    def purge_newer_creo_saves(self, project: Project, kept: Path) -> list[Path]:
+    def purge_newer_creo_saves(self, product: Product, kept: Path) -> list[Path]:
         """Delete same-logical Creo saves with a higher .N than ``kept`` in its folder.
 
         Used after revert so locate_content does not prefer an old tip like .prt.3
@@ -907,7 +907,7 @@ class WorkspaceService:
 
     def purge_untracked_paths(
         self,
-        project: Project,
+        product: Product,
         relative_paths: list[str],
         objects: list[EngineeringObject],
     ) -> list[dict[str, str]]:
@@ -917,7 +917,7 @@ class WorkspaceService:
             CreoFileManager.logical_repo_path(obj.relative_path, extras).lower()
             for obj in objects
         }
-        vault = self.vault_for(project)
+        vault = self.vault_for(product)
         targets: set[str] = set()
         requested: list[str] = []
         for raw in relative_paths:
@@ -925,7 +925,7 @@ class WorkspaceService:
             logical = CreoFileManager.logical_repo_path(relative, extras).lower()
             if logical in known:
                 raise PathValidationError(
-                    "That file is already in the project. Use Remove from Vault on the Files tab.",
+                    "That file is already in the product. Use Remove from Vault on the Files tab.",
                     details={"relative_path": relative},
                 )
             path = ensure_within(vault, vault / relative)
@@ -968,12 +968,12 @@ class WorkspaceService:
         self._prune_empty_workspace_dirs(vault, removed_paths)
         return removed
 
-    def purge_local(self, project: Project, obj: EngineeringObject) -> list[str]:
-        """Delete workspace copies only. Never touches the project repository."""
+    def purge_local(self, product: Product, obj: EngineeringObject) -> list[str]:
+        """Delete workspace copies only. Never touches the product repository."""
         extras = self._cad_extensions()
         wanted = CreoFileManager.logical_filename(obj.filename, extras).lower()
         removed: list[str] = []
-        for directory in self._workspace_search_dirs(project, obj):
+        for directory in self._workspace_search_dirs(product, obj):
             if not directory.is_dir():
                 continue
             for path in list(directory.iterdir()):
@@ -990,12 +990,12 @@ class WorkspaceService:
                         f"Could not delete the vault copy of {obj.filename}.",
                         details={"path": str(path)},
                     )
-        self._prune_empty_workspace_dirs(self.vault_for(project), removed)
+        self._prune_empty_workspace_dirs(self.vault_for(product), removed)
         return removed
 
     def purge_local_many(
         self,
-        project: Project,
+        product: Product,
         objects: list[EngineeringObject],
         *,
         ignore_locked: bool = False,
@@ -1008,7 +1008,7 @@ class WorkspaceService:
             CreoFileManager.logical_repo_path(obj.relative_path, extras).lower()
             for obj in objects
         }
-        root = self.vault_for(project)
+        root = self.vault_for(product)
         if not root.is_dir():
             return []
         skip = _RESERVED_WORKSPACE_DIRS
@@ -1072,10 +1072,10 @@ class WorkspaceService:
             return False
         return calculate_sha256(path) != current.content_hash
 
-    def _restore_tracked(self, project: Project, relative_path: str) -> None:
+    def _restore_tracked(self, product: Product, relative_path: str) -> None:
         if self._git is None:
             return
-        vault = self.vault_for(project)
+        vault = self.vault_for(product)
         if not self._git.is_repository(vault):
             return
         try:
@@ -1088,9 +1088,9 @@ class WorkspaceService:
         remove_tree(location / ".git")
         for name in (".gitignore", ".gitattributes"):
             remove_file(location / name)
-        remove_tree(location / PROJECT_MARKER_DIR)
+        remove_tree(location / PRODUCT_MARKER_DIR)
         self._remove_creopdm_readme(location / "README.md")
-        for folder in STANDARD_PROJECT_FOLDERS:
+        for folder in STANDARD_PRODUCT_FOLDERS:
             remove_file(location / folder / ".gitkeep")
 
     @staticmethod
@@ -1105,26 +1105,26 @@ class WorkspaceService:
             return
         remove_file(path)
 
-    def write_project_marker(
+    def write_product_marker(
         self,
-        project: Project,
+        product: Product,
         name: str,
         number: str | None,
         description: str | None,
     ) -> None:
-        self._write_project_marker(self.vault_for(project), project.uuid, name, number, description)
+        self._write_product_marker(self.vault_for(product), product.uuid, name, number, description)
 
-    def _write_project_marker(
+    def _write_product_marker(
         self,
         vault: Path,
-        project_uuid: str,
+        product_uuid: str,
         name: str,
         number: str | None,
         description: str | None,
     ) -> None:
-        marker = vault / PROJECT_MARKER_DIR
+        marker = vault / PRODUCT_MARKER_DIR
         marker.mkdir(parents=True, exist_ok=True)
-        path = marker / PROJECT_JSON_NAME
+        path = marker / PRODUCT_JSON_NAME
         payload: dict = {}
         if path.is_file():
             try:
@@ -1135,7 +1135,7 @@ class WorkspaceService:
                 payload = {}
         payload.update(
             {
-                "uuid": project_uuid,
+                "uuid": product_uuid,
                 "name": name,
                 "number": number,
                 "description": description,

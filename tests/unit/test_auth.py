@@ -42,10 +42,10 @@ def test_password_hash_round_trip_never_stores_plaintext():
 
 def test_migration_seeds_builtin_roles(auth_ctx):
     inspector = inspect(auth_ctx.engine)
-    for table in ("users", "roles", "permissions", "user_roles", "role_permissions", "user_projects", "project_watches"):
+    for table in ("users", "roles", "permissions", "user_roles", "role_permissions", "user_products", "product_watches"):
         assert table in inspector.get_table_names()
     cols = {c["name"] for c in inspector.get_columns("users")}
-    assert "access_all_projects" in cols
+    assert "access_all_products" in cols
     with auth_ctx.session_factory() as db:
         names = {r.name for r in db.scalars(select(Role)).all()}
     assert names >= {
@@ -342,7 +342,7 @@ def test_login_logout_and_disabled_user(auth_client, auth_ctx):
             password="BackupPass1",
             role_name=BuiltinRole.ADMINISTRATOR.value,
             must_change_password=False,
-            access_all_projects=True,
+            access_all_products=True,
         )
         admin = db.scalar(select(User).where(User.username == "admin"))
         assert admin is not None
@@ -441,7 +441,7 @@ def test_admin_can_open_settings(auth_client):
     assert "<h2><a href=\"/admin/users\">Users</a></h2>" in hub.text or ">Users</a>" in hub.text
     assert "Add and edit accounts, assign a role, and set status." in hub.text
     assert "Click a user’s name" not in hub.text and "Click a user's name" not in hub.text
-    assert 'href="/admin/projects"' in hub.text
+    assert 'href="/admin/products"' in hub.text
     assert 'href="/admin/email"' in hub.text
     # Help copy is plain text, not wrapped in the section link.
     assert 'href="/admin/users">Add and edit' not in hub.text
@@ -645,7 +645,7 @@ def test_admin_can_edit_user(auth_client, auth_ctx):
     assert f'href="/admin/users/{paul_uuid}"' in listed.text
     assert f'href="/admin/roles/{eng_role_uuid}"' in listed.text
     assert "Click a name to edit" in listed.text
-    assert "<th>Projects</th>" in listed.text
+    assert "<th>Products</th>" in listed.text
     assert ">All<" in listed.text or ">All</td>" in listed.text
     assert ">Edit</a>" not in listed.text
 
@@ -684,8 +684,8 @@ def test_admin_can_edit_user(auth_client, auth_ctx):
 
 
 @requires_git
-def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx):
-    """Membership By user + By project restrict / empty / restore for one Engineer.
+def test_admin_membership_product_access_filters_products(auth_client, auth_ctx):
+    """Membership By user + By product restrict / empty / restore for one Engineer.
 
     Broader per-starter-role membership coverage lives in
     test_every_starter_role_login_permission_matrix.
@@ -701,8 +701,8 @@ def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx)
         },
         follow_redirects=False,
     )
-    alpha_resp = auth_client.post("/api/projects", json={"name": "Alpha"})
-    beta_resp = auth_client.post("/api/projects", json={"name": "Beta"})
+    alpha_resp = auth_client.post("/api/products", json={"name": "Alpha"})
+    beta_resp = auth_client.post("/api/products", json={"name": "Beta"})
     assert alpha_resp.status_code == 201, alpha_resp.text
     assert beta_resp.status_code == 201, beta_resp.text
     alpha = alpha_resp.json()
@@ -714,9 +714,9 @@ def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx)
 
     user_form = auth_client.get("/admin/users/new")
     assert user_form.status_code == 200
-    assert "Project access" not in user_form.text
-    assert 'id="project-access-list"' not in user_form.text
-    assert "no project access" in user_form.text.lower()
+    assert "Product access" not in user_form.text
+    assert 'id="product-access-list"' not in user_form.text
+    assert "no product access" in user_form.text.lower()
     assert "Administration → Membership" in user_form.text or "/admin/membership" in user_form.text
 
     created = auth_client.post(
@@ -737,49 +737,49 @@ def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx)
     with auth_ctx.session_factory() as db:
         user = db.scalar(select(User).where(User.username == "limited"))
         assert user is not None
-        assert user.access_all_projects is False
+        assert user.access_all_products is False
         user.must_change_password = False
         user_uuid = user.uuid
         db.commit()
 
     mem_home = auth_client.get("/admin/membership")
     assert mem_home.status_code == 200
-    assert 'href="/admin/membership/projects"' in mem_home.text
+    assert 'href="/admin/membership/products"' in mem_home.text
     assert 'href="/admin/membership/users"' in mem_home.text
     assert f'href="/admin/membership/users/{user_uuid}"' not in mem_home.text
-    assert "Projects summary" in mem_home.text
+    assert "Products summary" in mem_home.text
     assert "Alpha" in mem_home.text
     assert "Members" in mem_home.text
     assert "Restricted" in mem_home.text
-    assert f'href="/admin/membership/projects/{alpha["uuid"]}"' in mem_home.text
+    assert f'href="/admin/membership/products/{alpha["uuid"]}"' in mem_home.text
 
     users_list = auth_client.get("/admin/membership/users")
     assert users_list.status_code == 200
     assert f'href="/admin/membership/users/{user_uuid}"' in users_list.text
 
-    projects_list = auth_client.get("/admin/membership/projects")
-    assert projects_list.status_code == 200
-    assert f'href="/admin/membership/projects/{alpha["uuid"]}"' in projects_list.text
+    products_list = auth_client.get("/admin/membership/products")
+    assert products_list.status_code == 200
+    assert f'href="/admin/membership/products/{alpha["uuid"]}"' in products_list.text
 
     mem_form = auth_client.get(f"/admin/membership/users/{user_uuid}")
     assert mem_form.status_code == 200
-    assert 'id="access-all-projects"' in mem_form.text
-    assert 'id="project-access-list"' in mem_form.text
-    assert 'name="project_uuid"' in mem_form.text
+    assert 'id="access-all-products"' in mem_form.text
+    assert 'id="product-access-list"' in mem_form.text
+    assert 'name="product_uuid"' in mem_form.text
     assert "multiple" in mem_form.text
     from pathlib import Path
 
     script = (
         Path(__file__).resolve().parents[2] / "src" / "creopdm" / "static" / "js" / "app.js"
     ).read_text(encoding="utf-8")
-    assert "function syncProjectAccessUi" in script
-    assert "__creopdmProjectAccessBound" in script
+    assert "function syncProductAccessUi" in script
+    assert "__creopdmProductAccessBound" in script
 
     restricted = auth_client.post(
         f"/admin/membership/users/{user_uuid}",
         data={
-            "project_access_present": "1",
-            "project_uuid": [alpha["uuid"]],
+            "product_access_present": "1",
+            "product_uuid": [alpha["uuid"]],
         },
         follow_redirects=False,
     )
@@ -788,25 +788,25 @@ def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx)
     with auth_ctx.session_factory() as db:
         user = db.scalar(select(User).where(User.username == "limited"))
         assert user is not None
-        assert user.access_all_projects is False
-        assert {p.uuid for p in user.projects} == {alpha["uuid"]}
+        assert user.access_all_products is False
+        assert {p.uuid for p in user.products} == {alpha["uuid"]}
 
     summary = auth_client.get("/admin/membership")
     assert summary.status_code == 200
-    # Restricted engineer on Alpha only — Restricted=1; Members includes All-projects users too.
+    # Restricted engineer on Alpha only — Restricted=1; Members includes All-products users too.
     assert re.search(
-        rf'href="/admin/membership/projects/{re.escape(alpha["uuid"])}">Alpha</a>.*?<td>1</td>',
+        rf'href="/admin/membership/products/{re.escape(alpha["uuid"])}">Alpha</a>.*?<td>1</td>',
         summary.text,
         re.S,
     ), summary.text
     assert "Members" in summary.text
 
     _login(auth_client, "limited", "Limited1!")
-    listed = auth_client.get("/api/projects")
+    listed = auth_client.get("/api/products")
     assert listed.status_code == 200
     assert [p["uuid"] for p in listed.json()] == [alpha["uuid"]]
-    assert auth_client.get(f"/api/projects/{alpha['uuid']}").status_code == 200
-    denied = auth_client.get(f"/api/projects/{beta['uuid']}")
+    assert auth_client.get(f"/api/products/{alpha['uuid']}").status_code == 200
+    denied = auth_client.get(f"/api/products/{beta['uuid']}")
     assert denied.status_code == 403
     assert denied.json()["error"]["code"] == "FORBIDDEN"
     home = auth_client.get("/")
@@ -817,44 +817,44 @@ def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx)
     _login(auth_client, "admin", "AdminPass1")
     users_list = auth_client.get("/admin/users")
     assert users_list.status_code == 200
-    assert "<th>Projects</th>" in users_list.text
+    assert "<th>Products</th>" in users_list.text
     assert "All" in users_list.text
     assert re.search(
         r'<td>limited</td>\s*<td>\s*<a href="/admin/roles/[^"]+">Engineer</a>\s*</td>\s*<td>ACTIVE</td>\s*<td>1</td>',
         users_list.text,
     ), users_list.text
 
-    # By project: clear limited from Alpha members.
-    proj_form = auth_client.get(f"/admin/membership/projects/{alpha['uuid']}")
+    # By product: clear limited from Alpha members.
+    proj_form = auth_client.get(f"/admin/membership/products/{alpha['uuid']}")
     assert proj_form.status_code == 200
     assert "Limited" in proj_form.text
     cleared = auth_client.post(
-        f"/admin/membership/projects/{alpha['uuid']}",
+        f"/admin/membership/products/{alpha['uuid']}",
         data={},  # no member_uuid → remove all restricted members
         follow_redirects=False,
     )
     assert cleared.status_code == 303, cleared.text
 
     _login(auth_client, "limited", "Limited1!")
-    empty = auth_client.get("/api/projects")
+    empty = auth_client.get("/api/products")
     assert empty.status_code == 200
     assert empty.json() == []
-    assert auth_client.get(f"/api/projects/{alpha['uuid']}").status_code == 403
+    assert auth_client.get(f"/api/products/{alpha['uuid']}").status_code == 403
 
     _login(auth_client, "admin", "AdminPass1")
     restored = auth_client.post(
         f"/admin/membership/users/{user_uuid}",
         data={
-            "project_access_present": "1",
-            "access_all_projects": "1",
+            "product_access_present": "1",
+            "access_all_products": "1",
         },
         follow_redirects=False,
     )
     assert restored.status_code == 303, restored.text
     _login(auth_client, "limited", "Limited1!")
-    all_projects = auth_client.get("/api/projects")
-    assert all_projects.status_code == 200
-    uuids = {p["uuid"] for p in all_projects.json()}
+    all_products = auth_client.get("/api/products")
+    assert all_products.status_code == 200
+    uuids = {p["uuid"] for p in all_products.json()}
     assert alpha["uuid"] in uuids and beta["uuid"] in uuids
 
 
@@ -871,7 +871,7 @@ def test_unauthenticated_api_returns_401(auth_client):
         follow_redirects=False,
     )
     auth_client.get("/logout", follow_redirects=False)
-    response = auth_client.get("/api/projects", follow_redirects=False)
+    response = auth_client.get("/api/products", follow_redirects=False)
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
 
@@ -895,9 +895,9 @@ def test_session_aware_provider_uses_request_identity():
 def test_checkout_uses_static_provider_username(client, repo_parent, identity, data_dir):
     """Regression: checkout.user_name is the provider username, not OS getpass."""
     identity.become("session.alice", "TEST-PC")
-    project = client.post("/api/projects", json={"name": "Auth Checkout"}).json()
+    product = client.post("/api/products", json={"name": "Auth Checkout"}).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt", b"payload", "application/octet-stream")},
         data={"comment": "init"},
     )
@@ -951,8 +951,8 @@ def _setup_admin_and_users(
             user = db.scalar(select(User).where(User.username == name))
             assert user is not None
             user.must_change_password = False
-            # Tests that browse projects expect access; production default is none.
-            auth_ctx.user_accounts.set_project_access(db, user, access_all=True)
+            # Tests that browse products expect access; production default is none.
+            auth_ctx.user_accounts.set_product_access(db, user, access_all=True)
         db.commit()
     auth_client.get("/logout", follow_redirects=False)
 
@@ -985,13 +985,13 @@ def test_paul_checkout_blocks_david(auth_client, auth_ctx, repo_parent):
     """Session users: only the holder may own a checkout (Paul vs David)."""
     _setup_admin_and_engineers(auth_client, auth_ctx, "paul", "david")
     _login(auth_client, "admin", "AdminPass1")
-    created_project = auth_client.post("/api/projects", json={"name": "Shared Part"})
-    assert created_project.status_code == 201, created_project.text
-    project = created_project.json()
+    created_product = auth_client.post("/api/products", json={"name": "Shared Part"})
+    assert created_product.status_code == 201, created_product.text
+    product = created_product.json()
 
     _login(auth_client, "paul", "PaulPass1")
     created = auth_client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt", b"payload", "application/octet-stream")},
         data={"comment": "init"},
     )
@@ -1013,45 +1013,45 @@ def test_paul_checkout_blocks_david(auth_client, auth_ctx, repo_parent):
     assert listed.json()["owned_by_me"] is False
 
 
-def test_empty_home_hero_hides_create_project_without_permission(auth_client, auth_ctx):
-    """Empty Files hero must not invite Create when the user lacks projects.create."""
+def test_empty_home_hero_hides_create_product_without_permission(auth_client, auth_ctx):
+    """Empty Files hero must not invite Create when the user lacks products.create."""
     _setup_admin_and_users(
         auth_client, auth_ctx, ("view", BuiltinRole.VIEWER.value)
     )
-    # No projects exist — both roles see the empty hero.
+    # No products exist — both roles see the empty hero.
     _login(auth_client, "admin", "AdminPass1")
     admin_home = auth_client.get("/")
     assert admin_home.status_code == 200
-    assert "Create a project to start managing engineering files" in admin_home.text
+    assert "Create a product to start managing engineering files" in admin_home.text
     assert "Git stays in the background" in admin_home.text
 
     _login(auth_client, "view", "ViewPass1")
     view_home = auth_client.get("/")
     assert view_home.status_code == 200
-    assert "Create a project to start managing engineering files" not in view_home.text
+    assert "Create a product to start managing engineering files" not in view_home.text
     assert "Git stays in the background" not in view_home.text
-    assert "No projects are available for your account" in view_home.text
-    assert 'id="new-project-btn"' not in view_home.text
+    assert "No products are available for your account" in view_home.text
+    assert 'id="new-product-btn"' not in view_home.text
 
 
 @requires_git
-def test_empty_project_hides_add_invite_without_permission(auth_client, auth_ctx, repo_parent):
-    """Empty project Files list must not invite Add when the user lacks objects.add."""
+def test_empty_product_hides_add_invite_without_permission(auth_client, auth_ctx, repo_parent):
+    """Empty product Files list must not invite Add when the user lacks objects.add."""
     _setup_admin_and_users(
         auth_client, auth_ctx, ("view", BuiltinRole.VIEWER.value)
     )
     _login(auth_client, "admin", "AdminPass1")
-    project = auth_client.post("/api/projects", json={"name": "Empty Files"}).json()
+    product = auth_client.post("/api/products", json={"name": "Empty Files"}).json()
 
-    admin_files = auth_client.get(f"/?project={project['uuid']}")
+    admin_files = auth_client.get(f"/?product={product['uuid']}")
     assert admin_files.status_code == 200
     assert "Add a Creo model, PDF, or document to get started" in admin_files.text
 
     _login(auth_client, "view", "ViewPass1")
-    view_files = auth_client.get(f"/?project={project['uuid']}")
+    view_files = auth_client.get(f"/?product={product['uuid']}")
     assert view_files.status_code == 200
     assert "Add a Creo model, PDF, or document to get started" not in view_files.text
-    assert "No files in this project." in view_files.text
+    assert "No files in this product." in view_files.text
     assert 'id="add-menu"' not in view_files.text
 
 
@@ -1062,9 +1062,9 @@ def test_viewer_is_read_only(auth_client, auth_ctx, repo_parent):
         auth_client, auth_ctx, ("view", BuiltinRole.VIEWER.value)
     )
     _login(auth_client, "admin", "AdminPass1")
-    project = auth_client.post("/api/projects", json={"name": "View Only"}).json()
+    product = auth_client.post("/api/products", json={"name": "View Only"}).json()
     created = auth_client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("part.prt", b"payload", "application/octet-stream")},
         data={"comment": "init"},
     )
@@ -1072,9 +1072,9 @@ def test_viewer_is_read_only(auth_client, auth_ctx, repo_parent):
     obj = created.json()
 
     _login(auth_client, "view", "ViewPass1")
-    assert auth_client.get(f"/api/projects/{project['uuid']}").status_code == 200
+    assert auth_client.get(f"/api/products/{product['uuid']}").status_code == 200
     assert auth_client.get(f"/api/objects/{obj['uuid']}").status_code == 200
-    home = auth_client.get(f"/?project={project['uuid']}")
+    home = auth_client.get(f"/?product={product['uuid']}")
     assert home.status_code == 200
     assert 'data-can-checkout="0"' in home.text
     assert 'data-can-view="1"' in home.text
@@ -1084,14 +1084,14 @@ def test_viewer_is_read_only(auth_client, auth_ctx, repo_parent):
     assert 'id="checkout-menu"' not in home.text
     assert 'id="checkin-menu"' not in home.text
     assert 'id="remove-menu"' not in home.text
-    assert 'id="new-project-btn"' not in home.text
+    assert 'id="new-product-btn"' not in home.text
     assert "Administration" not in home.text
     assert auth_client.get("/admin/roles", follow_redirects=False).status_code == 403
 
-    _assert_forbidden(auth_client.post("/api/projects", json={"name": "Nope"}))
+    _assert_forbidden(auth_client.post("/api/products", json={"name": "Nope"}))
     _assert_forbidden(
         auth_client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("other.prt", b"x", "application/octet-stream")},
             data={"comment": "nope"},
         )
@@ -1106,28 +1106,28 @@ def test_viewer_is_read_only(auth_client, auth_ctx, repo_parent):
 
 
 @requires_git
-def test_engineer_can_author_not_manage_projects(auth_client, auth_ctx, repo_parent):
-    """Engineer may add/checkout; cannot create/delete projects or open Administration."""
+def test_engineer_can_author_not_manage_products(auth_client, auth_ctx, repo_parent):
+    """Engineer may add/checkout; cannot create/delete products or open Administration."""
     _setup_admin_and_users(
         auth_client, auth_ctx, ("eng", BuiltinRole.ENGINEER.value)
     )
     _login(auth_client, "admin", "AdminPass1")
-    project = auth_client.post("/api/projects", json={"name": "Eng Project"}).json()
+    product = auth_client.post("/api/products", json={"name": "Eng Product"}).json()
 
     _login(auth_client, "eng", "EngPass1")
-    home = auth_client.get(f"/?project={project['uuid']}")
+    home = auth_client.get(f"/?product={product['uuid']}")
     assert home.status_code == 200
     assert 'id="add-menu"' in home.text
     assert 'id="checkout-menu"' in home.text
-    assert 'id="new-project-btn"' not in home.text
+    assert 'id="new-product-btn"' not in home.text
     assert "Administration" not in home.text
     assert auth_client.get("/admin", follow_redirects=False).status_code == 403
 
-    _assert_forbidden(auth_client.post("/api/projects", json={"name": "Nope"}))
-    _assert_forbidden(auth_client.delete(f"/api/projects/{project['uuid']}"))
+    _assert_forbidden(auth_client.post("/api/products", json={"name": "Nope"}))
+    _assert_forbidden(auth_client.delete(f"/api/products/{product['uuid']}"))
 
     created = auth_client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt", b"payload", "application/octet-stream")},
         data={"comment": "init"},
     )
@@ -1137,44 +1137,44 @@ def test_engineer_can_author_not_manage_projects(auth_client, auth_ctx, repo_par
 
 
 @requires_git
-def test_pdm_manager_can_create_not_delete_no_projects_admin(auth_client, auth_ctx, repo_parent):
-    """PDM Manager may create/edit via API/Files; no Administration → Projects (needs projects.manage)."""
+def test_pdm_manager_can_create_not_delete_no_products_admin(auth_client, auth_ctx, repo_parent):
+    """PDM Manager may create/edit via API/Files; no Administration → Products (needs products.manage)."""
     _setup_admin_and_users(
         auth_client, auth_ctx, ("pdm", BuiltinRole.PDM_MANAGER.value)
     )
     _login(auth_client, "pdm", "PdmPass1")
-    created = auth_client.post("/api/projects", json={"name": "PDM Project"})
+    created = auth_client.post("/api/products", json={"name": "PDM Product"})
     assert created.status_code == 201, created.text
-    project = created.json()
-    home = auth_client.get(f"/?project={project['uuid']}")
+    product = created.json()
+    home = auth_client.get(f"/?product={product['uuid']}")
     assert home.status_code == 200
-    assert 'id="new-project-btn"' in home.text
-    assert 'id="delete-project-btn"' not in home.text
+    assert 'id="new-product-btn"' in home.text
+    assert 'id="delete-product-btn"' not in home.text
     assert "Administration" not in home.text
 
     assert auth_client.get("/admin", follow_redirects=False).status_code == 403
-    assert auth_client.get("/admin/projects", follow_redirects=False).status_code == 403
+    assert auth_client.get("/admin/products", follow_redirects=False).status_code == 403
     assert auth_client.get("/admin/email", follow_redirects=False).status_code == 403
-    _assert_forbidden(auth_client.delete(f"/api/projects/{project['uuid']}"))
+    _assert_forbidden(auth_client.delete(f"/api/products/{product['uuid']}"))
     assert auth_client.get("/admin/users", follow_redirects=False).status_code == 403
     assert auth_client.get("/settings", follow_redirects=False).status_code == 403
     _assert_forbidden(auth_client.get("/api/settings"))
 
 
 @requires_git
-def test_admin_projects_crud_list_create_edit_delete(auth_client, auth_ctx, repo_parent):
-    """Administration → Projects lists all projects and supports create/edit/soft-delete."""
+def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo_parent):
+    """Administration → Products lists all products and supports create/edit/soft-delete."""
     _setup_admin_and_users(auth_client, auth_ctx)
     _login(auth_client, "admin", "AdminPass1")
     hub = auth_client.get("/admin")
     assert hub.status_code == 200
-    assert 'href="/admin/projects"' in hub.text
-    assert "List every project" in hub.text or "Projects</a>" in hub.text
+    assert 'href="/admin/products"' in hub.text
+    assert "List every product" in hub.text or "Products</a>" in hub.text
 
     created = auth_client.post(
-        "/admin/projects/new",
+        "/admin/products/new",
         data={
-            "name": "Admin Hub Project",
+            "name": "Admin Hub Product",
             "number": "AH-1",
             "description": "From admin",
             "vault_folder": "",
@@ -1182,21 +1182,21 @@ def test_admin_projects_crud_list_create_edit_delete(auth_client, auth_ctx, repo
         follow_redirects=False,
     )
     assert created.status_code == 303, created.text
-    assert created.headers["location"] == "/admin/projects"
+    assert created.headers["location"] == "/admin/products"
 
-    listed = auth_client.get("/admin/projects")
+    listed = auth_client.get("/admin/products")
     assert listed.status_code == 200
-    assert "Admin Hub Project" in listed.text
+    assert "Admin Hub Product" in listed.text
 
-    api = auth_client.get("/api/projects").json()
-    project = next(p for p in api if p["name"] == "Admin Hub Project")
-    detail = auth_client.get(f"/admin/projects/{project['uuid']}")
+    api = auth_client.get("/api/products").json()
+    product = next(p for p in api if p["name"] == "Admin Hub Product")
+    detail = auth_client.get(f"/admin/products/{product['uuid']}")
     assert detail.status_code == 200
-    assert 'value="Admin Hub Project"' in detail.text
-    assert "Remove project" in detail.text
+    assert 'value="Admin Hub Product"' in detail.text
+    assert "Remove product" in detail.text
 
     saved = auth_client.post(
-        f"/admin/projects/{project['uuid']}",
+        f"/admin/products/{product['uuid']}",
         data={
             "name": "Admin Hub Renamed",
             "number": "AH-2",
@@ -1205,29 +1205,29 @@ def test_admin_projects_crud_list_create_edit_delete(auth_client, auth_ctx, repo
         follow_redirects=False,
     )
     assert saved.status_code == 303, saved.text
-    assert auth_client.get(f"/api/projects/{project['uuid']}").json()["name"] == "Admin Hub Renamed"
+    assert auth_client.get(f"/api/products/{product['uuid']}").json()["name"] == "Admin Hub Renamed"
 
     bad_delete = auth_client.post(
-        f"/admin/projects/{project['uuid']}/delete",
+        f"/admin/products/{product['uuid']}/delete",
         data={"confirm_name": "wrong"},
         follow_redirects=False,
     )
     assert bad_delete.status_code == 400
-    assert "exact project name" in bad_delete.text
+    assert "exact product name" in bad_delete.text
 
     deleted = auth_client.post(
-        f"/admin/projects/{project['uuid']}/delete",
+        f"/admin/products/{product['uuid']}/delete",
         data={"confirm_name": "Admin Hub Renamed"},
         follow_redirects=False,
     )
     assert deleted.status_code == 303, deleted.text
-    assert deleted.headers["location"] == "/admin/projects"
-    assert auth_client.get(f"/api/projects/{project['uuid']}").status_code == 404
+    assert deleted.headers["location"] == "/admin/products"
+    assert auth_client.get(f"/api/products/{product['uuid']}").status_code == 404
 
 
 @requires_git
-def test_admin_can_create_and_delete_project(auth_client, auth_ctx, repo_parent):
-    """Administrator retains full project create/delete."""
+def test_admin_can_create_and_delete_product(auth_client, auth_ctx, repo_parent):
+    """Administrator retains full product create/delete."""
     auth_client.post(
         "/setup",
         data={
@@ -1239,14 +1239,14 @@ def test_admin_can_create_and_delete_project(auth_client, auth_ctx, repo_parent)
         },
         follow_redirects=False,
     )
-    created = auth_client.post("/api/projects", json={"name": "Admin Project"})
+    created = auth_client.post("/api/products", json={"name": "Admin Product"})
     assert created.status_code == 201, created.text
-    project_id = created.json()["uuid"]
-    home = auth_client.get(f"/?project={project_id}")
+    product_id = created.json()["uuid"]
+    home = auth_client.get(f"/?product={product_id}")
     assert home.status_code == 200
-    assert 'id="new-project-btn"' in home.text
-    assert 'id="delete-project-btn"' in home.text
-    deleted = auth_client.delete(f"/api/projects/{project_id}")
+    assert 'id="new-product-btn"' in home.text
+    assert 'id="delete-product-btn"' in home.text
+    deleted = auth_client.delete(f"/api/products/{product_id}")
     assert deleted.status_code == 204, deleted.text
 
 
@@ -1257,9 +1257,9 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
         PERMISSION_OBJECTS_CHECKOUT,
         PERMISSION_OBJECTS_COPY_TO_VAULT,
         PERMISSION_OBJECTS_VIEW,
-        PERMISSION_PROJECTS_CREATE,
-        PERMISSION_PROJECTS_DELETE,
-        PERMISSION_PROJECTS_MANAGE,
+        PERMISSION_PRODUCTS_CREATE,
+        PERMISSION_PRODUCTS_DELETE,
+        PERMISSION_PRODUCTS_MANAGE,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_USERS_MANAGE,
         STARTER_ROLE_PERMISSION_KEYS,
@@ -1286,14 +1286,14 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
     assert PERMISSION_OBJECTS_VIEW in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_OBJECTS_CHECKOUT in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_OBJECTS_COPY_TO_VAULT not in keys_by_role[BuiltinRole.ENGINEER.value]
-    assert PERMISSION_PROJECTS_CREATE not in keys_by_role[BuiltinRole.ENGINEER.value]
-    assert PERMISSION_PROJECTS_CREATE in keys_by_role[BuiltinRole.PDM_MANAGER.value]
+    assert PERMISSION_PRODUCTS_CREATE not in keys_by_role[BuiltinRole.ENGINEER.value]
+    assert PERMISSION_PRODUCTS_CREATE in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_OBJECTS_COPY_TO_VAULT in keys_by_role[BuiltinRole.PDM_MANAGER.value]
-    assert PERMISSION_PROJECTS_DELETE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
-    assert PERMISSION_PROJECTS_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
+    assert PERMISSION_PRODUCTS_DELETE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
+    assert PERMISSION_PRODUCTS_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_EMAIL_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_USERS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
-    assert PERMISSION_PROJECTS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
+    assert PERMISSION_PRODUCTS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_EMAIL_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_ROLES_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_OBJECTS_COPY_TO_VAULT in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
@@ -1346,37 +1346,37 @@ def test_roles_admin_create_custom_and_gate(auth_client, auth_ctx, repo_parent):
         row.must_change_password = False
         db.commit()
 
-    project = auth_client.post("/api/projects", json={"name": "Lock Proj"}).json()
+    product = auth_client.post("/api/products", json={"name": "Lock Proj"}).json()
     part = auth_client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("a.prt", b"x", "application/octet-stream")},
         data={"comment": "init"},
     )
     assert part.status_code == 201, part.text
-    # New users have no project access until Membership grants it.
+    # New users have no product access until Membership grants it.
     with auth_ctx.session_factory() as db:
         row = db.scalar(select(User).where(User.username == "locker"))
         assert row is not None
-        auth_ctx.user_accounts.set_project_access(
-            db, row, access_all=False, project_uuids=[project["uuid"]]
+        auth_ctx.user_accounts.set_product_access(
+            db, row, access_all=False, product_uuids=[product["uuid"]]
         )
         db.commit()
 
     _login(auth_client, "locker", "LockerPass1")
-    home = auth_client.get(f"/?project={project['uuid']}")
+    home = auth_client.get(f"/?product={product['uuid']}")
     assert home.status_code == 200
     assert 'data-can-view="1"' in home.text
     assert 'data-can-checkout="1"' in home.text
-    assert 'id="new-project-btn"' not in home.text
+    assert 'id="new-product-btn"' not in home.text
     assert auth_client.get("/admin/roles", follow_redirects=False).status_code == 403
     checked = auth_client.post(f"/api/objects/{part.json()['uuid']}/checkout")
     assert checked.status_code == 200, checked.text
-    _assert_forbidden(auth_client.post("/api/projects", json={"name": "Nope"}))
+    _assert_forbidden(auth_client.post("/api/products", json={"name": "Nope"}))
 
 
 @requires_git
 def test_role_with_no_permissions_cannot_browse(auth_client, auth_ctx, repo_parent):
-    """A signed-in user with zero permissions must not browse projects or files."""
+    """A signed-in user with zero permissions must not browse products or files."""
     _setup_admin_and_users(auth_client, auth_ctx)
     _login(auth_client, "admin", "AdminPass1")
     created = auth_client.post(
@@ -1404,7 +1404,7 @@ def test_role_with_no_permissions_cannot_browse(auth_client, auth_ctx, repo_pare
         assert row is not None
         row.must_change_password = False
         db.commit()
-    project = auth_client.post("/api/projects", json={"name": "Hidden"}).json()
+    product = auth_client.post("/api/products", json={"name": "Hidden"}).json()
 
     login = auth_client.post(
         "/login",
@@ -1422,8 +1422,8 @@ def test_role_with_no_permissions_cannot_browse(auth_client, auth_ctx, repo_pare
     home = auth_client.get("/", follow_redirects=False)
     assert home.status_code == 303
     assert home.headers["location"] == "/no-access"
-    _assert_forbidden(auth_client.get("/api/projects"))
-    _assert_forbidden(auth_client.get(f"/api/projects/{project['uuid']}"))
+    _assert_forbidden(auth_client.get("/api/products"))
+    _assert_forbidden(auth_client.get(f"/api/products/{product['uuid']}"))
     assert auth_client.get("/admin", follow_redirects=False).status_code == 403
 
 
@@ -1431,8 +1431,8 @@ def test_role_with_no_permissions_cannot_browse(auth_client, auth_ctx, repo_pare
 def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ctx):
     """Admin/settings-only role (no objects.view) signs in to /admin, not a JSON error."""
     from creopdm.auth_constants import (
-        PERMISSION_PROJECTS_ASSIGN,
-        PERMISSION_PROJECTS_MANAGE,
+        PERMISSION_PRODUCTS_ASSIGN,
+        PERMISSION_PRODUCTS_MANAGE,
         PERMISSION_ROLES_ASSIGN,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_SETTINGS_MANAGE,
@@ -1446,14 +1446,14 @@ def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ct
         "/admin/roles/new",
         data={
             "name": "Admin Desk",
-            "description": "Users/roles/settings/projects only",
+            "description": "Users/roles/settings/products only",
             "permission": [
                 PERMISSION_USERS_MANAGE,
                 PERMISSION_USERS_PASSWORD,
                 PERMISSION_ROLES_ASSIGN,
                 PERMISSION_ROLES_MANAGE,
-                PERMISSION_PROJECTS_ASSIGN,
-                PERMISSION_PROJECTS_MANAGE,
+                PERMISSION_PRODUCTS_ASSIGN,
+                PERMISSION_PRODUCTS_MANAGE,
                 PERMISSION_SETTINGS_MANAGE,
             ],
         },
@@ -1491,7 +1491,7 @@ def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ct
     hub = auth_client.get("/admin")
     assert hub.status_code == 200
     assert "Administration" in hub.text
-    assert 'href="/">Projects</a>' not in hub.text
+    assert 'href="/">Products</a>' not in hub.text
     assert "No Files access" not in hub.text
     assert '"error"' not in hub.text or "FORBIDDEN" not in hub.text
 
@@ -1501,7 +1501,7 @@ def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ct
 
     users = auth_client.get("/admin/users")
     assert users.status_code == 200
-    assert 'href="/">Projects</a>' not in users.text
+    assert 'href="/">Products</a>' not in users.text
     assert 'href="/admin">Administration</a>' in users.text
 
 
@@ -1575,7 +1575,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
     role_form = auth_client.get(f"/admin/roles/{role_uuid}")
     assert role_form.status_code == 200
     assert "CreoPDM Administration" in role_form.text
-    assert "projects.manage" in role_form.text
+    assert "products.manage" in role_form.text
     assert "email.manage" in role_form.text
     assert "your</strong> role" in role_form.text.lower() or "your role" in role_form.text.lower()
     assert "cannot lock themselves out" in role_form.text.lower()
@@ -1678,8 +1678,8 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
             "status": UserStatus.ACTIVE.value,
             "password": "",
             "password_confirm": "",
-            "project_access_present": "1",
-            "access_all_projects": "1",
+            "product_access_present": "1",
+            "access_all_products": "1",
         },
         follow_redirects=False,
     )
@@ -1966,8 +1966,8 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
             "status": UserStatus.ACTIVE.value,
             "password": "",
             "password_confirm": "",
-            "project_access_present": "1",
-            "access_all_projects": "1",
+            "product_access_present": "1",
+            "access_all_products": "1",
         },
         follow_redirects=False,
     )
@@ -1981,8 +1981,8 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
             "status": UserStatus.ACTIVE.value,
             "password": "",
             "password_confirm": "",
-            "project_access_present": "1",
-            "access_all_projects": "1",
+            "product_access_present": "1",
+            "access_all_products": "1",
         },
         follow_redirects=False,
     )
@@ -2000,8 +2000,8 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
     assert "cannot change roles" in eng_form.text.lower()
     assert 'name="password"' not in eng_form.text
     assert "users.password" in eng_form.text
-    assert 'name="project_uuid"' not in eng_form.text
-    assert "projects.assign" in eng_form.text or "/admin/membership" in eng_form.text
+    assert 'name="product_uuid"' not in eng_form.text
+    assert "products.assign" in eng_form.text or "/admin/membership" in eng_form.text
 
     # Missing roles.assign: crafted POST cannot change Engineer → Viewer.
     promote = auth_client.post(
@@ -2013,8 +2013,8 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
             "status": UserStatus.ACTIVE.value,
             "password": "",
             "password_confirm": "",
-            "project_access_present": "1",
-            "access_all_projects": "1",
+            "product_access_present": "1",
+            "access_all_products": "1",
         },
         follow_redirects=False,
     )
@@ -2034,8 +2034,8 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
             "status": UserStatus.ACTIVE.value,
             "password": "",
             "password_confirm": "",
-            "project_access_present": "1",
-            "access_all_projects": "1",
+            "product_access_present": "1",
+            "access_all_products": "1",
         },
         follow_redirects=False,
     )
@@ -2066,8 +2066,8 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
             "email": "user@example.com",
             "password": "",
             "password_confirm": "",
-            "project_access_present": "1",
-            "access_all_projects": "1",
+            "product_access_present": "1",
+            "access_all_products": "1",
         },
         follow_redirects=False,
     )
@@ -2089,8 +2089,8 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
             "status": UserStatus.ACTIVE.value,
             "password": "",
             "password_confirm": "",
-            "project_access_present": "1",
-            "access_all_projects": "1",
+            "product_access_present": "1",
+            "access_all_products": "1",
         },
         follow_redirects=False,
     )
@@ -2105,8 +2105,8 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
             "status": UserStatus.DISABLED.value,
             "password": "",
             "password_confirm": "",
-            "project_access_present": "1",
-            "access_all_projects": "1",
+            "product_access_present": "1",
+            "access_all_products": "1",
         },
         follow_redirects=False,
     )
@@ -2127,7 +2127,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
             password="BackupPass1",
             role_name=BuiltinRole.ADMINISTRATOR.value,
             must_change_password=False,
-            access_all_projects=True,
+            access_all_products=True,
         )
         db.commit()
 
@@ -2142,8 +2142,8 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
             "status": UserStatus.ACTIVE.value,
             "password": "",
             "password_confirm": "",
-            "project_access_present": "1",
-            "access_all_projects": "1",
+            "product_access_present": "1",
+            "access_all_products": "1",
         },
         follow_redirects=False,
     )
@@ -2170,9 +2170,9 @@ def test_agent_bearer_can_download_content(auth_client, auth_ctx, repo_parent):
         auth_client, auth_ctx, ("view", BuiltinRole.VIEWER.value)
     )
     _login(auth_client, "admin", "AdminPass1")
-    project = auth_client.post("/api/projects", json={"name": "Agent Open"}).json()
+    product = auth_client.post("/api/products", json={"name": "Agent Open"}).json()
     created = auth_client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("part.prt", b"vault-bytes", "application/octet-stream")},
         data={"comment": "init"},
     )
@@ -2226,7 +2226,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
     Ephemeral DB (data_dir fixture) — users do not persist after the test.
     Driven by STARTER_ROLE_PERMISSION_KEYS so seed drift fails this test.
 
-    Also asserts per-user project membership (All / selected / none) for each
+    Also asserts per-user product membership (All / selected / none) for each
     starter account — orthogonal to role permission keys.
     """
     from uuid import uuid4
@@ -2242,13 +2242,13 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_OBJECTS_REMOVE,
         PERMISSION_OBJECTS_REVERT,
         PERMISSION_OBJECTS_VIEW,
-        PERMISSION_PROJECTS_CREATE,
-        PERMISSION_PROJECTS_DELETE,
-        PERMISSION_PROJECTS_EDIT,
-        PERMISSION_PROJECTS_MANAGE,
+        PERMISSION_PRODUCTS_CREATE,
+        PERMISSION_PRODUCTS_DELETE,
+        PERMISSION_PRODUCTS_EDIT,
+        PERMISSION_PRODUCTS_MANAGE,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_ROLES_ASSIGN,
-        PERMISSION_PROJECTS_ASSIGN,
+        PERMISSION_PRODUCTS_ASSIGN,
         PERMISSION_SETTINGS_MANAGE,
         PERMISSION_USERS_MANAGE,
         PERMISSION_USERS_PASSWORD,
@@ -2283,7 +2283,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             password="OpsPass1",
             role_name=BuiltinRole.ADMINISTRATOR.value,
             must_change_password=False,
-            access_all_projects=True,
+            access_all_products=True,
         )
         db.commit()
 
@@ -2291,33 +2291,33 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
     _login(auth_client, "admin", "AdminPass1")
     form = auth_client.get("/admin/membership")
     assert form.status_code == 200
-    assert 'href="/admin/membership/projects"' in form.text
+    assert 'href="/admin/membership/products"' in form.text
     assert 'href="/admin/membership/users"' in form.text
     user_new = auth_client.get("/admin/users/new")
     assert user_new.status_code == 200
-    assert "no project access" in user_new.text.lower()
-    assert 'id="project-access-list"' not in user_new.text
+    assert "no product access" in user_new.text.lower()
+    assert 'id="product-access-list"' not in user_new.text
 
-    project = auth_client.post("/api/projects", json={"name": "Role Matrix"}).json()
-    project_id = project["uuid"]
-    other = auth_client.post("/api/projects", json={"name": "Other Matrix"})
+    product = auth_client.post("/api/products", json={"name": "Role Matrix"}).json()
+    product_id = product["uuid"]
+    other = auth_client.post("/api/products", json={"name": "Other Matrix"})
     assert other.status_code == 201, other.text
     other_id = other.json()["uuid"]
-    # Membership project list names projects once they exist.
-    form_with_projects = auth_client.get("/admin/membership/projects")
-    assert form_with_projects.status_code == 200
-    assert "Role Matrix" in form_with_projects.text
-    assert f'href="/admin/membership/projects/{project_id}"' in form_with_projects.text
+    # Membership product list names products once they exist.
+    form_with_products = auth_client.get("/admin/membership/products")
+    assert form_with_products.status_code == 200
+    assert "Role Matrix" in form_with_products.text
+    assert f'href="/admin/membership/products/{product_id}"' in form_with_products.text
     created = auth_client.post(
-        f"/api/projects/{project_id}/objects",
+        f"/api/products/{product_id}/objects",
         files={"file": ("matrix.prt", b"matrix-bytes", "application/octet-stream")},
         data={"comment": "seed"},
     )
     assert created.status_code == 201, created.text
     object_id = created.json()["uuid"]
-    # Disposable project for delete probes (recreated when consumed).
+    # Disposable product for delete probes (recreated when consumed).
     disposable = auth_client.post(
-        "/api/projects", json={"name": f"Disposable-{uuid4().hex[:8]}"}
+        "/api/products", json={"name": f"Disposable-{uuid4().hex[:8]}"}
     )
     assert disposable.status_code == 201, disposable.text
     disposable_id = disposable.json()["uuid"]
@@ -2338,12 +2338,12 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         _login(auth_client, username, password)
 
         # Browse requires objects.view.
-        assert auth_client.get(f"/api/projects/{project_id}").status_code == (
+        assert auth_client.get(f"/api/products/{product_id}").status_code == (
             200 if PERMISSION_OBJECTS_VIEW in allowed else 403
         )
         if PERMISSION_OBJECTS_VIEW in allowed:
             assert auth_client.get(f"/api/objects/{object_id}").status_code == 200
-            home = auth_client.get(f"/?project={project_id}")
+            home = auth_client.get(f"/?product={product_id}")
             assert home.status_code == 200
             assert f'data-can-checkout="{"1" if PERMISSION_OBJECTS_CHECKOUT in allowed else "0"}"' in home.text
             assert f'data-can-view="1"' in home.text
@@ -2356,17 +2356,17 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 assert 'id="add-menu"' in home.text
             else:
                 assert 'id="add-menu"' not in home.text
-            if PERMISSION_PROJECTS_CREATE in allowed:
-                assert 'id="new-project-btn"' in home.text
+            if PERMISSION_PRODUCTS_CREATE in allowed:
+                assert 'id="new-product-btn"' in home.text
             else:
-                assert 'id="new-project-btn"' not in home.text
+                assert 'id="new-product-btn"' not in home.text
             if (
                 PERMISSION_USERS_MANAGE in allowed
                 or PERMISSION_ROLES_MANAGE in allowed
                 or PERMISSION_SETTINGS_MANAGE in allowed
-                or PERMISSION_PROJECTS_MANAGE in allowed
+                or PERMISSION_PRODUCTS_MANAGE in allowed
                 or PERMISSION_EMAIL_MANAGE in allowed
-                or PERMISSION_PROJECTS_ASSIGN in allowed
+                or PERMISSION_PRODUCTS_ASSIGN in allowed
                 or PERMISSION_USERS_PASSWORD in allowed
                 or PERMISSION_ROLES_ASSIGN in allowed
             ):
@@ -2374,36 +2374,36 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             else:
                 assert "Administration" not in home.text
             # Default after Membership grant in setup: both fixtures visible.
-            listed_all = auth_client.get("/api/projects")
+            listed_all = auth_client.get("/api/products")
             assert listed_all.status_code == 200
             listed_uuids = {p["uuid"] for p in listed_all.json()}
-            assert project_id in listed_uuids and other_id in listed_uuids, (
-                f"{role_name}/{username}: All projects must include both fixtures"
+            assert product_id in listed_uuids and other_id in listed_uuids, (
+                f"{role_name}/{username}: All products must include both fixtures"
             )
         else:
             _assert_forbidden(auth_client.get(f"/api/objects/{object_id}"))
-            _assert_forbidden(auth_client.get(f"/?project={project_id}"))
+            _assert_forbidden(auth_client.get(f"/?product={product_id}"))
 
         probes: dict[str, object] = {
             PERMISSION_USERS_MANAGE: auth_client.get("/admin/users", follow_redirects=False),
             PERMISSION_ROLES_MANAGE: auth_client.get("/admin/roles", follow_redirects=False),
             PERMISSION_SETTINGS_MANAGE: auth_client.get("/api/settings", follow_redirects=False),
-            PERMISSION_PROJECTS_MANAGE: auth_client.get("/admin/projects", follow_redirects=False),
+            PERMISSION_PRODUCTS_MANAGE: auth_client.get("/admin/products", follow_redirects=False),
             PERMISSION_EMAIL_MANAGE: auth_client.get("/admin/email", follow_redirects=False),
-            PERMISSION_OBJECTS_VIEW: auth_client.get(f"/api/projects/{project_id}"),
-            PERMISSION_PROJECTS_CREATE: auth_client.post(
-                "/api/projects",
+            PERMISSION_OBJECTS_VIEW: auth_client.get(f"/api/products/{product_id}"),
+            PERMISSION_PRODUCTS_CREATE: auth_client.post(
+                "/api/products",
                 json={"name": f"Create-{username}-{uuid4().hex[:6]}"},
             ),
-            PERMISSION_PROJECTS_EDIT: auth_client.patch(
-                f"/api/projects/{project_id}",
+            PERMISSION_PRODUCTS_EDIT: auth_client.patch(
+                f"/api/products/{product_id}",
                 json={
                     "name": "Role Matrix",
                     "description": f"edited-by-{username}",
                 },
             ),
             PERMISSION_OBJECTS_ADD: auth_client.post(
-                f"/api/projects/{project_id}/objects",
+                f"/api/products/{product_id}/objects",
                 files={
                     "file": (
                         f"add-{username}.prt",
@@ -2461,8 +2461,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 "status": UserStatus.ACTIVE.value,
                 "password": "",
                 "password_confirm": "",
-                "project_access_present": "1",
-                "access_all_projects": "1",
+                "product_access_present": "1",
+                "access_all_products": "1",
             },
             follow_redirects=False,
         )
@@ -2477,8 +2477,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                     "status": UserStatus.ACTIVE.value,
                     "password": "",
                     "password_confirm": "",
-                    "project_access_present": "1",
-                    "access_all_projects": "1",
+                    "product_access_present": "1",
+                    "access_all_products": "1",
                 },
                 follow_redirects=False,
             )
@@ -2494,8 +2494,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 "status": UserStatus.ACTIVE.value,
                 "password": "TempPass99",
                 "password_confirm": "TempPass99",
-                "project_access_present": "1",
-                "access_all_projects": "1",
+                "product_access_present": "1",
+                "access_all_products": "1",
             },
             follow_redirects=False,
         )
@@ -2510,43 +2510,43 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 )
                 db.commit()
 
-        # projects.assign: try restricting bait to Role Matrix only, then restore All.
+        # products.assign: try restricting bait to Role Matrix only, then restore All.
         mem_probe = auth_client.post(
             f"/admin/membership/users/{bait_uuid}",
             data={
-                "project_access_present": "1",
-                "project_uuid": [project_id],
+                "product_access_present": "1",
+                "product_uuid": [product_id],
             },
             follow_redirects=False,
         )
-        probes[PERMISSION_PROJECTS_ASSIGN] = mem_probe
+        probes[PERMISSION_PRODUCTS_ASSIGN] = mem_probe
         if mem_probe.status_code in (302, 303):
             restored_mem = auth_client.post(
                 f"/admin/membership/users/{bait_uuid}",
                 data={
-                    "project_access_present": "1",
-                    "access_all_projects": "1",
+                    "product_access_present": "1",
+                    "access_all_products": "1",
                 },
                 follow_redirects=False,
             )
             assert restored_mem.status_code in (302, 303), restored_mem.text
 
         # Delete: try disposable when allowed; otherwise attempt delete on shared
-        # project (must 403 without destroying fixtures).
-        if PERMISSION_PROJECTS_DELETE in allowed:
-            delete_resp = auth_client.delete(f"/api/projects/{disposable_id}")
-            probes[PERMISSION_PROJECTS_DELETE] = delete_resp
+        # product (must 403 without destroying fixtures).
+        if PERMISSION_PRODUCTS_DELETE in allowed:
+            delete_resp = auth_client.delete(f"/api/products/{disposable_id}")
+            probes[PERMISSION_PRODUCTS_DELETE] = delete_resp
             # Recreate disposable for the next role that can delete.
             _login(auth_client, "admin", "AdminPass1")
             again = auth_client.post(
-                "/api/projects", json={"name": f"Disposable-{uuid4().hex[:8]}"}
+                "/api/products", json={"name": f"Disposable-{uuid4().hex[:8]}"}
             )
             assert again.status_code == 201, again.text
             disposable_id = again.json()["uuid"]
             _login(auth_client, username, password)
         else:
-            probes[PERMISSION_PROJECTS_DELETE] = auth_client.delete(
-                f"/api/projects/{project_id}"
+            probes[PERMISSION_PRODUCTS_DELETE] = auth_client.delete(
+                f"/api/products/{product_id}"
             )
 
         assert set(probes) == set(all_perm_keys), (
@@ -2566,21 +2566,21 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             undone = auth_client.post(f"/api/objects/{object_id}/undo-checkout")
             assert undone.status_code == 200, undone.text
 
-        # Project membership (per user, not per role permission key).
+        # Product membership (per user, not per role permission key).
         # Use ops (not the signed-in admin) so Administrator can be restricted too.
         with auth_ctx.session_factory() as db:
             row = db.scalar(select(User).where(User.username == username))
             assert row is not None
             user_uuid = row.uuid
             display_name = row.display_name
-            assert row.access_all_projects is True
+            assert row.access_all_products is True
 
         _login(auth_client, "ops", "OpsPass1")
         restricted = auth_client.post(
             f"/admin/membership/users/{user_uuid}",
             data={
-                "project_access_present": "1",
-                "project_uuid": [project_id],
+                "product_access_present": "1",
+                "product_uuid": [product_id],
             },
             follow_redirects=False,
         )
@@ -2588,13 +2588,13 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
 
         _login(auth_client, username, password)
         if PERMISSION_OBJECTS_VIEW in allowed:
-            only = auth_client.get("/api/projects")
+            only = auth_client.get("/api/products")
             assert only.status_code == 200, only.text
-            assert {p["uuid"] for p in only.json()} == {project_id}, (
+            assert {p["uuid"] for p in only.json()} == {product_id}, (
                 f"{role_name}/{username}: restricted membership must show only Role Matrix"
             )
-            assert auth_client.get(f"/api/projects/{project_id}").status_code == 200
-            denied_other = auth_client.get(f"/api/projects/{other_id}")
+            assert auth_client.get(f"/api/products/{product_id}").status_code == 200
+            denied_other = auth_client.get(f"/api/products/{other_id}")
             assert denied_other.status_code == 403, denied_other.text
             assert denied_other.json()["error"]["code"] == "FORBIDDEN"
 
@@ -2602,7 +2602,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         cleared = auth_client.post(
             f"/admin/membership/users/{user_uuid}",
             data={
-                "project_access_present": "1",
+                "product_access_present": "1",
             },
             follow_redirects=False,
         )
@@ -2610,20 +2610,20 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
 
         _login(auth_client, username, password)
         if PERMISSION_OBJECTS_VIEW in allowed:
-            empty = auth_client.get("/api/projects")
+            empty = auth_client.get("/api/products")
             assert empty.status_code == 200
             assert empty.json() == [], (
-                f"{role_name}/{username}: no selected projects → empty list"
+                f"{role_name}/{username}: no selected products → empty list"
             )
-            assert auth_client.get(f"/api/projects/{project_id}").status_code == 403
+            assert auth_client.get(f"/api/products/{product_id}").status_code == 403
 
-        # Restore All projects so later roles still share fixtures (and admin stays usable).
+        # Restore All products so later roles still share fixtures (and admin stays usable).
         _login(auth_client, "ops", "OpsPass1")
         restored = auth_client.post(
             f"/admin/membership/users/{user_uuid}",
             data={
-                "project_access_present": "1",
-                "access_all_projects": "1",
+                "product_access_present": "1",
+                "access_all_products": "1",
             },
             follow_redirects=False,
         )

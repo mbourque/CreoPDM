@@ -123,7 +123,7 @@ def _powershell_start(path: str, folder: str | None) -> bool:
 def open_windows_folder(path: Path) -> None:
     """Open a folder in Explorer, creating it when nothing has materialized yet.
 
-    Empty projects have no agent-cache files until checkout/open. Open workspace
+    Empty products have no agent-cache files until checkout/open. Open workspace
     still creates the local folder and shows it in Explorer.
     """
     target = Path(path)

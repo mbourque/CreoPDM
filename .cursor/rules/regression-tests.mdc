@@ -18,7 +18,7 @@ When the user reports a **bug** (including regressions, UI glitches, wrong data,
 
 ## Examples that need a test
 
-- Soft folder/project nav re-probed Creo.JS → soft boot skips probe / pill stays outside shell
+- Soft folder/product nav re-probed Creo.JS → soft boot skips probe / pill stays outside shell
 - Nested folder add flattened subfolders → assert sibling subfolder relative paths
 - `app.js` syntax typo killed all clicks → `node --check` / bare-`if` guard
 - Choose Folder on LAN http skipped the agent → assert agent pick runs before browser fallback

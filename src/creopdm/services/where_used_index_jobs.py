@@ -20,7 +20,7 @@ _CHUNK = 20
 
 @dataclass
 class WhereUsedIndexStatus:
-    project_id: str
+    product_id: str
     state: str = "idle"  # idle | queued | running | done | error
     parents_total: int = 0
     parents_done: int = 0
@@ -38,20 +38,20 @@ class WhereUsedIndexStatus:
 
 @dataclass
 class WhereUsedIndexJobs:
-    """One background index thread per project (re-entrant start is a no-op)."""
+    """One background index thread per product (re-entrant start is a no-op)."""
 
     session_factory: sessionmaker[Session]
     metadata: MetadataService
     _lock: threading.Lock = field(default_factory=threading.Lock)
     _status: dict[str, WhereUsedIndexStatus] = field(default_factory=dict)
 
-    def get(self, project_uuid: str) -> WhereUsedIndexStatus:
+    def get(self, product_uuid: str) -> WhereUsedIndexStatus:
         with self._lock:
-            current = self._status.get(project_uuid)
+            current = self._status.get(product_uuid)
             if current is None:
-                return WhereUsedIndexStatus(project_id=project_uuid, state="idle")
+                return WhereUsedIndexStatus(product_id=product_uuid, state="idle")
             return WhereUsedIndexStatus(
-                project_id=current.project_id,
+                product_id=current.product_id,
                 state=current.state,
                 parents_total=current.parents_total,
                 parents_done=current.parents_done,
@@ -63,34 +63,34 @@ class WhereUsedIndexJobs:
                 finished_at=current.finished_at,
             )
 
-    def start(self, project_uuid: str) -> WhereUsedIndexStatus:
+    def start(self, product_uuid: str) -> WhereUsedIndexStatus:
         with self._lock:
-            current = self._status.get(project_uuid)
+            current = self._status.get(product_uuid)
             if current is not None and current.state in {"queued", "running"}:
-                return self.get(project_uuid)
+                return self.get(product_uuid)
             status = WhereUsedIndexStatus(
-                project_id=project_uuid,
+                product_id=product_uuid,
                 state="queued",
                 started_at=time.time(),
             )
-            self._status[project_uuid] = status
+            self._status[product_uuid] = status
         thread = threading.Thread(
             target=self._run,
-            args=(project_uuid,),
-            name=f"where-used-{project_uuid[:8]}",
+            args=(product_uuid,),
+            name=f"where-used-{product_uuid[:8]}",
             daemon=True,
         )
         thread.start()
-        return self.get(project_uuid)
+        return self.get(product_uuid)
 
-    def maybe_start_after_add(self, project_uuid: str, added_count: int) -> WhereUsedIndexStatus | None:
+    def maybe_start_after_add(self, product_uuid: str, added_count: int) -> WhereUsedIndexStatus | None:
         if added_count < WHERE_USED_AUTO_INDEX_MIN_FILES:
             return None
-        return self.start(project_uuid)
+        return self.start(product_uuid)
 
-    def _run(self, project_uuid: str) -> None:
+    def _run(self, product_uuid: str) -> None:
         with self._lock:
-            status = self._status.get(project_uuid)
+            status = self._status.get(product_uuid)
             if status is None:
                 return
             status.state = "running"
@@ -106,7 +106,7 @@ class WhereUsedIndexJobs:
                 try:
                     result = self.metadata.rebuild_where_used_from_vault(
                         session,
-                        project_uuid,
+                        product_uuid,
                         offset=offset,
                         limit=_CHUNK,
                     )
@@ -122,7 +122,7 @@ class WhereUsedIndexJobs:
                 missing += result.parents_missing_vault
                 offset = result.next_offset
                 with self._lock:
-                    status = self._status.get(project_uuid)
+                    status = self._status.get(product_uuid)
                     if status is None:
                         return
                     status.parents_total = result.parents_total
@@ -135,22 +135,22 @@ class WhereUsedIndexJobs:
                 if result.done:
                     break
             with self._lock:
-                status = self._status.get(project_uuid)
+                status = self._status.get(product_uuid)
                 if status is None:
                     return
                 status.state = "done"
                 status.finished_at = time.time()
             logger.info(
                 "Where Used index done for %s: +%s edges (%s existing), %s missing vault",
-                project_uuid,
+                product_uuid,
                 edges_added,
                 edges_existing,
                 missing,
             )
         except Exception as exc:
-            logger.exception("Where Used index failed for %s", project_uuid)
+            logger.exception("Where Used index failed for %s", product_uuid)
             with self._lock:
-                status = self._status.get(project_uuid)
+                status = self._status.get(product_uuid)
                 if status is None:
                     return
                 status.state = "error"

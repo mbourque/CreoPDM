@@ -10,9 +10,9 @@ from creopdm.schemas.common import (
     HealthResponse,
     ObjectResponse,
     ObjectVersionResponse,
-    ProjectCreateRequest,
-    ProjectResponse,
-    ProjectStatusResponse,
+    ProductCreateRequest,
+    ProductResponse,
+    ProductStatusResponse,
 )
 
 __all__ = [
@@ -23,7 +23,7 @@ __all__ = [
     "HealthResponse",
     "ObjectResponse",
     "ObjectVersionResponse",
-    "ProjectCreateRequest",
-    "ProjectResponse",
-    "ProjectStatusResponse",
+    "ProductCreateRequest",
+    "ProductResponse",
+    "ProductStatusResponse",
 ]

@@ -26,13 +26,13 @@ PERMISSION_USERS_MANAGE = "users.manage"
 PERMISSION_USERS_PASSWORD = "users.password"
 PERMISSION_ROLES_ASSIGN = "roles.assign"
 PERMISSION_ROLES_MANAGE = "roles.manage"
-PERMISSION_PROJECTS_ASSIGN = "projects.assign"
-PERMISSION_PROJECTS_MANAGE = "projects.manage"
+PERMISSION_PRODUCTS_ASSIGN = "products.assign"
+PERMISSION_PRODUCTS_MANAGE = "products.manage"
 PERMISSION_SETTINGS_MANAGE = "settings.manage"
 PERMISSION_EMAIL_MANAGE = "email.manage"
-PERMISSION_PROJECTS_CREATE = "projects.create"
-PERMISSION_PROJECTS_EDIT = "projects.edit"
-PERMISSION_PROJECTS_DELETE = "projects.delete"
+PERMISSION_PRODUCTS_CREATE = "products.create"
+PERMISSION_PRODUCTS_EDIT = "products.edit"
+PERMISSION_PRODUCTS_DELETE = "products.delete"
 PERMISSION_OBJECTS_ADD = "objects.add"
 PERMISSION_OBJECTS_VIEW = "objects.view"
 PERMISSION_OBJECTS_CHECKOUT = "objects.checkout"
@@ -46,7 +46,7 @@ STARTER_ROLE_DESCRIPTIONS: dict[str, str] = {
     StarterRole.ADMINISTRATOR.value: "Full system administration access.",
     StarterRole.PDM_MANAGER.value: "Manage engineering data without full server administration.",
     StarterRole.ENGINEER.value: "Normal CAD/PDM authoring user.",
-    StarterRole.VIEWER.value: "Read-only access to assigned projects.",
+    StarterRole.VIEWER.value: "Read-only access to assigned products.",
 }
 
 # Back-compat alias.
@@ -57,18 +57,18 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_USERS_PASSWORD, "Set or reset user passwords"),
     (PERMISSION_ROLES_ASSIGN, "Assign roles to users"),
     (PERMISSION_ROLES_MANAGE, "Create, edit, and delete roles"),
-    (PERMISSION_PROJECTS_ASSIGN, "Assign project membership (Administration → Membership)"),
-    (PERMISSION_PROJECTS_MANAGE, "Create, edit, and delete projects in Administration"),
+    (PERMISSION_PRODUCTS_ASSIGN, "Assign product membership (Administration → Membership)"),
+    (PERMISSION_PRODUCTS_MANAGE, "Create, edit, and delete products in Administration"),
     (PERMISSION_SETTINGS_MANAGE, "Change global CreoPDM settings"),
     (PERMISSION_EMAIL_MANAGE, "Configure email and notifications in Administration"),
-    (PERMISSION_PROJECTS_CREATE, "Create projects"),
-    (PERMISSION_PROJECTS_EDIT, "Edit project properties"),
-    (PERMISSION_PROJECTS_DELETE, "Delete or forget projects"),
-    (PERMISSION_OBJECTS_VIEW, "Browse projects and open or download files"),
-    (PERMISSION_OBJECTS_ADD, "Add files and folders to projects"),
+    (PERMISSION_PRODUCTS_CREATE, "Create products"),
+    (PERMISSION_PRODUCTS_EDIT, "Edit product properties"),
+    (PERMISSION_PRODUCTS_DELETE, "Delete or forget products"),
+    (PERMISSION_OBJECTS_VIEW, "Browse products and open or download files"),
+    (PERMISSION_OBJECTS_ADD, "Add files and folders to products"),
     (PERMISSION_OBJECTS_CHECKOUT, "Check out objects and undo own checkout"),
     (PERMISSION_OBJECTS_CHECKIN, "Check in objects"),
-    (PERMISSION_OBJECTS_REMOVE, "Remove objects from projects"),
+    (PERMISSION_OBJECTS_REMOVE, "Remove objects from products"),
     (PERMISSION_OBJECTS_REVERT, "Restore an older version as the working version"),
     (PERMISSION_OBJECTS_METADATA, "Update Creo metadata on objects"),
     (PERMISSION_OBJECTS_COPY_TO_VAULT, "Copy selected files into the vault (Copy to Vault)"),
@@ -81,8 +81,8 @@ ADMINISTRATION_PERMISSION_KEYS: frozenset[str] = frozenset(
         PERMISSION_USERS_PASSWORD,
         PERMISSION_ROLES_ASSIGN,
         PERMISSION_ROLES_MANAGE,
-        PERMISSION_PROJECTS_ASSIGN,
-        PERMISSION_PROJECTS_MANAGE,
+        PERMISSION_PRODUCTS_ASSIGN,
+        PERMISSION_PRODUCTS_MANAGE,
         PERMISSION_SETTINGS_MANAGE,
         PERMISSION_EMAIL_MANAGE,
     )
@@ -97,15 +97,15 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             PERMISSION_USERS_PASSWORD,
             PERMISSION_ROLES_ASSIGN,
             PERMISSION_ROLES_MANAGE,
-            PERMISSION_PROJECTS_ASSIGN,
-            PERMISSION_PROJECTS_MANAGE,
+            PERMISSION_PRODUCTS_ASSIGN,
+            PERMISSION_PRODUCTS_MANAGE,
             PERMISSION_SETTINGS_MANAGE,
             PERMISSION_EMAIL_MANAGE,
         ),
     ),
     (
-        "Projects",
-        (PERMISSION_PROJECTS_CREATE, PERMISSION_PROJECTS_EDIT, PERMISSION_PROJECTS_DELETE),
+        "Products",
+        (PERMISSION_PRODUCTS_CREATE, PERMISSION_PRODUCTS_EDIT, PERMISSION_PRODUCTS_DELETE),
     ),
     (
         "Objects",
@@ -136,8 +136,8 @@ _AUTHORING = (
 STARTER_ROLE_PERMISSION_KEYS: dict[str, tuple[str, ...]] = {
     StarterRole.ADMINISTRATOR.value: tuple(key for key, _ in BUILTIN_PERMISSIONS),
     StarterRole.PDM_MANAGER.value: (
-        PERMISSION_PROJECTS_CREATE,
-        PERMISSION_PROJECTS_EDIT,
+        PERMISSION_PRODUCTS_CREATE,
+        PERMISSION_PRODUCTS_EDIT,
         *_AUTHORING,
         PERMISSION_OBJECTS_COPY_TO_VAULT,
     ),

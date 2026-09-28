@@ -31,12 +31,12 @@ def test_open_in_creo_uses_connector(data_dir, repo_parent, identity: StaticUser
     ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
     with TestClient(create_app(ctx)) as client:
         location = repo_parent / "OpenProj"
-        project = client.post(
-            "/api/projects",
+        product = client.post(
+            "/api/products",
             json={"name": "Open"},
         ).json()
         created = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("base.prt", b"solid", "application/octet-stream")},
             data={"comment": "Add base"},
         )
@@ -48,7 +48,7 @@ def test_open_in_creo_uses_connector(data_dir, repo_parent, identity: StaticUser
         assert opened.json()["working_directory"] == str(recorder.opened[0].parent)
         assert recorder.opened
         assert recorder.opened[0].name == "base.prt"
-        assert recorder.opened[0].parent.name == project["uuid"]
+        assert recorder.opened[0].parent.name == product["uuid"]
 
 
 @requires_git
@@ -60,14 +60,14 @@ def test_open_untracked_workspace_file_by_relative_path(
     ctx.creo = recorder
     ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
     with TestClient(create_app(ctx)) as client:
-        project = client.post("/api/projects", json={"name": "Queue Open"}).json()
-        workspace = data_dir / "vaults" / project["uuid"]
+        product = client.post("/api/products", json={"name": "Queue Open"}).json()
+        workspace = data_dir / "vaults" / product["uuid"]
         nested = workspace / "Incoming"
         nested.mkdir(parents=True, exist_ok=True)
         (nested / "pin.prt").write_bytes(b"new-pin")
         opened = client.post(
             "/api/creo/open",
-            json={"project_id": project["uuid"], "relative_path": "Incoming/pin.prt"},
+            json={"product_id": product["uuid"], "relative_path": "Incoming/pin.prt"},
         )
         assert opened.status_code == 200, opened.text
         assert opened.json()["method"] == "creo"
@@ -77,7 +77,7 @@ def test_open_untracked_workspace_file_by_relative_path(
         assert recorder.opened[-1].read_bytes() == b"new-pin"
         missing = client.post(
             "/api/creo/open",
-            json={"project_id": project["uuid"], "relative_path": "missing.prt"},
+            json={"product_id": product["uuid"], "relative_path": "missing.prt"},
         )
         assert missing.status_code == 400
         rejected = client.post("/api/creo/open", json={"launch": False})
@@ -91,9 +91,9 @@ def test_open_prepare_does_not_launch(data_dir, repo_parent, identity: StaticUse
     ctx.creo = recorder
     ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
     with TestClient(create_app(ctx)) as client:
-        project = client.post("/api/projects", json={"name": "Prepare"}).json()
+        product = client.post("/api/products", json={"name": "Prepare"}).json()
         created = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("hub.prt", b"solid", "application/octet-stream")},
             data={"comment": "Add hub"},
         )
@@ -116,9 +116,9 @@ def test_open_prepare_does_not_launch(data_dir, repo_parent, identity: StaticUse
 def test_open_prepare_includes_creo_release(data_dir, repo_parent, identity: StaticUserProvider):
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
-        project = client.post("/api/projects", json={"name": "Release Open"}).json()
+        product = client.post("/api/products", json={"name": "Release Open"}).json()
         created = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={
                 "file": (
                     "shaft.prt.1",
@@ -150,9 +150,9 @@ def test_open_prepare_skips_creo_release_for_foreign_openable(
     """SolidWorks is Creo-openable in File > Open, but Creo.JS cannot open Multi-CAD."""
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
-        project = client.post("/api/projects", json={"name": "SW Open"}).json()
+        product = client.post("/api/products", json={"name": "SW Open"}).json()
         created = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={
                 "file": ("bolt_sw.SLDPRT", b"solidworks-part", "application/octet-stream")
             },
@@ -182,19 +182,19 @@ def test_open_after_checkin_despite_creo_numbered_workspace_file(
     ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
     with TestClient(create_app(ctx)) as client:
         location = repo_parent / "Plywood"
-        project = client.post(
-            "/api/projects",
+        product = client.post(
+            "/api/products",
             json={"name": "Plywood"},
         ).json()
         created = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("nested-plywood.prt", b"original", "application/octet-stream")},
             data={"comment": "Add plywood"},
         )
         assert created.status_code == 201, created.text
         obj_id = created.json()["uuid"]
         assert client.post(f"/api/objects/{obj_id}/checkout").status_code == 200
-        workspace = data_dir / "vaults" / project["uuid"]
+        workspace = data_dir / "vaults" / product["uuid"]
         (workspace / "nested-plywood.prt.1").write_bytes(b"creo-iteration")
         checked = client.post(
             f"/api/objects/{obj_id}/checkin",
@@ -423,12 +423,12 @@ def test_windows_connector_opens_numbered_save_as_logical_name(tmp_path: Path, m
 def test_open_document_uses_windows_association(data_dir, repo_parent, identity, monkeypatch):
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
-        project = client.post(
-            "/api/projects",
+        product = client.post(
+            "/api/products",
             json={"name": "Docs"},
         ).json()
         created = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("notes.txt", b"hello", "text/plain")},
             data={"comment": "Notes"},
         )
@@ -452,9 +452,9 @@ def test_open_extra_cad_uses_windows_association(
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
         assert client.put("/api/settings", json={"creo_open_mode": "association"}).status_code == 200
-        project = client.post("/api/projects", json={"name": "ExtraCad"}).json()
+        product = client.post("/api/products", json={"name": "ExtraCad"}).json()
         created = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("setup.inf", b"info", "application/octet-stream")},
             data={"comment": "Extra CAD"},
         )
@@ -472,9 +472,9 @@ def test_open_image_uses_windows_association(data_dir, repo_parent, identity, mo
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
         assert client.put("/api/settings", json={"creo_open_mode": "embedded"}).status_code == 200
-        project = client.post("/api/projects", json={"name": "Images"}).json()
+        product = client.post("/api/products", json={"name": "Images"}).json()
         created = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("photo.png", b"\x89PNG\r\n\x1a\n", "image/png")},
             data={"comment": "Photo"},
         )
@@ -497,9 +497,9 @@ def test_open_openable_cad_uses_windows_association(
 ):
     ctx = build_context(ConfigManager(), users=identity)
     with TestClient(create_app(ctx)) as client:
-        project = client.post("/api/projects", json={"name": "OpenableCad"}).json()
+        product = client.post("/api/products", json={"name": "OpenableCad"}).json()
         created = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("rough.ncl", b"g1 x0", "text/plain")},
             data={"comment": "Openable CAD"},
         )
@@ -524,9 +524,9 @@ def test_open_embedded_does_not_launch_cad(data_dir, repo_parent, identity: Stat
     ctx.creo = recorder
     ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
     with TestClient(create_app(ctx)) as client:
-        project = client.post("/api/projects", json={"name": "Embedded"}).json()
+        product = client.post("/api/products", json={"name": "Embedded"}).json()
         created = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("cover.prt", b"solid", "application/octet-stream")},
             data={"comment": "Add cover"},
         )
@@ -553,9 +553,9 @@ def test_open_viewable_uses_creo_view(data_dir, repo_parent, identity: StaticUse
     ctx.creo = recorder
     ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
     with TestClient(create_app(ctx)) as client:
-        project = client.post("/api/projects", json={"name": "Viewable"}).json()
+        product = client.post("/api/products", json={"name": "Viewable"}).json()
         created = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("preview.pvz", b"viewable", "application/octet-stream")},
             data={"comment": "Add viewable"},
         )
@@ -581,9 +581,9 @@ def test_open_creo_model_with_view_mode(data_dir, repo_parent, identity: StaticU
     ctx.creo = recorder
     ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
     with TestClient(create_app(ctx)) as client:
-        project = client.post("/api/projects", json={"name": "ViewModels"}).json()
+        product = client.post("/api/products", json={"name": "ViewModels"}).json()
         created = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("shaft.prt", b"solid", "application/octet-stream")},
             data={"comment": "Add shaft"},
         )
@@ -603,9 +603,9 @@ def test_open_embedded_still_opens_creo_view(data_dir, repo_parent, identity: St
     ctx.creo = recorder
     ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
     with TestClient(create_app(ctx)) as client:
-        project = client.post("/api/projects", json={"name": "EmbeddedView"}).json()
+        product = client.post("/api/products", json={"name": "EmbeddedView"}).json()
         created = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("preview.pvz", b"viewable", "application/octet-stream")},
             data={"comment": "Add viewable"},
         )
@@ -627,14 +627,14 @@ def test_open_include_companions_false_skips_neighbors(
     ctx.creo = recorder
     ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
     with TestClient(create_app(ctx)) as client:
-        project = client.post("/api/projects", json={"name": "CompanionsFlag"}).json()
+        product = client.post("/api/products", json={"name": "CompanionsFlag"}).json()
         part = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("pin.prt", b"part", "application/octet-stream")},
             data={"comment": "Part"},
         )
         asm = client.post(
-            f"/api/projects/{project['uuid']}/objects",
+            f"/api/products/{product['uuid']}/objects",
             files={"file": ("arm.asm", b"asm-with-pin.prt", "application/octet-stream")},
             data={"comment": "Asm"},
         )

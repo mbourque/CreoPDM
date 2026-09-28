@@ -15,7 +15,7 @@ class Dependency(Base):
     __tablename__ = "dependencies"
     __table_args__ = (
         UniqueConstraint(
-            "project_id",
+            "product_id",
             "parent_object_id",
             "child_object_id",
             "dependency_type",
@@ -24,7 +24,7 @@ class Dependency(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     parent_object_id: Mapped[int] = mapped_column(ForeignKey("objects.id"), index=True)
     child_object_id: Mapped[int] = mapped_column(ForeignKey("objects.id"), index=True)
     dependency_type: Mapped[str] = mapped_column(

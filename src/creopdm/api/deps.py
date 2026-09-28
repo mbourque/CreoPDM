@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from creopdm.context import AppContext
 from creopdm.exceptions import PermissionDeniedError
-from creopdm.models.project import Project
+from creopdm.models.product import Product
 
 
 def get_context(request: Request) -> AppContext:
@@ -39,36 +39,36 @@ def require_permission(request: Request, ctx: AppContext, key: str) -> None:
     raise PermissionDeniedError("You do not have permission to perform this action.")
 
 
-def require_project_access(request: Request, ctx: AppContext, project: Project) -> None:
-    """Deny when the signed-in user is restricted away from this project."""
+def require_product_access(request: Request, ctx: AppContext, product: Product) -> None:
+    """Deny when the signed-in user is restricted away from this product."""
     if not ctx.auth_enabled:
         return
     user = getattr(request.state, "auth_user", None)
     if user is None:
         return
-    if ctx.user_accounts.user_can_access_project(user, project):
+    if ctx.user_accounts.user_can_access_product(user, product):
         return
-    raise PermissionDeniedError("You do not have access to this project.")
+    raise PermissionDeniedError("You do not have access to this product.")
 
 
-def accessible_projects(request: Request, ctx: AppContext, db: Session) -> list[Project]:
-    """Projects the current user may browse (all when auth off or All projects)."""
-    projects = ctx.projects.list_projects(db)
+def accessible_products(request: Request, ctx: AppContext, db: Session) -> list[Product]:
+    """Products the current user may browse (all when auth off or All products)."""
+    products = ctx.products.list_products(db)
     if not ctx.auth_enabled:
-        return projects
+        return products
     user = getattr(request.state, "auth_user", None)
     if user is None:
-        return projects
-    return ctx.user_accounts.filter_accessible_projects(user, projects)
+        return products
+    return ctx.user_accounts.filter_accessible_products(user, products)
 
 
-def load_accessible_project(
+def load_accessible_product(
     request: Request,
     ctx: AppContext,
     db: Session,
-    project_id: str,
-) -> Project:
-    """Load a project and enforce membership when auth is on."""
-    project = ctx.projects.get_project(db, project_id)
-    require_project_access(request, ctx, project)
-    return project
+    product_id: str,
+) -> Product:
+    """Load a product and enforce membership when auth is on."""
+    product = ctx.products.get_product(db, product_id)
+    require_product_access(request, ctx, product)
+    return product

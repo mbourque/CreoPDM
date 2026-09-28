@@ -47,13 +47,13 @@ def test_agent_health_and_materialize(tmp_path, monkeypatch):
             json={
                 "pdm_url": "http://pdm.example:52113",
                 "object_id": "abc",
-                "project_id": "proj1",
+                "product_id": "proj1",
                 "filename": "top.asm",
                 "disk_name": "top.asm.1",
                 "companions": [
                     {
                         "object_id": "pin",
-                        "project_id": "proj1",
+                        "product_id": "proj1",
                         "filename": "pin.prt",
                         "disk_name": "pin.prt.1",
                     }
@@ -68,7 +68,7 @@ def test_agent_health_and_materialize(tmp_path, monkeypatch):
         assert Path(body["path"]).read_bytes() == b"asm-bytes"
         assert (Path(body["working_directory"]) / "pin.prt.1").read_bytes() == b"prt-bytes"
         assert any("/api/objects/pin/content" in url for url in seen)
-        workdir = client.get("/workdir", params={"project_id": "proj1"})
+        workdir = client.get("/workdir", params={"product_id": "proj1"})
         assert workdir.status_code == 200
         assert workdir.json()["path"].endswith("proj1")
 
@@ -104,7 +104,7 @@ def test_agent_materialize_preserves_vault_folders(tmp_path, monkeypatch):
             json={
                 "pdm_url": "http://pdm.example:52113",
                 "object_id": "pin",
-                "project_id": "proj-nested",
+                "product_id": "proj-nested",
                 "relative_path": "lib/step/pin.prt",
                 "filename": "pin.prt",
                 "disk_name": "pin.prt.1",
@@ -122,8 +122,8 @@ def test_agent_materialize_preserves_vault_folders(tmp_path, monkeypatch):
 def test_agent_materialize_replace_newer_trashes_higher_local_saves(tmp_path, monkeypatch):
     """History revert / open-without-checkout must drop local .prt.3 when vault tip is .prt.1."""
     root = tmp_path / "cache"
-    project_id = "proj-replace"
-    cache = root / project_id
+    product_id = "proj-replace"
+    cache = root / product_id
     nested = cache / "model-templates"
     nested.mkdir(parents=True)
     (nested / "start_part.prt.1").write_bytes(b"stale-1")
@@ -159,7 +159,7 @@ def test_agent_materialize_replace_newer_trashes_higher_local_saves(tmp_path, mo
             json={
                 "pdm_url": "http://pdm.example:52113",
                 "object_id": "part1",
-                "project_id": project_id,
+                "product_id": product_id,
                 "relative_path": "model-templates/start_part.prt.1",
                 "filename": "start_part.prt.1",
                 "disk_name": "start_part.prt.1",
@@ -181,7 +181,7 @@ def test_agent_materialize_replace_newer_trashes_higher_local_saves(tmp_path, mo
         assert (nested / "other.prt.9").read_bytes() == b"keep"
 
 
-def test_agent_open_folder_uses_project_cache(tmp_path, monkeypatch):
+def test_agent_open_folder_uses_product_cache(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
     app = create_agent_app(settings)
@@ -194,21 +194,21 @@ def test_agent_open_folder_uses_project_cache(tmp_path, monkeypatch):
     with TestClient(app) as client:
         nested = root / "proj1" / "drawings"
         nested.mkdir(parents=True)
-        ok = client.post("/open-folder", json={"project_id": "proj1", "folder": "drawings"})
+        ok = client.post("/open-folder", json={"product_id": "proj1", "folder": "drawings"})
         assert ok.status_code == 200, ok.text
         assert opened[-1].resolve() == nested.resolve()
-        root_ok = client.post("/open-folder", json={"project_id": "proj1"})
+        root_ok = client.post("/open-folder", json={"product_id": "proj1"})
         assert root_ok.status_code == 200, root_ok.text
         assert opened[-1].resolve() == (root / "proj1").resolve()
         denied = client.post(
             "/open-folder",
-            json={"project_id": "proj1", "folder": "..\\..\\Windows"},
+            json={"product_id": "proj1", "folder": "..\\..\\Windows"},
         )
         assert denied.status_code == 403
 
 
 def test_agent_open_folder_creates_cache_when_nothing_materialized(tmp_path, monkeypatch):
-    """Open workspace on an empty project must create the local cache folder."""
+    """Open workspace on an empty product must create the local cache folder."""
     root = tmp_path / "cache"
     settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
     app = create_agent_app(settings)
@@ -225,7 +225,7 @@ def test_agent_open_folder_creates_cache_when_nothing_materialized(tmp_path, mon
         assert not (root / "brand-new").exists()
         ok = client.post(
             "/open-folder",
-            json={"project_id": "brand-new", "vault_folder": "brand-new"},
+            json={"product_id": "brand-new", "vault_folder": "brand-new"},
         )
         assert ok.status_code == 200, ok.text
         assert (root / "brand-new").is_dir()
@@ -243,7 +243,7 @@ def test_agent_pick_files_and_local_file(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "creopdm.utils.native_dialog.pick_files",
-        lambda initial_dir, title="Add files to the project": [sample],
+        lambda initial_dir, title="Add files to the product": [sample],
     )
     with TestClient(app) as client:
         picked = client.post(
@@ -275,7 +275,7 @@ def test_agent_pick_folder(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "creopdm.utils.native_dialog.pick_folder",
-        lambda initial_dir, title="Add a folder to the project": folder,
+        lambda initial_dir, title="Add a folder to the product": folder,
     )
     with TestClient(app) as client:
         picked = client.post(
@@ -309,7 +309,7 @@ def test_agent_pick_folder_non_recursive(tmp_path, monkeypatch):
     app = create_agent_app(settings)
     monkeypatch.setattr(
         "creopdm.utils.native_dialog.pick_folder",
-        lambda initial_dir, title="Add a folder to the project": folder,
+        lambda initial_dir, title="Add a folder to the product": folder,
     )
     with TestClient(app) as client:
         picked = client.post(
@@ -333,7 +333,7 @@ def test_agent_pick_folder_cancel(tmp_path, monkeypatch):
     app = create_agent_app(settings)
     monkeypatch.setattr(
         "creopdm.utils.native_dialog.pick_folder",
-        lambda initial_dir, title="Add a folder to the project": None,
+        lambda initial_dir, title="Add a folder to the product": None,
     )
     with TestClient(app) as client:
         picked = client.post("/pick-folder", json={})
@@ -386,7 +386,7 @@ def test_agent_add_paths_uses_base_folder_for_relative_paths(tmp_path, monkeypat
             "/add-paths",
             json={
                 "pdm_url": "http://pdm.test",
-                "project_id": "proj1",
+                "product_id": "proj1",
                 "absolute_paths": [str(part)],
                 "base_folder": str(folder),
             },
@@ -441,7 +441,7 @@ def test_agent_add_paths_omits_older_purgeable_versions(tmp_path, monkeypatch):
             "/add-paths",
             json={
                 "pdm_url": "http://pdm.test",
-                "project_id": "proj1",
+                "product_id": "proj1",
                 "absolute_paths": [str(older), str(notes)],
                 "base_folder": str(folder),
                 "purgeable_extensions": [".prt", ".asm"],
@@ -497,7 +497,7 @@ def test_agent_add_paths_preserves_sibling_subfolders_under_chosen_folder(tmp_pa
             "/add-paths",
             json={
                 "pdm_url": "http://pdm.test",
-                "project_id": "proj1",
+                "product_id": "proj1",
                 "absolute_paths": [str(video), str(sheet)],
                 "base_folder": str(docs),
             },
@@ -553,7 +553,7 @@ def test_agent_add_paths_skips_outside_base_instead_of_flattening(tmp_path, monk
             "/add-paths",
             json={
                 "pdm_url": "http://pdm.test",
-                "project_id": "proj1",
+                "product_id": "proj1",
                 "absolute_paths": [str(inside), str(outside)],
                 "base_folder": str(docs),
             },
@@ -608,7 +608,7 @@ def test_agent_add_paths_skips_empty_files_before_upload(tmp_path, monkeypatch):
             "/add-paths",
             json={
                 "pdm_url": "http://pdm.test",
-                "project_id": "proj1",
+                "product_id": "proj1",
                 "absolute_paths": [str(empty), str(real)],
                 "base_folder": str(docs),
             },
@@ -660,7 +660,7 @@ def test_agent_add_paths_keeps_documents_root_files(tmp_path, monkeypatch):
             "/add-paths",
             json={
                 "pdm_url": "http://pdm.test",
-                "project_id": "proj1",
+                "product_id": "proj1",
                 "absolute_paths": [str(top)],
                 "base_folder": str(docs),
             },
@@ -742,8 +742,8 @@ def test_agent_health_reports_status_poll_zero(tmp_path):
 
 def test_agent_push_uploads_latest_cache_file(tmp_path, monkeypatch):
     root = tmp_path / "cache"
-    project_id = "proj-push"
-    cache = root / project_id
+    product_id = "proj-push"
+    cache = root / product_id
     cache.mkdir(parents=True)
     (cache / "shaft.prt.3").write_bytes(b"older")
     (cache / "shaft.prt.4").write_bytes(b"agent-local-save")
@@ -798,7 +798,7 @@ def test_agent_push_uploads_latest_cache_file(tmp_path, monkeypatch):
             "/push",
             json={
                 "pdm_url": "http://pdm.example:52113",
-                "project_id": project_id,
+                "product_id": product_id,
                 "items": [
                     {"object_id": "obj-1", "filename": "shaft.prt"},
                     {"object_id": "missing", "filename": "ghost.prt"},
@@ -823,8 +823,8 @@ def test_agent_push_uploads_latest_cache_file(tmp_path, monkeypatch):
 def test_agent_push_finds_newer_save_in_cache_subfolder(tmp_path, monkeypatch):
     """Push must find the highest .ext.N by logical name across nested cache folders."""
     root = tmp_path / "cache"
-    project_id = "proj-nested-push"
-    cache = root / project_id
+    product_id = "proj-nested-push"
+    cache = root / product_id
     nested = cache / "Documents"
     nested.mkdir(parents=True)
     (nested / "shaft.prt.1").write_bytes(b"old")
@@ -873,7 +873,7 @@ def test_agent_push_finds_newer_save_in_cache_subfolder(tmp_path, monkeypatch):
             "/push",
             json={
                 "pdm_url": "http://pdm.example:52113",
-                "project_id": project_id,
+                "product_id": product_id,
                 "items": [{"object_id": "obj-1", "filename": "Documents/shaft.prt.1"}],
             },
         )
@@ -886,8 +886,8 @@ def test_agent_push_finds_newer_save_in_cache_subfolder(tmp_path, monkeypatch):
 
 def test_agent_push_uploads_latest_extra_cad_numbered_save(tmp_path, monkeypatch):
     root = tmp_path / "cache"
-    project_id = "proj-tph"
-    cache = root / project_id
+    product_id = "proj-tph"
+    cache = root / product_id
     cache.mkdir(parents=True)
     (cache / "op10.tph.1").write_bytes(b"old")
     (cache / "op10.tph.10").write_bytes(b"newest-tph")
@@ -935,7 +935,7 @@ def test_agent_push_uploads_latest_extra_cad_numbered_save(tmp_path, monkeypatch
             "/push",
             json={
                 "pdm_url": "http://pdm.example:52113",
-                "project_id": project_id,
+                "product_id": product_id,
                 "items": [{"object_id": "obj-tph", "filename": "op10.tph.1"}],
             },
         )
@@ -949,8 +949,8 @@ def test_agent_push_uploads_latest_extra_cad_numbered_save(tmp_path, monkeypatch
 
 def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
     root = tmp_path / "cache"
-    project_id = "proj-new"
-    cache = root / project_id
+    product_id = "proj-new"
+    cache = root / product_id
     cache.mkdir(parents=True)
     (cache / "notes.txt").write_bytes(b"hello-local")
     (cache / "nested").mkdir()
@@ -993,7 +993,7 @@ def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
                 200,
                 {
                     "ok": True,
-                    "object_id": project_id,
+                    "object_id": product_id,
                     "filename": files["file"][0],
                     "path": f"/vault/{files['file'][0]}",
                     "bytes_written": len(body),
@@ -1002,7 +1002,7 @@ def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
 
     monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
     with TestClient(app) as client:
-        listed = client.get(f"/files?project_id={project_id}")
+        listed = client.get(f"/files?product_id={product_id}")
         assert listed.status_code == 200, listed.text
         names = {item["relative_path"] for item in listed.json()["files"]}
         assert names == {"notes.txt", "nested/extra.txt"}
@@ -1011,7 +1011,7 @@ def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
             "/push-paths",
             json={
                 "pdm_url": "http://pdm.example:52113",
-                "project_id": project_id,
+                "product_id": product_id,
                 "relative_paths": ["notes.txt", "nested/extra.txt", "missing.txt"],
             },
         )
@@ -1021,13 +1021,13 @@ def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
         assert len(body["failed"]) == 1
         assert body["failed"][0]["filename"] == "missing.txt"
         assert len(puts) == 2
-        assert all("/api/projects/" in item["url"] and "workspace-content" in item["url"] for item in puts)
+        assert all("/api/products/" in item["url"] and "workspace-content" in item["url"] for item in puts)
         assert puts[0]["headers"].get("Authorization") == "Bearer tok"
 
         deleted = client.post(
             "/delete-paths",
             json={
-                "project_id": project_id,
+                "product_id": product_id,
                 "relative_paths": ["notes.txt", "nested/extra.txt", "gone.txt"],
             },
         )
@@ -1039,7 +1039,7 @@ def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
         assert not (cache / "nested" / "extra.txt").exists()
 
 
-def test_agent_delete_project_cache_removes_folder(tmp_path):
+def test_agent_delete_product_cache_removes_folder(tmp_path):
     root = tmp_path / "cache"
     vault = "robot-arm"
     cache = root / vault
@@ -1052,8 +1052,8 @@ def test_agent_delete_project_cache_removes_folder(tmp_path):
     app = create_agent_app(settings)
     with TestClient(app) as client:
         response = client.post(
-            "/delete-project-cache",
-            json={"project_id": "ignored-uuid", "vault_folder": vault},
+            "/delete-product-cache",
+            json={"product_id": "ignored-uuid", "vault_folder": vault},
         )
         assert response.status_code == 200, response.text
         body = response.json()
@@ -1061,8 +1061,8 @@ def test_agent_delete_project_cache_removes_folder(tmp_path):
         assert body["deleted"] is True
         assert not cache.exists()
         again = client.post(
-            "/delete-project-cache",
-            json={"project_id": "ignored-uuid", "vault_folder": vault},
+            "/delete-product-cache",
+            json={"product_id": "ignored-uuid", "vault_folder": vault},
         )
         assert again.status_code == 200, again.text
         assert again.json()["deleted"] is False
@@ -1070,8 +1070,8 @@ def test_agent_delete_project_cache_removes_folder(tmp_path):
 
 def test_agent_delete_paths_trashes_creo_numbered_siblings(tmp_path):
     root = tmp_path / "cache"
-    project_id = "proj-del-sib"
-    cache = root / project_id
+    product_id = "proj-del-sib"
+    cache = root / product_id
     cache.mkdir(parents=True)
     (cache / "shaft.prt.1").write_bytes(b"v1")
     (cache / "shaft.prt.3").write_bytes(b"v3")
@@ -1081,7 +1081,7 @@ def test_agent_delete_paths_trashes_creo_numbered_siblings(tmp_path):
     with TestClient(app) as client:
         deleted = client.post(
             "/delete-paths",
-            json={"project_id": project_id, "relative_paths": ["shaft.prt"]},
+            json={"product_id": product_id, "relative_paths": ["shaft.prt"]},
         )
         assert deleted.status_code == 200, deleted.text
         names = {item["filename"] for item in deleted.json()["ok"]}
@@ -1159,7 +1159,7 @@ def test_agent_add_paths_posts_multipart_to_pdm(tmp_path, monkeypatch):
             "/add-paths",
             json={
                 "pdm_url": "http://pdm.example:52113",
-                "project_id": "proj-add",
+                "product_id": "proj-add",
                 "absolute_paths": [str(pin), str(shaft)],
                 "comment": "Initial models",
             },
@@ -1176,8 +1176,8 @@ def test_agent_add_paths_posts_multipart_to_pdm(tmp_path, monkeypatch):
 
 def test_agent_purge_versions_deletes_only_older_than_vault_floor(tmp_path):
     root = tmp_path / "cache"
-    project_id = "proj-purge"
-    cache = root / project_id
+    product_id = "proj-purge"
+    cache = root / product_id
     nested = cache / "sub"
     nested.mkdir(parents=True)
     (cache / "shaft.prt").write_bytes(b"0")
@@ -1193,7 +1193,7 @@ def test_agent_purge_versions_deletes_only_older_than_vault_floor(tmp_path):
         response = client.post(
             "/purge-versions",
             json={
-                "project_id": project_id,
+                "product_id": product_id,
                 "model_extensions": [".prt", ".asm", ".drw"],
                 "floors": [
                     {"logical_path": "shaft.prt", "min_keep": 3},
@@ -1220,7 +1220,7 @@ def test_agent_purge_versions_deletes_only_older_than_vault_floor(tmp_path):
         empty = client.post(
             "/purge-versions",
             json={
-                "project_id": project_id,
+                "product_id": product_id,
                 "floors": [{"logical_path": "shaft.prt", "min_keep": 0}],
             },
         )
@@ -1232,8 +1232,8 @@ def test_agent_purge_versions_deletes_only_older_than_vault_floor(tmp_path):
 def test_agent_purge_versions_flat_cache_for_nested_vault_floor(tmp_path):
     """Regression: nested vault floor must purge older saves at the flat cache root."""
     root = tmp_path / "cache"
-    project_id = "proj-purge-flat"
-    cache = root / project_id
+    product_id = "proj-purge-flat"
+    cache = root / product_id
     cache.mkdir(parents=True)
     (cache / "shaft.prt.1").write_bytes(b"1")
     (cache / "shaft.prt.2").write_bytes(b"2")
@@ -1244,7 +1244,7 @@ def test_agent_purge_versions_flat_cache_for_nested_vault_floor(tmp_path):
         response = client.post(
             "/purge-versions",
             json={
-                "project_id": project_id,
+                "product_id": product_id,
                 "model_extensions": [".prt", ".asm", ".drw"],
                 "floors": [{"logical_path": "Documents/shaft.prt", "min_keep": 3}],
             },
@@ -1260,8 +1260,8 @@ def test_agent_purge_versions_flat_cache_for_nested_vault_floor(tmp_path):
 
 def test_agent_purge_versions_dry_run_lists_without_deleting(tmp_path):
     root = tmp_path / "cache"
-    project_id = "proj-purge-dry"
-    cache = root / project_id
+    product_id = "proj-purge-dry"
+    cache = root / product_id
     cache.mkdir(parents=True)
     (cache / "shaft.prt").write_bytes(b"0")
     (cache / "shaft.prt.1").write_bytes(b"1")
@@ -1272,7 +1272,7 @@ def test_agent_purge_versions_dry_run_lists_without_deleting(tmp_path):
         response = client.post(
             "/purge-versions",
             json={
-                "project_id": project_id,
+                "product_id": product_id,
                 "model_extensions": [".prt", ".asm", ".drw"],
                 "dry_run": True,
                 "floors": [{"logical_path": "shaft.prt", "min_keep": 3}],

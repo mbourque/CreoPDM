@@ -4,7 +4,7 @@
 <article class="detail settings-page">
   <nav class="crumb">
     {% if can_view_objects %}
-    <a href="/">Projects</a>
+    <a href="/">Products</a>
     <span>/</span>
     {% endif %}
     <a href="/admin">Administration</a>
@@ -21,24 +21,24 @@
   <form method="post" action="/admin/membership/users/{{ form.uuid }}" class="settings-form settings-form-wide">
     <section class="settings-card">
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
-      <fieldset class="project-access-fieldset">
-        <legend>Project access</legend>
-        <input type="hidden" name="project_access_present" value="1">
+      <fieldset class="product-access-fieldset">
+        <legend>Product access</legend>
+        <input type="hidden" name="product_access_present" value="1">
         <label class="choice">
-          <input type="checkbox" name="access_all_projects" id="access-all-projects" value="1" {% if access_all_projects %}checked{% endif %}>
-          <span>All projects</span>
+          <input type="checkbox" name="access_all_products" id="access-all-products" value="1" {% if access_all_products %}checked{% endif %}>
+          <span>All products</span>
         </label>
-        <p class="muted small">When All projects is off, multi-select which projects this user can open (Ctrl/Cmd-click). If none are selected, they cannot browse projects.</p>
-        {% if project_options %}
-        <label class="project-access-select-label">Projects
-          <select name="project_uuid" id="project-access-list" class="project-access-select{% if access_all_projects %} is-disabled{% endif %}" multiple size="8" {% if access_all_projects %}disabled{% endif %}>
-            {% for p in project_options %}
+        <p class="muted small">When All products is off, multi-select which products this user can open (Ctrl/Cmd-click). If none are selected, they cannot browse products.</p>
+        {% if product_options %}
+        <label class="product-access-select-label">Products
+          <select name="product_uuid" id="product-access-list" class="product-access-select{% if access_all_products %} is-disabled{% endif %}" multiple size="8" {% if access_all_products %}disabled{% endif %}>
+            {% for p in product_options %}
             <option value="{{ p.uuid }}" {% if p.checked %}selected{% endif %}>{% if p.number %}{{ p.number }} — {% endif %}{{ p.name }}</option>
             {% endfor %}
           </select>
         </label>
         {% else %}
-        <p class="muted small" id="project-access-list">No projects exist yet. Create a project first, or leave All projects checked.</p>
+        <p class="muted small" id="product-access-list">No products exist yet. Create a product first, or leave All products checked.</p>
         {% endif %}
       </fieldset>
       <div class="form-actions">

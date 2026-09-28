@@ -215,7 +215,7 @@ def test_get_and_update_settings(client, tmp_path):
     assert "Creo View" not in page.text
     assert "~/.local/share/CreoPDM/vaults" in page.text
     assert "Vault folder" in page.text
-    assert "Master repository for each project" in page.text
+    assert "Master repository for each product" in page.text
     assert "CreoPDM/workspaces" not in page.text
     assert "Specific application" not in page.text
     assert "Open Creo View with" not in page.text
@@ -274,13 +274,13 @@ def test_cad_extensions_setting_changes_classification(client, repo_parent):
     assert ".abc" in saved.json()["cad_extensions"]
 
     location = repo_parent / "CadExt"
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Cad Ext"},
     )
-    assert project.status_code == 201, project.text
+    assert product.status_code == 201, product.text
     created = client.post(
-        f"/api/projects/{project.json()['uuid']}/objects",
+        f"/api/products/{product.json()['uuid']}/objects",
         files={"file": ("blob.xyz", b"cad-ish", "application/octet-stream")},
         data={"comment": "Custom CAD"},
     )
@@ -299,12 +299,12 @@ def test_custom_workspace_used_on_checkout(client, repo_parent, tmp_path):
     assert saved.status_code == 200, saved.text
 
     location = repo_parent / "WorkspaceProj"
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Workspace Proj"},
     ).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt", b"original-content", "application/octet-stream")},
         data={"comment": "Initial model"},
     )
@@ -312,7 +312,7 @@ def test_custom_workspace_used_on_checkout(client, repo_parent, tmp_path):
     obj = created.json()
     checked = client.post(f"/api/objects/{obj['uuid']}/checkout")
     assert checked.status_code == 200, checked.text
-    copied = workspace / project["uuid"] / "shaft.prt"
+    copied = workspace / product["uuid"] / "shaft.prt"
     assert copied.is_file()
     assert copied.read_bytes() == b"original-content"
 
@@ -381,21 +381,21 @@ def test_type_labels_shown_in_file_list(client, repo_parent):
     )
     assert saved.status_code == 200, saved.text
 
-    project = client.post("/api/projects", json={"name": "Type Labels"}).json()
+    product = client.post("/api/products", json={"name": "Type Labels"}).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt", b"original-content", "application/octet-stream")},
         data={"comment": "Initial model"},
     )
     assert created.status_code == 201, created.text
 
-    page = client.get(f"/?project={project['uuid']}")
+    page = client.get(f"/?product={product['uuid']}")
     assert page.status_code == 200
     assert "Machined part" in page.text
     assert 'title="Machined part"' in page.text
     assert "Click to select. Double-click for history." not in page.text
 
-    detail = client.get(f"/projects/{project['uuid']}/objects/{created.json()['uuid']}")
+    detail = client.get(f"/products/{product['uuid']}/objects/{created.json()['uuid']}")
     assert detail.status_code == 200
     assert "Machined part" in detail.text
 

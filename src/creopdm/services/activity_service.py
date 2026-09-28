@@ -18,12 +18,12 @@ class ActivityService:
         session: Session,
         action: ActivityAction | str,
         user: UserIdentity,
-        project_id: int | None = None,
+        product_id: int | None = None,
         object_id: int | None = None,
         details: dict[str, Any] | None = None,
     ) -> Activity:
         activity = Activity(
-            project_id=project_id,
+            product_id=product_id,
             object_id=object_id,
             user=user.user_name,
             machine=user.machine_name,

@@ -148,8 +148,8 @@ def select_companion_objects(
                 narrowed.append(obj)
         if narrowed:
             return narrowed
-    # No byte matches (or empty scan): never drag an entire flat project folder
-    # into Creo — that hangs Open on multi-thousand-file projects.
+    # No byte matches (or empty scan): never drag an entire flat product folder
+    # into Creo — that hangs Open on multi-thousand-file products.
     if len(pool) > _MAX_OPEN_COMPANION_POOL:
         return []
     return pool

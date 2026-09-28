@@ -23,11 +23,11 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
     PERMISSION_OBJECTS_VIEW,
-    PERMISSION_PROJECTS_CREATE,
-    PERMISSION_PROJECTS_DELETE,
-    PERMISSION_PROJECTS_EDIT,
-    PERMISSION_PROJECTS_MANAGE,
-    PERMISSION_PROJECTS_ASSIGN,
+    PERMISSION_PRODUCTS_CREATE,
+    PERMISSION_PRODUCTS_DELETE,
+    PERMISSION_PRODUCTS_EDIT,
+    PERMISSION_PRODUCTS_MANAGE,
+    PERMISSION_PRODUCTS_ASSIGN,
     PERMISSION_ROLES_ASSIGN,
     PERMISSION_ROLES_MANAGE,
     PERMISSION_SETTINGS_MANAGE,
@@ -38,8 +38,8 @@ from creopdm.auth_constants import (
 )
 from creopdm.exceptions import NotFoundError, PermissionDeniedError, ValidationAppError
 from creopdm.logging_setup import get_logger
-from creopdm.models.project import Project
-from creopdm.models.user import Permission, Role, RolePermission, User, UserProject, UserRole
+from creopdm.models.product import Product
+from creopdm.models.user import Permission, Role, RolePermission, User, UserProduct, UserRole
 from creopdm.utils.passwords import hash_password, verify_password
 
 logger = get_logger("user_service")
@@ -159,13 +159,13 @@ class UserService:
         return frozenset(keys)
 
     def get_by_uuid(self, db: Session, user_uuid: str) -> User | None:
-        # Always load projects: restricted users (access_all_projects=False) need
+        # Always load products: restricted users (access_all_products=False) need
         # membership on request.state.auth_user after the auth middleware session closes.
         return db.scalar(
             select(User)
             .options(
                 selectinload(User.roles).selectinload(Role.permissions),
-                selectinload(User.projects),
+                selectinload(User.products),
             )
             .where(User.uuid == user_uuid)
         )
@@ -175,7 +175,7 @@ class UserService:
             select(User)
             .options(
                 selectinload(User.roles).selectinload(Role.permissions),
-                selectinload(User.projects),
+                selectinload(User.products),
             )
             .where(User.username == _normalize_username(username))
         )
@@ -186,7 +186,7 @@ class UserService:
                 select(User)
                 .options(
                     selectinload(User.roles).selectinload(Role.permissions),
-                    selectinload(User.projects),
+                    selectinload(User.products),
                 )
                 .order_by(User.username)
             ).all()
@@ -241,8 +241,8 @@ class UserService:
     def can_assign_roles(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_ROLES_ASSIGN)
 
-    def can_assign_projects(self, user: User) -> bool:
-        return self.has_permission(user, PERMISSION_PROJECTS_ASSIGN)
+    def can_assign_products(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_PRODUCTS_ASSIGN)
 
     def can_manage_roles(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_ROLES_MANAGE)
@@ -290,10 +290,10 @@ class UserService:
                 "You do not have permission to set passwords (users.password)."
             )
 
-    def ensure_can_assign_projects(self, actor: User) -> None:
-        if not self.can_assign_projects(actor):
+    def ensure_can_assign_products(self, actor: User) -> None:
+        if not self.can_assign_products(actor):
             raise PermissionDeniedError(
-                "You do not have permission to assign project membership (projects.assign)."
+                "You do not have permission to assign product membership (products.assign)."
             )
 
     def role_permission_keys(self, role: Role) -> frozenset[str]:
@@ -323,18 +323,18 @@ class UserService:
             return []
         return [r for r in self.list_roles(db) if self.role_is_strictly_below(actor, r)]
 
-    def can_manage_projects(self, user: User) -> bool:
-        """True when the user may open Administration → Projects (full CRUD there)."""
-        return self.has_permission(user, PERMISSION_PROJECTS_MANAGE)
+    def can_manage_products(self, user: User) -> bool:
+        """True when the user may open Administration → Products (full CRUD there)."""
+        return self.has_permission(user, PERMISSION_PRODUCTS_MANAGE)
 
-    def can_create_project(self, user: User) -> bool:
-        return self.has_permission(user, PERMISSION_PROJECTS_CREATE)
+    def can_create_product(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_PRODUCTS_CREATE)
 
-    def can_edit_project(self, user: User) -> bool:
-        return self.has_permission(user, PERMISSION_PROJECTS_EDIT)
+    def can_edit_product(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_PRODUCTS_EDIT)
 
-    def can_delete_project(self, user: User) -> bool:
-        return self.has_permission(user, PERMISSION_PROJECTS_DELETE)
+    def can_delete_product(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_PRODUCTS_DELETE)
 
     def can_add_objects(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_OBJECTS_ADD)
@@ -394,7 +394,7 @@ class UserService:
         """True when no ACTIVE user would keep all CreoPDM Administration caps.
 
         Full admin means every ADMINISTRATION_PERMISSION_KEYS entry on the
-        same account so Users, Roles, Projects admin, and Settings cannot
+        same account so Users, Roles, Products admin, and Settings cannot
         all become unreachable.
         """
         users = list(
@@ -514,7 +514,7 @@ class UserService:
                     "Cannot leave the system with no active user who has full "
                     "CreoPDM Administration "
                     "(users.manage, users.password, roles.assign, roles.manage, "
-                    "projects.assign, projects.manage, settings.manage, and email.manage)."
+                    "products.assign, products.manage, settings.manage, and email.manage)."
                 )
             db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
             for perm_id in self._permission_ids_for_keys(db, keys):
@@ -547,118 +547,118 @@ class UserService:
         db.flush()
 
     @staticmethod
-    def _membership_project_ids(user: User) -> set[int]:
-        """Project ids from user_projects. Never raises on detached/unloaded ORM state."""
+    def _membership_product_ids(user: User) -> set[int]:
+        """Product ids from user_products. Never raises on detached/unloaded ORM state."""
         try:
-            return {p.id for p in (user.projects or [])}
+            return {p.id for p in (user.products or [])}
         except Exception:
             # DetachedInstanceError when auth middleware closed its session before
-            # projects were loaded — treat as no membership rather than 500 the UI.
+            # products were loaded — treat as no membership rather than 500 the UI.
             logger.exception(
-                "Could not read project membership for user_id=%s; denying access",
+                "Could not read product membership for user_id=%s; denying access",
                 getattr(user, "id", None),
             )
             return set()
 
-    def user_can_access_project(self, user: User, project: Project) -> bool:
-        """True when the user may browse/use the given project."""
-        if getattr(user, "access_all_projects", True):
+    def user_can_access_product(self, user: User, product: Product) -> bool:
+        """True when the user may browse/use the given product."""
+        if getattr(user, "access_all_products", True):
             return True
-        return project.id in self._membership_project_ids(user)
+        return product.id in self._membership_product_ids(user)
 
-    def filter_accessible_projects(self, user: User, projects: list[Project]) -> list[Project]:
-        if getattr(user, "access_all_projects", True):
-            return list(projects)
-        allowed_ids = self._membership_project_ids(user)
-        return [p for p in projects if p.id in allowed_ids]
+    def filter_accessible_products(self, user: User, products: list[Product]) -> list[Product]:
+        if getattr(user, "access_all_products", True):
+            return list(products)
+        allowed_ids = self._membership_product_ids(user)
+        return [p for p in products if p.id in allowed_ids]
 
-    def set_project_access(
+    def set_product_access(
         self,
         db: Session,
         user: User,
         *,
         access_all: bool,
-        project_uuids: list[str] | None = None,
+        product_uuids: list[str] | None = None,
     ) -> User:
-        """Set All-projects flag and optional membership list (when not all)."""
-        user.access_all_projects = bool(access_all)
+        """Set All-products flag and optional membership list (when not all)."""
+        user.access_all_products = bool(access_all)
         if access_all:
             user.updated_at = datetime.now(timezone.utc)
             db.flush()
             return self.get_by_uuid(db, user.uuid) or user
-        # Restricted: replace membership. Empty list = no project access (cannot use app browse).
+        # Restricted: replace membership. Empty list = no product access (cannot use app browse).
         wanted: list[str] = []
         seen: set[str] = set()
-        for raw in project_uuids or []:
+        for raw in product_uuids or []:
             uid = (raw or "").strip()
             if not uid or uid in seen:
                 continue
             seen.add(uid)
             wanted.append(uid)
-        projects: list[Project] = []
+        products: list[Product] = []
         for uid in wanted:
-            project = db.scalar(select(Project).where(Project.uuid == uid))
-            if project is None:
-                raise ValidationAppError(f"Unknown project '{uid}'.")
-            projects.append(project)
-        db.execute(delete(UserProject).where(UserProject.user_id == user.id))
-        for project in projects:
-            db.add(UserProject(user_id=user.id, project_id=project.id))
+            product = db.scalar(select(Product).where(Product.uuid == uid))
+            if product is None:
+                raise ValidationAppError(f"Unknown product '{uid}'.")
+            products.append(product)
+        db.execute(delete(UserProduct).where(UserProduct.user_id == user.id))
+        for product in products:
+            db.add(UserProduct(user_id=user.id, product_id=product.id))
         user.updated_at = datetime.now(timezone.utc)
         db.flush()
         return self.get_by_uuid(db, user.uuid) or user
 
-    def grant_project_access(self, db: Session, user: User, project: Project) -> None:
-        """Add one project to a restricted user's membership (no-op if all-projects)."""
-        if getattr(user, "access_all_projects", True):
+    def grant_product_access(self, db: Session, user: User, product: Product) -> None:
+        """Add one product to a restricted user's membership (no-op if all-products)."""
+        if getattr(user, "access_all_products", True):
             return
         existing = db.scalar(
-            select(UserProject).where(
-                UserProject.user_id == user.id,
-                UserProject.project_id == project.id,
+            select(UserProduct).where(
+                UserProduct.user_id == user.id,
+                UserProduct.product_id == product.id,
             )
         )
         if existing is not None:
             return
-        db.add(UserProject(user_id=user.id, project_id=project.id))
+        db.add(UserProduct(user_id=user.id, product_id=product.id))
         db.flush()
 
-    def revoke_project_access(self, db: Session, user: User, project: Project) -> None:
-        """Remove one project from a restricted user's membership (no-op if all-projects)."""
-        if getattr(user, "access_all_projects", True):
+    def revoke_product_access(self, db: Session, user: User, product: Product) -> None:
+        """Remove one product from a restricted user's membership (no-op if all-products)."""
+        if getattr(user, "access_all_products", True):
             return
         db.execute(
-            delete(UserProject).where(
-                UserProject.user_id == user.id,
-                UserProject.project_id == project.id,
+            delete(UserProduct).where(
+                UserProduct.user_id == user.id,
+                UserProduct.product_id == product.id,
             )
         )
         db.flush()
 
-    def set_restricted_project_members(
+    def set_restricted_product_members(
         self,
         db: Session,
-        project: Project,
+        product: Product,
         *,
         member_user_uuids: list[str],
         actor: User | None = None,
     ) -> None:
-        """Replace which *restricted* users are members of this project.
+        """Replace which *restricted* users are members of this product.
 
-        Users with All projects are ignored (they already see every project).
+        Users with All products are ignored (they already see every product).
         """
         if actor is not None:
-            self.ensure_can_assign_projects(actor)
+            self.ensure_can_assign_products(actor)
         wanted = {str(u).strip() for u in (member_user_uuids or []) if str(u).strip()}
         for user in self.list_users(db):
             if user.status != UserStatus.ACTIVE.value:
                 continue
-            if getattr(user, "access_all_projects", True):
+            if getattr(user, "access_all_products", True):
                 continue
             if user.uuid in wanted:
-                self.grant_project_access(db, user, project)
+                self.grant_product_access(db, user, product)
             else:
-                self.revoke_project_access(db, user, project)
+                self.revoke_product_access(db, user, product)
 
     def create_user(
         self,
@@ -671,8 +671,8 @@ class UserService:
         role_name: str = StarterRole.ENGINEER.value,
         must_change_password: bool = False,
         status: str = UserStatus.ACTIVE.value,
-        access_all_projects: bool = False,
-        project_uuids: list[str] | None = None,
+        access_all_products: bool = False,
+        product_uuids: list[str] | None = None,
         actor: User | None = None,
     ) -> User:
         self.ensure_builtin_roles(db)
@@ -694,10 +694,10 @@ class UserService:
                     raise ValidationAppError("Engineer role is missing.")
             else:
                 self.ensure_can_assign_role(actor, role)
-            if not self.can_assign_projects(actor):
-                # Cannot grant All projects without projects.assign — leave none.
-                access_all_projects = False
-                project_uuids = None
+            if not self.can_assign_products(actor):
+                # Cannot grant All products without products.assign — leave none.
+                access_all_products = False
+                product_uuids = None
         user = User(
             uuid=str(uuid.uuid4()),
             username=uname,
@@ -706,17 +706,17 @@ class UserService:
             password_hash=hash_password(pwd),
             status=status,
             must_change_password=must_change_password,
-            access_all_projects=False,
+            access_all_products=False,
         )
         db.add(user)
         db.flush()
         db.add(UserRole(user_id=user.id, role_id=role.id))
         db.flush()
-        self.set_project_access(
+        self.set_product_access(
             db,
             user,
-            access_all=access_all_projects,
-            project_uuids=project_uuids,
+            access_all=access_all_products,
+            product_uuids=product_uuids,
         )
         return self.get_by_uuid(db, user.uuid) or user
 
@@ -739,7 +739,7 @@ class UserService:
             email=email,
             role_name=StarterRole.ADMINISTRATOR.value,
             must_change_password=False,
-            access_all_projects=True,
+            access_all_products=True,
         )
 
     def authenticate(self, db: Session, username: str, password: str) -> User:
@@ -763,8 +763,8 @@ class UserService:
         status: str | None = None,
         password: str | None = None,
         must_change_password: bool | None = None,
-        access_all_projects: bool | None = None,
-        project_uuids: list[str] | None = None,
+        access_all_products: bool | None = None,
+        product_uuids: list[str] | None = None,
         actor: User | None = None,
     ) -> User:
         user = self.get_by_uuid(db, user_uuid)
@@ -821,33 +821,33 @@ class UserService:
                     "Cannot leave the system with no active user who has full "
                     "CreoPDM Administration "
                     "(users.manage, users.password, roles.assign, roles.manage, "
-                    "projects.assign, projects.manage, settings.manage, and email.manage)."
+                    "products.assign, products.manage, settings.manage, and email.manage)."
                 )
         if new_status is not None:
             user.status = new_status
         if new_role_id is not None:
             db.execute(delete(UserRole).where(UserRole.user_id == user.id))
             db.add(UserRole(user_id=user.id, role_id=new_role_id))
-        if access_all_projects is not None:
-            if actor is not None and not self.can_assign_projects(actor):
-                current_all = bool(getattr(user, "access_all_projects", True))
-                current_ids = {p.uuid for p in (user.projects or [])}
+        if access_all_products is not None:
+            if actor is not None and not self.can_assign_products(actor):
+                current_all = bool(getattr(user, "access_all_products", True))
+                current_ids = {p.uuid for p in (user.products or [])}
                 wanted_ids = (
                     set()
-                    if access_all_projects
-                    else {str(u).strip() for u in (project_uuids or []) if str(u).strip()}
+                    if access_all_products
+                    else {str(u).strip() for u in (product_uuids or []) if str(u).strip()}
                 )
-                if bool(access_all_projects) != current_all or (
-                    not access_all_projects and wanted_ids != current_ids
+                if bool(access_all_products) != current_all or (
+                    not access_all_products and wanted_ids != current_ids
                 ):
-                    self.ensure_can_assign_projects(actor)
-                access_all_projects = None
-            if access_all_projects is not None:
-                self.set_project_access(
+                    self.ensure_can_assign_products(actor)
+                access_all_products = None
+            if access_all_products is not None:
+                self.set_product_access(
                     db,
                     user,
-                    access_all=access_all_projects,
-                    project_uuids=project_uuids if not access_all_projects else None,
+                    access_all=access_all_products,
+                    product_uuids=product_uuids if not access_all_products else None,
                 )
                 return self.get_by_uuid(db, user.uuid) or user
         user.updated_at = datetime.now(timezone.utc)

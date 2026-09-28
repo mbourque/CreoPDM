@@ -1,7 +1,7 @@
 """Store Creo.JS identity, materials, BOM JSON; parameter description.
 
 Revision ID: 005_creo_metadata
-Revises: 004_project_field_limits
+Revises: 004_product_field_limits
 Create Date: 2026-09-23
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "005_creo_metadata"
-down_revision: Union[str, None] = "004_project_field_limits"
+down_revision: Union[str, None] = "004_product_field_limits"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

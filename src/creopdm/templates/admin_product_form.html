@@ -1,22 +1,22 @@
 {% extends "base.html" %}
-{% block title %}{% if mode == 'new' %}Add project{% else %}Edit project{% endif %} — {{ app_name }}{% endblock %}
+{% block title %}{% if mode == 'new' %}Add product{% else %}Edit product{% endif %} — {{ app_name }}{% endblock %}
 {% block content %}
 <article class="detail settings-page">
   <nav class="crumb">
     {% if can_view_objects %}
-    <a href="/">Projects</a>
+    <a href="/">Products</a>
     <span>/</span>
     {% endif %}
     <a href="/admin">Administration</a>
     <span>/</span>
-    <a href="/admin/projects">Projects</a>
+    <a href="/admin/products">Products</a>
     <span>/</span>
-    <span>{% if mode == 'new' %}Add project{% else %}{{ form.name }}{% endif %}</span>
+    <span>{% if mode == 'new' %}Add product{% else %}{{ form.name }}{% endif %}</span>
   </nav>
-  <h1>{% if mode == 'new' %}Add project{% else %}Edit project{% endif %}</h1>
+  <h1>{% if mode == 'new' %}Add product{% else %}Edit product{% endif %}</h1>
 
   {% if mode == 'new' %}
-  <form method="post" action="/admin/projects/new" class="settings-form settings-form-wide">
+  <form method="post" action="/admin/products/new" class="settings-form settings-form-wide">
     <section class="settings-card">
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
       <label>Name
@@ -34,13 +34,13 @@
       </label>
       <p class="muted small">Blank uses a unique folder name under the server vault. Custom names cannot contain spaces.</p>
       <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Create project</button>
-        <a class="btn" href="/admin/projects">Back to list</a>
+        <button type="submit" class="btn btn-primary">Create product</button>
+        <a class="btn" href="/admin/products">Back to list</a>
       </div>
     </section>
   </form>
   {% else %}
-  <form method="post" action="/admin/projects/{{ form.uuid }}" class="settings-form settings-form-wide">
+  <form method="post" action="/admin/products/{{ form.uuid }}" class="settings-form settings-form-wide">
     <section class="settings-card">
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
       <label>Name
@@ -55,20 +55,20 @@
       <p class="muted small">Vault folder: <code>{{ form.vault_folder }}</code> (set at create; not renamed here).</p>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Save</button>
-        <a class="btn" href="/admin/projects">Back to list</a>
+        <a class="btn" href="/admin/products">Back to list</a>
       </div>
     </section>
   </form>
 
   <section class="settings-card" style="margin-top: 1rem;">
-    <h2>Remove project</h2>
-    <p class="muted small">Hides the project in CreoPDM. Does not delete CAD files on disk. Type the exact project name to confirm.</p>
+    <h2>Remove product</h2>
+    <p class="muted small">Hides the product in CreoPDM. Does not delete CAD files on disk. Type the exact product name to confirm.</p>
     {% if delete_error %}<p class="error">{{ delete_error }}</p>{% endif %}
-    <form method="post" action="/admin/projects/{{ form.uuid }}/delete" class="settings-form">
+    <form method="post" action="/admin/products/{{ form.uuid }}/delete" class="settings-form">
       <label>Type <strong>{{ form.name }}</strong> to confirm
         <input name="confirm_name" type="text" required maxlength="255" autocomplete="off">
       </label>
-      <button type="submit" class="btn btn-danger">Remove project</button>
+      <button type="submit" class="btn btn-danger">Remove product</button>
     </form>
   </section>
   {% endif %}

@@ -18,7 +18,7 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 _KEY = "objects.view"
-_DESC = "Browse projects and open or download files"
+_DESC = "Browse products and open or download files"
 _GRANT_ROLES = ("Administrator", "PDM Manager", "Engineer", "Viewer")
 
 

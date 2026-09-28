@@ -3,9 +3,9 @@ from creopdm.models.checkout import Checkout
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
-from creopdm.models.project import Project
+from creopdm.models.product import Product
 from creopdm.models.remote import Remote
-from creopdm.models.user import Permission, Role, RolePermission, User, UserProject, UserRole, ProjectWatch
+from creopdm.models.user import Permission, Role, RolePermission, User, UserProduct, UserRole, ProductWatch
 from creopdm.models.version import ObjectVersion
 
 __all__ = [
@@ -16,12 +16,12 @@ __all__ = [
     "ObjectVersion",
     "Parameter",
     "Permission",
-    "Project",
-    "ProjectWatch",
+    "Product",
+    "ProductWatch",
     "Remote",
     "Role",
     "RolePermission",
     "User",
-    "UserProject",
+    "UserProduct",
     "UserRole",
 ]

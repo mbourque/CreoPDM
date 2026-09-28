@@ -9,7 +9,7 @@ Git is used internally for history. You do not need to run Git commands.
 v0.1 is being built in stages. **Milestones 1–4 are implemented:**
 
 1. Local FastAPI application, PostgreSQL (or SQLite), configuration, logging, health page
-2. Create / list / open / remove projects with a Git-backed repository
+2. Create / list / open / remove products with a Git-backed repository
 3. Add files, classify them, create PDM objects, and record an initial version
 4. Local checkout / check-in locks, workspace files, and Open in Creo
 
@@ -81,7 +81,7 @@ pip install "git+https://github.com/mbourque/CreoPDM.git"
 
 ## Run
 
-Start from the project folder with the venv active (same as `pytest`). On Windows use a **normal** (not Run as administrator) PowerShell:
+Start from the product folder with the venv active (same as `pytest`). On Windows use a **normal** (not Run as administrator) PowerShell:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -133,7 +133,7 @@ Other PCs:  http://192.168.x.x:54321
 
 `This PC` only works in a browser on the machine running CreoPDM. From another computer, open the **Other PCs** URL printed at startup, for example `http://192.168.1.252:52113`.
 
-**First visit:** if no users exist yet, the browser opens **`/setup`** so you can create the first administrator (no default password). After that, sign in at **`/login`**. See [Users, roles, and project access](docs/users-roles-and-project-access.md).
+**First visit:** if no users exist yet, the browser opens **`/setup`** so you can create the first administrator (no default password). After that, sign in at **`/login`**. See [Users, roles, and product access](docs/users-roles-and-product-access.md).
 
 If that page does not load, the Linux firewall is usually blocking the port. On the Linux host:
 
@@ -182,9 +182,9 @@ systemctl --user enable --now creopdm
 systemctl --user status creopdm
 ```
 
-`creopdm` already binds **52113** and does not open a browser. Git must stay on `PATH` (the unit sets that). On Linux the store is `~/.local/share/CreoPDM` (projects, database settings, and `vaults`). Do **not** add `--data-dir` unless you mean a different store.
+`creopdm` already binds **52113** and does not open a browser. Git must stay on `PATH` (the unit sets that). On Linux the store is `~/.local/share/CreoPDM` (products, database settings, and `vaults`). Do **not** add `--data-dir` unless you mean a different store.
 
-If an older run used `~/AppData/Local/CreoPDM`, the next start moves that folder into `~/.local/share/CreoPDM` when the new location does not already have projects. Restart the service after updating CreoPDM:
+If an older run used `~/AppData/Local/CreoPDM`, the next start moves that folder into `~/.local/share/CreoPDM` when the new location does not already have products. Restart the service after updating CreoPDM:
 
 ```bash
 systemctl --user daemon-reload
@@ -260,21 +260,21 @@ Or: `python -m creopdm_agent` / `python -m creopdm_agent --tray`.
 3. In CreoPDM Settings, set open mode to **Embedded Creo Browser**.
 4. In Creo's built-in browser, open the CreoPDM URL (the Linux **Other PCs** address).
 5. Open a model — the page calls the agent at `http://127.0.0.1:8766`, which fetches the file (and same-folder assembly companions) into the local cache, then Creo.JS opens native Creo-openable files. SolidWorks / CATIA / Inventor Multi-CAD files are materialized locally; CreoPDM drives **File > Open** in the running session and navigates the dialog to the cache folder (session working directory is left unchanged).
-6. **Set Working Directory** uses the agent cache folder for the current project (not the remote server path).
+6. **Set Working Directory** uses the agent cache folder for the current product (not the remote server path).
 
 Quick check that the agent is up: open `http://127.0.0.1:8766/health` in a normal browser on the Creo PC.
 
 ## Tests
 
-With the venv active, run `pytest`. Tests use temporary directories. They never touch a real project repository.
+With the venv active, run `pytest`. Tests use temporary directories. They never touch a real product repository.
 
 ## Data location
 
-On Windows, application data lives in `%LOCALAPPDATA%\CreoPDM\`. On Linux it lives in `~/.local/share/CreoPDM`. Git history and vault copies live in the per-project folder under `vaults` there (older installs used `workspaces`; CreoPDM renames that folder on startup). The Settings vault field should be `~/.local/share/CreoPDM/vaults`, not `~/.local/share/CreoPDM` itself. Pass `--data-dir` or set `CREOPDM_DATA_DIR` only when you want a different store.
+On Windows, application data lives in `%LOCALAPPDATA%\CreoPDM\`. On Linux it lives in `~/.local/share/CreoPDM`. Git history and vault copies live in the per-product folder under `vaults` there (older installs used `workspaces`; CreoPDM renames that folder on startup). The Settings vault field should be `~/.local/share/CreoPDM/vaults`, not `~/.local/share/CreoPDM` itself. Pass `--data-dir` or set `CREOPDM_DATA_DIR` only when you want a different store.
 
 ## Database
 
-CreoPDM stores projects, objects, versions, checkouts, and activity in a SQL database. **Vault files and Git history stay on disk** under `vaults/` — switching databases does not move CAD files.
+CreoPDM stores products, objects, versions, checkouts, and activity in a SQL database. **Vault files and Git history stay on disk** under `vaults/` — switching databases does not move CAD files.
 
 ### PostgreSQL (default for normal installs)
 
@@ -308,7 +308,7 @@ systemctl --user restart creopdm.service
 journalctl --user -u creopdm -n 40 --no-pager
 ```
 
-The service should stay **active**. A new empty database starts with no projects until you create them (or copy an old SQLite catalog).
+The service should stay **active**. A new empty database starts with no products until you create them (or copy an old SQLite catalog).
 
 **4. Optional — systemd env file** (password not in Settings):
 
@@ -352,5 +352,5 @@ Changing the database URL does **not** migrate existing SQLite rows automaticall
 
 ## Further reading
 
-- [Creo templates and libraries with CreoPDM](docs/creo-library-templates.md) — Library project, Samba share, and `config.pro` UNC paths
+- [Creo templates and libraries with CreoPDM](docs/creo-library-templates.md) — Library product, Samba share, and `config.pro` UNC paths
 - [Linux disk space email alerts](docs/linux-disk-alerts.md) — Hourly disk monitoring with Postfix on the CreoPDM host

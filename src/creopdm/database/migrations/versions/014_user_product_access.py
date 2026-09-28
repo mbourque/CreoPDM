@@ -1,6 +1,6 @@
-"""Alembic migration: user project access (all projects or selected).
+"""Alembic migration: user product access (all products or selected).
 
-Revision ID: 014_user_project_access
+Revision ID: 014_user_product_access
 Revises: 013_objects_view
 Create Date: 2026-09-27
 """
@@ -12,7 +12,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "014_user_project_access"
+revision: str = "014_user_product_access"
 down_revision: Union[str, None] = "013_objects_view"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -22,25 +22,25 @@ def upgrade() -> None:
     op.add_column(
         "users",
         sa.Column(
-            "access_all_projects",
+            "access_all_products",
             sa.Boolean(),
             nullable=False,
             server_default=sa.true(),
         ),
     )
     op.create_table(
-        "user_projects",
+        "user_products",
         sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
         sa.Column(
-            "project_id",
+            "product_id",
             sa.Integer(),
-            sa.ForeignKey("projects.id", ondelete="CASCADE"),
+            sa.ForeignKey("products.id", ondelete="CASCADE"),
             primary_key=True,
         ),
-        sa.UniqueConstraint("user_id", "project_id", name="uq_user_projects"),
+        sa.UniqueConstraint("user_id", "product_id", name="uq_user_products"),
     )
 
 
 def downgrade() -> None:
-    op.drop_table("user_projects")
-    op.drop_column("users", "access_all_projects")
+    op.drop_table("user_products")
+    op.drop_column("users", "access_all_products")

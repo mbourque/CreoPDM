@@ -25,7 +25,7 @@ class NotificationEvent(StrEnum):
     LONG_JOB_COMPLETED = "long_job_completed"
     BACKUP_MAINTENANCE = "backup_maintenance"
     USER_WORKFLOW = "user_workflow"
-    PROJECT_ACTIVITY = "project_activity"
+    PRODUCT_ACTIVITY = "product_activity"
     SYSTEM_EVENT = "system_event"
 
 

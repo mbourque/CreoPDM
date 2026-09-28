@@ -1,4 +1,4 @@
-"""Helpers to notify project watchers after mutating API actions."""
+"""Helpers to notify product watchers after mutating API actions."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 
 from creopdm.context import AppContext
-from creopdm.models.project import Project
+from creopdm.models.product import Product
 from creopdm.models.user import User
 
 
@@ -17,11 +17,11 @@ def actor_label(user: User | None, fallback: str = "Someone") -> str:
     return f"{name} ({user.username})"
 
 
-def notify_project_watchers(
+def notify_product_watchers(
     request: Request,
     ctx: AppContext,
     db: Session,
-    project: Project,
+    product: Product,
     *,
     action: str,
     filenames: list[str],
@@ -33,9 +33,9 @@ def notify_project_watchers(
         auth_user = None
     identity = ctx.users.get_current_user()
     label = actor_label(auth_user, fallback=identity.user_name or "Someone")
-    ctx.project_watches.notify_project_activity(
+    ctx.product_watches.notify_product_activity(
         db,
-        project=project,
+        product=product,
         action=action,
         actor=auth_user,
         actor_label=label,

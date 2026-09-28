@@ -29,8 +29,8 @@ def _status(*, staged=None, unstaged=None, untracked=None, raw=""):
 
 def _watch(status, known=None):
     service = WorkspaceService(_Config())
-    service._git_status = lambda project: status
-    return service.watch_stamp(SimpleNamespace(uuid="project"), known)
+    service._git_status = lambda product: status
+    return service.watch_stamp(SimpleNamespace(uuid="product"), known)
 
 
 def test_watch_stamp_counts_numbered_creo_save_as_pending():
@@ -102,14 +102,14 @@ def test_import_relative_path_nests_under_parent_folder(tmp_path):
     kit.mkdir()
     part = kit / "top.prt"
     part.write_bytes(b"top")
-    project = SimpleNamespace(uuid="p1")
-    assert service.import_relative_path(project, part, kit) == "Kit/top.prt"
+    product = SimpleNamespace(uuid="p1")
+    assert service.import_relative_path(product, part, kit) == "Kit/top.prt"
     assert (
-        service.import_relative_path(project, part, kit, parent_folder="Incoming")
+        service.import_relative_path(product, part, kit, parent_folder="Incoming")
         == "Incoming/Kit/top.prt"
     )
     assert (
-        service.import_relative_path(project, part, None, parent_folder="Incoming")
+        service.import_relative_path(product, part, None, parent_folder="Incoming")
         == "Incoming/top.prt"
     )
 

@@ -4,7 +4,7 @@
 <article class="detail settings-page admin-hub">
   <nav class="crumb">
     {% if can_view_objects %}
-    <a href="/">Projects</a>
+    <a href="/">Products</a>
     <span>/</span>
     {% endif %}
     <a href="/admin">Administration</a>
@@ -12,41 +12,41 @@
     <span>Membership</span>
   </nav>
   <h1>Membership</h1>
-  <p class="muted">Choose who can open which projects.</p>
+  <p class="muted">Choose who can open which products.</p>
 
   <div class="admin-tile-grid">
     <section class="admin-tile">
-      <h2><a href="/admin/membership/projects">By project</a></h2>
-      <p>Open a project, then tick which restricted users are members.</p>
+      <h2><a href="/admin/membership/products">By product</a></h2>
+      <p>Open a product, then tick which restricted users are members.</p>
     </section>
     <section class="admin-tile">
       <h2><a href="/admin/membership/users">By user</a></h2>
-      <p>Open a user, then set All projects or a specific project list.</p>
+      <p>Open a user, then set All products or a specific product list.</p>
     </section>
   </div>
 
   <section class="settings-card settings-form-wide" style="margin-top: 1.25rem;">
-    <h2 class="h-like" style="margin-top: 0;">Projects summary</h2>
-    <p class="muted small">Members = everyone who can open the project (restricted members + users with All projects). Restricted = users without All projects who are explicitly on this project.</p>
+    <h2 class="h-like" style="margin-top: 0;">Products summary</h2>
+    <p class="muted small">Members = everyone who can open the product (restricted members + users with All products). Restricted = users without All products who are explicitly on this product.</p>
     <table class="data-table">
       <thead>
         <tr>
-          <th>Project</th>
+          <th>Product</th>
           <th>Members</th>
           <th>Restricted</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
-        {% for p in projects %}
+        {% for p in products %}
         <tr>
-          <td><a href="/admin/membership/projects/{{ p.uuid }}">{{ p.name }}</a></td>
+          <td><a href="/admin/membership/products/{{ p.uuid }}">{{ p.name }}</a></td>
           <td>{{ p.can_open_count }}</td>
           <td>{{ p.member_count }}</td>
-          <td><a href="/admin/membership/projects/{{ p.uuid }}">Manage</a></td>
+          <td><a href="/admin/membership/products/{{ p.uuid }}">Manage</a></td>
         </tr>
         {% else %}
-        <tr><td colspan="4" class="muted">No projects yet. Create one under Administration → Projects.</td></tr>
+        <tr><td colspan="4" class="muted">No products yet. Create one under Administration → Products.</td></tr>
         {% endfor %}
       </tbody>
     </table>

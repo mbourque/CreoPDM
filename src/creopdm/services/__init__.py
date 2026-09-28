@@ -5,6 +5,6 @@ __all__ = [
     "GitRemote",
     "GitService",
     "ObjectService",
-    "ProjectLockManager",
-    "ProjectService",
+    "ProductLockManager",
+    "ProductService",
 ]

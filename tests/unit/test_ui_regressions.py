@@ -75,10 +75,10 @@ def test_add_toolbar_is_menu_with_modes():
     assert 'openAddDialog("folders")' in script
     assert 'openAddDialog("folder")' in script
     assert "recursive" in script
-    assert "/api/projects/${projectId}/folders" in script or '/api/projects/${projectId}/folders' in script
+    assert "/api/products/${productId}/folders" in script or '/api/products/${productId}/folders' in script
 
 
-def test_remove_from_project_sends_folder_paths():
+def test_remove_from_product_sends_folder_paths():
     """Regression: Create/Add folder rows may lack data-object-ids; remove by path."""
     script = _app_js()
     assert "function selectedFolderPaths" in script
@@ -90,7 +90,7 @@ def test_remove_from_project_sends_folder_paths():
     )
     assert "selectedFolderPaths()" in remove
     assert "folder_paths" in remove
-    assert "canRemoveProject = ids.length > 0 || folderPaths.length > 0" in script
+    assert "canRemoveProduct = ids.length > 0 || folderPaths.length > 0" in script
 
 
 def test_remove_rows_update_folder_tbody_cache_and_soft_reload():
@@ -219,18 +219,18 @@ def test_dropped_folder_keeps_nested_relative_paths():
     assert body.index("nestedUploads") < body.index("uniquePaths")
 
 
-def test_project_dialog_has_vault_folder_and_use_hash():
+def test_product_dialog_has_vault_folder_and_use_hash():
     html = APP_HTML.read_text(encoding="utf-8")
     assert "Vault/Workspace name" in html
-    assert 'id="project-use-hash"' in html
+    assert 'id="product-use-hash"' in html
     assert 'name="vault_folder"' in html
     assert 'class="checkbox-row"' in html
-    assert 'for="project-use-hash"' in html
+    assert 'for="product-use-hash"' in html
     # Use hash is the default — uncheck to type a custom vault folder.
-    assert 'id="project-use-hash" checked' in html
+    assert 'id="product-use-hash" checked' in html
     assert "data-vault-folder=" in html
     script = _app_js()
-    assert "syncProjectVaultFolderField" in script
+    assert "syncProductVaultFolderField" in script
     assert "currentVaultFolder" in script
     assert "vault_folder: currentVaultFolder()" in script
     assert "slugifyVaultFolder" in script
@@ -241,16 +241,16 @@ def test_project_dialog_has_vault_folder_and_use_hash():
     assert "getRandomValues" in script
     assert "proj-${" not in script
     css = APP_CSS.read_text(encoding="utf-8")
-    assert ".project-vault-fields .checkbox-row" in css
-    assert "flex-direction: row" in css.split(".project-vault-fields .checkbox-row", 1)[1].split("}", 1)[0]
+    assert ".product-vault-fields .checkbox-row" in css
+    assert "flex-direction: row" in css.split(".product-vault-fields .checkbox-row", 1)[1].split("}", 1)[0]
 
 
-def test_delete_project_dialog_offers_local_workspace_checkbox():
+def test_delete_product_dialog_offers_local_workspace_checkbox():
     html = APP_HTML.read_text(encoding="utf-8")
     assert 'id="delete-local-workspace" checked' in html
     assert "Also delete local workspace on this PC" in html
     script = _app_js()
-    assert "/delete-project-cache" in script
+    assert "/delete-product-cache" in script
     assert "delete-local-workspace" in script
 
 
@@ -266,7 +266,7 @@ def test_soft_nav_does_not_silently_drop_when_busy():
 
 
 def test_batch_remove_commits_before_response():
-    """Remove-from-project soft reload raced FastAPI's post-response commit."""
+    """Remove-from-product soft reload raced FastAPI's post-response commit."""
     text = (ROOT / "src" / "creopdm" / "api" / "objects.py").read_text(encoding="utf-8")
     body = text.split("def remove_batch(", 1)[1].split("\n@router", 1)[0]
     assert "db.commit()" in body
@@ -278,7 +278,7 @@ def test_soft_nav_skips_creojs_reconnect():
     """Regression: shell soft nav used to re-probe Creo.JS and flash offline.
 
     Soft switches only replace main.shell; the status pill and Creo.JS bridge live
-    outside it and must stay connected — including folders, projects, and Settings.
+    outside it and must stay connected — including folders, products, and Settings.
     Hard reload SSR-paints Not Connected and drops the live bridge.
     """
     script = _app_js()
@@ -299,7 +299,7 @@ def test_soft_nav_skips_creojs_reconnect():
     assert 'path === "/admin/roles"' in soft_fn
     assert 'path === "/settings"' in soft_fn
     assert 'path === "/settings/types"' in soft_fn
-    assert "/projects/" in soft_fn or r"/projects\/" in soft_fn
+    assert "/products/" in soft_fn or r"/products\/" in soft_fn
     assert "objects" in soft_fn
     assert "userCanCheckout" in script
     assert "userCanCheckout()" in _between(
@@ -324,11 +324,11 @@ def test_soft_nav_skips_creojs_reconnect():
     ).read_text(encoding="utf-8")
     soft_nav = _between(script, "function softNavigate(", "function leavePage(")
     assert "innerHTML = nextShell.innerHTML" in soft_nav or "curShell.innerHTML" in soft_nav
-    # Soft-nav does not execute inline scripts; project-access toggle is document-bound.
-    assert "function syncProjectAccessUi" in script
-    assert "__creopdmProjectAccessBound" in script
-    assert 'id !== "access-all-projects"' in script
-    assert "syncProjectAccessUi();" in script
+    # Soft-nav does not execute inline scripts; product-access toggle is document-bound.
+    assert "function syncProductAccessUi" in script
+    assert "__creopdmProductAccessBound" in script
+    assert 'id !== "access-all-products"' in script
+    assert "syncProductAccessUi();" in script
     assert "window.__creopdmBoot({ soft: true })" in soft_nav
     assert "Keep the live Creo.JS bridge" in soft_nav
     assert "softNavTail" in soft_nav
@@ -366,7 +366,7 @@ def test_soft_nav_skips_creojs_reconnect():
 
     # Status poll must survive soft boots and skip updates while soft-nav busy.
     assert "__creopdmStatusPollId" in block
-    assert "Survive soft folder/project boots" in block
+    assert "Survive soft folder/product boots" in block
     poll_cb = script.split("window.__creopdmStatusPollId = window.setInterval(")[1].split("}, interval)")[0]
     assert "__creopdmSoftNavBusy" in poll_cb
 
@@ -411,28 +411,28 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "function toggleOpenMenu" in script
     assert "closeOpenMenu" in script
     assert 'id="checkout-menu"' in html
-    assert 'id="checkout-project-btn"' in html
-    assert "Checkout project" in html
+    assert 'id="checkout-product-btn"' in html
+    assert "Checkout product" in html
     assert 'id="undo-btn"' in html
     assert html.index('id="checkout-menu"') < html.index('id="undo-btn"')
     assert html.index('id="undo-btn"') < html.index('id="checkin-menu"')
     assert 'id="checkin-menu"' in html
-    assert 'id="checkin-project-btn"' in html
+    assert 'id="checkin-product-btn"' in html
     assert 'id="checkin-btn"' in html
-    assert html.index('id="checkin-project-btn"') < html.index('id="checkin-btn"')
-    assert ">Check in project…<" in html
+    assert html.index('id="checkin-product-btn"') < html.index('id="checkin-btn"')
+    assert ">Check in product…<" in html
     assert ">Check in selected…<" in html
     assert "function beginCheckin" in script
-    assert 'beginCheckin("project")' in script
+    assert 'beginCheckin("product")' in script
     assert "function runCheckoutObjects" in script
-    assert "pendingProjectSaves" in script
-    assert "projectCheckoutCount" in script
-    assert "pendingProjectSaves > 0 || pendingProjectNew > 0 || projectCheckoutCount > 0" in script
-    assert "Nothing to check in for this project" in script
+    assert "pendingProductSaves" in script
+    assert "productCheckoutCount" in script
+    assert "pendingProductSaves > 0 || pendingProductNew > 0 || productCheckoutCount > 0" in script
+    assert "Nothing to check in for this product" in script
     assert "data-checkoutable" in html
     assert "setCheckoutableCount" in script
-    assert "canCheckoutProject" in script
-    assert "Nothing left to check out in this project" in script
+    assert "canCheckoutProduct" in script
+    assert "Nothing left to check out in this product" in script
     assert "pushLocalNewPathsToVault" in script
     assert "localOnlyCacheFiles" in _between(script, "async function beginCheckin(", "$(\"#checkin-cancel\")")
     assert "Preview is vault-only" in script
@@ -460,21 +460,21 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "opens immediately" in docs.lower() or "Open dialog" in docs
 
 
-def test_new_project_and_sidebar_collapse_handlers_present():
+def test_new_product_and_sidebar_collapse_handlers_present():
     script = _app_js()
-    assert '$("#new-project-btn")?.addEventListener("click"' in script
-    assert "showProjectDialog(\"create\")" in script or 'showProjectDialog("create")' in script
+    assert '$("#new-product-btn")?.addEventListener("click"' in script
+    assert "showProductDialog(\"create\")" in script or 'showProductDialog("create")' in script
     assert "sidebarCollapseBtn?.addEventListener(\"click\"" in script
     assert "is-sidebar-collapsed" in script
-    assert 'id="new-project-btn"' in APP_HTML.read_text(encoding="utf-8")
+    assert 'id="new-product-btn"' in APP_HTML.read_text(encoding="utf-8")
     html = APP_HTML.read_text(encoding="utf-8")
-    # Empty-home create invite is only for projects.create (not for Viewer, etc.).
+    # Empty-home create invite is only for products.create (not for Viewer, etc.).
     assert re.search(
-        r"\{%\s*if\s+can_create_project\s*%\}[^%]*Create a project to start managing",
+        r"\{%\s*if\s+can_create_product\s*%\}[^%]*Create a product to start managing",
         html,
         re.DOTALL,
     )
-    # Empty-project add invite is only for objects.add (not for Viewer, etc.).
+    # Empty-product add invite is only for objects.add (not for Viewer, etc.).
     assert "can_add_objects" in html
     assert "Add a Creo model, PDF, or document to get started" in html
     assert re.search(
@@ -537,8 +537,8 @@ def test_mobile_browse_css_is_minimal():
     assert 'a[href="/logout"]' in mobile
     assert ".topbar .status-cluster > :not(" in mobile
     assert ".topbar .status-cluster { display: none" not in mobile
-    assert "#new-project-btn" in mobile
-    assert ".project-settings" in mobile
+    assert "#new-product-btn" in mobile
+    assert ".product-settings" in mobile
     assert ".metrics" in mobile
     assert "footer.toolbar" in mobile
     assert "#detail-toolbar" in mobile
@@ -670,22 +670,22 @@ def test_history_revert_only_for_older_versions():
     assert 'setToolbarActionVisible(checkinBtn, false)' in detail_toolbar
     assert "setCreoDirBtn.hidden = true" in detail_toolbar
     assert "pendingSaves" not in detail_toolbar
-    assert "canCheckinProject" not in detail_toolbar
+    assert "canCheckinProduct" not in detail_toolbar
     assert "never **Check In ▾**" in docs or "never **Check In" in docs
     assert "Check In stays on the Files page" in docs
     assert "Revert to selected…** only" in docs or "Revert to selected… only" in docs
     assert "You do not need to Check In afterward" in script
-    assert "confirmByProjectName({" in script
+    assert "confirmByProductName({" in script
     assert 'title: `Revert to ${display}`' in script
     assert 'submitLabel: "Revert"' in script
-    assert 'data-project-name="{{ project.name }}"' in detail
-    assert '$("#revert-version-btn")?.dataset.projectName' in script
+    assert 'data-product-name="{{ product.name }}"' in detail
+    assert '$("#revert-version-btn")?.dataset.productName' in script
     revert_click = _between(
         script,
         '$("#revert-version-btn")?.addEventListener("click"',
         'document.querySelectorAll(".tabs .tab")',
     )
-    assert "confirmByProjectName" in revert_click
+    assert "confirmByProductName" in revert_click
     assert "window.confirm" not in revert_click
     assert "Version History" not in detail
     assert "File History" not in detail
@@ -721,7 +721,7 @@ def test_history_revert_only_for_older_versions():
     assert "Offer Revert for the current version" in docs
     assert "keep a newer `.prt.N` name while only swapping bytes" in docs
     assert "leave you checked out with a Check In prompt" in docs
-    assert "type the **exact** project name" in docs
+    assert "type the **exact** product name" in docs
     assert "plain browser `confirm`" in docs
     assert "History **Revert to selected…**" in docs
     assert "no Check In prompt" in docs
@@ -732,11 +732,11 @@ def test_history_revert_only_for_older_versions():
     assert 'id="history-btn"' in html
     assert ">Details</button>" in html
     assert ">History</button>" not in html
-    assert 'data-detail="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}"' in html
-    assert 'data-detail="/projects/{{ selected.uuid }}/objects/{{ obj.uuid }}#history"' not in html
+    assert 'data-detail="/products/{{ selected.uuid }}/objects/{{ obj.uuid }}"' in html
+    assert 'data-detail="/products/{{ selected.uuid }}/objects/{{ obj.uuid }}#history"' not in html
     assert "Details page defaults to Overview" in script
     href_fn = _between(script, "function rowHistoryHref(", "document.querySelector(\"#object-table\")")
-    assert "return `/projects/${projectId}/objects/${uuid}`;" in href_fn
+    assert "return `/products/${productId}/objects/${uuid}`;" in href_fn
     assert "objects/${uuid}#history" not in href_fn
 
 
@@ -833,16 +833,16 @@ def test_user_interaction_negative_client_guards():
     assert "parts.length > 2" in filter_body
 
     # Danger confirm (D1 / N15)
-    confirm = _between(script, "function confirmByProjectName(", "function workspacePathsForRemovedObjects(")
-    assert "Type the project name exactly to confirm." in confirm
+    confirm = _between(script, "function confirmByProductName(", "function workspacePathsForRemovedObjects(")
+    assert "Type the product name exactly to confirm." in confirm
     assert "typed !== expected" in confirm
 
     # Check In comment required on dialog
     assert 'id="checkin-comment"' in html
     assert "required" in html.split('id="checkin-comment"', 1)[1].split(">", 1)[0]
 
-    # Remove from Project enablement includes empty folders (V2 / N16)
-    assert "canRemoveProject = ids.length > 0 || folderPaths.length > 0" in script
+    # Remove from Product enablement includes empty folders (V2 / N16)
+    assert "canRemoveProduct = ids.length > 0 || folderPaths.length > 0" in script
 
 
 def test_newer_local_cache_matches_flat_save_for_nested_vault_path():

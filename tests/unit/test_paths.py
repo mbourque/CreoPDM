@@ -7,8 +7,8 @@ from creopdm.utils.paths import (
     assert_safe_relative_path,
     ensure_within,
     is_within,
-    require_within_project,
-    validate_project_location,
+    require_within_product,
+    validate_product_location,
 )
 
 
@@ -35,24 +35,24 @@ def test_ensure_within_rejects_escape(tmp_path: Path):
         ensure_within(base, tmp_path / "other" / "file.txt")
 
 
-def test_require_within_project_allows_nested_and_rejects_outside(tmp_path: Path):
+def test_require_within_product_allows_nested_and_rejects_outside(tmp_path: Path):
     repo = tmp_path / "proj"
     nested = repo / "lib"
     nested.mkdir(parents=True)
     inside = nested / "pin.prt"
     inside.write_bytes(b"ok")
     assert is_within(repo, inside)
-    assert require_within_project(repo, nested) == nested.resolve()
+    assert require_within_product(repo, nested) == nested.resolve()
     outsider = tmp_path / "other" / "pin.prt"
     outsider.parent.mkdir()
     outsider.write_bytes(b"nope")
     assert not is_within(repo, outsider)
-    with pytest.raises(PathValidationError, match="project location"):
-        require_within_project(repo, outsider)
+    with pytest.raises(PathValidationError, match="product location"):
+        require_within_product(repo, outsider)
 
 
-def test_validate_project_location_requires_parent(tmp_path: Path):
+def test_validate_product_location_requires_parent(tmp_path: Path):
     with pytest.raises(PathValidationError):
-        validate_project_location(tmp_path / "missing-parent" / "proj")
-    location = validate_project_location(tmp_path / "proj")
+        validate_product_location(tmp_path / "missing-parent" / "proj")
+    location = validate_product_location(tmp_path / "proj")
     assert location.name == "proj"

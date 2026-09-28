@@ -14,7 +14,7 @@ class Remote(Base):
     __tablename__ = "remotes"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     name: Mapped[str] = mapped_column(String(64), default="origin")
     url: Mapped[str] = mapped_column(String(1024), nullable=False)
     provider: Mapped[str] = mapped_column(String(64), default="generic")
@@ -25,4 +25,4 @@ class Remote(Base):
         onupdate=func.now(),
     )
 
-    project: Mapped["Project"] = relationship(back_populates="remotes")  # noqa: F821
+    product: Mapped["Product"] = relationship(back_populates="remotes")  # noqa: F821

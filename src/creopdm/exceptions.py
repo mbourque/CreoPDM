@@ -26,8 +26,8 @@ class CreoPDMError(Exception):
         }
 
 
-class ProjectNotFoundError(CreoPDMError):
-    code = "PROJECT_NOT_FOUND"
+class ProductNotFoundError(CreoPDMError):
+    code = "PRODUCT_NOT_FOUND"
     http_status = 404
 
 
@@ -86,8 +86,8 @@ class DuplicateObjectError(CreoPDMError):
     http_status = 409
 
 
-class DuplicateProjectError(CreoPDMError):
-    code = "DUPLICATE_PROJECT"
+class DuplicateProductError(CreoPDMError):
+    code = "DUPLICATE_PRODUCT"
     http_status = 409
 
 

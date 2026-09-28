@@ -1,7 +1,7 @@
-"""Alembic migration: add projects.manage for Administration → Projects.
+"""Alembic migration: add products.manage for Administration → Products.
 
-Revision ID: 017_projects_manage
-Revises: 016_pw_proj_assign
+Revision ID: 017_products_manage
+Revises: 016_pw_prod_assign
 Create Date: 2026-09-28
 
 Note: revision id must fit alembic_version.version_num VARCHAR(32).
@@ -14,20 +14,20 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "017_projects_manage"
-down_revision: Union[str, None] = "016_pw_proj_assign"
+revision: str = "017_products_manage"
+down_revision: Union[str, None] = "016_pw_prod_assign"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-_KEY = "projects.manage"
-_DESC = "Create, edit, and delete projects in Administration"
+_KEY = "products.manage"
+_DESC = "Create, edit, and delete products in Administration"
 # Prior full-admin set (before this migration) — grant the new key to those roles.
 _PRIOR_ADMIN_KEYS = (
     "users.manage",
     "users.password",
     "roles.assign",
     "roles.manage",
-    "projects.assign",
+    "products.assign",
     "settings.manage",
 )
 

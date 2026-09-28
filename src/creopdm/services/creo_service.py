@@ -11,7 +11,7 @@ from creopdm.creo.base import CreoConnector
 from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import CreoUnavailableError, PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
-from creopdm.models.project import Project
+from creopdm.models.product import Product
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
@@ -47,34 +47,34 @@ class CreoService:
         include_companions: bool = True,
     ) -> dict:
         obj = self._objects.get_object(session, object_uuid)
-        project = obj.project
+        product = obj.product
         checkout = self._checkouts.active_for(session, obj.id)
         view = self._checkouts.describe(obj, checkout)
         if checkout is None:
             try:
-                latest = self._workspaces.locate_content(project, obj)
-                if self._workspaces.is_modified(project, obj):
+                latest = self._workspaces.locate_content(product, obj)
+                if self._workspaces.is_modified(product, obj):
                     path = latest
                 else:
                     path = self._workspaces.materialize(
-                        project,
+                        product,
                         obj,
                         writable=False,
                         overwrite_modified=True,
                     )
             except PathValidationError:
                 path = self._workspaces.materialize(
-                    project,
+                    product,
                     obj,
                     writable=False,
                     overwrite_modified=True,
                 )
         else:
             try:
-                path = self._workspaces.locate_content(project, obj)
+                path = self._workspaces.locate_content(product, obj)
             except PathValidationError:
                 path = self._workspaces.materialize(
-                    project,
+                    product,
                     obj,
                     writable=view.owned_by_me,
                     overwrite_modified=False,
@@ -90,7 +90,7 @@ class CreoService:
         if include_companions:
             companions = self._companions_for(
                 session,
-                project,
+                product,
                 path=path,
                 object_type=obj.object_type,
                 relative_path=obj.relative_path,
@@ -104,7 +104,7 @@ class CreoService:
             creo_release=file_release or "",
             browser_url=f"/api/objects/{object_uuid}/content",
             object_id=object_uuid,
-            project_id=str(project.uuid),
+            product_id=str(product.uuid),
             relative_path=obj.relative_path,
             companions=companions,
         )
@@ -116,12 +116,12 @@ class CreoService:
     def open_workspace_file(
         self,
         session: Session,
-        project: Project,
+        product: Product,
         relative_path: str,
         launch: bool = True,
         include_companions: bool = True,
     ) -> dict:
-        path = self._workspaces.file_path(project, relative_path)
+        path = self._workspaces.file_path(product, relative_path)
         if not path.is_file():
             raise PathValidationError(
                 f"Vault file not found: {Path(relative_path).name}.",
@@ -138,7 +138,7 @@ class CreoService:
         if include_companions:
             companions = self._companions_for(
                 session,
-                project,
+                product,
                 path=path,
                 object_type=kind.value,
                 relative_path=rel,
@@ -153,8 +153,8 @@ class CreoService:
             launch=launch,
             object_type=kind.value,
             creo_release=release,
-            browser_url=f"/api/projects/{project.uuid}/workspace/content?path={quote(rel)}",
-            project_id=str(project.uuid),
+            browser_url=f"/api/products/{product.uuid}/workspace/content?path={quote(rel)}",
+            product_id=str(product.uuid),
             relative_path=rel,
             companions=companions,
         )
@@ -162,7 +162,7 @@ class CreoService:
     def _companions_for(
         self,
         session: Session,
-        project: Project,
+        product: Product,
         *,
         path: Path,
         object_type: str,
@@ -174,7 +174,7 @@ class CreoService:
             return []
         models = self._workspaces._config.model_cad_extensions()
         all_cad = self._workspaces._cad_extensions()
-        siblings = self._objects.list_objects(session, project.id)
+        siblings = self._objects.list_objects(session, product.id)
         chosen = select_companion_objects(
             primary_relative=relative_path,
             primary_filename=filename,
@@ -189,10 +189,10 @@ class CreoService:
             if skip_object_id is not None and obj.id == skip_object_id:
                 continue
             try:
-                companion_path = self._workspaces.locate_content(project, obj)
+                companion_path = self._workspaces.locate_content(product, obj)
             except PathValidationError:
                 companion_path = self._workspaces.materialize(
-                    project,
+                    product,
                     obj,
                     writable=False,
                     overwrite_modified=True,
@@ -205,7 +205,7 @@ class CreoService:
             out.append(
                 {
                     "object_id": str(obj.uuid),
-                    "project_id": str(project.uuid),
+                    "product_id": str(product.uuid),
                     "relative_path": str(obj.relative_path).replace("\\", "/"),
                     "filename": logical,
                     "disk_name": companion_path.name,
@@ -228,7 +228,7 @@ class CreoService:
         creo_release: str = "",
         browser_url: str = "",
         object_id: str = "",
-        project_id: str = "",
+        product_id: str = "",
         relative_path: str = "",
         companions: list[dict[str, str | None]] | None = None,
     ) -> dict:
@@ -285,7 +285,7 @@ class CreoService:
             "disk_name": path.name,
             "working_directory": str(workdir.resolve()),
             "object_id": object_id or None,
-            "project_id": project_id or None,
+            "product_id": product_id or None,
             "relative_path": relative_path or None,
             "creo_object": creo_object,
             "open_with_creo": open_with_creo,

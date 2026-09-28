@@ -1,7 +1,7 @@
 """Alembic migration: add email.manage for Administration → Email.
 
 Revision ID: 018_email_manage
-Revises: 017_projects_manage
+Revises: 017_products_manage
 Create Date: 2026-09-28
 
 Note: revision id must fit alembic_version.version_num VARCHAR(32).
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "018_email_manage"
-down_revision: Union[str, None] = "017_projects_manage"
+down_revision: Union[str, None] = "017_products_manage"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -27,8 +27,8 @@ _PRIOR_ADMIN_KEYS = (
     "users.password",
     "roles.assign",
     "roles.manage",
-    "projects.assign",
-    "projects.manage",
+    "products.assign",
+    "products.manage",
     "settings.manage",
 )
 

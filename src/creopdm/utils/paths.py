@@ -43,7 +43,7 @@ def ensure_within(base: Path, target: Path) -> Path:
     try:
         target_resolved.relative_to(base_resolved)
     except ValueError as exc:
-        raise PathValidationError("Path escapes the project repository.") from exc
+        raise PathValidationError("Path escapes the product repository.") from exc
     return target_resolved
 
 
@@ -55,29 +55,29 @@ def is_within(base: Path, target: Path) -> bool:
         return False
 
 
-def require_within_project(location: Path, target: Path) -> Path:
+def require_within_product(location: Path, target: Path) -> Path:
     """Resolve target and require it to sit inside location."""
     try:
         return ensure_within(location, target)
     except PathValidationError as exc:
         raise PathValidationError(
-            "Choose files or folders inside the project location.",
+            "Choose files or folders inside the product location.",
             details={"path": str(target), "location": str(location)},
         ) from exc
 
 
-def validate_project_location(path: str | Path) -> Path:
-    """Validate a user-chosen project repository location."""
+def validate_product_location(path: str | Path) -> Path:
+    """Validate a user-chosen product repository location."""
     if not str(path).strip():
-        raise PathValidationError("A project location is required.")
+        raise PathValidationError("A product location is required.")
     resolved = normalize_fs_path(path)
     if resolved.exists() and resolved.is_file():
-        raise PathValidationError("Project location must be a directory.")
+        raise PathValidationError("Product location must be a directory.")
     parent = resolved.parent
     if not parent.exists():
         raise PathValidationError(f"Parent directory does not exist: {parent}")
     if not parent.is_dir():
-        raise PathValidationError("Project location parent is not a directory.")
+        raise PathValidationError("Product location parent is not a directory.")
     return resolved
 
 

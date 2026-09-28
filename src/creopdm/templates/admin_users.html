@@ -4,7 +4,7 @@
 <article class="detail settings-page">
   <nav class="crumb">
     {% if can_view_objects %}
-    <a href="/">Projects</a>
+    <a href="/">Products</a>
     <span>/</span>
     {% endif %}
     <a href="/admin">Administration</a>
@@ -23,7 +23,7 @@
           <th>Username</th>
           <th>Role</th>
           <th>Status</th>
-          <th>Projects</th>
+          <th>Products</th>
         </tr>
       </thead>
       <tbody>
@@ -45,7 +45,7 @@
             {% endif %}
           </td>
           <td>{{ u.status }}</td>
-          <td>{{ u.project_access }}</td>
+          <td>{{ u.product_access }}</td>
         </tr>
         {% else %}
         <tr><td colspan="5" class="muted">No users yet.</td></tr>

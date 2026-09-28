@@ -7,27 +7,27 @@ from tests.conftest import requires_git
 
 def _create_part(client, repo_parent: Path):
     location = repo_parent / "RobotArm"
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Robot Arm"},
     ).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt", b"v1-content", "application/octet-stream")},
         data={"comment": "Initial model"},
     )
     assert created.status_code == 201, created.text
-    return project, created.json()
+    return product, created.json()
 
 
 def _advance_to_iteration(client, object_id: str, target: int, data_dir) -> None:
     current = client.get(f"/api/objects/{object_id}").json()
     iteration = current["iteration"]
-    project_uuid = current["project_uuid"]
+    product_uuid = current["product_uuid"]
     filename = current["filename"]
     while iteration < target:
         assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
-        workspace = data_dir / "vaults" / project_uuid / filename
+        workspace = data_dir / "vaults" / product_uuid / filename
         workspace.write_bytes(f"prepare-{iteration + 1}".encode("utf-8"))
         response = client.post(
             f"/api/objects/{object_id}/checkin",
@@ -40,13 +40,13 @@ def _advance_to_iteration(client, object_id: str, target: int, data_dir) -> None
 
 @requires_git
 def test_checkin_increments_iteration_and_releases_lock(client, repo_parent, data_dir):
-    project, obj = _create_part(client, repo_parent)
+    product, obj = _create_part(client, repo_parent)
     _advance_to_iteration(client, obj["uuid"], 3, data_dir)
     current = client.get(f"/api/objects/{obj['uuid']}").json()
     assert current["display_revision"] == "A.3"
 
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "vaults" / project["uuid"] / "shaft.prt"
+    workspace = data_dir / "vaults" / product["uuid"] / "shaft.prt"
     workspace.write_bytes(b"bearing-diameter-25mm")
 
     preview = client.get(f"/api/objects/{obj['uuid']}/checkin-preview")
@@ -82,7 +82,7 @@ def test_checkin_increments_iteration_and_releases_lock(client, repo_parent, dat
     comments = [item["comment"] for item in versions]
     assert "Increased bearing diameter to 25 mm" in comments
 
-    page = client.get(f"/projects/{project['uuid']}/objects/{obj['uuid']}")
+    page = client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
     assert page.status_code == 200
     assert page.text.index("A.4") < page.text.index("A.3")
     assert page.text.count("shaft.prt") >= 4
@@ -90,9 +90,9 @@ def test_checkin_increments_iteration_and_releases_lock(client, repo_parent, dat
 
 @requires_git
 def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
-    project, obj = _create_part(client, repo_parent)
+    product, obj = _create_part(client, repo_parent)
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "vaults" / project["uuid"]
+    workspace = data_dir / "vaults" / product["uuid"]
     (workspace / "pin.prt").write_bytes(b"new-pin")
 
     preview = client.get(f"/api/objects/{obj['uuid']}/checkin-preview")
@@ -102,7 +102,7 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     pin = next(item for item in preview.json()["new_files"] if item["filename"] == "pin.prt")
     assert pin["same_folder"] is True
     assert pin["relative_path"] == "pin.prt"
-    home = client.get(f"/?project={project['uuid']}")
+    home = client.get(f"/?product={product['uuid']}")
     assert 'id="checkin-new-pick"' in home.text
     assert 'value="none"' in home.text
     assert 'value="all"' in home.text
@@ -112,7 +112,7 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     assert "function syncNewFilePick" in script.text
     assert "function selectionIsAddOnly" in script.text
     assert 'checkinBtn.textContent = addOnly ? "Add selected…" : "Check in selected…";' in script.text
-    assert 'title.textContent = addOnly ? "Add files" : projectScope ? "Check in project" : "Check In";' in script.text
+    assert 'title.textContent = addOnly ? "Add files" : productScope ? "Check in product" : "Check In";' in script.text
     assert "dataset.addPaths" in script.text
     assert "function pushLocalWorkspaceToVault" in script.text
     assert "Syncing local workspace to vault…" in script.text
@@ -137,25 +137,25 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
         },
     )
     assert checked_in.status_code == 200, checked_in.text
-    listing = client.get(f"/api/projects/{project['uuid']}/objects")
+    listing = client.get(f"/api/products/{product['uuid']}/objects")
     files = {item["filename"]: item for item in listing.json()}
     assert "shaft.prt" in files
     assert "pin.prt" in files
     assert files["pin.prt"]["display_revision"] == "A.1"
-    assert (data_dir / "vaults" / project["uuid"] / "pin.prt").is_file()
+    assert (data_dir / "vaults" / product["uuid"] / "pin.prt").is_file()
 
 
 @requires_git
 def test_workspace_watch_stamp_changes_when_creo_saves(client, repo_parent, data_dir):
-    project, obj = _create_part(client, repo_parent)
+    product, obj = _create_part(client, repo_parent)
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    first = client.get(f"/api/projects/{project['uuid']}/workspace-watch")
+    first = client.get(f"/api/products/{product['uuid']}/workspace-watch")
     assert first.status_code == 200, first.text
     before = first.json()
     assert before["stamp"]
-    workspace = data_dir / "vaults" / project["uuid"]
+    workspace = data_dir / "vaults" / product["uuid"]
     (workspace / "shaft.prt.2").write_bytes(b"creo-save")
-    second = client.get(f"/api/projects/{project['uuid']}/workspace-watch")
+    second = client.get(f"/api/products/{product['uuid']}/workspace-watch")
     assert second.status_code == 200, second.text
     after = second.json()
     assert after["stamp"] != before["stamp"]
@@ -168,10 +168,10 @@ def test_workspace_watch_stamp_changes_when_creo_saves(client, repo_parent, data
 
 @requires_git
 def test_checkin_keeps_creo_numbered_filename(client, repo_parent, data_dir):
-    project, obj = _create_part(client, repo_parent)
+    product, obj = _create_part(client, repo_parent)
     assert obj["filename"] == "shaft.prt"
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "vaults" / project["uuid"]
+    workspace = data_dir / "vaults" / product["uuid"]
     (workspace / "shaft.prt.4").write_bytes(b"creo-save-4")
 
     preview = client.get(f"/api/objects/{obj['uuid']}/checkin-preview")
@@ -187,14 +187,14 @@ def test_checkin_keeps_creo_numbered_filename(client, repo_parent, data_dir):
     payload = checked.json()
     assert payload["filename"] == "shaft.prt.4"
     assert payload["relative_path"] == "shaft.prt.4"
-    assert (data_dir / "vaults" / project["uuid"] / "shaft.prt.4").is_file()
+    assert (data_dir / "vaults" / product["uuid"] / "shaft.prt.4").is_file()
 
     history = client.get(f"/api/objects/{obj['uuid']}/history").json()
     assert history[0]["filename"] == "shaft.prt.4"
     assert history[0]["relative_path"] == "shaft.prt.4"
     assert history[-1]["filename"] == "shaft.prt"
     assert history[-1]["relative_path"] == "shaft.prt"
-    page = client.get(f"/projects/{project['uuid']}/objects/{obj['uuid']}")
+    page = client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
     assert page.status_code == 200
     assert "shaft.prt.4" in page.text
     assert "from shaft.prt" in page.text
@@ -203,12 +203,12 @@ def test_checkin_keeps_creo_numbered_filename(client, repo_parent, data_dir):
 @requires_git
 def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_parent, data_dir):
     location = repo_parent / "RobotArm"
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Robot Arm"},
     ).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt.3", b"v3-content", "application/octet-stream")},
         data={"comment": "Imported numbered save"},
     )
@@ -216,7 +216,7 @@ def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_paren
     obj = created.json()
     assert obj["filename"] == "shaft.prt.3"
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "vaults" / project["uuid"]
+    workspace = data_dir / "vaults" / product["uuid"]
     assert (workspace / "shaft.prt.3").read_bytes() == b"v3-content"
     (workspace / "shaft.prt.4").write_bytes(b"creo-save-4")
     (workspace / "trail.txt.5").write_bytes(b"trail")
@@ -234,7 +234,7 @@ def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_paren
     assert "747912f5-13ee-41f0-90d7-537c290.idx" not in names
     assert "pin.prt" in names
 
-    page = client.get(f"/projects/{project['uuid']}/objects/{obj['uuid']}")
+    page = client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
     assert page.status_code == 200
     assert "not checked in" in page.text
     assert "shaft.prt.4" in page.text
@@ -249,9 +249,9 @@ def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_paren
     payload = checked.json()
     assert payload["filename"] == "shaft.prt.4"
     assert payload["relative_path"] == "shaft.prt.4"
-    vault = data_dir / "vaults" / project["uuid"]
+    vault = data_dir / "vaults" / product["uuid"]
     assert (vault / "shaft.prt.4").read_bytes() == b"creo-save-4"
-    page = client.get(f"/projects/{project['uuid']}/objects/{obj['uuid']}")
+    page = client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
     assert page.status_code == 200
     assert "shaft.prt.4" in page.text
     assert "from shaft.prt.3" in page.text
@@ -262,17 +262,17 @@ def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_paren
 @requires_git
 def test_force_checkin_records_workspace_save_without_checkout(client, repo_parent, data_dir):
     location = repo_parent / "ForceArm"
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Force Arm"},
     ).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt.3", b"v3", "application/octet-stream")},
         data={"comment": "Initial"},
     ).json()
     assert client.post(f"/api/objects/{created['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "vaults" / project["uuid"]
+    workspace = data_dir / "vaults" / product["uuid"]
     (workspace / "shaft.prt.4").write_bytes(b"save-4")
     assert client.post(
         f"/api/objects/{created['uuid']}/checkin",
@@ -306,16 +306,16 @@ def test_force_checkin_records_workspace_save_without_checkout(client, repo_pare
 
 @requires_git
 def test_checkin_after_undo_checkout_records_numbered_save(client, repo_parent, data_dir):
-    project, obj = _create_part(client, repo_parent)
+    product, obj = _create_part(client, repo_parent)
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "vaults" / project["uuid"]
+    workspace = data_dir / "vaults" / product["uuid"]
     (workspace / "shaft.prt.2").write_bytes(b"creo-save")
     undone = client.post(f"/api/objects/{obj['uuid']}/undo-checkout")
     assert undone.status_code == 200, undone.text
     listing = undone.json()
     assert listing["owned_by_me"] is False
     assert listing["can_checkin"] is True
-    page = client.get(f"/projects/{project['uuid']}/objects/{obj['uuid']}")
+    page = client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
     assert page.status_code == 200
     match = re.search(r'<button[^>]*id="checkin-btn"[^>]*>', page.text)
     assert match, page.text
@@ -333,16 +333,16 @@ def test_checkin_after_undo_checkout_records_numbered_save(client, repo_parent, 
 @requires_git
 def test_checkout_keeps_newer_workspace_save(client, repo_parent, data_dir):
     location = repo_parent / "KeepLocal"
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Keep Local"},
     ).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("pin.prt.1", b"v1", "application/octet-stream")},
         data={"comment": "Initial"},
     ).json()
-    workspace = data_dir / "vaults" / project["uuid"]
+    workspace = data_dir / "vaults" / product["uuid"]
     (workspace / "pin.prt.2").write_bytes(b"kept-local")
     checked_out = client.post(f"/api/objects/{created['uuid']}/checkout")
     assert checked_out.status_code == 200, checked_out.text
@@ -350,22 +350,22 @@ def test_checkout_keeps_newer_workspace_save(client, repo_parent, data_dir):
 
 
 @requires_git
-def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, data_dir):
+def test_product_would_checkin_lists_saves_and_new_files(client, repo_parent, data_dir):
     location = repo_parent / "QueueArm"
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Queue Arm"},
     ).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt.3", b"v3", "application/octet-stream")},
         data={"comment": "Initial"},
     ).json()
     assert client.post(f"/api/objects/{created['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "vaults" / project["uuid"]
+    workspace = data_dir / "vaults" / product["uuid"]
     (workspace / "shaft.prt.4").write_bytes(b"save-4")
     (workspace / "bushing.prt").write_bytes(b"new-bushing")
-    page = client.get(f"/?project={project['uuid']}")
+    page = client.get(f"/?product={product['uuid']}")
     assert page.status_code == 200, page.text
     assert "Files checked out · 1" in page.text
     assert "New files" in page.text
@@ -378,16 +378,16 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     match = re.search(r'<button[^>]*id="checkin-btn"[^>]*>', page.text)
     assert match, page.text
     assert "disabled" in match.group(0)
-    assert "Delete project" in page.text
-    assert "Forget project" not in page.text
-    assert 'id="project-settings-btn"' in page.text
-    assert 'id="delete-project-btn"' in page.text
-    assert 'id="rename-project-btn"' in page.text
-    assert 'id="delete-project-dialog"' in page.text
-    assert "project-settings-menu" in page.text
+    assert "Delete product" in page.text
+    assert "Forget product" not in page.text
+    assert 'id="product-settings-btn"' in page.text
+    assert 'id="delete-product-btn"' in page.text
+    assert 'id="rename-product-btn"' in page.text
+    assert 'id="delete-product-dialog"' in page.text
+    assert "product-settings-menu" in page.text
     assert 'id="danger-confirm-dialog"' in page.text
-    assert 'data-project-name="Queue Arm"' in page.text
-    queue = client.get(f"/api/projects/{project['uuid']}/checkin-queue")
+    assert 'data-product-name="Queue Arm"' in page.text
+    queue = client.get(f"/api/products/{product['uuid']}/checkin-queue")
     assert queue.status_code == 200, queue.text
     body = queue.json()
     saves = {item["filename"] for item in body["saves"]}
@@ -401,40 +401,40 @@ def test_project_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     assert script.status_code == 200
     assert 'link.className = "object-open"' in script.text
     assert "body.relative_path = spec.relativePath" in script.text
-    assert "confirmByProjectName" in script.text
+    assert "confirmByProductName" in script.text
     assert "workspaceOption" in script.text
     assert 'id="danger-confirm-workspace"' in page.text
-    assert "Type the project name exactly to confirm." in script.text
+    assert "Type the product name exactly to confirm." in script.text
     assert "rowHistoryHref" in script.text
     assert "objects/${meta.uuid}#history" not in script.text
-    assert "row.dataset.detail = `/projects/${projectId}/objects/${meta.uuid}`;" in script.text
+    assert "row.dataset.detail = `/products/${productId}/objects/${meta.uuid}`;" in script.text
     assert "Details page defaults to Overview" in script.text
     assert script.text.count('addEventListener("dblclick", onFileTableDblclick)') >= 3
 
 
 
 @requires_git
-def test_project_checkin_queue_adds_new_workspace_file_without_checkout(client, repo_parent, data_dir):
+def test_product_checkin_queue_adds_new_workspace_file_without_checkout(client, repo_parent, data_dir):
     location = repo_parent / "NewFileArm"
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "New File Arm"},
     ).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt", b"v1", "application/octet-stream")},
         data={"comment": "Initial"},
     )
     assert created.status_code == 201, created.text
-    workspace = data_dir / "vaults" / project["uuid"]
+    workspace = data_dir / "vaults" / product["uuid"]
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "bushing.prt").write_bytes(b"new-bushing")
-    page = client.get(f"/?project={project['uuid']}")
+    page = client.get(f"/?product={product['uuid']}")
     assert page.status_code == 200, page.text
     match = re.search(r'<button[^>]*id="checkin-btn"[^>]*>', page.text)
     assert match, page.text
     assert "disabled" in match.group(0)
-    preview = client.get(f"/api/projects/{project['uuid']}/checkin-preview")
+    preview = client.get(f"/api/products/{product['uuid']}/checkin-preview")
     assert preview.status_code == 200, preview.text
     body = preview.json()
     assert body["queue_mode"] is True
@@ -442,14 +442,14 @@ def test_project_checkin_queue_adds_new_workspace_file_without_checkout(client, 
     names = {item["filename"] for item in body["new_files"]}
     assert names == {"bushing.prt"}
     added = client.post(
-        f"/api/projects/{project['uuid']}/checkin-queue",
+        f"/api/products/{product['uuid']}/checkin-queue",
         json={"comment": "Add bushing from workspace", "add_relative_paths": ["bushing.prt"]},
     )
     assert added.status_code == 200, added.text
     payload = added.json()
     assert payload["failed"] == []
     assert payload["ok"][0]["filename"] == "bushing.prt"
-    listing = client.get(f"/api/projects/{project['uuid']}/objects")
+    listing = client.get(f"/api/products/{product['uuid']}/objects")
     assert listing.status_code == 200, listing.text
     listed = {item["filename"] for item in listing.json()}
     assert "bushing.prt" in listed
@@ -459,29 +459,29 @@ def test_project_checkin_queue_adds_new_workspace_file_without_checkout(client, 
 
 @requires_git
 def test_purge_workspace_paths_removes_new_files(client, repo_parent, data_dir):
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Purge New Files"},
     ).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt", b"v1", "application/octet-stream")},
         data={"comment": "Initial"},
     )
     assert created.status_code == 201, created.text
-    workspace = data_dir / "vaults" / project["uuid"]
+    workspace = data_dir / "vaults" / product["uuid"]
     (workspace / "bushing.prt").write_bytes(b"new-bushing")
     (workspace / "bushing.prt.2").write_bytes(b"newer-bushing")
     (workspace / "pin.prt").write_bytes(b"new-pin")
 
-    queue = client.get(f"/api/projects/{project['uuid']}/checkin-queue")
+    queue = client.get(f"/api/products/{product['uuid']}/checkin-queue")
     assert queue.status_code == 200, queue.text
     names = {item["filename"] for item in queue.json()["new_files"]}
     assert "bushing.prt.2" in names
     assert "pin.prt" in names
 
     purged = client.post(
-        f"/api/projects/{project['uuid']}/workspace/purge-paths",
+        f"/api/products/{product['uuid']}/workspace/purge-paths",
         json={"relative_paths": ["bushing.prt.2"]},
     )
     assert purged.status_code == 200, purged.text
@@ -496,7 +496,7 @@ def test_purge_workspace_paths_removes_new_files(client, repo_parent, data_dir):
     assert (workspace / "shaft.prt").is_file()
 
     denied = client.post(
-        f"/api/projects/{project['uuid']}/workspace/purge-paths",
+        f"/api/products/{product['uuid']}/workspace/purge-paths",
         json={"relative_paths": ["shaft.prt"]},
     )
     assert denied.status_code == 200, denied.text
@@ -513,36 +513,36 @@ def test_purge_workspace_paths_removes_new_files(client, repo_parent, data_dir):
 
 @requires_git
 def test_workspace_purge_floors_from_vault_objects(client, repo_parent, data_dir):
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Purge Floors"},
     ).json()
     numbered = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt.3", b"v3", "application/octet-stream")},
         data={"comment": "Initial"},
     )
     assert numbered.status_code == 201, numbered.text
     toolpath = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("op10.tph.1", b"tph1", "application/octet-stream")},
         data={"comment": "Toolpath"},
     )
     assert toolpath.status_code == 201, toolpath.text
     unnumbered = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("notes.pdf", b"pdf", "application/pdf")},
         data={"comment": "Doc"},
     )
     assert unnumbered.status_code == 201, unnumbered.text
     plain_prt = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("blank.prt", b"blank", "application/octet-stream")},
         data={"comment": "Unnumbered model"},
     )
     assert plain_prt.status_code == 201, plain_prt.text
 
-    floors = client.get(f"/api/projects/{project['uuid']}/workspace/purge-floors")
+    floors = client.get(f"/api/products/{product['uuid']}/workspace/purge-floors")
     assert floors.status_code == 200, floors.text
     body = floors.json()
     assert ".prt" in body["model_extensions"]
@@ -557,28 +557,28 @@ def test_workspace_purge_floors_from_vault_objects(client, repo_parent, data_dir
 
 
 @requires_git
-def test_project_checkin_queue_records_pending_save_and_new_file(client, repo_parent, data_dir):
+def test_product_checkin_queue_records_pending_save_and_new_file(client, repo_parent, data_dir):
     location = repo_parent / "QueueCheckin"
-    project = client.post(
-        "/api/projects",
+    product = client.post(
+        "/api/products",
         json={"name": "Queue Checkin"},
     ).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt.3", b"v3", "application/octet-stream")},
         data={"comment": "Initial"},
     ).json()
     assert client.post(f"/api/objects/{created['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "vaults" / project["uuid"]
+    workspace = data_dir / "vaults" / product["uuid"]
     (workspace / "shaft.prt.4").write_bytes(b"save-4")
     (workspace / "bushing.prt").write_bytes(b"new-bushing")
-    preview = client.get(f"/api/projects/{project['uuid']}/checkin-preview")
+    preview = client.get(f"/api/products/{product['uuid']}/checkin-preview")
     assert preview.status_code == 200, preview.text
     body = preview.json()
     assert created["uuid"] in body["object_ids"]
     assert "shaft.prt.4" in body["pending_files"]
     result = client.post(
-        f"/api/projects/{project['uuid']}/checkin-queue",
+        f"/api/products/{product['uuid']}/checkin-queue",
         json={
             "comment": "Save numbered revision and add bushing",
             "object_ids": body["object_ids"],
@@ -589,7 +589,7 @@ def test_project_checkin_queue_records_pending_save_and_new_file(client, repo_pa
     assert result.json()["failed"] == []
     current = client.get(f"/api/objects/{created['uuid']}").json()
     assert current["filename"] == "shaft.prt.4"
-    listing = {item["filename"] for item in client.get(f"/api/projects/{project['uuid']}/objects").json()}
+    listing = {item["filename"] for item in client.get(f"/api/products/{product['uuid']}/objects").json()}
     assert "bushing.prt" in listing
     assert (workspace / "shaft.prt.4").read_bytes() == b"save-4"
 
@@ -611,9 +611,9 @@ _CREO_UGC_HEADER_NEXT = (
 
 @requires_git
 def test_checkin_records_creo_release_from_workspace_file(client, repo_parent, data_dir):
-    project = client.post("/api/projects", json={"name": "Robot Arm"}).json()
+    product = client.post("/api/products", json={"name": "Robot Arm"}).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("shaft.prt.1", _CREO_UGC_HEADER, "application/octet-stream")},
         data={"comment": "Initial model"},
     )
@@ -621,7 +621,7 @@ def test_checkin_records_creo_release_from_workspace_file(client, repo_parent, d
     obj = created.json()
     assert obj["creo_release"] == "13.4.1.0"
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "vaults" / project["uuid"] / "shaft.prt.1"
+    workspace = data_dir / "vaults" / product["uuid"] / "shaft.prt.1"
     workspace.write_bytes(_CREO_UGC_HEADER_NEXT)
     checked = client.post(
         f"/api/objects/{obj['uuid']}/checkin",
@@ -637,8 +637,8 @@ def test_checkin_records_creo_release_from_workspace_file(client, repo_parent, d
 
 @requires_git
 def test_workspace_content_put_then_checkin(client, repo_parent, data_dir, identity):
-    project, obj = _create_part(client, repo_parent)
-    vault = data_dir / "vaults" / project["uuid"] / "shaft.prt"
+    product, obj = _create_part(client, repo_parent)
+    vault = data_dir / "vaults" / product["uuid"] / "shaft.prt"
     assert vault.read_bytes() == b"v1-content"
 
     denied = client.put(
@@ -658,7 +658,7 @@ def test_workspace_content_put_then_checkin(client, repo_parent, data_dir, ident
     assert body["object_id"] == obj["uuid"]
     assert body["filename"] == "shaft.prt.4"
     assert body["bytes_written"] == len(b"from-agent-cache")
-    staged = data_dir / "vaults" / project["uuid"] / "shaft.prt.4"
+    staged = data_dir / "vaults" / product["uuid"] / "shaft.prt.4"
     assert staged.read_bytes() == b"from-agent-cache"
 
     wrong_name = client.put(
@@ -695,7 +695,7 @@ def test_workspace_content_put_then_checkin(client, repo_parent, data_dir, ident
 
 @requires_git
 def test_checkin_rejects_unchanged_checkout(client, repo_parent, data_dir):
-    project, obj = _create_part(client, repo_parent)
+    product, obj = _create_part(client, repo_parent)
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
     denied = client.post(
         f"/api/objects/{obj['uuid']}/checkin",
@@ -710,7 +710,7 @@ def test_checkin_rejects_unchanged_checkout(client, repo_parent, data_dir):
 
 @requires_git
 def test_revert_to_older_version_restores_vault_content(client, repo_parent, data_dir):
-    project, obj = _create_part(client, repo_parent)
+    product, obj = _create_part(client, repo_parent)
     object_id = obj["uuid"]
     _advance_to_iteration(client, object_id, 3, data_dir)
     history = client.get(f"/api/objects/{object_id}/history").json()
@@ -726,7 +726,7 @@ def test_revert_to_older_version_restores_vault_content(client, repo_parent, dat
     assert denied_current.status_code == 400, denied_current.text
     assert "already the current version" in denied_current.json()["error"]["message"].lower()
 
-    detail = client.get(f"/projects/{project['uuid']}/objects/{object_id}")
+    detail = client.get(f"/products/{product['uuid']}/objects/{object_id}")
     assert detail.status_code == 200
     assert 'id="revert-version-btn"' in detail.text
     assert 'data-can-revert="1"' in detail.text
@@ -740,7 +740,7 @@ def test_revert_to_older_version_restores_vault_content(client, repo_parent, dat
     assert body["iteration"] == 4
     assert body["current_version"]["content_hash"] == older["content_hash"]
     assert body["filename"] == older["filename"]
-    vault = data_dir / "vaults" / project["uuid"] / body["filename"]
+    vault = data_dir / "vaults" / product["uuid"] / body["filename"]
     assert vault.read_bytes() == b"v1-content"
     new_history = client.get(f"/api/objects/{object_id}/history").json()
     assert new_history[0]["comment"].startswith("Reverted to")
@@ -751,9 +751,9 @@ def test_revert_to_older_version_restores_vault_content(client, repo_parent, dat
 @requires_git
 def test_revert_restores_creo_save_number_not_current_tip(client, repo_parent, data_dir):
     """Regression: revert must restore start_part.prt.1, not overwrite .prt.3 in place."""
-    project = client.post("/api/projects", json={"name": "Creo Saves"}).json()
+    product = client.post("/api/products", json={"name": "Creo Saves"}).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={
             "file": (
                 "start_part.prt.1",
@@ -768,7 +768,7 @@ def test_revert_restores_creo_save_number_not_current_tip(client, repo_parent, d
     object_id = obj["uuid"]
     assert obj["filename"] == "start_part.prt.1"
     assert "model-templates" in (obj.get("relative_path") or "")
-    vault = data_dir / "vaults" / project["uuid"] / "model-templates"
+    vault = data_dir / "vaults" / product["uuid"] / "model-templates"
     vault.mkdir(parents=True, exist_ok=True)
 
     assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
@@ -813,15 +813,15 @@ def test_revert_renames_tip_when_content_already_matches(client, repo_parent, da
 
     Same bytes must not surface as 'No changes to check in' / leave a checkout.
     """
-    project = client.post("/api/projects", json={"name": "Creo Rename"}).json()
+    product = client.post("/api/products", json={"name": "Creo Rename"}).json()
     created = client.post(
-        f"/api/projects/{project['uuid']}/objects",
+        f"/api/products/{product['uuid']}/objects",
         files={"file": ("start_part.prt.1", b"same-bytes", "application/octet-stream")},
         data={"comment": "Add save 1", "relative_path": "model-templates/start_part.prt.1"},
     )
     assert created.status_code == 201, created.text
     object_id = created.json()["uuid"]
-    vault = data_dir / "vaults" / project["uuid"] / "model-templates"
+    vault = data_dir / "vaults" / product["uuid"] / "model-templates"
     vault.mkdir(parents=True, exist_ok=True)
 
     assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
@@ -857,17 +857,17 @@ def test_revert_renames_tip_when_content_already_matches(client, repo_parent, da
 
 @requires_git
 def test_revert_hidden_when_only_one_version(client, repo_parent):
-    project, obj = _create_part(client, repo_parent)
-    detail = client.get(f"/projects/{project['uuid']}/objects/{obj['uuid']}")
+    product, obj = _create_part(client, repo_parent)
+    detail = client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
     assert detail.status_code == 200
     assert 'id="revert-version-btn"' not in detail.text
 
 
 @requires_git
-def test_project_workspace_content_stages_new_file_for_add(client, repo_parent, data_dir):
-    project, _obj = _create_part(client, repo_parent)
+def test_product_workspace_content_stages_new_file_for_add(client, repo_parent, data_dir):
+    product, _obj = _create_part(client, repo_parent)
     uploaded = client.put(
-        f"/api/projects/{project['uuid']}/workspace-content",
+        f"/api/products/{product['uuid']}/workspace-content",
         params={"path": "notes.txt"},
         files={"file": ("notes.txt", b"local-notes", "text/plain")},
     )
@@ -875,18 +875,18 @@ def test_project_workspace_content_stages_new_file_for_add(client, repo_parent, 
     body = uploaded.json()
     assert body["filename"] == "notes.txt"
     assert body["bytes_written"] == len(b"local-notes")
-    vault = data_dir / "vaults" / project["uuid"] / "notes.txt"
+    vault = data_dir / "vaults" / product["uuid"] / "notes.txt"
     assert vault.read_bytes() == b"local-notes"
 
-    queue = client.get(f"/api/projects/{project['uuid']}/checkin-queue")
+    queue = client.get(f"/api/products/{product['uuid']}/checkin-queue")
     assert queue.status_code == 200, queue.text
     names = {item["filename"] for item in queue.json()["new_files"]}
     assert "notes.txt" in names
 
     added = client.post(
-        f"/api/projects/{project['uuid']}/checkin-queue",
+        f"/api/products/{product['uuid']}/checkin-queue",
         json={"comment": "Add notes from local workspace", "add_relative_paths": ["notes.txt"]},
     )
     assert added.status_code == 200, added.text
-    objects = client.get(f"/api/projects/{project['uuid']}/objects").json()
+    objects = client.get(f"/api/products/{product['uuid']}/objects").json()
     assert any(item["filename"] == "notes.txt" for item in objects)

@@ -24,9 +24,9 @@ def test_linux_migrates_appdata_store(monkeypatch, tmp_path):
     home = tmp_path / "home"
     _posix_home(monkeypatch, home)
     legacy = home / "AppData" / "Local" / APP_NAME
-    project = legacy / "workspaces" / "proj-1"
-    project.mkdir(parents=True)
-    (project / "IMG_0809.JPG").write_bytes(b"photo")
+    product = legacy / "workspaces" / "proj-1"
+    product.mkdir(parents=True)
+    (product / "IMG_0809.JPG").write_bytes(b"photo")
     (legacy / "database").mkdir()
     (legacy / "database" / "creopdm.db").write_bytes(b"sqlite")
     xdg = home / ".local" / "share" / APP_NAME
@@ -45,12 +45,12 @@ def test_linux_does_not_clobber_used_xdg(monkeypatch, tmp_path):
     legacy = home / "AppData" / "Local" / APP_NAME / "workspaces" / "old"
     legacy.mkdir(parents=True)
     (legacy / "old.txt").write_text("old")
-    xdg_project = home / ".local" / "share" / APP_NAME / "workspaces" / "new"
-    xdg_project.mkdir(parents=True)
-    (xdg_project / "new.txt").write_text("new")
+    xdg_share = home / ".local" / "share" / APP_NAME / "workspaces" / "new"
+    xdg_share.mkdir(parents=True)
+    (xdg_share / "new.txt").write_text("new")
     found = data_dir_from_environment()
     assert found == home / ".local" / "share" / APP_NAME
-    assert (xdg_project / "new.txt").read_text() == "new"
+    assert (xdg_share / "new.txt").read_text() == "new"
     assert (legacy / "old.txt").read_text() == "old"
 
 

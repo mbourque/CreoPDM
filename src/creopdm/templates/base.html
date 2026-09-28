@@ -34,7 +34,7 @@
       </div>
     </a>
     <div class="status-cluster">
-      {% if can_manage_users or can_manage_settings or can_manage_roles or can_assign_projects or can_manage_projects or can_manage_email %}
+      {% if can_manage_users or can_manage_settings or can_manage_roles or can_assign_products or can_manage_products or can_manage_email %}
       <a class="status-pill" href="/admin">Administration</a>
       {% endif %}
       <span id="creo-status" class="status-pill" data-state="{% if creo_label == 'Connected' %}ok{% else %}idle{% endif %}" data-creo-open-mode="{{ creo_open_mode }}" title="{{ creo_open_title }}">
@@ -62,7 +62,7 @@
       <p class="muted small" id="danger-confirm-workspace-hint" hidden>
         Moves matching files from the local creopdm-agent cache on this PC to the Recycle Bin.
       </p>
-      <label>Type the project name to confirm
+      <label>Type the product name to confirm
         <input name="confirm_name" id="danger-confirm-input" required maxlength="255" autocomplete="off">
       </label>
       <p class="error" id="danger-confirm-error" hidden></p>
@@ -72,13 +72,13 @@
       </div>
     </form>
   </dialog>
-  <dialog id="project-watch-dialog" class="dialog">
-    <form method="dialog" id="project-watch-form">
-      <h2 id="project-watch-title">Watch project</h2>
-      <p id="project-watch-lead"></p>
+  <dialog id="product-watch-dialog" class="dialog">
+    <form method="dialog" id="product-watch-form">
+      <h2 id="product-watch-title">Watch product</h2>
+      <p id="product-watch-lead"></p>
       <div class="dialog-actions">
-        <button type="button" class="btn" id="project-watch-cancel">Cancel</button>
-        <button type="submit" class="btn btn-primary" id="project-watch-confirm">Confirm</button>
+        <button type="button" class="btn" id="product-watch-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="product-watch-confirm">Confirm</button>
       </div>
     </form>
   </dialog>
@@ -108,7 +108,7 @@
       </p>
       <label class="choice" id="open-checkout-wd-wrap">
         <input type="checkbox" id="open-checkout-set-wd" checked>
-        Set Creo working directory to this project’s local workspace
+        Set Creo working directory to this product’s local workspace
       </label>
       <p class="error" id="open-checkout-error" hidden></p>
       <div class="dialog-actions">
@@ -395,7 +395,7 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
         var versionName = diskName || filename;
         var shortDisk = creoBasename(diskName || filename || fullPath || "");
         // Nested agent-cache layout (vault folders preserved): Creo resolves
-        // companions from the file's folder, not the project cache root.
+        // companions from the file's folder, not the product cache root.
         var fileDir = fullPath ? creoParentDir(fullPath) : "";
         var openWd = fileDir || directory || "";
         var relativeName = (fullPath && directory)
@@ -441,7 +441,7 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
         if (!model && shortDisk) {
             model = creoTryOpenName(session, "", shortDisk);
         }
-        // Project-root-relative path (model-templates/start_assy.asm.1).
+        // Product-root-relative path (model-templates/start_assy.asm.1).
         if (!model && relativeName && directory) {
             model = creoTryOpenName(session, directory, relativeName);
         }
@@ -499,7 +499,7 @@ function setWorkingDirectory(directory) {
           ? pfcGetCurrentSession()
           : pfcGetProESession();
         if (!directory) {
-            return "CREOPDM_ERROR:No project is selected.";
+            return "CREOPDM_ERROR:No product is selected.";
         }
         try {
             session.ChangeDirectory(directory);

@@ -16,18 +16,18 @@ from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object, present_objects
 from creopdm.api.deps import (
-    accessible_projects,
+    accessible_products,
     get_context,
     get_db,
-    load_accessible_project,
+    load_accessible_product,
     require_permission,
-    require_project_access,
+    require_product_access,
 )
-from creopdm.api.serializers import project_to_response, revision_display
+from creopdm.api.serializers import product_to_response, revision_display
 from creopdm.auth_constants import PERMISSION_OBJECTS_VIEW
 from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPSED_COOKIE
 from creopdm.context import AppContext
-from creopdm.exceptions import PermissionDeniedError, ProjectNotFoundError
+from creopdm.exceptions import PermissionDeniedError, ProductNotFoundError
 from creopdm.permissions import caps_dict
 from creopdm.utils.bom_match import bom_generic_label, bom_lookup_keys
 from creopdm.utils.classify import display_type_label, resolve_type_icon, type_icon_client_payload
@@ -62,9 +62,9 @@ def _bom_generic_label(filename: str) -> str | None:
     return bom_generic_label(filename)
 
 
-def _project_bom_index(ctx: AppContext, db: Session, project_id: int) -> dict[str, str]:
+def _product_bom_index(ctx: AppContext, db: Session, product_id: int) -> dict[str, str]:
     index: dict[str, str] = {}
-    for row in ctx.objects.list_objects(db, project_id):
+    for row in ctx.objects.list_objects(db, product_id):
         for key in _bom_lookup_keys(row.filename):
             index.setdefault(key, row.uuid)
     return index
@@ -97,13 +97,13 @@ def _enrich_bom_tree(nodes: list, by_logical: dict[str, str]) -> list[dict]:
 def _folder_page(
     ctx: AppContext,
     db: Session,
-    project,
+    product,
     current_folder: str,
 ) -> tuple[list, list[dict]]:
     """Show imported folders plus only the files that belong in this view."""
-    vault_names = ctx.workspaces.list_immediate_vault_folders(project, current_folder)
+    vault_names = ctx.workspaces.list_immediate_vault_folders(product, current_folder)
     files, folder_entries = ctx.objects.list_folder_view(
-        db, project.id, current_folder, vault_folder_names=vault_names
+        db, product.id, current_folder, vault_folder_names=vault_names
     )
     presented = present_objects(ctx, db, files)
     list_entries = list(folder_entries)
@@ -126,8 +126,8 @@ _PAGE_DEFAULTS = {
     "checkoutable_count": 0,
     "checkin_queue": {"saves": [], "new_files": []},
     "email_notifications_enabled": False,
-    "watching_project": False,
-    "can_watch_project": False,
+    "watching_product": False,
+    "can_watch_product": False,
     "watch_unavailable_reason": None,
     "local_time": format_local,
     "local_time_pretty": format_local_pretty,
@@ -228,37 +228,37 @@ def _creo_open_title(ctx: AppContext, mode: str) -> str:
     return "Opens Creo models as a browser download for the OS association"
 
 
-def _watch_page_flags(request: Request, ctx: AppContext, db: Session, project) -> dict:
+def _watch_page_flags(request: Request, ctx: AppContext, db: Session, product) -> dict:
     email_on = bool(ctx.settings.email.enabled)
     auth_user = getattr(request.state, "auth_user", None)
-    if not email_on or project is None:
+    if not email_on or product is None:
         return {
             "email_notifications_enabled": email_on,
-            "watching_project": False,
-            "can_watch_project": False,
+            "watching_product": False,
+            "can_watch_product": False,
             "watch_unavailable_reason": None,
         }
     # Never let watch/email probes 500 the Files page (missing table, detached user, etc.).
     try:
-        can_watch, reason = ctx.project_watches.watch_eligibility(auth_user, email_enabled=email_on)
+        can_watch, reason = ctx.product_watches.watch_eligibility(auth_user, email_enabled=email_on)
         watching = False
         if auth_user is not None:
-            watching = ctx.project_watches.is_watching(db, int(auth_user.id), int(project.id))
+            watching = ctx.product_watches.is_watching(db, int(auth_user.id), int(product.id))
         return {
             "email_notifications_enabled": email_on,
-            "watching_project": watching,
-            "can_watch_project": can_watch,
+            "watching_product": watching,
+            "can_watch_product": can_watch,
             "watch_unavailable_reason": None if can_watch else reason,
         }
     except Exception:
         from creopdm.logging_setup import get_logger
 
-        get_logger("pages").exception("project watch page flags failed")
+        get_logger("pages").exception("product watch page flags failed")
         return {
             "email_notifications_enabled": email_on,
-            "watching_project": False,
-            "can_watch_project": False,
-            "watch_unavailable_reason": "Project watch is temporarily unavailable.",
+            "watching_product": False,
+            "can_watch_product": False,
+            "watch_unavailable_reason": "Product watch is temporarily unavailable.",
         }
 
 
@@ -349,41 +349,41 @@ def home(
                 getattr(request.state, "can_manage_users", False)
                 or getattr(request.state, "can_manage_roles", False)
                 or getattr(request.state, "can_manage_settings", False)
-                or getattr(request.state, "can_manage_projects", False)
+                or getattr(request.state, "can_manage_products", False)
                 or getattr(request.state, "can_manage_email", False)
-                or getattr(request.state, "can_assign_projects", False)
+                or getattr(request.state, "can_assign_products", False)
                 or getattr(request.state, "can_set_passwords", False)
                 or getattr(request.state, "can_assign_roles", False)
             ):
                 return RedirectResponse("/admin", status_code=303)
             return RedirectResponse("/no-access", status_code=303)
-    projects = [project_to_response(p) for p in accessible_projects(request, ctx, db)]
-    selected_uuid = request.query_params.get("project") or ctx.config.settings.ui.last_project_uuid
+    products = [product_to_response(p) for p in accessible_products(request, ctx, db)]
+    selected_uuid = request.query_params.get("product") or ctx.config.settings.ui.last_product_uuid
     selected = None
     status = None
     checkin_queue: dict[str, list] = {"saves": [], "new_files": []}
-    project = None
+    product = None
     if selected_uuid:
         try:
-            project = load_accessible_project(request, ctx, db, selected_uuid)
-            selected = project_to_response(project)
-        except (ProjectNotFoundError, PermissionDeniedError):
+            product = load_accessible_product(request, ctx, db, selected_uuid)
+            selected = product_to_response(product)
+        except (ProductNotFoundError, PermissionDeniedError):
             selected = None
-            project = None
-    if selected is None and projects:
-        selected = projects[0]
-        project = load_accessible_project(request, ctx, db, selected.uuid)
-    if project is not None:
-        ctx.config.remember_project(project.uuid)
+            product = None
+    if selected is None and products:
+        selected = products[0]
+        product = load_accessible_product(request, ctx, db, selected.uuid)
+    if product is not None:
+        ctx.config.remember_product(product.uuid)
         if "folder" not in request.query_params:
-            remembered = ctx.config.remembered_folder(project.uuid)
+            remembered = ctx.config.remembered_folder(product.uuid)
             if remembered:
                 return RedirectResponse(
-                    url=f"/?project={quote(project.uuid)}&folder={quote(remembered)}",
+                    url=f"/?product={quote(product.uuid)}&folder={quote(remembered)}",
                     status_code=303,
                 )
         current_folder = normalize_folder_query(request.query_params.get("folder"))
-        ctx.config.remember_folder(project.uuid, current_folder)
+        ctx.config.remember_folder(product.uuid, current_folder)
     else:
         current_folder = normalize_folder_query(request.query_params.get("folder"))
     objects: list = []
@@ -392,12 +392,12 @@ def home(
     checkoutable_count = 0
     pending_saves = 0
     new_workspace_files = 0
-    if project is not None:
-        objects, list_entries = _folder_page(ctx, db, project, current_folder)
-        checkout_count = ctx.checkouts.count_for_project(db, project.id)
-        checkoutable_count = ctx.checkouts.count_checkoutable_for_project(db, project.id)
-        known = ctx.objects.list_path_index(db, project.id)
-        watch = ctx.workspaces.watch_stamp(project, known)
+    if product is not None:
+        objects, list_entries = _folder_page(ctx, db, product, current_folder)
+        checkout_count = ctx.checkouts.count_for_product(db, product.id)
+        checkoutable_count = ctx.checkouts.count_checkoutable_for_product(db, product.id)
+        known = ctx.objects.list_path_index(db, product.id)
+        watch = ctx.workspaces.watch_stamp(product, known)
         pending_saves = int(watch.get("pending_saves") or 0)
         new_workspace_files = int(watch.get("new_files") or 0)
     status = folder_view_counts(
@@ -414,7 +414,7 @@ def home(
             "app_name": APP_NAME,
             "app_version": APP_VERSION,
             **_creo_page(ctx),
-            "projects": projects,
+            "products": products,
             "selected": selected,
             "objects": objects,
             "current_folder": current_folder,
@@ -437,30 +437,30 @@ def home(
             "object_types": [item.value for item in ObjectType],
             "revision_display": revision_display,
             "native_picker": native_picker_available(),
-            **_watch_page_flags(request, ctx, db, project),
+            **_watch_page_flags(request, ctx, db, product),
         },
     )
 
 
-@router.get("/projects/{project_id}/objects/{object_id}", response_class=HTMLResponse)
+@router.get("/products/{product_id}/objects/{object_id}", response_class=HTMLResponse)
 def object_detail(
-    project_id: str,
+    product_id: str,
     object_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> HTMLResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = load_accessible_project(request, ctx, db, project_id)
+    product = load_accessible_product(request, ctx, db, product_id)
     obj = ctx.objects.get_object(db, object_id)
     history = ctx.objects.object_history(db, object_id)
     payload = present_object(ctx, db, obj)
     is_assembly = obj.object_type == ObjectType.CREO_ASSEMBLY.value
     is_part = obj.object_type == ObjectType.CREO_PART.value
     is_creo = obj.object_type.startswith("CREO_")
-    pending = ctx.workspaces.pending_workspace_save(project, obj)
+    pending = ctx.workspaces.pending_workspace_save(product, obj)
     metadata = ctx.metadata.get(db, object_id)
-    # Dependency + BOM only — vault byte scan is too slow on large projects for SSR.
+    # Dependency + BOM only — vault byte scan is too slow on large products for SSR.
     # Where Used tab loads the full result (including vault scan) via API.
     where_used = ctx.metadata.where_used(db, object_id, vault_scan=False)
     identity = metadata.identity or {}
@@ -470,7 +470,7 @@ def object_detail(
     family_table = metadata.family_table if isinstance(metadata.family_table, dict) else {}
     features = metadata.features if isinstance(metadata.features, list) else []
     bom = metadata.bom if isinstance(metadata.bom, list) else []
-    bom = _enrich_bom_tree(bom, _project_bom_index(ctx, db, project.id))
+    bom = _enrich_bom_tree(bom, _product_bom_index(ctx, db, product.id))
     show_mass_tab = bool(
         mass
         and (
@@ -485,10 +485,10 @@ def object_detail(
     # Features = Creo feature list; Structure = assembly model tree (separate tabs).
     show_features_tab = bool(features)
     show_structure_tab = bool(is_assembly)
-    checkout_count = ctx.checkouts.count_for_project(db, project.id)
-    checkoutable_count = ctx.checkouts.count_checkoutable_for_project(db, project.id)
-    siblings = ctx.objects.list_objects(db, project.id)
-    watch = ctx.workspaces.watch_stamp(project, [(o.relative_path, o.filename) for o in siblings])
+    checkout_count = ctx.checkouts.count_for_product(db, product.id)
+    checkoutable_count = ctx.checkouts.count_checkoutable_for_product(db, product.id)
+    siblings = ctx.objects.list_objects(db, product.id)
+    watch = ctx.workspaces.watch_stamp(product, [(o.relative_path, o.filename) for o in siblings])
     pending_saves = int(watch.get("pending_saves") or 0)
     new_workspace_files = int(watch.get("new_files") or 0)
     return render(
@@ -498,7 +498,7 @@ def object_detail(
             "app_name": APP_NAME,
             "app_version": APP_VERSION,
             **_creo_page(ctx),
-            "project": project_to_response(project),
+            "product": product_to_response(product),
             "object": payload,
             "history": history,
             "workspace_pending": pending,
@@ -518,7 +518,7 @@ def object_detail(
             "show_structure_tab": show_structure_tab,
             "bom": bom,
             "where_used": where_used.items,
-            "workspace_path": str(ctx.workspaces.vault_for(project)),
+            "workspace_path": str(ctx.workspaces.vault_for(product)),
             "workspace_folder": folder_of(obj.relative_path),
             "checkout_count": checkout_count,
             "checkoutable_count": checkoutable_count,

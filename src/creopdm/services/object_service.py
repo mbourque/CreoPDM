@@ -40,10 +40,10 @@ from creopdm.models.checkout import Checkout
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
-from creopdm.models.project import Project
+from creopdm.models.product import Product
 from creopdm.models.version import ObjectVersion
 from creopdm.services.activity_service import ActivityService
-from creopdm.services.lock_manager import ProjectLockManager
+from creopdm.services.lock_manager import ProductLockManager
 from creopdm.storage.base import VersionStore
 from creopdm.utils.classify import classify_filename
 from creopdm.utils.creo_header import creo_release_for
@@ -88,7 +88,7 @@ class ObjectService:
     def __init__(
         self,
         version_store: VersionStore,
-        locks: ProjectLockManager,
+        locks: ProductLockManager,
         activities: ActivityService,
         users: CurrentUserProvider,
         config: ConfigManager | None = None,
@@ -99,11 +99,11 @@ class ObjectService:
         self._users = users
         self._config = config
 
-    def _vault(self, project: Project) -> Path:
+    def _vault(self, product: Product) -> Path:
         if self._config is None:
             raise RepositoryError("Vault configuration is missing.")
-        path = self._config.workspace_for_project(
-            (project.vault_folder or "").strip() or project.uuid
+        path = self._config.workspace_for_product(
+            (product.vault_folder or "").strip() or product.uuid
         )
         path.mkdir(parents=True, exist_ok=True)
         return path
@@ -177,15 +177,15 @@ class ObjectService:
     def list_objects(
         self,
         session: Session,
-        project_id: int,
+        product_id: int,
         query: str | None = None,
         object_type: str | None = None,
         lifecycle_state: str | None = None,
     ) -> list[EngineeringObject]:
         stmt = select(EngineeringObject).options(
             joinedload(EngineeringObject.current_version),
-            joinedload(EngineeringObject.project),
-        ).where(EngineeringObject.project_id == project_id)
+            joinedload(EngineeringObject.product),
+        ).where(EngineeringObject.product_id == product_id)
         if object_type:
             stmt = stmt.where(EngineeringObject.object_type == object_type)
         if lifecycle_state:
@@ -216,11 +216,11 @@ class ObjectService:
             ).unique()
         )
 
-    def list_path_index(self, session: Session, project_id: int) -> list[tuple[str, str]]:
+    def list_path_index(self, session: Session, product_id: int) -> list[tuple[str, str]]:
         """Imported relative_path and filename only. Used by workspace watch."""
         rows = session.execute(
             select(EngineeringObject.relative_path, EngineeringObject.filename).where(
-                EngineeringObject.project_id == project_id
+                EngineeringObject.product_id == product_id
             )
         ).all()
         return [(str(relative), str(filename)) for relative, filename in rows]
@@ -229,7 +229,7 @@ class ObjectService:
         obj = session.scalar(
             select(EngineeringObject)
             .options(
-                joinedload(EngineeringObject.project),
+                joinedload(EngineeringObject.product),
                 joinedload(EngineeringObject.current_version),
             )
             .where(EngineeringObject.uuid == object_uuid)
@@ -249,7 +249,7 @@ class ObjectService:
             rows = session.scalars(
                 select(EngineeringObject)
                 .options(
-                    joinedload(EngineeringObject.project),
+                    joinedload(EngineeringObject.product),
                     joinedload(EngineeringObject.current_version),
                 )
                 .where(EngineeringObject.uuid.in_(chunk))
@@ -259,19 +259,19 @@ class ObjectService:
         return [found[item] for item in wanted if item in found]
 
     def delete_object(self, session: Session, object_uuid: str) -> dict[str, str]:
-        """Unregister the object from the project. Never deletes the original file.
+        """Unregister the object from the product. Never deletes the original file.
 
         Workspace copies are purged by the caller. Git tracking is dropped with
-        --cached so a leftover file in the original project folder stays on disk.
+        --cached so a leftover file in the original product folder stays on disk.
         """
         obj = self.get_object(session, object_uuid)
-        project = obj.project
+        product = obj.product
         user = self._users.get_current_user()
         filename = obj.filename
         relative = obj.relative_path
         uuid_value = obj.uuid
-        repo = self._vault(project)
-        with self._locks.acquire(project.uuid):
+        repo = self._vault(product)
+        with self._locks.acquire(product.uuid):
             captured = self._store.capture_checkpoint(repo)
             try:
                 self._store.remove_files(
@@ -285,17 +285,17 @@ class ObjectService:
                 if (repo / ".git").exists():
                     logger.exception("Git untrack failed for %s", relative)
                     raise RepositoryError(
-                        f"Could not unregister {filename} from project history.",
+                        f"Could not unregister {filename} from product history.",
                         details={"file": filename, "relative_path": relative},
                     )
-                logger.warning("Git history missing; unregistering %s from the project list only", filename)
+                logger.warning("Git history missing; unregistering %s from the product list only", filename)
             try:
                 self._delete_metadata(session, obj)
                 self._activities.record(
                     session,
                     ActivityAction.OBJECT_REMOVED,
                     user,
-                    project_id=project.id,
+                    product_id=product.id,
                     object_id=None,
                     details={"filename": filename, "relative_path": relative, "uuid": uuid_value},
                 )
@@ -304,42 +304,42 @@ class ObjectService:
                 if captured:
                     self._store.restore_checkpoint(repo, captured)
                 raise RepositoryError(
-                    "Project metadata could not be updated. The original file was not deleted.",
+                    "Product metadata could not be updated. The original file was not deleted.",
                     details={"file": filename},
                 ) from exc
         logger.info("Unregistered object %s (%s); original file left in place", uuid_value, relative)
         return {"uuid": uuid_value, "filename": filename, "relative_path": relative}
 
     def delete_objects(self, session: Session, objects: list[EngineeringObject]) -> list[dict[str, str]]:
-        """Unregister many objects with one Git untrack and one commit per project."""
+        """Unregister many objects with one Git untrack and one commit per product."""
         if not objects:
             return []
         if len(objects) == 1:
             return [self.delete_object(session, objects[0].uuid)]
         grouped: dict[int, list[EngineeringObject]] = {}
         for obj in objects:
-            grouped.setdefault(obj.project_id, []).append(obj)
+            grouped.setdefault(obj.product_id, []).append(obj)
         removed: list[dict[str, str]] = []
         for group in grouped.values():
-            removed.extend(self._delete_objects_in_project(session, group))
+            removed.extend(self._delete_objects_in_product(session, group))
         return removed
 
-    def _delete_objects_in_project(
+    def _delete_objects_in_product(
         self,
         session: Session,
         objects: list[EngineeringObject],
     ) -> list[dict[str, str]]:
-        project = objects[0].project
+        product = objects[0].product
         user = self._users.get_current_user()
         relatives = [obj.relative_path.replace("\\", "/") for obj in objects]
-        repo = self._vault(project)
+        repo = self._vault(product)
         count = len(objects)
         message = f"Unregister {count} files"
         summaries = [
             {"uuid": obj.uuid, "filename": obj.filename, "relative_path": obj.relative_path}
             for obj in objects
         ]
-        with self._locks.acquire(project.uuid):
+        with self._locks.acquire(product.uuid):
             captured = self._store.capture_checkpoint(repo)
             try:
                 self._store.remove_files(
@@ -353,11 +353,11 @@ class ObjectService:
                 if (repo / ".git").exists():
                     logger.exception("Git untrack failed for %s files", count)
                     raise RepositoryError(
-                        f"Could not unregister {count} files from project history.",
+                        f"Could not unregister {count} files from product history.",
                         details={"count": count},
                     )
                 logger.warning(
-                    "Git history missing; unregistering %s files from the project list only",
+                    "Git history missing; unregistering %s files from the product list only",
                     count,
                 )
             try:
@@ -366,7 +366,7 @@ class ObjectService:
                     session,
                     ActivityAction.OBJECT_REMOVED,
                     user,
-                    project_id=project.id,
+                    product_id=product.id,
                     object_id=None,
                     details={
                         "count": count,
@@ -378,7 +378,7 @@ class ObjectService:
                 if captured:
                     self._store.restore_checkpoint(repo, captured)
                 raise RepositoryError(
-                    "The files were untracked but project metadata could not be updated. "
+                    "The files were untracked but product metadata could not be updated. "
                     "The repository was restored and the files were not removed from the list.",
                     details={"count": count},
                 ) from exc
@@ -437,7 +437,7 @@ class ObjectService:
     def import_file(
         self,
         session: Session,
-        project: Project,
+        product: Product,
         source_path: Path,
         original_name: str | None = None,
         relative_path: str | None = None,
@@ -445,7 +445,7 @@ class ObjectService:
     ) -> EngineeringObject:
         results = self.import_files(
             session,
-            project,
+            product,
             [(source_path, original_name, relative_path)],
             comment,
         )
@@ -461,7 +461,7 @@ class ObjectService:
     def import_files(
         self,
         session: Session,
-        project: Project,
+        product: Product,
         jobs: list[tuple[Path, str | None, str | None]],
         comment: str | None = None,
     ) -> list[ImportJobResult]:
@@ -477,14 +477,14 @@ class ObjectService:
         jobs = self._prefer_latest_import_jobs(jobs, purgeable)
         ignore = self._config.ignore_patterns() if self._config else None
         user = self._users.get_current_user()
-        index = self._logical_index(session, project.id)
+        index = self._logical_index(session, product.id)
         checkouts = self._active_checkouts(session, [obj.id for obj in index.values()])
         results: list[ImportJobResult] = []
         plans: list[_ImportPlan] = []
         pending_logical: dict[str, str] = {}
         for source_path, original_name, relative_path in jobs:
             planned, error = self._plan_import(
-                project,
+                product,
                 source_path,
                 original_name,
                 relative_path,
@@ -521,10 +521,10 @@ class ObjectService:
             message = raw_comment or "Add files"
 
         created: list[Path] = []
-        repo = self._vault(project)
+        repo = self._vault(product)
         now = datetime.now(timezone.utc)
 
-        with self._locks.acquire(project.uuid):
+        with self._locks.acquire(product.uuid):
             for plan in stage_plans:
                 if plan.existing is None:
                     self._mark_result(
@@ -535,7 +535,7 @@ class ObjectService:
                     continue
                 try:
                     self._stage_later_workspace_save(
-                        project,
+                        product,
                         plan.existing,
                         plan.source,
                         plan.stored_name,
@@ -577,14 +577,14 @@ class ObjectService:
                     )
                     self._record_batch_versions(
                         session,
-                        project,
+                        product,
                         git_plans,
                         git_hash,
                         message,
                         user.user_name,
                         now,
                     )
-                    self._record_import_activity(session, project, git_plans, user)
+                    self._record_import_activity(session, product, git_plans, user)
                     for plan in git_plans:
                         destination = ensure_within(repo, repo / Path(plan.relative))
                         try:
@@ -600,7 +600,7 @@ class ObjectService:
                 if isinstance(exc, CreoPDMError):
                     raise
                 raise RepositoryError(
-                    "The files could not be added to the project.",
+                    "The files could not be added to the product.",
                     details={"count": len(git_plans)},
                 ) from exc
 
@@ -615,7 +615,7 @@ class ObjectService:
 
     def _plan_import(
         self,
-        _project: Project,
+        _product: Product,
         source_path: Path,
         original_name: str | None,
         relative_path: str | None,
@@ -695,12 +695,12 @@ class ObjectService:
                     old_relative = existing.relative_path.replace("\\", "/")
                 elif incoming_n < recorded_n:
                     raise DuplicateObjectError(
-                        f"{stored_name} is an older save of {existing.filename}, which is already in this project.",
+                        f"{stored_name} is an older save of {existing.filename}, which is already in this product.",
                         details={"relative_path": existing.relative_path, "existing": existing.filename},
                     )
                 else:
                     raise DuplicateObjectError(
-                        f"{stored_name} is already in this project as {existing.filename}.",
+                        f"{stored_name} is already in this product as {existing.filename}.",
                         details={"relative_path": existing.relative_path, "existing": existing.filename},
                     )
             content_hash = ""
@@ -727,10 +727,10 @@ class ObjectService:
         except CreoPDMError as exc:
             return None, exc
 
-    def _logical_index(self, session: Session, project_id: int) -> dict[str, EngineeringObject]:
+    def _logical_index(self, session: Session, product_id: int) -> dict[str, EngineeringObject]:
         purgeable = self._purgeable_extensions()
         objects = session.scalars(
-            select(EngineeringObject).where(EngineeringObject.project_id == project_id)
+            select(EngineeringObject).where(EngineeringObject.product_id == product_id)
         )
         return {
             CreoFileManager.logical_repo_path(obj.relative_path, purgeable): obj
@@ -770,7 +770,7 @@ class ObjectService:
     def _record_batch_versions(
         self,
         session: Session,
-        project: Project,
+        product: Product,
         plans: list[_ImportPlan],
         git_hash: str,
         message: str,
@@ -781,7 +781,7 @@ class ObjectService:
             if plan.kind == "new":
                 obj = EngineeringObject(
                     uuid=str(uuid.uuid4()),
-                    project_id=project.id,
+                    product_id=product.id,
                     number=plan.stem.upper(),
                     name=plan.stem,
                     filename=plan.stored_name,
@@ -831,7 +831,7 @@ class ObjectService:
             obj.updated_at = now
         session.flush()
 
-    def _record_import_activity(self, session: Session, project: Project, plans: list[_ImportPlan], user) -> None:
+    def _record_import_activity(self, session: Session, product: Product, plans: list[_ImportPlan], user) -> None:
         new_plans = [plan for plan in plans if plan.kind == "new"]
         later_plans = [plan for plan in plans if plan.kind == "later"]
         if len(new_plans) == 1:
@@ -840,7 +840,7 @@ class ObjectService:
                 session,
                 ActivityAction.OBJECT_ADDED,
                 user,
-                project_id=project.id,
+                product_id=product.id,
                 object_id=plan.existing.id if plan.existing is not None else None,
                 details={"filename": plan.stored_name, "relative_path": plan.relative},
             )
@@ -849,7 +849,7 @@ class ObjectService:
                 session,
                 ActivityAction.OBJECT_ADDED,
                 user,
-                project_id=project.id,
+                product_id=product.id,
                 object_id=None,
                 details={
                     "count": len(new_plans),
@@ -863,7 +863,7 @@ class ObjectService:
                 session,
                 ActivityAction.CHECKED_IN,
                 user,
-                project_id=project.id,
+                product_id=product.id,
                 object_id=plan.existing.id if plan.existing is not None else None,
                 details={
                     "filename": plan.stored_name,
@@ -876,7 +876,7 @@ class ObjectService:
                 session,
                 ActivityAction.CHECKED_IN,
                 user,
-                project_id=project.id,
+                product_id=product.id,
                 object_id=None,
                 details={"count": len(later_plans), "iteration": True},
             )
@@ -884,7 +884,7 @@ class ObjectService:
     def _import_later_save(
         self,
         session: Session,
-        project: Project,
+        product: Product,
         existing: EngineeringObject,
         source_path: Path,
         stored_name: str,
@@ -910,11 +910,11 @@ class ObjectService:
                     f"{existing.filename} is checked out by {active.user_name}.",
                     details={"uuid": existing.uuid, "user": active.user_name},
                 )
-            self._stage_later_workspace_save(project, existing, source_path, stored_name)
+            self._stage_later_workspace_save(product, existing, source_path, stored_name)
             return existing
         relative = self._later_save_relative(existing, stored_name)
         old_relative = existing.relative_path.replace("\\", "/")
-        repo = self._vault(project)
+        repo = self._vault(product)
         destination = ensure_within(repo, repo / Path(relative))
         content_hash = calculate_sha256(source_path)
         file_size = source_path.stat().st_size
@@ -925,7 +925,7 @@ class ObjectService:
         captured_head = self._store.capture_checkpoint(repo)
         now = datetime.now(timezone.utc)
         new_iteration = existing.iteration + 1
-        with self._locks.acquire(project.uuid):
+        with self._locks.acquire(product.uuid):
             created_copy = copy_file(source_path, destination)
             try:
                 git_hash = self._store.store_version(
@@ -968,7 +968,7 @@ class ObjectService:
                 if captured_head:
                     self._store.restore_checkpoint(repo, captured_head)
                 raise RepositoryError(
-                    "The later save was stored but project metadata could not be updated. "
+                    "The later save was stored but product metadata could not be updated. "
                     "The repository was restored and the file was not added.",
                     details={"file": stored_name},
                 ) from exc
@@ -980,7 +980,7 @@ class ObjectService:
                 session,
                 ActivityAction.CHECKED_IN,
                 user,
-                project_id=project.id,
+                product_id=product.id,
                 object_id=existing.id,
                 details={"filename": stored_name, "relative_path": relative, "iteration": new_iteration},
             )
@@ -995,15 +995,15 @@ class ObjectService:
 
     def _stage_later_workspace_save(
         self,
-        project: Project,
+        product: Product,
         existing: EngineeringObject,
         source_path: Path,
         stored_name: str,
     ) -> Path:
         """Put a later Creo save in the workspace. Check-in records the version."""
         relative = self._later_save_relative(existing, stored_name)
-        destination = ensure_within(self._vault(project), self._vault(project) / Path(relative))
-        with self._locks.acquire(project.uuid):
+        destination = ensure_within(self._vault(product), self._vault(product) / Path(relative))
+        with self._locks.acquire(product.uuid):
             copy_file(source_path, destination)
             try:
                 set_file_writable(destination)
@@ -1015,7 +1015,7 @@ class ObjectService:
     def import_upload(
         self,
         session: Session,
-        project: Project,
+        product: Product,
         filename: str,
         data: bytes,
         relative_path: str | None = None,
@@ -1030,7 +1030,7 @@ class ObjectService:
         try:
             return self.import_file(
                 session,
-                project,
+                product,
                 temp_path,
                 original_name=safe_name,
                 relative_path=relative_path,
@@ -1051,14 +1051,14 @@ class ObjectService:
     def existing_logical(
         self,
         session: Session,
-        project_id: int,
+        product_id: int,
         relative: str,
         exclude_id: int | None = None,
     ) -> EngineeringObject | None:
         extras = self._cad_extensions()
         logical = CreoFileManager.logical_repo_path(relative, extras)
         objects = session.scalars(
-            select(EngineeringObject).where(EngineeringObject.project_id == project_id)
+            select(EngineeringObject).where(EngineeringObject.product_id == product_id)
         )
         for item in objects:
             if exclude_id is not None and item.id == exclude_id:
@@ -1070,14 +1070,14 @@ class ObjectService:
     def search(
         self,
         session: Session,
-        project: Project,
+        product: Product,
         query: str | None = None,
         object_type: str | None = None,
         lifecycle_state: str | None = None,
     ) -> list[EngineeringObject]:
         return self.list_objects(
             session,
-            project.id,
+            product.id,
             query=query,
             object_type=object_type,
             lifecycle_state=lifecycle_state,
@@ -1086,7 +1086,7 @@ class ObjectService:
     def list_folder_view(
         self,
         session: Session,
-        project_id: int,
+        product_id: int,
         current_folder: str = "",
         vault_folder_names: list[str] | None = None,
     ) -> tuple[list[EngineeringObject], list[dict]]:
@@ -1102,7 +1102,7 @@ class ObjectService:
             EngineeringObject.relative_path,
             EngineeringObject.updated_at,
             EngineeringObject.uuid,
-        ).where(EngineeringObject.project_id == project_id)
+        ).where(EngineeringObject.product_id == product_id)
         if current:
             stmt = stmt.where(EngineeringObject.relative_path.startswith(f"{current}/"))
         rows = session.execute(stmt).all()
@@ -1116,10 +1116,10 @@ class ObjectService:
                     select(EngineeringObject)
                     .options(
                         joinedload(EngineeringObject.current_version),
-                        joinedload(EngineeringObject.project),
+                        joinedload(EngineeringObject.product),
                     )
                     .where(
-                        EngineeringObject.project_id == project_id,
+                        EngineeringObject.product_id == product_id,
                         EngineeringObject.relative_path.in_(file_rels),
                     )
                     .order_by(EngineeringObject.filename.asc())
@@ -1130,7 +1130,7 @@ class ObjectService:
     def uuids_under_folder(
         self,
         session: Session,
-        project_id: int,
+        product_id: int,
         folder: str,
     ) -> list[str]:
         """All object UUIDs whose relative_path is under folder (inclusive prefix)."""
@@ -1140,7 +1140,7 @@ class ObjectService:
         if not current:
             return []
         stmt = select(EngineeringObject.uuid).where(
-            EngineeringObject.project_id == project_id,
+            EngineeringObject.product_id == product_id,
             EngineeringObject.relative_path.startswith(f"{current}/"),
         )
         return [str(item) for item in session.scalars(stmt).all() if item]

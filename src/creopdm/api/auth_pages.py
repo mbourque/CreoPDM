@@ -11,7 +11,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
 
 from creopdm.api.deps import get_context, get_db
-from creopdm.api.serializers import project_to_response
+from creopdm.api.serializers import product_to_response
 from creopdm.auth_constants import (
     ADMINISTRATION_PERMISSION_KEYS,
     BUILTIN_PERMISSIONS,
@@ -331,16 +331,16 @@ def _require_roles_manager(
     return user
 
 
-def _require_projects_manager(
+def _require_products_manager(
     request: Request, ctx: AppContext, db: Session
 ) -> User | HTMLResponse | RedirectResponse:
     user_uuid = request.session.get(SESSION_USER_KEY)
     user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
     if user is None:
         return RedirectResponse("/login", status_code=303)
-    if not ctx.user_accounts.can_manage_projects(user):
+    if not ctx.user_accounts.can_manage_products(user):
         return HTMLResponse(
-            "<h1>403 Forbidden</h1><p>Project management access required.</p>",
+            "<h1>403 Forbidden</h1><p>Product management access required.</p>",
             status_code=403,
         )
     return user
@@ -353,9 +353,9 @@ def _require_membership_assign(
     user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
     if user is None:
         return RedirectResponse("/login", status_code=303)
-    if not ctx.user_accounts.can_assign_projects(user):
+    if not ctx.user_accounts.can_assign_products(user):
         return HTMLResponse(
-            "<h1>403 Forbidden</h1><p>Project membership access required (projects.assign).</p>",
+            "<h1>403 Forbidden</h1><p>Product membership access required (products.assign).</p>",
             status_code=403,
         )
     return user
@@ -395,24 +395,24 @@ def _parse_permission_keys(raw: list[str] | None) -> list[str]:
     return [key for key in (raw or []) if key in known]
 
 
-def _parse_project_access(
+def _parse_product_access(
     *,
-    project_access_present: str | None,
-    access_all_projects: str | None,
-    project_uuid: list[str] | None,
+    product_access_present: str | None,
+    access_all_products: str | None,
+    product_uuid: list[str] | None,
 ) -> tuple[bool, list[str]]:
-    """Return (access_all, project_uuids). Legacy posts without the field keep All projects."""
-    if not project_access_present:
+    """Return (access_all, product_uuids). Legacy posts without the field keep All products."""
+    if not product_access_present:
         return True, []
-    access_all = (access_all_projects or "").strip().lower() in {"1", "on", "true", "yes"}
-    if isinstance(project_uuid, str):
-        uuids = [project_uuid.strip()] if project_uuid.strip() else []
+    access_all = (access_all_products or "").strip().lower() in {"1", "on", "true", "yes"}
+    if isinstance(product_uuid, str):
+        uuids = [product_uuid.strip()] if product_uuid.strip() else []
     else:
-        uuids = [str(v).strip() for v in (project_uuid or []) if str(v).strip()]
+        uuids = [str(v).strip() for v in (product_uuid or []) if str(v).strip()]
     return access_all, uuids
 
 
-def _project_access_form(
+def _product_access_form(
     ctx: AppContext,
     db: Session,
     *,
@@ -420,18 +420,18 @@ def _project_access_form(
     selected_uuids: set[str] | None = None,
 ) -> dict:
     selected = selected_uuids or set()
-    projects = [
+    products = [
         {
             "uuid": p.uuid,
             "name": p.name,
             "number": p.number or "",
             "checked": p.uuid in selected,
         }
-        for p in ctx.projects.list_projects(db)
+        for p in ctx.products.list_products(db)
     ]
     return {
-        "access_all_projects": access_all,
-        "project_options": projects,
+        "access_all_products": access_all,
+        "product_options": products,
     }
 
 
@@ -443,8 +443,8 @@ def _user_form_payload(
     role: str = BuiltinRole.ENGINEER.value,
     status: str = UserStatus.ACTIVE.value,
     uuid: str | None = None,
-    access_all_projects: bool = True,
-    selected_project_uuids: list[str] | None = None,
+    access_all_products: bool = True,
+    selected_product_uuids: list[str] | None = None,
 ) -> dict:
     payload: dict = {
         "display_name": display_name,
@@ -452,8 +452,8 @@ def _user_form_payload(
         "email": email,
         "role": role,
         "status": status,
-        "access_all_projects": access_all_projects,
-        "selected_project_uuids": list(selected_project_uuids or []),
+        "access_all_products": access_all_products,
+        "selected_product_uuids": list(selected_product_uuids or []),
     }
     if uuid is not None:
         payload["uuid"] = uuid
@@ -510,10 +510,10 @@ def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Se
             "role": ctx.user_accounts.primary_role_name(u),
             "role_uuid": ctx.user_accounts.primary_role_uuid(u),
             "status": u.status,
-            "project_access": (
+            "product_access": (
                 "All"
-                if getattr(u, "access_all_projects", True)
-                else str(len(u.projects or []))
+                if getattr(u, "access_all_products", True)
+                else str(len(u.products or []))
             ),
             "is_full_admin": ctx.user_accounts.is_full_administrator(u),
             "can_edit": ctx.user_accounts.can_edit_user(admin, u),
@@ -541,7 +541,7 @@ def admin_users(request: Request, ctx: AppContext = Depends(get_context), db: Se
 def _user_form_admin_flags(ctx: AppContext, admin: User) -> dict:
     return {
         "can_assign_roles": ctx.user_accounts.can_assign_roles(admin),
-        "can_assign_projects": ctx.user_accounts.can_assign_projects(admin),
+        "can_assign_products": ctx.user_accounts.can_assign_products(admin),
         "can_set_passwords": ctx.user_accounts.can_set_passwords(admin),
     }
 
@@ -607,7 +607,7 @@ def admin_user_create(
                 role_name=role_name,
                 status=status,
                 must_change_password=True,
-                access_all_projects=False,
+                access_all_products=False,
                 actor=admin,
             )
             db.commit()
@@ -810,18 +810,18 @@ def admin_membership_home(
         for u in ctx.user_accounts.list_users(db)
         if u.status == UserStatus.ACTIVE.value
     ]
-    all_projects_count = sum(1 for u in users if getattr(u, "access_all_projects", True))
-    restricted = [u for u in users if not getattr(u, "access_all_projects", True)]
-    project_rows = []
-    for p in ctx.projects.list_projects(db):
-        member_count = sum(1 for u in restricted if any(mp.id == p.id for mp in (u.projects or [])))
-        project_rows.append(
+    all_products_count = sum(1 for u in users if getattr(u, "access_all_products", True))
+    restricted = [u for u in users if not getattr(u, "access_all_products", True)]
+    product_rows = []
+    for p in ctx.products.list_products(db):
+        member_count = sum(1 for u in restricted if any(mp.id == p.id for mp in (u.products or [])))
+        product_rows.append(
             {
                 "uuid": p.uuid,
                 "name": p.name,
                 "number": p.number or "",
                 "member_count": member_count,
-                "can_open_count": member_count + all_projects_count,
+                "can_open_count": member_count + all_products_count,
             }
         )
     return templates.TemplateResponse(
@@ -829,14 +829,14 @@ def admin_membership_home(
         "admin_membership.html",
         {
             **_base_ctx(request, ctx, current_user=manager),
-            "projects": project_rows,
-            "all_projects_count": all_projects_count,
+            "products": product_rows,
+            "all_products_count": all_products_count,
         },
     )
 
 
-@router.get("/admin/membership/projects", response_class=HTMLResponse)
-def admin_membership_projects_list(
+@router.get("/admin/membership/products", response_class=HTMLResponse)
+def admin_membership_products_list(
     request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
 ):
     manager = _require_membership_assign(request, ctx, db)
@@ -847,27 +847,27 @@ def admin_membership_projects_list(
         for u in ctx.user_accounts.list_users(db)
         if u.status == UserStatus.ACTIVE.value
     ]
-    all_projects_count = sum(1 for u in users if getattr(u, "access_all_projects", True))
-    restricted = [u for u in users if not getattr(u, "access_all_projects", True)]
-    projects = []
-    for p in ctx.projects.list_projects(db):
-        member_count = sum(1 for u in restricted if any(mp.id == p.id for mp in (u.projects or [])))
-        projects.append(
+    all_products_count = sum(1 for u in users if getattr(u, "access_all_products", True))
+    restricted = [u for u in users if not getattr(u, "access_all_products", True)]
+    products = []
+    for p in ctx.products.list_products(db):
+        member_count = sum(1 for u in restricted if any(mp.id == p.id for mp in (u.products or [])))
+        products.append(
             {
                 "uuid": p.uuid,
                 "name": p.name,
                 "number": p.number or "",
                 "member_count": member_count,
-                "can_open_count": member_count + all_projects_count,
+                "can_open_count": member_count + all_products_count,
             }
         )
     return templates.TemplateResponse(
         request,
-        "admin_membership_projects.html",
+        "admin_membership_products.html",
         {
             **_base_ctx(request, ctx, current_user=manager),
-            "projects": projects,
-            "all_projects_count": all_projects_count,
+            "products": products,
+            "all_products_count": all_products_count,
         },
     )
 
@@ -883,14 +883,14 @@ def admin_membership_users_list(
     for u in ctx.user_accounts.list_users(db):
         if u.status != UserStatus.ACTIVE.value:
             continue
-        access_all = bool(getattr(u, "access_all_projects", True))
+        access_all = bool(getattr(u, "access_all_products", True))
         users.append(
             {
                 "uuid": u.uuid,
                 "display_name": u.display_name,
                 "username": u.username,
                 "access_all": access_all,
-                "member_count": 0 if access_all else len(u.projects or []),
+                "member_count": 0 if access_all else len(u.products or []),
             }
         )
     return templates.TemplateResponse(
@@ -916,9 +916,9 @@ def admin_membership_user_detail(
     user = ctx.user_accounts.get_by_uuid(db, user_uuid)
     if user is None:
         return RedirectResponse("/admin/membership/users", status_code=303)
-    access_all = bool(user.access_all_projects)
-    selected = {p.uuid for p in (user.projects or [])}
-    access = _project_access_form(ctx, db, access_all=access_all, selected_uuids=selected)
+    access_all = bool(user.access_all_products)
+    selected = {p.uuid for p in (user.products or [])}
+    access = _product_access_form(ctx, db, access_all=access_all, selected_uuids=selected)
     return templates.TemplateResponse(
         request,
         "admin_membership_user.html",
@@ -940,9 +940,9 @@ def admin_membership_user_detail(
 def admin_membership_user_save(
     user_uuid: str,
     request: Request,
-    project_access_present: str | None = Form(default=None),
-    access_all_projects: str | None = Form(default=None),
-    project_uuid: list[str] = Form(default=[]),
+    product_access_present: str | None = Form(default=None),
+    access_all_products: str | None = Form(default=None),
+    product_uuid: list[str] = Form(default=[]),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -954,19 +954,19 @@ def admin_membership_user_save(
     user = ctx.user_accounts.get_by_uuid(db, user_uuid)
     if user is None:
         return RedirectResponse("/admin/membership/users", status_code=303)
-    access_all, project_uuids = _parse_project_access(
-        project_access_present=project_access_present or "1",
-        access_all_projects=access_all_projects,
-        project_uuid=project_uuid,
+    access_all, product_uuids = _parse_product_access(
+        product_access_present=product_access_present or "1",
+        access_all_products=access_all_products,
+        product_uuid=product_uuid,
     )
     error = None
     try:
-        ctx.user_accounts.ensure_can_assign_projects(manager)
-        ctx.user_accounts.set_project_access(
+        ctx.user_accounts.ensure_can_assign_products(manager)
+        ctx.user_accounts.set_product_access(
             db,
             user,
             access_all=access_all,
-            project_uuids=project_uuids if not access_all else None,
+            product_uuids=product_uuids if not access_all else None,
         )
         db.commit()
         return RedirectResponse("/admin/membership/users", status_code=303)
@@ -979,8 +979,8 @@ def admin_membership_user_save(
     except CreoPDMError as exc:
         db.rollback()
         error = exc.message
-    access = _project_access_form(
-        ctx, db, access_all=access_all, selected_uuids=set(project_uuids)
+    access = _product_access_form(
+        ctx, db, access_all=access_all, selected_uuids=set(product_uuids)
     )
     return templates.TemplateResponse(
         request,
@@ -1000,9 +1000,9 @@ def admin_membership_user_save(
     )
 
 
-@router.get("/admin/membership/projects/{project_uuid}", response_class=HTMLResponse)
-def admin_membership_project_detail(
-    project_uuid: str,
+@router.get("/admin/membership/products/{product_uuid}", response_class=HTMLResponse)
+def admin_membership_product_detail(
+    product_uuid: str,
     request: Request,
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
@@ -1011,10 +1011,10 @@ def admin_membership_project_detail(
     if _is_blocked(manager):
         return manager
     try:
-        project = ctx.projects.get_project(db, project_uuid)
+        product = ctx.products.get_product(db, product_uuid)
     except CreoPDMError:
-        return RedirectResponse("/admin/membership/projects", status_code=303)
-    all_projects_users = []
+        return RedirectResponse("/admin/membership/products", status_code=303)
+    all_products_users = []
     restricted_users = []
     for u in ctx.user_accounts.list_users(db):
         if u.status != UserStatus.ACTIVE.value:
@@ -1024,31 +1024,31 @@ def admin_membership_project_detail(
             "display_name": u.display_name,
             "username": u.username,
         }
-        if getattr(u, "access_all_projects", True):
-            all_projects_users.append(row)
+        if getattr(u, "access_all_products", True):
+            all_products_users.append(row)
         else:
-            member_ids = {p.id for p in (u.projects or [])}
-            restricted_users.append({**row, "member": project.id in member_ids})
+            member_ids = {p.id for p in (u.products or [])}
+            restricted_users.append({**row, "member": product.id in member_ids})
     return templates.TemplateResponse(
         request,
-        "admin_membership_project.html",
+        "admin_membership_product.html",
         {
             **_base_ctx(request, ctx, current_user=manager),
             "error": None,
-            "project": {
-                "uuid": project.uuid,
-                "name": project.name,
-                "number": project.number or "",
+            "product": {
+                "uuid": product.uuid,
+                "name": product.name,
+                "number": product.number or "",
             },
-            "all_projects_users": all_projects_users,
+            "all_products_users": all_products_users,
             "restricted_users": restricted_users,
         },
     )
 
 
-@router.post("/admin/membership/projects/{project_uuid}", response_class=HTMLResponse)
-def admin_membership_project_save(
-    project_uuid: str,
+@router.post("/admin/membership/products/{product_uuid}", response_class=HTMLResponse)
+def admin_membership_product_save(
+    product_uuid: str,
     request: Request,
     member_uuid: list[str] = Form(default=[]),
     ctx: AppContext = Depends(get_context),
@@ -1060,20 +1060,20 @@ def admin_membership_project_save(
     if _is_blocked(manager):
         return manager
     try:
-        project = ctx.projects.get_project(db, project_uuid)
+        product = ctx.products.get_product(db, product_uuid)
     except CreoPDMError:
-        return RedirectResponse("/admin/membership/projects", status_code=303)
+        return RedirectResponse("/admin/membership/products", status_code=303)
     if isinstance(member_uuid, str):
         members = [member_uuid.strip()] if member_uuid.strip() else []
     else:
         members = [str(v).strip() for v in (member_uuid or []) if str(v).strip()]
     error = None
     try:
-        ctx.user_accounts.set_restricted_project_members(
-            db, project, member_user_uuids=members, actor=manager
+        ctx.user_accounts.set_restricted_product_members(
+            db, product, member_user_uuids=members, actor=manager
         )
         db.commit()
-        return RedirectResponse("/admin/membership/projects", status_code=303)
+        return RedirectResponse("/admin/membership/products", status_code=303)
     except PermissionDeniedError as exc:
         db.rollback()
         return HTMLResponse(
@@ -1083,7 +1083,7 @@ def admin_membership_project_save(
     except CreoPDMError as exc:
         db.rollback()
         error = exc.message
-    all_projects_users = []
+    all_products_users = []
     restricted_users = []
     wanted = set(members)
     for u in ctx.user_accounts.list_users(db):
@@ -1094,22 +1094,22 @@ def admin_membership_project_save(
             "display_name": u.display_name,
             "username": u.username,
         }
-        if getattr(u, "access_all_projects", True):
-            all_projects_users.append(row)
+        if getattr(u, "access_all_products", True):
+            all_products_users.append(row)
         else:
             restricted_users.append({**row, "member": u.uuid in wanted})
     return templates.TemplateResponse(
         request,
-        "admin_membership_project.html",
+        "admin_membership_product.html",
         {
             **_base_ctx(request, ctx, current_user=manager),
             "error": error,
-            "project": {
-                "uuid": project.uuid,
-                "name": project.name,
-                "number": project.number or "",
+            "product": {
+                "uuid": product.uuid,
+                "name": product.name,
+                "number": product.number or "",
             },
-            "all_projects_users": all_projects_users,
+            "all_products_users": all_products_users,
             "restricted_users": restricted_users,
         },
         status_code=400,
@@ -1343,7 +1343,7 @@ def admin_role_delete(
         )
 
 
-def _project_form(
+def _product_form(
     *,
     name: str = "",
     number: str = "",
@@ -1362,42 +1362,42 @@ def _project_form(
     return payload
 
 
-@router.get("/admin/projects", response_class=HTMLResponse)
-def admin_projects(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
-    manager = _require_projects_manager(request, ctx, db)
+@router.get("/admin/products", response_class=HTMLResponse)
+def admin_products(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
+    manager = _require_products_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    projects = [project_to_response(p) for p in ctx.projects.list_projects(db)]
+    products = [product_to_response(p) for p in ctx.products.list_products(db)]
     return templates.TemplateResponse(
         request,
-        "admin_projects.html",
+        "admin_products.html",
         {
             **_base_ctx(request, ctx, current_user=manager),
-            "projects": projects,
+            "products": products,
         },
     )
 
 
-@router.get("/admin/projects/new", response_class=HTMLResponse)
-def admin_project_new(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
-    manager = _require_projects_manager(request, ctx, db)
+@router.get("/admin/products/new", response_class=HTMLResponse)
+def admin_product_new(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
+    manager = _require_products_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
     return templates.TemplateResponse(
         request,
-        "admin_project_form.html",
+        "admin_product_form.html",
         {
             **_base_ctx(request, ctx, current_user=manager),
             "error": None,
             "mode": "new",
-            "form": _project_form(),
+            "form": _product_form(),
             "delete_error": None,
         },
     )
 
 
-@router.post("/admin/projects/new", response_class=HTMLResponse)
-def admin_project_create(
+@router.post("/admin/products/new", response_class=HTMLResponse)
+def admin_product_create(
     request: Request,
     name: str = Form(...),
     number: str = Form(""),
@@ -1406,31 +1406,31 @@ def admin_project_create(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
-    manager = _require_projects_manager(request, ctx, db)
+    manager = _require_products_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    form = _project_form(
+    form = _product_form(
         name=name,
         number=number,
         description=description,
         vault_folder=vault_folder,
     )
     try:
-        project = ctx.projects.create_project(
+        product = ctx.products.create_product(
             db,
             name=name,
             number=number or None,
             description=description or None,
             vault_folder=(vault_folder or "").strip() or None,
         )
-        ctx.user_accounts.grant_project_access(db, manager, project)
+        ctx.user_accounts.grant_product_access(db, manager, product)
         db.commit()
-        return RedirectResponse("/admin/projects", status_code=303)
+        return RedirectResponse("/admin/products", status_code=303)
     except CreoPDMError as exc:
         db.rollback()
         return templates.TemplateResponse(
             request,
-            "admin_project_form.html",
+            "admin_product_form.html",
             {
                 **_base_ctx(request, ctx, current_user=manager),
                 "error": exc.message,
@@ -1442,29 +1442,29 @@ def admin_project_create(
         )
 
 
-@router.get("/admin/projects/{project_uuid}", response_class=HTMLResponse)
-def admin_project_detail(
-    project_uuid: str,
+@router.get("/admin/products/{product_uuid}", response_class=HTMLResponse)
+def admin_product_detail(
+    product_uuid: str,
     request: Request,
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
-    manager = _require_projects_manager(request, ctx, db)
+    manager = _require_products_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
     try:
-        project = ctx.projects.get_project(db, project_uuid)
+        product = ctx.products.get_product(db, product_uuid)
     except CreoPDMError:
-        return RedirectResponse("/admin/projects", status_code=303)
-    payload = project_to_response(project)
+        return RedirectResponse("/admin/products", status_code=303)
+    payload = product_to_response(product)
     return templates.TemplateResponse(
         request,
-        "admin_project_form.html",
+        "admin_product_form.html",
         {
             **_base_ctx(request, ctx, current_user=manager),
             "error": None,
             "mode": "edit",
-            "form": _project_form(
+            "form": _product_form(
                 name=payload.name,
                 number=payload.number or "",
                 description=payload.description or "",
@@ -1476,9 +1476,9 @@ def admin_project_detail(
     )
 
 
-@router.post("/admin/projects/{project_uuid}", response_class=HTMLResponse)
-def admin_project_update(
-    project_uuid: str,
+@router.post("/admin/products/{product_uuid}", response_class=HTMLResponse)
+def admin_product_update(
+    product_uuid: str,
     request: Request,
     name: str = Form(...),
     number: str = Form(""),
@@ -1486,35 +1486,35 @@ def admin_project_update(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
-    manager = _require_projects_manager(request, ctx, db)
+    manager = _require_products_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
     try:
-        project = ctx.projects.get_project(db, project_uuid)
+        product = ctx.products.get_product(db, product_uuid)
     except CreoPDMError:
-        return RedirectResponse("/admin/projects", status_code=303)
-    form = _project_form(
+        return RedirectResponse("/admin/products", status_code=303)
+    form = _product_form(
         name=name,
         number=number,
         description=description,
-        vault_folder=project.vault_folder or project.uuid,
-        uuid=project.uuid,
+        vault_folder=product.vault_folder or product.uuid,
+        uuid=product.uuid,
     )
     try:
-        ctx.projects.update_project(
+        ctx.products.update_product(
             db,
-            project_uuid,
+            product_uuid,
             name=name,
             number=number or None,
             description=description or None,
         )
         db.commit()
-        return RedirectResponse("/admin/projects", status_code=303)
+        return RedirectResponse("/admin/products", status_code=303)
     except CreoPDMError as exc:
         db.rollback()
         return templates.TemplateResponse(
             request,
-            "admin_project_form.html",
+            "admin_product_form.html",
             {
                 **_base_ctx(request, ctx, current_user=manager),
                 "error": exc.message,
@@ -1526,51 +1526,51 @@ def admin_project_update(
         )
 
 
-@router.post("/admin/projects/{project_uuid}/delete", response_class=HTMLResponse)
-def admin_project_delete(
-    project_uuid: str,
+@router.post("/admin/products/{product_uuid}/delete", response_class=HTMLResponse)
+def admin_product_delete(
+    product_uuid: str,
     request: Request,
     confirm_name: str = Form(...),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
-    manager = _require_projects_manager(request, ctx, db)
+    manager = _require_products_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
     try:
-        project = ctx.projects.get_project(db, project_uuid)
+        product = ctx.products.get_product(db, product_uuid)
     except CreoPDMError:
-        return RedirectResponse("/admin/projects", status_code=303)
-    payload = project_to_response(project)
-    form = _project_form(
+        return RedirectResponse("/admin/products", status_code=303)
+    payload = product_to_response(product)
+    form = _product_form(
         name=payload.name,
         number=payload.number or "",
         description=payload.description or "",
         vault_folder=payload.vault_folder,
         uuid=payload.uuid,
     )
-    if (confirm_name or "").strip() != project.name:
+    if (confirm_name or "").strip() != product.name:
         return templates.TemplateResponse(
             request,
-            "admin_project_form.html",
+            "admin_product_form.html",
             {
                 **_base_ctx(request, ctx, current_user=manager),
                 "error": None,
                 "mode": "edit",
                 "form": form,
-                "delete_error": "Type the exact project name to confirm removal.",
+                "delete_error": "Type the exact product name to confirm removal.",
             },
             status_code=400,
         )
     try:
-        ctx.projects.delete_project(db, project_uuid)
+        ctx.products.delete_product(db, product_uuid)
         db.commit()
-        return RedirectResponse("/admin/projects", status_code=303)
+        return RedirectResponse("/admin/products", status_code=303)
     except CreoPDMError as exc:
         db.rollback()
         return templates.TemplateResponse(
             request,
-            "admin_project_form.html",
+            "admin_product_form.html",
             {
                 **_base_ctx(request, ctx, current_user=manager),
                 "error": None,

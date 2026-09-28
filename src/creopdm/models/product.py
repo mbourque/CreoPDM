@@ -1,4 +1,4 @@
-"""SQLAlchemy models for projects."""
+"""SQLAlchemy models for products."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from creopdm.database.base import Base
 
 
-class Project(Base):
-    __tablename__ = "projects"
+class Product(Base):
+    __tablename__ = "products"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True)
@@ -31,6 +31,6 @@ class Project(Base):
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    objects: Mapped[list["EngineeringObject"]] = relationship(back_populates="project")  # noqa: F821
-    activities: Mapped[list["Activity"]] = relationship(back_populates="project")  # noqa: F821
-    remotes: Mapped[list["Remote"]] = relationship(back_populates="project")  # noqa: F821
+    objects: Mapped[list["EngineeringObject"]] = relationship(back_populates="product")  # noqa: F821
+    activities: Mapped[list["Activity"]] = relationship(back_populates="product")  # noqa: F821
+    remotes: Mapped[list["Remote"]] = relationship(back_populates="product")  # noqa: F821

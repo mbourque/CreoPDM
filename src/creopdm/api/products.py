@@ -11,22 +11,22 @@ from sqlalchemy.orm import Session
 
 from creopdm.api.checkout import present_object, present_objects
 from creopdm.api.deps import (
-    accessible_projects,
+    accessible_products,
     get_context,
     get_db,
-    load_accessible_project,
+    load_accessible_product,
     require_permission,
 )
-from creopdm.api.serializers import project_to_response
+from creopdm.api.serializers import product_to_response
 from creopdm.auth_constants import (
     PERMISSION_OBJECTS_ADD,
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_VIEW,
-    PERMISSION_PROJECTS_CREATE,
-    PERMISSION_PROJECTS_DELETE,
-    PERMISSION_PROJECTS_EDIT,
+    PERMISSION_PRODUCTS_CREATE,
+    PERMISSION_PRODUCTS_DELETE,
+    PERMISSION_PRODUCTS_EDIT,
 )
 from creopdm.context import AppContext
 from creopdm.constants import ActivityAction
@@ -38,16 +38,16 @@ from creopdm.schemas.common import (
     BatchOperationResponse,
     CreateFolderRequest,
     CreateFolderResponse,
-    ForgetProjectRequest,
-    ForgetProjectResponse,
+    ForgetProductRequest,
+    ForgetProductResponse,
     CheckinPreviewResponse,
     ImportLocalRequest,
     ObjectResponse,
-    ProjectCreateRequest,
-    ProjectResponse,
-    ProjectStatusResponse,
-    ProjectUpdateRequest,
-    ProjectWatchResponse,
+    ProductCreateRequest,
+    ProductResponse,
+    ProductStatusResponse,
+    ProductUpdateRequest,
+    ProductWatchResponse,
     PurgeFloorsResponse,
     PurgeFloorItem,
     PurgeWorkspacePathsRequest,
@@ -61,28 +61,28 @@ from creopdm.utils.launch import open_windows_folder
 from creopdm.utils.native_dialog import pick_files, pick_folder
 
 router = APIRouter()
-logger = get_logger("projects")
+logger = get_logger("products")
 
 
-@router.get("/api/projects", response_model=list[ProjectResponse])
-def list_projects(
+@router.get("/api/products", response_model=list[ProductResponse])
+def list_products(
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
-) -> list[ProjectResponse]:
+) -> list[ProductResponse]:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    return [project_to_response(project) for project in accessible_projects(request, ctx, db)]
+    return [product_to_response(product) for product in accessible_products(request, ctx, db)]
 
 
-@router.post("/api/projects", response_model=ProjectResponse, status_code=201)
-def create_project(
-    payload: ProjectCreateRequest,
+@router.post("/api/products", response_model=ProductResponse, status_code=201)
+def create_product(
+    payload: ProductCreateRequest,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
-) -> ProjectResponse:
-    require_permission(request, ctx, PERMISSION_PROJECTS_CREATE)
-    project = ctx.projects.create_project(
+) -> ProductResponse:
+    require_permission(request, ctx, PERMISSION_PRODUCTS_CREATE)
+    product = ctx.products.create_product(
         db,
         name=payload.name,
         number=payload.number,
@@ -91,38 +91,38 @@ def create_project(
     )
     user = getattr(request.state, "auth_user", None)
     if user is not None and ctx.auth_enabled:
-        ctx.user_accounts.grant_project_access(db, user, project)
-    return project_to_response(project)
+        ctx.user_accounts.grant_product_access(db, user, product)
+    return product_to_response(product)
 
 
-@router.get("/api/projects/{project_id}", response_model=ProjectResponse)
-def get_project(
-    project_id: str,
+@router.get("/api/products/{product_id}", response_model=ProductResponse)
+def get_product(
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
-) -> ProjectResponse:
+) -> ProductResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    return project_to_response(load_accessible_project(request, ctx, db, project_id))
+    return product_to_response(load_accessible_product(request, ctx, db, product_id))
 
 
-@router.get("/api/projects/{project_id}/watch", response_model=ProjectWatchResponse)
-def get_project_watch(
-    project_id: str,
+@router.get("/api/products/{product_id}/watch", response_model=ProductWatchResponse)
+def get_product_watch(
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
-) -> ProjectWatchResponse:
+) -> ProductWatchResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = load_accessible_project(request, ctx, db, project_id)
+    product = load_accessible_product(request, ctx, db, product_id)
     email_on = bool(ctx.settings.email.enabled)
     auth_user = getattr(request.state, "auth_user", None)
     try:
-        can_watch, reason = ctx.project_watches.watch_eligibility(auth_user, email_enabled=email_on)
+        can_watch, reason = ctx.product_watches.watch_eligibility(auth_user, email_enabled=email_on)
         watching = False
         if auth_user is not None:
-            watching = ctx.project_watches.is_watching(db, int(auth_user.id), int(project.id))
-        return ProjectWatchResponse(
+            watching = ctx.product_watches.is_watching(db, int(auth_user.id), int(product.id))
+        return ProductWatchResponse(
             watching=watching,
             can_watch=can_watch,
             email_notifications_enabled=email_on,
@@ -131,34 +131,34 @@ def get_project_watch(
     except Exception:
         from creopdm.logging_setup import get_logger
 
-        get_logger("projects").exception("get_project_watch failed")
-        return ProjectWatchResponse(
+        get_logger("products").exception("get_product_watch failed")
+        return ProductWatchResponse(
             watching=False,
             can_watch=False,
             email_notifications_enabled=email_on,
-            reason="Project watch is temporarily unavailable.",
+            reason="Product watch is temporarily unavailable.",
         )
 
 
-@router.post("/api/projects/{project_id}/watch", response_model=ProjectWatchResponse)
-def subscribe_project_watch(
-    project_id: str,
+@router.post("/api/products/{product_id}/watch", response_model=ProductWatchResponse)
+def subscribe_product_watch(
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
-) -> ProjectWatchResponse:
+) -> ProductWatchResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = load_accessible_project(request, ctx, db, project_id)
+    product = load_accessible_product(request, ctx, db, product_id)
     auth_user = getattr(request.state, "auth_user", None)
     if auth_user is None:
-        raise ValidationAppError("Sign in to watch a project.")
+        raise ValidationAppError("Sign in to watch a product.")
     email_on = bool(ctx.settings.email.enabled)
-    ctx.project_watches.subscribe(db, auth_user, project, email_enabled=email_on)
+    ctx.product_watches.subscribe(db, auth_user, product, email_enabled=email_on)
     db.commit()
     # Re-read for this user only — never trust a hard-coded watching=True.
-    watching = ctx.project_watches.is_watching(db, int(auth_user.id), int(project.id))
-    can_watch, reason = ctx.project_watches.watch_eligibility(auth_user, email_enabled=email_on)
-    return ProjectWatchResponse(
+    watching = ctx.product_watches.is_watching(db, int(auth_user.id), int(product.id))
+    can_watch, reason = ctx.product_watches.watch_eligibility(auth_user, email_enabled=email_on)
+    return ProductWatchResponse(
         watching=watching,
         can_watch=can_watch,
         email_notifications_enabled=email_on,
@@ -166,24 +166,24 @@ def subscribe_project_watch(
     )
 
 
-@router.delete("/api/projects/{project_id}/watch", response_model=ProjectWatchResponse)
-def unsubscribe_project_watch(
-    project_id: str,
+@router.delete("/api/products/{product_id}/watch", response_model=ProductWatchResponse)
+def unsubscribe_product_watch(
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
-) -> ProjectWatchResponse:
+) -> ProductWatchResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = load_accessible_project(request, ctx, db, project_id)
+    product = load_accessible_product(request, ctx, db, product_id)
     auth_user = getattr(request.state, "auth_user", None)
     if auth_user is None:
-        raise ValidationAppError("Sign in to manage project watches.")
+        raise ValidationAppError("Sign in to manage product watches.")
     email_on = bool(ctx.settings.email.enabled)
-    ctx.project_watches.unsubscribe(db, auth_user, project)
+    ctx.product_watches.unsubscribe(db, auth_user, product)
     db.commit()
-    watching = ctx.project_watches.is_watching(db, int(auth_user.id), int(project.id))
-    can_watch, reason = ctx.project_watches.watch_eligibility(auth_user, email_enabled=email_on)
-    return ProjectWatchResponse(
+    watching = ctx.product_watches.is_watching(db, int(auth_user.id), int(product.id))
+    can_watch, reason = ctx.product_watches.watch_eligibility(auth_user, email_enabled=email_on)
+    return ProductWatchResponse(
         watching=watching,
         can_watch=can_watch,
         email_notifications_enabled=email_on,
@@ -191,74 +191,74 @@ def unsubscribe_project_watch(
     )
 
 
-@router.patch("/api/projects/{project_id}", response_model=ProjectResponse)
-def update_project(
-    project_id: str,
-    payload: ProjectUpdateRequest,
+@router.patch("/api/products/{product_id}", response_model=ProductResponse)
+def update_product(
+    product_id: str,
+    payload: ProductUpdateRequest,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
-) -> ProjectResponse:
-    require_permission(request, ctx, PERMISSION_PROJECTS_EDIT)
-    load_accessible_project(request, ctx, db, project_id)
-    project = ctx.projects.update_project(
+) -> ProductResponse:
+    require_permission(request, ctx, PERMISSION_PRODUCTS_EDIT)
+    load_accessible_product(request, ctx, db, product_id)
+    product = ctx.products.update_product(
         db,
-        project_id,
+        product_id,
         name=payload.name,
         number=payload.number,
         description=payload.description,
     )
-    from creopdm.api.watch_notify import notify_project_watchers
+    from creopdm.api.watch_notify import notify_product_watchers
 
-    notify_project_watchers(
+    notify_product_watchers(
         request,
         ctx,
         db,
-        project,
-        action="Project updated",
+        product,
+        action="Product updated",
         filenames=[],
     )
-    return project_to_response(project)
+    return product_to_response(product)
 
 
-@router.delete("/api/projects/{project_id}", status_code=204)
-def delete_project(
-    project_id: str,
+@router.delete("/api/products/{product_id}", status_code=204)
+def delete_product(
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> None:
-    require_permission(request, ctx, PERMISSION_PROJECTS_DELETE)
-    load_accessible_project(request, ctx, db, project_id)
-    ctx.projects.delete_project(db, project_id)
+    require_permission(request, ctx, PERMISSION_PRODUCTS_DELETE)
+    load_accessible_product(request, ctx, db, product_id)
+    ctx.products.delete_product(db, product_id)
 
 
-@router.post("/api/projects/{project_id}/forget", response_model=ForgetProjectResponse)
-def forget_project(
-    project_id: str,
-    payload: ForgetProjectRequest,
+@router.post("/api/products/{product_id}/forget", response_model=ForgetProductResponse)
+def forget_product(
+    product_id: str,
+    payload: ForgetProductRequest,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
-) -> ForgetProjectResponse:
-    require_permission(request, ctx, PERMISSION_PROJECTS_DELETE)
-    project = load_accessible_project(request, ctx, db, project_id)
-    workspace = ctx.workspaces.vault_for(project)
-    result = ctx.projects.forget_project(
+) -> ForgetProductResponse:
+    require_permission(request, ctx, PERMISSION_PRODUCTS_DELETE)
+    product = load_accessible_product(request, ctx, db, product_id)
+    workspace = ctx.workspaces.vault_for(product)
+    result = ctx.products.forget_product(
         db,
-        project_id,
+        product_id,
         confirm_name=payload.confirm_name,
         workspace_path=workspace,
     )
-    if ctx.config.settings.ui.last_project_uuid == project_id:
-        ctx.config.remember_project(None)
-    ctx.config.forget_project_view(project_id)
-    return ForgetProjectResponse.model_validate(result)
+    if ctx.config.settings.ui.last_product_uuid == product_id:
+        ctx.config.remember_product(None)
+    ctx.config.forget_product_view(product_id)
+    return ForgetProductResponse.model_validate(result)
 
 
-@router.get("/api/projects/{project_id}/objects", response_model=list[ObjectResponse])
+@router.get("/api/products/{product_id}/objects", response_model=list[ObjectResponse])
 def list_objects(
-    project_id: str,
+    product_id: str,
     request: Request,
     q: str | None = None,
     object_type: str | None = None,
@@ -267,10 +267,10 @@ def list_objects(
     ctx: AppContext = Depends(get_context),
 ) -> list[ObjectResponse]:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = load_accessible_project(request, ctx, db, project_id)
+    product = load_accessible_product(request, ctx, db, product_id)
     objects = ctx.objects.search(
         db,
-        project,
+        product,
         query=q,
         object_type=object_type,
         lifecycle_state=lifecycle_state,
@@ -278,98 +278,98 @@ def list_objects(
     return present_objects(ctx, db, objects)
 
 
-@router.get("/api/projects/{project_id}/status", response_model=ProjectStatusResponse)
-def project_status(
-    project_id: str,
+@router.get("/api/products/{product_id}/status", response_model=ProductStatusResponse)
+def product_status(
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
-) -> ProjectStatusResponse:
+) -> ProductStatusResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    load_accessible_project(request, ctx, db, project_id)
-    counts = ctx.projects.project_status(db, project_id)
-    return ProjectStatusResponse.model_validate(counts)
+    load_accessible_product(request, ctx, db, product_id)
+    counts = ctx.products.product_status(db, product_id)
+    return ProductStatusResponse.model_validate(counts)
 
 
-@router.get("/api/projects/{project_id}/workspace-watch", response_model=WorkspaceWatchResponse)
+@router.get("/api/products/{product_id}/workspace-watch", response_model=WorkspaceWatchResponse)
 def workspace_watch(
-    project_id: str,
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WorkspaceWatchResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = load_accessible_project(request, ctx, db, project_id)
-    known = ctx.objects.list_path_index(db, project.id)
-    return WorkspaceWatchResponse.model_validate(ctx.workspaces.watch_stamp(project, known))
+    product = load_accessible_product(request, ctx, db, product_id)
+    known = ctx.objects.list_path_index(db, product.id)
+    return WorkspaceWatchResponse.model_validate(ctx.workspaces.watch_stamp(product, known))
 
 
-@router.get("/api/projects/{project_id}/checkin-preview", response_model=CheckinPreviewResponse)
-def project_checkin_preview(
-    project_id: str,
+@router.get("/api/products/{product_id}/checkin-preview", response_model=CheckinPreviewResponse)
+def product_checkin_preview(
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> CheckinPreviewResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = load_accessible_project(request, ctx, db, project_id)
-    return CheckinPreviewResponse.model_validate(ctx.checkins.preview_queue(db, project))
+    product = load_accessible_product(request, ctx, db, product_id)
+    return CheckinPreviewResponse.model_validate(ctx.checkins.preview_queue(db, product))
 
 
-@router.get("/api/projects/{project_id}/checkin-queue")
-def project_checkin_queue_view(
-    project_id: str,
+@router.get("/api/products/{product_id}/checkin-queue")
+def product_checkin_queue_view(
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> dict:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = load_accessible_project(request, ctx, db, project_id)
-    objects = ctx.objects.list_objects(db, project.id)
-    return ctx.workspaces.project_checkin_queue(project, objects)
+    product = load_accessible_product(request, ctx, db, product_id)
+    objects = ctx.objects.list_objects(db, product.id)
+    return ctx.workspaces.product_checkin_queue(product, objects)
 
 
-@router.get("/api/projects/{project_id}/checkouts", response_model=list[ObjectResponse])
-def list_project_checkouts(
-    project_id: str,
+@router.get("/api/products/{product_id}/checkouts", response_model=list[ObjectResponse])
+def list_product_checkouts(
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> list[ObjectResponse]:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = load_accessible_project(request, ctx, db, project_id)
-    objects = ctx.checkouts.list_for_project(db, project.id)
+    product = load_accessible_product(request, ctx, db, product_id)
+    objects = ctx.checkouts.list_for_product(db, product.id)
     return present_objects(ctx, db, objects)
 
 
-@router.post("/api/projects/{project_id}/checkin-queue", response_model=BatchOperationResponse)
-def project_checkin_queue(
-    project_id: str,
+@router.post("/api/products/{product_id}/checkin-queue", response_model=BatchOperationResponse)
+def product_checkin_queue(
+    product_id: str,
     payload: QueueCheckinRequest,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKIN)
-    project = load_accessible_project(request, ctx, db, project_id)
+    product = load_accessible_product(request, ctx, db, product_id)
     result = ctx.checkins.checkin_queue(
         db,
-        project,
+        product,
         payload.comment,
         payload.object_ids,
         payload.add_relative_paths,
     )
     return BatchOperationResponse.model_validate(
-        {**result, "workspace_root": str(ctx.workspaces.vault_for(project))}
+        {**result, "workspace_root": str(ctx.workspaces.vault_for(product))}
     )
 
 
 @router.post(
-    "/api/projects/{project_id}/rebuild-where-used",
+    "/api/products/{product_id}/rebuild-where-used",
     response_model=WhereUsedIndexJobResponse,
 )
 def start_rebuild_where_used(
-    project_id: str,
+    product_id: str,
     request: Request,
     ctx: AppContext = Depends(get_context),
 ) -> WhereUsedIndexJobResponse:
@@ -378,27 +378,27 @@ def start_rebuild_where_used(
     Does not touch the DB here so a busy indexer cannot block Start.
     """
     require_permission(request, ctx, PERMISSION_OBJECTS_METADATA)
-    status = ctx.where_used_index.start(project_id)
+    status = ctx.where_used_index.start(product_id)
     return _where_used_job_response(status)
 
 
 @router.get(
-    "/api/projects/{project_id}/rebuild-where-used",
+    "/api/products/{product_id}/rebuild-where-used",
     response_model=WhereUsedIndexJobResponse,
 )
 def rebuild_where_used_status(
-    project_id: str,
+    product_id: str,
     request: Request,
     ctx: AppContext = Depends(get_context),
 ) -> WhereUsedIndexJobResponse:
     """Poll background Where Used index job status (memory only — never waits on SQLite)."""
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    return _where_used_job_response(ctx.where_used_index.get(project_id))
+    return _where_used_job_response(ctx.where_used_index.get(product_id))
 
 
 def _where_used_job_response(status) -> WhereUsedIndexJobResponse:
     return WhereUsedIndexJobResponse(
-        project_id=status.project_id,
+        product_id=status.product_id,
         state=status.state,
         parents_total=status.parents_total,
         parents_done=status.parents_done,
@@ -413,30 +413,30 @@ def _where_used_job_response(status) -> WhereUsedIndexJobResponse:
 
 
 @router.post(
-    "/api/projects/{project_id}/workspace/purge-paths",
+    "/api/products/{product_id}/workspace/purge-paths",
     response_model=BatchOperationResponse,
 )
 def purge_workspace_paths(
-    project_id: str,
+    product_id: str,
     payload: PurgeWorkspacePathsRequest,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_REMOVE)
-    project = load_accessible_project(request, ctx, db, project_id)
-    objects = ctx.objects.list_objects(db, project.id)
+    product = load_accessible_product(request, ctx, db, product_id)
+    objects = ctx.objects.list_objects(db, product.id)
     ok: list[BatchItemResult] = []
     failed: list[BatchItemResult] = []
     try:
-        removed = ctx.workspaces.purge_untracked_paths(project, payload.relative_paths, objects)
+        removed = ctx.workspaces.purge_untracked_paths(product, payload.relative_paths, objects)
         user = ctx.users.get_current_user()
         for item in removed:
             ctx.activities.record(
                 db,
                 ActivityAction.WORKSPACE_CLEARED,
                 user,
-                project_id=project.id,
+                product_id=product.id,
                 details={"filename": item["filename"], "relative_path": item["relative_path"]},
             )
             ok.append(
@@ -460,16 +460,16 @@ def purge_workspace_paths(
     return BatchOperationResponse(
         ok=ok,
         failed=failed,
-        workspace_root=str(ctx.workspaces.vault_for(project)),
+        workspace_root=str(ctx.workspaces.vault_for(product)),
     )
 
 
 @router.get(
-    "/api/projects/{project_id}/workspace/purge-floors",
+    "/api/products/{product_id}/workspace/purge-floors",
     response_model=PurgeFloorsResponse,
 )
 def workspace_purge_floors(
-    project_id: str,
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
@@ -478,11 +478,11 @@ def workspace_purge_floors(
     from creopdm.utils.classify import extra_cad_set
 
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = load_accessible_project(request, ctx, db, project_id)
+    product = load_accessible_product(request, ctx, db, product_id)
     purgeable = ctx.config.purgeable_cad_extensions()
     allowed = extra_cad_set(purgeable)
     floors: list[PurgeFloorItem] = []
-    for obj in ctx.objects.list_objects(db, project.id):
+    for obj in ctx.objects.list_objects(db, product.id):
         logical_name = CreoFileManager.logical_filename(obj.filename, purgeable)
         if Path(logical_name).suffix.lower() not in allowed:
             continue
@@ -510,38 +510,38 @@ def _picker_filters(ctx: AppContext) -> dict[str, list[str]]:
     }
 
 
-@router.get("/api/projects/{project_id}/workspace/add-folder", response_model=WorkspacePickerResponse)
+@router.get("/api/products/{product_id}/workspace/add-folder", response_model=WorkspacePickerResponse)
 def workspace_add_folder(
-    project_id: str,
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WorkspacePickerResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = load_accessible_project(request, ctx, db, project_id)
-    start = ctx.projects.preferred_import_directory(project)
+    product = load_accessible_product(request, ctx, db, product_id)
+    start = ctx.products.preferred_import_directory(product)
     start.mkdir(parents=True, exist_ok=True)
     filters = _picker_filters(ctx)
     return WorkspacePickerResponse(
-        workspace_root=str(ctx.workspaces.vault_for(project)),
+        workspace_root=str(ctx.workspaces.vault_for(product)),
         initial_directory=str(start),
         ignore_patterns=filters["ignore_patterns"],
         import_extensions=filters["import_extensions"],
     )
 
 
-@router.post("/api/projects/{project_id}/workspace/choose-files", response_model=WorkspacePickerResponse)
+@router.post("/api/products/{product_id}/workspace/choose-files", response_model=WorkspacePickerResponse)
 def choose_workspace_files(
-    project_id: str,
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WorkspacePickerResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
-    project = load_accessible_project(request, ctx, db, project_id)
-    start = ctx.projects.preferred_import_directory(project)
+    product = load_accessible_product(request, ctx, db, product_id)
+    start = ctx.products.preferred_import_directory(product)
     start.mkdir(parents=True, exist_ok=True)
-    picked = pick_files(start, title="Add files to the project")
+    picked = pick_files(start, title="Add files to the product")
     ignored = ctx.config.ignore_patterns()
     extras = ctx.config.purgeable_cad_extensions()
     ignored_count = 0
@@ -558,52 +558,52 @@ def choose_workspace_files(
         scan_disk_siblings=True,
     )
     return WorkspacePickerResponse(
-        workspace_root=str(ctx.workspaces.vault_for(project)),
+        workspace_root=str(ctx.workspaces.vault_for(product)),
         initial_directory=str(start),
         selected=[str(path) for path in selected],
         ignored_count=ignored_count,
     )
 
 
-@router.post("/api/projects/{project_id}/workspace/choose-folder", response_model=WorkspacePickerResponse)
+@router.post("/api/products/{product_id}/workspace/choose-folder", response_model=WorkspacePickerResponse)
 def choose_workspace_folder(
-    project_id: str,
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WorkspacePickerResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
-    project = load_accessible_project(request, ctx, db, project_id)
-    start = ctx.projects.preferred_import_directory(project)
+    product = load_accessible_product(request, ctx, db, product_id)
+    start = ctx.products.preferred_import_directory(product)
     start.mkdir(parents=True, exist_ok=True)
-    chosen = pick_folder(start, title="Add a folder to the project")
+    chosen = pick_folder(start, title="Add a folder to the product")
     if chosen is None:
         logger.info("Folder picker cancelled")
         return WorkspacePickerResponse(
-            workspace_root=str(ctx.workspaces.vault_for(project)),
+            workspace_root=str(ctx.workspaces.vault_for(product)),
             initial_directory=str(start),
             cancelled=True,
         )
     logger.info("Chose folder %s", chosen)
     return WorkspacePickerResponse(
-        workspace_root=str(ctx.workspaces.vault_for(project)),
+        workspace_root=str(ctx.workspaces.vault_for(product)),
         initial_directory=str(chosen),
         selected=[],
         folder=str(chosen),
     )
 
 
-@router.post("/api/projects/{project_id}/workspace/open", status_code=204)
+@router.post("/api/products/{product_id}/workspace/open", status_code=204)
 def open_workspace_folder(
-    project_id: str,
+    product_id: str,
     request: Request,
     folder: str | None = Query(default=None),
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> Response:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = load_accessible_project(request, ctx, db, project_id)
-    opened = ctx.workspaces.explorer_directory(project, folder or "")
+    product = load_accessible_product(request, ctx, db, product_id)
+    opened = ctx.workspaces.explorer_directory(product, folder or "")
     try:
         open_windows_folder(opened)
     except OSError as exc:
@@ -614,9 +614,9 @@ def open_workspace_folder(
     return Response(status_code=204)
 
 
-@router.put("/api/projects/{project_id}/workspace-content", response_model=WorkspaceContentResponse)
-async def put_project_workspace_content(
-    project_id: str,
+@router.put("/api/products/{product_id}/workspace-content", response_model=WorkspaceContentResponse)
+async def put_product_workspace_content(
+    product_id: str,
     request: Request,
     path: str = Query(..., min_length=1),
     file: UploadFile = File(...),
@@ -625,28 +625,28 @@ async def put_project_workspace_content(
 ) -> WorkspaceContentResponse:
     """Stage a new local agent file into the vault (no PDM object required yet)."""
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
-    project = load_accessible_project(request, ctx, db, project_id)
+    product = load_accessible_product(request, ctx, db, product_id)
     data = await file.read()
-    written = ctx.workspaces.stage_new_workspace_file(project, path, data)
+    written = ctx.workspaces.stage_new_workspace_file(product, path, data)
     return WorkspaceContentResponse(
-        object_id=project_id,
+        object_id=product_id,
         filename=written.name,
         path=str(written),
         bytes_written=len(data),
     )
 
 
-@router.get("/api/projects/{project_id}/workspace/content")
+@router.get("/api/products/{product_id}/workspace/content")
 def workspace_file_content(
-    project_id: str,
+    product_id: str,
     request: Request,
     path: str = Query(..., min_length=1),
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> FileResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    project = load_accessible_project(request, ctx, db, project_id)
-    target = ctx.workspaces.file_path(project, path)
+    product = load_accessible_product(request, ctx, db, product_id)
+    target = ctx.workspaces.file_path(product, path)
     if not target.is_file():
         raise PathValidationError(
             f"Vault file not found: {Path(path).name}.",
@@ -663,16 +663,16 @@ def workspace_file_content(
     )
 
 
-@router.post("/api/projects/{project_id}/objects/from-disk", response_model=BatchOperationResponse)
+@router.post("/api/products/{product_id}/objects/from-disk", response_model=BatchOperationResponse)
 def import_from_disk(
-    project_id: str,
+    product_id: str,
     payload: ImportLocalRequest,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
-    project = load_accessible_project(request, ctx, db, project_id)
+    product = load_accessible_product(request, ctx, db, product_id)
     comment = (payload.comment or "").strip() or None
     extras = ctx.config.purgeable_cad_extensions()
     ignored = ctx.config.ignore_patterns()
@@ -717,7 +717,7 @@ def import_from_disk(
                         path,
                         path.name,
                         ctx.workspaces.import_relative_path(
-                            project, path, base_folder, parent_folder=parent_folder
+                            product, path, base_folder, parent_folder=parent_folder
                         ),
                     )
                 )
@@ -749,7 +749,7 @@ def import_from_disk(
                 path,
                 path.name,
                 ctx.workspaces.import_relative_path(
-                    project, path, base_folder, parent_folder=parent_folder
+                    product, path, base_folder, parent_folder=parent_folder
                 ),
             )
             for path in selected
@@ -764,7 +764,7 @@ def import_from_disk(
             )
         )
     if jobs:
-        for outcome in ctx.objects.import_files(db, project, jobs, comment):
+        for outcome in ctx.objects.import_files(db, product, jobs, comment):
             if outcome.error is not None:
                 failed.append(
                     BatchItemResult(
@@ -794,34 +794,34 @@ def import_from_disk(
                 )
     db.commit()
     index_flag = None
-    if ctx.where_used_index.maybe_start_after_add(project.uuid, len(ok)) is not None:
+    if ctx.where_used_index.maybe_start_after_add(product.uuid, len(ok)) is not None:
         index_flag = "started"
     if ok:
-        from creopdm.api.watch_notify import notify_project_watchers
+        from creopdm.api.watch_notify import notify_product_watchers
 
-        notify_project_watchers(
+        notify_product_watchers(
             request,
             ctx,
             db,
-            project,
+            product,
             action="Files added",
             filenames=[item.filename for item in ok if item.filename],
         )
     return BatchOperationResponse(
         ok=ok,
         failed=failed,
-        workspace_root=str(ctx.workspaces.vault_for(project)),
+        workspace_root=str(ctx.workspaces.vault_for(product)),
         where_used_index=index_flag,
     )
 
 
 @router.post(
-    "/api/projects/{project_id}/folders",
+    "/api/products/{product_id}/folders",
     response_model=CreateFolderResponse,
     status_code=201,
 )
-def create_project_folder(
-    project_id: str,
+def create_product_folder(
+    product_id: str,
     payload: CreateFolderRequest,
     request: Request,
     db: Session = Depends(get_db),
@@ -829,10 +829,10 @@ def create_project_folder(
 ) -> CreateFolderResponse:
     """Create an empty folder in the vault at the current Files view location."""
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
-    project = load_accessible_project(request, ctx, db, project_id)
+    product = load_accessible_product(request, ctx, db, product_id)
     user = ctx.users.get_current_user()
     created = ctx.workspaces.create_folder(
-        project,
+        product,
         name=payload.name,
         parent_folder=payload.parent_folder or "",
         user=user,
@@ -842,9 +842,9 @@ def create_project_folder(
     return CreateFolderResponse(path=created, name=Path(created).name)
 
 
-@router.post("/api/projects/{project_id}/objects/from-uploads", response_model=BatchOperationResponse)
+@router.post("/api/products/{product_id}/objects/from-uploads", response_model=BatchOperationResponse)
 async def import_from_uploads(
-    project_id: str,
+    product_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
@@ -867,7 +867,7 @@ async def import_from_uploads(
     note = str(comment_raw).strip() if comment_raw not in (None, "") else None
     parent_raw = form.get("parent_folder")
     parent_folder = str(parent_raw or "").strip().replace("\\", "/").strip("/")
-    project = load_accessible_project(request, ctx, db, project_id)
+    product = load_accessible_product(request, ctx, db, product_id)
     temps: list[Path] = []
     jobs: list[tuple[Path, str | None, str | None]] = []
     ok: list[BatchItemResult] = []
@@ -929,7 +929,7 @@ async def import_from_uploads(
                 relative = f"{parent_folder}/{filename}"
             jobs.append((temp_path, filename, relative or None))
         if jobs:
-            for outcome in ctx.objects.import_files(db, project, jobs, note):
+            for outcome in ctx.objects.import_files(db, product, jobs, note):
                 if outcome.error is not None:
                     failed.append(
                         BatchItemResult(
@@ -967,22 +967,22 @@ async def import_from_uploads(
         raise ValidationAppError("Drop files or a folder first.")
     db.commit()
     index_flag = None
-    if ctx.where_used_index.maybe_start_after_add(project.uuid, len(ok)) is not None:
+    if ctx.where_used_index.maybe_start_after_add(product.uuid, len(ok)) is not None:
         index_flag = "started"
     if ok:
-        from creopdm.api.watch_notify import notify_project_watchers
+        from creopdm.api.watch_notify import notify_product_watchers
 
-        notify_project_watchers(
+        notify_product_watchers(
             request,
             ctx,
             db,
-            project,
+            product,
             action="Files added",
             filenames=[item.filename for item in ok if item.filename],
         )
     return BatchOperationResponse(
         ok=ok,
         failed=failed,
-        workspace_root=str(ctx.workspaces.vault_for(project)),
+        workspace_root=str(ctx.workspaces.vault_for(product)),
         where_used_index=index_flag,
     )

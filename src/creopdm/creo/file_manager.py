@@ -327,7 +327,7 @@ class CreoFileManager:
         *,
         recursive: bool = True,
     ) -> Iterator[Path]:
-        """Walk a folder for files that can be added to a project."""
+        """Walk a folder for files that can be added to a product."""
         folder = Path(root)
         if not folder.is_dir():
             return

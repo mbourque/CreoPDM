@@ -12,12 +12,12 @@ Typical permissions:
 - Set or reset user passwords
 - Assign roles to users
 - Manage roles
-- Assign project membership to users
+- Assign product membership to users
 - Manage system settings
-- Create projects
-- Modify projects
-- Delete/archive projects
-- Manage project membership
+- Create products
+- Modify products
+- Delete/archive products
+- Manage product membership
 - Manage repositories/remotes
 - Manage Windows agents
 - Override stale checkouts
@@ -36,9 +36,9 @@ Responsible for managing engineering data without having full server administrat
 
 Typical permissions:
 
-- Create projects
-- Modify project settings
-- Manage project membership
+- Create products
+- Modify product settings
+- Manage product membership
 - Add objects
 - Check out objects
 - Check in objects
@@ -49,8 +49,8 @@ Typical permissions:
 - View BOMs
 - View Where Used
 - View history
-- View audit information related to projects
-- Manage project-level configuration
+- View audit information related to products
+- Manage product-level configuration
 - Copy to Vault (`objects.copy_to_vault`)
 
 Should NOT normally be able to:
@@ -69,7 +69,7 @@ Normal CAD/PDM user.
 
 Typical permissions:
 
-- View assigned projects
+- View assigned products
 - Download files
 - Open files locally
 - Open CAD files in Creo
@@ -91,7 +91,7 @@ Should NOT normally be able to:
 
 - Manage users
 - Manage roles
-- Delete projects
+- Delete products
 - Override another user's checkout
 - Change global settings
 - Delete history
@@ -106,7 +106,7 @@ Read-only access.
 
 Typical permissions:
 
-- View assigned projects
+- View assigned products
 - View objects
 - View metadata
 - View BOM
@@ -125,7 +125,7 @@ Cannot:
 - Modify objects
 - Delete objects
 - Change lifecycle state
-- Manage projects
+- Manage products
 - Manage users
 - Copy to Vault
 
@@ -147,7 +147,7 @@ A user needs to add or update supporting documents but does not need CAD authori
 
 Permissions might include:
 
-- View projects
+- View products
 - View BOM
 - View Where Used
 - Download files
@@ -171,15 +171,15 @@ This role can be deferred if it is not needed for the initial release
 
 |---|:---:|:---:|:---:|:---:|
 
-| View project | ✓ | ✓ | ✓ | ✓ |
+| View product | ✓ | ✓ | ✓ | ✓ |
 
-| Create project | ✓ | ✓ |  |  |
+| Create product | ✓ | ✓ |  |  |
 
-| Edit project | ✓ | ✓ |  |  |
+| Edit product | ✓ | ✓ |  |  |
 
-| Archive project | ✓ | ✓ |  |  |
+| Archive product | ✓ | ✓ |  |  |
 
-| Delete project | ✓ |  |  |  |
+| Delete product | ✓ |  |  |  |
 
 | Add object | ✓ | ✓ | ✓ |  |
 
@@ -211,7 +211,7 @@ This role can be deferred if it is not needed for the initial release
 
 | Release object | ✓ | ✓ |  |  |
 
-| Manage project members | ✓ | ✓ |  |  |
+| Manage product members | ✓ | ✓ |  |  |
 
 | View users | ✓ | ✓ |  |  |
 
@@ -231,9 +231,9 @@ Permissions should remain independently configurable internally.
 
 ---
 
-# Project Membership
+# Product Membership
 
-A user's global role should not automatically give access to every project.
+A user's global role should not automatically give access to every product.
 
 Separate:
 
@@ -255,11 +255,11 @@ User
 
   ↓
 
-Project Membership
+Product Membership
 
   ↓
 
-Project Access
+Product Access
 
 ```
 
@@ -271,29 +271,29 @@ Bob
 
 Role: Engineer
 
-Projects:
+Products:
 
     Robot Arm       Member
 
     Gearbox         Member
 
-    Secret Project  No Access
+    Secret Product  No Access
 
 ```
 
 Being an Engineer determines **what Bob can do**.
 
-Project membership determines **where Bob can do it**.
+Product membership determines **where Bob can do it**.
 
-Administrators may optionally have global project access.
+Administrators may optionally have global product access.
 
 ---
 
-# Future Project-Level Roles
+# Future Product-Level Roles
 
-The initial implementation can use global roles plus project membership.
+The initial implementation can use global roles plus product membership.
 
-However, the database design should allow future project-specific role assignment.
+However, the database design should allow future product-specific role assignment.
 
 Example:
 
@@ -315,7 +315,7 @@ Prototype X:
 
 ```
 
-Do not assume that one user must always have the same privileges in every project.
+Do not assume that one user must always have the same privileges in every product.
 
 ---
 
@@ -335,7 +335,7 @@ Administration
 
 ├── Roles
 
-├── Projects
+├── Products
 
 ├── Agents
 
@@ -407,7 +407,7 @@ Status:
 
 Active
 
-Projects:
+Products:
 
 ✓ Robot Arm
 
@@ -493,13 +493,13 @@ Example:
 
 Engineer
 
-Projects
+Products
 
-[x] View projects
+[x] View products
 
-[ ] Create projects
+[ ] Create products
 
-[ ] Delete projects
+[ ] Delete products
 
 Objects
 
@@ -555,15 +555,15 @@ The system should prevent:
 
 - deleting the Administrator role when it is the last full-admin path;
 
-- removing any of `users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `projects.manage`, `settings.manage`, or `email.manage` when that would leave no ACTIVE user with **all** of them;
+- removing any of `users.manage`, `users.password`, `roles.assign`, `roles.manage`, `products.assign`, `products.manage`, `settings.manage`, or `email.manage` when that would leave no ACTIVE user with **all** of them;
 
 - changing name, description, or CreoPDM Administration permissions on a role assigned to yourself (and deleting that role);
 
 - disabling or demoting the last active account that has full CreoPDM Administration.
 
-There must always be at least one active user who can manage Users, set passwords, assign roles, manage Roles, assign project membership, administer Projects, open Settings, and configure Email.
+There must always be at least one active user who can manage Users, set passwords, assign roles, manage Roles, assign product membership, administer Products, open Settings, and configure Email.
 
-Only a full administrator (all of those permissions) may edit another full administrator. Full administrators may also edit their own Users admin record (the only self-edit exception), but cannot change their own role or disable themselves. With `roles.assign`, you may only assign a role whose permissions are a **proper subset** of yours (never the same role or one with extra caps). An account with `users.manage` alone can manage non-admin users but cannot change their role (`roles.assign`), password (`users.password`), or project membership (`projects.assign`), and cannot change administrator accounts. Non-admin accounts still cannot edit themselves from Users admin — another administrator must change them.
+Only a full administrator (all of those permissions) may edit another full administrator. Full administrators may also edit their own Users admin record (the only self-edit exception), but cannot change their own role or disable themselves. With `roles.assign`, you may only assign a role whose permissions are a **proper subset** of yours (never the same role or one with extra caps). An account with `users.manage` alone can manage non-admin users but cannot change their role (`roles.assign`), password (`users.password`), or product membership (`products.assign`), and cannot change administrator accounts. Non-admin accounts still cannot edit themselves from Users admin — another administrator must change them.
 
 ---
 
@@ -583,7 +583,7 @@ Company Name
 
 Server URL
 
-Default Project Location
+Default Product Location
 
 Timezone
 
@@ -661,7 +661,7 @@ Do not hard-code these as universally required parameters.
 
 ## Email
 
-Administration → Email (`email.manage`) stores delivery settings in `settings.json`. Choose **Local Postfix** (`127.0.0.1:25`, no auth) or **Authenticated SMTP** (provider host, typically port 587 + TLS + username/app password). Also set From address / display name, administrator email, and use **Send test email** after saving. Application code sends only through `EmailService` / `NotificationService`. When email is enabled, users can watch projects (Files title-row bell) and receive `PROJECT_ACTIVITY` summaries for adds, removes, checkout, check-in, restore, and project updates.
+Administration → Email (`email.manage`) stores delivery settings in `settings.json`. Choose **Local Postfix** (`127.0.0.1:25`, no auth) or **Authenticated SMTP** (provider host, typically port 587 + TLS + username/app password). Also set From address / display name, administrator email, and use **Send test email** after saving. Application code sends only through `EmailService` / `NotificationService`. When email is enabled, users can watch products (Files title-row bell) and receive `PRODUCT_ACTIVITY` summaries for adds, removes, checkout, check-in, restore, and product updates.
 
 ---
 
@@ -729,7 +729,7 @@ role_permissions
 
 user_roles
 
-project_members
+product_members
 
 ```
 
@@ -737,7 +737,7 @@ Possible future table:
 
 ```text
 
-project_member_roles
+product_member_roles
 
 ```
 
@@ -849,11 +849,11 @@ Even if the initial UI allows only one role per user, using a join table avoids 
 
 ---
 
-## project_members
+## product_members
 
 ```text
 
-project_id
+product_id
 
 user_id
 
@@ -863,7 +863,7 @@ created_by
 
 ```
 
-This determines which projects the user can access.
+This determines which products the user can access.
 
 ---
 
@@ -887,7 +887,7 @@ Is account active?
 
         ↓
 
-Does user have access to project?
+Does user have access to product?
 
         ↓
 
@@ -961,9 +961,9 @@ ROLE_ASSIGNED
 
 ROLE_REMOVED
 
-PROJECT_MEMBER_ADDED
+PRODUCT_MEMBER_ADDED
 
-PROJECT_MEMBER_REMOVED
+PRODUCT_MEMBER_REMOVED
 
 CHECKOUT_OVERRIDDEN
 
@@ -1021,11 +1021,11 @@ PATCH  /api/v1/roles/{uuid}
 
 GET    /api/v1/permissions
 
-GET    /api/v1/projects/{uuid}/members
+GET    /api/v1/products/{uuid}/members
 
-POST   /api/v1/projects/{uuid}/members
+POST   /api/v1/products/{uuid}/members
 
-DELETE /api/v1/projects/{uuid}/members/{user_uuid}
+DELETE /api/v1/products/{uuid}/members/{user_uuid}
 
 GET    /api/v1/admin/settings
 
@@ -1057,7 +1057,7 @@ For the first version implement:
 
 - [ ] Role assignment
 
-- [ ] Project membership
+- [ ] Product membership
 
 - [ ] Administration navigation
 
@@ -1077,7 +1077,7 @@ Do not initially implement:
 
 - [x] Complex custom-role editor (Roles admin with permission checkboxes; free-form keys still out of scope)
 
-- [ ] Project-specific role overrides
+- [ ] Product-specific role overrides
 
 - [ ] Active Directory/LDAP
 
@@ -1107,7 +1107,7 @@ Role / Permission
 
     WHAT are you allowed to do?
 
-Project Membership
+Product Membership
 
     WHERE are you allowed to do it?
 
@@ -1139,7 +1139,7 @@ has checkout.create
 
     ↓
 
-member of Robot Arm project
+member of Robot Arm product
 
     ↓
 

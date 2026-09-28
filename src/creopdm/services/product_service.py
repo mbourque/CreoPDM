@@ -1,4 +1,4 @@
-"""Project lifecycle: create, list, open, delete. Git init is an implementation detail."""
+"""Product lifecycle: create, list, open, delete. Git init is an implementation detail."""
 
 from __future__ import annotations
 
@@ -11,15 +11,15 @@ from sqlalchemy.orm import Session
 
 from creopdm.constants import (
     DEFAULT_BRANCH,
-    PROJECT_JSON_NAME,
-    PROJECT_MARKER_DIR,
+    PRODUCT_JSON_NAME,
+    PRODUCT_MARKER_DIR,
     ActivityAction,
     CheckoutStatus,
 )
 from creopdm.exceptions import (
-    DuplicateProjectError,
+    DuplicateProductError,
     PathValidationError,
-    ProjectNotFoundError,
+    ProductNotFoundError,
     RepositoryError,
     ValidationAppError,
 )
@@ -30,26 +30,26 @@ from creopdm.models.checkout import Checkout
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
-from creopdm.models.project import Project
+from creopdm.models.product import Product
 from creopdm.models.remote import Remote
 from creopdm.models.version import ObjectVersion
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.git_service import GitService
-from creopdm.services.lock_manager import ProjectLockManager
+from creopdm.services.lock_manager import ProductLockManager
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.utils.files import remove_tree
 from creopdm.utils.identity import CurrentUserProvider
 from creopdm.utils.classify import matches_cad_models, matches_document
-from creopdm.utils.native_dialog import default_project_location_start
+from creopdm.utils.native_dialog import default_product_location_start
 
-logger = get_logger("projects")
+logger = get_logger("products")
 
 
-class ProjectService:
+class ProductService:
     def __init__(
         self,
         git: GitService,
-        locks: ProjectLockManager,
+        locks: ProductLockManager,
         activities: ActivityService,
         users: CurrentUserProvider,
         workspaces: WorkspaceService,
@@ -60,25 +60,25 @@ class ProjectService:
         self._users = users
         self._workspaces = workspaces
 
-    def list_projects(self, session: Session, include_inactive: bool = False) -> list[Project]:
-        stmt = select(Project).order_by(Project.name.asc())
+    def list_products(self, session: Session, include_inactive: bool = False) -> list[Product]:
+        stmt = select(Product).order_by(Product.name.asc())
         if not include_inactive:
-            stmt = stmt.where(Project.active.is_(True))
+            stmt = stmt.where(Product.active.is_(True))
         return list(session.scalars(stmt))
 
-    def _load_project(self, session: Session, project_uuid: str) -> Project:
-        project = session.scalar(select(Project).where(Project.uuid == project_uuid))
-        if project is None or not project.active:
-            raise ProjectNotFoundError(
-                "Project not found.",
-                details={"uuid": project_uuid},
+    def _load_product(self, session: Session, product_uuid: str) -> Product:
+        product = session.scalar(select(Product).where(Product.uuid == product_uuid))
+        if product is None or not product.active:
+            raise ProductNotFoundError(
+                "Product not found.",
+                details={"uuid": product_uuid},
             )
-        return project
+        return product
 
-    def get_project(self, session: Session, project_uuid: str) -> Project:
-        project = self._load_project(session, project_uuid)
-        self._workspaces.ensure_vault(project)
-        return project
+    def get_product(self, session: Session, product_uuid: str) -> Product:
+        product = self._load_product(session, product_uuid)
+        self._workspaces.ensure_vault(product)
+        return product
 
     def _require_unique_name(
         self,
@@ -88,13 +88,13 @@ class ProjectService:
         exclude_uuid: str | None = None,
     ) -> None:
         wanted = name.strip().casefold()
-        stmt = select(Project).where(Project.active.is_(True))
+        stmt = select(Product).where(Product.active.is_(True))
         for existing in session.scalars(stmt):
             if exclude_uuid and existing.uuid == exclude_uuid:
                 continue
             if existing.name.strip().casefold() == wanted:
-                raise DuplicateProjectError(
-                    f'A project named "{existing.name}" already exists.',
+                raise DuplicateProductError(
+                    f'A product named "{existing.name}" already exists.',
                     details={"name": existing.name},
                 )
 
@@ -106,51 +106,51 @@ class ProjectService:
         exclude_uuid: str | None = None,
     ) -> None:
         wanted = vault_folder.casefold()
-        stmt = select(Project).where(Project.active.is_(True))
+        stmt = select(Product).where(Product.active.is_(True))
         for existing in session.scalars(stmt):
             if exclude_uuid and existing.uuid == exclude_uuid:
                 continue
             existing_folder = (existing.vault_folder or existing.uuid).casefold()
             if existing_folder == wanted:
-                raise DuplicateProjectError(
-                    f'A project already uses vault/workspace name "{existing.vault_folder or existing.uuid}".',
+                raise DuplicateProductError(
+                    f'A product already uses vault/workspace name "{existing.vault_folder or existing.uuid}".',
                     details={"vault_folder": existing.vault_folder or existing.uuid},
                 )
             if existing.uuid.casefold() == wanted:
-                raise DuplicateProjectError(
-                    f'Vault/workspace name "{vault_folder}" matches another project id.',
+                raise DuplicateProductError(
+                    f'Vault/workspace name "{vault_folder}" matches another product id.',
                     details={"vault_folder": vault_folder},
                 )
 
-    def create_project(
+    def create_product(
         self,
         session: Session,
         name: str,
         number: str | None = None,
         description: str | None = None,
         vault_folder: str | None = None,
-    ) -> Project:
+    ) -> Product:
         if not name.strip():
-            raise PathValidationError("A project name is required.")
+            raise PathValidationError("A product name is required.")
         self._require_unique_name(session, name)
 
         requested = (vault_folder or "").strip()
         if requested:
             folder = validate_vault_folder(requested)
             as_uuid = normalize_uuid_folder(folder)
-            project_uuid = as_uuid or str(uuid.uuid4())
+            product_uuid = as_uuid or str(uuid.uuid4())
             if as_uuid:
                 folder = as_uuid
         else:
-            project_uuid = str(uuid.uuid4())
-            folder = project_uuid
+            product_uuid = str(uuid.uuid4())
+            folder = product_uuid
 
         self._require_unique_vault_folder(session, folder)
 
         vault_root = self._workspaces._config.workspace_root()
         vault_path = vault_root / folder
         if vault_path.exists() and any(vault_path.iterdir()):
-            raise DuplicateProjectError(
+            raise DuplicateProductError(
                 f'Vault folder "{folder}" already exists on disk.',
                 details={"vault_folder": folder, "path": str(vault_path)},
             )
@@ -159,13 +159,13 @@ class ProjectService:
         now = datetime.now(timezone.utc)
 
         if not self._git.is_available():
-            raise RepositoryError("Git is required to create a project but was not found on PATH.")
+            raise RepositoryError("Git is required to create a product but was not found on PATH.")
 
-        with self._locks.acquire(project_uuid):
-            vault = self._workspaces.init_vault(folder, project_uuid, name.strip(), user)
+        with self._locks.acquire(product_uuid):
+            vault = self._workspaces.init_vault(folder, product_uuid, name.strip(), user)
 
-        project = Project(
-            uuid=project_uuid,
+        product = Product(
+            uuid=product_uuid,
             name=name.strip(),
             number=(number or "").strip() or None,
             description=(description or "").strip() or None,
@@ -176,132 +176,132 @@ class ProjectService:
             updated_at=now,
             active=True,
         )
-        session.add(project)
+        session.add(product)
         session.flush()
         self._activities.record(
             session,
-            ActivityAction.PROJECT_CREATED,
+            ActivityAction.PRODUCT_CREATED,
             user,
-            project_id=project.id,
-            details={"workspace": str(vault), "name": project.name, "vault_folder": folder},
+            product_id=product.id,
+            details={"workspace": str(vault), "name": product.name, "vault_folder": folder},
         )
-        logger.info("Created project %s in workspace %s", project.uuid, vault)
+        logger.info("Created product %s in workspace %s", product.uuid, vault)
         session.commit()
-        return project
+        return product
 
-    def update_project(
+    def update_product(
         self,
         session: Session,
-        project_uuid: str,
+        product_uuid: str,
         name: str,
         number: str | None = None,
         description: str | None = None,
-    ) -> Project:
-        project = self.get_project(session, project_uuid)
+    ) -> Product:
+        product = self.get_product(session, product_uuid)
         new_name = name.strip()
         if not new_name:
-            raise ValidationAppError("A project name is required.")
-        self._require_unique_name(session, new_name, exclude_uuid=project.uuid)
+            raise ValidationAppError("A product name is required.")
+        self._require_unique_name(session, new_name, exclude_uuid=product.uuid)
         new_number = (number or "").strip() or None
         new_description = (description or "").strip() or None
         user = self._users.get_current_user()
-        vault = self._workspaces.ensure_vault(project)
-        marker_rel = f"{PROJECT_MARKER_DIR}/{PROJECT_JSON_NAME}"
-        with self._locks.acquire(project.uuid):
+        vault = self._workspaces.ensure_vault(product)
+        marker_rel = f"{PRODUCT_MARKER_DIR}/{PRODUCT_JSON_NAME}"
+        with self._locks.acquire(product.uuid):
             captured = None
             try:
                 captured = self._git.get_head(vault)
             except Exception:
                 captured = None
-            self._workspaces.write_project_marker(project, new_name, new_number, new_description)
+            self._workspaces.write_product_marker(product, new_name, new_number, new_description)
             try:
                 self._git.stage_files(vault, [marker_rel])
                 if self._git.is_dirty(vault):
-                    self._git.commit(vault, f"Rename project to {new_name}", user)
+                    self._git.commit(vault, f"Rename product to {new_name}", user)
             except Exception as exc:
                 if captured:
                     self._git.reset_to(vault, captured)
                 raise RepositoryError(
-                    "Could not record the project rename in the vault.",
+                    "Could not record the product rename in the vault.",
                     details={"name": new_name},
                 ) from exc
-            old_name = project.name
+            old_name = product.name
             try:
-                project.name = new_name
-                project.number = new_number
-                project.description = new_description
-                project.updated_at = datetime.now(timezone.utc)
+                product.name = new_name
+                product.number = new_number
+                product.description = new_description
+                product.updated_at = datetime.now(timezone.utc)
                 session.flush()
                 self._activities.record(
                     session,
-                    ActivityAction.PROJECT_UPDATED,
+                    ActivityAction.PRODUCT_UPDATED,
                     user,
-                    project_id=project.id,
+                    product_id=product.id,
                     details={"old_name": old_name, "name": new_name},
                 )
             except Exception as exc:
                 if captured:
                     self._git.reset_to(vault, captured)
                 raise RepositoryError(
-                    "The vault was updated but project metadata could not be saved. "
+                    "The vault was updated but product metadata could not be saved. "
                     "The repository was restored.",
                     details={"name": new_name},
                 ) from exc
-        logger.info("Renamed project %s to %s", project.uuid, new_name)
+        logger.info("Renamed product %s to %s", product.uuid, new_name)
         session.commit()
-        return project
+        return product
 
-    def delete_project(self, session: Session, project_uuid: str) -> None:
-        """Hide the project in CreoPDM. Never delete repository files from disk."""
-        project = self.get_project(session, project_uuid)
-        project.active = False
-        project.updated_at = datetime.now(timezone.utc)
+    def delete_product(self, session: Session, product_uuid: str) -> None:
+        """Hide the product in CreoPDM. Never delete repository files from disk."""
+        product = self.get_product(session, product_uuid)
+        product.active = False
+        product.updated_at = datetime.now(timezone.utc)
         session.flush()
-        logger.info("Deactivated project %s", project.uuid)
+        logger.info("Deactivated product %s", product.uuid)
 
-    def forget_project(
+    def forget_product(
         self,
         session: Session,
-        project_uuid: str,
+        product_uuid: str,
         confirm_name: str,
         workspace_path: Path | None = None,
     ) -> dict[str, str]:
-        """Unregister the project and delete the workspace Git vault."""
-        project = self._load_project(session, project_uuid)
-        expected = project.name.strip()
+        """Unregister the product and delete the workspace Git vault."""
+        product = self._load_product(session, product_uuid)
+        expected = product.name.strip()
         if confirm_name.strip() != expected:
             raise ValidationAppError(
-                "Type the project name exactly to delete it.",
+                "Type the product name exactly to delete it.",
                 details={"name": expected},
             )
-        leftover = self._workspaces.leftover_source(project)
-        name = project.name
+        leftover = self._workspaces.leftover_source(product)
+        name = product.name
         warnings: list[str] = []
-        with self._locks.acquire(project.uuid):
+        with self._locks.acquire(product.uuid):
             if leftover is not None:
                 self._workspaces.strip_location_git(leftover)
                 if (leftover / ".git").exists():
                     warnings.append(
-                        "Git metadata is still present because a program has the old project folder open."
+                        "Git metadata is still present because a program has the old product folder open."
                     )
             if workspace_path is not None and not remove_tree(workspace_path):
                 warnings.append(
                     "The workspace folder is still open in another program (often File Explorer). "
                     "Close that window and delete the leftover workspace folder if you want it gone."
                 )
-            self._delete_project_records(session, project)
-        logger.info("Deleted project %s", project_uuid)
+            self._delete_product_records(session, product)
+        logger.info("Deleted product %s", product_uuid)
         session.commit()
         return {
-            "uuid": project_uuid,
+            "uuid": product_uuid,
             "name": name,
             "repository_path": str(leftover) if leftover is not None else "",
             "warning": " ".join(warnings) if warnings else "",
         }
 
-    def _delete_project_records(self, session: Session, project: Project) -> None:
+    def _delete_product_records(self, session: Session, product: Product) -> None:
         objects = list(
-            session.scalars(select(EngineeringObject).where(EngineeringObject.project_id == project.id))
+            session.scalars(select(EngineeringObject).where(EngineeringObject.product_id == product.id))
         )
         object_ids = [item.id for item in objects]
         if object_ids:
@@ -324,31 +324,31 @@ class ProjectService:
             session.execute(delete(Activity).where(Activity.object_id.in_(object_ids)))
             session.execute(delete(ObjectVersion).where(ObjectVersion.object_id.in_(object_ids)))
             session.execute(delete(EngineeringObject).where(EngineeringObject.id.in_(object_ids)))
-        session.execute(delete(Dependency).where(Dependency.project_id == project.id))
-        session.execute(delete(Activity).where(Activity.project_id == project.id))
-        session.execute(delete(Remote).where(Remote.project_id == project.id))
-        session.delete(project)
+        session.execute(delete(Dependency).where(Dependency.product_id == product.id))
+        session.execute(delete(Activity).where(Activity.product_id == product.id))
+        session.execute(delete(Remote).where(Remote.product_id == product.id))
+        session.delete(product)
         session.flush()
 
-    def preferred_import_directory(self, project: Project) -> Path:
+    def preferred_import_directory(self, product: Product) -> Path:
         """Folder the Add Files dialog should start in."""
-        leftover = self._workspaces.leftover_source(project)
+        leftover = self._workspaces.leftover_source(product)
         if leftover is not None and leftover.is_dir():
             return leftover
-        return default_project_location_start()
+        return default_product_location_start()
 
-    def project_status(
+    def product_status(
         self,
         session: Session,
-        project_uuid: str,
+        product_uuid: str,
         objects: list | None = None,
-        project: Project | None = None,
+        product: Product | None = None,
     ) -> dict[str, int | str]:
-        project = project or self.get_project(session, project_uuid)
+        product = product or self.get_product(session, product_uuid)
         if objects is None:
             objects = list(
                 session.scalars(
-                    select(EngineeringObject).where(EngineeringObject.project_id == project.id)
+                    select(EngineeringObject).where(EngineeringObject.product_id == product.id)
                 )
             )
         user = self._users.get_current_user()
@@ -357,7 +357,7 @@ class ProjectService:
                 select(Checkout)
                 .join(EngineeringObject, Checkout.object_id == EngineeringObject.id)
                 .where(
-                    EngineeringObject.project_id == project.id,
+                    EngineeringObject.product_id == product.id,
                     Checkout.status == CheckoutStatus.ACTIVE.value,
                 )
             )

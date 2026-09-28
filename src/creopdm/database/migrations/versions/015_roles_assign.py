@@ -1,7 +1,7 @@
 """Alembic migration: add roles.assign permission for existing installs.
 
 Revision ID: 015_roles_assign
-Revises: 014_user_project_access
+Revises: 014_user_product_access
 Create Date: 2026-09-27
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "015_roles_assign"
-down_revision: Union[str, None] = "014_user_project_access"
+down_revision: Union[str, None] = "014_user_product_access"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

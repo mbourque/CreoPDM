@@ -5,22 +5,22 @@ from pathlib import Path
 from tests.conftest import requires_git
 
 
-def _create_project(client, repo_parent: Path):
+def _create_product(client, repo_parent: Path):
     location = repo_parent / "MetaArm"
     location.mkdir(parents=True, exist_ok=True)
     response = client.post(
-        "/api/projects",
+        "/api/products",
         json={"name": "Meta Arm", "number": "PRJ-META"},
     )
     assert response.status_code == 201, response.text
     return response.json()
 
 
-def _add_part(client, project_uuid: str, tmp_path: Path, name: str):
+def _add_part(client, product_uuid: str, tmp_path: Path, name: str):
     path = tmp_path / name
     path.write_bytes(b"FAKE CREO PART")
     response = client.post(
-        f"/api/projects/{project_uuid}/objects",
+        f"/api/products/{product_uuid}/objects",
         files={"file": (name, path.read_bytes(), "application/octet-stream")},
         data={"comment": f"Add {name}"},
     )
@@ -30,9 +30,9 @@ def _add_part(client, project_uuid: str, tmp_path: Path, name: str):
 
 @requires_git
 def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
-    project = _create_project(client, repo_parent)
-    shaft = _add_part(client, project["uuid"], tmp_path, "shaft.prt.1")
-    frame = _add_part(client, project["uuid"], tmp_path, "frame.asm.1")
+    product = _create_product(client, repo_parent)
+    shaft = _add_part(client, product["uuid"], tmp_path, "shaft.prt.1")
+    frame = _add_part(client, product["uuid"], tmp_path, "frame.asm.1")
 
     payload = {
         "identity": {
@@ -111,7 +111,7 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert items[0]["filename"] == "frame.asm.1"
     assert items[0]["quantity"] == 2.0
 
-    detail = client.get(f"/projects/{project['uuid']}/objects/{frame['uuid']}")
+    detail = client.get(f"/products/{product['uuid']}/objects/{frame['uuid']}")
     assert detail.status_code == 200
     text = detail.text
     assert 'data-tab="parameters"' in text
@@ -165,7 +165,7 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
         },
     )
     assert shaft_meta.status_code == 200, shaft_meta.text
-    shaft_detail = client.get(f"/projects/{project['uuid']}/objects/{shaft['uuid']}")
+    shaft_detail = client.get(f"/products/{product['uuid']}/objects/{shaft['uuid']}")
     assert shaft_detail.status_code == 200
     assert "frame.asm.1" in shaft_detail.text
     assert "ALUMINUM_WROUGHT" in shaft_detail.text
@@ -185,8 +185,8 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
 
 @requires_git
 def test_creo_metadata_unresolved_child_skipped(client, repo_parent, tmp_path):
-    project = _create_project(client, repo_parent)
-    frame = _add_part(client, project["uuid"], tmp_path, "frame.asm.2")
+    product = _create_product(client, repo_parent)
+    frame = _add_part(client, product["uuid"], tmp_path, "frame.asm.2")
     posted = client.post(
         f"/api/objects/{frame['uuid']}/creo-metadata",
         json={
@@ -205,10 +205,10 @@ def test_creo_metadata_unresolved_child_skipped(client, repo_parent, tmp_path):
 
 @requires_git
 def test_where_used_from_nested_bom_and_family_table_name(client, repo_parent, tmp_path):
-    project = _create_project(client, repo_parent)
-    pin = _add_part(client, project["uuid"], tmp_path, "pin.prt.1")
-    rivet = _add_part(client, project["uuid"], tmp_path, "SPLIT-RIVET.prt.1")
-    frame = _add_part(client, project["uuid"], tmp_path, "frame.asm.1")
+    product = _create_product(client, repo_parent)
+    pin = _add_part(client, product["uuid"], tmp_path, "pin.prt.1")
+    rivet = _add_part(client, product["uuid"], tmp_path, "SPLIT-RIVET.prt.1")
+    frame = _add_part(client, product["uuid"], tmp_path, "frame.asm.1")
 
     posted = client.post(
         f"/api/objects/{frame['uuid']}/creo-metadata",
@@ -261,7 +261,7 @@ def test_where_used_from_nested_bom_and_family_table_name(client, repo_parent, t
     assert rivet_items[0]["object_id"] == frame["uuid"]
     assert rivet_items[0]["quantity"] == 2.0
 
-    pin_detail = client.get(f"/projects/{project['uuid']}/objects/{pin['uuid']}")
+    pin_detail = client.get(f"/products/{product['uuid']}/objects/{pin['uuid']}")
     assert pin_detail.status_code == 200
     assert "frame.asm.1" in pin_detail.text
 
@@ -269,8 +269,8 @@ def test_where_used_from_nested_bom_and_family_table_name(client, repo_parent, t
 @requires_git
 def test_where_used_when_child_added_after_assembly_bom(client, repo_parent, tmp_path):
     """Assembly metadata captured before the child exists still feeds Where Used later."""
-    project = _create_project(client, repo_parent)
-    frame = _add_part(client, project["uuid"], tmp_path, "frame.asm.1")
+    product = _create_product(client, repo_parent)
+    frame = _add_part(client, product["uuid"], tmp_path, "frame.asm.1")
     posted = client.post(
         f"/api/objects/{frame['uuid']}/creo-metadata",
         json={
@@ -295,7 +295,7 @@ def test_where_used_when_child_added_after_assembly_bom(client, repo_parent, tmp
     assert posted.status_code == 200, posted.text
     assert posted.json()["dependencies"] == []
 
-    pin = _add_part(client, project["uuid"], tmp_path, "late-pin.prt.1")
+    pin = _add_part(client, product["uuid"], tmp_path, "late-pin.prt.1")
     where = client.get(f"/api/objects/{pin['uuid']}/where-used")
     assert where.status_code == 200, where.text
     items = where.json()["items"]
@@ -311,11 +311,11 @@ def test_where_used_from_vault_bytes_without_creo_metadata(
     """No Creo.JS capture: scan vault asm bytes for the part name."""
     from creopdm.utils.files import set_file_writable
 
-    project = _create_project(client, repo_parent)
-    pin = _add_part(client, project["uuid"], tmp_path, "clasp-clasp_mir.prt.1")
-    frame = _add_part(client, project["uuid"], tmp_path, "draw_latch.asm.1")
+    product = _create_product(client, repo_parent)
+    pin = _add_part(client, product["uuid"], tmp_path, "clasp-clasp_mir.prt.1")
+    frame = _add_part(client, product["uuid"], tmp_path, "draw_latch.asm.1")
 
-    vault = data_dir / "vaults" / project["uuid"]
+    vault = data_dir / "vaults" / product["uuid"]
     asm_files = list(vault.rglob("draw_latch.asm*"))
     assert asm_files, f"expected vault asm under {vault}"
     set_file_writable(asm_files[0])
@@ -336,23 +336,23 @@ def test_rebuild_where_used_writes_dependency_edges(client, repo_parent, data_di
 
     from creopdm.utils.files import set_file_writable
 
-    project = _create_project(client, repo_parent)
-    pin = _add_part(client, project["uuid"], tmp_path, "pin.prt.1")
-    frame = _add_part(client, project["uuid"], tmp_path, "frame.asm.1")
+    product = _create_product(client, repo_parent)
+    pin = _add_part(client, product["uuid"], tmp_path, "pin.prt.1")
+    frame = _add_part(client, product["uuid"], tmp_path, "frame.asm.1")
 
-    vault = data_dir / "vaults" / project["uuid"]
+    vault = data_dir / "vaults" / product["uuid"]
     asm_files = list(vault.rglob("frame.asm*"))
     assert asm_files
     set_file_writable(asm_files[0])
     asm_files[0].write_bytes(b"assembly body mentions PIN.PRT as component")
 
-    started = client.post(f"/api/projects/{project['uuid']}/rebuild-where-used")
+    started = client.post(f"/api/products/{product['uuid']}/rebuild-where-used")
     assert started.status_code == 200, started.text
     assert started.json()["state"] in {"queued", "running", "done"}
 
     body = None
     for _ in range(100):
-        status = client.get(f"/api/projects/{project['uuid']}/rebuild-where-used")
+        status = client.get(f"/api/products/{product['uuid']}/rebuild-where-used")
         assert status.status_code == 200, status.text
         body = status.json()
         if body["done"]:
@@ -369,11 +369,11 @@ def test_rebuild_where_used_writes_dependency_edges(client, repo_parent, data_di
     assert len(items) == 1
     assert items[0]["object_id"] == frame["uuid"]
 
-    again = client.post(f"/api/projects/{project['uuid']}/rebuild-where-used")
+    again = client.post(f"/api/products/{product['uuid']}/rebuild-where-used")
     assert again.status_code == 200, again.text
     body2 = None
     for _ in range(100):
-        status = client.get(f"/api/projects/{project['uuid']}/rebuild-where-used")
+        status = client.get(f"/api/products/{product['uuid']}/rebuild-where-used")
         assert status.status_code == 200, status.text
         body2 = status.json()
         if body2["done"]:

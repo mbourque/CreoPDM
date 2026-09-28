@@ -25,7 +25,7 @@ from creopdm.models.parameter import Parameter
 from creopdm.models.version import ObjectVersion
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.checkout_service import CheckoutService
-from creopdm.services.lock_manager import ProjectLockManager
+from creopdm.services.lock_manager import ProductLockManager
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.storage.base import VersionStore
@@ -44,7 +44,7 @@ class CheckinService:
         checkouts: CheckoutService,
         workspaces: WorkspaceService,
         version_store: VersionStore,
-        locks: ProjectLockManager,
+        locks: ProductLockManager,
         activities: ActivityService,
         users: CurrentUserProvider,
         creo: CreoConnector,
@@ -63,17 +63,17 @@ class CheckinService:
 
     def preview(self, session: Session, object_uuid: str) -> dict[str, str | bool | list]:
         obj = self._objects.get_object(session, object_uuid)
-        project = obj.project
+        product = obj.product
         user = self._users.get_current_user()
         checkout = self._checkouts.active_for(session, obj.id)
         view = self._checkouts.describe(obj, checkout, user)
         workspace_name = obj.filename
         try:
-            workspace_name = self._workspaces.locate_content(project, obj).name
+            workspace_name = self._workspaces.locate_content(product, obj).name
         except PathValidationError:
             pass
-        modified = self._workspaces.is_modified(project, obj)
-        pending = self._workspaces.pending_workspace_save(project, obj)
+        modified = self._workspaces.is_modified(product, obj)
+        pending = self._workspaces.pending_workspace_save(product, obj)
         force_checkin = (
             checkout is None
             and pending is not None
@@ -81,8 +81,8 @@ class CheckinService:
         )
         current = f"{obj.revision}.{obj.iteration}"
         nxt = f"{obj.revision}.{obj.iteration + 1}"
-        siblings = self._objects.list_objects(session, project.id)
-        new_files = self._new_files_for(project, obj, siblings)
+        siblings = self._objects.list_objects(session, product.id)
+        new_files = self._new_files_for(product, obj, siblings)
         warning = ""
         if force_checkin:
             warning = (
@@ -113,19 +113,19 @@ class CheckinService:
         if not message:
             raise ValidationAppError("A check-in comment is required.")
         obj = self._objects.get_object(session, object_uuid)
-        project = obj.project
+        product = obj.product
         user = self._users.get_current_user()
-        self._workspaces.ensure_vault(project)
-        repo = self._workspaces.vault_for(project)
+        self._workspaces.ensure_vault(product)
+        repo = self._workspaces.vault_for(product)
         to_add = [item.replace("\\", "/").strip() for item in (add_relative_paths or []) if item.strip()]
 
-        with self._locks.acquire(project.uuid):
+        with self._locks.acquire(product.uuid):
             existing = self._checkouts.active_for(session, obj.id)
             record = None
             if existing is not None:
                 record = self._checkouts.require_owned(session, obj, user)
             else:
-                pending = self._workspaces.pending_workspace_save(project, obj)
+                pending = self._workspaces.pending_workspace_save(product, obj)
                 if pending is None:
                     raise CheckoutOwnershipError(f"{obj.filename} is not checked out.")
                 if obj.lifecycle_state != LifecycleState.IN_WORK.value:
@@ -133,20 +133,20 @@ class CheckinService:
                         f"{obj.filename} is {obj.lifecycle_state.replace('_', ' ').title()} and cannot be checked in."
                     )
             if to_add:
-                self._add_workspace_files(session, project, to_add, message, obj.filename)
-            workspace_file = self._workspaces.locate_content(project, obj)
+                self._add_workspace_files(session, product, to_add, message, obj.filename)
+            workspace_file = self._workspaces.locate_content(product, obj)
             content_hash = calculate_sha256(workspace_file)
             file_size = workspace_file.stat().st_size
             creo_release = creo_release_for(workspace_file, workspace_file.name)
             old_relative = obj.relative_path.replace("\\", "/")
             new_relative = self._workspaces.sibling_relative(obj, workspace_file)
-            clash = self._objects.existing_logical(session, project.id, new_relative, exclude_id=obj.id)
+            clash = self._objects.existing_logical(session, product.id, new_relative, exclude_id=obj.id)
             if clash is not None:
                 raise ValidationAppError(
-                    f"{workspace_file.name} is already in this project as {clash.filename}.",
+                    f"{workspace_file.name} is already in this product as {clash.filename}.",
                     details={"relative_path": new_relative},
                 )
-            repo_file = self._workspaces.repository_file(project, new_relative)
+            repo_file = self._workspaces.repository_file(product, new_relative)
             captured_head = self._store.capture_checkpoint(repo)
             previous_git = obj.current_version.git_commit_hash if obj.current_version else None
             copy_file(workspace_file, repo_file)
@@ -212,7 +212,7 @@ class CheckinService:
                 if captured_head:
                     self._store.restore_checkpoint(repo, captured_head)
                 raise RepositoryError(
-                    "The file was stored but project metadata could not be updated. "
+                    "The file was stored but product metadata could not be updated. "
                     "The checkout was not released.",
                     details={"file": obj.filename},
                 ) from exc
@@ -227,7 +227,7 @@ class CheckinService:
             except Exception:
                 pass
             try:
-                self._workspaces.materialize(project, obj, writable=False, overwrite_modified=True)
+                self._workspaces.materialize(product, obj, writable=False, overwrite_modified=True)
             except Exception:
                 logger.warning("Could not refresh the canonical workspace copy after check-in: %s", obj.filename)
 
@@ -235,7 +235,7 @@ class CheckinService:
                 session,
                 ActivityAction.CHECKED_IN,
                 user,
-                project_id=project.id,
+                product_id=product.id,
                 object_id=obj.id,
                 details={"iteration": new_iteration, "comment": message, "added": to_add},
             )
@@ -251,7 +251,7 @@ class CheckinService:
     ) -> EngineeringObject:
         """Restore an older version onto vault (and rematerialize), as a new check-in."""
         obj = self._objects.get_object(session, object_uuid)
-        project = obj.project
+        product = obj.product
         user = self._users.get_current_user()
         target = session.scalar(
             select(ObjectVersion).where(ObjectVersion.uuid == version_uuid)
@@ -267,8 +267,8 @@ class CheckinService:
 
         display = f"{target.revision}.{target.iteration}"
         comment = f"Reverted to {display}"
-        self._workspaces.ensure_vault(project)
-        repo = self._workspaces.vault_for(project)
+        self._workspaces.ensure_vault(product)
+        repo = self._workspaces.vault_for(product)
         rel_candidates = []
         for raw in (target.relative_path, obj.relative_path, target.filename, obj.filename):
             text = str(raw or "").replace("\\", "/").strip().lstrip("/")
@@ -310,7 +310,7 @@ class CheckinService:
             dest_rel = source_rel.replace("\\", "/").lstrip("/")
 
         tip_rel = str(obj.relative_path or "").replace("\\", "/").strip().lstrip("/")
-        with self._locks.acquire(project.uuid):
+        with self._locks.acquire(product.uuid):
             existing = self._checkouts.active_for(session, obj.id)
             if existing is not None:
                 self._checkouts.require_owned(session, obj, user)
@@ -329,7 +329,7 @@ class CheckinService:
                     (target.git_commit_hash or "")[:8],
                     exc_info=True,
                 )
-            dest = self._workspaces.file_path(project, dest_rel)
+            dest = self._workspaces.file_path(product, dest_rel)
             dest.parent.mkdir(parents=True, exist_ok=True)
             if not dest.is_file() or dest.read_bytes() != data:
                 if dest.exists():
@@ -343,9 +343,9 @@ class CheckinService:
             # Drop higher .N siblings so locate_content prefers the restored save
             # (e.g. .prt.1) instead of the tip (.prt.3). Leave obj.filename as the tip
             # so check-in still git-rms the old tip path when the basename changes.
-            self._workspaces.purge_newer_creo_saves(project, dest)
+            self._workspaces.purge_newer_creo_saves(product, dest)
             if tip_rel and tip_rel != dest_rel:
-                tip_path = self._workspaces.file_path(project, tip_rel)
+                tip_path = self._workspaces.file_path(product, tip_rel)
                 try:
                     tip_resolved = tip_path.resolve()
                     dest_resolved = dest.resolve()
@@ -386,7 +386,7 @@ class CheckinService:
             session,
             ActivityAction.VERSION_RESTORED,
             user,
-            project_id=project.id,
+            product_id=product.id,
             object_id=obj.id,
             details={
                 "from_version": version_uuid,
@@ -397,9 +397,9 @@ class CheckinService:
         )
         return restored
 
-    def preview_queue(self, session: Session, project) -> dict[str, str | bool | list]:
-        siblings = self._objects.list_objects(session, project.id)
-        queue = self._workspaces.project_checkin_queue(project, siblings)
+    def preview_queue(self, session: Session, product) -> dict[str, str | bool | list]:
+        siblings = self._objects.list_objects(session, product.id)
+        queue = self._workspaces.product_checkin_queue(product, siblings)
         new_files = []
         for item in queue["new_files"]:
             new_files.append(
@@ -433,7 +433,7 @@ class CheckinService:
     def checkin_queue(
         self,
         session: Session,
-        project,
+        product,
         comment: str,
         object_ids: list[str] | None = None,
         add_relative_paths: list[str] | None = None,
@@ -464,7 +464,7 @@ class CheckinService:
         to_add = [item.replace("\\", "/").strip() for item in (add_relative_paths or []) if item.strip()]
         if to_add:
             try:
-                self._add_workspace_files(session, project, to_add, message, "workspace")
+                self._add_workspace_files(session, product, to_add, message, "workspace")
                 for relative in to_add:
                     ok.append({"uuid": "", "filename": Path(relative).name, "status": "added", "path": relative})
             except CreoPDMError as exc:
@@ -482,7 +482,7 @@ class CheckinService:
 
     def _new_files_for(
         self,
-        project,
+        product,
         obj: EngineeringObject,
         siblings: list[EngineeringObject],
     ) -> list[dict[str, str | bool]]:
@@ -490,7 +490,7 @@ class CheckinService:
         if folder == ".":
             folder = ""
         found = []
-        for item in self._workspaces.list_untracked(project, siblings):
+        for item in self._workspaces.list_untracked(product, siblings):
             parent = Path(str(item["relative_path"]).replace("\\", "/")).parent.as_posix()
             if parent == ".":
                 parent = ""
@@ -509,15 +509,15 @@ class CheckinService:
     def _add_workspace_files(
         self,
         session: Session,
-        project,
+        product,
         relative_paths: list[str],
         comment: str,
         source_label: str = "workspace",
     ) -> None:
-        siblings = self._objects.list_objects(session, project.id)
+        siblings = self._objects.list_objects(session, product.id)
         available = {
             str(item["relative_path"]).replace("\\", "/").lower(): item
-            for item in self._workspaces.list_untracked(project, siblings)
+            for item in self._workspaces.list_untracked(product, siblings)
         }
         jobs: list[tuple[Path, str | None, str | None]] = []
         for relative in relative_paths:
@@ -537,7 +537,7 @@ class CheckinService:
             jobs.append((source, source.name, relative))
         if not jobs:
             return
-        for outcome in self._objects.import_files(session, project, jobs, comment):
+        for outcome in self._objects.import_files(session, product, jobs, comment):
             if outcome.error is not None:
                 raise outcome.error
             logger.info("Added %s during check-in of %s", outcome.filename, source_label)

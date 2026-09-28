@@ -16,11 +16,11 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
     PERMISSION_OBJECTS_VIEW,
-    PERMISSION_PROJECTS_ASSIGN,
-    PERMISSION_PROJECTS_CREATE,
-    PERMISSION_PROJECTS_DELETE,
-    PERMISSION_PROJECTS_EDIT,
-    PERMISSION_PROJECTS_MANAGE,
+    PERMISSION_PRODUCTS_ASSIGN,
+    PERMISSION_PRODUCTS_CREATE,
+    PERMISSION_PRODUCTS_DELETE,
+    PERMISSION_PRODUCTS_EDIT,
+    PERMISSION_PRODUCTS_MANAGE,
     PERMISSION_ROLES_ASSIGN,
     PERMISSION_ROLES_MANAGE,
     PERMISSION_SETTINGS_MANAGE,
@@ -38,14 +38,14 @@ class CapabilityFlags:
     can_manage_users: bool
     can_set_passwords: bool
     can_assign_roles: bool
-    can_assign_projects: bool
+    can_assign_products: bool
     can_manage_roles: bool
     can_manage_settings: bool
-    can_manage_projects: bool
+    can_manage_products: bool
     can_manage_email: bool
-    can_create_project: bool
-    can_edit_project: bool
-    can_delete_project: bool
+    can_create_product: bool
+    can_edit_product: bool
+    can_delete_product: bool
     can_view_objects: bool
     can_add_objects: bool
     can_checkout: bool
@@ -62,14 +62,14 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_manage_users=PERMISSION_USERS_MANAGE in keys,
         can_set_passwords=PERMISSION_USERS_PASSWORD in keys,
         can_assign_roles=PERMISSION_ROLES_ASSIGN in keys,
-        can_assign_projects=PERMISSION_PROJECTS_ASSIGN in keys,
+        can_assign_products=PERMISSION_PRODUCTS_ASSIGN in keys,
         can_manage_roles=PERMISSION_ROLES_MANAGE in keys,
         can_manage_settings=PERMISSION_SETTINGS_MANAGE in keys,
-        can_manage_projects=PERMISSION_PROJECTS_MANAGE in keys,
+        can_manage_products=PERMISSION_PRODUCTS_MANAGE in keys,
         can_manage_email=PERMISSION_EMAIL_MANAGE in keys,
-        can_create_project=PERMISSION_PROJECTS_CREATE in keys,
-        can_edit_project=PERMISSION_PROJECTS_EDIT in keys,
-        can_delete_project=PERMISSION_PROJECTS_DELETE in keys,
+        can_create_product=PERMISSION_PRODUCTS_CREATE in keys,
+        can_edit_product=PERMISSION_PRODUCTS_EDIT in keys,
+        can_delete_product=PERMISSION_PRODUCTS_DELETE in keys,
         can_view_objects=PERMISSION_OBJECTS_VIEW in keys,
         can_add_objects=PERMISSION_OBJECTS_ADD in keys,
         can_checkout=PERMISSION_OBJECTS_CHECKOUT in keys,
@@ -98,14 +98,14 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_manage_users = caps.can_manage_users
     request.state.can_set_passwords = caps.can_set_passwords
     request.state.can_assign_roles = caps.can_assign_roles
-    request.state.can_assign_projects = caps.can_assign_projects
+    request.state.can_assign_products = caps.can_assign_products
     request.state.can_manage_roles = caps.can_manage_roles
     request.state.can_manage_settings = caps.can_manage_settings
-    request.state.can_manage_projects = caps.can_manage_projects
+    request.state.can_manage_products = caps.can_manage_products
     request.state.can_manage_email = caps.can_manage_email
-    request.state.can_create_project = caps.can_create_project
-    request.state.can_edit_project = caps.can_edit_project
-    request.state.can_delete_project = caps.can_delete_project
+    request.state.can_create_product = caps.can_create_product
+    request.state.can_edit_product = caps.can_edit_product
+    request.state.can_delete_product = caps.can_delete_product
     request.state.can_view_objects = caps.can_view_objects
     request.state.can_add_objects = caps.can_add_objects
     request.state.can_checkout = caps.can_checkout
@@ -121,14 +121,14 @@ def caps_dict(request: Request) -> dict:
         "can_manage_users": bool(getattr(request.state, "can_manage_users", False)),
         "can_set_passwords": bool(getattr(request.state, "can_set_passwords", False)),
         "can_assign_roles": bool(getattr(request.state, "can_assign_roles", False)),
-        "can_assign_projects": bool(getattr(request.state, "can_assign_projects", False)),
+        "can_assign_products": bool(getattr(request.state, "can_assign_products", False)),
         "can_manage_roles": bool(getattr(request.state, "can_manage_roles", False)),
         "can_manage_settings": bool(getattr(request.state, "can_manage_settings", False)),
-        "can_manage_projects": bool(getattr(request.state, "can_manage_projects", False)),
+        "can_manage_products": bool(getattr(request.state, "can_manage_products", False)),
         "can_manage_email": bool(getattr(request.state, "can_manage_email", False)),
-        "can_create_project": bool(getattr(request.state, "can_create_project", False)),
-        "can_edit_project": bool(getattr(request.state, "can_edit_project", False)),
-        "can_delete_project": bool(getattr(request.state, "can_delete_project", False)),
+        "can_create_product": bool(getattr(request.state, "can_create_product", False)),
+        "can_edit_product": bool(getattr(request.state, "can_edit_product", False)),
+        "can_delete_product": bool(getattr(request.state, "can_delete_product", False)),
         "can_view_objects": bool(getattr(request.state, "can_view_objects", False)),
         "can_add_objects": bool(getattr(request.state, "can_add_objects", False)),
         "can_checkout": bool(getattr(request.state, "can_checkout", False)),
@@ -142,10 +142,10 @@ def caps_dict(request: Request) -> dict:
         flags["can_manage_users"]
         or flags["can_set_passwords"]
         or flags["can_assign_roles"]
-        or flags["can_assign_projects"]
+        or flags["can_assign_products"]
         or flags["can_manage_roles"]
         or flags["can_manage_settings"]
-        or flags["can_manage_projects"]
+        or flags["can_manage_products"]
         or flags["can_manage_email"]
     )
     return flags
@@ -156,10 +156,10 @@ def can_open_administration(caps: CapabilityFlags) -> bool:
         caps.can_manage_users
         or caps.can_set_passwords
         or caps.can_assign_roles
-        or caps.can_assign_projects
+        or caps.can_assign_products
         or caps.can_manage_roles
         or caps.can_manage_settings
-        or caps.can_manage_projects
+        or caps.can_manage_products
         or caps.can_manage_email
     )
 

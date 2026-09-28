@@ -11,7 +11,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 ## Contents
 
 1. [Moving around the app](#1-moving-around-the-app)
-2. [Projects (sidebar)](#2-projects-sidebar)
+2. [Products (sidebar)](#2-products-sidebar)
 3. [Finding and filtering files](#3-finding-and-filtering-files)
 4. [Folders in the list](#4-folders-in-the-list)
 5. [Files in the list](#5-files-in-the-list)
@@ -21,7 +21,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 9. [Checkout ▾](#9-checkout-)
 10. [Check In ▾](#10-check-in-)
 11. [Remove ▾](#11-remove-)
-12. [Typing the project name to confirm](#12-typing-the-project-name-to-confirm)
+12. [Typing the product name to confirm](#12-typing-the-product-name-to-confirm)
 13. [Mobile browse](#13-mobile-browse)
 14. [Administration (users, roles, membership, email)](#14-administration-users-roles-membership-email)
 15. [Quick walkthroughs](#15-quick-walkthroughs)
@@ -33,36 +33,36 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Click a project, folder breadcrumb, or Administration / Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Not Connected” or drop the Creo link just because you changed folders; hard-reload the page during a folder/project switch |
-| Sign in as **Viewer** | Browse projects, open/download files (`objects.view`), use Details; Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove, New project, Copy to Vault, or “Check out … then open” in the Open dialog |
-| Sign in with Administration only (no `objects.view`) | Land on **Administration**; breadcrumb has no **Projects** link; visiting `/` redirects to `/admin` | See a JSON error; see a Projects crumb that opens Files |
-| Sign in with a role that has **no permissions** | Land on a clear **No Files access** page (not JSON); project APIs stay **403** | Use the app as if signed in with Viewer |
+| Click a product, folder breadcrumb, or Administration / Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Not Connected” or drop the Creo link just because you changed folders; hard-reload the page during a folder/product switch |
+| Sign in as **Viewer** | Browse products, open/download files (`objects.view`), use Details; Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove, New product, Copy to Vault, or “Check out … then open” in the Open dialog |
+| Sign in with Administration only (no `objects.view`) | Land on **Administration**; breadcrumb has no **Products** link; visiting `/` redirects to `/admin` | See a JSON error; see a Products crumb that opens Files |
+| Sign in with a role that has **no permissions** | Land on a clear **No Files access** page (not JSON); product APIs stay **403** | Use the app as if signed in with Viewer |
 | Add or remove files/folders | Update the list so it matches reality | Leave old rows on screen until you press F5 |
 | Wait while something big runs (Add, Remove, Check In…) | Show a busy message so you know it’s working | Sit frozen with no feedback |
 
 ---
 
-## 2. Projects (sidebar)
+## 2. Products (sidebar)
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Click a project | Open that project’s Files list | Lose track of which project you picked |
-| Collapse / expand the sidebar | Hide or show the project list | Break the Files list |
-| Click **New** | Ask for a project name (and vault name options); then show the new project | Create a project with a blank name |
-| Open Files with **no** projects (and you **can** create projects) | Show the empty hero inviting you to create a project | |
-| Open Files with **no** projects (and you **cannot** create projects) | Show that no projects are available; ask an administrator for access | Tell you to “Create a project…” when you have no `projects.create` |
-| Open an **empty** project (and you **can** add files) | Show that there are no files and invite you to add a Creo model, PDF, or document | |
-| Open an **empty** project (and you **cannot** add files) | Show that there are no files | Tell you to “Add a Creo model…” when you have no `objects.add` |
-| Rename (project settings) | Update the name everywhere you see it | |
-| Click the **bell** next to the gear (when Email notifications are enabled) | Ask to confirm Watch / Stop watching; then toggle **your** watching state for that project | Change watching when you Cancel the confirmation; show the bell when notifications are disabled; show another user’s watching state as your own |
-| Watch a project with a valid account email | Receive email summaries for adds, removes, checkout, undo checkout, check-in, restore, and project rename/info (not for browse or background scans); no historical mail | Email yourself for your own actions |
-| Log in as a different user after someone else watched | Show **not** watching unless **you** subscribed; keep the other user’s subscription | Steal or clear another user’s watch when you open the project or click Stop on your own bell |
-| Open a project when your account email is invalid | Show the bell disabled with a clear reason | Let you subscribe until email is fixed |
-| Delete project | Ask you to type the **exact** project name; remove CreoPDM’s copy of the project | Delete your original CAD folders on disk just because you deleted the project; delete if you typed the wrong name |
+| Click a product | Open that product’s Files list | Lose track of which product you picked |
+| Collapse / expand the sidebar | Hide or show the product list | Break the Files list |
+| Click **New** | Ask for a product name (and vault name options); then show the new product | Create a product with a blank name |
+| Open Files with **no** products (and you **can** create products) | Show the empty hero inviting you to create a product | |
+| Open Files with **no** products (and you **cannot** create products) | Show that no products are available; ask an administrator for access | Tell you to “Create a product…” when you have no `products.create` |
+| Open an **empty** product (and you **can** add files) | Show that there are no files and invite you to add a Creo model, PDF, or document | |
+| Open an **empty** product (and you **cannot** add files) | Show that there are no files | Tell you to “Add a Creo model…” when you have no `objects.add` |
+| Rename (product settings) | Update the name everywhere you see it | |
+| Click the **bell** next to the gear (when Email notifications are enabled) | Ask to confirm Watch / Stop watching; then toggle **your** watching state for that product | Change watching when you Cancel the confirmation; show the bell when notifications are disabled; show another user’s watching state as your own |
+| Watch a product with a valid account email | Receive email summaries for adds, removes, checkout, undo checkout, check-in, restore, and product rename/info (not for browse or background scans); no historical mail | Email yourself for your own actions |
+| Log in as a different user after someone else watched | Show **not** watching unless **you** subscribed; keep the other user’s subscription | Steal or clear another user’s watch when you open the product or click Stop on your own bell |
+| Open a product when your account email is invalid | Show the bell disabled with a clear reason | Let you subscribe until email is fixed |
+| Delete product | Ask you to type the **exact** product name; remove CreoPDM’s copy of the product | Delete your original CAD folders on disk just because you deleted the product; delete if you typed the wrong name |
 
 **Name rules (new / rename)**
 
-- Project name is required.
+- Product name is required.
 - Custom vault/workspace name: no spaces; or use the hash option instead.
 
 ---
@@ -72,13 +72,13 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Click a breadcrumb (Home / folder path) | Take you to that folder; Creo stays connected | |
-| Type in Search | Show matching files across the project | |
+| Type in Search | Show matching files across the product | |
 | Clear Search | Show the normal folder view again | Bring back folders/files you already removed |
 | Click a metric (Parts, Assemblies, …) | Filter and select those files; click again to clear | Jump into a folder or leave the page |
 | Switch tabs: **Files** / **Checked out** / **New files** | Show that list | |
 | Click a column header | Sort; click again to reverse | |
 
-**New files tab** shows files waiting in the **vault** (and sometimes local cache) that aren’t fully in the project yet. Deleting only from your PC workspace does **not** clear vault “new” files — those live on the CreoPDM vault until you remove them from there.
+**New files tab** shows files waiting in the **vault** (and sometimes local cache) that aren’t fully in the product yet. Deleting only from your PC workspace does **not** clear vault “new” files — those live on the CreoPDM vault until you remove them from there.
 
 ---
 
@@ -114,19 +114,19 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 
 | Button | Available when | Hidden when |
 |--------|----------------|-------------|
-| Set Working Directory | Inside Creo’s browser **and** Creo.JS connected, with a project workspace (Files page) | Hidden outside Creo, when Creo is not connected, and on the file **Details** page |
-| Add ▾ | A project is open | No project |
-| Open ▾ | A project is open (workspace) and/or a file can be opened (**Files** page) | No project and nothing to open; always hidden on the file **Details** page |
+| Set Working Directory | Inside Creo’s browser **and** Creo.JS connected, with a product workspace (Files page) | Hidden outside Creo, when Creo is not connected, and on the file **Details** page |
+| Add ▾ | A product is open | No product |
+| Open ▾ | A product is open (workspace) and/or a file can be opened (**Files** page) | No product and nothing to open; always hidden on the file **Details** page |
 | Open selected… | A file you can open is selected | Nothing useful selected |
-| Open workspace… | A project is open **and** creopdm-agent is running on this PC | No project; agent offline (do not offer a host-vault fallback) |
+| Open workspace… | A product is open **and** creopdm-agent is running on this PC | No product; agent offline (do not offer a host-vault fallback) |
 | Checkout ▾ | Something can be checked out or undone (**Files** page) | Nothing to do; always hidden on the file **Details** page |
 | Check In ▾ | Something can be checked in or added | Nothing pending |
 | Details | One file selected | No file |
 | Copy to Vault | You have **Copy to Vault** permission and selected files are not already in the vault | Nothing to copy; role lacks `objects.copy_to_vault` (hidden for Viewer / Engineer by default) |
 | Remove ▾ | Something can be removed (**Files** page) | Nothing selected; always hidden on the file **Details** page |
-| Remove from Project | Files **and/or folders** selected (including empty folders) | Nothing selected |
+| Remove from Product | Files **and/or folders** selected (including empty folders) | Nothing selected |
 
-Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Same rule for **permissions**: if the signed-in role cannot do an action (or the PC cannot — e.g. Open workspace without creopdm-agent), **do not show the control**. **Set Working Directory** follows the same rule: show only inside Creo when Creo.JS is connected (embedded browser, and a project workspace is ready); hide it outside Creo, when disconnected, and on the file **Details** page. On the file **Details** page (every tab, including History) Open, Checkout, Remove, Set Working Directory, and **Check In ▾** are all hidden — that toolbar is **Revert to selected…** only (when an older History row is selected). Check In stays on the Files page.
+Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Same rule for **permissions**: if the signed-in role cannot do an action (or the PC cannot — e.g. Open workspace without creopdm-agent), **do not show the control**. **Set Working Directory** follows the same rule: show only inside Creo when Creo.JS is connected (embedded browser, and a product workspace is ready); hide it outside Creo, when disconnected, and on the file **Details** page. On the file **Details** page (every tab, including History) Open, Checkout, Remove, Set Working Directory, and **Check In ▾** are all hidden — that toolbar is **Revert to selected…** only (when an older History row is selected). Check In stays on the Files page.
 
 Only one ▾ menu open at a time. Click outside or press Escape to close.
 
@@ -145,9 +145,9 @@ Menu order:
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Choose Create folder… | Ask for a name; say whether it’s under the current folder or project root | |
+| Choose Create folder… | Ask for a name; say whether it’s under the current folder or product root | |
 | Enter a good name and Create | New empty folder appears in the list (no F5) | |
-| Create while inside e.g. Drawings | Folder is created **inside Drawings** | Create it at project root by mistake |
+| Create while inside e.g. Drawings | Folder is created **inside Drawings** | Create it at product root by mistake |
 | Leave the name blank | Show an error; stay on the dialog | Create anything |
 | Enter `Foo/Bar` or `.hidden` | Reject with a clear error | Create weird or nested junk from one name |
 | Use a name that already exists | Say it already exists | Overwrite what’s there |
@@ -156,7 +156,7 @@ Menu order:
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Pick or drop individual files | Copy them into the project at the current location | |
+| Pick or drop individual files | Copy them into the product at the current location | |
 | Drop a whole folder tree | Tell you to use Add folder… / Add folders… | Quietly import the whole tree as “files” |
 | Click Add with nothing chosen | Ask you to choose files first | Start an empty import |
 | Click Add twice quickly | Say an add is already running | Run two imports at once |
@@ -172,7 +172,7 @@ Menu order:
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Pick folder trees | Keep the folder structure (e.g. Alpha/lib/part.prt stays nested) | Flatten everything to the project root |
+| Pick folder trees | Keep the folder structure (e.g. Alpha/lib/part.prt stays nested) | Flatten everything to the product root |
 | Pick several roots | Import each tree | Lose sibling folders |
 
 On a normal office network (`http://…`), the app should try the CreoPDM agent’s folder picker first (more reliable than the browser’s).
@@ -188,12 +188,12 @@ On a normal office network (`http://…`), the app should try the CreoPDM agent�
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| **Open ▾ → Open workspace…** | Open this project’s local working folder on this PC via creopdm-agent; if nothing has been checked out / materialized yet, create the empty local folder and open it | Open a folder on the CreoPDM Linux host; show the item when the agent is offline; fail with a raw WinError just because the local cache is still empty |
+| **Open ▾ → Open workspace…** | Open this product’s local working folder on this PC via creopdm-agent; if nothing has been checked out / materialized yet, create the empty local folder and open it | Open a folder on the CreoPDM Linux host; show the item when the agent is offline; fail with a raw WinError just because the local cache is still empty |
 | **Open ▾ → Open selected…** (or click a file name) | Offer how to open (see below); open in Creo or Windows; when the file is fetched to the local workspace, keep its vault folders (do not flatten); Creo opens from that folder so nested assemblies still resolve; when you are **not** checked out, align the local tip to the vault tip (remove newer local `.N` leftovers); **outside** Creo’s embedded browser (or when Open mode is OS association), download via creopdm-agent and open with the **Windows association** (or browser download if the agent is offline) | Fail silently with no message; put nested vault files at the workspace root; fail open just because the file lives under a vault subfolder; leave a newer local `.prt.N` after opening a vault tip you do not have checked out; require Creo’s embedded browser when Open mode is association |
 | **Details** (toolbar / double-click) | Open the file **Details** page on the **Overview** tab (first tab); page shows a **Details** title under the breadcrumb | Open the History tab by default; jump to History from a single-click on the file name |
 | **Details** (file page) | Show a clear **Details** title near the top (under the breadcrumb, Library-sized), then the file name and tabs (Overview, History, …); same light panel background as Files; **Overview** Identity labels the model **Name** (not Number), shows **Date created** and **Date modified** only when modified differs (hide Date modified when it matches Date created), and omits content hash; date values keep the short stamp on screen and show a pretty hover title (e.g. Monday, July 23, 2026 at 5:30pm); skips duplicate identity fields (same name/instance) and omits Revision / Lifecycle already shown in the header; when the file is checked out, **Overview → Checkout** shows **Checked out by** and **Checked out** (when), and the header checkout badge has a pretty hover for when; use one body font and size on all Details tabs (no mixed monospace); file/open links use regular ink color (underline on hover), not accent/orange; bottom toolbar shows **Revert to selected…** on History only — never **Check In ▾**, **Open ▾**, **Set Working Directory**, **Checkout ▾**, or **Remove ▾** on Details | Show Check In, Open, Set Working Directory, Checkout, or Remove on Details; keep a separate History page title; keep a separate Version History view; label the model identity as Number; show content hash on Overview; always show Date modified when it equals Date created; omit created/modified dates; hide who/when for an active checkout; repeat Revision / Lifecycle header badges again in Overview Identity; mix monospace and UI fonts on Details tabs; use orange or accent-colored hyperlinks on Details |
 | **Open ▾ → Open current…** | (Files page / file name) Open the **current** tip of this file | |
-| Select an **older** History row → **Revert to selected…** (bottom toolbar, red like Remove) | Ask you to type the **exact** project name (same confirm dialog as Remove); explain that content and filename (including Creo `.prt.N`) restore to vault and local **in one step** (new version recorded — no Check In prompt); remove newer numbered siblings so the tip is not left as `.3` after reverting to `.1`; leave the file Available (not checked out); show Revert only when an older row is selected | Offer Revert for the current version, a pending unsaved row, or when this file has only one version; revert someone else’s checkout; proceed if the typed name is wrong or Cancel; keep a newer `.prt.N` name while only swapping bytes; leave Revert greyed at the top of the History list; leave a newer local cache save after vault restore; leave you checked out with a Check In prompt; show floating “choose an older row” hint text in the toolbar; use a plain browser `confirm` instead of typing the project name |
+| Select an **older** History row → **Revert to selected…** (bottom toolbar, red like Remove) | Ask you to type the **exact** product name (same confirm dialog as Remove); explain that content and filename (including Creo `.prt.N`) restore to vault and local **in one step** (new version recorded — no Check In prompt); remove newer numbered siblings so the tip is not left as `.3` after reverting to `.1`; leave the file Available (not checked out); show Revert only when an older row is selected | Offer Revert for the current version, a pending unsaved row, or when this file has only one version; revert someone else’s checkout; proceed if the typed name is wrong or Cancel; keep a newer `.prt.N` name while only swapping bytes; leave Revert greyed at the top of the History list; leave a newer local cache save after vault restore; leave you checked out with a Check In prompt; show floating “choose an older row” hint text in the toolbar; use a plain browser `confirm` instead of typing the product name |
 | **Copy to Vault** | Put a copy in the vault without checking out (requires `objects.copy_to_vault`; starter: Administrator + PDM Manager only) | Check the file out; show the button to Viewer / Engineer by default |
 
 ### When you open a file that’s not checked out to you
@@ -221,25 +221,25 @@ If open seems to do nothing, check the error line under the toolbar, and that cr
 ## 9. Checkout ▾
 
 1. **Checkout selected**  
-2. **Checkout project**  
+2. **Checkout product**  
 3. **Undo Checkout**
 
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Checkout selected | Lock those files and download them for editing, keeping vault folder paths in the local workspace | Steal a file someone else has checked out; flatten nested files to the workspace root |
-| Checkout project | Check out everything that’s free, keeping vault folder paths locally | Offer checkout when nothing is left; flatten nested files to the workspace root |
+| Checkout product | Check out everything that’s free, keeping vault folder paths locally | Offer checkout when nothing is left; flatten nested files to the workspace root |
 | Undo Checkout | Release **your** locks only | Undo someone else’s checkout; delete the vault file; create a new version |
 
 ---
 
 ## 10. Check In ▾
 
-1. **Check in project…**  
+1. **Check in product…**  
 2. **Check in selected…** (may say **Add selected…** if you’re only adding new files)
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Check in project… | Record pending saves and new files; release unchanged checkouts so the project looks checked in | Run when there’s nothing to do (button should stay disabled) |
+| Check in product… | Record pending saves and new files; release unchanged checkouts so the product looks checked in | Run when there’s nothing to do (button should stay disabled) |
 | Check in selected… | Check in / add what you selected | |
 | Leave the comment blank | Block check-in until you write a comment | Save a version with no comment |
 | Finish successfully | List and status update to match the vault | |
@@ -248,18 +248,18 @@ If open seems to do nothing, check the error line under the toolbar, and that cr
 
 ## 11. Remove ▾
 
-1. **Remove from Workspace** — trash local copies on this PC only; vault and project list unchanged  
+1. **Remove from Workspace** — trash local copies on this PC only; vault and product list unchanged  
 2. **Purge workspace** — trash older local numbered saves that are below the vault version; vault unchanged  
 3. **Remove from Vault** — delete CreoPDM’s vault copies; your original CAD folder stays; checkouts cancelled  
-4. **Remove from Project** — remove from this project and delete vault copies; originals stay  
+4. **Remove from Product** — remove from this product and delete vault copies; originals stay  
 
-Destructive actions ask you to type the project name ([§12](#12-typing-the-project-name-to-confirm)).
+Destructive actions ask you to type the product name ([§12](#12-typing-the-product-name-to-confirm)).
 
 ### Remove from Workspace
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Select local “new” files on New files and remove | Move them to the Recycle Bin on this PC | Change the vault or project file list |
+| Select local “new” files on New files and remove | Move them to the Recycle Bin on this PC | Change the vault or product file list |
 | Agent not running | Tell you to start creopdm-agent | |
 
 ### Purge workspace
@@ -273,29 +273,29 @@ Destructive actions ask you to type the project name ([§12](#12-typing-the-proj
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Confirm | Delete vault copies of the selection | Delete files in your original project folder on disk |
+| Confirm | Delete vault copies of the selection | Delete files in your original product folder on disk |
 
-### Remove from Project
+### Remove from Product
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Select files and/or folders (including empty folders) | Enable Remove from Project | Stay disabled just because a folder is empty |
-| Confirm with the correct project name | Remove from the project; delete vault copies; **rows disappear right away** | Leave the folder/file visible until F5 |
+| Select files and/or folders (including empty folders) | Enable Remove from Product | Stay disabled just because a folder is empty |
+| Confirm with the correct product name | Remove from the product; delete vault copies; **rows disappear right away** | Leave the folder/file visible until F5 |
 | Optionally also delete local workspace | Clean local copies if you checked that box | Delete your original CAD source folder unless you asked for workspace cleanup |
-| Type the wrong project name | Show an error; change nothing | Remove anything |
+| Type the wrong product name | Show an error; change nothing | Remove anything |
 | Cancel | Change nothing | |
 | File checked out by someone else | Skip that file with an error; may still remove others | Quietly remove their locked file |
 
 ---
 
-## 12. Typing the project name to confirm
+## 12. Typing the product name to confirm
 
-Used for delete project, remove from project/vault, purge, History **Revert to selected…**, and similar.
+Used for delete product, remove from product/vault, purge, History **Revert to selected…**, and similar.
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Type the project name exactly | Allow Continue | |
-| Typo, wrong case, or blank | Show “Type the project name exactly…” | Proceed |
+| Type the product name exactly | Allow Continue | |
+| Typo, wrong case, or blank | Show “Type the product name exactly…” | Proceed |
 | Cancel / Escape | Abort | Treat as confirm |
 
 ---
@@ -317,7 +317,7 @@ Phone-only **browse** mode (portrait or landscape). No Add / Checkout / Check In
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Look at the top bar | Show CreoPDM brand and **Logout**; hide Administration, display name, and Creo status pills | Hide Logout; show Administration / Creo status / name pills on a phone |
-| Look at the project header | Show project name and search; hide **New**, gear, and metric chips (Files / Parts / …) | Show New project, project gear, or filter pills |
+| Look at the product header | Show product name and search; hide **New**, gear, and metric chips (Files / Parts / …) | Show New product, product gear, or filter pills |
 | Look at the bottom | No toolbar | Show Set Working Directory, Add, Open, Checkout, Check In, or Remove |
 | Open a file’s Details page | No bottom Details toolbar (no Revert / Check In chrome) | Show the desktop Details action bar |
 
@@ -355,7 +355,7 @@ Use a normal browser for these checks. You need the matching Administration perm
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Open the app when **no users** exist yet | Send you to **Create administrator** (`/setup`) | Let you use Files / login as if accounts already exist |
-| Create the first admin with display name, username, **email**, and password | Create an **Administrator** with **All projects**, sign you in, and take you to the app | Accept a blank email or an incomplete address like `user@host` (no domain suffix); leave email optional |
+| Create the first admin with display name, username, **email**, and password | Create an **Administrator** with **All products**, sign you in, and take you to the app | Accept a blank email or an incomplete address like `user@host` (no domain suffix); leave email optional |
 | Try `/setup` again after any user exists | Redirect to login | Create a second “first” admin |
 
 ### Users
@@ -363,9 +363,9 @@ Use a normal browser for these checks. You need the matching Administration perm
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Open **Add user** with spaces or symbols in the username (e.g. `Pat O'Neil`, `a@b`) | Reject with a clear validation error | Accept spaces or special characters |
-| Open **Add user** | Require display name, username, **email**, role (if you can assign), status, and initial password | Treat email as optional; let you set project membership on this form |
+| Open **Add user** | Require display name, username, **email**, role (if you can assign), status, and initial password | Treat email as optional; let you set product membership on this form |
 | Enter email `dfdsf@ca` / `sdfsdf@ss` or other non-`name@domain.tld` values | Reject with a clear validation error (browser and server) | Save incomplete domains or bare TLDs like `@ca` |
-| Save a new user | Create the account with **no project access**; point you to **Membership** to grant access; return to the Users list | Give the new user All projects or any project by default |
+| Save a new user | Create the account with **no product access**; point you to **Membership** to grant access; return to the Users list | Give the new user All products or any product by default |
 | Edit a user and clear email | Reject with “Email is required” (or equivalent) and keep the previous address | Save a blank email |
 | Open the Role dropdown (with `roles.assign`) | List only roles with **fewer** permissions than yours (not your role, not a peer, not a higher role) | Offer Administrator to another Administrator, or the same role as yours |
 | Try to change **your own** role or status | Block the change and tell you to ask another administrator | Let you demote or disable yourself |
@@ -374,9 +374,9 @@ Use a normal browser for these checks. You need the matching Administration perm
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Open **Membership** | Show a hub with **By project** and **By user**, plus a short projects summary | Put project checkboxes on the user Add/Edit form |
-| Open **By user** → a person | Let you set **All projects** or pick specific projects, then Save | Leave Files still showing every project when that user is restricted |
-| Open **By project** → a project | Let you add/remove members for that project | |
+| Open **Membership** | Show a hub with **By product** and **By user**, plus a short products summary | Put product checkboxes on the user Add/Edit form |
+| Open **By user** → a person | Let you set **All products** or pick specific products, then Save | Leave Files still showing every product when that user is restricted |
+| Open **By product** → a product | Let you add/remove members for that product | |
 
 ### Roles
 
@@ -394,7 +394,7 @@ Needs `email.manage`.
 | Open Email | Show enable, **Local Postfix** vs **Authenticated SMTP**, From address, administrator email, and Test email | |
 | Choose **Local Postfix** | Use `127.0.0.1:25` on the CreoPDM server (no username/password panel) | Require SMTP credentials for Local |
 | Choose **Authenticated SMTP** | Show host, port, TLS, auth, username/password | |
-| Disable email notifications and open a project | Hide the watch bell on Files | Leave the bell visible while notifications are off |
+| Disable email notifications and open a product | Hide the watch bell on Files | Leave the bell visible while notifications are off |
 | Change delivery settings, then **Send test email** without Save | Block with a message to Save first | Send using unsaved settings |
 | Change only To / Subject / Message, then Send test | Send using the **saved** delivery settings (no Save required for those three fields) | |
 | Save, then Send test | Deliver to the test recipient (or administrator email if To is blank) | |
@@ -405,13 +405,13 @@ Needs `email.manage`.
 
 ### Create → open → remove a folder
 
-1. Open a project (any folder).  
+1. Open a product (any folder).  
 2. **Add ▾ → Create folder…** → name `UxTest` → Create.  
 3. Folder appears without F5.  
 4. Click the **name** → you enter the folder; Creo stays connected if it was.  
 5. Go up via the breadcrumb.  
-6. Click the row **beside** the name → selected; Remove from Project is available.  
-7. Confirm with the real project name.  
+6. Click the row **beside** the name → selected; Remove from Product is available.  
+7. Confirm with the real product name.  
 8. Folder is gone from the list immediately; no F5 needed.
 
 Try the same with **Add folder…** and **Add folders…**.
@@ -419,7 +419,7 @@ Try the same with **Add folder…** and **Add folders…**.
 ### Things that should fail (and say why)
 
 - Create folder with blank name, `Bad/Name`, or a duplicate name.  
-- Remove with the wrong project name, or Cancel.  
+- Remove with the wrong product name, or Cancel.  
 - Click folder row chrome → must select, not open; click name → must open.  
 - Add files… by dropping a whole folder tree → told to use Add folder(s).  
 - Check In with an empty comment → blocked.  
@@ -428,12 +428,12 @@ Try the same with **Add folder…** and **Add folders…**.
 - Setup / Add user / Edit user with blank email → blocked.  
 - Setup / Add user with spaces or special characters in username → blocked.  
 - Setup / Add user with `dfdsf@ca` or `sdfsdf@ss` (no real domain) → blocked.  
-- Add user → new account has no projects until Membership grants them.  
+- Add user → new account has no products until Membership grants them.  
 - Role dropdown → your own role / a peer role / a higher role must not appear.  
 - Email admin: change SMTP fields then Send test without Save → blocked.
 - Cancel Watch / Stop watching confirmation → subscription unchanged.
-- Notifications disabled → no project watch bell on Files.
-- User A watches; user B opens the same project → B is not watching; B’s Stop does not clear A.
+- Notifications disabled → no product watch bell on Files.
+- User A watches; user B opens the same product → B is not watching; B’s Stop does not clear A.
 
 ---
 
@@ -445,8 +445,8 @@ Automated coverage lives mainly in:
 - `tests/unit/test_user_interaction_validations.py`
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
-- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `objects.view` / `data-can-checkout`; empty-home `projects.create` hero; empty-project `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_objects_view_lands_on_administration`; `test_setup_and_admin_user_require_email`; `test_username_rejects_spaces_and_email_needs_domain`; `test_admin_email_settings_save_and_gate`; `test_admin_membership_project_access_filters_projects`; `test_role_assign_must_be_strictly_below_actor`; new users default to no project access)
-- `tests/unit/test_project_watch.py` (bell when email enabled; per-user watch; subscribe/unsubscribe; one email per bulk action; actor excluded; notifications off skips mail)
+- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `objects.view` / `data-can-checkout`; empty-home `products.create` hero; empty-product `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_objects_view_lands_on_administration`; `test_setup_and_admin_user_require_email`; `test_username_rejects_spaces_and_email_needs_domain`; `test_admin_email_settings_save_and_gate`; `test_admin_membership_product_access_filters_products`; `test_role_assign_must_be_strictly_below_actor`; new users default to no product access)
+- `tests/unit/test_product_watch.py` (bell when email enabled; per-user watch; subscribe/unsubscribe; one email per bulk action; actor excluded; notifications off skips mail)
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
 - Related checkout / check-in / soft-nav tests
