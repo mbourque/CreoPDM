@@ -97,7 +97,13 @@
       <label>Send test to
         <input name="test_to" type="email" value="{{ form.test_to }}" placeholder="{{ form.administrator_email or 'you@example.com' }}">
       </label>
-      <p class="muted small">Uses saved settings only. Defaults to the administrator email when left blank. <span id="email-test-dirty-hint" hidden>Save your changes before sending a test.</span></p>
+      <label>Subject
+        <input name="test_subject" type="text" value="{{ form.test_subject }}">
+      </label>
+      <label>Message
+        <textarea name="test_message" rows="4">{{ form.test_message }}</textarea>
+      </label>
+      <p class="muted small">Uses saved delivery settings only. Changing To / Subject / Message does not require Save. <span id="email-test-dirty-hint" hidden>Save your delivery settings before sending a test.</span></p>
       <p class="form-actions">
         <button type="submit" class="btn" name="action" value="test" id="email-test-btn">Send test email</button>
       </p>
@@ -112,6 +118,7 @@
   var smtpPanel = document.getElementById("email-smtp-panel");
   var testBtn = document.getElementById("email-test-btn");
   var dirtyHint = document.getElementById("email-test-dirty-hint");
+  var ignoreDirty = { action: 1, test_to: 1, test_subject: 1, test_message: 1, smtp_password: 1 };
 
   function syncPanels() {
     var checked = form.querySelector('input[name="transport"]:checked');
@@ -124,7 +131,7 @@
     var data = new FormData(form);
     var parts = [];
     data.forEach(function (value, key) {
-      if (key === "action" || key === "test_to" || key === "smtp_password") return;
+      if (ignoreDirty[key]) return;
       parts.push(key + "=" + String(value));
     });
     parts.sort();

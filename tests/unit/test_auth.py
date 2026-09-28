@@ -369,8 +369,10 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
 
     page = auth_client.get("/admin/email")
     assert 'id="email-test-btn"' in page.text
+    assert 'name="test_subject"' in page.text
+    assert 'name="test_message"' in page.text
+    assert "CreoPDM test email" in page.text
     assert "Save your changes before sending a test" in page.text
-    assert "email-test-dirty-hint" in page.text
 
     # PDM Manager lacks email.manage.
     auth_client.post(

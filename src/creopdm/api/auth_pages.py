@@ -1594,7 +1594,19 @@ def _require_email_manager(
     return user
 
 
-def _email_form_from_settings(ctx: AppContext, *, test_to: str = "") -> dict:
+_DEFAULT_TEST_SUBJECT = "CreoPDM test email"
+_DEFAULT_TEST_MESSAGE = (
+    "This is a test message from CreoPDM Administration → Email.\n"
+)
+
+
+def _email_form_from_settings(
+    ctx: AppContext,
+    *,
+    test_to: str = "",
+    test_subject: str | None = None,
+    test_message: str | None = None,
+) -> dict:
     email = ctx.settings.email
     transport = email.transport if email.transport in {"local", "smtp"} else "local"
     return {
@@ -1610,6 +1622,12 @@ def _email_form_from_settings(ctx: AppContext, *, test_to: str = "") -> dict:
         "smtp_use_tls": bool(email.smtp_use_tls),
         "smtp_use_auth": bool(email.smtp_use_auth),
         "test_to": test_to,
+        "test_subject": (
+            _DEFAULT_TEST_SUBJECT if test_subject is None else test_subject
+        ),
+        "test_message": (
+            _DEFAULT_TEST_MESSAGE if test_message is None else test_message
+        ),
     }
 
 
@@ -1627,6 +1645,8 @@ def _email_form_from_post(
     smtp_use_tls: str,
     smtp_use_auth: str,
     test_to: str,
+    test_subject: str,
+    test_message: str,
     has_password: bool,
 ) -> dict:
     mode = (transport or "local").strip().lower()
@@ -1636,6 +1656,9 @@ def _email_form_from_post(
         port = int((smtp_port or "25").strip() or "25")
     except ValueError:
         port = 25
+    subject = (test_subject or "").strip() or _DEFAULT_TEST_SUBJECT
+    # Preserve user-edited body (including empty); fall back only when field omitted.
+    message = _DEFAULT_TEST_MESSAGE if test_message is None else test_message
     return {
         "enabled": enabled == "1",
         "transport": mode,
@@ -1649,6 +1672,8 @@ def _email_form_from_post(
         "smtp_use_tls": smtp_use_tls == "1",
         "smtp_use_auth": smtp_use_auth == "1",
         "test_to": (test_to or "").strip(),
+        "test_subject": subject,
+        "test_message": message,
     }
 
 
@@ -1721,6 +1746,8 @@ def admin_email_submit(
     smtp_use_tls: str = Form(""),
     smtp_use_auth: str = Form(""),
     test_to: str = Form(""),
+    test_subject: str = Form(_DEFAULT_TEST_SUBJECT),
+    test_message: str = Form(_DEFAULT_TEST_MESSAGE),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -1743,6 +1770,8 @@ def admin_email_submit(
         smtp_use_tls=smtp_use_tls,
         smtp_use_auth=smtp_use_auth,
         test_to=test_to,
+        test_subject=test_subject,
+        test_message=test_message,
         has_password=bool(current_password),
     )
     # Keep SMTP panel values from saved settings when local (hidden fields may be empty).
@@ -1773,8 +1802,13 @@ def admin_email_submit(
                 error="Save your changes before sending a test email.",
                 status_code=400,
             )
-        form = _email_form_from_settings(ctx, test_to=form["test_to"])
-        recipient = form["test_to"] or form["administrator_email"]
+        recipient = form["test_to"] or (current.administrator_email or "")
+        form = _email_form_from_settings(
+            ctx,
+            test_to=form["test_to"],
+            test_subject=form["test_subject"],
+            test_message=form["test_message"],
+        )
         if not recipient:
             return _render(
                 error="Set an administrator email or a test recipient before sending.",
@@ -1783,8 +1817,8 @@ def admin_email_submit(
         try:
             ctx.email.send(
                 recipient,
-                "CreoPDM test email",
-                "This is a test message from CreoPDM Administration → Email.\n",
+                form["test_subject"],
+                form["test_message"],
             )
         except CreoPDMError as exc:
             return _render(error=exc.message, status_code=400)
@@ -1827,5 +1861,10 @@ def admin_email_submit(
 
     ctx.config.save(new_settings)
     ctx.settings = new_settings
-    form = _email_form_from_settings(ctx, test_to=form["test_to"])
+    form = _email_form_from_settings(
+        ctx,
+        test_to=form["test_to"],
+        test_subject=form["test_subject"],
+        test_message=form["test_message"],
+    )
     return _render(success="Email settings saved.")
