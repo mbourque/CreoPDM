@@ -88,6 +88,10 @@
       <p class="muted small">Leave password blank to keep the current value. Typical provider setup: port <strong>587</strong>, TLS on, authentication on (Gmail needs an App password). Allow outbound TCP 587 from this host. From address must be allowed by the provider.</p>
     </section>
 
+    <p class="form-actions">
+      <button type="submit" class="btn btn-primary" name="action" value="save">Save</button>
+    </p>
+
     <section class="settings-card">
       <h2>Test email</h2>
       <label>Send test to
@@ -95,7 +99,6 @@
       </label>
       <p class="muted small">Uses saved settings only. Defaults to the administrator email when left blank. <span id="email-test-dirty-hint" hidden>Save your changes before sending a test.</span></p>
       <p class="form-actions">
-        <button type="submit" class="btn btn-primary" name="action" value="save">Save</button>
         <button type="submit" class="btn" name="action" value="test" id="email-test-btn">Send test email</button>
       </p>
     </section>
