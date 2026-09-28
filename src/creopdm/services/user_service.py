@@ -258,25 +258,32 @@ class UserService:
                 "You do not have permission to assign project membership (projects.assign)."
             )
 
+    def role_permission_keys(self, role: Role) -> frozenset[str]:
+        return frozenset(p.key for p in (role.permissions or []))
+
+    def role_is_strictly_below(self, actor: User, role: Role) -> bool:
+        """True when role permissions are a proper subset of the actor's caps."""
+        actor_keys = self.permission_keys_for_user(actor)
+        role_keys = self.role_permission_keys(role)
+        return role_keys < actor_keys
+
     def ensure_can_assign_role(self, actor: User, role: Role) -> None:
-        """Require roles.assign; full-admin roles need a full administrator actor."""
+        """Require roles.assign; target role must be strictly below the actor's caps."""
         if not self.can_assign_roles(actor):
             raise PermissionDeniedError(
                 "You do not have permission to assign roles (roles.assign)."
             )
-        if self.role_is_full_administrator(role) and not self.is_full_administrator(actor):
+        if not self.role_is_strictly_below(actor, role):
             raise ValidationAppError(
-                "Only a full administrator can assign a full administrator role."
+                "You can only assign a role with fewer permissions than your own "
+                "(not the same role or a higher one)."
             )
 
     def assignable_roles_for(self, db: Session, actor: User) -> list[Role]:
-        """Roles the actor may pick on Add/Edit user (hides full-admin roles for non-admins)."""
+        """Roles the actor may pick on Add/Edit user (strictly below their own caps)."""
         if not self.can_assign_roles(actor):
             return []
-        roles = self.list_roles(db)
-        if self.is_full_administrator(actor):
-            return roles
-        return [r for r in roles if not self.role_is_full_administrator(r)]
+        return [r for r in self.list_roles(db) if self.role_is_strictly_below(actor, r)]
 
     def can_manage_projects(self, user: User) -> bool:
         """True when the user may open Administration → Projects (full CRUD there)."""

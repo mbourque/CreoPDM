@@ -39,6 +39,7 @@
           {% endfor %}
         </select>
       </label>
+      <p class="muted small">You can only assign a role with <strong>fewer</strong> permissions than your own (not the same role or a higher one).</p>
       {% else %}
       <label>Role
         <input type="text" value="{% if mode == 'new' %}Engineer (default){% else %}{{ form.role }}{% endif %}" disabled>

@@ -39,17 +39,17 @@ Others do not see Administration; direct URLs return **403**.
 
 **Lockout safety:** at least one **ACTIVE** user must keep **all** CreoPDM Administration permissions on the same account. Saving a role, demoting/disabling a user, or deleting a role is rejected if it would leave nobody with the full set. You also cannot change **name**, **description**, or **CreoPDM Administration** checkboxes on a role **assigned to you**, and you cannot **delete** your own role — ask another administrator.
 
-**Admins edit admins only:** a full administrator (all Administration caps) may edit **other** full administrators and assign full-admin roles. Full administrators may also edit **their own** account from Users admin (the only self-edit exception), but **cannot** change their own role or disable/change their own status — ask another administrator. Other accounts still cannot edit themselves — ask another administrator, or use **Account → password** for your own password.
+**Admins edit admins only:** a full administrator (all Administration caps) may edit **other** full administrators. Full administrators may also edit **their own** account from Users admin (the only self-edit exception), but **cannot** change their own role or disable/change their own status — ask another administrator. Role assignment always requires a **lower** permission set than the actor’s (including for Administrators — you cannot assign the Administrator role from the UI). Other accounts still cannot edit themselves — ask another administrator, or use **Account → password** for your own password.
 
 **Fine-grained Users admin caps** (separate from `users.manage`):
 
 | Permission | Allows |
 | --- | --- |
-| `roles.assign` | Change another user’s role (otherwise Role is read-only; new users default to **Engineer**) |
+| `roles.assign` | Change another user’s role to one with **fewer** permissions than your own (not the same role or a higher one). Otherwise Role is read-only; new users default to **Engineer** |
 | `users.password` | Set initial password on Add user, or reset password on Edit |
 | `projects.assign` | Open **Administration → Membership** (By project / By user). New users still default to All projects |
 
-Full-admin roles still require a full administrator to assign.
+Assignable roles are always a **proper subset** of the signed-in user’s permissions (never peer or higher).
 
 ### Project access (Membership)
 

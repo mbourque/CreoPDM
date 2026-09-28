@@ -563,7 +563,7 @@ The system should prevent:
 
 There must always be at least one active user who can manage Users, set passwords, assign roles, manage Roles, assign project membership, administer Projects, open Settings, and configure Email.
 
-Only a full administrator (all of those permissions) may edit another full administrator or assign a full-administrator role. Full administrators may also edit their own Users admin record (the only self-edit exception), but cannot change their own role or disable themselves. An account with `users.manage` alone can manage non-admin users but cannot change their role (`roles.assign`), password (`users.password`), or project membership (`projects.assign`), and cannot change administrator accounts. Non-admin accounts still cannot edit themselves from Users admin — another administrator must change them.
+Only a full administrator (all of those permissions) may edit another full administrator. Full administrators may also edit their own Users admin record (the only self-edit exception), but cannot change their own role or disable themselves. With `roles.assign`, you may only assign a role whose permissions are a **proper subset** of yours (never the same role or one with extra caps). An account with `users.manage` alone can manage non-admin users but cannot change their role (`roles.assign`), password (`users.password`), or project membership (`projects.assign`), and cannot change administrator accounts. Non-admin accounts still cannot edit themselves from Users admin — another administrator must change them.
 
 ---
 

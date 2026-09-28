@@ -1526,6 +1526,162 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
         assert PERMISSION_ROLES_MANAGE in keys
 
 
+def test_role_assign_must_be_strictly_below_actor(auth_client, auth_ctx):
+    """roles.assign may only grant a proper subset of the actor's permissions."""
+    from creopdm.auth_constants import (
+        PERMISSION_OBJECTS_VIEW,
+        PERMISSION_ROLES_ASSIGN,
+        PERMISSION_USERS_MANAGE,
+        PERMISSION_USERS_PASSWORD,
+    )
+
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+
+    # Mid-level assigner: users + passwords + roles.assign (not full admin).
+    mid = auth_client.post(
+        "/admin/roles/new",
+        data={
+            "name": "Team Lead",
+            "description": "Can assign roles below themselves",
+            "permission": [
+                PERMISSION_USERS_MANAGE,
+                PERMISSION_USERS_PASSWORD,
+                PERMISSION_ROLES_ASSIGN,
+                PERMISSION_OBJECTS_VIEW,
+            ],
+        },
+        follow_redirects=False,
+    )
+    assert mid.status_code == 303, mid.text
+    # Peer role with the same caps — must not be assignable by Team Lead.
+    peer = auth_client.post(
+        "/admin/roles/new",
+        data={
+            "name": "Team Lead Twin",
+            "description": "Same caps as Team Lead",
+            "permission": [
+                PERMISSION_USERS_MANAGE,
+                PERMISSION_USERS_PASSWORD,
+                PERMISSION_ROLES_ASSIGN,
+                PERMISSION_OBJECTS_VIEW,
+            ],
+        },
+        follow_redirects=False,
+    )
+    assert peer.status_code == 303, peer.text
+    lower = auth_client.post(
+        "/admin/roles/new",
+        data={
+            "name": "Team Viewer",
+            "description": "Below Team Lead",
+            "permission": [PERMISSION_OBJECTS_VIEW],
+        },
+        follow_redirects=False,
+    )
+    assert lower.status_code == 303, lower.text
+
+    created = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Lead",
+            "username": "lead",
+            "email": "",
+            "role": "Team Lead",
+            "status": UserStatus.ACTIVE.value,
+            "password": "LeadPass1",
+            "password_confirm": "LeadPass1",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303, created.text
+    bait = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Bait",
+            "username": "bait",
+            "email": "",
+            "role": BuiltinRole.VIEWER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "BaitPass1",
+            "password_confirm": "BaitPass1",
+        },
+        follow_redirects=False,
+    )
+    assert bait.status_code == 303, bait.text
+
+    with auth_ctx.session_factory() as db:
+        lead = db.scalar(select(User).where(User.username == "lead"))
+        bait_user = db.scalar(select(User).where(User.username == "bait"))
+        assert lead is not None and bait_user is not None
+        lead.must_change_password = False
+        bait_uuid = bait_user.uuid
+        db.commit()
+
+    _login(auth_client, "lead", "LeadPass1")
+    form = auth_client.get(f"/admin/users/{bait_uuid}")
+    assert form.status_code == 200
+    assert "Team Viewer" in form.text
+    assert "Team Lead Twin" not in form.text
+    assert "Team Lead</option>" not in form.text
+    assert BuiltinRole.ADMINISTRATOR.value not in form.text
+    assert "fewer" in form.text.lower()
+
+    denied_peer = auth_client.post(
+        f"/admin/users/{bait_uuid}",
+        data={
+            "display_name": "Bait",
+            "email": "",
+            "role": "Team Lead Twin",
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+        },
+        follow_redirects=False,
+    )
+    assert denied_peer.status_code == 400, denied_peer.text
+    assert "fewer permissions" in denied_peer.text.lower()
+
+    denied_self_role = auth_client.post(
+        f"/admin/users/{bait_uuid}",
+        data={
+            "display_name": "Bait",
+            "email": "",
+            "role": "Team Lead",
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+        },
+        follow_redirects=False,
+    )
+    assert denied_self_role.status_code == 400, denied_self_role.text
+
+    allowed = auth_client.post(
+        f"/admin/users/{bait_uuid}",
+        data={
+            "display_name": "Bait",
+            "email": "",
+            "role": "Team Viewer",
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+        },
+        follow_redirects=False,
+    )
+    assert allowed.status_code == 303, allowed.text
+    with auth_ctx.session_factory() as db:
+        bait_user = db.scalar(select(User).where(User.username == "bait"))
+        assert bait_user is not None
+        assert auth_ctx.user_accounts.primary_role_name(bait_user) == "Team Viewer"
+
+    # Full admin cannot assign Administrator (peer) either — only strictly lower.
+    _login(auth_client, "admin", "AdminPass1")
+    admin_new = auth_client.get("/admin/users/new")
+    assert admin_new.status_code == 200
+    assert BuiltinRole.ADMINISTRATOR.value not in admin_new.text
+    assert BuiltinRole.ENGINEER.value in admin_new.text
+
+
 def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
     """users.manage alone cannot edit/promote full admins or assign roles; full admins still can."""
     from creopdm.auth_constants import PERMISSION_USERS_MANAGE
