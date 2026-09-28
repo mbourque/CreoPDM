@@ -864,6 +864,22 @@ def test_revert_hidden_when_only_one_version(client, repo_parent):
 
 
 @requires_git
+def test_product_workspace_content_rejects_existing_object_path(client, repo_parent):
+    """Staging must not overwrite a path that already belongs to a PDM object."""
+    product, obj = _create_part(client, repo_parent)
+    relative = obj.get("relative_path") or obj["filename"]
+    blocked = client.put(
+        f"/api/products/{product['uuid']}/workspace-content",
+        params={"path": relative},
+        files={"file": (Path(relative).name, b"overwrite-attempt", "application/octet-stream")},
+    )
+    assert blocked.status_code == 400, blocked.text
+    body = blocked.json()
+    assert body["error"]["code"] == "INVALID_PATH"
+    assert "already belongs" in (body["error"].get("message") or "").lower()
+
+
+@requires_git
 def test_product_workspace_content_stages_new_file_for_add(client, repo_parent, data_dir):
     product, _obj = _create_part(client, repo_parent)
     uploaded = client.put(

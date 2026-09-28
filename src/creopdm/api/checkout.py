@@ -9,7 +9,14 @@ from fastapi.responses import FileResponse
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from creopdm.api.deps import get_context, get_db, load_accessible_product, require_permission, require_product_access
+from creopdm.api.deps import (
+    get_context,
+    get_db,
+    load_accessible_objects,
+    load_accessible_product,
+    require_permission,
+    require_product_access,
+)
 from creopdm.api.serializers import object_to_response
 from creopdm.auth_constants import (
     PERMISSION_OBJECTS_CHECKIN,
@@ -108,6 +115,39 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
     return presented
 
 
+def _notify_batch_by_product(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    objects: list,
+    result: dict,
+    action: str,
+) -> None:
+    from collections import defaultdict
+
+    from creopdm.api.watch_notify import notify_product_watchers
+
+    by_uuid = {obj.uuid: obj for obj in objects}
+    names_by_product: dict[int, list[str]] = defaultdict(list)
+    product_by_id = {}
+    for item in result.get("ok") or []:
+        obj = by_uuid.get(item.get("uuid") or "")
+        name = item.get("filename")
+        if obj is None or not name:
+            continue
+        names_by_product[obj.product.id].append(name)
+        product_by_id[obj.product.id] = obj.product
+    for product_id, names in names_by_product.items():
+        notify_product_watchers(
+            request,
+            ctx,
+            db,
+            product_by_id[product_id],
+            action=action,
+            filenames=names,
+        )
+
+
 @router.post("/api/objects/batch/checkout", response_model=BatchOperationResponse)
 def checkout_batch(
     payload: BatchObjectRequest,
@@ -116,24 +156,10 @@ def checkout_batch(
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
-    if payload.object_ids:
-        sample = ctx.objects.get_object(db, payload.object_ids[0])
-        require_product_access(request, ctx, sample.product)
+    objects = load_accessible_objects(request, ctx, db, payload.object_ids)
     result = ctx.checkouts.checkout_many(db, payload.object_ids)
     if result.get("ok"):
-        from creopdm.api.watch_notify import notify_product_watchers
-
-        sample = ctx.objects.get_object(db, payload.object_ids[0])
-        names = [item["filename"] for item in result["ok"] if item.get("filename")]
-        if names:
-            notify_product_watchers(
-                request,
-                ctx,
-                db,
-                sample.product,
-                action="Checked out",
-                filenames=names,
-            )
+        _notify_batch_by_product(request, ctx, db, objects, result, "Checked out")
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.config.workspace_root())}
     )
@@ -147,24 +173,10 @@ def undo_checkout_batch(
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_CHECKOUT)
-    if payload.object_ids:
-        sample = ctx.objects.get_object(db, payload.object_ids[0])
-        require_product_access(request, ctx, sample.product)
+    objects = load_accessible_objects(request, ctx, db, payload.object_ids)
     result = ctx.checkouts.undo_checkout_many(db, payload.object_ids)
     if result.get("ok"):
-        from creopdm.api.watch_notify import notify_product_watchers
-
-        sample = ctx.objects.get_object(db, payload.object_ids[0])
-        names = [item["filename"] for item in result["ok"] if item.get("filename")]
-        if names:
-            notify_product_watchers(
-                request,
-                ctx,
-                db,
-                sample.product,
-                action="Checkout canceled",
-                filenames=names,
-            )
+        _notify_batch_by_product(request, ctx, db, objects, result, "Checkout canceled")
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.config.workspace_root())}
     )
@@ -179,16 +191,7 @@ def agent_cache_manifest(
 ) -> AgentCacheManifestResponse:
     """Content identities for agent-cache hit detection (no file bodies)."""
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    objects = ctx.objects.get_objects(db, payload.object_ids)
-    if objects:
-        require_product_access(request, ctx, objects[0].product)
-    if len(objects) != len(payload.object_ids):
-        found = {obj.uuid for obj in objects}
-        missing = [item for item in payload.object_ids if item not in found]
-        raise ValidationAppError(
-            "One or more objects were not found.",
-            details={"missing": missing[:20]},
-        )
+    objects = load_accessible_objects(request, ctx, db, payload.object_ids)
     product_ids = {obj.product.uuid for obj in objects}
     if len(product_ids) != 1:
         raise ValidationAppError("All files must belong to the same product.")
@@ -208,16 +211,7 @@ def agent_cache_archive(
 ) -> FileResponse:
     """Zip vault files (nested relative paths) for one-shot agent-cache download — no Creo open prep."""
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
-    objects = ctx.objects.get_objects(db, payload.object_ids)
-    if objects:
-        require_product_access(request, ctx, objects[0].product)
-    if len(objects) != len(payload.object_ids):
-        found = {obj.uuid for obj in objects}
-        missing = [item for item in payload.object_ids if item not in found]
-        raise ValidationAppError(
-            "One or more objects were not found.",
-            details={"missing": missing[:20]},
-        )
+    objects = load_accessible_objects(request, ctx, db, payload.object_ids)
     product_ids = {obj.product.uuid for obj in objects}
     if len(product_ids) != 1:
         raise ValidationAppError("All files must belong to the same product.")

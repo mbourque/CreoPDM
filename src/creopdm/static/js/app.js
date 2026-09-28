@@ -5059,6 +5059,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         items: list.map((item) => ({
           object_id: String(item.object_id),
           filename: String(item.filename || ""),
+          relative_path: String(item.relative_path || ""),
         })),
       }),
     });
@@ -6016,13 +6017,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           owned[0]?.dataset.filename ||
           document.querySelector(".detail-head .object-open")?.textContent?.trim() ||
           "";
-        pushItems.push({ object_id: objectId, filename: name });
+        pushItems.push({
+          object_id: objectId,
+          filename: name,
+          relative_path: owned[0]?.dataset.relativePath || "",
+        });
       } else if (!productScope) {
         owned.forEach((row) => {
           if (row.dataset.uuid) {
             pushItems.push({
               object_id: row.dataset.uuid,
               filename: row.dataset.filename || "",
+              relative_path: row.dataset.relativePath || "",
             });
           }
         });
@@ -6031,6 +6037,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             pushItems.push({
               object_id: row.dataset.uuid,
               filename: row.dataset.filename || "",
+              relative_path: row.dataset.relativePath || "",
             });
           }
         });
@@ -6051,6 +6058,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
                 pushItems.push({
                   object_id: String(item.uuid),
                   filename: String(item.filename || ""),
+                  relative_path: String(item.relative_path || ""),
                 });
               }
             });
@@ -6071,6 +6079,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               pushItems.push({
                 object_id: String(item.uuid),
                 filename: String(item.filename || ""),
+                relative_path: String(item.relative_path || ""),
               });
             });
         } catch {

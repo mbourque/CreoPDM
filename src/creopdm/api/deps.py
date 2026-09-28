@@ -8,7 +8,8 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 
 from creopdm.context import AppContext
-from creopdm.exceptions import PermissionDeniedError
+from creopdm.exceptions import PermissionDeniedError, ValidationAppError
+from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
 
 
@@ -49,6 +50,29 @@ def require_product_access(request: Request, ctx: AppContext, product: Product) 
     if ctx.user_accounts.user_can_access_product(user, product):
         return
     raise PermissionDeniedError("You do not have access to this product.")
+
+
+def load_accessible_objects(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    object_ids: list[str] | None,
+) -> list[EngineeringObject]:
+    """Load objects by UUID and enforce product access for every id."""
+    requested = [oid for oid in dict.fromkeys(object_ids or []) if oid]
+    if not requested:
+        return []
+    objects = ctx.objects.get_objects(db, requested)
+    found = {obj.uuid for obj in objects}
+    missing = [oid for oid in requested if oid not in found]
+    if missing:
+        raise ValidationAppError(
+            "One or more objects were not found.",
+            details={"missing": missing[:20]},
+        )
+    for obj in objects:
+        require_product_access(request, ctx, obj.product)
+    return objects
 
 
 def accessible_products(request: Request, ctx: AppContext, db: Session) -> list[Product]:

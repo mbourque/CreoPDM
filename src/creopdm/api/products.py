@@ -626,6 +626,15 @@ async def put_product_workspace_content(
     """Stage a new local agent file into the vault (no PDM object required yet)."""
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
     product = load_accessible_product(request, ctx, db, product_id)
+    relative = str(path or "").replace("\\", "/").lstrip("/")
+    extras = ctx.config.purgeable_cad_extensions()
+    logical = CreoFileManager.logical_repo_path(relative, extras)
+    for existing_rel, _filename in ctx.objects.list_path_index(db, product.id):
+        if CreoFileManager.logical_repo_path(existing_rel, extras) == logical:
+            raise PathValidationError(
+                "That path already belongs to a product file. Check it out to update it.",
+                details={"relative_path": relative, "existing": existing_rel},
+            )
     data = await file.read()
     written = ctx.workspaces.stage_new_workspace_file(product, path, data)
     return WorkspaceContentResponse(

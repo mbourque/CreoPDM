@@ -471,15 +471,33 @@ class WorkspaceService:
         product: Product,
         relative_path: str,
         data: bytes,
+        *,
+        allow_existing_untracked: bool = True,
     ) -> Path:
-        """Write a new (not yet PDM) file into the vault working tree."""
+        """Write a new (not yet PDM) file into the vault working tree.
+
+        Rejects reserved path segments (``.git``, etc.). Overwriting an existing
+        file is allowed only for untracked staging when ``allow_existing_untracked``
+        is true — callers must refuse paths that already belong to a PDM object.
+        """
         relative = assert_safe_relative_path(str(relative_path or "").replace("\\", "/")).as_posix()
         if not data:
             raise PathValidationError("The uploaded file is empty.")
+        parts = Path(relative).parts
+        if any(part.lower() in _RESERVED_WORKSPACE_DIRS for part in parts):
+            raise PathValidationError(
+                "That path uses a reserved folder name and cannot be staged.",
+                details={"relative_path": relative},
+            )
         name = Path(relative).name
         if self._is_ignored(name):
             raise PathValidationError(f"{name} is ignored and cannot be staged.")
         destination = self.file_path(product, relative)
+        if destination.exists() and not allow_existing_untracked:
+            raise PathValidationError(
+                "A file already exists at that vault path. Check out the object to update it.",
+                details={"relative_path": relative},
+            )
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.exists():
             set_file_writable(destination)

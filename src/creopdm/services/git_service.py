@@ -161,9 +161,11 @@ class GitService:
                 last_error = exc
                 if not is_git_index_lock_error(exc.message):
                     raise
+                # Never drop below the normal stale window — a live commit can
+                # hold index.lock longer than a couple of seconds.
                 cleared = clear_stale_git_index_lock(
                     cwd,
-                    max_age_sec=2.0 if attempt >= 3 else _INDEX_LOCK_STALE_SEC,
+                    max_age_sec=_INDEX_LOCK_STALE_SEC,
                 )
                 logger.warning(
                     "Git index.lock busy (%s/%s)%s; retrying in %.1fs",

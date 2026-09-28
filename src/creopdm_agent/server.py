@@ -179,6 +179,7 @@ class PickFilesResponse(BaseModel):
 class PushItem(BaseModel):
     object_id: str
     filename: str = ""
+    relative_path: str = ""
 
 
 class PushRequest(BaseModel):
@@ -493,15 +494,19 @@ def _plan_cache_downloads(
             rel_key = local.name
         cached = index.get(rel_key) or index.get(local.name) or index.get(disk_name)
         if (
-            isinstance(cached, dict)
+            expected_hash
+            and isinstance(cached, dict)
             and str(cached.get("hash") or "").lower() == expected_hash
-            and expected_hash
             and int(cached.get("size") or -1) == local_size
         ):
+            # Size+remembered hash match: safe skip (content change without size change
+            # still invalidates when hash was updated after a prior verify).
             skipped += 1
             continue
 
-        if expected_hash and (not expected_size or local_size == expected_size):
+        # Always hash when we need a content check. Never treat "size matches"
+        # alone as proof the file is unchanged (edits can preserve size).
+        if expected_hash:
             try:
                 digest = calculate_sha256(local).lower()
             except Exception:
@@ -827,7 +832,18 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                         )
                     )
                     continue
-                local = _find_cache_file(cache_dir, filename) if filename else None
+                rel = (item.relative_path or "").replace("\\", "/").lstrip("/")
+                local = None
+                if filename or rel:
+                    local = _find_planned_cache_file(
+                        cache_dir,
+                        CachePlanItem(
+                            object_id=object_id,
+                            filename=filename or Path(rel).name,
+                            disk_name=filename or Path(rel).name,
+                            relative_path=rel,
+                        ),
+                    )
                 if local is None:
                     failed.append(
                         PushItemResult(

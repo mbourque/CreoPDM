@@ -981,6 +981,50 @@ def _assert_forbidden(response) -> None:
 
 
 @requires_git
+def test_batch_checkout_denies_inaccessible_product_object(auth_client, auth_ctx, repo_parent):
+    """Batch checkout must not touch objects in products the user cannot access."""
+    _setup_admin_and_users(auth_client, auth_ctx, ("limited", BuiltinRole.ENGINEER.value))
+    _login(auth_client, "admin", "AdminPass1")
+    alpha = auth_client.post("/api/products", json={"name": "Alpha Batch"}).json()
+    beta = auth_client.post("/api/products", json={"name": "Beta Batch"}).json()
+    with auth_ctx.session_factory() as db:
+        user = db.scalar(select(User).where(User.username == "limited"))
+        assert user is not None
+        user.access_all_products = False
+        user.must_change_password = False
+        db.commit()
+        user_uuid = user.uuid
+    restricted = auth_client.post(
+        f"/admin/membership/users/{user_uuid}",
+        data={"product_access_present": "1", "product_uuid": [alpha["uuid"]]},
+        follow_redirects=False,
+    )
+    assert restricted.status_code == 303, restricted.text
+
+    _login(auth_client, "admin", "AdminPass1")
+    alpha_obj = auth_client.post(
+        f"/api/products/{alpha['uuid']}/objects",
+        files={"file": ("alpha.prt", b"a", "application/octet-stream")},
+        data={"comment": "init"},
+    )
+    assert alpha_obj.status_code == 201, alpha_obj.text
+    beta_obj = auth_client.post(
+        f"/api/products/{beta['uuid']}/objects",
+        files={"file": ("beta.prt", b"b", "application/octet-stream")},
+        data={"comment": "init"},
+    )
+    assert beta_obj.status_code == 201, beta_obj.text
+
+    _login(auth_client, "limited", "LimitedPass1")
+    denied = auth_client.post(
+        "/api/objects/batch/checkout",
+        json={"object_ids": [alpha_obj.json()["uuid"], beta_obj.json()["uuid"]]},
+    )
+    assert denied.status_code == 403, denied.text
+    assert denied.json()["error"]["code"] == "FORBIDDEN"
+
+
+@requires_git
 def test_paul_checkout_blocks_david(auth_client, auth_ctx, repo_parent):
     """Session users: only the holder may own a checkout (Paul vs David)."""
     _setup_admin_and_engineers(auth_client, auth_ctx, "paul", "david")
