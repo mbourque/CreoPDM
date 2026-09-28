@@ -852,6 +852,7 @@ span.object-open:hover { text-decoration: underline; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-small { font-size: 0.78rem; }
 .btn-primary { background: var(--accent); color: white; border-color: #8d3e12; }
+.btn-primary:hover:not(:disabled) { color: white; }
 .btn-danger { color: #9b1c1c; border-color: #d7a3a3; }
 .btn-danger:hover:not(:disabled) { border-color: #9b1c1c; background: #fdf2f2; }
 
@@ -1010,6 +1011,21 @@ body.is-file-drag #file-drop-overlay {
 .detail span.object-open:hover {
   color: var(--ink);
   text-decoration: underline;
+}
+/* Primary/danger button links must keep button colors (`.detail a` is more specific). */
+.detail a.btn {
+  text-decoration: none;
+}
+.detail a.btn:hover {
+  text-decoration: none;
+}
+.detail a.btn-primary,
+.detail a.btn-primary:hover {
+  color: #fff;
+}
+.detail a.btn-danger,
+.detail a.btn-danger:hover {
+  color: #9b1c1c;
 }
 .detail .crumb a {
   color: var(--muted);

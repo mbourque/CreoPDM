@@ -604,6 +604,10 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert "accent-colored hyperlinks" in docs
     assert ".detail a" in css
     assert "color: var(--ink)" in css
+    # Admin Add user / Add role / etc. are <a class="btn btn-primary"> inside .detail —
+    # must keep white text (`.detail a` alone would force ink).
+    assert ".detail a.btn-primary" in css
+    assert "color: #fff" in _between(css, ".detail a.btn-primary", ".detail a.btn-danger")
     assert ".detail .bom-legend-in" in css
     # One content size on Details — kv/grid inherit, not a smaller rem.
     assert ".detail .kv" in css and "font-size: inherit" in _between(css, ".detail .kv {", ".detail .kv dt")
