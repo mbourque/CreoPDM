@@ -23,14 +23,18 @@
       </label>
       <label>Username
         {% if mode == 'new' %}
-        <input name="username" type="text" value="{{ form.username }}" required maxlength="64" autocomplete="username">
+        <input name="username" type="text" value="{{ form.username }}" required maxlength="64" autocomplete="username" pattern="[A-Za-z0-9_]{2,64}" title="Letters, numbers, or underscore only">
         {% else %}
         <input type="text" value="{{ form.username }}" disabled>
         {% endif %}
       </label>
+      {% if mode == 'new' %}
+      <p class="muted small">2–64 characters: letters, numbers, or underscore only (no spaces). Sign-in is not case-sensitive.</p>
+      {% endif %}
       <label>Email
         <input name="email" type="email" value="{{ form.email }}" required maxlength="255" autocomplete="email">
       </label>
+      <p class="muted small">Must look like <code>name@example.com</code>.</p>
       {% if can_assign_roles and not editing_self %}
       <label>Role
         <select name="role">

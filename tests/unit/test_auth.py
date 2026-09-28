@@ -199,6 +199,106 @@ def test_setup_and_admin_user_require_email(auth_client, auth_ctx):
         assert target.email == "has@example.com"
 
 
+def test_username_rejects_spaces_and_email_needs_domain(auth_client, auth_ctx):
+    """Usernames: letters/numbers/underscore only; emails need name@domain.tld."""
+    from creopdm.exceptions import ValidationAppError
+    from creopdm.services.user_service import validate_email, validate_username
+
+    assert validate_username("Jane_Doe") == "jane_doe"
+    assert validate_username("  Admin99  ") == "admin99"
+    assert validate_username("ab") == "ab"
+
+    for bad in ("x", "Pat O'Neil", "a@b", "user-name", "user.name", "has space"):
+        try:
+            validate_username(bad)
+            raise AssertionError(f"expected {bad!r} to fail")
+        except ValidationAppError as exc:
+            assert "username" in exc.message.lower() or "letters" in exc.message.lower()
+
+    assert validate_email("Name@Example.COM") == "Name@example.com"
+    try:
+        validate_email("sdfsdf@ss")
+        raise AssertionError("expected incomplete domain to fail")
+    except ValidationAppError as exc:
+        assert "valid email" in exc.message.lower()
+    try:
+        validate_email("not-an-email")
+        raise AssertionError("expected bare local-part to fail")
+    except ValidationAppError as exc:
+        assert "valid email" in exc.message.lower()
+
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "email": "admin@example.com",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    spaced = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Has Space",
+            "username": "has space",
+            "email": "space@example.com",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "SpacePass1",
+            "password_confirm": "SpacePass1",
+        },
+        follow_redirects=False,
+    )
+    assert spaced.status_code == 400
+    assert "username" in spaced.text.lower()
+
+    bad_email = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Bad Mail",
+            "username": "bad_mail",
+            "email": "sdfsdf@ss",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "BadmailPass1",
+            "password_confirm": "BadmailPass1",
+        },
+        follow_redirects=False,
+    )
+    assert bad_email.status_code == 400
+    assert "valid email" in bad_email.text.lower()
+
+    created = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Jane Doe",
+            "username": "Jane_Doe",
+            "email": "jane@example.com",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "JanePass12",
+            "password_confirm": "JanePass12",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303, created.text
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(User).where(User.username == "jane_doe"))
+        assert row is not None
+        assert row.email == "jane@example.com"
+        row.must_change_password = False
+        db.commit()
+
+    login = auth_client.post(
+        "/login",
+        data={"username": "JANE_DOE", "password": "JanePass12"},
+        follow_redirects=False,
+    )
+    assert login.status_code == 303, login.text
+
+
 def test_login_logout_and_disabled_user(auth_client, auth_ctx):
     auth_client.post(
         "/setup",

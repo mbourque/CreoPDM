@@ -41,20 +41,20 @@ from creopdm.models.project import Project
 from creopdm.models.user import Permission, Role, RolePermission, User, UserProject, UserRole
 from creopdm.utils.passwords import hash_password, verify_password
 
-_USERNAME_RE = re.compile(r"^[a-zA-Z0-9._-]{2,64}$")
+# Login names: letters, digits, underscore only (no spaces or punctuation).
+_USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{2,64}$")
 _ROLE_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 ._/-]{0,62}[a-zA-Z0-9]$|^[a-zA-Z0-9]$")
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _normalize_username(username: str) -> str:
-    return (username or "").strip().lower()
+    return (username or "").strip().casefold()
 
 
 def validate_username(username: str) -> str:
     value = _normalize_username(username)
     if not _USERNAME_RE.match(value):
         raise ValidationAppError(
-            "Username must be 2–64 characters: letters, numbers, dot, underscore, or hyphen."
+            "Username must be 2–64 characters: letters, numbers, or underscore only (no spaces)."
         )
     return value
 
@@ -67,12 +67,20 @@ def validate_password(password: str) -> str:
 
 
 def validate_email(email: str) -> str:
+    """Require a real name@domain.tld address (email-validator; no DNS lookup)."""
+    from email_validator import EmailNotValidError
+    from email_validator import validate_email as validate_email_address
+
     value = (email or "").strip()
     if not value:
         raise ValidationAppError("Email is required.")
-    if len(value) > 255 or not _EMAIL_RE.match(value):
+    if len(value) > 255:
         raise ValidationAppError("Enter a valid email address.")
-    return value
+    try:
+        result = validate_email_address(value, check_deliverability=False)
+    except EmailNotValidError as exc:
+        raise ValidationAppError("Enter a valid email address.") from exc
+    return str(result.normalized)
 
 
 def validate_role_name(name: str) -> str:

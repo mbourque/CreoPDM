@@ -12,11 +12,13 @@
         <input name="display_name" type="text" value="{{ display_name or '' }}" required autocomplete="name" maxlength="255">
       </label>
       <label>Username
-        <input name="username" type="text" value="{{ username or 'admin' }}" required autocomplete="username" maxlength="64">
+        <input name="username" type="text" value="{{ username or 'admin' }}" required autocomplete="username" maxlength="64" pattern="[A-Za-z0-9_]{2,64}" title="Letters, numbers, or underscore only">
       </label>
+      <p class="muted small">2–64 characters: letters, numbers, or underscore only (no spaces). Sign-in is not case-sensitive.</p>
       <label>Email
         <input name="email" type="email" value="{{ email or '' }}" required autocomplete="email" maxlength="255">
       </label>
+      <p class="muted small">Must look like <code>name@example.com</code>.</p>
       <label>Password
         <input name="password" type="password" required autocomplete="new-password" minlength="8">
       </label>

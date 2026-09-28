@@ -351,14 +351,16 @@ Use a normal browser for these checks. You need the matching Administration perm
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Open the app when **no users** exist yet | Send you to **Create administrator** (`/setup`) | Let you use Files / login as if accounts already exist |
-| Create the first admin with display name, username, **email**, and password | Create an **Administrator** with **All projects**, sign you in, and take you to the app | Accept a blank or invalid email; leave email optional |
+| Create the first admin with display name, username, **email**, and password | Create an **Administrator** with **All projects**, sign you in, and take you to the app | Accept a blank email or an incomplete address like `user@host` (no domain suffix); leave email optional |
 | Try `/setup` again after any user exists | Redirect to login | Create a second “first” admin |
 
 ### Users
 
 | You do | App should | App must not |
 |--------|------------|--------------|
+| Open **Add user** with spaces or symbols in the username (e.g. `Pat O'Neil`, `a@b`) | Reject with a clear validation error | Accept spaces or special characters |
 | Open **Add user** | Require display name, username, **email**, role (if you can assign), status, and initial password | Treat email as optional; let you set project membership on this form |
+| Enter email `sdfsdf@ss` or other non-`name@domain.tld` values | Reject with a clear validation error | Save incomplete domains |
 | Save a new user | Create the account with **no project access**; point you to **Membership** to grant access; return to the Users list | Give the new user All projects or any project by default |
 | Edit a user and clear email | Reject with “Email is required” (or equivalent) and keep the previous address | Save a blank email |
 | Open the Role dropdown (with `roles.assign`) | List only roles with **fewer** permissions than yours (not your role, not a peer, not a higher role) | Offer Administrator to another Administrator, or the same role as yours |
@@ -419,6 +421,8 @@ Try the same with **Add folder…** and **Add folders…**.
 - Check In ▾ with nothing pending → options stay disabled.  
 - On a phone: tap a file name → must not open; shrink Creo on desktop → must not enter browse-only.  
 - Setup / Add user / Edit user with blank email → blocked.  
+- Setup / Add user with spaces or special characters in username → blocked.  
+- Setup / Add user with `sdfsdf@ss` (no real domain) → blocked.  
 - Add user → new account has no projects until Membership grants them.  
 - Role dropdown → your own role / a peer role / a higher role must not appear.  
 - Email admin: change SMTP fields then Send test without Save → blocked.
@@ -433,7 +437,7 @@ Automated coverage lives mainly in:
 - `tests/unit/test_user_interaction_validations.py`
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
-- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `objects.view` / `data-can-checkout`; empty-home `projects.create` hero; empty-project `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_objects_view_lands_on_administration`; `test_setup_and_admin_user_require_email`; `test_admin_email_settings_save_and_gate`; `test_admin_membership_project_access_filters_projects`; `test_role_assign_must_be_strictly_below_actor`; new users default to no project access)
+- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `objects.view` / `data-can-checkout`; empty-home `projects.create` hero; empty-project `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_objects_view_lands_on_administration`; `test_setup_and_admin_user_require_email`; `test_username_rejects_spaces_and_email_needs_domain`; `test_admin_email_settings_save_and_gate`; `test_admin_membership_project_access_filters_projects`; `test_role_assign_must_be_strictly_below_actor`; new users default to no project access)
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
 - Related checkout / check-in / soft-nav tests
