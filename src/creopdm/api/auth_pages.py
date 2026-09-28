@@ -543,6 +543,7 @@ def _user_form_admin_flags(ctx: AppContext, admin: User) -> dict:
         "can_assign_roles": ctx.user_accounts.can_assign_roles(admin),
         "can_assign_products": ctx.user_accounts.can_assign_products(admin),
         "can_set_passwords": ctx.user_accounts.can_set_passwords(admin),
+        "actor_is_full_admin": ctx.user_accounts.is_full_administrator(admin),
     }
 
 

@@ -1747,7 +1747,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
 
 
 def test_role_assign_must_be_strictly_below_actor(auth_client, auth_ctx):
-    """roles.assign may only grant a proper subset of the actor's permissions."""
+    """Non-full-admins with roles.assign may only grant a proper subset; full admins may assign any role."""
     from creopdm.auth_constants import (
         PERMISSION_OBJECTS_VIEW,
         PERMISSION_ROLES_ASSIGN,
@@ -1894,12 +1894,34 @@ def test_role_assign_must_be_strictly_below_actor(auth_client, auth_ctx):
         assert bait_user is not None
         assert auth_ctx.user_accounts.primary_role_name(bait_user) == "Team Viewer"
 
-    # Full admin cannot assign Administrator (peer) either — only strictly lower.
+    # Full admin may assign any role, including Administrator.
     _login(auth_client, "admin", "AdminPass1")
     admin_new = auth_client.get("/admin/users/new")
     assert admin_new.status_code == 200
-    assert BuiltinRole.ADMINISTRATOR.value not in admin_new.text
+    assert BuiltinRole.ADMINISTRATOR.value in admin_new.text
     assert BuiltinRole.ENGINEER.value in admin_new.text
+    assert BuiltinRole.PDM_MANAGER.value in admin_new.text
+    assert BuiltinRole.VIEWER.value in admin_new.text
+    assert "fewer" not in admin_new.text.lower()
+
+    create_admin = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Second Admin",
+            "username": "admin2",
+            "email": "admin2@example.com",
+            "role": BuiltinRole.ADMINISTRATOR.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "Admin2Pass1",
+            "password_confirm": "Admin2Pass1",
+        },
+        follow_redirects=False,
+    )
+    assert create_admin.status_code == 303, create_admin.text
+    with auth_ctx.session_factory() as db:
+        second = db.scalar(select(User).where(User.username == "admin2"))
+        assert second is not None
+        assert auth_ctx.user_accounts.primary_role_name(second) == BuiltinRole.ADMINISTRATOR.value
 
 
 def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
@@ -2272,8 +2294,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         ("view", BuiltinRole.VIEWER.value),
     )
 
-    # Spare full admin edits other accounts' membership (and can still demote another admin).
-    # No actor: Administrator is not assignable via roles.assign (must be strictly below).
+    # Spare full admin (created with actor=None so setup can mint a peer Administrator).
     with auth_ctx.session_factory() as db:
         auth_ctx.user_accounts.create_user(
             db,

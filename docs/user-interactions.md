@@ -367,7 +367,8 @@ Use a normal browser for these checks. You need the matching Administration perm
 | Enter email `dfdsf@ca` / `sdfsdf@ss` or other non-`name@domain.tld` values | Reject with a clear validation error (browser and server) | Save incomplete domains or bare TLDs like `@ca` |
 | Save a new user | Create the account with **no product access**; point you to **Membership** to grant access; return to the Users list | Give the new user All products or any product by default |
 | Edit a user and clear email | Reject with “Email is required” (or equivalent) and keep the previous address | Save a blank email |
-| Open the Role dropdown (with `roles.assign`) | List only roles with **fewer** permissions than yours (not your role, not a peer, not a higher role) | Offer Administrator to another Administrator, or the same role as yours |
+| Open the Role dropdown (with `roles.assign`) as a **full administrator** | List **every** role, including Administrator | Hide lower roles or block assigning Administrator |
+| Open the Role dropdown (with `roles.assign`) without full Administration | List only roles with **fewer** permissions than yours (not your role, not a peer, not a higher role) | Offer your own role, a peer role, or a higher role |
 | Try to change **your own** role or status | Block the change and tell you to ask another administrator | Let you demote or disable yourself |
 
 ### Membership

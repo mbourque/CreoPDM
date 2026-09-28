@@ -306,11 +306,13 @@ class UserService:
         return role_keys < actor_keys
 
     def ensure_can_assign_role(self, actor: User, role: Role) -> None:
-        """Require roles.assign; target role must be strictly below the actor's caps."""
+        """Require roles.assign. Full admins may assign any role; others only strictly below."""
         if not self.can_assign_roles(actor):
             raise PermissionDeniedError(
                 "You do not have permission to assign roles (roles.assign)."
             )
+        if self.is_full_administrator(actor):
+            return
         if not self.role_is_strictly_below(actor, role):
             raise ValidationAppError(
                 "You can only assign a role with fewer permissions than your own "
@@ -318,10 +320,17 @@ class UserService:
             )
 
     def assignable_roles_for(self, db: Session, actor: User) -> list[Role]:
-        """Roles the actor may pick on Add/Edit user (strictly below their own caps)."""
+        """Roles the actor may pick on Add/Edit user.
+
+        Full administrators see every role (including Administrator). Other
+        accounts with roles.assign only see roles strictly below their own caps.
+        """
         if not self.can_assign_roles(actor):
             return []
-        return [r for r in self.list_roles(db) if self.role_is_strictly_below(actor, r)]
+        roles = self.list_roles(db)
+        if self.is_full_administrator(actor):
+            return roles
+        return [r for r in roles if self.role_is_strictly_below(actor, r)]
 
     def can_manage_products(self, user: User) -> bool:
         """True when the user may open Administration → Products (full CRUD there)."""

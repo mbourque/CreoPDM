@@ -39,13 +39,13 @@ Others do not see Administration; direct URLs return **403**.
 
 **Lockout safety:** at least one **ACTIVE** user must keep **all** CreoPDM Administration permissions on the same account. Saving a role, demoting/disabling a user, or deleting a role is rejected if it would leave nobody with the full set. You also cannot change **name**, **description**, or **CreoPDM Administration** checkboxes on a role **assigned to you**, and you cannot **delete** your own role — ask another administrator.
 
-**Admins edit admins only:** a full administrator (all Administration caps) may edit **other** full administrators. Full administrators may also edit **their own** account from Users admin (the only self-edit exception), but **cannot** change their own role or disable/change their own status — ask another administrator. Role assignment always requires a **lower** permission set than the actor’s (including for Administrators — you cannot assign the Administrator role from the UI). Other accounts still cannot edit themselves — ask another administrator, or use **Account → password** for your own password.
+**Admins edit admins only:** a full administrator (all Administration caps) may edit **other** full administrators. Full administrators may also edit **their own** account from Users admin (the only self-edit exception), but **cannot** change their own role or disable/change their own status — ask another administrator. Full administrators may assign **any** role (including Administrator). Other accounts with `roles.assign` may only assign a role with **fewer** permissions than their own. Other accounts still cannot edit themselves — ask another administrator, or use **Account → password** for your own password.
 
 **Fine-grained Users admin caps** (separate from `users.manage`):
 
 | Permission | Allows |
 | --- | --- |
-| `roles.assign` | Change another user’s role to one with **fewer** permissions than your own (not the same role or a higher one). Otherwise Role is read-only; new users default to **Engineer** |
+| `roles.assign` | Change another user’s role. Full administrators may pick any role (including Administrator). Everyone else may only pick a role with **fewer** permissions than their own. Without this cap, Role is read-only and new users default to **Engineer** |
 | `users.password` | Set initial password on Add user, or reset password on Edit |
 | `products.assign` | Open **Administration → Membership** (By product / By user). New users default to **no** product access |
 
