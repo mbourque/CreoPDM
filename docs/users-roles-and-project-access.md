@@ -26,11 +26,12 @@ Disabled accounts cannot sign in. Checkout, check-in, and activity rows store th
 
 Users with any CreoPDM Administration capability (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `projects.manage`, `settings.manage`) see **Administration** (`/admin`):
 
-- **Users** — list accounts (Projects column: **All** or membership count); click a **name** to edit the user, or a **role** name to open that role (`roles.manage`); **Add user** (`users.manage` + `users.password` for the initial password)
+- **Users** — list accounts (Projects column: **All** or membership count); click a **name** to edit the user, or a **role** name to open that role (`roles.manage`); **Add user** (`users.manage` + `users.password` for the initial password). New users get **All projects**; membership is not edited here.
 - **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`). The role editor groups **CreoPDM Administration** (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `projects.manage`, `settings.manage`), **Projects**, and **Objects**.
+- **Membership** — decide who can open which projects (`projects.assign`): **By project** (tick restricted members) and **By user** (All projects / project multi-select)
 - **Projects** — list every active project on the server; create, edit, and soft-delete (`projects.manage`). Not limited by the signed-in user’s project membership list. (Files-page New/Delete still use `projects.create` / `projects.delete`.)
 - **Settings** — server options (Creo open mode, vault, file types, …) (`settings.manage`)
-- After a successful **Add user** / **Save** / role save / project save, you return to the list
+- After a successful **Add user** / **Save** / role save / project save / membership save, you return to the list
 - New users must change their password on first sign-in
 
 Others do not see Administration; direct URLs return **403**.
@@ -45,19 +46,18 @@ Others do not see Administration; direct URLs return **403**.
 | --- | --- |
 | `roles.assign` | Change another user’s role (otherwise Role is read-only; new users default to **Engineer**) |
 | `users.password` | Set initial password on Add user, or reset password on Edit |
-| `projects.assign` | Change All-projects / membership multi-select (otherwise membership is unchanged; new users get All projects) |
+| `projects.assign` | Open **Administration → Membership** (By project / By user). New users still default to All projects |
 
 Full-admin roles still require a full administrator to assign.
 
-### Project access (per user)
+### Project access (Membership)
 
-On **Add user** / **Edit user**, admins set which projects the account may open:
+On **Administration → Membership** (`projects.assign`):
 
-| Control | Behavior |
+| Mode | Behavior |
 | --- | --- |
-| **All projects** (checkbox, default on) | User sees every project; the project list below is disabled |
-| Project multi-select (scrollable) | When All projects is off, only selected projects appear in the app and APIs |
-| None selected (All off) | User can sign in but cannot browse or open any project (**empty** project list / **403** on project URLs) |
+| **By user** | **All projects** (default) or a multi-select project list; none selected → empty project list / **403** on project URLs |
+| **By project** | Tick which **restricted** users are members. Users with All projects are listed read-only (they already see the project); change All projects under By user |
 
 Creating a project while signed in as a restricted user automatically grants that user access to the new project.
 
@@ -78,7 +78,7 @@ Permission keys (`projects.*`, `objects.*` including **`objects.view`**, `users.
 | **PDM Manager** | Create/edit projects (Files/API) + Engineer authoring + **Copy to Vault** | Delete project, Administration → Projects (`projects.manage`), users, roles, settings |
 | **Administrator** | Everything above + delete project + full CreoPDM Administration (including Admin → Projects) | — |
 
-Automated coverage: `tests/unit/test_auth.py::test_every_starter_role_login_permission_matrix` creates one ephemeral user per starter role, logs each in, and asserts allow/deny for every built-in permission key (plus Files toolbar chrome and **project membership**: All / one project / none). Dedicated UI + lifecycle coverage: `test_admin_user_project_access_filters_projects`.
+Automated coverage: `tests/unit/test_auth.py::test_every_starter_role_login_permission_matrix` creates one ephemeral user per starter role, logs each in, and asserts allow/deny for every built-in permission key (plus Files toolbar chrome and **project membership**: All / one project / none). Dedicated UI + lifecycle coverage: `test_admin_membership_project_access_filters_projects`.
 
 When `auth_enabled` is false (unit tests with a static identity), all authoring and project caps are granted so the existing suite stays green.
 

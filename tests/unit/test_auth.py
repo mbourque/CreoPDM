@@ -326,8 +326,8 @@ def test_admin_can_edit_user(auth_client, auth_ctx):
 
 
 @requires_git
-def test_admin_user_project_access_filters_projects(auth_client, auth_ctx):
-    """Admin form multi-select + restrict / empty / restore for one Engineer.
+def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx):
+    """Membership By user + By project restrict / empty / restore for one Engineer.
 
     Broader per-starter-role membership coverage lives in
     test_every_starter_role_login_permission_matrix.
@@ -349,26 +349,15 @@ def test_admin_user_project_access_filters_projects(auth_client, auth_ctx):
     alpha = alpha_resp.json()
     beta = beta_resp.json()
 
-    form = auth_client.get("/admin/users/new")
-    assert form.status_code == 200
-    assert "Project access" in form.text
-    assert 'id="access-all-projects"' in form.text
-    assert 'name="project_uuid"' in form.text
-    assert 'multiple' in form.text
-    assert 'id="project-access-list"' in form.text
-    assert "type=\"checkbox\" name=\"project_uuid\"" not in form.text
-    # Soft-nav strips inline scripts; toggle must live in app.js (document-level).
-    assert "getElementById(\"access-all-projects\")" not in form.text
-    from pathlib import Path
+    hub = auth_client.get("/admin")
+    assert hub.status_code == 200
+    assert 'href="/admin/membership"' in hub.text
 
-    script = (
-        Path(__file__).resolve().parents[2] / "src" / "creopdm" / "static" / "js" / "app.js"
-    ).read_text(encoding="utf-8")
-    assert "function syncProjectAccessUi" in script
-    assert "__creopdmProjectAccessBound" in script
-    assert 'id !== "access-all-projects"' in script
-    assert "list.disabled = locked" in script
-    assert "syncProjectAccessUi();" in script
+    user_form = auth_client.get("/admin/users/new")
+    assert user_form.status_code == 200
+    assert "Project access" not in user_form.text
+    assert 'id="project-access-list"' not in user_form.text
+    assert "Administration → Membership" in user_form.text or "/admin/membership" in user_form.text
 
     created = auth_client.post(
         "/admin/users/new",
@@ -380,8 +369,6 @@ def test_admin_user_project_access_filters_projects(auth_client, auth_ctx):
             "status": UserStatus.ACTIVE.value,
             "password": "Limited1!",
             "password_confirm": "Limited1!",
-            "project_access_present": "1",
-            "project_uuid": [alpha["uuid"]],
         },
         follow_redirects=False,
     )
@@ -390,11 +377,47 @@ def test_admin_user_project_access_filters_projects(auth_client, auth_ctx):
     with auth_ctx.session_factory() as db:
         user = db.scalar(select(User).where(User.username == "limited"))
         assert user is not None
-        assert user.access_all_projects is False
-        assert {p.uuid for p in user.projects} == {alpha["uuid"]}
+        assert user.access_all_projects is True
         user.must_change_password = False
         user_uuid = user.uuid
         db.commit()
+
+    mem_home = auth_client.get("/admin/membership")
+    assert mem_home.status_code == 200
+    assert "By project" in mem_home.text
+    assert "By user" in mem_home.text
+    assert f'href="/admin/membership/users/{user_uuid}"' in mem_home.text
+    assert f'href="/admin/membership/projects/{alpha["uuid"]}"' in mem_home.text
+
+    mem_form = auth_client.get(f"/admin/membership/users/{user_uuid}")
+    assert mem_form.status_code == 200
+    assert 'id="access-all-projects"' in mem_form.text
+    assert 'id="project-access-list"' in mem_form.text
+    assert 'name="project_uuid"' in mem_form.text
+    assert "multiple" in mem_form.text
+    from pathlib import Path
+
+    script = (
+        Path(__file__).resolve().parents[2] / "src" / "creopdm" / "static" / "js" / "app.js"
+    ).read_text(encoding="utf-8")
+    assert "function syncProjectAccessUi" in script
+    assert "__creopdmProjectAccessBound" in script
+
+    restricted = auth_client.post(
+        f"/admin/membership/users/{user_uuid}",
+        data={
+            "project_access_present": "1",
+            "project_uuid": [alpha["uuid"]],
+        },
+        follow_redirects=False,
+    )
+    assert restricted.status_code == 303, restricted.text
+
+    with auth_ctx.session_factory() as db:
+        user = db.scalar(select(User).where(User.username == "limited"))
+        assert user is not None
+        assert user.access_all_projects is False
+        assert {p.uuid for p in user.projects} == {alpha["uuid"]}
 
     _login(auth_client, "limited", "Limited1!")
     listed = auth_client.get("/api/projects")
@@ -419,18 +442,13 @@ def test_admin_user_project_access_filters_projects(auth_client, auth_ctx):
         users_list.text,
     ), users_list.text
 
+    # By project: clear limited from Alpha members.
+    proj_form = auth_client.get(f"/admin/membership/projects/{alpha['uuid']}")
+    assert proj_form.status_code == 200
+    assert "Limited" in proj_form.text
     cleared = auth_client.post(
-        f"/admin/users/{user_uuid}",
-        data={
-            "display_name": "Limited",
-            "email": "",
-            "role": BuiltinRole.ENGINEER.value,
-            "status": UserStatus.ACTIVE.value,
-            "password": "",
-            "password_confirm": "",
-            "project_access_present": "1",
-            # All projects off, no project_uuid → cannot browse
-        },
+        f"/admin/membership/projects/{alpha['uuid']}",
+        data={},  # no member_uuid → remove all restricted members
         follow_redirects=False,
     )
     assert cleared.status_code == 303, cleared.text
@@ -443,14 +461,8 @@ def test_admin_user_project_access_filters_projects(auth_client, auth_ctx):
 
     _login(auth_client, "admin", "AdminPass1")
     restored = auth_client.post(
-        f"/admin/users/{user_uuid}",
+        f"/admin/membership/users/{user_uuid}",
         data={
-            "display_name": "Limited",
-            "email": "",
-            "role": BuiltinRole.ENGINEER.value,
-            "status": UserStatus.ACTIVE.value,
-            "password": "",
-            "password_confirm": "",
             "project_access_present": "1",
             "access_all_projects": "1",
         },
@@ -1431,7 +1443,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
     assert 'name="password"' not in eng_form.text
     assert "users.password" in eng_form.text
     assert 'name="project_uuid"' not in eng_form.text
-    assert "projects.assign" in eng_form.text
+    assert "projects.assign" in eng_form.text or "/admin/membership" in eng_form.text
 
     # Missing roles.assign: crafted POST cannot change Engineer → Viewer.
     promote = auth_client.post(
@@ -1715,22 +1727,24 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
 
     # Shared fixtures created as admin (always allowed).
     _login(auth_client, "admin", "AdminPass1")
-    form = auth_client.get("/admin/users/new")
+    form = auth_client.get("/admin/membership")
     assert form.status_code == 200
-    assert "Project access" in form.text
-    assert 'id="access-all-projects"' in form.text
+    assert "By project" in form.text
+    assert "By user" in form.text
+    user_new = auth_client.get("/admin/users/new")
+    assert user_new.status_code == 200
+    assert 'id="project-access-list"' not in user_new.text
 
     project = auth_client.post("/api/projects", json={"name": "Role Matrix"}).json()
     project_id = project["uuid"]
     other = auth_client.post("/api/projects", json={"name": "Other Matrix"})
     assert other.status_code == 201, other.text
     other_id = other.json()["uuid"]
-    # Multi-select options appear once projects exist.
-    form_with_projects = auth_client.get("/admin/users/new")
+    # Membership By-user form lists projects once they exist.
+    form_with_projects = auth_client.get("/admin/membership")
     assert form_with_projects.status_code == 200
-    assert 'multiple' in form_with_projects.text
-    assert 'name="project_uuid"' in form_with_projects.text
-    assert 'id="project-access-list"' in form_with_projects.text
+    assert "Role Matrix" in form_with_projects.text
+    assert f'href="/admin/membership/projects/{project_id}"' in form_with_projects.text
     created = auth_client.post(
         f"/api/projects/{project_id}/objects",
         files={"file": ("matrix.prt", b"matrix-bytes", "application/octet-stream")},
@@ -1933,14 +1947,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
 
         # projects.assign: try restricting bait to Role Matrix only, then restore All.
         mem_probe = auth_client.post(
-            f"/admin/users/{bait_uuid}",
+            f"/admin/membership/users/{bait_uuid}",
             data={
-                "display_name": bait_display,
-                "email": "",
-                "role": bait_role,
-                "status": UserStatus.ACTIVE.value,
-                "password": "",
-                "password_confirm": "",
                 "project_access_present": "1",
                 "project_uuid": [project_id],
             },
@@ -1949,14 +1957,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         probes[PERMISSION_PROJECTS_ASSIGN] = mem_probe
         if mem_probe.status_code in (302, 303):
             restored_mem = auth_client.post(
-                f"/admin/users/{bait_uuid}",
+                f"/admin/membership/users/{bait_uuid}",
                 data={
-                    "display_name": bait_display,
-                    "email": "",
-                    "role": bait_role,
-                    "status": UserStatus.ACTIVE.value,
-                    "password": "",
-                    "password_confirm": "",
                     "project_access_present": "1",
                     "access_all_projects": "1",
                 },
@@ -2010,14 +2012,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
 
         _login(auth_client, "ops", "OpsPass1")
         restricted = auth_client.post(
-            f"/admin/users/{user_uuid}",
+            f"/admin/membership/users/{user_uuid}",
             data={
-                "display_name": display_name,
-                "email": "",
-                "role": role_name,
-                "status": UserStatus.ACTIVE.value,
-                "password": "",
-                "password_confirm": "",
                 "project_access_present": "1",
                 "project_uuid": [project_id],
             },
@@ -2039,14 +2035,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
 
         _login(auth_client, "ops", "OpsPass1")
         cleared = auth_client.post(
-            f"/admin/users/{user_uuid}",
+            f"/admin/membership/users/{user_uuid}",
             data={
-                "display_name": display_name,
-                "email": "",
-                "role": role_name,
-                "status": UserStatus.ACTIVE.value,
-                "password": "",
-                "password_confirm": "",
                 "project_access_present": "1",
             },
             follow_redirects=False,
@@ -2065,14 +2055,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         # Restore All projects so later roles still share fixtures (and admin stays usable).
         _login(auth_client, "ops", "OpsPass1")
         restored = auth_client.post(
-            f"/admin/users/{user_uuid}",
+            f"/admin/membership/users/{user_uuid}",
             data={
-                "display_name": display_name,
-                "email": "",
-                "role": role_name,
-                "status": UserStatus.ACTIVE.value,
-                "password": "",
-                "password_confirm": "",
                 "project_access_present": "1",
                 "access_all_projects": "1",
             },

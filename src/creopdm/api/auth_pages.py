@@ -343,6 +343,21 @@ def _require_projects_manager(
     return user
 
 
+def _require_membership_assign(
+    request: Request, ctx: AppContext, db: Session
+) -> User | HTMLResponse | RedirectResponse:
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not ctx.user_accounts.can_assign_projects(user):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>Project membership access required (projects.assign).</p>",
+            status_code=403,
+        )
+    return user
+
+
 def _is_blocked(result: User | HTMLResponse | RedirectResponse) -> bool:
     return isinstance(result, (HTMLResponse, RedirectResponse))
 
@@ -537,7 +552,6 @@ def admin_user_new(request: Request, ctx: AppContext = Depends(get_context), db:
     roles = (
         ctx.user_accounts.assignable_roles_for(db, admin) if flags["can_assign_roles"] else []
     )
-    access = _project_access_form(ctx, db, access_all=True)
     return templates.TemplateResponse(
         request,
         "admin_user_form.html",
@@ -549,7 +563,6 @@ def admin_user_new(request: Request, ctx: AppContext = Depends(get_context), db:
             **flags,
             "roles": [{"name": r.name} for r in roles],
             "form": _user_form_payload(),
-            **access,
         },
     )
 
@@ -564,9 +577,6 @@ def admin_user_create(
     status: str = Form(UserStatus.ACTIVE.value),
     password: str = Form(""),
     password_confirm: str = Form(""),
-    project_access_present: str | None = Form(default=None),
-    access_all_projects: str | None = Form(default=None),
-    project_uuid: list[str] = Form(default=[]),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -579,13 +589,6 @@ def admin_user_create(
     roles = (
         ctx.user_accounts.assignable_roles_for(db, admin) if flags["can_assign_roles"] else []
     )
-    access_all, project_uuids = _parse_project_access(
-        project_access_present=project_access_present,
-        access_all_projects=access_all_projects,
-        project_uuid=project_uuid,
-    )
-    if not flags["can_assign_projects"]:
-        access_all, project_uuids = True, []
     role_name = (role or "").strip() or BuiltinRole.ENGINEER.value
     error = None
     if password != password_confirm:
@@ -601,8 +604,7 @@ def admin_user_create(
                 role_name=role_name,
                 status=status,
                 must_change_password=True,
-                access_all_projects=access_all,
-                project_uuids=project_uuids,
+                access_all_projects=True,
                 actor=admin,
             )
             db.commit()
@@ -616,12 +618,6 @@ def admin_user_create(
         except CreoPDMError as exc:
             db.rollback()
             error = exc.message
-    access = _project_access_form(
-        ctx,
-        db,
-        access_all=access_all,
-        selected_uuids=set(project_uuids),
-    )
     return templates.TemplateResponse(
         request,
         "admin_user_form.html",
@@ -638,10 +634,7 @@ def admin_user_create(
                 email=email,
                 role=role_name,
                 status=status,
-                access_all_projects=access_all,
-                selected_project_uuids=project_uuids,
             ),
-            **access,
         },
         status_code=400,
     )
@@ -677,9 +670,6 @@ def admin_user_detail(
         current = ctx.user_accounts.role_by_name(db, ctx.user_accounts.primary_role_name(user))
         if current is not None:
             roles = list(roles) + [current]
-    access_all = bool(user.access_all_projects)
-    selected = {p.uuid for p in (user.projects or [])}
-    access = _project_access_form(ctx, db, access_all=access_all, selected_uuids=selected)
     editing_self = admin.id == user.id
     return templates.TemplateResponse(
         request,
@@ -698,10 +688,7 @@ def admin_user_detail(
                 email=user.email or "",
                 role=ctx.user_accounts.primary_role_name(user),
                 status=user.status,
-                access_all_projects=access_all,
-                selected_project_uuids=list(selected),
             ),
-            **access,
         },
     )
 
@@ -716,9 +703,6 @@ def admin_user_update(
     status: str = Form(UserStatus.ACTIVE.value),
     password: str = Form(""),
     password_confirm: str = Form(""),
-    project_access_present: str | None = Form(default=None),
-    access_all_projects: str | None = Form(default=None),
-    project_uuid: list[str] = Form(default=[]),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -742,11 +726,6 @@ def admin_user_update(
     roles = (
         ctx.user_accounts.assignable_roles_for(db, admin) if flags["can_assign_roles"] else []
     )
-    access_all, project_uuids = _parse_project_access(
-        project_access_present=project_access_present,
-        access_all_projects=access_all_projects,
-        project_uuid=project_uuid,
-    )
     error = None
     if password and password != password_confirm:
         error = "Passwords do not match."
@@ -768,9 +747,6 @@ def admin_user_update(
             }
             if not editing_self:
                 kwargs["status"] = status
-            if flags["can_assign_projects"] and project_access_present:
-                kwargs["access_all_projects"] = access_all
-                kwargs["project_uuids"] = project_uuids
             if (
                 not editing_self
                 and role is not None
@@ -792,12 +768,6 @@ def admin_user_update(
         except CreoPDMError as exc:
             db.rollback()
             error = exc.message
-    access = _project_access_form(
-        ctx,
-        db,
-        access_all=access_all,
-        selected_uuids=set(project_uuids),
-    )
     return templates.TemplateResponse(
         request,
         "admin_user_form.html",
@@ -819,10 +789,256 @@ def admin_user_update(
                     else ctx.user_accounts.primary_role_name(user)
                 ),
                 status=status if not editing_self else user.status,
-                access_all_projects=access_all,
-                selected_project_uuids=project_uuids,
             ),
+        },
+        status_code=400,
+    )
+
+
+@router.get("/admin/membership", response_class=HTMLResponse)
+def admin_membership_home(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_membership_assign(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    projects = [
+        {"uuid": p.uuid, "name": p.name, "number": p.number or ""}
+        for p in ctx.projects.list_projects(db)
+    ]
+    users = []
+    for u in ctx.user_accounts.list_users(db):
+        if u.status != UserStatus.ACTIVE.value:
+            continue
+        access_all = bool(getattr(u, "access_all_projects", True))
+        users.append(
+            {
+                "uuid": u.uuid,
+                "display_name": u.display_name,
+                "username": u.username,
+                "access_all": access_all,
+                "member_count": 0 if access_all else len(u.projects or []),
+            }
+        )
+    return templates.TemplateResponse(
+        request,
+        "admin_membership.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "projects": projects,
+            "users": users,
+        },
+    )
+
+
+@router.get("/admin/membership/users/{user_uuid}", response_class=HTMLResponse)
+def admin_membership_user_detail(
+    user_uuid: str,
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_membership_assign(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    user = ctx.user_accounts.get_by_uuid(db, user_uuid)
+    if user is None:
+        return RedirectResponse("/admin/membership", status_code=303)
+    access_all = bool(user.access_all_projects)
+    selected = {p.uuid for p in (user.projects or [])}
+    access = _project_access_form(ctx, db, access_all=access_all, selected_uuids=selected)
+    return templates.TemplateResponse(
+        request,
+        "admin_membership_user.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "error": None,
+            "form": {
+                "uuid": user.uuid,
+                "display_name": user.display_name,
+                "username": user.username,
+                "role": ctx.user_accounts.primary_role_name(user),
+            },
             **access,
+        },
+    )
+
+
+@router.post("/admin/membership/users/{user_uuid}", response_class=HTMLResponse)
+def admin_membership_user_save(
+    user_uuid: str,
+    request: Request,
+    project_access_present: str | None = Form(default=None),
+    access_all_projects: str | None = Form(default=None),
+    project_uuid: list[str] = Form(default=[]),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    from creopdm.exceptions import PermissionDeniedError
+
+    manager = _require_membership_assign(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    user = ctx.user_accounts.get_by_uuid(db, user_uuid)
+    if user is None:
+        return RedirectResponse("/admin/membership", status_code=303)
+    access_all, project_uuids = _parse_project_access(
+        project_access_present=project_access_present or "1",
+        access_all_projects=access_all_projects,
+        project_uuid=project_uuid,
+    )
+    error = None
+    try:
+        ctx.user_accounts.ensure_can_assign_projects(manager)
+        ctx.user_accounts.set_project_access(
+            db,
+            user,
+            access_all=access_all,
+            project_uuids=project_uuids if not access_all else None,
+        )
+        db.commit()
+        return RedirectResponse("/admin/membership", status_code=303)
+    except PermissionDeniedError as exc:
+        db.rollback()
+        return HTMLResponse(
+            f"<h1>403 Forbidden</h1><p>{exc.message}</p>",
+            status_code=403,
+        )
+    except CreoPDMError as exc:
+        db.rollback()
+        error = exc.message
+    access = _project_access_form(
+        ctx, db, access_all=access_all, selected_uuids=set(project_uuids)
+    )
+    return templates.TemplateResponse(
+        request,
+        "admin_membership_user.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "error": error,
+            "form": {
+                "uuid": user.uuid,
+                "display_name": user.display_name,
+                "username": user.username,
+                "role": ctx.user_accounts.primary_role_name(user),
+            },
+            **access,
+        },
+        status_code=400,
+    )
+
+
+@router.get("/admin/membership/projects/{project_uuid}", response_class=HTMLResponse)
+def admin_membership_project_detail(
+    project_uuid: str,
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_membership_assign(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    try:
+        project = ctx.projects.get_project(db, project_uuid)
+    except CreoPDMError:
+        return RedirectResponse("/admin/membership", status_code=303)
+    all_projects_users = []
+    restricted_users = []
+    for u in ctx.user_accounts.list_users(db):
+        if u.status != UserStatus.ACTIVE.value:
+            continue
+        row = {
+            "uuid": u.uuid,
+            "display_name": u.display_name,
+            "username": u.username,
+        }
+        if getattr(u, "access_all_projects", True):
+            all_projects_users.append(row)
+        else:
+            member_ids = {p.id for p in (u.projects or [])}
+            restricted_users.append({**row, "member": project.id in member_ids})
+    return templates.TemplateResponse(
+        request,
+        "admin_membership_project.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "error": None,
+            "project": {
+                "uuid": project.uuid,
+                "name": project.name,
+                "number": project.number or "",
+            },
+            "all_projects_users": all_projects_users,
+            "restricted_users": restricted_users,
+        },
+    )
+
+
+@router.post("/admin/membership/projects/{project_uuid}", response_class=HTMLResponse)
+def admin_membership_project_save(
+    project_uuid: str,
+    request: Request,
+    member_uuid: list[str] = Form(default=[]),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    from creopdm.exceptions import PermissionDeniedError
+
+    manager = _require_membership_assign(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    try:
+        project = ctx.projects.get_project(db, project_uuid)
+    except CreoPDMError:
+        return RedirectResponse("/admin/membership", status_code=303)
+    if isinstance(member_uuid, str):
+        members = [member_uuid.strip()] if member_uuid.strip() else []
+    else:
+        members = [str(v).strip() for v in (member_uuid or []) if str(v).strip()]
+    error = None
+    try:
+        ctx.user_accounts.set_restricted_project_members(
+            db, project, member_user_uuids=members, actor=manager
+        )
+        db.commit()
+        return RedirectResponse("/admin/membership", status_code=303)
+    except PermissionDeniedError as exc:
+        db.rollback()
+        return HTMLResponse(
+            f"<h1>403 Forbidden</h1><p>{exc.message}</p>",
+            status_code=403,
+        )
+    except CreoPDMError as exc:
+        db.rollback()
+        error = exc.message
+    all_projects_users = []
+    restricted_users = []
+    wanted = set(members)
+    for u in ctx.user_accounts.list_users(db):
+        if u.status != UserStatus.ACTIVE.value:
+            continue
+        row = {
+            "uuid": u.uuid,
+            "display_name": u.display_name,
+            "username": u.username,
+        }
+        if getattr(u, "access_all_projects", True):
+            all_projects_users.append(row)
+        else:
+            restricted_users.append({**row, "member": u.uuid in wanted})
+    return templates.TemplateResponse(
+        request,
+        "admin_membership_project.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "error": error,
+            "project": {
+                "uuid": project.uuid,
+                "name": project.name,
+                "number": project.number or "",
+            },
+            "all_projects_users": all_projects_users,
+            "restricted_users": restricted_users,
         },
         status_code=400,
     )

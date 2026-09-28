@@ -561,6 +561,43 @@ class UserService:
         db.add(UserProject(user_id=user.id, project_id=project.id))
         db.flush()
 
+    def revoke_project_access(self, db: Session, user: User, project: Project) -> None:
+        """Remove one project from a restricted user's membership (no-op if all-projects)."""
+        if getattr(user, "access_all_projects", True):
+            return
+        db.execute(
+            delete(UserProject).where(
+                UserProject.user_id == user.id,
+                UserProject.project_id == project.id,
+            )
+        )
+        db.flush()
+
+    def set_restricted_project_members(
+        self,
+        db: Session,
+        project: Project,
+        *,
+        member_user_uuids: list[str],
+        actor: User | None = None,
+    ) -> None:
+        """Replace which *restricted* users are members of this project.
+
+        Users with All projects are ignored (they already see every project).
+        """
+        if actor is not None:
+            self.ensure_can_assign_projects(actor)
+        wanted = {str(u).strip() for u in (member_user_uuids or []) if str(u).strip()}
+        for user in self.list_users(db):
+            if user.status != UserStatus.ACTIVE.value:
+                continue
+            if getattr(user, "access_all_projects", True):
+                continue
+            if user.uuid in wanted:
+                self.grant_project_access(db, user, project)
+            else:
+                self.revoke_project_access(db, user, project)
+
     def create_user(
         self,
         db: Session,

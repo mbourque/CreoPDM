@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Membership — {{ form.display_name }} — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page">
+  <nav class="crumb">
+    {% if can_view_objects %}
+    <a href="/">Projects</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/membership">Membership</a>
+    <span>/</span>
+    <span>{{ form.display_name }}</span>
+  </nav>
+  <h1>Membership — {{ form.display_name }}</h1>
+  <p class="muted">{{ form.username }}{% if form.role %} · {{ form.role }}{% endif %}</p>
+
+  <form method="post" action="/admin/membership/users/{{ form.uuid }}" class="settings-form settings-form-wide">
+    <section class="settings-card">
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      <fieldset class="project-access-fieldset">
+        <legend>Project access</legend>
+        <input type="hidden" name="project_access_present" value="1">
+        <label class="choice">
+          <input type="checkbox" name="access_all_projects" id="access-all-projects" value="1" {% if access_all_projects %}checked{% endif %}>
+          <span>All projects</span>
+        </label>
+        <p class="muted small">When All projects is off, multi-select which projects this user can open (Ctrl/Cmd-click). If none are selected, they cannot browse projects.</p>
+        {% if project_options %}
+        <label class="project-access-select-label">Projects
+          <select name="project_uuid" id="project-access-list" class="project-access-select{% if access_all_projects %} is-disabled{% endif %}" multiple size="8" {% if access_all_projects %}disabled{% endif %}>
+            {% for p in project_options %}
+            <option value="{{ p.uuid }}" {% if p.checked %}selected{% endif %}>{% if p.number %}{{ p.number }} — {% endif %}{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        {% else %}
+        <p class="muted small" id="project-access-list">No projects exist yet. Create a project first, or leave All projects checked.</p>
+        {% endif %}
+      </fieldset>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save membership</button>
+        <a class="btn" href="/admin/membership">Back to Membership</a>
+      </div>
+    </section>
+  </form>
+</article>
+{% endblock %}

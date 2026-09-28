@@ -88,30 +88,7 @@
         {% endif %}
       {% endif %}
 
-      {% if can_assign_projects %}
-      <fieldset class="project-access-fieldset">
-        <legend>Project access</legend>
-        <input type="hidden" name="project_access_present" value="1">
-        <label class="choice">
-          <input type="checkbox" name="access_all_projects" id="access-all-projects" value="1" {% if access_all_projects %}checked{% endif %}>
-          <span>All projects</span>
-        </label>
-        <p class="muted small">When All projects is off, multi-select which projects this user can open (Ctrl/Cmd-click). If none are selected, they cannot use the app.</p>
-        {% if project_options %}
-        <label class="project-access-select-label">Projects
-          <select name="project_uuid" id="project-access-list" class="project-access-select{% if access_all_projects %} is-disabled{% endif %}" multiple size="8" {% if access_all_projects %}disabled{% endif %}>
-            {% for p in project_options %}
-            <option value="{{ p.uuid }}" {% if p.checked %}selected{% endif %}>{% if p.number %}{{ p.number }} — {% endif %}{{ p.name }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        {% else %}
-        <p class="muted small" id="project-access-list">No projects exist yet. Create a project first, or leave All projects checked.</p>
-        {% endif %}
-      </fieldset>
-      {% else %}
-      <p class="muted small">Project membership is read-only without <code>projects.assign</code>.{% if mode == 'new' %} New users get All projects.{% endif %}</p>
-      {% endif %}
+      <p class="muted small">New users get <strong>All projects</strong> access. Change who can open which projects under <a href="/admin/membership">Administration → Membership</a>{% if not can_assign_projects %} (requires <code>projects.assign</code>){% endif %}.</p>
 
       <div class="form-actions">
         <button type="submit" class="btn btn-primary" {% if mode == 'new' and not can_set_passwords %}disabled{% endif %}>{% if mode == 'new' %}Create user{% else %}Save{% endif %}</button>

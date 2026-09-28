@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Membership — {{ project.name }} — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page">
+  <nav class="crumb">
+    {% if can_view_objects %}
+    <a href="/">Projects</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/membership">Membership</a>
+    <span>/</span>
+    <span>{{ project.name }}</span>
+  </nav>
+  <h1>Membership — {{ project.name }}</h1>
+  <p class="muted">{% if project.number %}{{ project.number }} · {% endif %}Tick restricted users who may open this project. Users with <strong>All projects</strong> already see it — change that under By user.</p>
+
+  <form method="post" action="/admin/membership/projects/{{ project.uuid }}" class="settings-form settings-form-wide">
+    <section class="settings-card">
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      {% if all_projects_users %}
+      <h2 class="h-like">All projects</h2>
+      <ul class="plain-list">
+        {% for u in all_projects_users %}
+        <li>{{ u.display_name }} <span class="muted small">({{ u.username }})</span></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <h2 class="h-like">Restricted users</h2>
+      {% if restricted_users %}
+      <fieldset class="role-perm-group">
+        <legend>Members of this project</legend>
+        {% for u in restricted_users %}
+        <label class="choice">
+          <input type="checkbox" name="member_uuid" value="{{ u.uuid }}" {% if u.member %}checked{% endif %}>
+          <span>{{ u.display_name }} <span class="muted small">({{ u.username }})</span></span>
+        </label>
+        {% endfor %}
+      </fieldset>
+      {% else %}
+      <p class="muted">No restricted users. Everyone listed above has All projects, or create users first.</p>
+      {% endif %}
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" {% if not restricted_users %}disabled{% endif %}>Save members</button>
+        <a class="btn" href="/admin/membership">Back to Membership</a>
+      </div>
+    </section>
+  </form>
+</article>
+{% endblock %}

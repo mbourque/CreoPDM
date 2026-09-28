@@ -56,7 +56,7 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_USERS_PASSWORD, "Set or reset user passwords"),
     (PERMISSION_ROLES_ASSIGN, "Assign roles to users"),
     (PERMISSION_ROLES_MANAGE, "Create, edit, and delete roles"),
-    (PERMISSION_PROJECTS_ASSIGN, "Assign project membership to users"),
+    (PERMISSION_PROJECTS_ASSIGN, "Assign project membership (Administration → Membership)"),
     (PERMISSION_PROJECTS_MANAGE, "Create, edit, and delete projects in Administration"),
     (PERMISSION_SETTINGS_MANAGE, "Change global CreoPDM settings"),
     (PERMISSION_PROJECTS_CREATE, "Create projects"),

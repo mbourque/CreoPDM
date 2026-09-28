@@ -395,6 +395,17 @@ a.brand:hover { text-decoration: none; color: inherit; }
   color: #5a6a78;
   font-weight: 400;
 }
+.plain-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.h-like {
+  margin: 0.85rem 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 650;
+}
 .role-perm-group {
   margin: 0.85rem 0 0;
   padding: 0.65rem 0.75rem 0.5rem;
