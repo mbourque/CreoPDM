@@ -10,7 +10,7 @@
     <span>Administration</span>
   </nav>
   <h1>Administration</h1>
-  <p class="muted">Server tools for users, roles, projects, membership, and settings.</p>
+  <p class="muted">Server tools for users, roles, projects, membership, email, and settings.</p>
 
   <div class="admin-tile-grid">
     {% if can_manage_users %}
@@ -35,6 +35,12 @@
     <section class="admin-tile">
       <h2><a href="/admin/projects">Projects</a></h2>
       <p>List every project on this server. Create, rename, or remove projects.</p>
+    </section>
+    {% endif %}
+    {% if can_manage_email %}
+    <section class="admin-tile">
+      <h2><a href="/admin/email">Email</a></h2>
+      <p>SMTP setup, From address, and test email for notifications.</p>
     </section>
     {% endif %}
     {% if can_manage_settings %}

@@ -242,10 +242,107 @@ def test_admin_can_open_settings(auth_client):
     assert "Add and edit accounts, assign a role, and set status." in hub.text
     assert "Click a user’s name" not in hub.text and "Click a user's name" not in hub.text
     assert 'href="/admin/projects"' in hub.text
+    assert 'href="/admin/email"' in hub.text
     # Help copy is plain text, not wrapped in the section link.
     assert 'href="/admin/users">Add and edit' not in hub.text
     assert auth_client.get("/settings").status_code == 200
     assert auth_client.get("/api/settings").status_code == 200
+
+
+def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
+    """email.manage opens Email admin; save keeps blank password; others get 403."""
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    page = auth_client.get("/admin/email")
+    assert page.status_code == 200
+    assert "SMTP setup help" in page.text
+    assert 'value="localhost"' in page.text
+    assert 'value="25"' in page.text
+
+    saved = auth_client.post(
+        "/admin/email",
+        data={
+            "action": "save",
+            "enabled": "1",
+            "smtp_host": "localhost",
+            "smtp_port": "25",
+            "from_address": "creopdm@example.com",
+            "from_name": "CreoPDM",
+            "administrator_email": "admin@example.com",
+            "smtp_username": "",
+            "smtp_password": "first-secret",
+            "smtp_use_tls": "",
+            "smtp_use_auth": "",
+            "test_to": "",
+        },
+    )
+    assert saved.status_code == 200
+    assert "Email settings saved" in saved.text
+    assert auth_ctx.settings.email.enabled is True
+    assert auth_ctx.settings.email.from_address == "creopdm@example.com"
+    assert auth_ctx.settings.email.smtp_password == "first-secret"
+    assert auth_ctx.settings.email.smtp_host == "localhost"
+    assert auth_ctx.settings.email.smtp_port == 25
+
+    kept = auth_client.post(
+        "/admin/email",
+        data={
+            "action": "save",
+            "enabled": "1",
+            "smtp_host": "smtp.example.com",
+            "smtp_port": "587",
+            "from_address": "creopdm@example.com",
+            "from_name": "CreoPDM",
+            "administrator_email": "admin@example.com",
+            "smtp_username": "creopdm@example.com",
+            "smtp_password": "",
+            "smtp_use_tls": "1",
+            "smtp_use_auth": "1",
+            "test_to": "",
+        },
+    )
+    assert kept.status_code == 200
+    assert auth_ctx.settings.email.smtp_password == "first-secret"
+    assert auth_ctx.settings.email.smtp_host == "smtp.example.com"
+    assert auth_ctx.settings.email.smtp_port == 587
+    assert auth_ctx.settings.email.smtp_use_tls is True
+    assert auth_ctx.settings.email.smtp_use_auth is True
+
+    # PDM Manager lacks email.manage.
+    auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "PDM",
+            "username": "pdm",
+            "email": "",
+            "role": BuiltinRole.PDM_MANAGER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "PdmPass1",
+            "password_confirm": "PdmPass1",
+        },
+        follow_redirects=False,
+    )
+    with auth_ctx.session_factory() as db:
+        pdm = db.scalar(select(User).where(User.username == "pdm"))
+        assert pdm is not None
+        pdm.must_change_password = False
+        db.commit()
+    auth_client.get("/logout")
+    auth_client.post(
+        "/login",
+        data={"username": "pdm", "password": "PdmPass1"},
+        follow_redirects=False,
+    )
+    denied = auth_client.get("/admin/email", follow_redirects=False)
+    assert denied.status_code == 403
 
 
 def test_admin_can_edit_user(auth_client, auth_ctx):
@@ -790,6 +887,7 @@ def test_pdm_manager_can_create_not_delete_no_projects_admin(auth_client, auth_c
 
     assert auth_client.get("/admin", follow_redirects=False).status_code == 403
     assert auth_client.get("/admin/projects", follow_redirects=False).status_code == 403
+    assert auth_client.get("/admin/email", follow_redirects=False).status_code == 403
     _assert_forbidden(auth_client.delete(f"/api/projects/{project['uuid']}"))
     assert auth_client.get("/admin/users", follow_redirects=False).status_code == 403
     assert auth_client.get("/settings", follow_redirects=False).status_code == 403
@@ -887,6 +985,7 @@ def test_admin_can_create_and_delete_project(auth_client, auth_ctx, repo_parent)
 def test_builtin_role_permission_matrix_seeded(auth_ctx):
     """Migration/startup seed grants matrix keys (Viewer none; Engineer authoring)."""
     from creopdm.auth_constants import (
+        PERMISSION_EMAIL_MANAGE,
         PERMISSION_OBJECTS_CHECKOUT,
         PERMISSION_OBJECTS_COPY_TO_VAULT,
         PERMISSION_OBJECTS_VIEW,
@@ -924,8 +1023,10 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
     assert PERMISSION_OBJECTS_COPY_TO_VAULT in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_PROJECTS_DELETE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_PROJECTS_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
+    assert PERMISSION_EMAIL_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_USERS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_PROJECTS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
+    assert PERMISSION_EMAIL_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_ROLES_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_OBJECTS_COPY_TO_VAULT in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     for role_name, expected in STARTER_ROLE_PERMISSION_KEYS.items():
@@ -1198,6 +1299,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
     assert role_form.status_code == 200
     assert "CreoPDM Administration" in role_form.text
     assert "projects.manage" in role_form.text
+    assert "email.manage" in role_form.text
     assert "your</strong> role" in role_form.text.lower() or "your role" in role_form.text.lower()
     assert "cannot lock themselves out" in role_form.text.lower()
     assert 'name="name"' in role_form.text and "disabled" in role_form.text
@@ -1696,6 +1798,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
 
     from creopdm.auth_constants import (
         BUILTIN_PERMISSIONS,
+        PERMISSION_EMAIL_MANAGE,
         PERMISSION_OBJECTS_ADD,
         PERMISSION_OBJECTS_CHECKIN,
         PERMISSION_OBJECTS_CHECKOUT,
@@ -1824,6 +1927,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 or PERMISSION_ROLES_MANAGE in allowed
                 or PERMISSION_SETTINGS_MANAGE in allowed
                 or PERMISSION_PROJECTS_MANAGE in allowed
+                or PERMISSION_EMAIL_MANAGE in allowed
                 or PERMISSION_PROJECTS_ASSIGN in allowed
                 or PERMISSION_USERS_PASSWORD in allowed
                 or PERMISSION_ROLES_ASSIGN in allowed
@@ -1847,6 +1951,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             PERMISSION_ROLES_MANAGE: auth_client.get("/admin/roles", follow_redirects=False),
             PERMISSION_SETTINGS_MANAGE: auth_client.get("/api/settings", follow_redirects=False),
             PERMISSION_PROJECTS_MANAGE: auth_client.get("/admin/projects", follow_redirects=False),
+            PERMISSION_EMAIL_MANAGE: auth_client.get("/admin/email", follow_redirects=False),
             PERMISSION_OBJECTS_VIEW: auth_client.get(f"/api/projects/{project_id}"),
             PERMISSION_PROJECTS_CREATE: auth_client.post(
                 "/api/projects",

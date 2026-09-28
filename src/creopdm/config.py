@@ -280,6 +280,39 @@ class IgnoreConfig(BaseModel):
         return list(DEFAULT_IGNORE_PATTERNS)
 
 
+class EmailConfig(BaseModel):
+    """SMTP settings for notifications (defaults match local Postfix on Linux)."""
+
+    enabled: bool = False
+    smtp_host: str = "localhost"
+    smtp_port: int = 25
+    from_address: str = ""
+    from_name: str = ""
+    administrator_email: str = ""
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = False
+    smtp_use_auth: bool = False
+
+    @field_validator("smtp_host")
+    @classmethod
+    def default_host(cls, value: str) -> str:
+        return (value or "").strip() or "localhost"
+
+    @field_validator("smtp_port")
+    @classmethod
+    def valid_smtp_port(cls, value: int) -> int:
+        port = int(value)
+        if not 1 <= port <= 65535:
+            raise ValueError("SMTP port must be 1–65535.")
+        return port
+
+    @field_validator("from_address", "from_name", "administrator_email", "smtp_username")
+    @classmethod
+    def strip_text(cls, value: str) -> str:
+        return (value or "").strip()
+
+
 class AppSettings(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
@@ -289,6 +322,7 @@ class AppSettings(BaseModel):
     ui: UiConfig = Field(default_factory=UiConfig)
     cad: CadConfig = Field(default_factory=CadConfig)
     ignore: IgnoreConfig = Field(default_factory=IgnoreConfig)
+    email: EmailConfig = Field(default_factory=EmailConfig)
 
 
 _ADDED_DEFAULT_TYPE_LABELS = (

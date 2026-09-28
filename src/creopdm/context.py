@@ -13,9 +13,11 @@ from creopdm.services.activity_service import ActivityService
 from creopdm.services.checkin_service import CheckinService
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.creo_service import CreoService
+from creopdm.services.email_service import EmailService
 from creopdm.services.git_service import GitService
 from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.services.metadata_service import MetadataService
+from creopdm.services.notification_service import NotificationService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.project_service import ProjectService
 from creopdm.services.user_service import UserService
@@ -45,6 +47,8 @@ class AppContext:
     creo_service: CreoService
     metadata: MetadataService
     where_used_index: WhereUsedIndexJobs
+    email: EmailService
+    notifications: NotificationService
     user_accounts: UserService = field(default_factory=UserService)
     # When False (tests with StaticUserProvider), skip login redirects.
     auth_enabled: bool = True

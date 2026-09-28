@@ -1577,3 +1577,191 @@ def admin_project_delete(
             },
             status_code=400,
         )
+
+
+def _require_email_manager(
+    request: Request, ctx: AppContext, db: Session
+) -> User | HTMLResponse | RedirectResponse:
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not ctx.user_accounts.can_manage_email(user):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>Email configuration access required (email.manage).</p>",
+            status_code=403,
+        )
+    return user
+
+
+def _email_form_from_settings(ctx: AppContext, *, test_to: str = "") -> dict:
+    email = ctx.settings.email
+    return {
+        "enabled": bool(email.enabled),
+        "smtp_host": email.smtp_host or "localhost",
+        "smtp_port": int(email.smtp_port or 25),
+        "from_address": email.from_address or "",
+        "from_name": email.from_name or "",
+        "administrator_email": email.administrator_email or "",
+        "smtp_username": email.smtp_username or "",
+        "has_password": bool(email.smtp_password),
+        "smtp_use_tls": bool(email.smtp_use_tls),
+        "smtp_use_auth": bool(email.smtp_use_auth),
+        "test_to": test_to,
+    }
+
+
+def _email_form_from_post(
+    *,
+    enabled: str,
+    smtp_host: str,
+    smtp_port: str,
+    from_address: str,
+    from_name: str,
+    administrator_email: str,
+    smtp_username: str,
+    smtp_password: str,
+    smtp_use_tls: str,
+    smtp_use_auth: str,
+    test_to: str,
+    has_password: bool,
+) -> dict:
+    try:
+        port = int((smtp_port or "25").strip() or "25")
+    except ValueError:
+        port = 25
+    return {
+        "enabled": enabled == "1",
+        "smtp_host": (smtp_host or "").strip() or "localhost",
+        "smtp_port": port,
+        "from_address": (from_address or "").strip(),
+        "from_name": (from_name or "").strip(),
+        "administrator_email": (administrator_email or "").strip(),
+        "smtp_username": (smtp_username or "").strip(),
+        "has_password": has_password or bool((smtp_password or "").strip()),
+        "smtp_use_tls": smtp_use_tls == "1",
+        "smtp_use_auth": smtp_use_auth == "1",
+        "test_to": (test_to or "").strip(),
+    }
+
+
+@router.get("/admin/email", response_class=HTMLResponse)
+def admin_email_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_email_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return templates.TemplateResponse(
+        request,
+        "admin_email.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "form": _email_form_from_settings(ctx),
+            "error": None,
+            "success": None,
+        },
+    )
+
+
+@router.post("/admin/email", response_class=HTMLResponse)
+def admin_email_submit(
+    request: Request,
+    action: str = Form("save"),
+    enabled: str = Form(""),
+    smtp_host: str = Form("localhost"),
+    smtp_port: str = Form("25"),
+    from_address: str = Form(""),
+    from_name: str = Form(""),
+    administrator_email: str = Form(""),
+    smtp_username: str = Form(""),
+    smtp_password: str = Form(""),
+    smtp_use_tls: str = Form(""),
+    smtp_use_auth: str = Form(""),
+    test_to: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_email_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+
+    current_password = ctx.settings.email.smtp_password or ""
+    form = _email_form_from_post(
+        enabled=enabled,
+        smtp_host=smtp_host,
+        smtp_port=smtp_port,
+        from_address=from_address,
+        from_name=from_name,
+        administrator_email=administrator_email,
+        smtp_username=smtp_username,
+        smtp_password=smtp_password,
+        smtp_use_tls=smtp_use_tls,
+        smtp_use_auth=smtp_use_auth,
+        test_to=test_to,
+        has_password=bool(current_password),
+    )
+
+    def _render(*, error: str | None = None, success: str | None = None, status_code: int = 200):
+        return templates.TemplateResponse(
+            request,
+            "admin_email.html",
+            {
+                **_base_ctx(request, ctx, current_user=manager),
+                "form": form,
+                "error": error,
+                "success": success,
+            },
+            status_code=status_code,
+        )
+
+    # Apply form fields to settings (password blank keeps existing).
+    new_settings = ctx.settings.model_copy(deep=True)
+    email = new_settings.email
+    email.enabled = form["enabled"]
+    email.smtp_host = form["smtp_host"]
+    email.smtp_port = form["smtp_port"]
+    email.from_address = form["from_address"]
+    email.from_name = form["from_name"]
+    email.administrator_email = form["administrator_email"]
+    email.smtp_username = form["smtp_username"]
+    email.smtp_use_tls = form["smtp_use_tls"]
+    email.smtp_use_auth = form["smtp_use_auth"]
+    new_password = (smtp_password or "").strip()
+    if new_password:
+        email.smtp_password = new_password
+    else:
+        email.smtp_password = current_password
+    form["has_password"] = bool(email.smtp_password)
+
+    try:
+        # Validate via pydantic (port range, etc.).
+        from creopdm.config import EmailConfig
+        from pydantic import ValidationError
+
+        EmailConfig.model_validate(email.model_dump())
+    except ValidationError as exc:
+        msg = "; ".join(err.get("msg", str(err)) for err in exc.errors())
+        return _render(error=msg or str(exc), status_code=400)
+
+    ctx.config.save(new_settings)
+    ctx.settings = new_settings
+
+    if action == "test":
+        recipient = form["test_to"] or form["administrator_email"]
+        if not recipient:
+            return _render(
+                error="Set an administrator email or a test recipient before sending.",
+                status_code=400,
+            )
+        try:
+            ctx.email.send(
+                recipient,
+                "CreoPDM test email",
+                "This is a test message from CreoPDM Administration → Email.\n",
+            )
+        except CreoPDMError as exc:
+            return _render(error=exc.message, status_code=400)
+        return _render(success=f"Test email sent to {recipient}.")
+
+    return _render(success="Email settings saved.")

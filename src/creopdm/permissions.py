@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from starlette.requests import Request
 
 from creopdm.auth_constants import (
+    PERMISSION_EMAIL_MANAGE,
     PERMISSION_OBJECTS_ADD,
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_CHECKOUT,
@@ -41,6 +42,7 @@ class CapabilityFlags:
     can_manage_roles: bool
     can_manage_settings: bool
     can_manage_projects: bool
+    can_manage_email: bool
     can_create_project: bool
     can_edit_project: bool
     can_delete_project: bool
@@ -64,6 +66,7 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_manage_roles=PERMISSION_ROLES_MANAGE in keys,
         can_manage_settings=PERMISSION_SETTINGS_MANAGE in keys,
         can_manage_projects=PERMISSION_PROJECTS_MANAGE in keys,
+        can_manage_email=PERMISSION_EMAIL_MANAGE in keys,
         can_create_project=PERMISSION_PROJECTS_CREATE in keys,
         can_edit_project=PERMISSION_PROJECTS_EDIT in keys,
         can_delete_project=PERMISSION_PROJECTS_DELETE in keys,
@@ -99,6 +102,7 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_manage_roles = caps.can_manage_roles
     request.state.can_manage_settings = caps.can_manage_settings
     request.state.can_manage_projects = caps.can_manage_projects
+    request.state.can_manage_email = caps.can_manage_email
     request.state.can_create_project = caps.can_create_project
     request.state.can_edit_project = caps.can_edit_project
     request.state.can_delete_project = caps.can_delete_project
@@ -121,6 +125,7 @@ def caps_dict(request: Request) -> dict:
         "can_manage_roles": bool(getattr(request.state, "can_manage_roles", False)),
         "can_manage_settings": bool(getattr(request.state, "can_manage_settings", False)),
         "can_manage_projects": bool(getattr(request.state, "can_manage_projects", False)),
+        "can_manage_email": bool(getattr(request.state, "can_manage_email", False)),
         "can_create_project": bool(getattr(request.state, "can_create_project", False)),
         "can_edit_project": bool(getattr(request.state, "can_edit_project", False)),
         "can_delete_project": bool(getattr(request.state, "can_delete_project", False)),
@@ -141,6 +146,7 @@ def caps_dict(request: Request) -> dict:
         or flags["can_manage_roles"]
         or flags["can_manage_settings"]
         or flags["can_manage_projects"]
+        or flags["can_manage_email"]
     )
     return flags
 
@@ -154,6 +160,7 @@ def can_open_administration(caps: CapabilityFlags) -> bool:
         or caps.can_manage_roles
         or caps.can_manage_settings
         or caps.can_manage_projects
+        or caps.can_manage_email
     )
 
 def default_app_path(caps: CapabilityFlags) -> str:

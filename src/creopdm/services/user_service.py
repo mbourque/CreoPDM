@@ -31,6 +31,7 @@ from creopdm.auth_constants import (
     PERMISSION_ROLES_ASSIGN,
     PERMISSION_ROLES_MANAGE,
     PERMISSION_SETTINGS_MANAGE,
+    PERMISSION_EMAIL_MANAGE,
     PERMISSION_USERS_MANAGE,
     PERMISSION_USERS_PASSWORD,
     UserStatus,
@@ -210,6 +211,9 @@ class UserService:
 
     def can_manage_settings(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_SETTINGS_MANAGE)
+
+    def can_manage_email(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_EMAIL_MANAGE)
 
     def is_full_administrator(self, user: User) -> bool:
         """True when the user has all CreoPDM Administration caps on one account."""
@@ -465,7 +469,7 @@ class UserService:
                     "Cannot leave the system with no active user who has full "
                     "CreoPDM Administration "
                     "(users.manage, users.password, roles.assign, roles.manage, "
-                    "projects.assign, projects.manage, and settings.manage)."
+                    "projects.assign, projects.manage, settings.manage, and email.manage)."
                 )
             db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
             for perm_id in self._permission_ids_for_keys(db, keys):
@@ -754,7 +758,7 @@ class UserService:
                     "Cannot leave the system with no active user who has full "
                     "CreoPDM Administration "
                     "(users.manage, users.password, roles.assign, roles.manage, "
-                    "projects.assign, projects.manage, and settings.manage)."
+                    "projects.assign, projects.manage, settings.manage, and email.manage)."
                 )
         if new_status is not None:
             user.status = new_status

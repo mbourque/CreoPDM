@@ -34,9 +34,11 @@ from creopdm.services.activity_service import ActivityService
 from creopdm.services.checkin_service import CheckinService
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.creo_service import CreoService
+from creopdm.services.email_service import EmailService
 from creopdm.services.git_service import GitService
 from creopdm.services.lock_manager import ProjectLockManager
 from creopdm.services.metadata_service import MetadataService
+from creopdm.services.notification_service import NotificationService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.project_service import ProjectService
 from creopdm.services.user_service import UserService
@@ -92,10 +94,12 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
     )
     metadata = MetadataService(objects, workspaces)
     user_accounts = UserService()
+    email = EmailService()
+    notifications = NotificationService(get_config=lambda: manager.settings.email, email=email)
     with session_factory() as db:
         user_accounts.ensure_builtin_roles(db)
         db.commit()
-    return AppContext(
+    ctx = AppContext(
         config=manager,
         settings=app_settings,
         engine=engine,
@@ -114,9 +118,16 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         creo_service=CreoService(creo_connector, objects, checkouts, workspaces),
         metadata=metadata,
         where_used_index=WhereUsedIndexJobs(session_factory, metadata),
+        email=email,
+        notifications=notifications,
         user_accounts=user_accounts,
         auth_enabled=auth_enabled,
     )
+    # Prefer live ctx.settings after apply_settings / email form saves.
+    email.configure(lambda: ctx.settings.email)
+    notifications.configure(lambda: ctx.settings.email)
+    return ctx
+
 
 
 def create_app(context: AppContext | None = None) -> FastAPI:

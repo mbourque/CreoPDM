@@ -312,6 +312,7 @@ def home(
                 or getattr(request.state, "can_manage_roles", False)
                 or getattr(request.state, "can_manage_settings", False)
                 or getattr(request.state, "can_manage_projects", False)
+                or getattr(request.state, "can_manage_email", False)
                 or getattr(request.state, "can_assign_projects", False)
                 or getattr(request.state, "can_set_passwords", False)
                 or getattr(request.state, "can_assign_roles", False)
