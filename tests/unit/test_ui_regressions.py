@@ -845,6 +845,23 @@ def test_user_interaction_negative_client_guards():
     assert "canRemoveProduct = ids.length > 0 || folderPaths.length > 0" in script
 
 
+def test_modified_metric_pill_left_of_checked_out():
+    """Modified pill filters/selects dirty owned files; sits left of Checked out."""
+    html = APP_HTML.read_text(encoding="utf-8")
+    assert 'data-filter="modified"' in html
+    assert html.index('data-filter="modified"') < html.index('data-filter="checked_out"')
+    assert "> Modified</button>" in html.replace("\n", "")
+    script = _app_js()
+    match = _between(script, "function rowMatchesMetric(", "function rememberMetricCounts(")
+    assert 'key === "modified"' in match
+    assert "pendingCheckinIds.has" in match
+    assert "function isStateMetric(" in script
+    assert 'key === "checked_out" || key === "modified"' in script
+    assert "activeStateMetricKeys" in script
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "Click **Modified**" in docs
+
+
 def test_newer_local_cache_matches_flat_save_for_nested_vault_path():
     """Regression: older flat agent caches + nested vault paths still detect Modified."""
     script = _app_js()

@@ -5,6 +5,11 @@ from creopdm.constants import DEFAULT_TYPE_LABELS, SIDEBAR_COLLAPSED_COOKIE
 from tests.conftest import requires_git
 
 
+def _settings_path(value: str) -> Path:
+    """Resolve Settings API paths that may use ~/… display form."""
+    return Path(value).expanduser().resolve()
+
+
 def test_sidebar_collapse_cookie_is_applied(client):
     home = client.get("/")
     assert home.status_code == 200
@@ -143,7 +148,7 @@ def test_get_and_update_settings(client, tmp_path):
     assert body["creo_open_mode"] == "association"
     assert Path(body["creo_executable"]) == fake_creo
     assert Path(body["creo_view_executable"]) == fake_view
-    assert Path(body["workspace_root"]) == workspace.resolve()
+    assert _settings_path(body["workspace_root"]) == workspace.resolve()
     assert workspace.is_dir()
 
     rejected_mode = client.put("/api/settings", json={"creo_open_mode": "executable"})
@@ -152,7 +157,7 @@ def test_get_and_update_settings(client, tmp_path):
     kept_view = client.put("/api/settings", json={"creo_open_mode": "embedded"})
     assert kept_view.status_code == 200, kept_view.text
     assert Path(kept_view.json()["creo_view_executable"]) == fake_view
-    assert Path(kept_view.json()["workspace_root"]) == workspace.resolve()
+    assert _settings_path(kept_view.json()["workspace_root"]) == workspace.resolve()
 
     embedded = client.put("/api/settings", json={"creo_open_mode": "embedded"})
     assert embedded.status_code == 200, embedded.text
@@ -323,9 +328,9 @@ def test_vault_data_dir_uses_vaults_subdir(client, data_dir):
         json={"creo_open_mode": "association", "workspace_root": str(data_dir)},
     )
     assert saved.status_code == 200, saved.text
-    assert Path(saved.json()["workspace_root"]) == (data_dir / "vaults").resolve()
+    assert _settings_path(saved.json()["workspace_root"]) == (data_dir / "vaults").resolve()
     kept = client.put("/api/settings", json={"creo_open_mode": "association"})
-    assert Path(kept.json()["workspace_root"]) == (data_dir / "vaults").resolve()
+    assert _settings_path(kept.json()["workspace_root"]) == (data_dir / "vaults").resolve()
 
 
 def test_type_labels_persist_and_keep_when_omitted(client):

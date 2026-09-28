@@ -618,6 +618,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     drawings: "drawings",
     documents: "documents",
     other: "files that are not Creo models",
+    modified: "modified files",
     checked_out: "checked out files",
   };
 
@@ -687,6 +688,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function rowMatchesMetric(row, key) {
     if (key === "checked_out") {
       return rowAttr(row, "data-checked-out") === "1" || row.dataset.checkedOut === "1";
+    }
+    if (key === "modified") {
+      const uuid = String(row.dataset.uuid || "").trim();
+      const owned = row.dataset.owned === "1" || row.dataset.canCheckin === "1";
+      const dirty = Boolean(
+        rowAttr(row, "data-modified-locally") === "1"
+          || row.dataset.modifiedLocally === "1"
+          || (uuid && pendingCheckinIds.has(uuid))
+      );
+      return owned && dirty;
     }
     if (key === "cad_models") return cadModelsExtensions().includes(rowExtension(row));
     if (key === "documents") return documentExtensions().includes(rowExtension(row));
@@ -829,13 +840,25 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         : "Showing checked out files (selected). Click to clear.";
       return;
     }
+    if (key === "modified") {
+      btn.title = mode === "off"
+        ? "Filter to modified files in the current group and select them. Click again to clear."
+        : "Showing modified files (selected). Click to clear.";
+      return;
+    }
     btn.title = mode === "off"
       ? `Filter to ${label} and select them. Click again to clear.`
       : `Filtering to ${label} (selected). Click to clear.`;
   }
 
-  function isCheckoutMetric(key) {
-    return key === "checked_out";
+  function isStateMetric(key) {
+    return key === "checked_out" || key === "modified";
+  }
+
+  function activeStateMetricKeys(metrics) {
+    return metrics
+      .filter((btn) => isStateMetric(metricKey(btn)) && metricMode(btn) === "filter")
+      .map((btn) => metricKey(btn));
   }
 
   function setRowHidden(row, hide) {
@@ -851,15 +874,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function applyMetricVisibility() {
     const metrics = metricButtons();
     const typeFilterBtns = metrics.filter((btn) => {
-      return !isCheckoutMetric(metricKey(btn)) && metricMode(btn) === "filter";
+      return !isStateMetric(metricKey(btn)) && metricMode(btn) === "filter";
     });
-    const checkoutFiltering = metrics.some((btn) => {
-      return isCheckoutMetric(metricKey(btn)) && metricMode(btn) === "filter";
-    });
-    const typeRestricts = typeFilterBtns.length > 0 || checkoutFiltering;
+    const stateKeys = activeStateMetricKeys(metrics);
+    const typeRestricts = typeFilterBtns.length > 0 || stateKeys.length > 0;
     const viewBtns = metrics.filter((btn) => {
       const key = metricKey(btn);
-      if (isCheckoutMetric(key)) return false;
+      if (isStateMetric(key)) return false;
       const mode = metricMode(btn);
       if (mode === "off" || !typeRestricts) return false;
       if (mode === "select" && isParentMetric(key) && typeFilterBtns.length) return false;
@@ -875,8 +896,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       const matchesSearch = searchingAll || !q || row.textContent.toLowerCase().includes(q);
       const matchesView = !viewBtns.length || viewBtns.some((btn) => rowMatchesMetric(row, metricKey(btn)));
-      const matchesCheckout = !checkoutFiltering || rowMatchesMetric(row, "checked_out");
-      setRowHidden(row, !(matchesSearch && matchesView && matchesCheckout));
+      const matchesState = !stateKeys.length || stateKeys.every((key) => rowMatchesMetric(row, key));
+      setRowHidden(row, !(matchesSearch && matchesView && matchesState));
     });
   }
 
@@ -887,14 +908,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return mode === "select" || mode === "filter";
     });
     if (!selecting.length) return;
-    const typeActive = selecting.filter((btn) => !isCheckoutMetric(metricKey(btn)));
-    const checkoutOn = selecting.some((btn) => isCheckoutMetric(metricKey(btn)));
+    const typeActive = selecting.filter((btn) => !isStateMetric(metricKey(btn)));
+    const stateKeys = selecting.filter((btn) => isStateMetric(metricKey(btn))).map((btn) => metricKey(btn));
     rows().forEach((row) => {
       // Folder rows are selected by click for Remove — do not clear them here.
       if (row.classList.contains("folder-row")) return;
       const matchesType = !typeActive.length || typeActive.some((btn) => rowMatchesMetric(row, metricKey(btn)));
-      const matchesCheckout = !checkoutOn || rowMatchesMetric(row, "checked_out");
-      markRowSelected(row, matchesType && matchesCheckout && !rowIsHidden(row));
+      const matchesState = !stateKeys.length || stateKeys.every((key) => rowMatchesMetric(row, key));
+      markRowSelected(row, matchesType && matchesState && !rowIsHidden(row));
     });
   }
 
@@ -4083,7 +4104,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const files = metricButtons().find((btn) => metricKey(btn) === "files");
     if (files && metricMode(files) !== "off") {
       metricButtons().forEach((item) => {
-        if (item !== files && !isCheckoutMetric(metricKey(item))) setMetricMode(item, "off");
+        if (item !== files && !isStateMetric(metricKey(item))) setMetricMode(item, "off");
       });
     }
     const cadModels = metricButtons().find((btn) => metricKey(btn) === "cad_models");
@@ -4294,10 +4315,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     setMetricMode(btn, next);
     if (key === "files" && next !== "off") {
       metricButtons().forEach((item) => {
-        if (item !== btn && !isCheckoutMetric(metricKey(item))) setMetricMode(item, "off");
+        if (item !== btn && !isStateMetric(metricKey(item))) setMetricMode(item, "off");
       });
     }
-    if (key !== "files" && !isCheckoutMetric(key) && next !== "off") {
+    if (key !== "files" && !isStateMetric(key) && next !== "off") {
       clearMetricFilters(new Set(["files"]));
     }
     if (key === "cad_models" && next !== "off") {

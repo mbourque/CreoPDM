@@ -117,6 +117,7 @@
       <li><button type="button" class="metric" data-filter="drawings" data-mode="off" title="Filter to drawings and select them. Click again to clear."><strong>{{ status.drawings }}</strong> Drawings</button></li>
       <li><button type="button" class="metric" data-filter="documents" data-mode="off" title="Filter to documents and select them. Click again to clear."><strong>{{ status.documents }}</strong> Documents</button></li>
       <li><button type="button" class="metric" data-filter="other" data-mode="off" title="Filter to files that are not Creo models and select them. Click again to clear."><strong>{{ status.other }}</strong> Other</button></li>
+      <li><button type="button" class="metric" data-filter="modified" data-mode="off" title="Filter to modified files in the current group and select them. Click again to clear."><strong>{{ status.modified | default(0) }}</strong> Modified</button></li>
       <li><button type="button" class="metric" data-filter="checked_out" data-mode="off" title="Filter to checked out files in the current group and select them. Click again to clear."><strong>{{ status.checked_out }}</strong> Checked out</button></li>
     </ul>
     {% endif %}

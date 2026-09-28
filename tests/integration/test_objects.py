@@ -364,6 +364,8 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data
     assert "disabled" not in inside.text.split('data-filter="creo_parts"')[1].split("</button>")[0]
     assert "disabled" not in inside.text.split('data-filter="assemblies"')[1].split("</button>")[0]
     assert "disabled" not in inside.text.split('data-filter="drawings"')[1].split("</button>")[0]
+    assert 'data-filter="modified"' in inside.text
+    assert inside.text.index('data-filter="modified"') < inside.text.index('data-filter="checked_out"')
     assert "disabled" not in inside.text.split('data-filter="checked_out"')[1].split("</button>")[0]
     nested = client.get(f"/?product={product['uuid']}&folder=Incoming/lib")
     assert nested.status_code == 200, nested.text

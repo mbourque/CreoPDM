@@ -96,6 +96,40 @@ def test_folder_view_counts_checked_out():
     counts = folder_view_counts(objects, "")
     assert counts["checked_out"] == 2
     assert counts["files"] == 3
+    assert counts["modified"] == 0
+
+
+def test_folder_view_counts_modified():
+    objects = [
+        SimpleNamespace(
+            filename="dirty.prt",
+            relative_path="dirty.prt",
+            object_type="CREO_PART",
+            owned_by_me=True,
+            modified_locally=True,
+            can_checkin=True,
+        ),
+        SimpleNamespace(
+            filename="clean.prt",
+            relative_path="clean.prt",
+            object_type="CREO_PART",
+            owned_by_me=True,
+            modified_locally=False,
+            can_checkin=True,
+        ),
+        SimpleNamespace(
+            filename="theirs.prt",
+            relative_path="theirs.prt",
+            object_type="CREO_PART",
+            checkout_user="Bob",
+            modified_locally=True,
+            can_checkin=False,
+        ),
+    ]
+    counts = folder_view_counts(objects, "")
+    assert counts["modified"] == 1
+    assert counts["checked_out"] == 3
+    assert counts["files"] == 3
 
 
 def test_folder_of_root_and_nested():

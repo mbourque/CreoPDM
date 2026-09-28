@@ -61,6 +61,12 @@ def folder_view_counts(
             for obj in view
             if getattr(obj, "owned_by_me", False) or getattr(obj, "checkout_user", None)
         ),
+        "modified": sum(
+            1
+            for obj in view
+            if getattr(obj, "modified_locally", False)
+            and (getattr(obj, "owned_by_me", False) or getattr(obj, "can_checkin", False))
+        ),
     }
 
 

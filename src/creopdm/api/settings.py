@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request
 
 from creopdm.api.deps import get_context
 from creopdm.api.pages import clear_creo_page_cache
-from creopdm.config import AppSettings, database_url_for_display
+from creopdm.config import AppSettings, database_url_for_display, path_for_settings_display
 from creopdm.constants import (
     DEFAULT_CAD_MODELS_EXTENSIONS,
     DEFAULT_CREO_MODEL_EXTENSIONS,
@@ -40,6 +40,12 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
     settings = ctx.settings
     default_root = ctx.config.workspaces_dir
     current_root = ctx.config.workspace_root()
+    default_display = path_for_settings_display(default_root)
+    try:
+        on_default = current_root.resolve() == default_root.resolve()
+    except OSError:
+        on_default = False
+    workspace_display = default_display if on_default else str(current_root)
     resolved = _resolved_creojs(ctx)
     return SettingsResponse(
         creo_open_mode=settings.creo.open_mode,
@@ -48,8 +54,8 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         creo_view_executable=settings.creo.view_executable,
         creo_js_library=settings.creo.js_library,
         creo_js_library_resolved=str(resolved) if resolved else None,
-        workspace_root=str(current_root),
-        default_workspace_root=str(default_root),
+        workspace_root=workspace_display,
+        default_workspace_root=default_display,
         open_browser_on_start=settings.ui.open_browser_on_start,
         cad_extensions=ctx.config.extra_cad_extensions(),
         default_cad_extensions=list(DEFAULT_EXTRA_CAD_EXTENSIONS),

@@ -495,6 +495,25 @@ def user_home() -> Path:
     return Path.home()
 
 
+def path_for_settings_display(path: Path | str) -> str:
+    """Format a path for Settings UI hints without embedding the login name.
+
+    Paths under the user home become ``~/...`` (posix separators). Others stay absolute.
+    """
+    try:
+        resolved = Path(path).expanduser().resolve()
+        home = user_home().resolve()
+    except OSError:
+        return str(path)
+    try:
+        relative = resolved.relative_to(home)
+    except ValueError:
+        return str(resolved)
+    if str(relative) in {"", "."}:
+        return "~"
+    return "~/" + relative.as_posix()
+
+
 def on_windows() -> bool:
     return os.name == "nt"
 

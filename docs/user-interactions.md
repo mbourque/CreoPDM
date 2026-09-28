@@ -75,6 +75,8 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Type in Search | Show matching files across the product | |
 | Clear Search | Show the normal folder view again | Bring back folders/files you already removed |
 | Click a metric (Parts, Assemblies, …) | Filter and select those files; click again to clear | Jump into a folder or leave the page |
+| Click **Modified** | Filter and select files with local changes you can check in; click again to clear | Select unmodified checkouts or someone else’s files |
+| Click **Checked out** | Filter and select checked out files in the current group; click again to clear | |
 | Switch tabs: **Files** / **Checked out** / **New files** | Show that list | |
 | Click a column header | Sort; click again to reverse | |
 

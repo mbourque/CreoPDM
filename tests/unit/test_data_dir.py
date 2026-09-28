@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from creopdm.config import ConfigManager, adopt_legacy_linux_data_dir, data_dir_from_environment
+from creopdm.config import (
+    ConfigManager,
+    adopt_legacy_linux_data_dir,
+    data_dir_from_environment,
+    path_for_settings_display,
+)
 from creopdm.constants import APP_NAME
 from creopdm.services.workspace_service import WorkspaceService
 
@@ -86,3 +91,15 @@ def test_case_insensitive_jpg_lookup(tmp_path):
     found = WorkspaceService._case_insensitive_file(tmp_path / "IMG_0809.JPG")
     assert found.is_file()
     assert found.read_bytes() == b"photo"
+
+
+def test_path_for_settings_display_uses_tilde_under_home(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr("creopdm.config.user_home", lambda: home)
+    vaults = home / ".local" / "share" / APP_NAME / "vaults"
+    vaults.mkdir(parents=True)
+    assert path_for_settings_display(vaults) == f"~/.local/share/{APP_NAME}/vaults"
+    outside = tmp_path / "other" / "vaults"
+    outside.mkdir(parents=True)
+    assert path_for_settings_display(outside) == str(outside.resolve())
