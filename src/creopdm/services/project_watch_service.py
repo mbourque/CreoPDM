@@ -124,7 +124,8 @@ class ProjectWatchService:
         for email, _uid in db.execute(stmt).all():
             usable = _usable_watch_email(email)
             if usable is not None:
-                out.append(usable)        # Stable unique order
+                out.append(usable)
+        # Stable unique order
         seen: set[str] = set()
         unique: list[str] = []
         for addr in out:
@@ -149,10 +150,21 @@ class ProjectWatchService:
         email_enabled: bool,
     ) -> None:
         if not email_enabled:
+            logger.info(
+                "project_activity skip project=%s action=%s: email notifications disabled",
+                project.uuid,
+                action,
+            )
             return
         exclude_id = actor.id if actor is not None else None
         recipients = self.list_watcher_emails(db, project.id, exclude_user_id=exclude_id)
         if not recipients:
+            logger.info(
+                "project_activity skip project=%s action=%s actor_id=%s: no watcher recipients",
+                project.uuid,
+                action,
+                exclude_id,
+            )
             return
 
         files = [f for f in filenames if (f or "").strip()]
@@ -183,6 +195,13 @@ class ProjectWatchService:
             f"When: {when}\n"
             f"Files: {files_block}\n"
             f"\nOpen: {link}\n"
+        )
+        logger.info(
+            "project_activity notify project=%s action=%s recipients=%s files=%s",
+            project.uuid,
+            action,
+            recipients,
+            files[:5],
         )
         self._notifications.notify(
             NotificationEvent.PROJECT_ACTIVITY,
