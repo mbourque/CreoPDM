@@ -300,6 +300,31 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         curShell.innerHTML = nextShell.innerHTML;
         if (doc.title) document.title = doc.title;
+        // Keep signed-in identity + caps in sync with the session that served this HTML.
+        // Soft-nav only swaps main.shell; without this, a stale header/watch state can linger.
+        const nextBody = doc.body;
+        if (nextBody) {
+          [
+            "data-agent-token",
+            "data-can-checkout",
+            "data-can-view",
+            "data-can-copy-to-vault",
+            "data-agent-base",
+            "data-workspace-poll-ms",
+          ].forEach((attr) => {
+            if (nextBody.hasAttribute(attr)) {
+              document.body.setAttribute(attr, nextBody.getAttribute(attr) || "");
+            }
+          });
+        }
+        const nextCluster = doc.querySelector(".status-cluster");
+        const curCluster = document.querySelector(".status-cluster");
+        if (nextCluster && curCluster) {
+          const creo = curCluster.querySelector("#creo-status");
+          curCluster.innerHTML = nextCluster.innerHTML;
+          const placeholder = curCluster.querySelector("#creo-status");
+          if (creo && placeholder) placeholder.replaceWith(creo);
+        }
         const nextUrl = response.url || href;
         if (mode === "push") {
           history.pushState({ creopdmSoft: 1 }, "", nextUrl);
@@ -978,6 +1003,36 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  function applyProjectWatchPayload(btn, body) {
+    if (!btn || !body) return;
+    const can = Boolean(body.can_watch);
+    btn.dataset.canWatch = can ? "1" : "0";
+    btn.dataset.reason = body.reason || "";
+    btn.disabled = !can;
+    if (!can) {
+      btn.title = (body.reason || "").trim() || "Watching unavailable";
+    }
+    applyProjectWatchState(btn, Boolean(body.watching));
+  }
+
+  async function syncProjectWatchFromServer() {
+    const btn = $("#project-watch-btn");
+    if (!btn) return;
+    const projectId = btn.dataset.project || "";
+    if (!projectId) return;
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/watch`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!response.ok) return;
+      const body = await response.json().catch(() => null);
+      if (body) applyProjectWatchPayload(btn, body);
+    } catch {
+      /* best-effort — SSR attributes remain */
+    }
+  }
+
   function confirmProjectWatch(watching) {
     const dialog = $("#project-watch-dialog");
     const form = $("#project-watch-form");
@@ -1042,9 +1097,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     const body = await response.json().catch(() => ({}));
-    applyProjectWatchState(btn, Boolean(body.watching));
+    applyProjectWatchPayload(btn, body);
     showOk(body.watching ? "Watching this project." : "Stopped watching this project.");
   });
+
+  // Authoritative per-session watch state (avoids stale SSR/cache across logins).
+  void syncProjectWatchFromServer();
 
   $("#rename-project-btn")?.addEventListener("click", () => {
     closeProjectSettings();

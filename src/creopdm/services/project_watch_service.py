@@ -96,6 +96,12 @@ class ProjectWatchService:
             return
         db.add(ProjectWatch(user_id=user.id, project_id=project.id))
         db.flush()
+        logger.info(
+            "project_watch subscribe user_id=%s project_id=%s project=%s",
+            user.id,
+            project.id,
+            project.uuid,
+        )
 
     def unsubscribe(self, db: Session, user: User, project: Project) -> None:
         db.execute(
@@ -105,6 +111,12 @@ class ProjectWatchService:
             )
         )
         db.flush()
+        logger.info(
+            "project_watch unsubscribe user_id=%s project_id=%s project=%s",
+            user.id,
+            project.id,
+            project.uuid,
+        )
 
     def list_watcher_emails(
         self,

@@ -177,6 +177,10 @@ def create_app(context: AppContext | None = None) -> FastAPI:
         path = request.url.path or ""
         if path.endswith("/app.js"):
             response.headers["Cache-Control"] = "no-store"
+        # Authenticated HTML must not be reused across logins (stale watch bell / user pill).
+        content_type = (response.headers.get("content-type") or "").lower()
+        if "text/html" in content_type:
+            response.headers["Cache-Control"] = "no-store"
         return response
 
     # Outermost so request.session is available in auth_guard.

@@ -155,11 +155,14 @@ def subscribe_project_watch(
     email_on = bool(ctx.settings.email.enabled)
     ctx.project_watches.subscribe(db, auth_user, project, email_enabled=email_on)
     db.commit()
+    # Re-read for this user only — never trust a hard-coded watching=True.
+    watching = ctx.project_watches.is_watching(db, int(auth_user.id), int(project.id))
+    can_watch, reason = ctx.project_watches.watch_eligibility(auth_user, email_enabled=email_on)
     return ProjectWatchResponse(
-        watching=True,
-        can_watch=True,
+        watching=watching,
+        can_watch=can_watch,
         email_notifications_enabled=email_on,
-        reason=None,
+        reason=None if can_watch else reason,
     )
 
 
@@ -178,9 +181,10 @@ def unsubscribe_project_watch(
     email_on = bool(ctx.settings.email.enabled)
     ctx.project_watches.unsubscribe(db, auth_user, project)
     db.commit()
+    watching = ctx.project_watches.is_watching(db, int(auth_user.id), int(project.id))
     can_watch, reason = ctx.project_watches.watch_eligibility(auth_user, email_enabled=email_on)
     return ProjectWatchResponse(
-        watching=False,
+        watching=watching,
         can_watch=can_watch,
         email_notifications_enabled=email_on,
         reason=None if can_watch else reason,

@@ -328,3 +328,71 @@ def test_membership_helper_swallows_unreadable_projects(auth_ctx):
     broken = BrokenUser()
     assert auth_ctx.user_accounts._membership_project_ids(broken) == set()
     assert auth_ctx.user_accounts.filter_accessible_projects(broken, []) == []
+
+
+@requires_git
+def test_watch_is_per_user_other_user_stop_does_not_clear(auth_client, auth_ctx):
+    """Tim watches; Michael must not see watching; Michael stop must not clear Tim."""
+    from creopdm.models.user import ProjectWatch, User
+    from sqlalchemy import select
+
+    _setup_admin_and_users(
+        auth_client,
+        auth_ctx,
+        ("tim", BuiltinRole.ENGINEER.value),
+        ("michael", BuiltinRole.ENGINEER.value),
+    )
+    auth_ctx.settings.email.enabled = True
+    _login(auth_client, "admin", "AdminPass1")
+    project = auth_client.post("/api/projects", json={"name": "Conveyor"}).json()
+    project_id = project["uuid"]
+
+    with auth_ctx.session_factory() as db:
+        for name in ("tim", "michael"):
+            user = db.scalar(select(User).where(User.username == name))
+            assert user is not None
+            user.must_change_password = False
+            auth_ctx.user_accounts.set_project_access(
+                db, user, access_all=False, project_uuids=[project_id]
+            )
+        db.commit()
+
+    _login(auth_client, "tim", "TimPass1")
+    sub = auth_client.post(f"/api/projects/{project_id}/watch")
+    assert sub.status_code == 200, sub.text
+    assert sub.json()["watching"] is True
+    tim_home = auth_client.get(f"/?project={project_id}")
+    assert tim_home.status_code == 200
+    assert 'data-watching="1"' in tim_home.text
+    assert 'data-can-watch="1"' in tim_home.text
+
+    _login(auth_client, "michael", "MichaelPass1")
+    michael_status = auth_client.get(f"/api/projects/{project_id}/watch")
+    assert michael_status.status_code == 200
+    assert michael_status.json()["watching"] is False
+    michael_home = auth_client.get(f"/?project={project_id}")
+    assert michael_home.status_code == 200
+    assert 'data-watching="0"' in michael_home.text
+    assert "is-watching" not in michael_home.text.split("project-watch-btn", 1)[-1].split("</button>", 1)[0]
+
+    # Michael "stop watching" must not remove Tim's row.
+    stop = auth_client.delete(f"/api/projects/{project_id}/watch")
+    assert stop.status_code == 200
+    assert stop.json()["watching"] is False
+    with auth_ctx.session_factory() as db:
+        tim = db.scalar(select(User).where(User.username == "tim"))
+        assert tim is not None
+        assert (
+            db.scalar(
+                select(ProjectWatch).where(ProjectWatch.user_id == tim.id)
+            )
+            is not None
+        )
+
+    _login(auth_client, "tim", "TimPass1")
+    still = auth_client.get(f"/api/projects/{project_id}/watch")
+    assert still.status_code == 200
+    assert still.json()["watching"] is True
+    tim_again = auth_client.get(f"/?project={project_id}")
+    assert tim_again.status_code == 200
+    assert 'data-watching="1"' in tim_again.text
