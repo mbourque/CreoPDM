@@ -26,7 +26,7 @@ Disabled accounts cannot sign in. Checkout, check-in, and activity rows store th
 
 Users with any CreoPDM Administration capability (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `projects.manage`, `settings.manage`, `email.manage`) see **Administration** (`/admin`):
 
-- **Users** — list accounts (Projects column: **All** or membership count); click a **name** to edit the user, or a **role** name to open that role (`roles.manage`); **Add user** (`users.manage` + `users.password` for the initial password). New users get **All projects**; membership is not edited here.
+- **Users** — list accounts (Projects column: **All** or membership count); click a **name** to edit the user, or a **role** name to open that role (`roles.manage`); **Add user** (`users.manage` + `users.password` for the initial password). New users get **no project access**; membership is not edited here.
 - **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`). The role editor groups **CreoPDM Administration** (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `projects.manage`, `settings.manage`, `email.manage`), **Projects**, and **Objects**.
 - **Membership** — decide who can open which projects (`projects.assign`): hub with **By project** and **By user** list pages, then edit members / All-projects for one row
 - **Projects** — list every active project on the server; create, edit, and soft-delete (`projects.manage`). Not limited by the signed-in user’s project membership list. (Files-page New/Delete still use `projects.create` / `projects.delete`.)
@@ -47,7 +47,7 @@ Others do not see Administration; direct URLs return **403**.
 | --- | --- |
 | `roles.assign` | Change another user’s role to one with **fewer** permissions than your own (not the same role or a higher one). Otherwise Role is read-only; new users default to **Engineer** |
 | `users.password` | Set initial password on Add user, or reset password on Edit |
-| `projects.assign` | Open **Administration → Membership** (By project / By user). New users still default to All projects |
+| `projects.assign` | Open **Administration → Membership** (By project / By user). New users default to **no** project access |
 
 Assignable roles are always a **proper subset** of the signed-in user’s permissions (never peer or higher).
 
@@ -57,7 +57,7 @@ On **Administration → Membership** (`projects.assign`):
 
 | Mode | Behavior |
 | --- | --- |
-| **By user** | **All projects** (default) or a multi-select project list; none selected → empty project list / **403** on project URLs |
+| **By user** | **All projects** or a multi-select project list; none selected → empty project list / **403** on project URLs (new users start with none) |
 | **By project** | Tick which **restricted** users are members. Users with All projects are listed read-only (they already see the project); change All projects under By user |
 | **Hub summary** | Table of projects with **Members** (who can open = restricted + All-projects users), **Restricted** counts, and **Manage** links |
 

@@ -620,7 +620,7 @@ class UserService:
         role_name: str = StarterRole.ENGINEER.value,
         must_change_password: bool = False,
         status: str = UserStatus.ACTIVE.value,
-        access_all_projects: bool = True,
+        access_all_projects: bool = False,
         project_uuids: list[str] | None = None,
         actor: User | None = None,
     ) -> User:
@@ -643,7 +643,8 @@ class UserService:
             else:
                 self.ensure_can_assign_role(actor, role)
             if not self.can_assign_projects(actor):
-                access_all_projects = True
+                # Cannot grant All projects without projects.assign — leave none.
+                access_all_projects = False
                 project_uuids = None
         user = User(
             uuid=str(uuid.uuid4()),
@@ -653,7 +654,7 @@ class UserService:
             password_hash=hash_password(pwd),
             status=status,
             must_change_password=must_change_password,
-            access_all_projects=True,
+            access_all_projects=False,
         )
         db.add(user)
         db.flush()
@@ -684,6 +685,7 @@ class UserService:
             password=password,
             role_name=StarterRole.ADMINISTRATOR.value,
             must_change_password=False,
+            access_all_projects=True,
         )
 
     def authenticate(self, db: Session, username: str, password: str) -> User:

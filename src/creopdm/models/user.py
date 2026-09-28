@@ -23,7 +23,7 @@ class User(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=UserStatus.ACTIVE.value, index=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # True = every project; False = only rows in user_projects (empty = no project access).
-    access_all_projects: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    access_all_projects: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

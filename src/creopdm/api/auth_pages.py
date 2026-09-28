@@ -604,7 +604,7 @@ def admin_user_create(
                 role_name=role_name,
                 status=status,
                 must_change_password=True,
-                access_all_projects=True,
+                access_all_projects=False,
                 actor=admin,
             )
             db.commit()

@@ -512,6 +512,7 @@ def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx)
     assert user_form.status_code == 200
     assert "Project access" not in user_form.text
     assert 'id="project-access-list"' not in user_form.text
+    assert "no project access" in user_form.text.lower()
     assert "Administration → Membership" in user_form.text or "/admin/membership" in user_form.text
 
     created = auth_client.post(
@@ -532,7 +533,7 @@ def test_admin_membership_project_access_filters_projects(auth_client, auth_ctx)
     with auth_ctx.session_factory() as db:
         user = db.scalar(select(User).where(User.username == "limited"))
         assert user is not None
-        assert user.access_all_projects is True
+        assert user.access_all_projects is False
         user.must_change_password = False
         user_uuid = user.uuid
         db.commit()
@@ -744,6 +745,8 @@ def _setup_admin_and_users(
             user = db.scalar(select(User).where(User.username == name))
             assert user is not None
             user.must_change_password = False
+            # Tests that browse projects expect access; production default is none.
+            auth_ctx.user_accounts.set_project_access(db, user, access_all=True)
         db.commit()
     auth_client.get("/logout", follow_redirects=False)
 
@@ -1906,7 +1909,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
             password="BackupPass1",
             role_name=BuiltinRole.ADMINISTRATOR.value,
             must_change_password=False,
-            actor=db.scalar(select(User).where(User.username == "admin")),
+            access_all_projects=True,
         )
         db.commit()
 
@@ -2052,6 +2055,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
     )
 
     # Spare full admin edits other accounts' membership (and can still demote another admin).
+    # No actor: Administrator is not assignable via roles.assign (must be strictly below).
     with auth_ctx.session_factory() as db:
         auth_ctx.user_accounts.create_user(
             db,
@@ -2060,7 +2064,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             password="OpsPass1",
             role_name=BuiltinRole.ADMINISTRATOR.value,
             must_change_password=False,
-            actor=db.scalar(select(User).where(User.username == "admin")),
+            access_all_projects=True,
         )
         db.commit()
 
@@ -2072,6 +2076,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
     assert 'href="/admin/membership/users"' in form.text
     user_new = auth_client.get("/admin/users/new")
     assert user_new.status_code == 200
+    assert "no project access" in user_new.text.lower()
     assert 'id="project-access-list"' not in user_new.text
 
     project = auth_client.post("/api/projects", json={"name": "Role Matrix"}).json()
@@ -2149,12 +2154,12 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 assert "Administration" in home.text
             else:
                 assert "Administration" not in home.text
-            # Default All projects: both fixtures visible.
+            # Default after Membership grant in setup: both fixtures visible.
             listed_all = auth_client.get("/api/projects")
             assert listed_all.status_code == 200
             listed_uuids = {p["uuid"] for p in listed_all.json()}
             assert project_id in listed_uuids and other_id in listed_uuids, (
-                f"{role_name}/{username}: default All projects must include both fixtures"
+                f"{role_name}/{username}: All projects must include both fixtures"
             )
         else:
             _assert_forbidden(auth_client.get(f"/api/objects/{object_id}"))
