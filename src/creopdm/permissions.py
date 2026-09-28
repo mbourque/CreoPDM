@@ -19,6 +19,7 @@ from creopdm.auth_constants import (
     PERMISSION_PROJECTS_CREATE,
     PERMISSION_PROJECTS_DELETE,
     PERMISSION_PROJECTS_EDIT,
+    PERMISSION_PROJECTS_MANAGE,
     PERMISSION_ROLES_ASSIGN,
     PERMISSION_ROLES_MANAGE,
     PERMISSION_SETTINGS_MANAGE,
@@ -54,9 +55,6 @@ class CapabilityFlags:
 
 
 def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
-    can_create = PERMISSION_PROJECTS_CREATE in keys
-    can_edit = PERMISSION_PROJECTS_EDIT in keys
-    can_delete = PERMISSION_PROJECTS_DELETE in keys
     return CapabilityFlags(
         permissions=keys,
         can_manage_users=PERMISSION_USERS_MANAGE in keys,
@@ -65,10 +63,10 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_assign_projects=PERMISSION_PROJECTS_ASSIGN in keys,
         can_manage_roles=PERMISSION_ROLES_MANAGE in keys,
         can_manage_settings=PERMISSION_SETTINGS_MANAGE in keys,
-        can_manage_projects=can_create or can_edit or can_delete,
-        can_create_project=can_create,
-        can_edit_project=can_edit,
-        can_delete_project=can_delete,
+        can_manage_projects=PERMISSION_PROJECTS_MANAGE in keys,
+        can_create_project=PERMISSION_PROJECTS_CREATE in keys,
+        can_edit_project=PERMISSION_PROJECTS_EDIT in keys,
+        can_delete_project=PERMISSION_PROJECTS_DELETE in keys,
         can_view_objects=PERMISSION_OBJECTS_VIEW in keys,
         can_add_objects=PERMISSION_OBJECTS_ADD in keys,
         can_checkout=PERMISSION_OBJECTS_CHECKOUT in keys,

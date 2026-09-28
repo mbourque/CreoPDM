@@ -12,10 +12,8 @@
     <span>Projects</span>
   </nav>
   <h1>Projects</h1>
-  <p class="muted">Every active project on this CreoPDM server. Click a name to edit{% if can_create_project %}, or add a new project{% endif %}.</p>
-  {% if can_create_project %}
+  <p class="muted">Every active project on this CreoPDM server. Click a name to edit, or add a new project.</p>
   <p><a class="btn btn-primary" href="/admin/projects/new">Add project</a></p>
-  {% endif %}
 
   <section class="settings-card settings-form-wide">
     <table class="data-table">
@@ -31,11 +29,7 @@
         {% for p in projects %}
         <tr>
           <td>
-            {% if can_edit_project or can_delete_project %}
             <a href="/admin/projects/{{ p.uuid }}">{{ p.name }}</a>
-            {% else %}
-            {{ p.name }}
-            {% endif %}
           </td>
           <td>{{ p.number or "—" }}</td>
           <td>{{ p.vault_folder }}</td>

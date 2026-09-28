@@ -555,11 +555,11 @@ The system should prevent:
 
 - deleting the Administrator role when it is the last full-admin path;
 
-- removing any of `users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, or `settings.manage` when that would leave no ACTIVE user with **all** of them;
+- removing any of `users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `projects.manage`, or `settings.manage` when that would leave no ACTIVE user with **all** of them;
 
 - disabling or demoting the last active account that has full CreoPDM Administration.
 
-There must always be at least one active user who can manage Users, set passwords, assign roles, manage Roles, assign project membership, and open Settings.
+There must always be at least one active user who can manage Users, set passwords, assign roles, manage Roles, assign project membership, administer Projects, and open Settings.
 
 Only a full administrator (all of those permissions) may edit another full administrator or assign a full-administrator role. Full administrators may also edit their own Users admin record (the only self-edit exception). An account with `users.manage` alone can manage non-admin users but cannot change their role (`roles.assign`), password (`users.password`), or project membership (`projects.assign`), and cannot change administrator accounts. Non-admin accounts still cannot edit themselves from Users admin — another administrator must change them.
 

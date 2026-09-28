@@ -26,6 +26,7 @@ from creopdm.auth_constants import (
     PERMISSION_PROJECTS_CREATE,
     PERMISSION_PROJECTS_DELETE,
     PERMISSION_PROJECTS_EDIT,
+    PERMISSION_PROJECTS_MANAGE,
     PERMISSION_PROJECTS_ASSIGN,
     PERMISSION_ROLES_ASSIGN,
     PERMISSION_ROLES_MANAGE,
@@ -271,12 +272,8 @@ class UserService:
         return [r for r in roles if not self.role_is_full_administrator(r)]
 
     def can_manage_projects(self, user: User) -> bool:
-        """True when the user may open Administration → Projects (create/edit/delete)."""
-        return (
-            self.can_create_project(user)
-            or self.can_edit_project(user)
-            or self.can_delete_project(user)
-        )
+        """True when the user may open Administration → Projects (full CRUD there)."""
+        return self.has_permission(user, PERMISSION_PROJECTS_MANAGE)
 
     def can_create_project(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_PROJECTS_CREATE)
@@ -344,8 +341,9 @@ class UserService:
     ) -> bool:
         """True when no ACTIVE user would keep all CreoPDM Administration caps.
 
-        Full admin means users.manage + roles.manage + settings.manage on the
-        same account so Users, Roles, and Settings cannot all become unreachable.
+        Full admin means every ADMINISTRATION_PERMISSION_KEYS entry on the
+        same account so Users, Roles, Projects admin, and Settings cannot
+        all become unreachable.
         """
         users = list(
             db.scalars(
@@ -442,7 +440,7 @@ class UserService:
                     "Cannot leave the system with no active user who has full "
                     "CreoPDM Administration "
                     "(users.manage, users.password, roles.assign, roles.manage, "
-                    "projects.assign, and settings.manage)."
+                    "projects.assign, projects.manage, and settings.manage)."
                 )
             db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
             for perm_id in self._permission_ids_for_keys(db, keys):
@@ -462,7 +460,7 @@ class UserService:
         if self._would_leave_zero_full_administrators(db, deleting_role_id=role.id):
             raise ValidationAppError(
                 "Cannot delete the last role that grants full CreoPDM Administration "
-                "(users, roles, and settings) to an active user."
+                "to an active user."
             )
         db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
         db.delete(role)
@@ -679,7 +677,7 @@ class UserService:
                     "Cannot leave the system with no active user who has full "
                     "CreoPDM Administration "
                     "(users.manage, users.password, roles.assign, roles.manage, "
-                    "projects.assign, and settings.manage)."
+                    "projects.assign, projects.manage, and settings.manage)."
                 )
         if new_status is not None:
             user.status = new_status

@@ -739,8 +739,8 @@ def test_engineer_can_author_not_manage_projects(auth_client, auth_ctx, repo_par
 
 
 @requires_git
-def test_pdm_manager_can_create_not_delete_sees_projects_admin(auth_client, auth_ctx, repo_parent):
-    """PDM Manager may create/edit via Administration → Projects; cannot delete or manage users."""
+def test_pdm_manager_can_create_not_delete_no_projects_admin(auth_client, auth_ctx, repo_parent):
+    """PDM Manager may create/edit via API/Files; no Administration → Projects (needs projects.manage)."""
     _setup_admin_and_users(
         auth_client, auth_ctx, ("pdm", BuiltinRole.PDM_MANAGER.value)
     )
@@ -752,18 +752,10 @@ def test_pdm_manager_can_create_not_delete_sees_projects_admin(auth_client, auth
     assert home.status_code == 200
     assert 'id="new-project-btn"' in home.text
     assert 'id="delete-project-btn"' not in home.text
-    assert "Administration" in home.text
+    assert "Administration" not in home.text
 
-    hub = auth_client.get("/admin")
-    assert hub.status_code == 200
-    assert 'href="/admin/projects"' in hub.text
-    assert 'href="/admin/users"' not in hub.text
-
-    listed = auth_client.get("/admin/projects")
-    assert listed.status_code == 200
-    assert "PDM Project" in listed.text
-    assert 'href="/admin/projects/new"' in listed.text
-
+    assert auth_client.get("/admin", follow_redirects=False).status_code == 403
+    assert auth_client.get("/admin/projects", follow_redirects=False).status_code == 403
     _assert_forbidden(auth_client.delete(f"/api/projects/{project['uuid']}"))
     assert auth_client.get("/admin/users", follow_redirects=False).status_code == 403
     assert auth_client.get("/settings", follow_redirects=False).status_code == 403
@@ -866,6 +858,7 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
         PERMISSION_OBJECTS_VIEW,
         PERMISSION_PROJECTS_CREATE,
         PERMISSION_PROJECTS_DELETE,
+        PERMISSION_PROJECTS_MANAGE,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_USERS_MANAGE,
         STARTER_ROLE_PERMISSION_KEYS,
@@ -896,7 +889,9 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
     assert PERMISSION_PROJECTS_CREATE in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_OBJECTS_COPY_TO_VAULT in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_PROJECTS_DELETE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
+    assert PERMISSION_PROJECTS_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_USERS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
+    assert PERMISSION_PROJECTS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_ROLES_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_OBJECTS_COPY_TO_VAULT in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     for role_name, expected in STARTER_ROLE_PERMISSION_KEYS.items():
@@ -1026,9 +1021,7 @@ def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ct
     """Admin/settings-only role (no objects.view) signs in to /admin, not a JSON error."""
     from creopdm.auth_constants import (
         PERMISSION_PROJECTS_ASSIGN,
-        PERMISSION_PROJECTS_CREATE,
-        PERMISSION_PROJECTS_DELETE,
-        PERMISSION_PROJECTS_EDIT,
+        PERMISSION_PROJECTS_MANAGE,
         PERMISSION_ROLES_ASSIGN,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_SETTINGS_MANAGE,
@@ -1049,10 +1042,8 @@ def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ct
                 PERMISSION_ROLES_ASSIGN,
                 PERMISSION_ROLES_MANAGE,
                 PERMISSION_PROJECTS_ASSIGN,
+                PERMISSION_PROJECTS_MANAGE,
                 PERMISSION_SETTINGS_MANAGE,
-                PERMISSION_PROJECTS_CREATE,
-                PERMISSION_PROJECTS_EDIT,
-                PERMISSION_PROJECTS_DELETE,
             ],
         },
         follow_redirects=False,
@@ -1171,6 +1162,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
     role_form = auth_client.get(f"/admin/roles/{role_uuid}")
     assert role_form.status_code == 200
     assert "CreoPDM Administration" in role_form.text
+    assert "projects.manage" in role_form.text
     assert "cannot lock themselves out" in role_form.text.lower()
 
     # Stripping every admin key is rejected.
@@ -1186,9 +1178,10 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
     assert denied_all.status_code == 400, denied_all.text
     assert "users.manage" in denied_all.text
     assert "roles.manage" in denied_all.text
+    assert "projects.manage" in denied_all.text
     assert "settings.manage" in denied_all.text
 
-    # Keeping two of three is still a lockout (must keep all three on someone).
+    # Dropping any single Administration key is still a lockout.
     for drop in (
         PERMISSION_USERS_MANAGE,
         PERMISSION_ROLES_MANAGE,
@@ -1229,12 +1222,12 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
     assert demote.status_code in (400, 403), demote.text
 
     # With a second full admin, stripping settings.manage from Administrator is allowed
-    # only if that second account keeps all three (via a dedicated full-admin role).
+    # only if that second account keeps the full Administration set (via a dedicated role).
     with auth_ctx.session_factory() as db:
         full = auth_ctx.user_accounts.create_role(
             db,
             name="Full Admin Backup",
-            description="Backup path with all three admin caps",
+            description="Backup path with all Administration caps",
             permission_keys=sorted(ADMINISTRATION_PERMISSION_KEYS)
             + [PERMISSION_OBJECTS_VIEW],
         )
@@ -1572,6 +1565,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_PROJECTS_CREATE,
         PERMISSION_PROJECTS_DELETE,
         PERMISSION_PROJECTS_EDIT,
+        PERMISSION_PROJECTS_MANAGE,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_ROLES_ASSIGN,
         PERMISSION_PROJECTS_ASSIGN,
@@ -1685,9 +1679,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 PERMISSION_USERS_MANAGE in allowed
                 or PERMISSION_ROLES_MANAGE in allowed
                 or PERMISSION_SETTINGS_MANAGE in allowed
-                or PERMISSION_PROJECTS_CREATE in allowed
-                or PERMISSION_PROJECTS_EDIT in allowed
-                or PERMISSION_PROJECTS_DELETE in allowed
+                or PERMISSION_PROJECTS_MANAGE in allowed
                 or PERMISSION_PROJECTS_ASSIGN in allowed
                 or PERMISSION_USERS_PASSWORD in allowed
                 or PERMISSION_ROLES_ASSIGN in allowed
@@ -1710,6 +1702,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             PERMISSION_USERS_MANAGE: auth_client.get("/admin/users", follow_redirects=False),
             PERMISSION_ROLES_MANAGE: auth_client.get("/admin/roles", follow_redirects=False),
             PERMISSION_SETTINGS_MANAGE: auth_client.get("/api/settings", follow_redirects=False),
+            PERMISSION_PROJECTS_MANAGE: auth_client.get("/admin/projects", follow_redirects=False),
             PERMISSION_OBJECTS_VIEW: auth_client.get(f"/api/projects/{project_id}"),
             PERMISSION_PROJECTS_CREATE: auth_client.post(
                 "/api/projects",

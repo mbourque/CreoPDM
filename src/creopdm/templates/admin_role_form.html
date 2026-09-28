@@ -24,7 +24,7 @@
       <label>Description
         <input name="description" type="text" value="{{ form.description }}" maxlength="500" autocomplete="off">
       </label>
-      <p class="muted small">Permissions control API and toolbar access. At least one active user must keep full <strong>CreoPDM Administration</strong> (<code>users.manage</code>, <code>users.password</code>, <code>roles.assign</code>, <code>roles.manage</code>, <code>projects.assign</code>, and <code>settings.manage</code>) so admins cannot lock themselves out. <code>users.manage</code> alone does not allow changing roles, passwords, or project membership.</p>
+      <p class="muted small">Permissions control API and toolbar access. At least one active user must keep full <strong>CreoPDM Administration</strong> (<code>users.manage</code>, <code>users.password</code>, <code>roles.assign</code>, <code>roles.manage</code>, <code>projects.assign</code>, <code>projects.manage</code>, and <code>settings.manage</code>) so admins cannot lock themselves out. <code>users.manage</code> alone does not allow changing roles, passwords, or project membership.</p>
 
       {% for group in permission_groups %}
       <fieldset class="role-perm-group">

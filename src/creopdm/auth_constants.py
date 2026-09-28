@@ -27,6 +27,7 @@ PERMISSION_USERS_PASSWORD = "users.password"
 PERMISSION_ROLES_ASSIGN = "roles.assign"
 PERMISSION_ROLES_MANAGE = "roles.manage"
 PERMISSION_PROJECTS_ASSIGN = "projects.assign"
+PERMISSION_PROJECTS_MANAGE = "projects.manage"
 PERMISSION_SETTINGS_MANAGE = "settings.manage"
 PERMISSION_PROJECTS_CREATE = "projects.create"
 PERMISSION_PROJECTS_EDIT = "projects.edit"
@@ -56,6 +57,7 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_ROLES_ASSIGN, "Assign roles to users"),
     (PERMISSION_ROLES_MANAGE, "Create, edit, and delete roles"),
     (PERMISSION_PROJECTS_ASSIGN, "Assign project membership to users"),
+    (PERMISSION_PROJECTS_MANAGE, "Create, edit, and delete projects in Administration"),
     (PERMISSION_SETTINGS_MANAGE, "Change global CreoPDM settings"),
     (PERMISSION_PROJECTS_CREATE, "Create projects"),
     (PERMISSION_PROJECTS_EDIT, "Edit project properties"),
@@ -78,6 +80,7 @@ ADMINISTRATION_PERMISSION_KEYS: frozenset[str] = frozenset(
         PERMISSION_ROLES_ASSIGN,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_PROJECTS_ASSIGN,
+        PERMISSION_PROJECTS_MANAGE,
         PERMISSION_SETTINGS_MANAGE,
     )
 )
@@ -92,6 +95,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             PERMISSION_ROLES_ASSIGN,
             PERMISSION_ROLES_MANAGE,
             PERMISSION_PROJECTS_ASSIGN,
+            PERMISSION_PROJECTS_MANAGE,
             PERMISSION_SETTINGS_MANAGE,
         ),
     ),

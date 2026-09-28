@@ -15,7 +15,7 @@
   </nav>
   <h1>{% if mode == 'new' %}Add project{% else %}Edit project{% endif %}</h1>
 
-  {% if mode == 'new' and can_create_project %}
+  {% if mode == 'new' %}
   <form method="post" action="/admin/projects/new" class="settings-form settings-form-wide">
     <section class="settings-card">
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
@@ -39,7 +39,7 @@
       </div>
     </section>
   </form>
-  {% elif mode == 'edit' and can_edit_project %}
+  {% else %}
   <form method="post" action="/admin/projects/{{ form.uuid }}" class="settings-form settings-form-wide">
     <section class="settings-card">
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
@@ -59,21 +59,7 @@
       </div>
     </section>
   </form>
-  {% elif mode == 'edit' %}
-  <section class="settings-card settings-form-wide">
-    <p><strong>{{ form.name }}</strong></p>
-    <p class="muted">Number: {{ form.number or "—" }} · Vault: <code>{{ form.vault_folder }}</code></p>
-    <p class="muted">{{ form.description or "" }}</p>
-    <p><a class="btn" href="/admin/projects">Back to list</a></p>
-  </section>
-  {% else %}
-  <section class="settings-card">
-    <p class="error">You do not have permission to create projects.</p>
-    <p><a class="btn" href="/admin/projects">Back to list</a></p>
-  </section>
-  {% endif %}
 
-  {% if mode == 'edit' and can_delete_project %}
   <section class="settings-card" style="margin-top: 1rem;">
     <h2>Remove project</h2>
     <p class="muted small">Hides the project in CreoPDM. Does not delete CAD files on disk. Type the exact project name to confirm.</p>

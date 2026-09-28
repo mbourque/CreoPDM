@@ -24,11 +24,11 @@ Disabled accounts cannot sign in. Checkout, check-in, and activity rows store th
 
 ### Administration
 
-Users with any CreoPDM Administration capability (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `settings.manage`, or project create/edit/delete) see **Administration** (`/admin`):
+Users with any CreoPDM Administration capability (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `projects.manage`, `settings.manage`) see **Administration** (`/admin`):
 
 - **Users** — list accounts (Projects column: **All** or membership count); click a **name** to edit the user, or a **role** name to open that role (`roles.manage`); **Add user** (`users.manage` + `users.password` for the initial password)
-- **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`). The role editor groups **CreoPDM Administration** (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `settings.manage`), **Projects**, and **Objects**.
-- **Projects** — list every active project on the server; **Add project** (`projects.create`); edit name/number/description (`projects.edit`); remove (soft-delete) with typed name confirm (`projects.delete`). Not limited by the signed-in user’s project membership list.
+- **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`). The role editor groups **CreoPDM Administration** (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `projects.manage`, `settings.manage`), **Projects**, and **Objects**.
+- **Projects** — list every active project on the server; create, edit, and soft-delete (`projects.manage`). Not limited by the signed-in user’s project membership list. (Files-page New/Delete still use `projects.create` / `projects.delete`.)
 - **Settings** — server options (Creo open mode, vault, file types, …) (`settings.manage`)
 - After a successful **Add user** / **Save** / role save / project save, you return to the list
 - New users must change their password on first sign-in
@@ -69,14 +69,14 @@ Empty databases seed four **starter** roles (**Administrator**, **PDM Manager**,
 
 ## Phase 2 (shipped): core role matrix
 
-Permission keys (`projects.*`, `objects.*` including **`objects.view`**, `users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `settings.manage`) gate APIs (**403** when missing). Browse/open/download requires **`objects.view`** — a role with no permissions cannot use the Files page. After sign-in, accounts **without** `objects.view` land on **`/admin`** when they have any Administration capability, otherwise on a plain **`/no-access`** page (not a JSON error). Administration breadcrumbs omit the **Projects** link when `objects.view` is missing. The Files toolbar and project New/Delete controls hide when the matching capability is false. Viewer Open dialog offers view-only open (no “Check out … then open”) when `objects.checkout` is missing (`data-can-checkout` on the page).
+Permission keys (`projects.*`, `objects.*` including **`objects.view`**, `users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `projects.manage`, `settings.manage`) gate APIs (**403** when missing). Browse/open/download requires **`objects.view`** — a role with no permissions cannot use the Files page. After sign-in, accounts **without** `objects.view` land on **`/admin`** when they have any Administration capability, otherwise on a plain **`/no-access`** page (not a JSON error). Administration breadcrumbs omit the **Projects** link when `objects.view` is missing. The Files toolbar and project New/Delete controls hide when the matching capability is false. Viewer Open dialog offers view-only open (no “Check out … then open”) when `objects.checkout` is missing (`data-can-checkout` on the page).
 
 | Starter role (default seed) | Can do | Cannot |
 | --- | --- | --- |
 | **Viewer** | Browse, open/download, Details (`objects.view` only; Open goes straight to open — no checkout dialog) | Authoring toolbar, Copy to Vault, checkout-on-open, Administration |
 | **Engineer** | View + Add, checkout, check-in, remove, revert, metadata | Create/edit/delete projects, Copy to Vault, users, roles, settings |
-| **PDM Manager** | Create/edit projects + Engineer authoring + **Copy to Vault** | Delete project, users, roles, settings |
-| **Administrator** | Everything above + delete project + full CreoPDM Administration | — |
+| **PDM Manager** | Create/edit projects (Files/API) + Engineer authoring + **Copy to Vault** | Delete project, Administration → Projects (`projects.manage`), users, roles, settings |
+| **Administrator** | Everything above + delete project + full CreoPDM Administration (including Admin → Projects) | — |
 
 Automated coverage: `tests/unit/test_auth.py::test_every_starter_role_login_permission_matrix` creates one ephemeral user per starter role, logs each in, and asserts allow/deny for every built-in permission key (plus Files toolbar chrome and **project membership**: All / one project / none). Dedicated UI + lifecycle coverage: `test_admin_user_project_access_filters_projects`.
 
@@ -86,7 +86,7 @@ When `auth_enabled` is false (unit tests with a static identity), all authoring 
 
 - **`/admin/roles`** — create roles, edit name/description/permissions, delete unused roles
 - Runtime caps come only from `role_permissions` (no Administrator-by-name short-circuit; starter templates are not re-applied on restart)
-- Safety: cannot leave zero **ACTIVE** users with full CreoPDM Administration (`users.manage` + `users.password` + `roles.assign` + `roles.manage` + `projects.assign` + `settings.manage` on the same account); cannot delete a role that is still assigned
+- Safety: cannot leave zero **ACTIVE** users with full CreoPDM Administration (`users.manage` + `users.password` + `roles.assign` + `roles.manage` + `projects.assign` + `projects.manage` + `settings.manage` on the same account); cannot delete a role that is still assigned
 - Starter roles are editable like any other role
 
 ### Deferred (later phases)

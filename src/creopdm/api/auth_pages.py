@@ -1055,11 +1055,6 @@ def admin_project_new(request: Request, ctx: AppContext = Depends(get_context), 
     manager = _require_projects_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    if not ctx.user_accounts.can_create_project(manager):
-        return HTMLResponse(
-            "<h1>403 Forbidden</h1><p>You do not have permission to create projects.</p>",
-            status_code=403,
-        )
     return templates.TemplateResponse(
         request,
         "admin_project_form.html",
@@ -1086,11 +1081,6 @@ def admin_project_create(
     manager = _require_projects_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    if not ctx.user_accounts.can_create_project(manager):
-        return HTMLResponse(
-            "<h1>403 Forbidden</h1><p>You do not have permission to create projects.</p>",
-            status_code=403,
-        )
     form = _project_form(
         name=name,
         number=number,
@@ -1171,11 +1161,6 @@ def admin_project_update(
     manager = _require_projects_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    if not ctx.user_accounts.can_edit_project(manager):
-        return HTMLResponse(
-            "<h1>403 Forbidden</h1><p>You do not have permission to edit projects.</p>",
-            status_code=403,
-        )
     try:
         project = ctx.projects.get_project(db, project_uuid)
     except CreoPDMError:
@@ -1224,11 +1209,6 @@ def admin_project_delete(
     manager = _require_projects_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    if not ctx.user_accounts.can_delete_project(manager):
-        return HTMLResponse(
-            "<h1>403 Forbidden</h1><p>You do not have permission to delete projects.</p>",
-            status_code=403,
-        )
     try:
         project = ctx.projects.get_project(db, project_uuid)
     except CreoPDMError:
