@@ -14,7 +14,7 @@
     <span>By project</span>
   </nav>
   <h1>Membership — By project</h1>
-  <p class="muted">Click a project to choose which restricted users can open it.</p>
+  <p class="muted">Click a project to choose which restricted users can open it. Members includes users with All projects ({% if all_projects_count %}{{ all_projects_count }}{% else %}0{% endif %}).</p>
 
   <section class="settings-card settings-form-wide">
     <table class="data-table">
@@ -22,16 +22,20 @@
         <tr>
           <th>Name</th>
           <th>Number</th>
+          <th>Members</th>
+          <th>Restricted</th>
         </tr>
       </thead>
       <tbody>
         {% for p in projects %}
         <tr>
-          <td><a href="/admin/membership/projects/{{ p.uuid }}">{% if p.number %}{{ p.number }} — {% endif %}{{ p.name }}</a></td>
+          <td><a href="/admin/membership/projects/{{ p.uuid }}">{{ p.name }}</a></td>
           <td>{{ p.number or "—" }}</td>
+          <td>{{ p.can_open_count }}</td>
+          <td>{{ p.member_count }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="2" class="muted">No projects yet. Create one under Administration → Projects.</td></tr>
+        <tr><td colspan="4" class="muted">No projects yet. Create one under Administration → Projects.</td></tr>
         {% endfor %}
       </tbody>
     </table>

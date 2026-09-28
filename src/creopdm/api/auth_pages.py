@@ -818,6 +818,7 @@ def admin_membership_home(
                 "name": p.name,
                 "number": p.number or "",
                 "member_count": member_count,
+                "can_open_count": member_count + all_projects_count,
             }
         )
     return templates.TemplateResponse(
@@ -838,16 +839,32 @@ def admin_membership_projects_list(
     manager = _require_membership_assign(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    projects = [
-        {"uuid": p.uuid, "name": p.name, "number": p.number or ""}
-        for p in ctx.projects.list_projects(db)
+    users = [
+        u
+        for u in ctx.user_accounts.list_users(db)
+        if u.status == UserStatus.ACTIVE.value
     ]
+    all_projects_count = sum(1 for u in users if getattr(u, "access_all_projects", True))
+    restricted = [u for u in users if not getattr(u, "access_all_projects", True)]
+    projects = []
+    for p in ctx.projects.list_projects(db):
+        member_count = sum(1 for u in restricted if any(mp.id == p.id for mp in (u.projects or [])))
+        projects.append(
+            {
+                "uuid": p.uuid,
+                "name": p.name,
+                "number": p.number or "",
+                "member_count": member_count,
+                "can_open_count": member_count + all_projects_count,
+            }
+        )
     return templates.TemplateResponse(
         request,
         "admin_membership_projects.html",
         {
             **_base_ctx(request, ctx, current_user=manager),
             "projects": projects,
+            "all_projects_count": all_projects_count,
         },
     )
 

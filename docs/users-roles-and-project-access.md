@@ -58,7 +58,7 @@ On **Administration → Membership** (`projects.assign`):
 | --- | --- |
 | **By user** | **All projects** (default) or a multi-select project list; none selected → empty project list / **403** on project URLs |
 | **By project** | Tick which **restricted** users are members. Users with All projects are listed read-only (they already see the project); change All projects under By user |
-| **Hub summary** | Table of projects with restricted-member counts and **Manage** links; notes how many users have All projects |
+| **Hub summary** | Table of projects with **Members** (who can open = restricted + All-projects users), **Restricted** counts, and **Manage** links |
 
 Creating a project while signed in as a restricted user automatically grants that user access to the new project.
 
