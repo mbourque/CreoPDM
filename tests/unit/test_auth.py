@@ -350,6 +350,28 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
     assert auth_ctx.settings.email.transport == "local"
     assert auth_ctx.settings.email.smtp_password == "first-secret"
 
+    # Unsaved edits must not send a test (and must not persist).
+    dirty_test = auth_client.post(
+        "/admin/email",
+        data={
+            "action": "test",
+            "enabled": "1",
+            "transport": "local",
+            "from_address": "changed@example.com",
+            "from_name": "CreoPDM",
+            "administrator_email": "admin@example.com",
+            "test_to": "admin@example.com",
+        },
+    )
+    assert dirty_test.status_code == 400
+    assert "Save your changes" in dirty_test.text
+    assert auth_ctx.settings.email.from_address == "creopdm@example.com"
+
+    page = auth_client.get("/admin/email")
+    assert 'id="email-test-btn"' in page.text
+    assert "Save your changes before sending a test" in page.text
+    assert "email-test-dirty-hint" in page.text
+
     # PDM Manager lacks email.manage.
     auth_client.post(
         "/admin/users/new",

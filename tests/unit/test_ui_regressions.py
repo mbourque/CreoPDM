@@ -768,7 +768,7 @@ def test_toolbar_hides_inactive_actions():
     assert "On the file **Details** page" in docs
     assert "every tab, including History" in docs
     assert "Check In stays on the Files page" in docs
-    assert "show only inside Creo" in docs.lower()
+    assert "show only inside creo" in docs.lower()
 
 
 def test_folder_row_click_selects_double_click_opens():

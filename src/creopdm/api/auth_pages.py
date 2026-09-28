@@ -1652,6 +1652,40 @@ def _email_form_from_post(
     }
 
 
+def _email_form_is_dirty(
+    form: dict,
+    current,
+    *,
+    smtp_password_posted: str,
+) -> bool:
+    """True when posted settings differ from last saved EmailConfig (test_to ignored)."""
+    if bool(form["enabled"]) != bool(current.enabled):
+        return True
+    if form["transport"] != (current.transport or "local"):
+        return True
+    if form["from_address"] != (current.from_address or ""):
+        return True
+    if form["from_name"] != (current.from_name or ""):
+        return True
+    if form["administrator_email"] != (current.administrator_email or ""):
+        return True
+    if (smtp_password_posted or "").strip():
+        return True
+    if form["transport"] != "smtp":
+        return False
+    if form["smtp_host"] != (current.smtp_host or "127.0.0.1"):
+        return True
+    if int(form["smtp_port"]) != int(current.smtp_port or 25):
+        return True
+    if form["smtp_username"] != (current.smtp_username or ""):
+        return True
+    if bool(form["smtp_use_tls"]) != bool(current.smtp_use_tls):
+        return True
+    if bool(form["smtp_use_auth"]) != bool(current.smtp_use_auth):
+        return True
+    return False
+
+
 @router.get("/admin/email", response_class=HTMLResponse)
 def admin_email_page(
     request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
@@ -1711,6 +1745,14 @@ def admin_email_submit(
         test_to=test_to,
         has_password=bool(current_password),
     )
+    # Keep SMTP panel values from saved settings when local (hidden fields may be empty).
+    if form["transport"] == "local":
+        form["smtp_host"] = current.smtp_host or "127.0.0.1"
+        form["smtp_port"] = int(current.smtp_port or 25)
+        form["smtp_username"] = current.smtp_username or ""
+        form["smtp_use_tls"] = bool(current.smtp_use_tls)
+        form["smtp_use_auth"] = bool(current.smtp_use_auth)
+        form["has_password"] = bool(current_password)
 
     def _render(*, error: str | None = None, success: str | None = None, status_code: int = 200):
         return templates.TemplateResponse(
@@ -1724,6 +1766,29 @@ def admin_email_submit(
             },
             status_code=status_code,
         )
+
+    if action == "test":
+        if _email_form_is_dirty(form, current, smtp_password_posted=smtp_password):
+            return _render(
+                error="Save your changes before sending a test email.",
+                status_code=400,
+            )
+        form = _email_form_from_settings(ctx, test_to=form["test_to"])
+        recipient = form["test_to"] or form["administrator_email"]
+        if not recipient:
+            return _render(
+                error="Set an administrator email or a test recipient before sending.",
+                status_code=400,
+            )
+        try:
+            ctx.email.send(
+                recipient,
+                "CreoPDM test email",
+                "This is a test message from CreoPDM Administration → Email.\n",
+            )
+        except CreoPDMError as exc:
+            return _render(error=exc.message, status_code=400)
+        return _render(success=f"Test email sent to {recipient}.")
 
     new_settings = ctx.settings.model_copy(deep=True)
     email = new_settings.email
@@ -1762,22 +1827,5 @@ def admin_email_submit(
 
     ctx.config.save(new_settings)
     ctx.settings = new_settings
-
-    if action == "test":
-        recipient = form["test_to"] or form["administrator_email"]
-        if not recipient:
-            return _render(
-                error="Set an administrator email or a test recipient before sending.",
-                status_code=400,
-            )
-        try:
-            ctx.email.send(
-                recipient,
-                "CreoPDM test email",
-                "This is a test message from CreoPDM Administration → Email.\n",
-            )
-        except CreoPDMError as exc:
-            return _render(error=exc.message, status_code=400)
-        return _render(success=f"Test email sent to {recipient}.")
-
+    form = _email_form_from_settings(ctx, test_to=form["test_to"])
     return _render(success="Email settings saved.")

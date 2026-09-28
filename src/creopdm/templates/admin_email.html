@@ -28,7 +28,7 @@
         <input type="checkbox" name="enabled" value="1" {% if form.enabled %}checked{% endif %}>
         Enable email notifications
       </label>
-      <p class="muted small">When off, CreoPDM does not send notification mail. Test Email still uses the delivery settings below.</p>
+      <p class="muted small">When off, CreoPDM does not send notification mail. Test Email uses the last <strong>saved</strong> delivery settings.</p>
     </section>
 
     <section class="settings-card">
@@ -60,7 +60,7 @@
 
     <section class="settings-card" id="email-local-panel" {% if form.transport != 'local' %}hidden{% endif %}>
       <h2>Local Postfix</h2>
-      <p class="muted small">CreoPDM sends through <code>127.0.0.1:25</code> on the <strong>CreoPDM server</strong> (same idea as <code>mail</code> / Postfix). No username or password. Use a From address your MTA accepts for local send (often the server hostname domain). After saving, use <strong>Send test email</strong>.</p>
+      <p class="muted small">CreoPDM sends through <code>127.0.0.1:25</code> on the <strong>CreoPDM server</strong> (same idea as <code>mail</code> / Postfix). No username or password. Use a From address your MTA accepts for local send (often the server hostname domain). Save, then use <strong>Send test email</strong>.</p>
     </section>
 
     <section class="settings-card" id="email-smtp-panel" {% if form.transport != 'smtp' %}hidden{% endif %}>
@@ -93,10 +93,10 @@
       <label>Send test to
         <input name="test_to" type="email" value="{{ form.test_to }}" placeholder="{{ form.administrator_email or 'you@example.com' }}">
       </label>
-      <p class="muted small">Defaults to the administrator email when left blank.</p>
+      <p class="muted small">Uses saved settings only. Defaults to the administrator email when left blank. <span id="email-test-dirty-hint" hidden>Save your changes before sending a test.</span></p>
       <p class="form-actions">
         <button type="submit" class="btn btn-primary" name="action" value="save">Save</button>
-        <button type="submit" class="btn" name="action" value="test">Send test email</button>
+        <button type="submit" class="btn" name="action" value="test" id="email-test-btn">Send test email</button>
       </p>
     </section>
   </form>
@@ -107,16 +107,45 @@
   if (!form) return;
   var localPanel = document.getElementById("email-local-panel");
   var smtpPanel = document.getElementById("email-smtp-panel");
-  function sync() {
+  var testBtn = document.getElementById("email-test-btn");
+  var dirtyHint = document.getElementById("email-test-dirty-hint");
+
+  function syncPanels() {
     var checked = form.querySelector('input[name="transport"]:checked');
     var mode = checked ? checked.value : "local";
     if (localPanel) localPanel.hidden = mode !== "local";
     if (smtpPanel) smtpPanel.hidden = mode !== "smtp";
   }
+
+  function snapshot() {
+    var data = new FormData(form);
+    var parts = [];
+    data.forEach(function (value, key) {
+      if (key === "action" || key === "test_to" || key === "smtp_password") return;
+      parts.push(key + "=" + String(value));
+    });
+    parts.sort();
+    var pwd = form.querySelector('input[name="smtp_password"]');
+    parts.push("smtp_password_set=" + (pwd && pwd.value ? "1" : "0"));
+    return parts.join("&");
+  }
+
+  var baseline = snapshot();
+
+  function syncDirty() {
+    syncPanels();
+    if (!testBtn) return;
+    var dirty = snapshot() !== baseline;
+    testBtn.disabled = dirty;
+    if (dirtyHint) dirtyHint.hidden = !dirty;
+  }
+
   form.querySelectorAll("[data-email-transport]").forEach(function (el) {
-    el.addEventListener("change", sync);
+    el.addEventListener("change", syncDirty);
   });
-  sync();
+  form.addEventListener("input", syncDirty);
+  form.addEventListener("change", syncDirty);
+  syncDirty();
 })();
 </script>
 {% endblock %}
