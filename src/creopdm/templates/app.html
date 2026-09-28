@@ -342,10 +342,10 @@
 
 <footer class="toolbar">
   <div class="toolbar-actions">
-    <span class="toolbar-tip creo-session-only" title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
+    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this project's local workspace (creopdm-agent cache on this PC).">
       <button type="button" class="btn" id="set-creo-dir-btn"
               {% if workspace_path %}data-workspace="{{ workspace_path }}"{% endif %}
-              disabled>Set Working Directory</button>
+              disabled hidden>Set Working Directory</button>
     </span>
     {% if can_add_objects %}
     <div class="toolbar-menu" id="add-menu">

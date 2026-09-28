@@ -4445,9 +4445,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (window.__creopdmSoftNavBusy || softNavBusy) return null;
     let inSession = hostedCreoJS();
     document.querySelectorAll(".creo-session-only").forEach((el) => {
-      // Keep Set Working Directory in the Files toolbar (greyed when unusable) so it
-      // stays discoverable; other inactive toolbar actions stay hidden.
-      // File Details page hides it (Revert-only toolbar).
+      // Set Working Directory: only when inside Creo with a live session (Files page).
+      // Hidden outside Creo / when disconnected; always hidden on File Details.
       const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
       const onDetail = Boolean($("article.detail"));
       if (onDetail && btn?.id === "set-creo-dir-btn") {
@@ -4455,9 +4454,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (btn) btn.hidden = true;
         return;
       }
-      el.hidden = false;
+      el.hidden = !inSession;
       if (!btn) return;
-      btn.hidden = false;
+      btn.hidden = !inSession;
       if (!inSession) {
         btn.disabled = true;
         return;
@@ -4542,9 +4541,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (btn) btn.hidden = true;
         return;
       }
-      el.hidden = false;
+      el.hidden = !inSession;
       if (!btn) return;
-      btn.hidden = false;
+      btn.hidden = !inSession;
       if (!inSession) {
         btn.disabled = true;
         return;

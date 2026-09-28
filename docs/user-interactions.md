@@ -109,7 +109,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 
 | Button | Available when | Hidden when |
 |--------|----------------|-------------|
-| Set Working Directory | Inside Creo’s browser with a project workspace (Files page) | Hidden on the file **Details** page; otherwise stays greyed when not usable |
+| Set Working Directory | Inside Creo’s browser **and** Creo.JS connected, with a project workspace (Files page) | Hidden outside Creo, when Creo is not connected, and on the file **Details** page |
 | Add ▾ | A project is open | No project |
 | Open ▾ | A project is open (workspace) and/or a file can be opened (**Files** page) | No project and nothing to open; always hidden on the file **Details** page |
 | Open selected… | A file you can open is selected | Nothing useful selected |
@@ -121,7 +121,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 | Remove ▾ | Something can be removed (**Files** page) | Nothing selected; always hidden on the file **Details** page |
 | Remove from Project | Files **and/or folders** selected (including empty folders) | Nothing selected |
 
-Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Same rule for **permissions**: if the signed-in role cannot do an action (or the PC cannot — e.g. Open workspace without creopdm-agent), **do not show the control**. Exception: **Set Working Directory** always stays visible on the Files page so it remains easy to find; it is greyed out outside Creo’s browser or when no project workspace is ready. On the file **Details** page (every tab, including History) Open, Checkout, Remove, Set Working Directory, and **Check In ▾** are all hidden — that toolbar is **Revert to selected…** only (when an older History row is selected). Check In stays on the Files page.
+Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Same rule for **permissions**: if the signed-in role cannot do an action (or the PC cannot — e.g. Open workspace without creopdm-agent), **do not show the control**. **Set Working Directory** follows the same rule: show only inside Creo’s browser when Creo.JS is connected (and a project workspace is ready); hide it outside Creo, when disconnected, and on the file **Details** page. On the file **Details** page (every tab, including History) Open, Checkout, Remove, Set Working Directory, and **Check In ▾** are all hidden — that toolbar is **Revert to selected…** only (when an older History row is selected). Check In stays on the Files page.
 
 Only one ▾ menu open at a time. Click outside or press Escape to close.
 
@@ -209,7 +209,7 @@ If open seems to do nothing, check the error line under the toolbar, and that cr
 
 **Settings → Open Creo models with:** **Embedded** only uses Creo.JS when CreoPDM is inside Creo’s embedded browser. Outside Creo (Chrome/Edge/etc.), or when Creo.JS is not connected, Open **always falls back to the OS file association**. Choosing **OS file association** uses that path every time. The Settings page help text states this fallback.
 
-**Set Working Directory** (toolbar) does the same WD step on its own; it only applies inside Creo’s browser.
+**Set Working Directory** (toolbar) does the same WD step on its own; it only appears inside Creo’s browser when Creo.JS is connected.
 
 ---
 
