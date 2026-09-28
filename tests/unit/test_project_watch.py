@@ -59,6 +59,31 @@ def test_project_watch_eligibility_and_unique(auth_ctx, auth_client):
         can_bad, reason_bad = auth_ctx.project_watches.watch_eligibility(admin, email_enabled=True)
         assert can_bad is False
         assert reason_bad and "valid email" in reason_bad.lower()
+        admin.email = ""
+        can_empty, reason_empty = auth_ctx.project_watches.watch_eligibility(admin, email_enabled=True)
+        assert can_empty is False
+        assert reason_empty and "valid email" in reason_empty.lower()
+
+
+def test_watch_eligibility_does_not_import_email_validator(auth_ctx, monkeypatch):
+    """Files page watch must work even if email-validator is missing from the venv."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def blocked(name, *args, **kwargs):
+        if name == "email_validator" or name.startswith("email_validator."):
+            raise ImportError("blocked for test")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked)
+
+    class U:
+        email = "tim@example.com"
+
+    can, reason = auth_ctx.project_watches.watch_eligibility(U(), email_enabled=True)
+    assert can is True
+    assert reason is None
 
 
 @requires_git
@@ -85,6 +110,8 @@ def test_project_watch_api_subscribe_unsubscribe_and_notify(auth_client, auth_ct
     home_on = auth_client.get(f"/?project={project_id}")
     assert home_on.status_code == 200
     assert 'id="project-watch-btn"' in home_on.text
+    assert 'data-can-watch="1"' in home_on.text
+    assert "temporarily unavailable" not in home_on.text
     assert 'id="project-watch-dialog"' in home_on.text
 
     # Watcher subscribes.
@@ -209,11 +236,11 @@ def test_project_activity_event_requires_explicit_recipients():
 
 
 @requires_git
-def test_restricted_user_home_with_email_watch_does_not_500(auth_client, auth_ctx):
-    """One-project membership + email on must render Files, not INTERNAL_ERROR JSON.
+def test_restricted_user_home_with_email_watch_usable(auth_client, auth_ctx):
+    """Restricted engineer + notifications on → working watch bell, never INTERNAL_ERROR.
 
-    Regression: auth session user loads must include projects; restricted accounts
-    otherwise crash on `/` after login when membership is read.
+    Catches: missing projects on auth user (login 500), and watch eligibility that
+    fail-closed to "temporarily unavailable" while Admin → Email shows enabled.
     """
     from creopdm.auth_constants import UserStatus
     from creopdm.models.user import User
@@ -266,7 +293,19 @@ def test_restricted_user_home_with_email_watch_does_not_500(auth_client, auth_ct
     assert home.status_code == 200, home.text
     assert "INTERNAL_ERROR" not in home.text
     assert "Alpha Only" in home.text
+    # Notifications on + valid account email → usable watch control (not the
+    # disabled "temporarily unavailable" catch-all that masked ImportError etc.).
     assert 'id="project-watch-btn"' in home.text
+    assert 'data-can-watch="1"' in home.text
+    assert "temporarily unavailable" not in home.text
+    assert "Project watch is temporarily unavailable." not in home.text
+
+    status = auth_client.get(f"/api/projects/{alpha['uuid']}/watch")
+    assert status.status_code == 200, status.text
+    body = status.json()
+    assert body["email_notifications_enabled"] is True
+    assert body["can_watch"] is True
+    assert body.get("reason") in (None, "")
 
     with auth_ctx.session_factory() as db:
         loaded = auth_ctx.user_accounts.get_by_uuid(db, user_uuid)

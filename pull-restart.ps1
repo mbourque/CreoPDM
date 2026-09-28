@@ -55,7 +55,7 @@ Write-Host "==> Git pull (this PC)"
 git pull
 
 Write-Host "==> Git pull + restart creopdm on $SshHost"
-ssh $SshHost "cd $RemoteDir && git pull && systemctl --user restart creopdm.service"
+ssh $SshHost "cd $RemoteDir && git pull && .venv/bin/pip install -e . -q && systemctl --user restart creopdm.service"
 
 Write-Host "==> Starting agent tray"
 Start-CreoPdmAgentTray

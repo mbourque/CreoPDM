@@ -12,11 +12,31 @@ from creopdm.logging_setup import get_logger
 from creopdm.models.project import Project
 from creopdm.models.user import ProjectWatch, User
 from creopdm.services.notification_service import NotificationEvent, NotificationService
-from creopdm.services.user_service import validate_email
 
 logger = get_logger("project_watch")
 
 _MAX_FILES_IN_EMAIL = 40
+
+
+def _usable_watch_email(raw: str | None) -> str | None:
+    """Return a stripped address if it looks like name@domain.tld; else None.
+
+    Intentionally does not import email-validator — watch/notify must work when
+    that optional-at-runtime dep is missing from a deployed venv.
+    """
+    email = str(raw or "").strip()
+    at = email.rfind("@")
+    domain = email[at + 1 :] if at >= 0 else ""
+    tld = domain.rsplit(".", 1)[-1] if "." in domain else ""
+    if (
+        not email
+        or at < 1
+        or "." not in domain
+        or not tld.isalpha()
+        or len(tld) < 2
+    ):
+        return None
+    return email
 
 
 class ProjectWatchService:
@@ -32,22 +52,26 @@ class ProjectWatchService:
         *,
         email_enabled: bool,
     ) -> tuple[bool, str | None]:
-        """Return (can_watch, reason). Notifications off is handled by hiding the UI."""
+        """Return (can_watch, reason). Notifications off is handled by hiding the UI.
+
+        Uses a light email presence check only — full email-validator runs on
+        account create/edit. Pages must not fail closed when that package is
+        missing from the server venv after a deploy.
+        """
         if not email_enabled:
             return False, "Email notifications are disabled."
         if user is None:
             return False, "Sign in to watch a project."
         try:
-            email = getattr(user, "email", None) or ""
-            validate_email(email)
-        except ValidationAppError:
+            email = _usable_watch_email(getattr(user, "email", None))
+        except Exception:
+            logger.exception("watch_eligibility could not read user email")
+            return False, "Project watch is temporarily unavailable."
+        if email is None:
             return (
                 False,
                 "Set a valid email address on your account before watching a project.",
             )
-        except Exception:
-            logger.exception("watch_eligibility email check failed")
-            return False, "Project watch is temporarily unavailable."
         return True, None
 
     def is_watching(self, db: Session, user_id: int, project_id: int) -> bool:
@@ -98,11 +122,9 @@ class ProjectWatchService:
             stmt = stmt.where(User.id != exclude_user_id)
         out: list[str] = []
         for email, _uid in db.execute(stmt).all():
-            try:
-                out.append(validate_email(email or ""))
-            except ValidationAppError:
-                continue
-        # Stable unique order
+            usable = _usable_watch_email(email)
+            if usable is not None:
+                out.append(usable)        # Stable unique order
         seen: set[str] = set()
         unique: list[str] = []
         for addr in out:

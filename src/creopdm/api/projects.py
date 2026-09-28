@@ -129,6 +129,9 @@ def get_project_watch(
             reason=None if can_watch else reason,
         )
     except Exception:
+        from creopdm.logging_setup import get_logger
+
+        get_logger("projects").exception("get_project_watch failed")
         return ProjectWatchResponse(
             watching=False,
             can_watch=False,

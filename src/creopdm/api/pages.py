@@ -251,6 +251,9 @@ def _watch_page_flags(request: Request, ctx: AppContext, db: Session, project) -
             "watch_unavailable_reason": None if can_watch else reason,
         }
     except Exception:
+        from creopdm.logging_setup import get_logger
+
+        get_logger("pages").exception("project watch page flags failed")
         return {
             "email_notifications_enabled": email_on,
             "watching_project": False,
