@@ -12,6 +12,7 @@ from creopdm.logging_setup import get_logger
 from creopdm.models.project import Project
 from creopdm.models.user import ProjectWatch, User
 from creopdm.services.notification_service import NotificationEvent, NotificationService
+from creopdm.utils.timefmt import format_local
 
 logger = get_logger("project_watch")
 
@@ -180,7 +181,8 @@ class ProjectWatchService:
             return
 
         files = [f for f in filenames if (f or "").strip()]
-        when = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        # Same local clock as Files / Details (server TZ via format_local), not bare UTC.
+        when = format_local(datetime.now(timezone.utc))
         base = (base_url or "").rstrip("/")
         if object_uuid and len(files) == 1:
             link = f"{base}/projects/{project.uuid}/objects/{object_uuid}"

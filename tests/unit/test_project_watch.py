@@ -169,6 +169,12 @@ def test_project_watch_api_subscribe_unsubscribe_and_notify(auth_client, auth_ct
     assert "Watch Proj" in message
     assert "watch.prt" in message
     assert "admin" in message.lower()
+    assert " UTC" not in message
+    assert "When: " in message
+    # Matches Files page local stamp shape (YYYY-MM-DD HH:MM), not "… UTC".
+    when_line = next(line for line in message.splitlines() if line.startswith("When: "))
+    assert when_line.startswith("When: ")
+    assert len(when_line) >= len("When: YYYY-MM-DD HH:MM")
 
     # Actor watching themselves is not emailed for their own action.
     watch_self = auth_client.post(f"/api/projects/{project_id}/watch")
