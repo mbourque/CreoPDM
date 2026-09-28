@@ -32,7 +32,6 @@
       <thead>
         <tr>
           <th>Project</th>
-          <th>Number</th>
           <th>Members</th>
           <th>Restricted</th>
           <th></th>
@@ -42,13 +41,12 @@
         {% for p in projects %}
         <tr>
           <td><a href="/admin/membership/projects/{{ p.uuid }}">{{ p.name }}</a></td>
-          <td>{{ p.number or "—" }}</td>
           <td>{{ p.can_open_count }}</td>
           <td>{{ p.member_count }}</td>
           <td><a href="/admin/membership/projects/{{ p.uuid }}">Manage</a></td>
         </tr>
         {% else %}
-        <tr><td colspan="5" class="muted">No projects yet. Create one under Administration → Projects.</td></tr>
+        <tr><td colspan="4" class="muted">No projects yet. Create one under Administration → Projects.</td></tr>
         {% endfor %}
       </tbody>
     </table>
