@@ -11,6 +11,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
 
 from creopdm.api.deps import get_context, get_db
+from creopdm.api.serializers import project_to_response
 from creopdm.auth_constants import (
     BUILTIN_PERMISSIONS,
     PERMISSION_GROUPS,
@@ -22,7 +23,13 @@ from creopdm.constants import APP_NAME, APP_VERSION
 from creopdm.context import AppContext
 from creopdm.exceptions import CreoPDMError
 from creopdm.models.user import User
-from creopdm.permissions import caps_dict, caps_for_user, default_app_path, resolve_post_login_target
+from creopdm.permissions import (
+    can_open_administration,
+    caps_dict,
+    caps_for_user,
+    default_app_path,
+    resolve_post_login_target,
+)
 from creopdm.utils.identity import UserIdentity, set_request_identity
 
 # Back-compat for default form role.
@@ -320,6 +327,21 @@ def _require_roles_manager(
     return user
 
 
+def _require_projects_manager(
+    request: Request, ctx: AppContext, db: Session
+) -> User | HTMLResponse | RedirectResponse:
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not ctx.user_accounts.can_manage_projects(user):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>Project management access required.</p>",
+            status_code=403,
+        )
+    return user
+
+
 def _is_blocked(result: User | HTMLResponse | RedirectResponse) -> bool:
     return isinstance(result, (HTMLResponse, RedirectResponse))
 
@@ -436,10 +458,8 @@ def admin_home(request: Request, ctx: AppContext = Depends(get_context), db: Ses
     user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
     if user is None:
         return RedirectResponse("/login", status_code=303)
-    can_users = ctx.user_accounts.can_manage_users(user)
-    can_roles = ctx.user_accounts.can_manage_roles(user)
-    can_settings = ctx.user_accounts.can_manage_settings(user)
-    if not can_users and not can_roles and not can_settings:
+    caps = caps_for_user(ctx.user_accounts, user)
+    if not can_open_administration(caps):
         return HTMLResponse(
             "<h1>403 Forbidden</h1><p>Administrator access required.</p>",
             status_code=403,
@@ -448,14 +468,7 @@ def admin_home(request: Request, ctx: AppContext = Depends(get_context), db: Ses
         request,
         "admin.html",
         {
-            **_base_ctx(
-                request,
-                ctx,
-                current_user=user,
-                can_manage_users=can_users,
-                can_manage_roles=can_roles,
-                can_manage_settings=can_settings,
-            ),
+            **_base_ctx(request, ctx, current_user=user),
         },
     )
 
@@ -997,6 +1010,265 @@ def admin_role_delete(
                 },
                 "can_delete": len(role.users) == 0,
                 "user_count": len(role.users),
+            },
+            status_code=400,
+        )
+
+
+def _project_form(
+    *,
+    name: str = "",
+    number: str = "",
+    description: str = "",
+    vault_folder: str = "",
+    uuid: str | None = None,
+) -> dict:
+    payload = {
+        "name": name,
+        "number": number,
+        "description": description,
+        "vault_folder": vault_folder,
+    }
+    if uuid is not None:
+        payload["uuid"] = uuid
+    return payload
+
+
+@router.get("/admin/projects", response_class=HTMLResponse)
+def admin_projects(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
+    manager = _require_projects_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    projects = [project_to_response(p) for p in ctx.projects.list_projects(db)]
+    return templates.TemplateResponse(
+        request,
+        "admin_projects.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "projects": projects,
+        },
+    )
+
+
+@router.get("/admin/projects/new", response_class=HTMLResponse)
+def admin_project_new(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
+    manager = _require_projects_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    if not ctx.user_accounts.can_create_project(manager):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>You do not have permission to create projects.</p>",
+            status_code=403,
+        )
+    return templates.TemplateResponse(
+        request,
+        "admin_project_form.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "error": None,
+            "mode": "new",
+            "form": _project_form(),
+            "delete_error": None,
+        },
+    )
+
+
+@router.post("/admin/projects/new", response_class=HTMLResponse)
+def admin_project_create(
+    request: Request,
+    name: str = Form(...),
+    number: str = Form(""),
+    description: str = Form(""),
+    vault_folder: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_projects_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    if not ctx.user_accounts.can_create_project(manager):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>You do not have permission to create projects.</p>",
+            status_code=403,
+        )
+    form = _project_form(
+        name=name,
+        number=number,
+        description=description,
+        vault_folder=vault_folder,
+    )
+    try:
+        project = ctx.projects.create_project(
+            db,
+            name=name,
+            number=number or None,
+            description=description or None,
+            vault_folder=(vault_folder or "").strip() or None,
+        )
+        ctx.user_accounts.grant_project_access(db, manager, project)
+        db.commit()
+        return RedirectResponse("/admin/projects", status_code=303)
+    except CreoPDMError as exc:
+        db.rollback()
+        return templates.TemplateResponse(
+            request,
+            "admin_project_form.html",
+            {
+                **_base_ctx(request, ctx, current_user=manager),
+                "error": exc.message,
+                "mode": "new",
+                "form": form,
+                "delete_error": None,
+            },
+            status_code=400,
+        )
+
+
+@router.get("/admin/projects/{project_uuid}", response_class=HTMLResponse)
+def admin_project_detail(
+    project_uuid: str,
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_projects_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    try:
+        project = ctx.projects.get_project(db, project_uuid)
+    except CreoPDMError:
+        return RedirectResponse("/admin/projects", status_code=303)
+    payload = project_to_response(project)
+    return templates.TemplateResponse(
+        request,
+        "admin_project_form.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "error": None,
+            "mode": "edit",
+            "form": _project_form(
+                name=payload.name,
+                number=payload.number or "",
+                description=payload.description or "",
+                vault_folder=payload.vault_folder,
+                uuid=payload.uuid,
+            ),
+            "delete_error": None,
+        },
+    )
+
+
+@router.post("/admin/projects/{project_uuid}", response_class=HTMLResponse)
+def admin_project_update(
+    project_uuid: str,
+    request: Request,
+    name: str = Form(...),
+    number: str = Form(""),
+    description: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_projects_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    if not ctx.user_accounts.can_edit_project(manager):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>You do not have permission to edit projects.</p>",
+            status_code=403,
+        )
+    try:
+        project = ctx.projects.get_project(db, project_uuid)
+    except CreoPDMError:
+        return RedirectResponse("/admin/projects", status_code=303)
+    form = _project_form(
+        name=name,
+        number=number,
+        description=description,
+        vault_folder=project.vault_folder or project.uuid,
+        uuid=project.uuid,
+    )
+    try:
+        ctx.projects.update_project(
+            db,
+            project_uuid,
+            name=name,
+            number=number or None,
+            description=description or None,
+        )
+        db.commit()
+        return RedirectResponse("/admin/projects", status_code=303)
+    except CreoPDMError as exc:
+        db.rollback()
+        return templates.TemplateResponse(
+            request,
+            "admin_project_form.html",
+            {
+                **_base_ctx(request, ctx, current_user=manager),
+                "error": exc.message,
+                "mode": "edit",
+                "form": form,
+                "delete_error": None,
+            },
+            status_code=400,
+        )
+
+
+@router.post("/admin/projects/{project_uuid}/delete", response_class=HTMLResponse)
+def admin_project_delete(
+    project_uuid: str,
+    request: Request,
+    confirm_name: str = Form(...),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_projects_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    if not ctx.user_accounts.can_delete_project(manager):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>You do not have permission to delete projects.</p>",
+            status_code=403,
+        )
+    try:
+        project = ctx.projects.get_project(db, project_uuid)
+    except CreoPDMError:
+        return RedirectResponse("/admin/projects", status_code=303)
+    payload = project_to_response(project)
+    form = _project_form(
+        name=payload.name,
+        number=payload.number or "",
+        description=payload.description or "",
+        vault_folder=payload.vault_folder,
+        uuid=payload.uuid,
+    )
+    if (confirm_name or "").strip() != project.name:
+        return templates.TemplateResponse(
+            request,
+            "admin_project_form.html",
+            {
+                **_base_ctx(request, ctx, current_user=manager),
+                "error": None,
+                "mode": "edit",
+                "form": form,
+                "delete_error": "Type the exact project name to confirm removal.",
+            },
+            status_code=400,
+        )
+    try:
+        ctx.projects.delete_project(db, project_uuid)
+        db.commit()
+        return RedirectResponse("/admin/projects", status_code=303)
+    except CreoPDMError as exc:
+        db.rollback()
+        return templates.TemplateResponse(
+            request,
+            "admin_project_form.html",
+            {
+                **_base_ctx(request, ctx, current_user=manager),
+                "error": None,
+                "mode": "edit",
+                "form": form,
+                "delete_error": exc.message,
             },
             status_code=400,
         )

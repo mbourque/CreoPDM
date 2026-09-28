@@ -10,7 +10,7 @@
     <span>Administration</span>
   </nav>
   <h1>Administration</h1>
-  <p class="muted">Server and workstation tools. More sections will appear here as they are added.</p>
+  <p class="muted">Server tools for users, roles, projects, and settings.</p>
 
   <div class="admin-tile-grid">
     {% if can_manage_users %}
@@ -23,6 +23,12 @@
     <section class="admin-tile">
       <h2><a href="/admin/roles">Roles</a></h2>
       <p>Create roles and choose what each can do (projects, files, administration).</p>
+    </section>
+    {% endif %}
+    {% if can_manage_projects %}
+    <section class="admin-tile">
+      <h2><a href="/admin/projects">Projects</a></h2>
+      <p>List every project on this server. Create, rename, or remove projects.</p>
     </section>
     {% endif %}
     {% if can_manage_settings %}

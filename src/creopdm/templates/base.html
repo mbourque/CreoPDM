@@ -26,7 +26,7 @@
   data-agent-token="{{ agent_token | default('') }}"
 >
   <header class="topbar">
-    <a class="brand" href="{% if can_view_objects %}/{% elif can_manage_users or can_manage_roles or can_manage_settings %}/admin{% else %}/no-access{% endif %}">
+    <a class="brand" href="{% if can_view_objects %}/{% elif can_open_administration %}/admin{% else %}/no-access{% endif %}">
       <span class="brand-mark" aria-hidden="true"></span>
       <div>
         <div class="brand-name">{{ app_name }}</div>
@@ -34,7 +34,7 @@
       </div>
     </a>
     <div class="status-cluster">
-      {% if can_manage_users or can_manage_settings or can_manage_roles %}
+      {% if can_manage_users or can_manage_settings or can_manage_roles or can_assign_projects or can_manage_projects %}
       <a class="status-pill" href="/admin">Administration</a>
       {% endif %}
       <span id="creo-status" class="status-pill" data-state="{% if creo_label == 'Connected' %}ok{% else %}idle{% endif %}" data-creo-open-mode="{{ creo_open_mode }}" title="{{ creo_open_title }}">

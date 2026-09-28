@@ -226,11 +226,13 @@ class UserService:
             return False
 
     def ensure_can_edit_user(self, actor: User, target: User) -> None:
-        """Nobody may edit themselves via Users admin; only full admins edit full admins."""
+        """Non-admins may not self-edit; full admins may edit themselves and other admins."""
         if actor.id == target.id:
-            raise ValidationAppError(
-                "You cannot edit your own account. Ask another administrator."
-            )
+            if not self.is_full_administrator(actor):
+                raise ValidationAppError(
+                    "You cannot edit your own account. Ask another administrator."
+                )
+            return
         if self.is_full_administrator(target) and not self.is_full_administrator(actor):
             raise ValidationAppError(
                 "Only a full administrator can edit another administrator."
@@ -267,6 +269,14 @@ class UserService:
         if self.is_full_administrator(actor):
             return roles
         return [r for r in roles if not self.role_is_full_administrator(r)]
+
+    def can_manage_projects(self, user: User) -> bool:
+        """True when the user may open Administration → Projects (create/edit/delete)."""
+        return (
+            self.can_create_project(user)
+            or self.can_edit_project(user)
+            or self.can_delete_project(user)
+        )
 
     def can_create_project(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_PROJECTS_CREATE)

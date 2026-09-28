@@ -24,19 +24,20 @@ Disabled accounts cannot sign in. Checkout, check-in, and activity rows store th
 
 ### Administration
 
-Users with any CreoPDM Administration capability (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, or `settings.manage`) see **Administration** (`/admin`):
+Users with any CreoPDM Administration capability (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `settings.manage`, or project create/edit/delete) see **Administration** (`/admin`):
 
 - **Users** — list accounts (Projects column: **All** or membership count); click a **name** to edit the user, or a **role** name to open that role (`roles.manage`); **Add user** (`users.manage` + `users.password` for the initial password)
 - **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`). The role editor groups **CreoPDM Administration** (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `settings.manage`), **Projects**, and **Objects**.
+- **Projects** — list every active project on the server; **Add project** (`projects.create`); edit name/number/description (`projects.edit`); remove (soft-delete) with typed name confirm (`projects.delete`). Not limited by the signed-in user’s project membership list.
 - **Settings** — server options (Creo open mode, vault, file types, …) (`settings.manage`)
-- After a successful **Add user** / **Save** / role save, you return to the list
+- After a successful **Add user** / **Save** / role save / project save, you return to the list
 - New users must change their password on first sign-in
 
 Others do not see Administration; direct URLs return **403**.
 
 **Lockout safety:** at least one **ACTIVE** user must keep **all** CreoPDM Administration permissions on the same account. Saving a role, demoting/disabling a user, or deleting a role is rejected if it would leave nobody with the full set.
 
-**Admins edit admins only:** a full administrator (all Administration caps) may edit **other** full administrators and assign full-admin roles. **Nobody** may edit their own account from Users admin (another admin must change them; use **Account → password** for your own password).
+**Admins edit admins only:** a full administrator (all Administration caps) may edit **other** full administrators and assign full-admin roles. Full administrators may also edit **their own** account from Users admin (the only self-edit exception). Other accounts still cannot edit themselves — ask another administrator, or use **Account → password** for your own password.
 
 **Fine-grained Users admin caps** (separate from `users.manage`):
 

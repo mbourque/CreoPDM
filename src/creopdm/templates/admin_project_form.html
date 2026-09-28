@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'new' %}Add project{% else %}Edit project{% endif %} — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page">
+  <nav class="crumb">
+    {% if can_view_objects %}
+    <a href="/">Projects</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/projects">Projects</a>
+    <span>/</span>
+    <span>{% if mode == 'new' %}Add project{% else %}{{ form.name }}{% endif %}</span>
+  </nav>
+  <h1>{% if mode == 'new' %}Add project{% else %}Edit project{% endif %}</h1>
+
+  {% if mode == 'new' and can_create_project %}
+  <form method="post" action="/admin/projects/new" class="settings-form settings-form-wide">
+    <section class="settings-card">
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      <label>Name
+        <input name="name" type="text" value="{{ form.name }}" required maxlength="255" autocomplete="off">
+      </label>
+      <label>Number <span class="muted small">(optional)</span>
+        <input name="number" type="text" value="{{ form.number }}" maxlength="25" autocomplete="off">
+      </label>
+      <label>Description <span class="muted small">(optional)</span>
+        <input name="description" type="text" value="{{ form.description }}" maxlength="256" autocomplete="off">
+      </label>
+      <label>Vault / workspace folder <span class="muted small">(optional)</span>
+        <input name="vault_folder" type="text" value="{{ form.vault_folder }}" maxlength="200" autocomplete="off"
+               placeholder="Leave blank for a unique id; no spaces">
+      </label>
+      <p class="muted small">Blank uses a unique folder name under the server vault. Custom names cannot contain spaces.</p>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Create project</button>
+        <a class="btn" href="/admin/projects">Back to list</a>
+      </div>
+    </section>
+  </form>
+  {% elif mode == 'edit' and can_edit_project %}
+  <form method="post" action="/admin/projects/{{ form.uuid }}" class="settings-form settings-form-wide">
+    <section class="settings-card">
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      <label>Name
+        <input name="name" type="text" value="{{ form.name }}" required maxlength="255" autocomplete="off">
+      </label>
+      <label>Number <span class="muted small">(optional)</span>
+        <input name="number" type="text" value="{{ form.number }}" maxlength="25" autocomplete="off">
+      </label>
+      <label>Description <span class="muted small">(optional)</span>
+        <input name="description" type="text" value="{{ form.description }}" maxlength="256" autocomplete="off">
+      </label>
+      <p class="muted small">Vault folder: <code>{{ form.vault_folder }}</code> (set at create; not renamed here).</p>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a class="btn" href="/admin/projects">Back to list</a>
+      </div>
+    </section>
+  </form>
+  {% elif mode == 'edit' %}
+  <section class="settings-card settings-form-wide">
+    <p><strong>{{ form.name }}</strong></p>
+    <p class="muted">Number: {{ form.number or "—" }} · Vault: <code>{{ form.vault_folder }}</code></p>
+    <p class="muted">{{ form.description or "" }}</p>
+    <p><a class="btn" href="/admin/projects">Back to list</a></p>
+  </section>
+  {% else %}
+  <section class="settings-card">
+    <p class="error">You do not have permission to create projects.</p>
+    <p><a class="btn" href="/admin/projects">Back to list</a></p>
+  </section>
+  {% endif %}
+
+  {% if mode == 'edit' and can_delete_project %}
+  <section class="settings-card" style="margin-top: 1rem;">
+    <h2>Remove project</h2>
+    <p class="muted small">Hides the project in CreoPDM. Does not delete CAD files on disk. Type the exact project name to confirm.</p>
+    {% if delete_error %}<p class="error">{{ delete_error }}</p>{% endif %}
+    <form method="post" action="/admin/projects/{{ form.uuid }}/delete" class="settings-form">
+      <label>Type <strong>{{ form.name }}</strong> to confirm
+        <input name="confirm_name" type="text" required maxlength="255" autocomplete="off">
+      </label>
+      <button type="submit" class="btn btn-danger">Remove project</button>
+    </form>
+  </section>
+  {% endif %}
+</article>
+{% endblock %}

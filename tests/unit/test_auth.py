@@ -241,6 +241,7 @@ def test_admin_can_open_settings(auth_client):
     assert "<h2><a href=\"/admin/users\">Users</a></h2>" in hub.text or ">Users</a>" in hub.text
     assert "Add and edit accounts, assign a role, and set status." in hub.text
     assert "Click a user’s name" not in hub.text and "Click a user's name" not in hub.text
+    assert 'href="/admin/projects"' in hub.text
     # Help copy is plain text, not wrapped in the section link.
     assert 'href="/admin/users">Add and edit' not in hub.text
     assert auth_client.get("/settings").status_code == 200
@@ -738,8 +739,8 @@ def test_engineer_can_author_not_manage_projects(auth_client, auth_ctx, repo_par
 
 
 @requires_git
-def test_pdm_manager_can_create_not_delete_or_admin(auth_client, auth_ctx, repo_parent):
-    """PDM Manager may create projects; cannot delete or manage users/settings."""
+def test_pdm_manager_can_create_not_delete_sees_projects_admin(auth_client, auth_ctx, repo_parent):
+    """PDM Manager may create/edit via Administration → Projects; cannot delete or manage users."""
     _setup_admin_and_users(
         auth_client, auth_ctx, ("pdm", BuiltinRole.PDM_MANAGER.value)
     )
@@ -751,13 +752,86 @@ def test_pdm_manager_can_create_not_delete_or_admin(auth_client, auth_ctx, repo_
     assert home.status_code == 200
     assert 'id="new-project-btn"' in home.text
     assert 'id="delete-project-btn"' not in home.text
-    assert "Administration" not in home.text
+    assert "Administration" in home.text
+
+    hub = auth_client.get("/admin")
+    assert hub.status_code == 200
+    assert 'href="/admin/projects"' in hub.text
+    assert 'href="/admin/users"' not in hub.text
+
+    listed = auth_client.get("/admin/projects")
+    assert listed.status_code == 200
+    assert "PDM Project" in listed.text
+    assert 'href="/admin/projects/new"' in listed.text
 
     _assert_forbidden(auth_client.delete(f"/api/projects/{project['uuid']}"))
-    assert auth_client.get("/admin", follow_redirects=False).status_code == 403
     assert auth_client.get("/admin/users", follow_redirects=False).status_code == 403
     assert auth_client.get("/settings", follow_redirects=False).status_code == 403
     _assert_forbidden(auth_client.get("/api/settings"))
+
+
+@requires_git
+def test_admin_projects_crud_list_create_edit_delete(auth_client, auth_ctx, repo_parent):
+    """Administration → Projects lists all projects and supports create/edit/soft-delete."""
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+    hub = auth_client.get("/admin")
+    assert hub.status_code == 200
+    assert 'href="/admin/projects"' in hub.text
+    assert "List every project" in hub.text or "Projects</a>" in hub.text
+
+    created = auth_client.post(
+        "/admin/projects/new",
+        data={
+            "name": "Admin Hub Project",
+            "number": "AH-1",
+            "description": "From admin",
+            "vault_folder": "",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303, created.text
+    assert created.headers["location"] == "/admin/projects"
+
+    listed = auth_client.get("/admin/projects")
+    assert listed.status_code == 200
+    assert "Admin Hub Project" in listed.text
+
+    api = auth_client.get("/api/projects").json()
+    project = next(p for p in api if p["name"] == "Admin Hub Project")
+    detail = auth_client.get(f"/admin/projects/{project['uuid']}")
+    assert detail.status_code == 200
+    assert 'value="Admin Hub Project"' in detail.text
+    assert "Remove project" in detail.text
+
+    saved = auth_client.post(
+        f"/admin/projects/{project['uuid']}",
+        data={
+            "name": "Admin Hub Renamed",
+            "number": "AH-2",
+            "description": "Updated",
+        },
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303, saved.text
+    assert auth_client.get(f"/api/projects/{project['uuid']}").json()["name"] == "Admin Hub Renamed"
+
+    bad_delete = auth_client.post(
+        f"/admin/projects/{project['uuid']}/delete",
+        data={"confirm_name": "wrong"},
+        follow_redirects=False,
+    )
+    assert bad_delete.status_code == 400
+    assert "exact project name" in bad_delete.text
+
+    deleted = auth_client.post(
+        f"/admin/projects/{project['uuid']}/delete",
+        data={"confirm_name": "Admin Hub Renamed"},
+        follow_redirects=False,
+    )
+    assert deleted.status_code == 303, deleted.text
+    assert deleted.headers["location"] == "/admin/projects"
+    assert auth_client.get(f"/api/projects/{project['uuid']}").status_code == 404
 
 
 @requires_git
@@ -1251,7 +1325,7 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
     assert f'href="/admin/users/{eng_uuid}"' in listed.text
     assert f'href="/admin/users/{admin_uuid}"' not in listed.text
     assert f'href="/admin/users/{clerk_uuid}"' not in listed.text
-    assert "You cannot edit your own account" in listed.text
+    assert "full administrator can edit their own account" in listed.text.lower()
 
     assert auth_client.get(f"/admin/users/{clerk_uuid}").status_code == 403
     assert auth_client.get(f"/admin/users/{admin_uuid}").status_code == 403
@@ -1344,21 +1418,21 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         assert eng.display_name == "Eng Updated"
         assert auth_ctx.user_accounts.primary_role_name(eng) == BuiltinRole.ENGINEER.value
 
-    # Nobody may edit themselves; another full admin can demote admin (lockout still applies).
+    # Nobody except a full administrator may edit themselves.
     _login(auth_client, "admin", "AdminPass1")
     listed_as_admin = auth_client.get("/admin/users")
     assert listed_as_admin.status_code == 200
-    assert f'href="/admin/users/{admin_uuid}"' not in listed_as_admin.text
-    assert "You cannot edit your own account" in listed_as_admin.text
-    self_denied = auth_client.get(f"/admin/users/{admin_uuid}")
-    assert self_denied.status_code == 403
-    assert "own account" in self_denied.text.lower()
+    assert f'href="/admin/users/{admin_uuid}"' in listed_as_admin.text
+    assert "full administrator can edit their own account" in listed_as_admin.text.lower()
+    self_ok = auth_client.get(f"/admin/users/{admin_uuid}")
+    assert self_ok.status_code == 200, self_ok.text
+    assert 'value="admin"' in self_ok.text or ">admin<" in self_ok.text
     self_post_admin = auth_client.post(
         f"/admin/users/{admin_uuid}",
         data={
-            "display_name": "Admin Hacked",
+            "display_name": "Admin Self",
             "email": "",
-            "role": BuiltinRole.ENGINEER.value,
+            "role": BuiltinRole.ADMINISTRATOR.value,
             "status": UserStatus.ACTIVE.value,
             "password": "",
             "password_confirm": "",
@@ -1367,7 +1441,11 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         },
         follow_redirects=False,
     )
-    assert self_post_admin.status_code == 403, self_post_admin.text
+    assert self_post_admin.status_code == 303, self_post_admin.text
+    with auth_ctx.session_factory() as db:
+        admin = db.scalar(select(User).where(User.username == "admin"))
+        assert admin is not None
+        assert admin.display_name == "Admin Self"
 
     with auth_ctx.session_factory() as db:
         auth_ctx.user_accounts.create_user(
@@ -1520,7 +1598,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         ("view", BuiltinRole.VIEWER.value),
     )
 
-    # Spare full admin edits other accounts' membership (admins cannot self-edit).
+    # Spare full admin edits other accounts' membership (and can still demote another admin).
     with auth_ctx.session_factory() as db:
         auth_ctx.user_accounts.create_user(
             db,
@@ -1603,7 +1681,17 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 assert 'id="new-project-btn"' in home.text
             else:
                 assert 'id="new-project-btn"' not in home.text
-            if PERMISSION_USERS_MANAGE in allowed or PERMISSION_ROLES_MANAGE in allowed or PERMISSION_SETTINGS_MANAGE in allowed:
+            if (
+                PERMISSION_USERS_MANAGE in allowed
+                or PERMISSION_ROLES_MANAGE in allowed
+                or PERMISSION_SETTINGS_MANAGE in allowed
+                or PERMISSION_PROJECTS_CREATE in allowed
+                or PERMISSION_PROJECTS_EDIT in allowed
+                or PERMISSION_PROJECTS_DELETE in allowed
+                or PERMISSION_PROJECTS_ASSIGN in allowed
+                or PERMISSION_USERS_PASSWORD in allowed
+                or PERMISSION_ROLES_ASSIGN in allowed
+            ):
                 assert "Administration" in home.text
             else:
                 assert "Administration" not in home.text

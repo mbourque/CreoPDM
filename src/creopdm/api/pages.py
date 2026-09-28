@@ -311,6 +311,10 @@ def home(
                 getattr(request.state, "can_manage_users", False)
                 or getattr(request.state, "can_manage_roles", False)
                 or getattr(request.state, "can_manage_settings", False)
+                or getattr(request.state, "can_manage_projects", False)
+                or getattr(request.state, "can_assign_projects", False)
+                or getattr(request.state, "can_set_passwords", False)
+                or getattr(request.state, "can_assign_roles", False)
             ):
                 return RedirectResponse("/admin", status_code=303)
             return RedirectResponse("/no-access", status_code=303)

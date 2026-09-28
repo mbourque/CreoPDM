@@ -39,6 +39,7 @@ class CapabilityFlags:
     can_assign_projects: bool
     can_manage_roles: bool
     can_manage_settings: bool
+    can_manage_projects: bool
     can_create_project: bool
     can_edit_project: bool
     can_delete_project: bool
@@ -53,6 +54,9 @@ class CapabilityFlags:
 
 
 def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
+    can_create = PERMISSION_PROJECTS_CREATE in keys
+    can_edit = PERMISSION_PROJECTS_EDIT in keys
+    can_delete = PERMISSION_PROJECTS_DELETE in keys
     return CapabilityFlags(
         permissions=keys,
         can_manage_users=PERMISSION_USERS_MANAGE in keys,
@@ -61,9 +65,10 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_assign_projects=PERMISSION_PROJECTS_ASSIGN in keys,
         can_manage_roles=PERMISSION_ROLES_MANAGE in keys,
         can_manage_settings=PERMISSION_SETTINGS_MANAGE in keys,
-        can_create_project=PERMISSION_PROJECTS_CREATE in keys,
-        can_edit_project=PERMISSION_PROJECTS_EDIT in keys,
-        can_delete_project=PERMISSION_PROJECTS_DELETE in keys,
+        can_manage_projects=can_create or can_edit or can_delete,
+        can_create_project=can_create,
+        can_edit_project=can_edit,
+        can_delete_project=can_delete,
         can_view_objects=PERMISSION_OBJECTS_VIEW in keys,
         can_add_objects=PERMISSION_OBJECTS_ADD in keys,
         can_checkout=PERMISSION_OBJECTS_CHECKOUT in keys,
@@ -95,6 +100,7 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_assign_projects = caps.can_assign_projects
     request.state.can_manage_roles = caps.can_manage_roles
     request.state.can_manage_settings = caps.can_manage_settings
+    request.state.can_manage_projects = caps.can_manage_projects
     request.state.can_create_project = caps.can_create_project
     request.state.can_edit_project = caps.can_edit_project
     request.state.can_delete_project = caps.can_delete_project
@@ -109,13 +115,14 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
 
 
 def caps_dict(request: Request) -> dict:
-    return {
+    flags = {
         "can_manage_users": bool(getattr(request.state, "can_manage_users", False)),
         "can_set_passwords": bool(getattr(request.state, "can_set_passwords", False)),
         "can_assign_roles": bool(getattr(request.state, "can_assign_roles", False)),
         "can_assign_projects": bool(getattr(request.state, "can_assign_projects", False)),
         "can_manage_roles": bool(getattr(request.state, "can_manage_roles", False)),
         "can_manage_settings": bool(getattr(request.state, "can_manage_settings", False)),
+        "can_manage_projects": bool(getattr(request.state, "can_manage_projects", False)),
         "can_create_project": bool(getattr(request.state, "can_create_project", False)),
         "can_edit_project": bool(getattr(request.state, "can_edit_project", False)),
         "can_delete_project": bool(getattr(request.state, "can_delete_project", False)),
@@ -128,6 +135,16 @@ def caps_dict(request: Request) -> dict:
         "can_update_metadata": bool(getattr(request.state, "can_update_metadata", False)),
         "can_copy_to_vault": bool(getattr(request.state, "can_copy_to_vault", False)),
     }
+    flags["can_open_administration"] = (
+        flags["can_manage_users"]
+        or flags["can_set_passwords"]
+        or flags["can_assign_roles"]
+        or flags["can_assign_projects"]
+        or flags["can_manage_roles"]
+        or flags["can_manage_settings"]
+        or flags["can_manage_projects"]
+    )
+    return flags
 
 
 def can_open_administration(caps: CapabilityFlags) -> bool:
@@ -138,6 +155,7 @@ def can_open_administration(caps: CapabilityFlags) -> bool:
         or caps.can_assign_projects
         or caps.can_manage_roles
         or caps.can_manage_settings
+        or caps.can_manage_projects
     )
 
 def default_app_path(caps: CapabilityFlags) -> str:

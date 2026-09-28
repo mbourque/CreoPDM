@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Projects — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page">
+  <nav class="crumb">
+    {% if can_view_objects %}
+    <a href="/">Projects</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <span>Projects</span>
+  </nav>
+  <h1>Projects</h1>
+  <p class="muted">Every active project on this CreoPDM server. Click a name to edit{% if can_create_project %}, or add a new project{% endif %}.</p>
+  {% if can_create_project %}
+  <p><a class="btn btn-primary" href="/admin/projects/new">Add project</a></p>
+  {% endif %}
+
+  <section class="settings-card settings-form-wide">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Number</th>
+          <th>Vault folder</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in projects %}
+        <tr>
+          <td>
+            {% if can_edit_project or can_delete_project %}
+            <a href="/admin/projects/{{ p.uuid }}">{{ p.name }}</a>
+            {% else %}
+            {{ p.name }}
+            {% endif %}
+          </td>
+          <td>{{ p.number or "—" }}</td>
+          <td>{{ p.vault_folder }}</td>
+          <td>{{ p.description or "—" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No projects yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</article>
+{% endblock %}
