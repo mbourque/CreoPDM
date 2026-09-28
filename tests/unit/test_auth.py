@@ -1127,7 +1127,7 @@ def test_role_permission_edit_survives_restart(auth_client, auth_ctx, data_dir, 
 
 
 def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
-    """Cannot remove any CreoPDM Administration cap from the last full-admin path."""
+    """Own-role Administration is frozen; cannot leave zero full-admin paths."""
     from creopdm.auth_constants import (
         ADMINISTRATION_PERMISSION_KEYS,
         PERMISSION_OBJECTS_CHECKOUT,
@@ -1153,6 +1153,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
         )
         assert admin_role is not None
         role_uuid = admin_role.uuid
+        admin_desc = admin_role.description or ""
         other_keys = [
             p.key
             for p in admin_role.permissions
@@ -1163,25 +1164,75 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
     assert role_form.status_code == 200
     assert "CreoPDM Administration" in role_form.text
     assert "projects.manage" in role_form.text
+    assert "your</strong> role" in role_form.text.lower() or "your role" in role_form.text.lower()
     assert "cannot lock themselves out" in role_form.text.lower()
+    assert 'name="name"' in role_form.text and "disabled" in role_form.text
+    assert "cannot delete a role assigned to you" in role_form.text.lower()
 
-    # Stripping every admin key is rejected.
+    # Service-level lockout still applies when no actor (or another admin edits this role).
+    from creopdm.exceptions import ValidationAppError
+
+    with auth_ctx.session_factory() as db:
+        try:
+            auth_ctx.user_accounts.update_role(
+                db,
+                role_uuid,
+                permission_keys=[PERMISSION_OBJECTS_CHECKOUT],
+            )
+            db.commit()
+            raise AssertionError("expected lockout ValidationAppError")
+        except ValidationAppError as exc:
+            db.rollback()
+            assert "CreoPDM Administration" in exc.message
+            assert "users.manage" in exc.message
+
+    # Own role: cannot strip Administration (even all of it).
     denied_all = auth_client.post(
         f"/admin/roles/{role_uuid}",
         data={
             "name": "Administrator",
-            "description": "oops",
+            "description": admin_desc,
             "permission": PERMISSION_OBJECTS_CHECKOUT,
         },
         follow_redirects=False,
     )
     assert denied_all.status_code == 400, denied_all.text
-    assert "users.manage" in denied_all.text
-    assert "roles.manage" in denied_all.text
-    assert "projects.manage" in denied_all.text
-    assert "settings.manage" in denied_all.text
+    assert "administration permissions" in denied_all.text.lower()
+    assert "assigned to you" in denied_all.text.lower()
 
-    # Dropping any single Administration key is still a lockout.
+    # Own role: cannot rename or change description.
+    denied_rename = auth_client.post(
+        f"/admin/roles/{role_uuid}",
+        data={
+            "name": "Renamed Admin",
+            "description": admin_desc,
+            "permission": sorted(ADMINISTRATION_PERMISSION_KEYS) + other_keys,
+        },
+        follow_redirects=False,
+    )
+    assert denied_rename.status_code == 400, denied_rename.text
+    assert "cannot rename" in denied_rename.text.lower()
+    denied_desc = auth_client.post(
+        f"/admin/roles/{role_uuid}",
+        data={
+            "name": "Administrator",
+            "description": "changed by self",
+            "permission": sorted(ADMINISTRATION_PERMISSION_KEYS) + other_keys,
+        },
+        follow_redirects=False,
+    )
+    assert denied_desc.status_code == 400, denied_desc.text
+    assert "cannot change the description" in denied_desc.text.lower()
+
+    # Own role: cannot delete (also blocked while assigned).
+    denied_delete = auth_client.post(
+        f"/admin/roles/{role_uuid}/delete",
+        follow_redirects=False,
+    )
+    assert denied_delete.status_code == 400, denied_delete.text
+    assert "cannot delete a role assigned to you" in denied_delete.text.lower()
+
+    # Dropping any single Administration key on own role is rejected.
     for drop in (
         PERMISSION_USERS_MANAGE,
         PERMISSION_ROLES_MANAGE,
@@ -1192,13 +1243,13 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
             f"/admin/roles/{role_uuid}",
             data={
                 "name": "Administrator",
-                "description": "partial",
+                "description": admin_desc,
                 "permission": keep,
             },
             follow_redirects=False,
         )
         assert denied_one.status_code == 400, f"drop={drop}: {denied_one.text}"
-        assert "users.manage" in denied_one.text
+        assert "administration permissions" in denied_one.text.lower()
 
     # Demoting the only full admin is rejected.
     with auth_ctx.session_factory() as db:
@@ -1221,8 +1272,8 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
     )
     assert demote.status_code in (400, 403), demote.text
 
-    # With a second full admin, stripping settings.manage from Administrator is allowed
-    # only if that second account keeps the full Administration set (via a dedicated role).
+    # Second full admin (different role) may edit Administrator; lockout still applies
+    # if that would leave zero full-admin paths. With a backup path, strip is allowed.
     with auth_ctx.session_factory() as db:
         full = auth_ctx.user_accounts.create_role(
             db,
@@ -1241,10 +1292,24 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
         )
         db.commit()
 
+    # Still on Administrator: self cannot strip settings even with a backup elsewhere.
     keep_without_settings = sorted(
         (ADMINISTRATION_PERMISSION_KEYS - {PERMISSION_SETTINGS_MANAGE})
         | set(other_keys)
     )
+    still_denied = auth_client.post(
+        f"/admin/roles/{role_uuid}",
+        data={
+            "name": "Administrator",
+            "description": admin_desc,
+            "permission": keep_without_settings,
+        },
+        follow_redirects=False,
+    )
+    assert still_denied.status_code == 400, still_denied.text
+    assert "assigned to you" in still_denied.text.lower()
+
+    _login(auth_client, "backup", "BackupPass1")
     allowed = auth_client.post(
         f"/admin/roles/{role_uuid}",
         data={
@@ -1420,13 +1485,15 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
     self_ok = auth_client.get(f"/admin/users/{admin_uuid}")
     assert self_ok.status_code == 200, self_ok.text
     assert 'value="admin"' in self_ok.text or ">admin<" in self_ok.text
+    assert 'name="role"' not in self_ok.text
+    assert 'name="status"' not in self_ok.text
+    assert "cannot change your own role" in self_ok.text.lower()
+    assert "cannot disable or change status on your own account" in self_ok.text.lower()
     self_post_admin = auth_client.post(
         f"/admin/users/{admin_uuid}",
         data={
             "display_name": "Admin Self",
             "email": "",
-            "role": BuiltinRole.ADMINISTRATOR.value,
-            "status": UserStatus.ACTIVE.value,
             "password": "",
             "password_confirm": "",
             "project_access_present": "1",
@@ -1439,6 +1506,47 @@ def test_only_full_admin_can_edit_administrators(auth_client, auth_ctx):
         admin = db.scalar(select(User).where(User.username == "admin"))
         assert admin is not None
         assert admin.display_name == "Admin Self"
+        assert auth_ctx.user_accounts.primary_role_name(admin) == BuiltinRole.ADMINISTRATOR.value
+        assert admin.status == UserStatus.ACTIVE.value
+
+    # Full admin must not demote or disable themselves (lockout).
+    self_demote = auth_client.post(
+        f"/admin/users/{admin_uuid}",
+        data={
+            "display_name": "Admin Self",
+            "email": "",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "",
+            "password_confirm": "",
+            "project_access_present": "1",
+            "access_all_projects": "1",
+        },
+        follow_redirects=False,
+    )
+    assert self_demote.status_code == 400, self_demote.text
+    assert "cannot change your own role" in self_demote.text.lower()
+    self_disable = auth_client.post(
+        f"/admin/users/{admin_uuid}",
+        data={
+            "display_name": "Admin Self",
+            "email": "",
+            "role": BuiltinRole.ADMINISTRATOR.value,
+            "status": UserStatus.DISABLED.value,
+            "password": "",
+            "password_confirm": "",
+            "project_access_present": "1",
+            "access_all_projects": "1",
+        },
+        follow_redirects=False,
+    )
+    assert self_disable.status_code == 400, self_disable.text
+    assert "cannot change your own status" in self_disable.text.lower()
+    with auth_ctx.session_factory() as db:
+        admin = db.scalar(select(User).where(User.username == "admin"))
+        assert admin is not None
+        assert auth_ctx.user_accounts.primary_role_name(admin) == BuiltinRole.ADMINISTRATOR.value
+        assert admin.status == UserStatus.ACTIVE.value
 
     with auth_ctx.session_factory() as db:
         auth_ctx.user_accounts.create_user(

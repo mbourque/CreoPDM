@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from creopdm.api.deps import get_context, get_db
 from creopdm.api.serializers import project_to_response
 from creopdm.auth_constants import (
+    ADMINISTRATION_PERMISSION_KEYS,
     BUILTIN_PERMISSIONS,
     PERMISSION_GROUPS,
     StarterRole,
@@ -346,7 +347,9 @@ def _is_blocked(result: User | HTMLResponse | RedirectResponse) -> bool:
     return isinstance(result, (HTMLResponse, RedirectResponse))
 
 
-def _permission_groups(selected: set[str] | None = None) -> list[dict]:
+def _permission_groups(
+    selected: set[str] | None = None, *, lock_administration: bool = False
+) -> list[dict]:
     selected = selected or set()
     desc = {key: description for key, description in BUILTIN_PERMISSIONS}
     groups = []
@@ -360,6 +363,7 @@ def _permission_groups(selected: set[str] | None = None) -> list[dict]:
                         "key": key,
                         "description": desc.get(key, key),
                         "checked": key in selected,
+                        "locked": lock_administration and key in ADMINISTRATION_PERMISSION_KEYS,
                     }
                     for key in keys
                 ],
@@ -541,6 +545,7 @@ def admin_user_new(request: Request, ctx: AppContext = Depends(get_context), db:
             **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": None,
             "mode": "new",
+            "editing_self": False,
             **flags,
             "roles": [{"name": r.name} for r in roles],
             "form": _user_form_payload(),
@@ -624,6 +629,7 @@ def admin_user_create(
             **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": error,
             "mode": "new",
+            "editing_self": False,
             **flags,
             "roles": [{"name": r.name} for r in roles],
             "form": _user_form_payload(
@@ -674,6 +680,7 @@ def admin_user_detail(
     access_all = bool(user.access_all_projects)
     selected = {p.uuid for p in (user.projects or [])}
     access = _project_access_form(ctx, db, access_all=access_all, selected_uuids=selected)
+    editing_self = admin.id == user.id
     return templates.TemplateResponse(
         request,
         "admin_user_form.html",
@@ -681,6 +688,7 @@ def admin_user_detail(
             **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": None,
             "mode": "edit",
+            "editing_self": editing_self,
             **flags,
             "roles": [{"name": r.name} for r in roles],
             "form": _user_form_payload(
@@ -729,6 +737,7 @@ def admin_user_update(
             f"<h1>403 Forbidden</h1><p>{exc.message}</p>",
             status_code=403,
         )
+    editing_self = admin.id == user.id
     flags = _user_form_admin_flags(ctx, admin)
     roles = (
         ctx.user_accounts.assignable_roles_for(db, admin) if flags["can_assign_roles"] else []
@@ -741,18 +750,32 @@ def admin_user_update(
     error = None
     if password and password != password_confirm:
         error = "Passwords do not match."
+    elif editing_self and status != user.status:
+        error = "You cannot change your own status. Ask another administrator."
+    elif (
+        editing_self
+        and role is not None
+        and str(role).strip()
+        and str(role).strip() != ctx.user_accounts.primary_role_name(user)
+    ):
+        error = "You cannot change your own role. Ask another administrator."
     else:
         try:
             kwargs: dict = {
                 "display_name": display_name,
                 "email": email,
-                "status": status,
                 "actor": admin,
             }
+            if not editing_self:
+                kwargs["status"] = status
             if flags["can_assign_projects"] and project_access_present:
                 kwargs["access_all_projects"] = access_all
                 kwargs["project_uuids"] = project_uuids
-            if role is not None and str(role).strip():
+            if (
+                not editing_self
+                and role is not None
+                and str(role).strip()
+            ):
                 kwargs["role_name"] = str(role).strip()
             if password:
                 kwargs["password"] = password
@@ -782,6 +805,7 @@ def admin_user_update(
             **_base_ctx(request, ctx, current_user=admin, can_manage_users=True, can_manage_settings=True),
             "error": error,
             "mode": "edit",
+            "editing_self": editing_self,
             **flags,
             "roles": [{"name": r.name} for r in roles],
             "form": _user_form_payload(
@@ -794,7 +818,7 @@ def admin_user_update(
                     if role is not None and str(role).strip()
                     else ctx.user_accounts.primary_role_name(user)
                 ),
-                status=status,
+                status=status if not editing_self else user.status,
                 access_all_projects=access_all,
                 selected_project_uuids=project_uuids,
             ),
@@ -842,6 +866,7 @@ def admin_role_new(request: Request, ctx: AppContext = Depends(get_context), db:
             **_base_ctx(request, ctx, current_user=manager),
             "error": None,
             "mode": "new",
+            "editing_own_role": False,
             "permission_groups": _permission_groups(),
             "form": {"name": "", "description": ""},
             "can_delete": False,
@@ -882,6 +907,7 @@ def admin_role_create(
             **_base_ctx(request, ctx, current_user=manager),
             "error": error,
             "mode": "new",
+            "editing_own_role": False,
             "permission_groups": _permission_groups(set(permission_keys)),
             "form": {"name": name, "description": description},
             "can_delete": False,
@@ -904,6 +930,7 @@ def admin_role_detail(
     if role is None:
         return RedirectResponse("/admin/roles", status_code=303)
     selected = {p.key for p in role.permissions}
+    editing_own = ctx.user_accounts.user_holds_role(manager, role)
     return templates.TemplateResponse(
         request,
         "admin_role_form.html",
@@ -911,13 +938,16 @@ def admin_role_detail(
             **_base_ctx(request, ctx, current_user=manager),
             "error": None,
             "mode": "edit",
-            "permission_groups": _permission_groups(selected),
+            "editing_own_role": editing_own,
+            "permission_groups": _permission_groups(
+                selected, lock_administration=editing_own
+            ),
             "form": {
                 "uuid": role.uuid,
                 "name": role.name,
                 "description": role.description or "",
             },
-            "can_delete": len(role.users) == 0,
+            "can_delete": (not editing_own) and len(role.users) == 0,
             "user_count": len(role.users),
         },
     )
@@ -940,6 +970,7 @@ def admin_role_update(
     if role is None:
         return RedirectResponse("/admin/roles", status_code=303)
     permission_keys = _parse_permission_keys([str(v) for v in permission])
+    editing_own = ctx.user_accounts.user_holds_role(manager, role)
     error = None
     try:
         ctx.user_accounts.update_role(
@@ -948,6 +979,7 @@ def admin_role_update(
             name=name,
             description=description,
             permission_keys=permission_keys,
+            actor=manager,
         )
         db.commit()
         return RedirectResponse("/admin/roles", status_code=303)
@@ -955,6 +987,7 @@ def admin_role_update(
         db.rollback()
         error = exc.message
     role = ctx.user_accounts.get_role_by_uuid(db, role_uuid) or role
+    editing_own = ctx.user_accounts.user_holds_role(manager, role)
     return templates.TemplateResponse(
         request,
         "admin_role_form.html",
@@ -962,13 +995,16 @@ def admin_role_update(
             **_base_ctx(request, ctx, current_user=manager),
             "error": error,
             "mode": "edit",
-            "permission_groups": _permission_groups(set(permission_keys)),
+            "editing_own_role": editing_own,
+            "permission_groups": _permission_groups(
+                set(permission_keys), lock_administration=editing_own
+            ),
             "form": {
                 "uuid": role_uuid,
                 "name": name,
                 "description": description,
             },
-            "can_delete": len(role.users) == 0,
+            "can_delete": (not editing_own) and len(role.users) == 0,
             "user_count": len(role.users),
         },
         status_code=400,
@@ -986,7 +1022,7 @@ def admin_role_delete(
     if _is_blocked(manager):
         return manager
     try:
-        ctx.user_accounts.delete_role(db, role_uuid)
+        ctx.user_accounts.delete_role(db, role_uuid, actor=manager)
         db.commit()
         return RedirectResponse("/admin/roles", status_code=303)
     except CreoPDMError as exc:
@@ -994,6 +1030,7 @@ def admin_role_delete(
         role = ctx.user_accounts.get_role_by_uuid(db, role_uuid)
         if role is None:
             return RedirectResponse("/admin/roles", status_code=303)
+        editing_own = ctx.user_accounts.user_holds_role(manager, role)
         selected = {p.key for p in role.permissions}
         return templates.TemplateResponse(
             request,
@@ -1002,13 +1039,16 @@ def admin_role_delete(
                 **_base_ctx(request, ctx, current_user=manager),
                 "error": exc.message,
                 "mode": "edit",
-                "permission_groups": _permission_groups(selected),
+                "editing_own_role": editing_own,
+                "permission_groups": _permission_groups(
+                    selected, lock_administration=editing_own
+                ),
                 "form": {
                     "uuid": role.uuid,
                     "name": role.name,
                     "description": role.description or "",
                 },
-                "can_delete": len(role.users) == 0,
+                "can_delete": (not editing_own) and len(role.users) == 0,
                 "user_count": len(role.users),
             },
             status_code=400,

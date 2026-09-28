@@ -219,6 +219,9 @@ class UserService:
         keys = {p.key for p in (role.permissions or [])}
         return ADMINISTRATION_PERMISSION_KEYS.issubset(keys)
 
+    def user_holds_role(self, user: User, role: Role) -> bool:
+        return any(r.id == role.id for r in (user.roles or []))
+
     def can_edit_user(self, actor: User, target: User) -> bool:
         try:
             self.ensure_can_edit_user(actor, target)
@@ -227,7 +230,7 @@ class UserService:
             return False
 
     def ensure_can_edit_user(self, actor: User, target: User) -> None:
-        """Non-admins may not self-edit; full admins may edit themselves and other admins."""
+        """Non-admins may not self-edit; full admins may edit themselves (not own role/status) and other admins."""
         if actor.id == target.id:
             if not self.is_full_administrator(actor):
                 raise ValidationAppError(
@@ -418,18 +421,40 @@ class UserService:
         name: str | None = None,
         description: str | None = None,
         permission_keys: list[str] | None = None,
+        actor: User | None = None,
     ) -> Role:
         self.ensure_permission_catalog(db)
         role = self.get_role_by_uuid(db, role_uuid)
         if role is None:
             raise NotFoundError("Role not found.")
-        if name is not None:
+        editing_own = actor is not None and self.user_holds_role(actor, role)
+        current_keys = {p.key for p in (role.permissions or [])}
+        if editing_own:
+            if name is not None and validate_role_name(name) != role.name:
+                raise ValidationAppError(
+                    "You cannot rename a role assigned to you. Ask another administrator."
+                )
+            if description is not None and (description or "").strip() != (role.description or "").strip():
+                raise ValidationAppError(
+                    "You cannot change the description of a role assigned to you. "
+                    "Ask another administrator."
+                )
+            if permission_keys is not None:
+                new_keys = frozenset(permission_keys)
+                current_admin = current_keys & ADMINISTRATION_PERMISSION_KEYS
+                new_admin = new_keys & ADMINISTRATION_PERMISSION_KEYS
+                if new_admin != current_admin:
+                    raise ValidationAppError(
+                        "You cannot change CreoPDM Administration permissions on a role "
+                        "assigned to you. Ask another administrator."
+                    )
+        if name is not None and not editing_own:
             rname = validate_role_name(name)
             other = self.role_by_name(db, rname)
             if other is not None and other.id != role.id:
                 raise ValidationAppError(f"Role '{rname}' already exists.")
             role.name = rname
-        if description is not None:
+        if description is not None and not editing_own:
             role.description = description.strip()
         if permission_keys is not None:
             keys = frozenset(permission_keys)
@@ -449,10 +474,16 @@ class UserService:
         db.flush()
         return self.get_role_by_uuid(db, role.uuid) or role
 
-    def delete_role(self, db: Session, role_uuid: str) -> None:
+    def delete_role(
+        self, db: Session, role_uuid: str, *, actor: User | None = None
+    ) -> None:
         role = self.get_role_by_uuid(db, role_uuid)
         if role is None:
             raise NotFoundError("Role not found.")
+        if actor is not None and self.user_holds_role(actor, role):
+            raise ValidationAppError(
+                "You cannot delete a role assigned to you. Ask another administrator."
+            )
         if role.users:
             raise ValidationAppError(
                 "Cannot delete a role that is still assigned to users. Reassign them first."
@@ -637,6 +668,7 @@ class UserService:
             raise NotFoundError("User not found.")
         if actor is not None:
             self.ensure_can_edit_user(actor, user)
+        editing_self = actor is not None and actor.id == user.id
         if display_name is not None:
             text = display_name.strip()
             if not text:
@@ -648,6 +680,10 @@ class UserService:
         if status is not None:
             if status not in {UserStatus.ACTIVE.value, UserStatus.DISABLED.value}:
                 raise ValidationAppError("Invalid status.")
+            if editing_self and status != user.status:
+                raise ValidationAppError(
+                    "You cannot change your own status. Ask another administrator."
+                )
         if password:
             if actor is not None:
                 self.ensure_can_set_password(actor)
@@ -660,6 +696,10 @@ class UserService:
             if (role_name or "").strip() == current_role:
                 role_name = None
             else:
+                if editing_self:
+                    raise ValidationAppError(
+                        "You cannot change your own role. Ask another administrator."
+                    )
                 role = self.role_by_name(db, role_name)
                 if role is None:
                     raise ValidationAppError(f"Unknown role '{role_name}'.")

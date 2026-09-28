@@ -31,7 +31,7 @@
       <label>Email (optional)
         <input name="email" type="email" value="{{ form.email }}" maxlength="255" autocomplete="email">
       </label>
-      {% if can_assign_roles %}
+      {% if can_assign_roles and not editing_self %}
       <label>Role
         <select name="role">
           {% for r in roles %}
@@ -43,14 +43,25 @@
       <label>Role
         <input type="text" value="{% if mode == 'new' %}Engineer (default){% else %}{{ form.role }}{% endif %}" disabled>
       </label>
+      {% if editing_self %}
+      <p class="muted small">You cannot change your own role. Ask another administrator.</p>
+      {% elif not can_assign_roles %}
       <p class="muted small">You can edit this account but cannot change roles without <code>roles.assign</code>.{% if mode == 'new' %} New users are created as Engineer.{% endif %}</p>
       {% endif %}
+      {% endif %}
+      {% if editing_self %}
+      <label>Status
+        <input type="text" value="{{ form.status }}" disabled>
+      </label>
+      <p class="muted small">You cannot disable or change status on your own account. Ask another administrator.</p>
+      {% else %}
       <label>Status
         <select name="status">
           <option value="ACTIVE" {% if form.status == 'ACTIVE' %}selected{% endif %}>ACTIVE</option>
           <option value="DISABLED" {% if form.status == 'DISABLED' %}selected{% endif %}>DISABLED</option>
         </select>
       </label>
+      {% endif %}
       {% if can_set_passwords %}
         {% if mode == 'new' %}
         <label>Password

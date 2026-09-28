@@ -18,12 +18,21 @@
   <form method="post" action="{% if mode == 'new' %}/admin/roles/new{% else %}/admin/roles/{{ form.uuid }}{% endif %}" class="settings-form settings-form-wide">
     <section class="settings-card">
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      {% if editing_own_role %}
+      <p class="muted small">This is <strong>your</strong> role. Name, description, and CreoPDM Administration permissions are locked so you cannot lock yourself out. Ask another administrator to change them. You may still adjust Projects and Objects permissions.</p>
+      {% endif %}
       <label>Name
-        <input name="name" type="text" value="{{ form.name }}" required maxlength="64" autocomplete="off">
+        <input name="name" type="text" value="{{ form.name }}" required maxlength="64" autocomplete="off" {% if editing_own_role %}disabled{% endif %}>
       </label>
+      {% if editing_own_role %}
+      <input type="hidden" name="name" value="{{ form.name }}">
+      {% endif %}
       <label>Description
-        <input name="description" type="text" value="{{ form.description }}" maxlength="500" autocomplete="off">
+        <input name="description" type="text" value="{{ form.description }}" maxlength="500" autocomplete="off" {% if editing_own_role %}disabled{% endif %}>
       </label>
+      {% if editing_own_role %}
+      <input type="hidden" name="description" value="{{ form.description }}">
+      {% endif %}
       <p class="muted small">Permissions control API and toolbar access. At least one active user must keep full <strong>CreoPDM Administration</strong> (<code>users.manage</code>, <code>users.password</code>, <code>roles.assign</code>, <code>roles.manage</code>, <code>projects.assign</code>, <code>projects.manage</code>, and <code>settings.manage</code>) so admins cannot lock themselves out. <code>users.manage</code> alone does not allow changing roles, passwords, or project membership.</p>
 
       {% for group in permission_groups %}
@@ -31,7 +40,10 @@
         <legend>{{ group.title }}</legend>
         {% for item in group.perms %}
         <label class="choice">
-          <input type="checkbox" name="permission" value="{{ item.key }}" {% if item.checked %}checked{% endif %}>
+          <input type="checkbox" name="permission" value="{{ item.key }}" {% if item.checked %}checked{% endif %} {% if item.locked %}disabled{% endif %}>
+          {% if item.locked and item.checked %}
+          <input type="hidden" name="permission" value="{{ item.key }}">
+          {% endif %}
           <span><strong>{{ item.key }}</strong> — {{ item.description }}</span>
         </label>
         {% endfor %}
@@ -51,6 +63,8 @@
     <form method="post" action="/admin/roles/{{ form.uuid }}/delete" onsubmit="return confirm('Delete this role?');">
       <button type="submit" class="btn btn-danger">Delete role</button>
     </form>
+    {% elif editing_own_role %}
+    <p class="muted small">You cannot delete a role assigned to you. Ask another administrator.</p>
     {% else %}
     <p class="muted small">This role is assigned to {{ user_count }} user{{ 's' if user_count != 1 else '' }}. Reassign them before deleting.</p>
     {% endif %}
