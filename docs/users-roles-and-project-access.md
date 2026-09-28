@@ -28,7 +28,7 @@ Users with any CreoPDM Administration capability (`users.manage`, `users.passwor
 
 - **Users** — list accounts (Projects column: **All** or membership count); click a **name** to edit the user, or a **role** name to open that role (`roles.manage`); **Add user** (`users.manage` + `users.password` for the initial password)
 - **Roles** — list/create/edit/delete roles and their permission checkboxes (`roles.manage`). The role editor groups **CreoPDM Administration** (`users.manage`, `users.password`, `roles.assign`, `roles.manage`, `projects.assign`, `settings.manage`), **Projects**, and **Objects**.
-- **Settings** — workstation options (Creo open mode, vault, file types, …) (`settings.manage`)
+- **Settings** — server options (Creo open mode, vault, file types, …) (`settings.manage`)
 - After a successful **Add user** / **Save** / role save, you return to the list
 - New users must change their password on first sign-in
 
