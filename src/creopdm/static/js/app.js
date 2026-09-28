@@ -965,6 +965,87 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeProjectSettings();
   });
+
+  function applyProjectWatchState(btn, watching) {
+    if (!btn) return;
+    const on = Boolean(watching);
+    btn.dataset.watching = on ? "1" : "0";
+    btn.classList.toggle("is-watching", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.setAttribute("aria-label", on ? "Stop watching project" : "Watch project");
+    if (btn.dataset.canWatch === "1") {
+      btn.title = on ? "Watching — click to stop" : "Watch this project";
+    }
+  }
+
+  function confirmProjectWatch(watching) {
+    const dialog = $("#project-watch-dialog");
+    const form = $("#project-watch-form");
+    const titleEl = $("#project-watch-title");
+    const leadEl = $("#project-watch-lead");
+    const confirmBtn = $("#project-watch-confirm");
+    const cancelBtn = $("#project-watch-cancel");
+    if (!dialog || !form || !titleEl || !leadEl || !confirmBtn) {
+      return Promise.resolve(
+        window.confirm(watching ? "Stop watching this project?" : "Watch this project for email updates?")
+      );
+    }
+    const name = $("#project-watch-btn")?.dataset.projectName || "this project";
+    titleEl.textContent = watching ? "Stop watching" : "Watch project";
+    leadEl.textContent = watching
+      ? `Stop email notifications for activity in ${name}?`
+      : `Get email when files change in ${name}?`;
+    confirmBtn.textContent = watching ? "Stop watching" : "Watch";
+    return new Promise((resolve) => {
+      const finish = (ok) => {
+        form.removeEventListener("submit", onSubmit);
+        cancelBtn?.removeEventListener("click", onCancel);
+        dialog.removeEventListener("cancel", onDialogCancel);
+        if (dialog.open) dialog.close();
+        resolve(ok);
+      };
+      const onSubmit = (event) => {
+        event.preventDefault();
+        finish(true);
+      };
+      const onCancel = () => finish(false);
+      const onDialogCancel = (event) => {
+        event.preventDefault();
+        finish(false);
+      };
+      form.addEventListener("submit", onSubmit);
+      cancelBtn?.addEventListener("click", onCancel);
+      dialog.addEventListener("cancel", onDialogCancel);
+      dialog.showModal();
+    });
+  }
+
+  $("#project-watch-btn")?.addEventListener("click", async () => {
+    const btn = $("#project-watch-btn");
+    if (!btn) return;
+    if (btn.dataset.canWatch !== "1") {
+      const reason = (btn.dataset.reason || "").trim() || "Watching is unavailable.";
+      showError($("#toolbar-error"), reason);
+      return;
+    }
+    const projectId = btn.dataset.project || currentProjectId();
+    if (!projectId) return;
+    const watching = btn.dataset.watching === "1";
+    const ok = await confirmProjectWatch(watching);
+    if (!ok) return;
+    showError($("#toolbar-error"), "");
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/watch`, {
+      method: watching ? "DELETE" : "POST",
+    });
+    if (!response.ok) {
+      showError($("#toolbar-error"), await readError(response));
+      return;
+    }
+    const body = await response.json().catch(() => ({}));
+    applyProjectWatchState(btn, Boolean(body.watching));
+    showOk(body.watching ? "Watching this project." : "Stopped watching this project.");
+  });
+
   $("#rename-project-btn")?.addEventListener("click", () => {
     closeProjectSettings();
     showProjectDialog("rename");

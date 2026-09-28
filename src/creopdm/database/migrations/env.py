@@ -16,6 +16,7 @@ from creopdm.models import (  # noqa: F401
     ObjectVersion,
     Parameter,
     Project,
+    ProjectWatch,
     Remote,
 )
 

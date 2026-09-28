@@ -44,6 +44,26 @@
     <div class="content-head">
       <div class="title-row">
         <h1{% if workspace_path %} title="{{ workspace_path }}"{% endif %}>{{ selected.name }}</h1>
+        {% if email_notifications_enabled %}
+        <button type="button" class="project-watch-btn{% if watching_project %} is-watching{% endif %}"
+                id="project-watch-btn"
+                data-project="{{ selected.uuid }}"
+                data-project-name="{{ selected.name }}"
+                data-watching="{{ '1' if watching_project else '0' }}"
+                data-can-watch="{{ '1' if can_watch_project else '0' }}"
+                data-reason="{{ watch_unavailable_reason or '' }}"
+                title="{% if not can_watch_project %}{{ watch_unavailable_reason or 'Watching unavailable' }}{% elif watching_project %}Watching — click to stop{% else %}Watch this project{% endif %}"
+                aria-label="{% if watching_project %}Stop watching project{% else %}Watch project{% endif %}"
+                aria-pressed="{{ 'true' if watching_project else 'false' }}"
+                {% if not can_watch_project %}disabled{% endif %}>
+          <svg class="bell-icon bell-icon-off" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 22a2.2 2.2 0 0 0 2.2-2.2h-4.4A2.2 2.2 0 0 0 12 22Zm6.4-6.2V11a6.4 6.4 0 0 0-5.1-6.3V4a1.3 1.3 0 1 0-2.6 0v.7A6.4 6.4 0 0 0 5.6 11v4.8L4 17.4V18h16v-.6l-1.6-1.6Z"/>
+          </svg>
+          <svg class="bell-icon bell-icon-on" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 22a2.5 2.5 0 0 0 2.5-2.5h-5A2.5 2.5 0 0 0 12 22Zm7-6.5V11a7 7 0 0 0-5.5-6.85V3.5a1.5 1.5 0 1 0-3 0v.65A7 7 0 0 0 5 11v4.5L3 17.5V19h18v-1.5L19 15.5Z"/>
+          </svg>
+        </button>
+        {% endif %}
         {% if can_edit_project or can_delete_project or can_update_metadata %}
         <div class="project-settings" id="project-settings">
           <button type="button" class="project-settings-btn" id="project-settings-btn"

@@ -183,6 +183,44 @@ a.brand:hover { text-decoration: none; color: inherit; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .title-row .btn { flex-shrink: 0; }
+.project-watch-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: white;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.project-watch-btn:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: #9eb0c0;
+  background: #f3f6f8;
+}
+.project-watch-btn.is-watching {
+  color: var(--accent);
+  border-color: #c58a5a;
+  background: #fff7f0;
+}
+.project-watch-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.bell-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  fill: currentColor;
+}
+.project-watch-btn .bell-icon-on { display: none; }
+.project-watch-btn.is-watching .bell-icon-off { display: none; }
+.project-watch-btn.is-watching .bell-icon-on { display: block; }
 .project-settings {
   position: relative;
   flex-shrink: 0;
@@ -1303,6 +1341,7 @@ body.is-file-drag #file-drop-overlay {
 
   #new-project-btn,
   .project-settings,
+  .project-watch-btn,
   .metrics,
   #selection-summary,
   footer.toolbar,

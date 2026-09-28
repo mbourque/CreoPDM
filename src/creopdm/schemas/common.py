@@ -68,6 +68,13 @@ class ProjectResponse(BaseModel):
     remote_mode: str
 
 
+class ProjectWatchResponse(BaseModel):
+    watching: bool
+    can_watch: bool
+    email_notifications_enabled: bool
+    reason: str | None = None
+
+
 class ObjectVersionResponse(BaseModel):
     uuid: str
     revision: str

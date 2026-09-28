@@ -102,6 +102,17 @@ class UserProject(Base):
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
 
 
+class ProjectWatch(Base):
+    """Email subscribe: one row per user + project when watching."""
+
+    __tablename__ = "project_watches"
+    __table_args__ = (UniqueConstraint("user_id", "project_id", name="uq_project_watches"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class RolePermission(Base):
     __tablename__ = "role_permissions"
     __table_args__ = (UniqueConstraint("role_id", "permission_id", name="uq_role_permissions"),)

@@ -42,7 +42,7 @@ def test_password_hash_round_trip_never_stores_plaintext():
 
 def test_migration_seeds_builtin_roles(auth_ctx):
     inspector = inspect(auth_ctx.engine)
-    for table in ("users", "roles", "permissions", "user_roles", "role_permissions", "user_projects"):
+    for table in ("users", "roles", "permissions", "user_roles", "role_permissions", "user_projects", "project_watches"):
         assert table in inspector.get_table_names()
     cols = {c["name"] for c in inspector.get_columns("users")}
     assert "access_all_projects" in cols

@@ -41,6 +41,7 @@ from creopdm.services.metadata_service import MetadataService
 from creopdm.services.notification_service import NotificationService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.project_service import ProjectService
+from creopdm.services.project_watch_service import ProjectWatchService
 from creopdm.services.user_service import UserService
 from creopdm.services.where_used_index_jobs import WhereUsedIndexJobs
 from creopdm.services.workspace_service import WorkspaceService
@@ -96,6 +97,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
     user_accounts = UserService()
     email = EmailService()
     notifications = NotificationService(get_config=lambda: manager.settings.email, email=email)
+    project_watches = ProjectWatchService(notifications)
     with session_factory() as db:
         user_accounts.ensure_builtin_roles(db)
         db.commit()
@@ -120,6 +122,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         where_used_index=WhereUsedIndexJobs(session_factory, metadata),
         email=email,
         notifications=notifications,
+        project_watches=project_watches,
         user_accounts=user_accounts,
         auth_enabled=auth_enabled,
     )

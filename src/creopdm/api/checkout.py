@@ -120,6 +120,20 @@ def checkout_batch(
         sample = ctx.objects.get_object(db, payload.object_ids[0])
         require_project_access(request, ctx, sample.project)
     result = ctx.checkouts.checkout_many(db, payload.object_ids)
+    if result.get("ok"):
+        from creopdm.api.watch_notify import notify_project_watchers
+
+        sample = ctx.objects.get_object(db, payload.object_ids[0])
+        names = [item["filename"] for item in result["ok"] if item.get("filename")]
+        if names:
+            notify_project_watchers(
+                request,
+                ctx,
+                db,
+                sample.project,
+                action="Checked out",
+                filenames=names,
+            )
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.config.workspace_root())}
     )
@@ -137,6 +151,20 @@ def undo_checkout_batch(
         sample = ctx.objects.get_object(db, payload.object_ids[0])
         require_project_access(request, ctx, sample.project)
     result = ctx.checkouts.undo_checkout_many(db, payload.object_ids)
+    if result.get("ok"):
+        from creopdm.api.watch_notify import notify_project_watchers
+
+        sample = ctx.objects.get_object(db, payload.object_ids[0])
+        names = [item["filename"] for item in result["ok"] if item.get("filename")]
+        if names:
+            notify_project_watchers(
+                request,
+                ctx,
+                db,
+                sample.project,
+                action="Checkout canceled",
+                filenames=names,
+            )
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.config.workspace_root())}
     )
@@ -241,6 +269,17 @@ def checkout_object(
     require_project_access(request, ctx, obj.project)
     ctx.checkouts.checkout(db, object_id)
     obj = ctx.objects.get_object(db, object_id)
+    from creopdm.api.watch_notify import notify_project_watchers
+
+    notify_project_watchers(
+        request,
+        ctx,
+        db,
+        obj.project,
+        action="Checked out",
+        filenames=[obj.filename],
+        object_uuid=obj.uuid,
+    )
     return present_object(ctx, db, obj)
 
 
@@ -256,6 +295,17 @@ def undo_checkout(
     require_project_access(request, ctx, obj.project)
     ctx.checkouts.undo_checkout(db, object_id)
     obj = ctx.objects.get_object(db, object_id)
+    from creopdm.api.watch_notify import notify_project_watchers
+
+    notify_project_watchers(
+        request,
+        ctx,
+        db,
+        obj.project,
+        action="Checkout canceled",
+        filenames=[obj.filename],
+        object_uuid=obj.uuid,
+    )
     return present_object(ctx, db, obj)
 
 
@@ -302,4 +352,15 @@ def checkin_object(
     require_project_access(request, ctx, obj.project)
     obj = ctx.checkins.checkin(db, object_id, payload.comment, payload.add_relative_paths)
     obj = ctx.objects.get_object(db, obj.uuid)
+    from creopdm.api.watch_notify import notify_project_watchers
+
+    notify_project_watchers(
+        request,
+        ctx,
+        db,
+        obj.project,
+        action="Checked in",
+        filenames=[obj.filename],
+        object_uuid=obj.uuid,
+    )
     return present_object(ctx, db, obj)

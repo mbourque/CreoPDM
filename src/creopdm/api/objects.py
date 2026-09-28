@@ -135,6 +135,17 @@ async def add_object(
     checkout = ctx.checkouts.active_for(db, obj.id)
     mine = checkout is not None and checkout.user_name == ctx.users.get_current_user().user_name
     ctx.workspaces.copy_into_workspace(project, obj, writable=mine, keep_local=mine)
+    from creopdm.api.watch_notify import notify_project_watchers
+
+    notify_project_watchers(
+        request,
+        ctx,
+        db,
+        project,
+        action="File added",
+        filenames=[obj.filename],
+        object_uuid=obj.uuid,
+    )
     return present_object(ctx, db, obj)
 
 
@@ -279,6 +290,22 @@ def remove_batch(
     # Commit before the response leaves the process. FastAPI yield-deps commit after
     # the body is sent — soft reload would otherwise re-paint deleted folders/files.
     db.commit()
+    if ok:
+        from creopdm.api.watch_notify import notify_project_watchers
+
+        names = [item.filename for item in ok if item.filename]
+        proj = project
+        if proj is None and to_remove:
+            proj = to_remove[0].project
+        if proj is not None and names:
+            notify_project_watchers(
+                request,
+                ctx,
+                db,
+                proj,
+                action="Files removed",
+                filenames=names,
+            )
     return BatchOperationResponse(ok=ok, failed=failed, workspace_root=str(ctx.config.workspace_root()))
 
 
@@ -324,6 +351,17 @@ def revert_object_version(
     obj = ctx.checkins.revert_to_version(db, object_id, version_id)
     db.commit()
     db.refresh(obj)
+    from creopdm.api.watch_notify import notify_project_watchers
+
+    notify_project_watchers(
+        request,
+        ctx,
+        db,
+        obj.project,
+        action="Version restored",
+        filenames=[obj.filename],
+        object_uuid=obj.uuid,
+    )
     return present_object(ctx, db, obj)
 
 

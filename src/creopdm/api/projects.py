@@ -47,6 +47,7 @@ from creopdm.schemas.common import (
     ProjectResponse,
     ProjectStatusResponse,
     ProjectUpdateRequest,
+    ProjectWatchResponse,
     PurgeFloorsResponse,
     PurgeFloorItem,
     PurgeWorkspacePathsRequest,
@@ -105,6 +106,76 @@ def get_project(
     return project_to_response(load_accessible_project(request, ctx, db, project_id))
 
 
+@router.get("/api/projects/{project_id}/watch", response_model=ProjectWatchResponse)
+def get_project_watch(
+    project_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ProjectWatchResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    project = load_accessible_project(request, ctx, db, project_id)
+    email_on = bool(ctx.settings.email.enabled)
+    auth_user = getattr(request.state, "auth_user", None)
+    can_watch, reason = ctx.project_watches.watch_eligibility(auth_user, email_enabled=email_on)
+    watching = False
+    if auth_user is not None:
+        watching = ctx.project_watches.is_watching(db, auth_user.id, project.id)
+    return ProjectWatchResponse(
+        watching=watching,
+        can_watch=can_watch,
+        email_notifications_enabled=email_on,
+        reason=None if can_watch else reason,
+    )
+
+
+@router.post("/api/projects/{project_id}/watch", response_model=ProjectWatchResponse)
+def subscribe_project_watch(
+    project_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ProjectWatchResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    project = load_accessible_project(request, ctx, db, project_id)
+    auth_user = getattr(request.state, "auth_user", None)
+    if auth_user is None:
+        raise ValidationAppError("Sign in to watch a project.")
+    email_on = bool(ctx.settings.email.enabled)
+    ctx.project_watches.subscribe(db, auth_user, project, email_enabled=email_on)
+    db.commit()
+    return ProjectWatchResponse(
+        watching=True,
+        can_watch=True,
+        email_notifications_enabled=email_on,
+        reason=None,
+    )
+
+
+@router.delete("/api/projects/{project_id}/watch", response_model=ProjectWatchResponse)
+def unsubscribe_project_watch(
+    project_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ProjectWatchResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    project = load_accessible_project(request, ctx, db, project_id)
+    auth_user = getattr(request.state, "auth_user", None)
+    if auth_user is None:
+        raise ValidationAppError("Sign in to manage project watches.")
+    email_on = bool(ctx.settings.email.enabled)
+    ctx.project_watches.unsubscribe(db, auth_user, project)
+    db.commit()
+    can_watch, reason = ctx.project_watches.watch_eligibility(auth_user, email_enabled=email_on)
+    return ProjectWatchResponse(
+        watching=False,
+        can_watch=can_watch,
+        email_notifications_enabled=email_on,
+        reason=None if can_watch else reason,
+    )
+
+
 @router.patch("/api/projects/{project_id}", response_model=ProjectResponse)
 def update_project(
     project_id: str,
@@ -121,6 +192,16 @@ def update_project(
         name=payload.name,
         number=payload.number,
         description=payload.description,
+    )
+    from creopdm.api.watch_notify import notify_project_watchers
+
+    notify_project_watchers(
+        request,
+        ctx,
+        db,
+        project,
+        action="Project updated",
+        filenames=[],
     )
     return project_to_response(project)
 
@@ -700,6 +781,17 @@ def import_from_disk(
     index_flag = None
     if ctx.where_used_index.maybe_start_after_add(project.uuid, len(ok)) is not None:
         index_flag = "started"
+    if ok:
+        from creopdm.api.watch_notify import notify_project_watchers
+
+        notify_project_watchers(
+            request,
+            ctx,
+            db,
+            project,
+            action="Files added",
+            filenames=[item.filename for item in ok if item.filename],
+        )
     return BatchOperationResponse(
         ok=ok,
         failed=failed,
@@ -862,6 +954,17 @@ async def import_from_uploads(
     index_flag = None
     if ctx.where_used_index.maybe_start_after_add(project.uuid, len(ok)) is not None:
         index_flag = "started"
+    if ok:
+        from creopdm.api.watch_notify import notify_project_watchers
+
+        notify_project_watchers(
+            request,
+            ctx,
+            db,
+            project,
+            action="Files added",
+            filenames=[item.filename for item in ok if item.filename],
+        )
     return BatchOperationResponse(
         ok=ok,
         failed=failed,

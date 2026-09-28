@@ -125,6 +125,10 @@ _PAGE_DEFAULTS = {
     "checkout_count": 0,
     "checkoutable_count": 0,
     "checkin_queue": {"saves": [], "new_files": []},
+    "email_notifications_enabled": False,
+    "watching_project": False,
+    "can_watch_project": False,
+    "watch_unavailable_reason": None,
     "local_time": format_local,
     "local_time_pretty": format_local_pretty,
     "creo_label": "Not Connected",
@@ -222,6 +226,28 @@ def _creo_open_title(ctx: AppContext, mode: str) -> str:
     if mode == "embedded":
         return "Opens CAD in the Creo session showing this page"
     return "Opens Creo models as a browser download for the OS association"
+
+
+def _watch_page_flags(request: Request, ctx: AppContext, db: Session, project) -> dict:
+    email_on = bool(ctx.settings.email.enabled)
+    auth_user = getattr(request.state, "auth_user", None)
+    if not email_on or project is None:
+        return {
+            "email_notifications_enabled": email_on,
+            "watching_project": False,
+            "can_watch_project": False,
+            "watch_unavailable_reason": None,
+        }
+    can_watch, reason = ctx.project_watches.watch_eligibility(auth_user, email_enabled=email_on)
+    watching = False
+    if auth_user is not None:
+        watching = ctx.project_watches.is_watching(db, auth_user.id, project.id)
+    return {
+        "email_notifications_enabled": email_on,
+        "watching_project": watching,
+        "can_watch_project": can_watch,
+        "watch_unavailable_reason": None if can_watch else reason,
+    }
 
 
 _CREO_PAGE_TTL = 20.0
@@ -399,6 +425,7 @@ def home(
             "object_types": [item.value for item in ObjectType],
             "revision_display": revision_display,
             "native_picker": native_picker_available(),
+            **_watch_page_flags(request, ctx, db, project),
         },
     )
 
