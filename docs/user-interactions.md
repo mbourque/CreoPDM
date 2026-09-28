@@ -360,7 +360,7 @@ Use a normal browser for these checks. You need the matching Administration perm
 |--------|------------|--------------|
 | Open **Add user** with spaces or symbols in the username (e.g. `Pat O'Neil`, `a@b`) | Reject with a clear validation error | Accept spaces or special characters |
 | Open **Add user** | Require display name, username, **email**, role (if you can assign), status, and initial password | Treat email as optional; let you set project membership on this form |
-| Enter email `sdfsdf@ss` or other non-`name@domain.tld` values | Reject with a clear validation error | Save incomplete domains |
+| Enter email `dfdsf@ca` / `sdfsdf@ss` or other non-`name@domain.tld` values | Reject with a clear validation error (browser and server) | Save incomplete domains or bare TLDs like `@ca` |
 | Save a new user | Create the account with **no project access**; point you to **Membership** to grant access; return to the Users list | Give the new user All projects or any project by default |
 | Edit a user and clear email | Reject with “Email is required” (or equivalent) and keep the previous address | Save a blank email |
 | Open the Role dropdown (with `roles.assign`) | List only roles with **fewer** permissions than yours (not your role, not a peer, not a higher role) | Offer Administrator to another Administrator, or the same role as yours |
@@ -422,7 +422,7 @@ Try the same with **Add folder…** and **Add folders…**.
 - On a phone: tap a file name → must not open; shrink Creo on desktop → must not enter browse-only.  
 - Setup / Add user / Edit user with blank email → blocked.  
 - Setup / Add user with spaces or special characters in username → blocked.  
-- Setup / Add user with `sdfsdf@ss` (no real domain) → blocked.  
+- Setup / Add user with `dfdsf@ca` or `sdfsdf@ss` (no real domain) → blocked.  
 - Add user → new account has no projects until Membership grants them.  
 - Role dropdown → your own role / a peer role / a higher role must not appear.  
 - Email admin: change SMTP fields then Send test without Save → blocked.

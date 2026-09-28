@@ -76,8 +76,17 @@ def validate_email(email: str) -> str:
         raise ValidationAppError("Email is required.")
     if len(value) > 255:
         raise ValidationAppError("Enter a valid email address.")
+    # Reject dotless domains like user@ca (HTML5 type=email wrongly allows these).
+    at = value.rfind("@")
+    domain = value[at + 1 :] if at >= 0 else ""
+    if "." not in domain or not domain.rsplit(".", 1)[-1].isalpha() or len(domain.rsplit(".", 1)[-1]) < 2:
+        raise ValidationAppError("Enter a valid email address.")
     try:
-        result = validate_email_address(value, check_deliverability=False)
+        result = validate_email_address(
+            value,
+            check_deliverability=False,
+            globally_deliverable=True,
+        )
     except EmailNotValidError as exc:
         raise ValidationAppError("Enter a valid email address.") from exc
     return str(result.normalized)

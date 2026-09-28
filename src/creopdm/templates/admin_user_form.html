@@ -32,9 +32,9 @@
       <p class="muted small">2–64 characters: letters, numbers, or underscore only (no spaces). Sign-in is not case-sensitive.</p>
       {% endif %}
       <label>Email
-        <input name="email" type="email" value="{{ form.email }}" required maxlength="255" autocomplete="email">
+        <input name="email" type="email" value="{{ form.email }}" required maxlength="255" autocomplete="email" pattern="[^@\s]+@[^@\s]+\.[A-Za-z]{2,}" title="Use name@domain.tld (for example name@example.com)">
       </label>
-      <p class="muted small">Must look like <code>name@example.com</code>.</p>
+      <p class="muted small">Must look like <code>name@example.com</code> (a domain with a real ending like <code>.com</code> or <code>.ca</code>).</p>
       {% if can_assign_roles and not editing_self %}
       <label>Role
         <select name="role">

@@ -16,9 +16,9 @@
       </label>
       <p class="muted small">2–64 characters: letters, numbers, or underscore only (no spaces). Sign-in is not case-sensitive.</p>
       <label>Email
-        <input name="email" type="email" value="{{ email or '' }}" required autocomplete="email" maxlength="255">
+        <input name="email" type="email" value="{{ email or '' }}" required autocomplete="email" maxlength="255" pattern="[^@\s]+@[^@\s]+\.[A-Za-z]{2,}" title="Use name@domain.tld (for example name@example.com)">
       </label>
-      <p class="muted small">Must look like <code>name@example.com</code>.</p>
+      <p class="muted small">Must look like <code>name@example.com</code> (a domain with a real ending like <code>.com</code> or <code>.ca</code>).</p>
       <label>Password
         <input name="password" type="password" required autocomplete="new-password" minlength="8">
       </label>

@@ -216,16 +216,12 @@ def test_username_rejects_spaces_and_email_needs_domain(auth_client, auth_ctx):
             assert "username" in exc.message.lower() or "letters" in exc.message.lower()
 
     assert validate_email("Name@Example.COM") == "Name@example.com"
-    try:
-        validate_email("sdfsdf@ss")
-        raise AssertionError("expected incomplete domain to fail")
-    except ValidationAppError as exc:
-        assert "valid email" in exc.message.lower()
-    try:
-        validate_email("not-an-email")
-        raise AssertionError("expected bare local-part to fail")
-    except ValidationAppError as exc:
-        assert "valid email" in exc.message.lower()
+    for bad in ("sdfsdf@ss", "dfdsf@ca", "not-an-email", "user@localhost"):
+        try:
+            validate_email(bad)
+            raise AssertionError(f"expected {bad!r} to fail")
+        except ValidationAppError as exc:
+            assert "valid email" in exc.message.lower() or "required" in exc.message.lower()
 
     auth_client.post(
         "/setup",
