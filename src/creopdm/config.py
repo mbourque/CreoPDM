@@ -514,6 +514,23 @@ def path_for_settings_display(path: Path | str) -> str:
     return "~/" + relative.as_posix()
 
 
+def sqlite_url_for_settings_display(url: str) -> str:
+    """Show SQLite URLs with ``~/...`` when the DB file lives under the user home."""
+    text = (url or "").strip()
+    if not text.lower().startswith("sqlite:///"):
+        return database_url_for_display(text)
+    raw_path = text[len("sqlite:///"):]
+    if not raw_path:
+        return text
+    display = path_for_settings_display(raw_path)
+    if display.startswith("~"):
+        return f"sqlite:///{display}"
+    # Absolute posix path needs the fourth slash (sqlite:////home/...).
+    if display.startswith("/"):
+        return f"sqlite:///{display}"
+    return f"sqlite:///{display}"
+
+
 def on_windows() -> bool:
     return os.name == "nt"
 

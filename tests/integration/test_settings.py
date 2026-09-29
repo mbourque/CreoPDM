@@ -125,6 +125,13 @@ def test_get_and_update_settings(client, tmp_path):
     assert "Thumbs.db" in payload["ignore_patterns"]
     assert payload["database_url"].startswith("sqlite:///")
     assert payload["default_database_url"].startswith("sqlite:///")
+    # Help text must not embed the OS login name (unit test covers ~/ under home).
+    home_name = Path.home().name.lower()
+    if home_name and home_name not in {".", ""}:
+        db_url = payload["default_database_url"].replace("\\", "/").lower()
+        vault = payload["default_workspace_root"].replace("\\", "/").lower()
+        assert f"/{home_name}/" not in db_url
+        assert f"/{home_name}/" not in vault
     assert payload["port"] == 0
     assert payload["agent_base_url"] == "http://127.0.0.1:8766"
     assert payload["workspace_poll_interval_ms"] == 5000

@@ -103,3 +103,19 @@ def test_path_for_settings_display_uses_tilde_under_home(monkeypatch, tmp_path):
     outside = tmp_path / "other" / "vaults"
     outside.mkdir(parents=True)
     assert path_for_settings_display(outside) == str(outside.resolve())
+
+
+def test_sqlite_url_for_settings_display_hides_login_name(monkeypatch, tmp_path):
+    from creopdm.config import sqlite_url_for_settings_display
+
+    home = tmp_path / "home" / "michael"
+    home.mkdir(parents=True)
+    monkeypatch.setattr("creopdm.config.user_home", lambda: home)
+    db_path = home / ".local" / "share" / APP_NAME / "database" / "creopdm.db"
+    db_path.parent.mkdir(parents=True)
+    db_path.write_text("x", encoding="utf-8")
+    raw = f"sqlite:///{db_path.resolve().as_posix()}"
+    shown = sqlite_url_for_settings_display(raw)
+    assert "michael" not in shown
+    assert shown.startswith("sqlite:///~/")
+    assert shown.endswith(f"/{APP_NAME}/database/creopdm.db")

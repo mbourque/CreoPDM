@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends, Request
 
 from creopdm.api.deps import get_context
 from creopdm.api.pages import clear_creo_page_cache
-from creopdm.config import AppSettings, database_url_for_display, path_for_settings_display
+from creopdm.config import (
+    AppSettings,
+    database_url_for_display,
+    path_for_settings_display,
+    sqlite_url_for_settings_display,
+)
 from creopdm.constants import (
     DEFAULT_CAD_MODELS_EXTENSIONS,
     DEFAULT_CREO_MODEL_EXTENSIONS,
@@ -41,19 +46,24 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
     default_root = ctx.config.workspaces_dir
     current_root = ctx.config.workspace_root()
     default_display = path_for_settings_display(default_root)
-    try:
-        on_default = current_root.resolve() == default_root.resolve()
-    except OSError:
-        on_default = False
-    workspace_display = default_display if on_default else str(current_root)
+    workspace_display = path_for_settings_display(current_root)
     resolved = _resolved_creojs(ctx)
+    default_db = sqlite_url_for_settings_display(ctx.config.default_sqlite_url())
+    configured_db = (settings.database.url or "").strip()
+    database_display = (
+        sqlite_url_for_settings_display(database_url_for_display(configured_db))
+        if configured_db
+        else default_db
+    )
     return SettingsResponse(
         creo_open_mode=settings.creo.open_mode,
         creo_executable=settings.creo.executable,
         creo_view_open_mode=settings.creo.view_open_mode,
         creo_view_executable=settings.creo.view_executable,
         creo_js_library=settings.creo.js_library,
-        creo_js_library_resolved=str(resolved) if resolved else None,
+        creo_js_library_resolved=(
+            path_for_settings_display(resolved) if resolved else None
+        ),
         workspace_root=workspace_display,
         default_workspace_root=default_display,
         open_browser_on_start=settings.ui.open_browser_on_start,
@@ -72,12 +82,8 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         type_labels=ctx.config.type_labels(),
         ignore_patterns=ctx.config.ignore_patterns(),
         default_ignore_patterns=list(DEFAULT_IGNORE_PATTERNS),
-        database_url=(
-            database_url_for_display(settings.database.url)
-            if (settings.database.url or "").strip()
-            else ctx.config.default_sqlite_url()
-        ),
-        default_database_url=ctx.config.default_sqlite_url(),
+        database_url=database_display,
+        default_database_url=default_db,
         port=settings.server.port,
         agent_base_url=settings.ui.agent_base_url,
         workspace_poll_interval_ms=settings.ui.workspace_poll_interval_ms,
@@ -205,7 +211,8 @@ def update_settings(
     if payload.database_url is not None:
         text = payload.database_url.strip()
         default = ctx.config.default_sqlite_url()
-        if not text or text == default:
+        default_display = sqlite_url_for_settings_display(default)
+        if not text or text == default or text == default_display:
             current.database.url = ""
         else:
             current.database.url = database_url_for_display(text)
