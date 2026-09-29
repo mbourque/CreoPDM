@@ -78,6 +78,12 @@ def test_locked_product_rejects_all_mutation_apis(client, repo_parent):
     assert body["failed"], "batch remove must fail when product is locked"
     assert body["failed"][0]["code"] == "VALIDATION_ERROR"
     assert "on hold" in body["failed"][0]["message"].lower()
+
+    # Still checked out after failed batch remove (must not release locks on lock failure).
+    still = client.get(f"/api/objects/{oid}")
+    assert still.status_code == 200, still.text
+    assert still.json()["owned_by_me"] is True
+
     _assert_locked(
         client.patch(f"/api/products/{pid}", json={"name": "Renamed Lock", "number": None, "description": None}),
         hint="rename product",
@@ -85,7 +91,7 @@ def test_locked_product_rejects_all_mutation_apis(client, repo_parent):
     _assert_locked(
         client.post(
             f"/api/objects/{oid}/creo-metadata",
-            json={"parameters": {}, "identity": {}, "materials": {}, "units": {}},
+            json={"parameters": [], "identity": {}, "materials": {}, "units": {}},
         ),
         hint="creo metadata",
     )
