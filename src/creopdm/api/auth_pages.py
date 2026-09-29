@@ -381,6 +381,7 @@ def forgot_password_submit(
             email_enabled=bool(ctx.settings.email.enabled),
         )
         db.commit()
+        # One email try per grant — match or miss — so addresses cannot be probed.
         _clear_forgot_password_grant(request)
         return _forgot_password_form(
             request,
@@ -392,16 +393,17 @@ def forgot_password_submit(
             submitted=True,
         )
     except CreoPDMError as exc:
-        # Keep attempt rows and abuse disable even when the request is rejected
-        # (wrong email, rate limit, etc.).
+        # Invalid format only (e.g. blank email). Keep attempt rows if any were written.
         db.commit()
+        _clear_forgot_password_grant(request)
         return _forgot_password_form(
             request,
             ctx,
             username=uname,
-            forgot_token=token,
+            forgot_token="",
             email=email,
             error=exc.message,
+            submitted=True,
             status_code=400,
         )
 

@@ -17,7 +17,6 @@ from creopdm.exceptions import ValidationAppError
 from creopdm.models.password_reset import PasswordResetAttempt, PasswordResetToken
 from creopdm.models.user import User
 from creopdm.services.password_reset_service import (
-    MATCH_ERROR,
     MAX_ATTEMPTS_PER_USER_PER_DAY,
     SENT_MESSAGE,
     TOKEN_TTL,
@@ -183,6 +182,7 @@ def test_forgot_password_requires_username_and_matching_email(auth_client, auth_
     assert "disabled" in form.text
     token = _forgot_token_from_html(form.text)
 
+    # Wrong email: same success screen as a match (no enumeration), no mail, grant spent.
     wrong = auth_client.post(
         "/forgot-password",
         data={
@@ -191,12 +191,28 @@ def test_forgot_password_requires_username_and_matching_email(auth_client, auth_
             "forgot_token": token,
         },
     )
-    assert wrong.status_code == 400
-    assert MATCH_ERROR in wrong.text
+    assert wrong.status_code == 200
+    assert SENT_MESSAGE.split(".")[0] in wrong.text
+    assert "do not match an account" not in wrong.text
+    assert "Send reset link" not in wrong.text
     assert sent == []
-    token = _forgot_token_from_html(wrong.text)
+
+    # Cannot keep guessing emails with the same grant.
+    retry = auth_client.post(
+        "/forgot-password",
+        data={
+            "username": "engineer",
+            "email": email,
+            "forgot_token": token,
+        },
+        follow_redirects=False,
+    )
+    assert retry.status_code == 303
+    assert "/login" in retry.headers["location"]
 
     # Tampered form username (different from session grant) is rejected.
+    form = _open_forgot(auth_client, "engineer")
+    token = _forgot_token_from_html(form.text)
     tampered = auth_client.post(
         "/forgot-password",
         data={"username": "admin", "email": email, "forgot_token": token},
@@ -205,7 +221,7 @@ def test_forgot_password_requires_username_and_matching_email(auth_client, auth_
     assert tampered.status_code == 303
     assert "/login" in tampered.headers["location"]
 
-    # Grant was cleared by the tamper — must unlock again.
+    # Fresh grant for the real matching email.
     form = _open_forgot(auth_client, "engineer")
     token = _forgot_token_from_html(form.text)
     posted = auth_client.post(
@@ -281,22 +297,21 @@ def test_forgot_password_spam_disables_non_admin(auth_client, auth_ctx):
         email = user.email
         user_id = user.id
 
-    form = _open_forgot(auth_client, "limited")
-    token = _forgot_token_from_html(form.text)
-
-    # Wrong email still counts as attempts against that username (abuse path).
-    for _ in range(MAX_ATTEMPTS_PER_USER_PER_DAY):
+    # Each try needs a fresh wrong-password grant (one email attempt per grant).
+    for i in range(MAX_ATTEMPTS_PER_USER_PER_DAY):
+        form = _open_forgot(auth_client, "limited")
+        token = _forgot_token_from_html(form.text)
         resp = auth_client.post(
             "/forgot-password",
             data={
                 "username": "limited",
-                "email": "wrong-" + email,
+                "email": f"wrong{i}@example.com",
                 "forgot_token": token,
             },
         )
-        assert resp.status_code == 400
-        if 'name="forgot_token"' in resp.text:
-            token = _forgot_token_from_html(resp.text)
+        assert resp.status_code == 200
+        assert SENT_MESSAGE.split(".")[0] in resp.text
+        assert sent == []
 
     with auth_ctx.session_factory() as db:
         user = db.get(User, user_id)

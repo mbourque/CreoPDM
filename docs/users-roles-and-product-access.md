@@ -17,7 +17,7 @@ When the `users` table has **zero** rows, opening the app redirects to **`/setup
 | Page | Purpose |
 | --- | --- |
 | `/login` | Username + password. After a **wrong password** for a **known** username, a **Forgot password?** control appears (submits the current username plus a one-time token; hides if you change the field). |
-| `/forgot-password` | **GET is never allowed** (typed URLs redirect to sign-in). The email form is returned only from the login **Forgot password?** POST when the session grant and token match; then matching **email** sends a 10-minute reset link. |
+| `/forgot-password` | **GET is never allowed** (typed URLs redirect to sign-in). The email form is returned only from the login **Forgot password?** POST when the session grant and token match. Submitting any well-formed email shows the same confirmation; a reset mail is sent only when it matches that account. The grant is spent after one try so emails cannot be probed. |
 | `/reset-password?token=…&username=…` | Choose a new password; username is shown **disabled** and must match the token. Token alone (no matching username) is rejected. |
 | `/logout` | Clears the session cookie |
 | `/account/password` | Change password while signed in (required when `must_change_password` is set) |
