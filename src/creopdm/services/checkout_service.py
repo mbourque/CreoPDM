@@ -18,7 +18,12 @@ from creopdm.exceptions import (
 from creopdm.logging_setup import get_logger
 from creopdm.models.checkout import Checkout
 from creopdm.models.object import EngineeringObject
-from creopdm.product_state import ensure_product_mutable, product_allows_mutation
+from creopdm.product_state import (
+    ensure_product_mutable,
+    product_allows_mutation,
+    product_state_label,
+    product_state_value,
+)
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.lock_manager import ProductLockManager
 from creopdm.services.object_service import ObjectService
@@ -128,13 +133,21 @@ class CheckoutService:
         user: UserIdentity | None = None,
     ) -> CheckoutView:
         current = user or self._users.get_current_user()
-        mutable = product_allows_mutation(obj.product) if obj.product is not None else True
+        product = obj.product
+        mutable = product_allows_mutation(product) if product is not None else True
         released = obj.lifecycle_state != LifecycleState.IN_WORK.value
         if released:
             label = "Released" if obj.lifecycle_state == LifecycleState.RELEASED.value else "Obsolete"
             return CheckoutView(checkout, label, False, False, False)
         if checkout is None:
-            return CheckoutView(None, "Available", False, mutable, False)
+            if not mutable:
+                # Do not say Available when checkout is blocked by product lock.
+                if product is not None and bool(getattr(product, "read_only", False)):
+                    label = "Read only"
+                else:
+                    label = product_state_label(product_state_value(product))
+                return CheckoutView(None, label, False, False, False)
+            return CheckoutView(None, "Available", False, True, False)
         owned = checkout.user_name == current.user_name
         label = "Checked out by me" if owned else f"Checked out by {checkout.user_name}"
         # Check-in blocked when product is read-only / not IN_WORK; undo stays via owned_by_me.

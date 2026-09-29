@@ -200,6 +200,24 @@ def test_settings_muted_help_under_field_top_margin_only():
     assert "margin-top: 0.15rem" in label_help
 
 
+def test_product_state_badge_in_files_header():
+    """Product lifecycle state uses the same .state dot badge as the Files State column."""
+    html = APP_HTML.read_text(encoding="utf-8")
+    css = APP_CSS.read_text(encoding="utf-8")
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert 'id="product-state-badge"' in html
+    assert 'class="state product-state"' in html
+    assert "selected.state.replace('_', ' ') | title" in html
+    assert "Read only" in html
+    assert html.index('id="product-state-badge"') < html.index('id="search-form"')
+    assert ".title-row .product-state" in css
+    assert '.state[data-state="ON_HOLD"]::before' in css
+    assert '.state[data-state="CLOSED"]::before' in css
+    assert '.checkout-state[data-state="locked"]::before' in css
+    assert "current product state" in docs.lower()
+    assert "can_checkout %}available{% else %}locked" in html
+
+
 def test_metadata_gear_items_require_creo_session():
     """Collect / Rebuild Where Used use creo-session-only like Set Working Directory."""
     app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")

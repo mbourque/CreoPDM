@@ -458,7 +458,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       row.dataset.owned = "0";
       row.dataset.checkedOut = "0";
       row.dataset.canCheckin = "0";
-      row.dataset.canCheckout = "1";
+      row.dataset.canCheckout = item.can_checkout ? "1" : "0";
       if (item.filename) {
         row.dataset.filename = item.filename;
         const openBtn = row.querySelector(".object-open");
@@ -476,8 +476,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       const state = row.querySelector(".checkout-state");
       if (state) {
-        const label = item.checkout_status || "Available";
-        state.dataset.state = "available";
+        const label = item.checkout_status || (item.can_checkout ? "Available" : "Locked");
+        state.dataset.state = item.can_checkout ? "available" : "locked";
         state.textContent = label;
         const td = state.closest("td");
         if (td) td.title = label;
@@ -530,25 +530,47 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  function productLockedCheckoutLabel() {
+    // Server-painted product lock on #metric-filters — keep undo paint truthful.
+    const el = $("#metric-filters");
+    if (!el || el.dataset.allowsMutation == null || el.dataset.allowsMutation === "") {
+      return null;
+    }
+    if (el.dataset.allowsMutation === "1") return null;
+    if (el.dataset.readOnly === "1") return "Read only";
+    const key = String(el.dataset.productState || "").trim().toUpperCase();
+    const labels = {
+      IN_WORK: "In work",
+      ON_HOLD: "On hold",
+      RELEASED: "Released",
+      CLOSED: "Closed",
+      ARCHIVED: "Archived",
+    };
+    return labels[key] || "Locked";
+  }
+
   function applyUndoCheckoutOnRows(uuids) {
-    /** Paint Available immediately when reload is slow or ignored. */
+    /** Paint checkout column immediately when reload is slow or ignored. */
     const ids = new Set(
       (uuids || []).map((id) => String(id || "").trim()).filter(Boolean)
     );
     if (!ids.size) return;
     stopHeartbeats([...ids]);
-    const text = "Available";
+    const lockedLabel = productLockedCheckoutLabel();
+    const text = lockedLabel || "Available";
+    const kind = lockedLabel ? "locked" : "available";
+    const canCheckout = lockedLabel ? "0" : "1";
     rows().forEach((row) => {
       const id = row.dataset.uuid;
       if (!id || !ids.has(id)) return;
       row.dataset.owned = "0";
       row.dataset.checkedOut = "0";
       row.dataset.canCheckin = "0";
-      row.dataset.canCheckout = "1";
+      row.dataset.canCheckout = canCheckout;
       row.dataset.modifiedLocally = "0";
       const state = row.querySelector(".checkout-state");
       if (state) {
-        state.dataset.state = "available";
+        state.dataset.state = kind;
         state.textContent = text;
         const td = state.closest("td");
         if (td) td.title = text;
@@ -559,7 +581,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
     });
     document.querySelectorAll(".detail-meta .checkout-state").forEach((state) => {
-      state.dataset.state = "available";
+      state.dataset.state = kind;
       state.textContent = text;
     });
     try {
@@ -3203,7 +3225,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const objectType = String(obj.object_type || "");
     const creo = String(obj.creo_release || "");
     const checkout = String(obj.checkout_status || "Available");
-    const checkoutKind = obj.owned_by_me ? "mine" : obj.checkout_user ? "other" : "available";
+    const checkoutKind = obj.owned_by_me
+      ? "mine"
+      : obj.checkout_user
+        ? "other"
+        : obj.can_checkout
+          ? "available"
+          : "locked";
     const rev = String(obj.display_revision || obj.revision || "");
     const pathLine = relative && relative !== filename
       ? `<div class="muted small">${escapeHtml(relative)}</div>`

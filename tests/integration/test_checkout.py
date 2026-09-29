@@ -49,14 +49,20 @@ def test_checkout_blocked_when_product_on_hold(client, repo_parent):
     assert page.status_code == 200, page.text
     assert 'data-allows-mutation="0"' in page.text
     assert "product-access-banner" in page.text
+    assert 'id="product-state-badge"' in page.text
+    assert 'data-state="ON_HOLD"' in page.text
+    assert "On Hold" in page.text
     assert 'id="add-menu"' not in page.text
     assert 'id="checkin-menu"' not in page.text
     assert 'id="checkout-menu"' in page.text
+    assert 'data-state="locked"' in page.text
+    assert "On hold" in page.text
 
     detail = client.get(f"/api/objects/{obj['uuid']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["can_checkout"] is False
     assert detail.json()["can_checkin"] is False
+    assert detail.json()["checkout_status"] == "On hold"
 
 
 @requires_git
@@ -72,6 +78,8 @@ def test_read_only_product_hides_mutation_toolbar(client, repo_parent):
     assert page.status_code == 200, page.text
     assert 'data-allows-mutation="0"' in page.text
     assert "read only" in page.text.lower()
+    assert 'id="product-state-badge"' in page.text
+    assert "Read only" in page.text
     assert 'id="add-menu"' not in page.text
     assert 'id="checkin-menu"' not in page.text
     assert 'id="purge-workspace-btn"' not in page.text
@@ -91,6 +99,8 @@ def test_read_only_product_hides_mutation_toolbar(client, repo_parent):
     assert detail.status_code == 200, detail.text
     assert detail.json()["can_checkout"] is False
     assert detail.json()["can_checkin"] is False
+    assert detail.json()["checkout_status"] == "Read only"
+    assert 'data-state="locked"' in page.text
 
     deleted = client.delete(f"/api/products/{product['uuid']}")
     assert deleted.status_code == 400, deleted.text

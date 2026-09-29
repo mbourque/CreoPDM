@@ -182,6 +182,7 @@ a.brand:hover { text-decoration: none; color: inherit; }
   margin: 0; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.title-row .product-state { flex-shrink: 0; color: var(--muted); }
 .title-row .btn { flex-shrink: 0; }
 .product-watch-btn {
   appearance: none;
@@ -817,11 +818,16 @@ span.object-open:hover { text-decoration: underline; }
 .checkout-state[data-state="mine"]::before { background: var(--warn); }
 .checkout-state[data-state="other"]::before { background: #9b1c1c; }
 .checkout-state[data-state="available"]::before { background: var(--ok); }
+.checkout-state[data-state="locked"]::before { background: var(--idle); }
 .detect-list { margin: 0; padding-left: 1.1rem; color: var(--ink); }
 .state[data-state="IN_WORK"]::before { background: var(--accent-2); }
 .state[data-state="MODIFIED"]::before { background: var(--warn); }
 .state[data-state="RELEASED"]::before { background: var(--ok); }
 .state[data-state="OBSOLETE"]::before { background: var(--idle); }
+/* Product lifecycle (project) — same .state chrome as file State column */
+.state[data-state="ON_HOLD"]::before { background: var(--warn); }
+.state[data-state="CLOSED"]::before { background: var(--idle); }
+.state[data-state="ARCHIVED"]::before { background: var(--idle); }
 
 .toolbar {
   flex-shrink: 0; display: flex; flex-direction: column; align-items: stretch;

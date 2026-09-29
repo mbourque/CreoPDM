@@ -44,6 +44,9 @@
     <div class="content-head">
       <div class="title-row">
         <h1{% if workspace_path %} title="{{ workspace_path }}"{% endif %}>{{ selected.name }}</h1>
+        <span class="state product-state" id="product-state-badge"
+              data-state="{{ selected.state }}"
+              title="Product state{% if selected.read_only %} (read only){% endif %}">{{ selected.state.replace('_', ' ') | title }}{% if selected.read_only %} · Read only{% endif %}</span>
         {% if email_notifications_enabled %}
         <button type="button" class="product-watch-btn{% if watching_product %} is-watching{% endif %}"
                 id="product-watch-btn"
@@ -242,7 +245,7 @@
             <td title="{{ obj.creo_release or '' }}">{{ obj.creo_release or "" }}</td>
             <td title="{% if obj.updated_at %}{{ local_time_pretty(obj.updated_at) }}{% endif %}">{% if obj.updated_at %}{{ local_time(obj.updated_at) }}{% else %}—{% endif %}</td>
             <td title="{{ obj.checkout_status }}">
-              <span class="checkout-state" data-state="{% if obj.owned_by_me %}mine{% elif obj.checkout_user %}other{% else %}available{% endif %}">
+              <span class="checkout-state" data-state="{% if obj.owned_by_me %}mine{% elif obj.checkout_user %}other{% elif obj.can_checkout %}available{% else %}locked{% endif %}">
                 {{ obj.checkout_status }}
               </span>
             </td>

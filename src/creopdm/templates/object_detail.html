@@ -82,7 +82,7 @@
     <div class="detail-meta">
       <span class="state" data-state="{{ object.lifecycle_state }}">{{ object.lifecycle_state.replace('_', ' ').title() }}</span>
       <span class="checkout-state"
-            data-state="{% if object.owned_by_me %}mine{% elif object.checkout_user %}other{% else %}available{% endif %}"
+            data-state="{% if object.owned_by_me %}mine{% elif object.checkout_user %}other{% elif object.can_checkout %}available{% else %}locked{% endif %}"
             {% if object.checkout_since %}title="Checked out {{ local_time_pretty(object.checkout_since) }}"{% endif %}>{{ object.checkout_status }}</span>
       <span class="rev">{{ object.display_revision }}</span>
     </div>

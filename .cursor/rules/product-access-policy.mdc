@@ -14,7 +14,7 @@ Anything that changes vault/product content or locks (Add, Checkout, Check In, R
 1. **API / service** — call `ensure_product_mutable` or `ensure_product_deletable` (do not rely on hidden buttons).
 2. **Toolbar / gear** — add or reuse a flag on `ProductUiCapabilities` / `product_ui_capabilities()`; templates use `{% if product_ui.show_* %}` only.
 3. **`app.js`** — selection / agent / Creo visibility only. Do **not** re-check `read_only`, product `state`, or `data-allows-mutation` to hide mutation chrome.
-4. **Tests** — extend `tests/unit/test_product_state.py` for the new flag; keep integration coverage in `tests/integration/test_checkout.py` (or a focused sibling) that locked products omit the control **and** the API rejects.
+4. **Tests** — extend `tests/unit/test_product_state.py` for the new flag; keep **`tests/unit/test_product_access_policy_contract.py`** green (modules must call `ensure_*`, templates use `product_ui`, no JS lock re-check); add/keep an API rejection in `tests/integration/test_product_lifecycle_lock.py` (or `test_checkout.py`) for the new endpoint.
 5. **Docs** — update the read-only / not In work rows in `docs/user-interactions.md` when UX changes (see `user-interactions.mdc`).
 
 `pages.render()` already injects `product_ui` from role caps ∩ product. Role permissions stay in `permissions.py` / `caps_dict`; combine them only inside `product_ui_capabilities`.
@@ -25,7 +25,8 @@ Anything that changes vault/product content or locks (Add, Checkout, Check In, R
 # ❌ BAD — Jinja: can_add_objects and selected.allows_mutation
 # ❌ BAD — syncToolbar: mutable && canCheckout / productAllowsMutation()
 # ❌ BAD — new POST handler without ensure_product_mutable
-# ✅ GOOD — product_ui.show_add + ensure_product_mutable in the service
+# ❌ BAD — ship a mutation without updating test_product_access_policy_contract / lifecycle lock tests
+# ✅ GOOD — product_ui.show_add + ensure_product_mutable in the service + contract/API tests
 ```
 
 Undo Checkout may stay available on locked products (Checkout menu + owned row). Local workspace discard/purge may stay under `show_remove` without vault/product remove.
