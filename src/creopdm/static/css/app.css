@@ -383,10 +383,11 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .settings-form textarea {
   font: inherit; padding: 0.45rem 0.55rem; border: 1px solid var(--line); border-radius: 4px; font-weight: 400;
 }
-.settings-form input[readonly] {
+.settings-form input[readonly],
+.settings-form input:disabled {
   background: #f0f3f6;
-  color: var(--ink);
-  cursor: default;
+  color: var(--muted);
+  cursor: not-allowed;
 }
 .settings-form select { width: max-content; min-width: 8rem; }
 .settings-form textarea {
