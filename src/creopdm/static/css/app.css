@@ -510,12 +510,17 @@ a.brand:hover { text-decoration: none; color: inherit; }
 }
 .settings-card > .choice { margin: 0.2rem 0; }
 .settings-nested {
-  margin: 0.2rem 0 0.65rem 1.55rem;
+  margin: 0 0 0.45rem 1.55rem;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.2rem;
 }
-.settings-nested > label { margin-top: 0.15rem; }
+.settings-nested > .muted.small {
+  margin: 0;
+}
+.settings-nested > label {
+  margin: 0.35rem 0 0;
+}
 .settings-nested.is-disabled {
   opacity: 0.45;
 }
