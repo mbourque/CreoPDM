@@ -891,6 +891,17 @@ span.object-open:hover { text-decoration: underline; }
 .btn-small { font-size: 0.78rem; }
 .btn-primary { background: var(--accent); color: white; border-color: #8d3e12; }
 .btn-primary:hover:not(:disabled) { color: white; }
+button.forgot-password-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+button.forgot-password-btn:hover { color: var(--accent-2); }
 .btn-danger { color: #9b1c1c; border-color: #d7a3a3; }
 .btn-danger:hover:not(:disabled) { border-color: #9b1c1c; background: #fdf2f2; }
 

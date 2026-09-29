@@ -208,6 +208,8 @@ def login_page(request: Request, ctx: AppContext = Depends(get_context), db: Ses
                 default_app_path(caps_for_user(ctx.user_accounts, user)),
                 status_code=303,
             )
+    # Fresh sign-in page: do not keep a stale forgot-password grant.
+    _clear_forgot_password_grant(request)
     return templates.TemplateResponse(
         request,
         "auth_login.html",
@@ -282,12 +284,12 @@ def forgot_password_page(
     if ctx.user_accounts.needs_setup(db):
         return RedirectResponse("/setup", status_code=303)
     granted = _forgot_password_granted_username(request)
-    if not granted:
-        return _forgot_password_redirect_to_login()
-    # Query username is optional display only; must match the session grant
-    # so crafted ?username=… URLs cannot start a reset for someone else.
     query_name = _normalize_login_username(username)
-    if query_name and query_name != granted:
+    # Require both a session grant and a matching username query (from the
+    # post-login Forgot button redirect). Crafted / bare URLs cannot open this.
+    if not granted or not query_name or query_name != granted:
+        if granted and query_name and query_name != granted:
+            _clear_forgot_password_grant(request)
         return _forgot_password_redirect_to_login()
     user = ctx.user_accounts.get_by_username(db, granted)
     if user is None:
@@ -312,22 +314,32 @@ def forgot_password_submit(
     request: Request,
     username: str = Form(""),
     email: str = Form(""),
+    forgot_start: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
     if ctx.user_accounts.needs_setup(db):
         return RedirectResponse("/setup", status_code=303)
     granted = _forgot_password_granted_username(request)
-    if not granted:
-        return _forgot_password_redirect_to_login()
-    # Always use the session-granted username; ignore/reject form tampering.
-    if _normalize_login_username(username) and _normalize_login_username(username) != granted:
+    submitted = _normalize_login_username(username)
+    # Submitted username must match the wrong-password grant. Changing the
+    # login field to another name (e.g. kim → kim1) clears the grant.
+    if not granted or not submitted or submitted != granted:
+        _clear_forgot_password_grant(request)
         return _forgot_password_redirect_to_login()
     user = ctx.user_accounts.get_by_username(db, granted)
     if user is None:
         _clear_forgot_password_grant(request)
         return _forgot_password_redirect_to_login()
     uname = user.username
+
+    # Login-form "Forgot password?" button: open the email form (no email yet).
+    if forgot_start or not (email or "").strip():
+        return RedirectResponse(
+            "/forgot-password?username=" + quote(uname, safe=""),
+            status_code=303,
+        )
+
     try:
         result = ctx.password_resets.request_reset(
             db,

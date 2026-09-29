@@ -5,22 +5,45 @@
   <h1>Sign in</h1>
   <p class="muted">Use your CreoPDM username and password.</p>
 
-  <form method="post" action="/login" class="settings-form">
+  <form method="post" action="/login" class="settings-form" id="login-form">
     <section class="settings-card">
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
       {% if info %}<p class="muted">{{ info }}</p>{% endif %}
       {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
       <label>Username
-        <input name="username" type="text" value="{{ username or '' }}" required autocomplete="username" maxlength="64" autofocus>
+        <input name="username" type="text" value="{{ username or '' }}" required autocomplete="username" maxlength="64" autofocus
+               {% if show_forgot %}data-forgot-username="{{ username }}"{% endif %}>
       </label>
       <label>Password
         <input name="password" type="password" required autocomplete="current-password">
       </label>
       {% if show_forgot %}
-      <p class="muted small"><a href="/forgot-password">Forgot password?</a></p>
+      {# Submits the *current* username field to /forgot-password (not a bare link). #}
+      <p class="muted small" id="forgot-password-wrap">
+        <button type="submit" class="forgot-password-btn"
+                formaction=/forgot-password formmethod=post formnovalidate
+                name="forgot_start" value="1">Forgot password?</button>
+      </p>
       {% endif %}
       <p><button type="submit" class="btn btn-primary">Sign in</button></p>
     </section>
   </form>
 </article>
+{% if show_forgot %}
+<script>
+(function () {
+  var input = document.querySelector('#login-form input[name="username"]');
+  var wrap = document.getElementById('forgot-password-wrap');
+  if (!input || !wrap) return;
+  var granted = (input.getAttribute('data-forgot-username') || '').trim().toLowerCase();
+  function syncForgot() {
+    var current = (input.value || '').trim().toLowerCase();
+    wrap.hidden = !granted || current !== granted;
+  }
+  input.addEventListener('input', syncForgot);
+  input.addEventListener('change', syncForgot);
+  syncForgot();
+})();
+</script>
+{% endif %}
 {% endblock %}

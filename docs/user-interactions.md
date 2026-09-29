@@ -365,7 +365,8 @@ Use a normal browser for these checks. You need the matching Administration perm
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Open `/login` with no recent failure | Show username + password only | Show **Forgot password?** before a failed attempt |
-| Enter a wrong password for a **known** username | Show an error and a **Forgot password?** link under the password field (keeps that username) | Show **Forgot password?** for an unknown username, empty fields, or other validation failures |
+| Enter a wrong password for a **known** username | Show an error and a **Forgot password?** control under the password field (tied to that username) | Show **Forgot password?** for an unknown username, empty fields, or other validation failures |
+| Change the username field after a wrong-password offer, then use **Forgot password?** | Hide the control (in the browser) and reject/clear the grant on the server | Keep using the previous username’s forgot grant |
 | Open `/forgot-password?username=…` without that wrong-password step (or with a different username) | Redirect to sign-in | Start a reset from a crafted URL alone |
 | Use **Forgot password?** (after that wrong-password attempt) + matching email | Send a 10-minute reset link only when email matches **that** username; show username as a disabled field | Open forgot without a username or for an unknown username; accept email alone; send mail when username/email do not match; let you change the username on the form |
 | Open the reset link and set a new password | Show username as a disabled field; update password and send you to sign in | Allow reset without username; accept a link older than 10 minutes; reuse the same link afterward |

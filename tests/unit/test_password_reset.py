@@ -60,6 +60,23 @@ def _unlock_forgot(auth_client, username: str) -> None:
     )
     assert bad.status_code == 400
     assert "Forgot password?" in bad.text
+    assert "forgot_start" in bad.text
+
+
+def _open_forgot(auth_client, username: str):
+    """Use the login Forgot button path (POST current username, then GET form)."""
+    _unlock_forgot(auth_client, username)
+    started = auth_client.post(
+        "/forgot-password",
+        data={"username": username, "forgot_start": "1"},
+        follow_redirects=False,
+    )
+    assert started.status_code == 303
+    loc = started.headers["location"]
+    assert f"username={username}" in loc
+    form = auth_client.get(loc)
+    assert form.status_code == 200
+    return form
 
 
 @requires_git
@@ -84,19 +101,31 @@ def test_forgot_link_only_after_failed_login(auth_client, auth_ctx):
     )
     assert bad.status_code == 400
     assert "Forgot password?" in bad.text
-    assert 'href="/forgot-password"' in bad.text
+    assert 'formaction=/forgot-password' in bad.text or 'formaction="/forgot-password"' in bad.text
+    assert 'data-forgot-username="admin"' in bad.text
 
-    allowed = auth_client.get("/forgot-password")
+    allowed = auth_client.post(
+        "/forgot-password",
+        data={"username": "admin", "forgot_start": "1"},
+        follow_redirects=True,
+    )
     assert allowed.status_code == 200
     assert 'value="admin"' in allowed.text
 
-    # Session is for admin; swapping username in the URL must not work.
-    swapped = auth_client.get(
-        "/forgot-password?username=kim",
+    # Changing the login username then clicking Forgot must not keep the old grant.
+    _unlock_forgot(auth_client, "admin")
+    changed = auth_client.post(
+        "/forgot-password",
+        data={"username": "kim1", "forgot_start": "1"},
         follow_redirects=False,
     )
-    assert swapped.status_code == 303
-    assert "/login" in swapped.headers["location"]
+    assert changed.status_code == 303
+    assert "/login" in changed.headers["location"]
+    stale = auth_client.get(
+        "/forgot-password?username=admin",
+        follow_redirects=False,
+    )
+    assert stale.status_code == 303
 
     # Fresh client: unknown username → no forgot link / no grant.
     with TestClient(create_app(auth_ctx)) as other:
@@ -129,10 +158,7 @@ def test_forgot_password_requires_username_and_matching_email(auth_client, auth_
     assert bare_forgot.status_code == 303
     assert "/login" in bare_forgot.headers["location"]
 
-    _unlock_forgot(auth_client, "engineer")
-
-    form = auth_client.get("/forgot-password")
-    assert form.status_code == 200
+    form = _open_forgot(auth_client, "engineer")
     assert 'name="username"' in form.text
     assert 'value="engineer"' in form.text
     assert "disabled" in form.text
@@ -154,6 +180,8 @@ def test_forgot_password_requires_username_and_matching_email(auth_client, auth_
     assert tampered.status_code == 303
     assert "/login" in tampered.headers["location"]
 
+    # Grant was cleared by the tamper — must unlock again.
+    _open_forgot(auth_client, "engineer")
     posted = auth_client.post(
         "/forgot-password",
         data={"username": "engineer", "email": email},
@@ -224,7 +252,7 @@ def test_forgot_password_spam_disables_non_admin(auth_client, auth_ctx):
         email = user.email
         user_id = user.id
 
-    _unlock_forgot(auth_client, "limited")
+    _open_forgot(auth_client, "limited")
 
     for _ in range(MAX_ATTEMPTS_PER_USER_PER_DAY):
         auth_client.post(
