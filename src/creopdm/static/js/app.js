@@ -7291,23 +7291,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   });
 
-  function productLockCopy() {
-    // Display-only: match banner / checkout labels from server-painted metric-filters.
-    const el = $("#metric-filters");
-    if (!el || el.dataset.allowsMutation == null || el.dataset.allowsMutation === "") {
-      return null;
-    }
-    if (el.dataset.allowsMutation === "1") return null;
-    if (el.dataset.readOnly === "1") return "read only";
-    const key = String(el.dataset.productState || "").trim().toUpperCase();
-    const labels = {
-      IN_WORK: "In work",
-      ON_HOLD: "On Hold",
-      RELEASED: "Released",
-      CLOSED: "Closed",
-      ARCHIVED: "Archived",
-    };
-    return labels[key] || "locked";
+  function canOfferAdd() {
+    return Boolean($("#add-menu"));
+  }
+
+  function canOfferCheckin() {
+    return Boolean($("#checkin-menu"));
   }
 
   async function loadChangesTab(options = {}) {
@@ -7472,9 +7461,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         );
       });
       newerLocal.forEach((item) => {
-        const lock = productLockCopy();
-        const localDetail = lock
-          ? `Local workspace — Check In is blocked while this product is ${lock}.`
+        const offerCheckin = canOfferCheckin();
+        const localDetail = !offerCheckin
+          ? "Local workspace."
           : item.can_checkin === "1"
             ? "Local workspace — select and Check In."
             : "Local workspace — check out to Check In.";
@@ -7494,18 +7483,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             relativePath: item.relative_path,
             localCache: true,
             checkedOut: item.checked_out || "0",
-            canCheckin: lock ? "0" : item.can_checkin || "0",
-            canCheckout: lock ? "0" : item.can_checkout || "0",
+            canCheckin: offerCheckin ? item.can_checkin || "0" : "0",
+            canCheckout: offerCheckin ? item.can_checkout || "0" : "0",
             recordedFilename: item.recorded_filename || "",
           }
         );
       });
       created.forEach((item) => {
-        const lock = productLockCopy();
-        const newDetail = lock
+        const offerAdd = canOfferAdd();
+        const newDetail = !offerAdd
           ? item.local_cache
-            ? `Local workspace — Add is blocked while this product is ${lock}.`
-            : `Not in the product yet. Add is blocked while this product is ${lock}.`
+            ? "Local workspace."
+            : "Not in the product yet."
           : item.local_cache
             ? "Local workspace — select and Add."
             : "Not in the product yet. Select and click Add.";

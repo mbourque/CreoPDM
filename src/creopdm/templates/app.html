@@ -262,10 +262,8 @@
     </section>
 
     <section class="tab-panel" id="panel-checked-out" hidden>
-      {% if product_ui.allows_mutation %}
+      {% if product_ui.show_checkin %}
       <p class="muted small" id="checked-out-help">Active checkout locks in this product, including files held by other people. Open, Check In, and Undo Checkout still apply to your files.</p>
-      {% else %}
-      <p class="muted small" id="checked-out-help">Active checkout locks in this product, including files held by other people. Open and Undo Checkout still apply to your files; Check In is blocked while this product is {% if selected.read_only %}<strong>read only</strong>{% else %}<strong>{{ selected.state.replace('_', ' ') | title }}</strong>{% endif %}.</p>
       {% endif %}
       <div class="table-wrap">
         <table class="grid" id="checked-out-table">
@@ -290,10 +288,8 @@
     </section>
 
     <section class="tab-panel" id="panel-changes" hidden>
-      {% if product_ui.allows_mutation %}
+      {% if product_ui.show_add and product_ui.show_checkin %}
       <p class="muted small" id="changes-help">New files in the vault or your local workspace (creopdm-agent cache), plus vault files that differ from the last checked-in version. Use <strong>Add</strong> for new files and <strong>Check In</strong> for modified saves. Checkout locks are on the Files checked out tab.</p>
-      {% else %}
-      <p class="muted small" id="changes-help">New files and local saves still appear here for reference. <strong>Add</strong> and <strong>Check In</strong> are blocked while this product is {% if selected.read_only %}<strong>read only</strong>{% else %}<strong>{{ selected.state.replace('_', ' ') | title }}</strong>{% endif %}. You can remove local workspace copies; Checkout locks are on the Files checked out tab.</p>
       {% endif %}
       <div class="table-wrap">
         <table class="grid" id="changes-table">
@@ -347,7 +343,7 @@
                 <div class="muted small">{{ item.relative_path }}</div>
                 {% endif %}
               </td>
-              <td>{% if product_ui.show_add %}Not in the product yet. Select and click Add.{% else %}Not in the product yet. Add is blocked while this product is {% if selected.read_only %}read only{% else %}{{ selected.state.replace('_', ' ') | title }}{% endif %}.{% endif %}</td>
+              <td>{% if product_ui.show_add %}Not in the product yet. Select and click Add.{% else %}Not in the product yet.{% endif %}</td>
               <td title="{{ item.size }} bytes">{{ item.size | byte_size }}</td>
               <td{% if item.saved_at %} title="{{ local_time_pretty(item.saved_at) }}"{% endif %}>{{ item.saved_at or "—" }}</td>
             </tr>

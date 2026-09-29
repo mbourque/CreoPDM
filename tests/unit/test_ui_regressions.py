@@ -201,19 +201,25 @@ def test_settings_muted_help_under_field_top_margin_only():
 
 
 def test_locked_product_changes_help_does_not_offer_add_checkin():
-    """On Hold / read-only New files copy must not tell users to Add or Check In."""
+    """Tab help blurbs appear only when product_ui says those actions are available."""
     html = APP_HTML.read_text(encoding="utf-8")
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert 'id="changes-help"' in html
-    assert "product_ui.allows_mutation" in html
-    assert "Add</strong> and <strong>Check In</strong> are blocked while this product is" in html
-    assert "Check In is blocked while this product is" in html
-    assert "Add is blocked while this product is" in html
-    assert "function productLockCopy" in script
-    assert "Add is blocked while this product is ${lock}" in script
-    assert "Check In is blocked while this product is ${lock}" in script
-    assert "Add/Check In are blocked" in docs
+    assert 'id="checked-out-help"' in html
+    assert "{% if product_ui.show_add and product_ui.show_checkin %}" in html
+    assert "{% if product_ui.show_checkin %}" in html
+    assert html.index("{% if product_ui.show_add and product_ui.show_checkin %}") < html.index(
+        'id="changes-help"'
+    )
+    assert "Use <strong>Add</strong> for new files and <strong>Check In</strong>" in html
+    assert "Open, Check In, and Undo Checkout still apply" in html
+    assert "are blocked while this product is" not in html
+    assert "function canOfferAdd" in script
+    assert "function canOfferCheckin" in script
+    assert '"Local workspace."' in script
+    assert '"Not in the product yet."' in script
+    assert "shows only when you can Add" in docs
 
 
 def test_product_state_badge_in_files_header():
