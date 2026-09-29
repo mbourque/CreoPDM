@@ -18,6 +18,7 @@ from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
 from creopdm.models.version import ObjectVersion
+from creopdm.product_state import ensure_product_mutable
 from creopdm.schemas.common import (
     CreoDependencyPayload,
     CreoMetadataRequest,
@@ -67,6 +68,7 @@ class MetadataService:
         payload: CreoMetadataRequest,
     ) -> CreoMetadataResponse:
         obj = self._objects.get_object(session, object_uuid)
+        ensure_product_mutable(obj.product, action="update metadata")
         version = self._resolve_version(session, obj, payload.version_id)
         if version is None:
             raise ValidationAppError(

@@ -7,6 +7,7 @@ from creopdm.models.checkout import Checkout
 from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
 from creopdm.models.version import ObjectVersion
+from creopdm.product_state import product_allows_mutation
 from creopdm.schemas.common import ObjectResponse, ObjectVersionResponse, ProductResponse
 from creopdm.services.checkout_service import CheckoutView
 from creopdm.utils.classify import display_type_label, resolve_type_icon
@@ -20,6 +21,8 @@ def revision_display(revision: str, iteration: int) -> str:
 
 def product_to_response(product: Product) -> ProductResponse:
     remote_mode = RemoteMode.LOCAL_WITH_REMOTE if product.remote_url else RemoteMode.LOCAL_ONLY
+    state = getattr(product, "state", None) or "IN_WORK"
+    read_only = bool(getattr(product, "read_only", False))
     return ProductResponse(
         uuid=product.uuid,
         name=product.name,
@@ -33,6 +36,9 @@ def product_to_response(product: Product) -> ProductResponse:
         updated_at=as_utc(product.updated_at),
         active=product.active,
         remote_mode=remote_mode.value,
+        state=state,
+        read_only=read_only,
+        allows_mutation=product_allows_mutation(product),
     )
 
 

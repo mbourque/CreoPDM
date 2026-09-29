@@ -66,6 +66,9 @@ class ProductResponse(BaseModel):
     updated_at: datetime | None
     active: bool
     remote_mode: str
+    state: str = "IN_WORK"
+    read_only: bool = False
+    allows_mutation: bool = True
 
 
 class ProductWatchResponse(BaseModel):

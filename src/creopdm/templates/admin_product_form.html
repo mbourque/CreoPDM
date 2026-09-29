@@ -33,6 +33,18 @@
                placeholder="Leave blank for a unique id; no spaces">
       </label>
       <p class="muted small">Blank uses a unique folder name under the server vault. Custom names cannot contain spaces.</p>
+      <label>Lifecycle state
+        <select name="state">
+          {% for s in product_states %}
+          <option value="{{ s.value }}" {% if form.state == s.value %}selected{% endif %}>{{ product_state_labels.get(s.value, s.value) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <p class="muted small">Only <strong>In work</strong> allows add, checkout, and check-in (unless Read only is on).</p>
+      <label class="choice">
+        <input type="checkbox" name="read_only" value="1" {% if form.read_only %}checked{% endif %}>
+        Read only — block modifications without changing lifecycle state
+      </label>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Create product</button>
         <a class="btn" href="/admin/products">Back to list</a>
@@ -53,6 +65,18 @@
         <input name="description" type="text" value="{{ form.description }}" maxlength="256" autocomplete="off">
       </label>
       <p class="muted small">Vault folder: <code>{{ form.vault_folder }}</code> (set at create; not renamed here).</p>
+      <label>Lifecycle state
+        <select name="state">
+          {% for s in product_states %}
+          <option value="{{ s.value }}" {% if form.state == s.value %}selected{% endif %}>{{ product_state_labels.get(s.value, s.value) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <p class="muted small">Only <strong>In work</strong> allows add, checkout, and check-in (unless Read only is on). Other states are view-only for engineering changes in this first cut.</p>
+      <label class="choice">
+        <input type="checkbox" name="read_only" value="1" {% if form.read_only %}checked{% endif %}>
+        Read only — block modifications without changing lifecycle state
+      </label>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Save</button>
         <a class="btn" href="/admin/products">Back to list</a>

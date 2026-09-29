@@ -1238,6 +1238,9 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert detail.status_code == 200
     assert 'value="Admin Hub Product"' in detail.text
     assert "Remove product" in detail.text
+    assert "Lifecycle state" in detail.text
+    assert 'name="state"' in detail.text
+    assert 'name="read_only"' in detail.text
 
     saved = auth_client.post(
         f"/admin/products/{product['uuid']}",
@@ -1245,11 +1248,34 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
             "name": "Admin Hub Renamed",
             "number": "AH-2",
             "description": "Updated",
+            "state": "ON_HOLD",
+            "read_only": "1",
         },
         follow_redirects=False,
     )
     assert saved.status_code == 303, saved.text
-    assert auth_client.get(f"/api/products/{product['uuid']}").json()["name"] == "Admin Hub Renamed"
+    body = auth_client.get(f"/api/products/{product['uuid']}").json()
+    assert body["name"] == "Admin Hub Renamed"
+    assert body["state"] == "ON_HOLD"
+    assert body["read_only"] is True
+    assert body["allows_mutation"] is False
+
+    listed = auth_client.get("/admin/products")
+    assert "On hold" in listed.text
+    assert "Read only" in listed.text
+
+    # Clear read-only and restore IN_WORK before delete path.
+    restored = auth_client.post(
+        f"/admin/products/{product['uuid']}",
+        data={
+            "name": "Admin Hub Renamed",
+            "number": "AH-2",
+            "description": "Updated",
+            "state": "IN_WORK",
+        },
+        follow_redirects=False,
+    )
+    assert restored.status_code == 303, restored.text
 
     bad_delete = auth_client.post(
         f"/admin/products/{product['uuid']}/delete",

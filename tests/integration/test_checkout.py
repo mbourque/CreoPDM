@@ -22,6 +22,31 @@ def _create_part(client, repo_parent: Path):
 
 
 @requires_git
+def test_checkout_blocked_when_product_on_hold(client, repo_parent):
+    """Minimum product lifecycle: ON_HOLD blocks checkout at the API."""
+    product, obj, _location = _create_part(client, repo_parent)
+    listed = client.get(f"/api/products/{product['uuid']}")
+    assert listed.status_code == 200
+    assert listed.json()["state"] == "IN_WORK"
+    assert listed.json()["allows_mutation"] is True
+
+    ctx = client.app.state.ctx
+    with ctx.session_factory() as db:
+        loaded = ctx.products.get_product(db, product["uuid"])
+        loaded.state = "ON_HOLD"
+        db.commit()
+
+    blocked = client.post(f"/api/objects/{obj['uuid']}/checkout")
+    assert blocked.status_code == 400, blocked.text
+    err = blocked.json()["error"]
+    assert err["code"] == "VALIDATION_ERROR"
+    assert "On hold" in err["message"]
+
+    again = client.get(f"/api/products/{product['uuid']}")
+    assert again.json()["allows_mutation"] is False
+
+
+@requires_git
 def test_checkout_then_second_user_denied(client, repo_parent, identity, data_dir):
     product, obj, _location = _create_part(client, repo_parent)
     git = GitService()

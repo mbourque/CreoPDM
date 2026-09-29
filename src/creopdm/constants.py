@@ -43,6 +43,25 @@ class LifecycleState(StrEnum):
     OBSOLETE = "OBSOLETE"
 
 
+class ProductState(StrEnum):
+    """Product (project) lifecycle — separate from object LifecycleState."""
+
+    IN_WORK = "IN_WORK"
+    ON_HOLD = "ON_HOLD"
+    RELEASED = "RELEASED"
+    CLOSED = "CLOSED"
+    ARCHIVED = "ARCHIVED"
+
+
+PRODUCT_STATE_LABELS: dict[str, str] = {
+    ProductState.IN_WORK.value: "In work",
+    ProductState.ON_HOLD.value: "On hold",
+    ProductState.RELEASED.value: "Released",
+    ProductState.CLOSED.value: "Closed",
+    ProductState.ARCHIVED.value: "Archived",
+}
+
+
 class CheckoutStatus(StrEnum):
     ACTIVE = "ACTIVE"
     RETURNED = "RETURNED"

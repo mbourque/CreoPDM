@@ -24,6 +24,7 @@ from creopdm.exceptions import PathValidationError, RepositoryError, WorkspaceCo
 from creopdm.logging_setup import get_logger
 from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
+from creopdm.product_state import ensure_product_mutable
 from creopdm.services.git_service import GitService, GitStatus
 from creopdm.utils.classify import classify_filename
 from creopdm.utils.files import (
@@ -125,6 +126,7 @@ class WorkspaceService:
         """Create an empty vault folder (tracked via .gitkeep) under parent_folder."""
         from creopdm.utils.folders import normalize_folder_query
 
+        ensure_product_mutable(product, action="create folders")
         raw_name = str(name or "").strip().strip("/\\")
         if not raw_name or raw_name in {".", ".."} or "/" in raw_name or "\\" in raw_name:
             raise PathValidationError(

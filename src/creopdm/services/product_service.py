@@ -15,6 +15,7 @@ from creopdm.constants import (
     PRODUCT_MARKER_DIR,
     ActivityAction,
     CheckoutStatus,
+    ProductState,
 )
 from creopdm.exceptions import (
     DuplicateProductError,
@@ -23,6 +24,7 @@ from creopdm.exceptions import (
     RepositoryError,
     ValidationAppError,
 )
+from creopdm.product_state import parse_product_state
 from creopdm.utils.vault_folder import normalize_uuid_folder, validate_vault_folder
 from creopdm.logging_setup import get_logger
 from creopdm.models.activity import Activity
@@ -129,6 +131,9 @@ class ProductService:
         number: str | None = None,
         description: str | None = None,
         vault_folder: str | None = None,
+        *,
+        state: str | None = None,
+        read_only: bool = False,
     ) -> Product:
         if not name.strip():
             raise PathValidationError("A product name is required.")
@@ -157,6 +162,7 @@ class ProductService:
 
         user = self._users.get_current_user()
         now = datetime.now(timezone.utc)
+        initial_state = parse_product_state(state) if state is not None else ProductState.IN_WORK.value
 
         if not self._git.is_available():
             raise RepositoryError("Git is required to create a product but was not found on PATH.")
@@ -172,6 +178,8 @@ class ProductService:
             vault_folder=folder,
             repository_path="",
             default_branch=DEFAULT_BRANCH,
+            state=initial_state,
+            read_only=bool(read_only),
             created_at=now,
             updated_at=now,
             active=True,
@@ -196,6 +204,9 @@ class ProductService:
         name: str,
         number: str | None = None,
         description: str | None = None,
+        *,
+        state: str | None = None,
+        read_only: bool | None = None,
     ) -> Product:
         product = self.get_product(session, product_uuid)
         new_name = name.strip()
@@ -204,6 +215,7 @@ class ProductService:
         self._require_unique_name(session, new_name, exclude_uuid=product.uuid)
         new_number = (number or "").strip() or None
         new_description = (description or "").strip() or None
+        new_state = parse_product_state(state) if state is not None else None
         user = self._users.get_current_user()
         vault = self._workspaces.ensure_vault(product)
         marker_rel = f"{PRODUCT_MARKER_DIR}/{PRODUCT_JSON_NAME}"
@@ -230,6 +242,10 @@ class ProductService:
                 product.name = new_name
                 product.number = new_number
                 product.description = new_description
+                if new_state is not None:
+                    product.state = new_state
+                if read_only is not None:
+                    product.read_only = bool(read_only)
                 product.updated_at = datetime.now(timezone.utc)
                 session.flush()
                 self._activities.record(
@@ -237,7 +253,12 @@ class ProductService:
                     ActivityAction.PRODUCT_UPDATED,
                     user,
                     product_id=product.id,
-                    details={"old_name": old_name, "name": new_name},
+                    details={
+                        "old_name": old_name,
+                        "name": new_name,
+                        "state": product.state,
+                        "read_only": bool(product.read_only),
+                    },
                 )
             except Exception as exc:
                 if captured:

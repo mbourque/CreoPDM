@@ -23,6 +23,7 @@ from creopdm.logging_setup import get_logger
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
 from creopdm.models.version import ObjectVersion
+from creopdm.product_state import ensure_product_mutable
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.lock_manager import ProductLockManager
@@ -114,6 +115,7 @@ class CheckinService:
             raise ValidationAppError("A check-in comment is required.")
         obj = self._objects.get_object(session, object_uuid)
         product = obj.product
+        ensure_product_mutable(product, action="check in files")
         user = self._users.get_current_user()
         self._workspaces.ensure_vault(product)
         repo = self._workspaces.vault_for(product)
@@ -252,6 +254,7 @@ class CheckinService:
         """Restore an older version onto vault (and rematerialize), as a new check-in."""
         obj = self._objects.get_object(session, object_uuid)
         product = obj.product
+        ensure_product_mutable(product, action="revert files")
         user = self._users.get_current_user()
         target = session.scalar(
             select(ObjectVersion).where(ObjectVersion.uuid == version_uuid)
@@ -441,6 +444,7 @@ class CheckinService:
         message = (comment or "").strip()
         if not message:
             raise ValidationAppError("A check-in comment is required.")
+        ensure_product_mutable(product, action="check in files")
         ok: list[dict[str, str]] = []
         failed: list[dict[str, str]] = []
         for object_uuid in object_ids or []:

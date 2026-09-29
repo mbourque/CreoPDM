@@ -21,6 +21,8 @@
         <tr>
           <th>Name</th>
           <th>Number</th>
+          <th>State</th>
+          <th>Access</th>
           <th>Vault folder</th>
           <th>Description</th>
         </tr>
@@ -32,11 +34,13 @@
             <a href="/admin/products/{{ p.uuid }}">{{ p.name }}</a>
           </td>
           <td>{{ p.number or "—" }}</td>
+          <td>{{ product_state_labels.get(p.state, p.state) }}</td>
+          <td>{% if p.read_only %}Read only{% else %}—{% endif %}</td>
           <td>{{ p.vault_folder }}</td>
           <td>{{ p.description or "—" }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="4" class="muted">No products yet.</td></tr>
+        <tr><td colspan="6" class="muted">No products yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>

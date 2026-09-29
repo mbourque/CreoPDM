@@ -18,6 +18,7 @@ from creopdm.exceptions import (
 from creopdm.logging_setup import get_logger
 from creopdm.models.checkout import Checkout
 from creopdm.models.object import EngineeringObject
+from creopdm.product_state import ensure_product_mutable
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.lock_manager import ProductLockManager
 from creopdm.services.object_service import ObjectService
@@ -135,6 +136,7 @@ class CheckoutService:
     def checkout(self, session: Session, object_uuid: str) -> Checkout:
         obj = self._objects.get_object(session, object_uuid)
         product = obj.product
+        ensure_product_mutable(product, action="check out files")
         user = self._users.get_current_user()
         with self._locks.acquire(product.uuid):
             if obj.lifecycle_state != LifecycleState.IN_WORK.value:

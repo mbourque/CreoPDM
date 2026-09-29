@@ -42,6 +42,7 @@ from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
 from creopdm.models.version import ObjectVersion
+from creopdm.product_state import ensure_product_mutable
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.lock_manager import ProductLockManager
 from creopdm.storage.base import VersionStore
@@ -266,6 +267,7 @@ class ObjectService:
         """
         obj = self.get_object(session, object_uuid)
         product = obj.product
+        ensure_product_mutable(product, action="remove files")
         user = self._users.get_current_user()
         filename = obj.filename
         relative = obj.relative_path
@@ -330,6 +332,7 @@ class ObjectService:
         objects: list[EngineeringObject],
     ) -> list[dict[str, str]]:
         product = objects[0].product
+        ensure_product_mutable(product, action="remove files")
         user = self._users.get_current_user()
         relatives = [obj.relative_path.replace("\\", "/") for obj in objects]
         repo = self._vault(product)
@@ -472,6 +475,7 @@ class ObjectService:
         """
         if not jobs:
             return []
+        ensure_product_mutable(product, action="add files")
         # Numbered-save collapse follows Settings → Purgeable extensions.
         purgeable = self._purgeable_extensions()
         jobs = self._prefer_latest_import_jobs(jobs, purgeable)
