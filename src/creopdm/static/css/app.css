@@ -45,10 +45,27 @@ a.brand:hover { text-decoration: none; color: inherit; }
 }
 .brand-name { font-weight: 700; letter-spacing: 0.04em; }
 .brand-version { font-size: 0.75rem; color: #9aabbb; }
-.status-cluster { display: flex; gap: 0.5rem; }
+.status-cluster {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
 .status-pill {
-  border: 1px solid #314252; border-radius: 999px; padding: 0.2rem 0.7rem;
-  font-size: 0.8rem; background: #1b2732;
+  border: 1px solid #314252;
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.8rem;
+  background: #1b2732;
+  /* Never shrink/wrap into a tall capsule (border-radius 999px + wrapped text). */
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.25;
+  box-sizing: border-box;
 }
 .status-pill[data-state="ok"] { color: #8ee0b0; }
 .status-pill[data-state="idle"] { color: #f0d48a; }

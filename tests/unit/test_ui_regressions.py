@@ -200,6 +200,16 @@ def test_settings_muted_help_under_field_top_margin_only():
     assert "margin-top: 0.15rem" in label_help
 
 
+def test_status_pills_do_not_shrink_into_tall_capsules():
+    """Regression: narrow topbar wrapped pill text + border-radius 999px → tall ovals."""
+    css = APP_CSS.read_text(encoding="utf-8")
+    block = _between(css, ".status-pill {", ".status-pill[data-state=")
+    assert "white-space: nowrap" in block
+    assert "flex-shrink: 0" in block
+    assert "inline-flex" in block
+    assert "border-radius: 999px" in block
+
+
 def test_locked_product_changes_help_does_not_offer_add_checkin():
     """Tab help blurbs appear only when product_ui says those actions are available."""
     html = APP_HTML.read_text(encoding="utf-8")
