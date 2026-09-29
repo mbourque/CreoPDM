@@ -17,7 +17,7 @@ When the `users` table has **zero** rows, opening the app redirects to **`/setup
 | Page | Purpose |
 | --- | --- |
 | `/login` | Username + password. After a **wrong password** for a **known** username, a **Forgot password?** link appears under the password field (carries that username). Unknown usernames and other validation failures do not show the link. |
-| `/forgot-password` | Requires a **known** username (from that link) plus matching **email** for that account only before a one-hour reset link is sent. Bare `/forgot-password` or an unknown username redirects to sign-in. |
+| `/forgot-password` | Requires a **known** username (from that link) plus matching **email** for that account only before a 10-minute reset link is sent. Bare `/forgot-password` or an unknown username redirects to sign-in. |
 | `/reset-password?token=…&username=…` | Choose a new password; username is shown **disabled** and must match the token. Token alone (no matching username) is rejected. |
 | `/logout` | Clears the session cookie |
 | `/account/password` | Change password while signed in (required when `must_change_password` is set) |

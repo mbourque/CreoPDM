@@ -366,8 +366,8 @@ Use a normal browser for these checks. You need the matching Administration perm
 |--------|------------|--------------|
 | Open `/login` with no recent failure | Show username + password only | Show **Forgot password?** before a failed attempt |
 | Enter a wrong password for a **known** username | Show an error and a **Forgot password?** link under the password field (keeps that username) | Show **Forgot password?** for an unknown username, empty fields, or other validation failures |
-| Use **Forgot password?** (username from that wrong-password attempt) + matching email | Send a 1-hour reset link only when email matches **that** username; show username as a disabled field | Open forgot without a username or for an unknown username; accept email alone; send mail when username/email do not match; let you change the username on the form |
-| Open the reset link and set a new password | Show username as a disabled field; update password and send you to sign in | Allow reset without username; reuse the same link afterward |
+| Use **Forgot password?** (username from that wrong-password attempt) + matching email | Send a 10-minute reset link only when email matches **that** username; show username as a disabled field | Open forgot without a username or for an unknown username; accept email alone; send mail when username/email do not match; let you change the username on the form |
+| Open the reset link and set a new password | Show username as a disabled field; update password and send you to sign in | Allow reset without username; accept a link older than 10 minutes; reuse the same link afterward |
 | Spam forgot-password for one account | After many tries in 24 hours, disable that account (not full Administration) and email the administrator address | Keep a non-admin account open under reset spam |
 
 ### Users

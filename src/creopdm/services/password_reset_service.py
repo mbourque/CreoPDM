@@ -23,7 +23,7 @@ from creopdm.utils.passwords import hash_password
 
 logger = get_logger("password_reset")
 
-TOKEN_TTL = timedelta(hours=1)
+TOKEN_TTL = timedelta(minutes=10)
 MAX_SENDS_PER_USER_PER_HOUR = 5
 MAX_ATTEMPTS_PER_IP_PER_HOUR = 20
 MAX_ATTEMPTS_PER_USER_PER_DAY = 10
@@ -198,7 +198,7 @@ class PasswordResetService:
             f"Hello {user.display_name or user.username},\n\n"
             "We received a request to reset the password for your CreoPDM account "
             f"({user.username}).\n\n"
-            f"Open this link to choose a new password (expires in 1 hour):\n{reset_url}\n\n"
+            f"Open this link to choose a new password (expires in 10 minutes):\n{reset_url}\n\n"
             "If you did not ask for this, you can ignore this email — your password "
             "will stay the same. If you keep getting these messages, tell your "
             "CreoPDM administrator.\n\n"

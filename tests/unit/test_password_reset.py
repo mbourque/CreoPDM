@@ -20,6 +20,7 @@ from creopdm.services.password_reset_service import (
     MATCH_ERROR,
     MAX_ATTEMPTS_PER_USER_PER_DAY,
     SENT_MESSAGE,
+    TOKEN_TTL,
     PasswordResetService,
 )
 from tests.conftest import requires_git
@@ -217,6 +218,7 @@ def test_forgot_password_spam_disables_non_admin(auth_client, auth_ctx):
 
 
 def test_password_reset_expired_token_rejected(auth_ctx):
+    assert TOKEN_TTL == timedelta(minutes=10)
     service: PasswordResetService = auth_ctx.password_resets
     sent = _enable_email(auth_ctx)
     with auth_ctx.session_factory() as db:
@@ -230,6 +232,7 @@ def test_password_reset_expired_token_rejected(auth_ctx):
         db.commit()
 
     with auth_ctx.session_factory() as db:
+        before = datetime.now(timezone.utc)
         result = service.request_reset(
             db,
             username="admin",
@@ -237,13 +240,20 @@ def test_password_reset_expired_token_rejected(auth_ctx):
             base_url="http://test/",
             email_enabled=True,
         )
+        after = datetime.now(timezone.utc)
         assert result.sent is True
         assert len(sent) == 1
         body = sent[0][2]
+        assert "expires in 10 minutes" in body
         token = body.split("/reset-password?token=")[1].split("&")[0].strip()
         row = db.scalar(select(PasswordResetToken))
         assert row is not None
-        row.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        expires = row.expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        assert before + TOKEN_TTL <= expires <= after + TOKEN_TTL
+        # Past the 10-minute window → rejected.
+        row.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
         db.commit()
 
     with auth_ctx.session_factory() as db:
