@@ -18,7 +18,7 @@ from creopdm.exceptions import (
 from creopdm.logging_setup import get_logger
 from creopdm.models.checkout import Checkout
 from creopdm.models.object import EngineeringObject
-from creopdm.product_state import ensure_product_mutable
+from creopdm.product_state import ensure_product_mutable, product_allows_mutation
 from creopdm.services.activity_service import ActivityService
 from creopdm.services.lock_manager import ProductLockManager
 from creopdm.services.object_service import ObjectService
@@ -104,6 +104,11 @@ class CheckoutService:
 
     def count_checkoutable_for_product(self, session: Session, product_id: int) -> int:
         """IN_WORK files with no active checkout — available for Checkout product."""
+        from creopdm.models.product import Product
+
+        product = session.get(Product, product_id)
+        if product is not None and not product_allows_mutation(product):
+            return 0
         active = select(Checkout.object_id).where(Checkout.status == CheckoutStatus.ACTIVE.value)
         value = session.scalar(
             select(func.count())
@@ -123,15 +128,17 @@ class CheckoutService:
         user: UserIdentity | None = None,
     ) -> CheckoutView:
         current = user or self._users.get_current_user()
+        mutable = product_allows_mutation(obj.product) if obj.product is not None else True
         released = obj.lifecycle_state != LifecycleState.IN_WORK.value
         if released:
             label = "Released" if obj.lifecycle_state == LifecycleState.RELEASED.value else "Obsolete"
             return CheckoutView(checkout, label, False, False, False)
         if checkout is None:
-            return CheckoutView(None, "Available", False, True, False)
+            return CheckoutView(None, "Available", False, mutable, False)
         owned = checkout.user_name == current.user_name
         label = "Checked out by me" if owned else f"Checked out by {checkout.user_name}"
-        return CheckoutView(checkout, label, owned, False, owned)
+        # Check-in blocked when product is read-only / not IN_WORK; undo stays via owned_by_me.
+        return CheckoutView(checkout, label, owned, False, owned and mutable)
 
     def checkout(self, session: Session, object_uuid: str) -> Checkout:
         obj = self._objects.get_object(session, object_uuid)

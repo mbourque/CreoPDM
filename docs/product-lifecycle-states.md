@@ -1902,124 +1902,126 @@ Read Only = FALSE
 
 # 48. Acceptance Criteria
 
+Status for the current minimum implementation (Administration → Products state + read-only; Files toolbar + API gates).
+
 ## IN_WORK
 
 ```text
-[ ] Normal engineering operations permitted according to user permissions
+[x] Normal engineering operations permitted according to user permissions
 
-[ ] Checkout permitted
+[x] Checkout permitted
 
-[ ] Check-In permitted
+[x] Check-In permitted
 
-[ ] Add object permitted
+[x] Add object permitted
 
-[ ] Revise permitted
+[x] Revise permitted (History revert)
 
-[ ] Metadata modification permitted
+[x] Metadata modification permitted
 ```
 
 ## ON_HOLD
 
 ```text
-[ ] Project remains visible
+[x] Project remains visible
 
-[ ] Files remain downloadable
+[x] Files remain downloadable
 
-[ ] BOM remains viewable
+[x] BOM remains viewable
 
-[ ] Where Used remains available
+[x] Where Used remains available
 
-[ ] Checkout blocked
+[x] Checkout blocked
 
-[ ] Check-In blocked
+[x] Check-In blocked
 
-[ ] Add object blocked
+[x] Add object blocked
 
-[ ] Modification blocked
+[x] Modification blocked
 ```
 
 ## RELEASED
 
 ```text
-[ ] Project remains visible
+[x] Project remains visible
 
-[ ] Released configuration remains accessible
+[x] Released configuration remains accessible
 
-[ ] Files remain downloadable
+[x] Files remain downloadable
 
-[ ] Historical versions remain accessible
+[x] Historical versions remain accessible
 
-[ ] Checkout blocked
+[x] Checkout blocked
 
-[ ] Check-In blocked
+[x] Check-In blocked
 
-[ ] New objects blocked
+[x] New objects blocked
 
-[ ] Existing objects cannot be modified through project operations
+[x] Existing objects cannot be modified through project operations
 
-[ ] API enforces restrictions
+[x] API enforces restrictions
 ```
 
 ## CLOSED
 
 ```text
-[ ] Project remains searchable
+[x] Project remains searchable
 
-[ ] Historical data remains accessible
+[x] Historical data remains accessible
 
-[ ] Download remains available
+[x] Download remains available
 
-[ ] Engineering modifications blocked
+[x] Engineering modifications blocked
 ```
 
 ## ARCHIVED
 
 ```text
-[ ] Project hidden from normal project list
+[x] Project hidden from normal project list (Files / API product list)
 
-[ ] Project excluded from normal search by default
+[x] Project excluded from normal search by default (not listed → not selected)
 
-[ ] Include Archived option can expose it
+[ ] Include Archived option can expose it (Administration → Products still lists archived; Files “include archived” toggle not built yet)
 
-[ ] Historical data remains intact
+[x] Historical data remains intact
 
-[ ] BOM remains intact
+[x] BOM remains intact
 
-[ ] Where Used remains intact
+[x] Where Used remains intact
 
-[ ] Baselines remain intact
+[x] Baselines remain intact (N/A until baselines ship — data untouched)
 
-[ ] Releases remain intact
+[x] Releases remain intact (N/A until releases ship — data untouched)
 
-[ ] Engineering Changes remain intact
+[x] Engineering Changes remain intact (N/A until EC ship — data untouched)
 
-[ ] Audit remains intact
+[x] Audit remains intact
 
-[ ] Administrator can restore project
+[x] Administrator can restore project (set state back from Administration → Products)
 
-[ ] Restore retains same Project UUID
+[x] Restore retains same Project UUID
 ```
 
 ## READ_ONLY
 
 ```text
-[ ] Can be enabled independently of project state
+[x] Can be enabled independently of project state
 
-[ ] Project remains viewable
+[x] Project remains viewable
 
-[ ] Files remain downloadable
+[x] Files remain downloadable
 
-[ ] Checkout blocked
+[x] Checkout blocked
 
-[ ] Check-In blocked
+[x] Check-In blocked
 
-[ ] Add object blocked
+[x] Add object blocked
 
-[ ] Metadata modification blocked
+[x] Metadata modification blocked
 
-[ ] Disabling Read Only does not change project lifecycle state
+[x] Disabling Read Only does not change project lifecycle state
 
-[ ] Change is audited
+[x] Change is audited (PRODUCT_UPDATED activity includes state / read_only)
 ```
 
 ---

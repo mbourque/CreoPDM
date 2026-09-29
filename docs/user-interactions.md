@@ -54,7 +54,8 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Open an **empty** product (and you **can** add files) | Show that there are no files and invite you to add a Creo model, PDF, or document | |
 | Open an **empty** product (and you **cannot** add files) | Show that there are no files | Tell you to “Add a Creo model…” when you have no `objects.add` |
 | Rename (product settings) | Update the name everywhere you see it | |
-| **Rebuild Where Used** / **Collect all metadata** (product gear) | Show only inside Creo’s embedded browser when Creo.JS is connected (and you have metadata permission); hide in Chrome/Edge and when Session offline | Show those items in a standalone browser; Collect without Creo.JS |
+| **Rebuild Where Used** / **Collect all metadata** (product gear) | Show only inside Creo’s embedded browser when Creo.JS is connected (and you have metadata permission); hide when the product is read-only or not **In work**; hide in Chrome/Edge and when Session offline | Show those items in a standalone browser; Collect without Creo.JS; show when the product is read-only / On hold / Released / Closed / Archived |
+| Product is **read only** or not **In work** | Show a banner; hide Add, Checkout (except Undo), Check In, Remove from Product, Rename, Delete product, Collect, Rebuild; API rejects those mutations (including product delete). Open / History / Copy to workspace still work. **Archived** products are hidden from the Files list (restore from Administration → Products) | Leave mutation toolbar items visible when the product cannot be modified; allow Delete/Rename while read-only; show Archived in the normal Files product list |
 | Click the **bell** next to the gear (when Email notifications are enabled) | Ask to confirm Watch / Stop watching; then toggle **your** watching state for that product | Change watching when you Cancel the confirmation; show the bell when notifications are disabled; show another user’s watching state as your own |
 | Watch a product with a valid account email | Receive email summaries for adds, removes, checkout, undo checkout, check-in, restore, and product rename/info (not for browse or background scans); no historical mail | Email yourself for your own actions |
 | Log in as a different user after someone else watched | Show **not** watching unless **you** subscribed; keep the other user’s subscription | Steal or clear another user’s watch when you open the product or click Stop on your own bell |
@@ -118,16 +119,17 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 | Button | Available when | Hidden when |
 |--------|----------------|-------------|
 | Set Working Directory | Inside Creo’s browser **and** Creo.JS connected, with a product workspace (Files page) | Hidden outside Creo, when Creo is not connected, and on the file **Details** page |
-| Add ▾ | A product is open | No product |
+| Add ▾ | A product is open **and** the product allows edits (In work, not read-only) | No product; product is read-only / On hold / Released / Closed / Archived |
 | Open ▾ | A product is open (workspace) and/or a file can be opened (**Files** page) | No product and nothing to open; always hidden on the file **Details** page |
 | Open selected… | A file you can open is selected | Nothing useful selected |
 | Open workspace… | A product is open **and** creopdm-agent is running on this PC | No product; agent offline (do not offer a host-vault fallback) |
-| Checkout ▾ | Something can be checked out or undone (**Files** page) | Nothing to do; always hidden on the file **Details** page |
-| Check In ▾ | Something can be checked in or added | Nothing pending |
+| Checkout ▾ | Something can be checked out or undone (**Files** page). On a locked product, only **Undo Checkout** may appear | Nothing to do; always hidden on the file **Details** page |
+| Check In ▾ | Something can be checked in or added **and** the product allows edits | Nothing pending; product is locked (read-only / not In work) |
 | Details | One file selected | No file |
 | Copy to Vault | You have **Copy to Vault** permission and selected files are not already in the vault | Nothing to copy; role lacks `objects.copy_to_vault` (hidden for Viewer / Engineer by default) |
-| Remove ▾ | Something can be removed (**Files** page) | Nothing selected; always hidden on the file **Details** page |
-| Remove from Product | Files **and/or folders** selected (including empty folders) | Nothing selected |
+| Remove ▾ | Something can be removed (**Files** page). Local workspace remove/purge still work on a locked product | Nothing selected; always hidden on the file **Details** page |
+| Remove from Product | Files **and/or folders** selected (including empty folders); product allows edits | Nothing selected; product is locked |
+| Remove from Vault | Selected vault files; product allows edits | Nothing selected; product is locked |
 
 Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Same rule for **permissions**: if the signed-in role cannot do an action (or the PC cannot — e.g. Open workspace without creopdm-agent), **do not show the control**. **Set Working Directory**, **Collect all metadata**, and **Rebuild Where Used** follow the same rule: show only inside Creo when Creo.JS is connected (embedded browser); hide them outside Creo / when Session offline. Set Working Directory also needs a product workspace ready and stays hidden on the file **Details** page. On the file **Details** page (every tab, including History) Open, Checkout, Remove, Set Working Directory, and **Check In ▾** are all hidden — that toolbar is **Revert to selected…** only (when an older History row is selected). Check In stays on the Files page.
 
@@ -467,6 +469,8 @@ Automated coverage lives mainly in:
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
 - `tests/integration/test_creo_metadata.py` (Collect / Rebuild Where Used gear items are `creo-session-only`, hidden until Creo.JS is connected)
+- `tests/integration/test_checkout.py` (product lock: ON_HOLD / read-only hide Add & Check In via Jinja; Checkout stays for Undo; API rejects mutations)
+- `tests/unit/test_product_state.py` (allows_mutation / ensure helpers)
 - Related checkout / check-in / soft-nav tests
 
 Mobile browse is CSS-only in `app.css`: `@media` with `pointer: coarse` and `hover: none` (plus width/height limits). Do **not** gate browse mode on `max-width` alone.

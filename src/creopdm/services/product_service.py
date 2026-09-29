@@ -24,7 +24,7 @@ from creopdm.exceptions import (
     RepositoryError,
     ValidationAppError,
 )
-from creopdm.product_state import parse_product_state
+from creopdm.product_state import ensure_product_deletable, parse_product_state
 from creopdm.utils.vault_folder import normalize_uuid_folder, validate_vault_folder
 from creopdm.logging_setup import get_logger
 from creopdm.models.activity import Activity
@@ -62,10 +62,19 @@ class ProductService:
         self._users = users
         self._workspaces = workspaces
 
-    def list_products(self, session: Session, include_inactive: bool = False) -> list[Product]:
+    def list_products(
+        self,
+        session: Session,
+        include_inactive: bool = False,
+        *,
+        include_archived: bool = False,
+    ) -> list[Product]:
         stmt = select(Product).order_by(Product.name.asc())
         if not include_inactive:
             stmt = stmt.where(Product.active.is_(True))
+        if not include_archived:
+            # ARCHIVED is hidden from normal Files / API lists (admin passes include_archived).
+            stmt = stmt.where(Product.state != ProductState.ARCHIVED.value)
         return list(session.scalars(stmt))
 
     def _load_product(self, session: Session, product_uuid: str) -> Product:
@@ -217,10 +226,12 @@ class ProductService:
         new_description = (description or "").strip() or None
         new_state = parse_product_state(state) if state is not None else None
         user = self._users.get_current_user()
+        old_number = (product.number or "").strip() or None
+        old_description = (product.description or "").strip() or None
         identity_changed = (
             new_name != product.name
-            or new_number != (product.number or None)
-            or new_description != (product.description or None)
+            or new_number != old_number
+            or new_description != old_description
         )
         old_name = product.name
 
@@ -313,6 +324,7 @@ class ProductService:
     def delete_product(self, session: Session, product_uuid: str) -> None:
         """Hide the product in CreoPDM. Never delete repository files from disk."""
         product = self.get_product(session, product_uuid)
+        ensure_product_deletable(product, action="delete this product")
         product.active = False
         product.updated_at = datetime.now(timezone.utc)
         session.flush()
@@ -327,6 +339,7 @@ class ProductService:
     ) -> dict[str, str]:
         """Unregister the product and delete the workspace Git vault."""
         product = self._load_product(session, product_uuid)
+        ensure_product_deletable(product, action="delete this product")
         expected = product.name.strip()
         if confirm_name.strip() != expected:
             raise ValidationAppError(

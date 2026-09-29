@@ -23,7 +23,7 @@ def _create_part(client, repo_parent: Path):
 
 @requires_git
 def test_checkout_blocked_when_product_on_hold(client, repo_parent):
-    """Minimum product lifecycle: ON_HOLD blocks checkout at the API."""
+    """Minimum product lifecycle: ON_HOLD blocks checkout at the API and list flags."""
     product, obj, _location = _create_part(client, repo_parent)
     listed = client.get(f"/api/products/{product['uuid']}")
     assert listed.status_code == 200
@@ -44,6 +44,77 @@ def test_checkout_blocked_when_product_on_hold(client, repo_parent):
 
     again = client.get(f"/api/products/{product['uuid']}")
     assert again.json()["allows_mutation"] is False
+
+    page = client.get(f"/?product={product['uuid']}")
+    assert page.status_code == 200, page.text
+    assert 'data-allows-mutation="0"' in page.text
+    assert "product-access-banner" in page.text
+    assert 'id="add-menu"' not in page.text
+    assert 'id="checkin-menu"' not in page.text
+    assert 'id="checkout-menu"' in page.text
+
+    detail = client.get(f"/api/objects/{obj['uuid']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["can_checkout"] is False
+    assert detail.json()["can_checkin"] is False
+
+
+@requires_git
+def test_read_only_product_hides_mutation_toolbar(client, repo_parent):
+    product, obj, _location = _create_part(client, repo_parent)
+    ctx = client.app.state.ctx
+    with ctx.session_factory() as db:
+        loaded = ctx.products.get_product(db, product["uuid"])
+        loaded.read_only = True
+        db.commit()
+
+    page = client.get(f"/?product={product['uuid']}")
+    assert page.status_code == 200, page.text
+    assert 'data-allows-mutation="0"' in page.text
+    assert "read only" in page.text.lower()
+    assert 'id="add-menu"' not in page.text
+    assert 'id="checkin-menu"' not in page.text
+    assert 'id="collect-metadata-btn"' not in page.text
+    assert 'id="rebuild-where-used-btn"' not in page.text
+    assert 'id="rename-product-btn"' not in page.text
+    assert 'id="delete-product-btn"' not in page.text
+    assert 'data-requires-mutation="1"' in page.text
+    # Checkout menu stays for Undo; selected/product checkout stay off via row flags.
+    assert 'id="checkout-menu"' in page.text
+    assert 'id="undo-btn"' in page.text
+
+    detail = client.get(f"/api/objects/{obj['uuid']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["can_checkout"] is False
+    assert detail.json()["can_checkin"] is False
+
+    deleted = client.delete(f"/api/products/{product['uuid']}")
+    assert deleted.status_code == 400, deleted.text
+    assert "read-only" in deleted.json()["error"]["message"].lower()
+
+
+@requires_git
+def test_archived_product_hidden_from_files_list(client, repo_parent):
+    product, _obj, _location = _create_part(client, repo_parent)
+    other = client.post("/api/products", json={"name": "Still Visible"}).json()
+    ctx = client.app.state.ctx
+    with ctx.session_factory() as db:
+        loaded = ctx.products.get_product(db, product["uuid"])
+        loaded.state = "ARCHIVED"
+        db.commit()
+
+    listed = client.get("/api/products")
+    assert listed.status_code == 200, listed.text
+    uuids = {p["uuid"] for p in listed.json()}
+    assert product["uuid"] not in uuids
+    assert other["uuid"] in uuids
+
+    home = client.get("/")
+    assert home.status_code == 200, home.text
+    # Sidebar product links only — name may still appear as a New-product placeholder.
+    assert f'href="/?product={product["uuid"]}"' not in home.text
+    assert f'href="/?product={other["uuid"]}"' in home.text
+    assert "Still Visible" in home.text
 
 
 @requires_git

@@ -718,7 +718,7 @@ def _product_access_form(
             "number": p.number or "",
             "checked": p.uuid in selected,
         }
-        for p in ctx.products.list_products(db)
+        for p in ctx.products.list_products(db, include_archived=True)
     ]
     return {
         "access_all_products": access_all,
@@ -1105,7 +1105,7 @@ def admin_membership_home(
     all_products_count = sum(1 for u in users if getattr(u, "access_all_products", True))
     restricted = [u for u in users if not getattr(u, "access_all_products", True)]
     product_rows = []
-    for p in ctx.products.list_products(db):
+    for p in ctx.products.list_products(db, include_archived=True):
         member_count = sum(1 for u in restricted if any(mp.id == p.id for mp in (u.products or [])))
         product_rows.append(
             {
@@ -1142,7 +1142,7 @@ def admin_membership_products_list(
     all_products_count = sum(1 for u in users if getattr(u, "access_all_products", True))
     restricted = [u for u in users if not getattr(u, "access_all_products", True)]
     products = []
-    for p in ctx.products.list_products(db):
+    for p in ctx.products.list_products(db, include_archived=True):
         member_count = sum(1 for u in restricted if any(mp.id == p.id for mp in (u.products or [])))
         products.append(
             {
@@ -1663,7 +1663,7 @@ def admin_products(request: Request, ctx: AppContext = Depends(get_context), db:
     manager = _require_products_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    products = [product_to_response(p) for p in ctx.products.list_products(db)]
+    products = [product_to_response(p) for p in ctx.products.list_products(db, include_archived=True)]
     return templates.TemplateResponse(
         request,
         "admin_products.html",

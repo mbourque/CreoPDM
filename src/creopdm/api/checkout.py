@@ -69,9 +69,12 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
     """Build list rows without SHA-256 of every file. Git status is the dirty signal."""
     if not objects:
         return []
+    from creopdm.product_state import product_allows_mutation
+
     user = ctx.users.get_current_user()
     checkouts = ctx.checkouts.active_map(db, [obj.id for obj in objects])
     product = objects[0].product
+    mutable = product_allows_mutation(product)
     status = ctx.workspaces._git_status(product)
     name_labels, ext_labels = type_label_maps(ctx.config.type_labels())
     in_workspace = ctx.workspaces.local_copy_uuids(product, objects)
@@ -91,10 +94,12 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
         )
         modified = pending is not None
         force_checkin = (
-            checkout is None
+            mutable
+            and checkout is None
             and pending is not None
             and obj.lifecycle_state == LifecycleState.IN_WORK.value
         )
+        can_checkin = (view.can_checkin or force_checkin) if mutable else False
         presented.append(
             object_to_response(
                 obj,
@@ -102,7 +107,7 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
                 view=view,
                 modified_locally=modified,
                 current_user=user,
-                can_checkin=view.can_checkin or force_checkin,
+                can_checkin=can_checkin,
                 in_workspace=obj.uuid in in_workspace,
                 type_label=display_type_label(
                     obj.filename,

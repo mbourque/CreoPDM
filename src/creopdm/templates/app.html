@@ -64,7 +64,10 @@
           </svg>
         </button>
         {% endif %}
-        {% if can_edit_product or can_delete_product or can_update_metadata %}
+        {% set show_product_rename = can_edit_product and selected.allows_mutation %}
+        {% set show_product_delete = can_delete_product and selected.allows_mutation %}
+        {% set show_product_meta = can_update_metadata and selected.allows_mutation %}
+        {% if show_product_rename or show_product_delete or show_product_meta %}
         <div class="product-settings" id="product-settings">
           <button type="button" class="product-settings-btn" id="product-settings-btn"
                   title="Product settings" aria-label="Product settings"
@@ -74,14 +77,14 @@
             </svg>
           </button>
           <div class="product-settings-menu" id="product-settings-menu" role="menu" hidden>
-            {% if can_edit_product %}
+            {% if show_product_rename %}
             <button type="button" class="product-settings-item" role="menuitem" id="rename-product-btn"
                     data-product="{{ selected.uuid }}"
                     data-name="{{ selected.name }}"
                     data-number="{{ selected.number or '' }}"
                     data-description="{{ selected.description or '' }}">Rename</button>
             {% endif %}
-            {% if can_update_metadata %}
+            {% if show_product_meta %}
             <button type="button" class="product-settings-item creo-session-only" role="menuitem" id="rebuild-where-used-btn"
                     data-product="{{ selected.uuid }}" hidden
                     title="Index vault assemblies/drawings into Where Used links in the background.">Rebuild Where Used</button>
@@ -89,7 +92,7 @@
                     data-product="{{ selected.uuid }}" hidden
                     title="Open each Creo model in session and capture parameters, materials, BOM, and related metadata.">Collect all metadata</button>
             {% endif %}
-            {% if can_delete_product %}
+            {% if show_product_delete %}
             <button type="button" class="product-settings-item is-danger" role="menuitem" id="delete-product-btn"
                     data-product="{{ selected.uuid }}"
                     data-name="{{ selected.name }}"
@@ -106,10 +109,13 @@
       {% if selected.number or selected.description %}
       <p class="muted product-meta">{% if selected.number %}<span class="product-meta-number">{{ selected.number }}</span>{% endif %}{% if selected.number and selected.description %} · {% endif %}{% if selected.description %}{{ selected.description }}{% endif %}</p>
       {% endif %}
+      {% if not selected.allows_mutation %}
+      <p class="warn-note" id="product-access-banner">{% if selected.read_only %}This product is <strong>read only</strong>{% else %}This product is <strong>{{ selected.state.replace('_', ' ') | title }}</strong>{% endif %} — add, checkout, check-in, rename, remove, and delete are blocked.</p>
+      {% endif %}
     </div>
 
     {% if selected and status %}
-    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-product="{{ selected.uuid }}" data-type-icons='{{ type_icons | tojson }}'>
+    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-product="{{ selected.uuid }}" data-allows-mutation="{{ '1' if selected.allows_mutation else '0' }}" data-product-state="{{ selected.state }}" data-read-only="{{ '1' if selected.read_only else '0' }}" data-type-icons='{{ type_icons | tojson }}'>
       <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Show and select all files. Clears type chips. Click again to clear."><strong>{{ status.files }}</strong> Files</button></li>
       <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Filter to Creo models and select them. Click again to clear."><strong>{{ status.cad_models }}</strong> Creo Models</button></li>
       <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Filter to parts and select them. Click again to clear."><strong>{{ status.creo_parts }}</strong> Parts</button></li>
@@ -368,7 +374,7 @@
               {% if workspace_path %}data-workspace="{{ workspace_path }}"{% endif %}
               disabled hidden>Set Working Directory</button>
     </span>
-    {% if can_add_objects %}
+    {% if can_add_objects and (not selected or selected.allows_mutation) %}
     <div class="toolbar-menu" id="add-menu">
       <button type="button" class="btn toolbar-menu-toggle" id="add-menu-btn"
               aria-haspopup="menu" aria-expanded="false"
@@ -423,7 +429,7 @@
       </div>
     </div>
     {% endif %}
-    {% if can_checkin %}
+    {% if can_checkin and (not selected or selected.allows_mutation) %}
     <div class="toolbar-menu" id="checkin-menu">
       <button type="button" class="btn toolbar-menu-toggle" id="checkin-menu-btn"
               aria-haspopup="menu" aria-expanded="false" disabled
@@ -465,10 +471,12 @@
                 title="Move local agent-cache numbered saves older than the vault copy to the Recycle Bin (configured purgeable extensions). Keeps the vault revision and any newer local work. Does not change the vault.">Purge workspace</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn"
                 {% if selected %}data-product-name="{{ selected.name }}"{% endif %}
+                data-requires-mutation="1"
                 disabled
                 title="Delete CreoPDM vault copies of the selected files only. Files in your original product folder are not deleted. Checkouts on those files are cancelled.">Remove from Vault</button>
         <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-product-btn"
                 {% if selected %}data-product-name="{{ selected.name }}"{% endif %}
+                data-requires-mutation="1"
                 disabled
                 title="Remove the selected files from this product list and delete CreoPDM vault copies. Files in your original product folder are not deleted.">Remove from Product</button>
       </div>

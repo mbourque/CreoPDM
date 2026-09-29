@@ -366,7 +366,13 @@ def home(
     if selected_uuid:
         try:
             product = load_accessible_product(request, ctx, db, selected_uuid)
-            selected = product_to_response(product)
+            # ARCHIVED products stay out of the normal Files list (admin restores via Administration).
+            from creopdm.product_state import product_is_archived
+
+            if product_is_archived(product):
+                product = None
+            else:
+                selected = product_to_response(product)
         except (ProductNotFoundError, PermissionDeniedError):
             selected = None
             product = None

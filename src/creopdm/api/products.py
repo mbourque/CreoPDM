@@ -200,7 +200,10 @@ def update_product(
     ctx: AppContext = Depends(get_context),
 ) -> ProductResponse:
     require_permission(request, ctx, PERMISSION_PRODUCTS_EDIT)
-    load_accessible_product(request, ctx, db, product_id)
+    product = load_accessible_product(request, ctx, db, product_id)
+    from creopdm.product_state import ensure_product_mutable
+
+    ensure_product_mutable(product, action="rename this product")
     product = ctx.products.update_product(
         db,
         product_id,

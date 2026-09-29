@@ -86,6 +86,7 @@
 
   <section class="settings-card" style="margin-top: 1rem;">
     <h2>Remove product</h2>
+    {% if form.state == 'IN_WORK' and not form.read_only %}
     <p class="muted small">Hides the product in CreoPDM. Does not delete CAD files on disk. Type the exact product name to confirm.</p>
     {% if delete_error %}<p class="error">{{ delete_error }}</p>{% endif %}
     <form method="post" action="/admin/products/{{ form.uuid }}/delete" class="settings-form">
@@ -94,7 +95,11 @@
       </label>
       <button type="submit" class="btn btn-danger">Remove product</button>
     </form>
+    {% else %}
+    <p class="muted small">Set lifecycle to <strong>In work</strong> and clear <strong>Read only</strong>, then Save, before removing this product.</p>
+    {% if delete_error %}<p class="error">{{ delete_error }}</p>{% endif %}
+    {% endif %}
   </section>
-  {% endif %}
+{% endif %}
 </article>
 {% endblock %}

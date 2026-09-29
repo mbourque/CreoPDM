@@ -90,7 +90,9 @@ def test_remove_from_product_sends_folder_paths():
     )
     assert "selectedFolderPaths()" in remove
     assert "folder_paths" in remove
-    assert "canRemoveProduct = ids.length > 0 || folderPaths.length > 0" in script
+    sync = _between(script, "function syncToolbar(", "function setCheckinQueueCounts(")
+    assert "mutationActionAllowed(removeBtn)" in sync
+    assert "ids.length > 0 || folderPaths.length > 0" in sync
 
 
 def test_remove_rows_update_folder_tbody_cache_and_soft_reload():
@@ -203,15 +205,16 @@ def test_metadata_gear_items_require_creo_session():
     app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     script = _app_js()
-    rebuild = app_html.split('id="rebuild-where-used-btn"', 1)[0][-120:]
-    collect = app_html.split('id="collect-metadata-btn"', 1)[0][-120:]
-    assert "creo-session-only" in rebuild
-    assert "creo-session-only" in collect
-    assert 'id="rebuild-where-used-btn"' in app_html and "hidden" in app_html
-    assert "syncProductSettingsVisibility" in script
+    assert "can_update_metadata and selected.allows_mutation" in app_html
+    assert "can_add_objects and (not selected or selected.allows_mutation)" in app_html
+    assert "can_checkin and (not selected or selected.allows_mutation)" in app_html
+    assert 'data-requires-mutation="1"' in app_html
+    assert "creo-session-only" in app_html
+    assert "productAllowsMutation" in script
+    assert "mutationActionAllowed" in script
+    assert "data-allows-mutation" in app_html
     assert "Rebuild Where Used" in docs and "Collect all metadata" in docs
-    assert "inside Creo’s embedded browser" in docs or "inside Creo's embedded browser" in docs
-    assert "standalone browser" in docs
+    assert "read only" in docs.lower() or "read-only" in docs.lower()
 
 
 def test_agent_add_chunks_continue_after_http_error():
@@ -429,6 +432,15 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "agentIsOnline()" in _between(
         script, "function syncToolbar(", "function setCheckinQueueCounts("
     )
+    assert "mutationActionAllowed" in _between(
+        script, "function syncToolbar(", "function setCheckinQueueCounts("
+    )
+    assert "mutable &&" not in _between(
+        script, "function syncToolbar(", "function setCheckinQueueCounts("
+    )
+    assert "can_add_objects and (not selected or selected.allows_mutation)" in html
+    assert "can_checkin and (not selected or selected.allows_mutation)" in html
+    assert 'data-requires-mutation="1"' in html
     assert "Start creopdm-agent on this PC to open the local workspace folder" in script
     assert "Opened the vault folder on the CreoPDM host" not in script
     assert "do not show the control" in (
@@ -869,7 +881,9 @@ def test_user_interaction_negative_client_guards():
     assert "required" in html.split('id="checkin-comment"', 1)[1].split(">", 1)[0]
 
     # Remove from Product enablement includes empty folders (V2 / N16)
-    assert "canRemoveProduct = ids.length > 0 || folderPaths.length > 0" in script
+    sync = _between(script, "function syncToolbar(", "function setCheckinQueueCounts(")
+    assert "mutationActionAllowed(removeBtn)" in sync
+    assert "ids.length > 0 || folderPaths.length > 0" in sync
 
 
 def test_modified_metric_pill_left_of_checked_out():
