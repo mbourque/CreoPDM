@@ -262,7 +262,11 @@
     </section>
 
     <section class="tab-panel" id="panel-checked-out" hidden>
-      <p class="muted small">Active checkout locks in this product, including files held by other people. Open, Check In, and Undo Checkout still apply to your files.</p>
+      {% if product_ui.allows_mutation %}
+      <p class="muted small" id="checked-out-help">Active checkout locks in this product, including files held by other people. Open, Check In, and Undo Checkout still apply to your files.</p>
+      {% else %}
+      <p class="muted small" id="checked-out-help">Active checkout locks in this product, including files held by other people. Open and Undo Checkout still apply to your files; Check In is blocked while this product is {% if selected.read_only %}<strong>read only</strong>{% else %}<strong>{{ selected.state.replace('_', ' ') | title }}</strong>{% endif %}.</p>
+      {% endif %}
       <div class="table-wrap">
         <table class="grid" id="checked-out-table">
           <thead>
@@ -286,7 +290,11 @@
     </section>
 
     <section class="tab-panel" id="panel-changes" hidden>
-      <p class="muted small">New files in the vault or your local workspace (creopdm-agent cache), plus vault files that differ from the last checked-in version. Use <strong>Add</strong> for new files and <strong>Check In</strong> for modified saves. Checkout locks are on the Files checked out tab.</p>
+      {% if product_ui.allows_mutation %}
+      <p class="muted small" id="changes-help">New files in the vault or your local workspace (creopdm-agent cache), plus vault files that differ from the last checked-in version. Use <strong>Add</strong> for new files and <strong>Check In</strong> for modified saves. Checkout locks are on the Files checked out tab.</p>
+      {% else %}
+      <p class="muted small" id="changes-help">New files and local saves still appear here for reference. <strong>Add</strong> and <strong>Check In</strong> are blocked while this product is {% if selected.read_only %}<strong>read only</strong>{% else %}<strong>{{ selected.state.replace('_', ' ') | title }}</strong>{% endif %}. You can remove local workspace copies; Checkout locks are on the Files checked out tab.</p>
+      {% endif %}
       <div class="table-wrap">
         <table class="grid" id="changes-table">
           <thead>
@@ -300,7 +308,7 @@
           </thead>
           <tbody>
             {% for item in checkin_queue.saves %}
-            <tr class="queue-row is-pending" data-uuid="{{ item.uuid }}" data-can-checkin="1" data-checked-out="1"
+            <tr class="queue-row is-pending" data-uuid="{{ item.uuid }}" data-can-checkin="{{ '1' if product_ui.show_checkin else '0' }}" data-checked-out="1"
                 data-object-type="{{ item.object_type or '' }}" data-extension="" data-filename="{{ item.filename }}"
                 data-detail="/products/{{ selected.uuid }}/objects/{{ item.uuid }}">
               <td>{% if item.newer_save %}Newer Creo save{% else %}Modified{% endif %}</td>
@@ -323,7 +331,7 @@
             </tr>
             {% endfor %}
             {% for item in checkin_queue.new_files %}
-            <tr class="queue-row" data-relative-path="{{ item.relative_path }}" data-can-checkin="1"
+            <tr class="queue-row" data-relative-path="{{ item.relative_path }}" data-can-checkin="{{ '1' if product_ui.show_add or product_ui.show_checkin else '0' }}"
                 data-object-type="{{ item.object_type or '' }}" data-extension="" data-filename="{{ item.filename }}">
               <td>New file</td>
               <td class="filename-cell">
@@ -339,7 +347,7 @@
                 <div class="muted small">{{ item.relative_path }}</div>
                 {% endif %}
               </td>
-              <td>Not in the product yet. Select and click Add.</td>
+              <td>{% if product_ui.show_add %}Not in the product yet. Select and click Add.{% else %}Not in the product yet. Add is blocked while this product is {% if selected.read_only %}read only{% else %}{{ selected.state.replace('_', ' ') | title }}{% endif %}.{% endif %}</td>
               <td title="{{ item.size }} bytes">{{ item.size | byte_size }}</td>
               <td{% if item.saved_at %} title="{{ local_time_pretty(item.saved_at) }}"{% endif %}>{{ item.saved_at or "—" }}</td>
             </tr>

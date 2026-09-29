@@ -80,10 +80,10 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Click a metric (Parts, Assemblies, …) | Filter and select those files; click again to clear | Jump into a folder or leave the page |
 | Click **Modified** | Filter and select files with local changes you can check in; click again to clear. **Modified** pill count matches rows shown as Modified (including after local/agent detection) | Select unmodified checkouts or someone else’s files; leave the pill at 0 while a row shows Modified |
 | Click **Checked out** | Filter and select checked out files in the current group; click again to clear | |
-| Switch tabs: **Files** / **Checked out** / **New files** | Show that list | |
+| Switch tabs: **Files** / **Checked out** / **New files** | Show that list; tab help text matches what you can do (no “use Add / Check In” when the product is read-only or not **In work**) | Tell you to Add or Check In on a locked product |
 | Click a column header | Sort; click again to reverse | |
 
-**New files tab** shows files waiting in the **vault** (and sometimes local cache) that aren’t fully in the product yet. Deleting only from your PC workspace does **not** clear vault “new” files — those live on the CreoPDM vault until you remove them from there.
+**New files tab** shows files waiting in the **vault** (and sometimes local cache) that aren’t fully in the product yet. Deleting only from your PC workspace does **not** clear vault “new” files — those live on the CreoPDM vault until you remove them from there. When the product is **read only** or not **In work**, the help text and row Detail say Add/Check In are blocked (files still list for reference; local workspace remove may still work).
 
 ---
 

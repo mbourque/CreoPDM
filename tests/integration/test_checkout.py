@@ -57,6 +57,8 @@ def test_checkout_blocked_when_product_on_hold(client, repo_parent):
     assert 'id="checkout-menu"' in page.text
     assert 'data-state="locked"' in page.text
     assert "On hold" in page.text
+    assert "Add</strong> and <strong>Check In</strong> are blocked while this product is" in page.text
+    assert "Use <strong>Add</strong> for new files and <strong>Check In</strong>" not in page.text
 
     detail = client.get(f"/api/objects/{obj['uuid']}")
     assert detail.status_code == 200, detail.text

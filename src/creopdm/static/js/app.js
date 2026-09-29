@@ -7291,6 +7291,25 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   });
 
+  function productLockCopy() {
+    // Display-only: match banner / checkout labels from server-painted metric-filters.
+    const el = $("#metric-filters");
+    if (!el || el.dataset.allowsMutation == null || el.dataset.allowsMutation === "") {
+      return null;
+    }
+    if (el.dataset.allowsMutation === "1") return null;
+    if (el.dataset.readOnly === "1") return "read only";
+    const key = String(el.dataset.productState || "").trim().toUpperCase();
+    const labels = {
+      IN_WORK: "In work",
+      ON_HOLD: "On Hold",
+      RELEASED: "Released",
+      CLOSED: "Closed",
+      ARCHIVED: "Archived",
+    };
+    return labels[key] || "locked";
+  }
+
   async function loadChangesTab(options = {}) {
     const quiet = Boolean(options.quiet);
     const productId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
@@ -7453,13 +7472,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         );
       });
       newerLocal.forEach((item) => {
+        const lock = productLockCopy();
+        const localDetail = lock
+          ? `Local workspace — Check In is blocked while this product is ${lock}.`
+          : item.can_checkin === "1"
+            ? "Local workspace — select and Check In."
+            : "Local workspace — check out to Check In.";
         addRow(
           [
             "Newer local save",
             item.filename || "",
-            item.can_checkin === "1"
-              ? "Local workspace — select and Check In."
-              : "Local workspace — check out to Check In.",
+            localDetail,
             item.size != null ? formatByteSize(item.size) : "",
             item.saved_at || "—",
           ],
@@ -7471,20 +7494,26 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             relativePath: item.relative_path,
             localCache: true,
             checkedOut: item.checked_out || "0",
-            canCheckin: item.can_checkin || "0",
-            canCheckout: item.can_checkout || "0",
+            canCheckin: lock ? "0" : item.can_checkin || "0",
+            canCheckout: lock ? "0" : item.can_checkout || "0",
             recordedFilename: item.recorded_filename || "",
           }
         );
       });
       created.forEach((item) => {
+        const lock = productLockCopy();
+        const newDetail = lock
+          ? item.local_cache
+            ? `Local workspace — Add is blocked while this product is ${lock}.`
+            : `Not in the product yet. Add is blocked while this product is ${lock}.`
+          : item.local_cache
+            ? "Local workspace — select and Add."
+            : "Not in the product yet. Select and click Add.";
         addRow(
           [
             item.local_cache ? "New file (local)" : "New file",
             item.filename || "",
-            item.local_cache
-              ? "Local workspace — select and Add."
-              : "Not in the product yet. Select and click Add.",
+            newDetail,
             item.size != null ? formatByteSize(item.size) : "",
             item.saved_at || "—",
           ],

@@ -200,6 +200,22 @@ def test_settings_muted_help_under_field_top_margin_only():
     assert "margin-top: 0.15rem" in label_help
 
 
+def test_locked_product_changes_help_does_not_offer_add_checkin():
+    """On Hold / read-only New files copy must not tell users to Add or Check In."""
+    html = APP_HTML.read_text(encoding="utf-8")
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert 'id="changes-help"' in html
+    assert "product_ui.allows_mutation" in html
+    assert "Add</strong> and <strong>Check In</strong> are blocked while this product is" in html
+    assert "Check In is blocked while this product is" in html
+    assert "Add is blocked while this product is" in html
+    assert "function productLockCopy" in script
+    assert "Add is blocked while this product is ${lock}" in script
+    assert "Check In is blocked while this product is ${lock}" in script
+    assert "Add/Check In are blocked" in docs
+
+
 def test_product_state_badge_in_files_header():
     """Product lifecycle state uses the same .state dot badge as the Files State column."""
     html = APP_HTML.read_text(encoding="utf-8")
