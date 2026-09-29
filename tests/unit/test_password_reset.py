@@ -17,8 +17,9 @@ from creopdm.exceptions import ValidationAppError
 from creopdm.models.password_reset import PasswordResetAttempt, PasswordResetToken
 from creopdm.models.user import User
 from creopdm.services.password_reset_service import (
-    GENERIC_SENT_MESSAGE,
-    MAX_ATTEMPTS_PER_EMAIL_PER_DAY,
+    MATCH_ERROR,
+    MAX_ATTEMPTS_PER_USER_PER_DAY,
+    SENT_MESSAGE,
     PasswordResetService,
 )
 from tests.conftest import requires_git
@@ -57,17 +58,33 @@ def test_forgot_link_only_after_failed_login(auth_client, auth_ctx):
     assert page.status_code == 200
     assert "Forgot password?" not in page.text
 
+    # Wrong password for a known user → offer forgot.
     bad = auth_client.post(
         "/login",
         data={"username": "admin", "password": "wrong"},
     )
     assert bad.status_code == 400
     assert "Forgot password?" in bad.text
-    assert 'href="/forgot-password"' in bad.text
+    assert 'href="/forgot-password?username=admin"' in bad.text
 
+    # Unknown username → no forgot link (do not leak / invite reset).
+    unknown = auth_client.post(
+        "/login",
+        data={"username": "nosuchuser", "password": "whatever"},
+    )
+    assert unknown.status_code == 400
+    assert "Forgot password?" not in unknown.text
+
+    # Unknown username cannot open the forgot page either.
+    no_user = auth_client.get(
+        "/forgot-password?username=nosuchuser",
+        follow_redirects=False,
+    )
+    assert no_user.status_code == 303
+    assert "/login" in no_user.headers["location"]
 
 @requires_git
-def test_forgot_password_sends_email_and_reset_works(auth_client, auth_ctx):
+def test_forgot_password_requires_username_and_matching_email(auth_client, auth_ctx):
     _setup_admin_and_users(auth_client, auth_ctx, ("engineer", BuiltinRole.ENGINEER.value))
     sent = _enable_email(auth_ctx)
 
@@ -76,36 +93,75 @@ def test_forgot_password_sends_email_and_reset_works(auth_client, auth_ctx):
         assert user is not None
         email = user.email
 
-    form = auth_client.get("/forgot-password")
-    assert form.status_code == 200
-    assert "Email" in form.text
+    # Bare forgot URL (no username from sign-in) is rejected.
+    bare_forgot = auth_client.get("/forgot-password", follow_redirects=False)
+    assert bare_forgot.status_code == 303
+    assert "/login" in bare_forgot.headers["location"]
 
-    posted = auth_client.post("/forgot-password", data={"email": email})
+    form = auth_client.get("/forgot-password?username=engineer")
+    assert form.status_code == 200
+    assert 'name="username"' in form.text
+    assert 'value="engineer"' in form.text
+    assert "disabled" in form.text
+
+    wrong = auth_client.post(
+        "/forgot-password",
+        data={"username": "engineer", "email": "nobody@example.com"},
+    )
+    assert wrong.status_code == 400
+    assert MATCH_ERROR in wrong.text
+    assert sent == []
+
+    missing_user = auth_client.post(
+        "/forgot-password",
+        data={"username": "", "email": email},
+        follow_redirects=False,
+    )
+    assert missing_user.status_code == 303
+    assert "/login" in missing_user.headers["location"]
+
+    posted = auth_client.post(
+        "/forgot-password",
+        data={"username": "engineer", "email": email},
+    )
     assert posted.status_code == 200
-    assert GENERIC_SENT_MESSAGE.split(".")[0] in posted.text
+    assert SENT_MESSAGE.split(".")[0] in posted.text
     assert len(sent) == 1
     to, subject, body = sent[0]
     assert to == email or to == [email]
     assert "Reset" in subject
     assert "/reset-password?token=" in body
+    assert "username=engineer" in body
     assert "If you did not ask for this" in body
-    token = body.split("/reset-password?token=")[1].split()[0].strip()
+    token = body.split("/reset-password?token=")[1].split("&")[0].strip()
 
-    # Unknown email still looks the same (no enumeration).
-    again = auth_client.post("/forgot-password", data={"email": "nobody@example.com"})
-    assert again.status_code == 200
-    assert GENERIC_SENT_MESSAGE.split(".")[0] in again.text
-    assert len(sent) == 1
+    # Token alone (no username) is rejected.
+    bare = auth_client.get(f"/reset-password?token={token}")
+    assert bare.status_code == 400
 
-    page = auth_client.get(f"/reset-password?token={token}")
+    page = auth_client.get(f"/reset-password?token={token}&username=engineer")
     assert page.status_code == 200
-    assert "Choose a new password" in page.text
-    assert "engineer" in page.text
+    assert 'name="username"' in page.text
+    assert "disabled" in page.text
+    assert 'value="engineer"' in page.text
+
+    # Wrong username on submit is rejected.
+    bad_user = auth_client.post(
+        "/reset-password",
+        data={
+            "token": token,
+            "username": "admin",
+            "new_password": "NewPass99!",
+            "new_password_confirm": "NewPass99!",
+        },
+    )
+    assert bad_user.status_code == 400
 
     saved = auth_client.post(
         "/reset-password",
         data={
             "token": token,
+            "username": "engineer",
             "new_password": "NewPass99!",
             "new_password_confirm": "NewPass99!",
         },
@@ -115,8 +171,7 @@ def test_forgot_password_sends_email_and_reset_works(auth_client, auth_ctx):
     assert "/login" in saved.headers["location"]
     assert "Password updated" in unquote(saved.headers["location"])
 
-    # Token single-use.
-    reuse = auth_client.get(f"/reset-password?token={token}")
+    reuse = auth_client.get(f"/reset-password?token={token}&username=engineer")
     assert reuse.status_code == 400
 
     _login(auth_client, "engineer", "NewPass99!")
@@ -135,8 +190,11 @@ def test_forgot_password_spam_disables_non_admin(auth_client, auth_ctx):
         email = user.email
         user_id = user.id
 
-    for _ in range(MAX_ATTEMPTS_PER_EMAIL_PER_DAY):
-        auth_client.post("/forgot-password", data={"email": email})
+    for _ in range(MAX_ATTEMPTS_PER_USER_PER_DAY):
+        auth_client.post(
+            "/forgot-password",
+            data={"username": "limited", "email": email},
+        )
 
     with auth_ctx.session_factory() as db:
         user = db.get(User, user_id)
@@ -145,7 +203,7 @@ def test_forgot_password_spam_disables_non_admin(auth_client, auth_ctx):
         attempts = db.scalars(
             select(PasswordResetAttempt).where(PasswordResetAttempt.user_id == user_id)
         ).all()
-        assert len(attempts) >= MAX_ATTEMPTS_PER_EMAIL_PER_DAY
+        assert len(attempts) >= MAX_ATTEMPTS_PER_USER_PER_DAY
 
     auth_ctx.notifications.notify.assert_called()
     assert len(sent) >= 1
@@ -174,6 +232,7 @@ def test_password_reset_expired_token_rejected(auth_ctx):
     with auth_ctx.session_factory() as db:
         result = service.request_reset(
             db,
+            username="admin",
             email="admin@example.com",
             base_url="http://test/",
             email_enabled=True,
@@ -181,7 +240,7 @@ def test_password_reset_expired_token_rejected(auth_ctx):
         assert result.sent is True
         assert len(sent) == 1
         body = sent[0][2]
-        token = body.split("/reset-password?token=")[1].split()[0].strip()
+        token = body.split("/reset-password?token=")[1].split("&")[0].strip()
         row = db.scalar(select(PasswordResetToken))
         assert row is not None
         row.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
@@ -190,4 +249,9 @@ def test_password_reset_expired_token_rejected(auth_ctx):
     with auth_ctx.session_factory() as db:
         assert service.peek_token(db, token) is None
         with pytest.raises(ValidationAppError, match="invalid or has expired"):
-            service.reset_password(db, raw_token=token, new_password="AnotherPass1")
+            service.reset_password(
+                db,
+                raw_token=token,
+                username="admin",
+                new_password="AnotherPass1",
+            )

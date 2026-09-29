@@ -33,6 +33,7 @@ from creopdm.permissions import (
     resolve_post_login_target,
 )
 from creopdm.utils.identity import UserIdentity, set_request_identity
+from creopdm.utils.passwords import verify_password
 
 # Back-compat for default form role.
 BuiltinRole = StarterRole
@@ -207,6 +208,14 @@ def login_submit(
         return RedirectResponse(target, status_code=303)
     except CreoPDMError as exc:
         db.rollback()
+        # Forgot password only after wrong password for a known username
+        # (not unknown user, empty fields, or other validation failures).
+        known = ctx.user_accounts.get_by_username(db, username)
+        show_forgot = bool(
+            known is not None
+            and (password or "")
+            and not verify_password(password, known.password_hash)
+        )
         return templates.TemplateResponse(
             request,
             "auth_login.html",
@@ -216,7 +225,7 @@ def login_submit(
                 "info": "",
                 "username": username,
                 "next": next,
-                "show_forgot": True,
+                "show_forgot": show_forgot,
             },
             status_code=400,
         )
@@ -225,6 +234,7 @@ def login_submit(
 @router.get("/forgot-password", response_class=HTMLResponse)
 def forgot_password_page(
     request: Request,
+    username: str = Query(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -232,6 +242,21 @@ def forgot_password_page(
         return RedirectResponse("/", status_code=303)
     if ctx.user_accounts.needs_setup(db):
         return RedirectResponse("/setup", status_code=303)
+    uname = (username or "").strip()
+    # Username must come from a failed sign-in (Forgot password? link).
+    if not uname:
+        return RedirectResponse(
+            "/login?info="
+            + quote("Sign in first, then use Forgot password? so we know which username to reset."),
+            status_code=303,
+        )
+    # Only known usernames may start this flow.
+    if ctx.user_accounts.get_by_username(db, uname) is None:
+        return RedirectResponse(
+            "/login?info="
+            + quote("Sign in with your username first. Forgot password is only available after a wrong password."),
+            status_code=303,
+        )
     return templates.TemplateResponse(
         request,
         "auth_forgot_password.html",
@@ -239,6 +264,7 @@ def forgot_password_page(
             **_base_ctx(request, ctx),
             "error": None,
             "info": None,
+            "username": uname,
             "email": "",
             "submitted": False,
         },
@@ -248,15 +274,30 @@ def forgot_password_page(
 @router.post("/forgot-password", response_class=HTMLResponse)
 def forgot_password_submit(
     request: Request,
+    username: str = Form(""),
     email: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
     if ctx.user_accounts.needs_setup(db):
         return RedirectResponse("/setup", status_code=303)
+    uname = (username or "").strip()
+    if not uname:
+        return RedirectResponse(
+            "/login?info="
+            + quote("Sign in first, then use Forgot password? so we know which username to reset."),
+            status_code=303,
+        )
+    if ctx.user_accounts.get_by_username(db, uname) is None:
+        return RedirectResponse(
+            "/login?info="
+            + quote("Sign in with your username first. Forgot password is only available after a wrong password."),
+            status_code=303,
+        )
     try:
         result = ctx.password_resets.request_reset(
             db,
+            username=uname,
             email=email,
             base_url=str(request.base_url),
             request_ip=request.client.host if request.client else None,
@@ -270,12 +311,15 @@ def forgot_password_submit(
                 **_base_ctx(request, ctx),
                 "error": None,
                 "info": result.message,
+                "username": uname,
                 "email": email,
                 "submitted": True,
             },
         )
     except CreoPDMError as exc:
-        db.rollback()
+        # Keep attempt rows and abuse disable even when the request is rejected
+        # (wrong email, rate limit, etc.).
+        db.commit()
         return templates.TemplateResponse(
             request,
             "auth_forgot_password.html",
@@ -283,6 +327,7 @@ def forgot_password_submit(
                 **_base_ctx(request, ctx),
                 "error": exc.message,
                 "info": None,
+                "username": uname,
                 "email": email,
                 "submitted": False,
             },
@@ -294,6 +339,7 @@ def forgot_password_submit(
 def reset_password_page(
     request: Request,
     token: str = Query(""),
+    username: str = Query(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -302,7 +348,8 @@ def reset_password_page(
     if ctx.user_accounts.needs_setup(db):
         return RedirectResponse("/setup", status_code=303)
     user = ctx.password_resets.peek_token(db, token)
-    if user is None:
+    uname = (username or "").strip()
+    if user is None or not uname or user.username.lower() != uname.lower():
         return templates.TemplateResponse(
             request,
             "auth_reset_password.html",
@@ -332,6 +379,7 @@ def reset_password_page(
 def reset_password_submit(
     request: Request,
     token: str = Form(""),
+    username: str = Form(""),
     new_password: str = Form(""),
     new_password_confirm: str = Form(""),
     ctx: AppContext = Depends(get_context),
@@ -339,24 +387,39 @@ def reset_password_submit(
 ):
     if ctx.user_accounts.needs_setup(db):
         return RedirectResponse("/setup", status_code=303)
-    if (new_password or "") != (new_password_confirm or ""):
+    uname = (username or "").strip()
+
+    def _reset_error(message: str, *, status: int = 400) -> HTMLResponse:
         user = ctx.password_resets.peek_token(db, token)
+        ok_user = (
+            user is not None
+            and uname
+            and user.username.lower() == uname.lower()
+        )
         return templates.TemplateResponse(
             request,
             "auth_reset_password.html",
             {
                 **_base_ctx(request, ctx),
-                "invalid": user is None,
-                "error": "New password and confirmation do not match."
-                if user is not None
-                else "This reset link is invalid or has expired. Request a new one from the sign-in page.",
-                "token": token if user is not None else "",
-                "username": user.username if user is not None else "",
+                "invalid": not ok_user,
+                "error": message,
+                "token": token if ok_user else "",
+                "username": user.username if ok_user else "",
             },
-            status_code=400,
+            status_code=status,
         )
+
+    if not uname:
+        return _reset_error("Username is required.")
+    if (new_password or "") != (new_password_confirm or ""):
+        return _reset_error("New password and confirmation do not match.")
     try:
-        ctx.password_resets.reset_password(db, raw_token=token, new_password=new_password)
+        ctx.password_resets.reset_password(
+            db,
+            raw_token=token,
+            username=uname,
+            new_password=new_password,
+        )
         db.commit()
         return RedirectResponse(
             "/login?info=" + quote("Password updated. Sign in with your new password."),
@@ -364,19 +427,7 @@ def reset_password_submit(
         )
     except CreoPDMError as exc:
         db.rollback()
-        user = ctx.password_resets.peek_token(db, token)
-        return templates.TemplateResponse(
-            request,
-            "auth_reset_password.html",
-            {
-                **_base_ctx(request, ctx),
-                "invalid": user is None,
-                "error": exc.message,
-                "token": token if user is not None else "",
-                "username": user.username if user is not None else "",
-            },
-            status_code=400,
-        )
+        return _reset_error(exc.message)
 
 
 @router.get("/logout")

@@ -6,6 +6,7 @@ import hashlib
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -23,15 +24,13 @@ from creopdm.utils.passwords import hash_password
 logger = get_logger("password_reset")
 
 TOKEN_TTL = timedelta(hours=1)
-# Soft cap: still show success, but do not send another mail.
-MAX_SENDS_PER_EMAIL_PER_HOUR = 5
+MAX_SENDS_PER_USER_PER_HOUR = 5
 MAX_ATTEMPTS_PER_IP_PER_HOUR = 20
-# Hard cap: disable the account (non–full-admin) and email administrators.
-MAX_ATTEMPTS_PER_EMAIL_PER_DAY = 10
+MAX_ATTEMPTS_PER_USER_PER_DAY = 10
 
-GENERIC_SENT_MESSAGE = (
-    "If an account exists for that email address, we sent a link to reset the password. "
-    "Check your inbox and spam folder."
+MATCH_ERROR = "Username and email do not match an account."
+SENT_MESSAGE = (
+    "We sent a reset link to that email. Check your inbox and spam folder."
 )
 
 
@@ -44,6 +43,10 @@ class ForgotPasswordResult:
 
 def _normalize_email(email: str) -> str:
     return (email or "").strip().lower()
+
+
+def _normalize_username(username: str) -> str:
+    return (username or "").strip().lower()
 
 
 def _hash_token(raw: str) -> str:
@@ -66,32 +69,42 @@ class PasswordResetService:
         self._email = email
         self._notifications = notifications
 
-    def get_user_by_email(self, db: Session, email: str) -> User | None:
-        normalized = _normalize_email(email)
-        if not normalized:
-            return None
-        return db.scalar(
-            select(User).where(func.lower(User.email) == normalized).limit(1)
-        )
-
     def request_reset(
         self,
         db: Session,
         *,
+        username: str,
         email: str,
         base_url: str,
         request_ip: str | None = None,
         email_enabled: bool = True,
     ) -> ForgotPasswordResult:
-        """Always return a generic message (no email enumeration)."""
+        """Require username + matching email for that account only."""
+        uname = _normalize_username(username)
         normalized = _normalize_email(email)
         ip = _client_ip(request_ip)
+        if not uname:
+            raise ValidationAppError("Username is required.")
         if not normalized or "@" not in normalized:
             raise ValidationAppError("Enter a valid email address.")
 
         now = datetime.now(timezone.utc)
         hour_ago = now - timedelta(hours=1)
         day_ago = now - timedelta(days=1)
+
+        user = self._users.get_by_username(db, uname)
+        email_ok = (
+            user is not None and _normalize_email(user.email) == normalized
+        )
+
+        attempt = PasswordResetAttempt(
+            email_normalized=normalized,
+            request_ip=ip,
+            user_id=user.id if user is not None else None,
+            sent=False,
+        )
+        db.add(attempt)
+        db.flush()
 
         ip_attempts = 0
         if ip:
@@ -106,57 +119,58 @@ class PasswordResetService:
                 )
                 or 0
             )
-        email_hour = int(
-            db.scalar(
-                select(func.count())
-                .select_from(PasswordResetAttempt)
-                .where(
-                    PasswordResetAttempt.email_normalized == normalized,
-                    PasswordResetAttempt.created_at >= hour_ago,
-                )
-            )
-            or 0
-        )
-        email_day = int(
-            db.scalar(
-                select(func.count())
-                .select_from(PasswordResetAttempt)
-                .where(
-                    PasswordResetAttempt.email_normalized == normalized,
-                    PasswordResetAttempt.created_at >= day_ago,
-                )
-            )
-            or 0
-        )
 
-        user = self.get_user_by_email(db, normalized)
-        attempt = PasswordResetAttempt(
-            email_normalized=normalized,
-            request_ip=ip,
-            user_id=user.id if user is not None else None,
-            sent=False,
-        )
-        db.add(attempt)
-        db.flush()
+        user_hour = 0
+        user_day = 0
+        if user is not None:
+            user_hour = int(
+                db.scalar(
+                    select(func.count())
+                    .select_from(PasswordResetAttempt)
+                    .where(
+                        PasswordResetAttempt.user_id == user.id,
+                        PasswordResetAttempt.created_at >= hour_ago,
+                    )
+                )
+                or 0
+            )
+            user_day = int(
+                db.scalar(
+                    select(func.count())
+                    .select_from(PasswordResetAttempt)
+                    .where(
+                        PasswordResetAttempt.user_id == user.id,
+                        PasswordResetAttempt.created_at >= day_ago,
+                    )
+                )
+                or 0
+            )
 
         disabled = False
-        if user is not None and email_day + 1 >= MAX_ATTEMPTS_PER_EMAIL_PER_DAY:
-            disabled = self._maybe_disable_for_abuse(db, user, email_day=email_day + 1)
+        if user is not None and user_day >= MAX_ATTEMPTS_PER_USER_PER_DAY:
+            disabled = self._maybe_disable_for_abuse(db, user, attempt_count=user_day)
+
+        if not email_ok or user is None:
+            raise ValidationAppError(MATCH_ERROR)
+
+        if disabled:
+            raise ValidationAppError("This account is disabled. Contact an administrator.")
 
         allow_send = (
             email_enabled
-            and user is not None
             and user.status == UserStatus.ACTIVE.value
             and ip_attempts < MAX_ATTEMPTS_PER_IP_PER_HOUR
-            and email_hour < MAX_SENDS_PER_EMAIL_PER_HOUR
-            and not disabled
+            and user_hour < MAX_SENDS_PER_USER_PER_HOUR
         )
         if not allow_send:
-            if user is not None and not email_enabled:
-                logger.info("Password reset skipped; email notifications disabled")
-            return ForgotPasswordResult(message=GENERIC_SENT_MESSAGE, sent=False, disabled_user=disabled)
+            if not email_enabled:
+                raise ValidationAppError(
+                    "Password reset email is not configured. Ask an administrator for help."
+                )
+            raise ValidationAppError(
+                "Too many reset attempts. Try again later or contact an administrator."
+            )
 
-        # Invalidate unused tokens for this user.
         for old in db.scalars(
             select(PasswordResetToken).where(
                 PasswordResetToken.user_id == user.id,
@@ -175,7 +189,10 @@ class PasswordResetService:
         db.add(token)
         db.flush()
 
-        reset_url = f"{base_url.rstrip('/')}/reset-password?token={raw}"
+        reset_url = (
+            f"{base_url.rstrip('/')}/reset-password"
+            f"?token={raw}&username={quote(user.username, safe='')}"
+        )
         subject = "Reset your CreoPDM password"
         body = (
             f"Hello {user.display_name or user.username},\n\n"
@@ -189,16 +206,20 @@ class PasswordResetService:
         )
         try:
             self._email.send(user.email, subject, body)
-        except Exception:
+        except Exception as exc:
             logger.exception("Failed to send password reset email to user_id=%s", user.id)
-            # Still return generic success; token remains usable if mail is retried manually.
-            return ForgotPasswordResult(message=GENERIC_SENT_MESSAGE, sent=False, disabled_user=disabled)
+            # Do not leave a usable token if the caller commits attempt bookkeeping.
+            token.used_at = datetime.now(timezone.utc)
+            db.flush()
+            raise ValidationAppError(
+                "Could not send the reset email. Try again later or contact an administrator."
+            ) from exc
 
         attempt.sent = True
         db.flush()
-        return ForgotPasswordResult(message=GENERIC_SENT_MESSAGE, sent=True, disabled_user=disabled)
+        return ForgotPasswordResult(message=SENT_MESSAGE, sent=True, disabled_user=False)
 
-    def _maybe_disable_for_abuse(self, db: Session, user: User, *, email_day: int) -> bool:
+    def _maybe_disable_for_abuse(self, db: Session, user: User, *, attempt_count: int) -> bool:
         """Disable non–full-admin accounts after too many reset attempts; always notify."""
         is_full_admin = ADMINISTRATION_PERMISSION_KEYS <= self._users.permission_keys_for_user(user)
         disabled = False
@@ -210,18 +231,18 @@ class PasswordResetService:
             logger.warning(
                 "Disabled user %s after %s password-reset attempts in 24h",
                 user.username,
-                email_day,
+                attempt_count,
             )
         subject = "CreoPDM: password reset abuse"
         if disabled:
             message = (
                 f"The account {user.username} ({user.email}) was disabled after "
-                f"{email_day} password-reset attempts in 24 hours.\n\n"
+                f"{attempt_count} password-reset attempts in 24 hours.\n\n"
                 "Review Administration → Users if this was unexpected."
             )
         else:
             message = (
-                f"The account {user.username} ({user.email}) hit {email_day} "
+                f"The account {user.username} ({user.email}) hit {attempt_count} "
                 "password-reset attempts in 24 hours. The account was not disabled "
                 "because it holds full Administration access — please investigate."
             )
@@ -239,7 +260,17 @@ class PasswordResetService:
             return None
         return db.get(User, token.user_id)
 
-    def reset_password(self, db: Session, *, raw_token: str, new_password: str) -> User:
+    def reset_password(
+        self,
+        db: Session,
+        *,
+        raw_token: str,
+        username: str,
+        new_password: str,
+    ) -> User:
+        uname = _normalize_username(username)
+        if not uname:
+            raise ValidationAppError("Username is required.")
         token = self._load_valid_token(db, raw_token)
         if token is None:
             raise ValidationAppError(
@@ -250,6 +281,10 @@ class PasswordResetService:
             raise ValidationAppError(
                 "This reset link is invalid or has expired. Request a new one from the sign-in page."
             )
+        if _normalize_username(user.username) != uname:
+            raise ValidationAppError(
+                "Username does not match this reset link. Use the username from the email."
+            )
         if user.status != UserStatus.ACTIVE.value:
             raise ValidationAppError("This account is disabled. Contact an administrator.")
         user.password_hash = hash_password(validate_password(new_password))
@@ -257,7 +292,6 @@ class PasswordResetService:
         user.updated_at = datetime.now(timezone.utc)
         now = datetime.now(timezone.utc)
         token.used_at = now
-        # Invalidate any other outstanding tokens.
         for other in db.scalars(
             select(PasswordResetToken).where(
                 PasswordResetToken.user_id == user.id,
