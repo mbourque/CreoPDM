@@ -188,6 +188,16 @@ def test_add_paths_sends_purgeable_extensions():
     assert "isImportVersionedExtension" in logical
 
 
+def test_settings_muted_help_under_field_top_margin_only():
+    """Help under form fields uses a small top margin only (no stacked p bottom gap)."""
+    css = APP_CSS.read_text(encoding="utf-8")
+    block = _between(css, ".settings-form .muted.small {", ".settings-form h2 + .muted.small")
+    assert "margin: 0.2rem 0 0" in block
+    assert ".settings-form label + .muted.small" in css
+    label_help = _between(css, ".settings-form label + .muted.small {", "}")
+    assert "margin-top: 0.15rem" in label_help
+
+
 def test_agent_add_chunks_continue_after_http_error():
     """Regression: one failed /add-paths batch used to abort the rest of a large folder add."""
     script = _app_js()
