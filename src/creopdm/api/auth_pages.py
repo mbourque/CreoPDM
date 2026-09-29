@@ -20,7 +20,7 @@ from creopdm.auth_constants import (
     StarterRole,
     UserStatus,
 )
-from creopdm.auth_session import SESSION_USER_KEY
+from creopdm.auth_session import SESSION_FORGOT_USERNAME_KEY, SESSION_USER_KEY
 from creopdm.constants import APP_NAME, APP_VERSION
 from creopdm.context import AppContext
 from creopdm.exceptions import CreoPDMError
@@ -80,6 +80,7 @@ def _base_ctx(
 
 
 def _login_session(request: Request, user: User) -> None:
+    request.session.pop(SESSION_FORGOT_USERNAME_KEY, None)
     request.session[SESSION_USER_KEY] = user.uuid
     set_request_identity(
         UserIdentity(
@@ -94,6 +95,40 @@ def _login_session(request: Request, user: User) -> None:
 def _clear_session(request: Request) -> None:
     request.session.clear()
     set_request_identity(None)
+
+
+def _normalize_login_username(username: str) -> str:
+    return (username or "").strip().casefold()
+
+
+def _grant_forgot_password(request: Request, username: str) -> None:
+    """Allow /forgot-password only after wrong password for this known username."""
+    request.session[SESSION_FORGOT_USERNAME_KEY] = _normalize_login_username(username)
+
+
+def _clear_forgot_password_grant(request: Request) -> None:
+    request.session.pop(SESSION_FORGOT_USERNAME_KEY, None)
+
+
+def _forgot_password_granted_username(request: Request) -> str | None:
+    raw = request.session.get(SESSION_FORGOT_USERNAME_KEY)
+    if not isinstance(raw, str):
+        return None
+    value = _normalize_login_username(raw)
+    return value or None
+
+
+_FORGOT_LOGIN_HINT = (
+    "Sign in with your username first. Forgot password is only available "
+    "after a wrong password for that account."
+)
+
+
+def _forgot_password_redirect_to_login() -> RedirectResponse:
+    return RedirectResponse(
+        "/login?info=" + quote(_FORGOT_LOGIN_HINT),
+        status_code=303,
+    )
 
 
 @router.get("/setup", response_class=HTMLResponse)
@@ -216,6 +251,10 @@ def login_submit(
             and (password or "")
             and not verify_password(password, known.password_hash)
         )
+        if show_forgot:
+            _grant_forgot_password(request, known.username)
+        else:
+            _clear_forgot_password_grant(request)
         return templates.TemplateResponse(
             request,
             "auth_login.html",
@@ -242,21 +281,18 @@ def forgot_password_page(
         return RedirectResponse("/", status_code=303)
     if ctx.user_accounts.needs_setup(db):
         return RedirectResponse("/setup", status_code=303)
-    uname = (username or "").strip()
-    # Username must come from a failed sign-in (Forgot password? link).
-    if not uname:
-        return RedirectResponse(
-            "/login?info="
-            + quote("Sign in first, then use Forgot password? so we know which username to reset."),
-            status_code=303,
-        )
-    # Only known usernames may start this flow.
-    if ctx.user_accounts.get_by_username(db, uname) is None:
-        return RedirectResponse(
-            "/login?info="
-            + quote("Sign in with your username first. Forgot password is only available after a wrong password."),
-            status_code=303,
-        )
+    granted = _forgot_password_granted_username(request)
+    if not granted:
+        return _forgot_password_redirect_to_login()
+    # Query username is optional display only; must match the session grant
+    # so crafted ?username=… URLs cannot start a reset for someone else.
+    query_name = _normalize_login_username(username)
+    if query_name and query_name != granted:
+        return _forgot_password_redirect_to_login()
+    user = ctx.user_accounts.get_by_username(db, granted)
+    if user is None:
+        _clear_forgot_password_grant(request)
+        return _forgot_password_redirect_to_login()
     return templates.TemplateResponse(
         request,
         "auth_forgot_password.html",
@@ -264,7 +300,7 @@ def forgot_password_page(
             **_base_ctx(request, ctx),
             "error": None,
             "info": None,
-            "username": uname,
+            "username": user.username,
             "email": "",
             "submitted": False,
         },
@@ -281,19 +317,17 @@ def forgot_password_submit(
 ):
     if ctx.user_accounts.needs_setup(db):
         return RedirectResponse("/setup", status_code=303)
-    uname = (username or "").strip()
-    if not uname:
-        return RedirectResponse(
-            "/login?info="
-            + quote("Sign in first, then use Forgot password? so we know which username to reset."),
-            status_code=303,
-        )
-    if ctx.user_accounts.get_by_username(db, uname) is None:
-        return RedirectResponse(
-            "/login?info="
-            + quote("Sign in with your username first. Forgot password is only available after a wrong password."),
-            status_code=303,
-        )
+    granted = _forgot_password_granted_username(request)
+    if not granted:
+        return _forgot_password_redirect_to_login()
+    # Always use the session-granted username; ignore/reject form tampering.
+    if _normalize_login_username(username) and _normalize_login_username(username) != granted:
+        return _forgot_password_redirect_to_login()
+    user = ctx.user_accounts.get_by_username(db, granted)
+    if user is None:
+        _clear_forgot_password_grant(request)
+        return _forgot_password_redirect_to_login()
+    uname = user.username
     try:
         result = ctx.password_resets.request_reset(
             db,

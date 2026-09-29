@@ -10,6 +10,8 @@ from pathlib import Path
 
 SESSION_COOKIE = "creopdm_session"
 SESSION_USER_KEY = "user_uuid"
+# Set only after wrong password for a known user; gates /forgot-password.
+SESSION_FORGOT_USERNAME_KEY = "forgot_password_username"
 
 # Agent fetches vault content without the browser cookie; JS passes this Bearer.
 AGENT_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 14  # match session cookie
