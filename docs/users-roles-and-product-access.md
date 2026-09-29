@@ -75,7 +75,7 @@ Permission keys (`products.*`, `objects.*` including **`objects.view`**, `users.
 
 | Starter role (default seed) | Can do | Cannot |
 | --- | --- | --- |
-| **Viewer** | Browse, open/download, Details (`objects.view` only; Open goes straight to open — no checkout dialog) | Authoring toolbar, Copy to Vault, checkout-on-open, Administration |
+| **Viewer** | Browse, open/download, Details/History (`objects.view` only; Open goes straight to open — no checkout dialog; Files toolbar **Details** when one file is selected, same as double-click) | Authoring toolbar, Copy to Vault, checkout-on-open, Administration |
 | **Engineer** | View + Add, checkout, check-in, remove, revert, metadata | Create/edit/delete products, Copy to Vault, users, roles, settings |
 | **PDM Manager** | Create/edit products (Files/API) + Engineer authoring + **Copy to Vault** | Delete product, Administration → Products (`products.manage`), users, roles, settings, email |
 | **Administrator** | Everything above + delete product + full CreoPDM Administration (including Admin → Products and Email) | — |

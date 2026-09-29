@@ -64,7 +64,7 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_PRODUCTS_CREATE, "Create products"),
     (PERMISSION_PRODUCTS_EDIT, "Edit product properties"),
     (PERMISSION_PRODUCTS_DELETE, "Delete or forget products"),
-    (PERMISSION_OBJECTS_VIEW, "Browse products and open or download files"),
+    (PERMISSION_OBJECTS_VIEW, "Browse products, history, and open or download files"),
     (PERMISSION_OBJECTS_ADD, "Add files and folders to products"),
     (PERMISSION_OBJECTS_CHECKOUT, "Check out objects and undo own checkout"),
     (PERMISSION_OBJECTS_CHECKIN, "Check in objects"),

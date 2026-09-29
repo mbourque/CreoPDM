@@ -730,6 +730,7 @@ def test_history_revert_only_for_older_versions():
     assert "Open the History tab by default" in docs
     html = APP_HTML.read_text(encoding="utf-8")
     assert 'id="history-btn"' in html
+    assert "Overview and History" in html
     assert ">Details</button>" in html
     assert ">History</button>" not in html
     assert 'data-detail="/products/{{ selected.uuid }}/objects/{{ obj.uuid }}"' in html

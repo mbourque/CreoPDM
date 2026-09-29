@@ -1313,6 +1313,9 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
     with auth_ctx.session_factory() as db:
         auth_ctx.user_accounts.ensure_builtin_roles(db)
         db.commit()
+        view = db.scalar(select(Permission).where(Permission.key == PERMISSION_OBJECTS_VIEW))
+        assert view is not None
+        assert view.description == "Browse products, history, and open or download files"
         keys_by_role: dict[str, set[str]] = {}
         for role in db.scalars(select(Role)).all():
             perm_ids = {

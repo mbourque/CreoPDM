@@ -1,0 +1,18 @@
+---
+description: Remaining Astra review items to remind the user when they ask
+alwaysApply: true
+---
+
+# Astra leftovers (remind on ask)
+
+When the user asks about remaining Astra findings, leftover security/reliability work, “what to worry about,” or “remind me about Astra,” list these **unfixed** items (do not re-implement unless asked):
+
+| # | Topic | Worry level |
+|---|---|---|
+| **6** | Agent `/local-file` + CORS `*` — unauthenticated localhost file read | **Highest** (security) |
+| **7** | `from-disk` absolute paths on the server | Medium (if server can see those paths) |
+| **3** | Git can advance while DB rolls back after handler | Failure-path correctness |
+| **2** | Recovery `git reset --hard` can wipe uncommitted vault edits | Failure-path only |
+| **10** | Split `app.js` | Don’t worry (maintainability) |
+
+**Already done:** #1 push by `relative_path`, #4 stage guards, #5 batch product access, #8 cache hash (no size-alone skip), #9 `index.lock` full stale window.
