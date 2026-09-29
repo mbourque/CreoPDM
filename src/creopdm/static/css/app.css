@@ -891,17 +891,36 @@ span.object-open:hover { text-decoration: underline; }
 .btn-small { font-size: 0.78rem; }
 .btn-primary { background: var(--accent); color: white; border-color: #8d3e12; }
 .btn-primary:hover:not(:disabled) { color: white; }
-button.forgot-password-btn {
-  background: none;
+button.forgot-password-btn,
+.detail .settings-form button.forgot-password-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  background: transparent;
   border: none;
+  border-radius: 0;
+  box-shadow: none;
   padding: 0;
   margin: 0;
   font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
   color: inherit;
+  text-align: left;
   text-decoration: underline;
   cursor: pointer;
+  white-space: normal;
+  flex-shrink: 1;
 }
-button.forgot-password-btn:hover { color: var(--accent-2); }
+.detail .settings-form button.forgot-password-btn:hover {
+  color: var(--accent-2);
+  background: transparent;
+  border: none;
+}
 .btn-danger { color: #9b1c1c; border-color: #d7a3a3; }
 .btn-danger:hover:not(:disabled) { border-color: #9b1c1c; background: #fdf2f2; }
 

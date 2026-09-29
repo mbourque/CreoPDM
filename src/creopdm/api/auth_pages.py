@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from pathlib import Path
 from urllib.parse import quote
 
@@ -20,7 +21,11 @@ from creopdm.auth_constants import (
     StarterRole,
     UserStatus,
 )
-from creopdm.auth_session import SESSION_FORGOT_USERNAME_KEY, SESSION_USER_KEY
+from creopdm.auth_session import (
+    SESSION_FORGOT_TOKEN_KEY,
+    SESSION_FORGOT_USERNAME_KEY,
+    SESSION_USER_KEY,
+)
 from creopdm.constants import APP_NAME, APP_VERSION
 from creopdm.context import AppContext
 from creopdm.exceptions import CreoPDMError
@@ -80,7 +85,7 @@ def _base_ctx(
 
 
 def _login_session(request: Request, user: User) -> None:
-    request.session.pop(SESSION_FORGOT_USERNAME_KEY, None)
+    _clear_forgot_password_grant(request)
     request.session[SESSION_USER_KEY] = user.uuid
     set_request_identity(
         UserIdentity(
@@ -101,13 +106,17 @@ def _normalize_login_username(username: str) -> str:
     return (username or "").strip().casefold()
 
 
-def _grant_forgot_password(request: Request, username: str) -> None:
-    """Allow /forgot-password only after wrong password for this known username."""
+def _grant_forgot_password(request: Request, username: str) -> str:
+    """Allow forgot-password POST only after wrong password; return one-time form token."""
+    token = secrets.token_urlsafe(32)
     request.session[SESSION_FORGOT_USERNAME_KEY] = _normalize_login_username(username)
+    request.session[SESSION_FORGOT_TOKEN_KEY] = token
+    return token
 
 
 def _clear_forgot_password_grant(request: Request) -> None:
     request.session.pop(SESSION_FORGOT_USERNAME_KEY, None)
+    request.session.pop(SESSION_FORGOT_TOKEN_KEY, None)
 
 
 def _forgot_password_granted_username(request: Request) -> str | None:
@@ -116,6 +125,27 @@ def _forgot_password_granted_username(request: Request) -> str | None:
         return None
     value = _normalize_login_username(raw)
     return value or None
+
+
+def _forgot_password_grant_token(request: Request) -> str | None:
+    raw = request.session.get(SESSION_FORGOT_TOKEN_KEY)
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    return raw.strip()
+
+
+def _forgot_password_grant_ok(
+    request: Request, *, username: str, token: str
+) -> bool:
+    """True only when username + opaque token match the wrong-password grant."""
+    granted = _forgot_password_granted_username(request)
+    expected = _forgot_password_grant_token(request)
+    submitted = _normalize_login_username(username)
+    if not granted or not expected or not submitted or not (token or "").strip():
+        return False
+    if submitted != granted:
+        return False
+    return secrets.compare_digest(expected, (token or "").strip())
 
 
 _FORGOT_LOGIN_HINT = (
@@ -128,6 +158,34 @@ def _forgot_password_redirect_to_login() -> RedirectResponse:
     return RedirectResponse(
         "/login?info=" + quote(_FORGOT_LOGIN_HINT),
         status_code=303,
+    )
+
+
+def _forgot_password_form(
+    request: Request,
+    ctx: AppContext,
+    *,
+    username: str,
+    forgot_token: str,
+    email: str = "",
+    error: str | None = None,
+    info: str | None = None,
+    submitted: bool = False,
+    status_code: int = 200,
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "auth_forgot_password.html",
+        {
+            **_base_ctx(request, ctx),
+            "error": error,
+            "info": info,
+            "username": username,
+            "forgot_token": forgot_token,
+            "email": email,
+            "submitted": submitted,
+        },
+        status_code=status_code,
     )
 
 
@@ -254,9 +312,10 @@ def login_submit(
             and not verify_password(password, known.password_hash)
         )
         if show_forgot:
-            _grant_forgot_password(request, known.username)
+            forgot_token = _grant_forgot_password(request, known.username)
         else:
             _clear_forgot_password_grant(request)
+            forgot_token = ""
         return templates.TemplateResponse(
             request,
             "auth_login.html",
@@ -267,46 +326,18 @@ def login_submit(
                 "username": username,
                 "next": next,
                 "show_forgot": show_forgot,
+                "forgot_token": forgot_token,
             },
             status_code=400,
         )
 
 
 @router.get("/forgot-password", response_class=HTMLResponse)
-def forgot_password_page(
-    request: Request,
-    username: str = Query(""),
-    ctx: AppContext = Depends(get_context),
-    db: Session = Depends(get_db),
-):
+def forgot_password_page(request: Request, ctx: AppContext = Depends(get_context)):
+    """GET is never allowed — typing /forgot-password must not open the form."""
     if not ctx.auth_enabled:
         return RedirectResponse("/", status_code=303)
-    if ctx.user_accounts.needs_setup(db):
-        return RedirectResponse("/setup", status_code=303)
-    granted = _forgot_password_granted_username(request)
-    query_name = _normalize_login_username(username)
-    # Require both a session grant and a matching username query (from the
-    # post-login Forgot button redirect). Crafted / bare URLs cannot open this.
-    if not granted or not query_name or query_name != granted:
-        if granted and query_name and query_name != granted:
-            _clear_forgot_password_grant(request)
-        return _forgot_password_redirect_to_login()
-    user = ctx.user_accounts.get_by_username(db, granted)
-    if user is None:
-        _clear_forgot_password_grant(request)
-        return _forgot_password_redirect_to_login()
-    return templates.TemplateResponse(
-        request,
-        "auth_forgot_password.html",
-        {
-            **_base_ctx(request, ctx),
-            "error": None,
-            "info": None,
-            "username": user.username,
-            "email": "",
-            "submitted": False,
-        },
-    )
+    return _forgot_password_redirect_to_login()
 
 
 @router.post("/forgot-password", response_class=HTMLResponse)
@@ -314,30 +345,30 @@ def forgot_password_submit(
     request: Request,
     username: str = Form(""),
     email: str = Form(""),
+    forgot_token: str = Form(""),
     forgot_start: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
     if ctx.user_accounts.needs_setup(db):
         return RedirectResponse("/setup", status_code=303)
-    granted = _forgot_password_granted_username(request)
-    submitted = _normalize_login_username(username)
-    # Submitted username must match the wrong-password grant. Changing the
-    # login field to another name (e.g. kim → kim1) clears the grant.
-    if not granted or not submitted or submitted != granted:
+    if not _forgot_password_grant_ok(request, username=username, token=forgot_token):
         _clear_forgot_password_grant(request)
         return _forgot_password_redirect_to_login()
-    user = ctx.user_accounts.get_by_username(db, granted)
+    user = ctx.user_accounts.get_by_username(db, _normalize_login_username(username))
     if user is None:
         _clear_forgot_password_grant(request)
         return _forgot_password_redirect_to_login()
     uname = user.username
+    token = _forgot_password_grant_token(request) or ""
 
-    # Login-form "Forgot password?" button: open the email form (no email yet).
+    # Login-form "Forgot password?" button: return the email form (never via GET).
     if forgot_start or not (email or "").strip():
-        return RedirectResponse(
-            "/forgot-password?username=" + quote(uname, safe=""),
-            status_code=303,
+        return _forgot_password_form(
+            request,
+            ctx,
+            username=uname,
+            forgot_token=token,
         )
 
     try:
@@ -350,33 +381,27 @@ def forgot_password_submit(
             email_enabled=bool(ctx.settings.email.enabled),
         )
         db.commit()
-        return templates.TemplateResponse(
+        _clear_forgot_password_grant(request)
+        return _forgot_password_form(
             request,
-            "auth_forgot_password.html",
-            {
-                **_base_ctx(request, ctx),
-                "error": None,
-                "info": result.message,
-                "username": uname,
-                "email": email,
-                "submitted": True,
-            },
+            ctx,
+            username=uname,
+            forgot_token="",
+            email=email,
+            info=result.message,
+            submitted=True,
         )
     except CreoPDMError as exc:
         # Keep attempt rows and abuse disable even when the request is rejected
         # (wrong email, rate limit, etc.).
         db.commit()
-        return templates.TemplateResponse(
+        return _forgot_password_form(
             request,
-            "auth_forgot_password.html",
-            {
-                **_base_ctx(request, ctx),
-                "error": exc.message,
-                "info": None,
-                "username": uname,
-                "email": email,
-                "submitted": False,
-            },
+            ctx,
+            username=uname,
+            forgot_token=token,
+            email=email,
+            error=exc.message,
             status_code=400,
         )
 

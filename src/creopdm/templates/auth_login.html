@@ -10,6 +10,9 @@
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
       {% if info %}<p class="muted">{{ info }}</p>{% endif %}
       {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+      {% if show_forgot and forgot_token %}
+      <input type="hidden" name="forgot_token" value="{{ forgot_token }}">
+      {% endif %}
       <label>Username
         <input name="username" type="text" value="{{ username or '' }}" required autocomplete="username" maxlength="64" autofocus
                {% if show_forgot %}data-forgot-username="{{ username }}"{% endif %}>
@@ -18,7 +21,7 @@
         <input name="password" type="password" required autocomplete="current-password">
       </label>
       {% if show_forgot %}
-      {# Submits the *current* username field to /forgot-password (not a bare link). #}
+      {# Submits the *current* username + one-time token (never a bare GET URL). #}
       <p class="muted small" id="forgot-password-wrap">
         <button type="submit" class="forgot-password-btn"
                 formaction=/forgot-password formmethod=post formnovalidate

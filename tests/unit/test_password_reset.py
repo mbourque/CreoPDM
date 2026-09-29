@@ -52,8 +52,8 @@ def _enable_email(auth_ctx, monkeypatch=None):
     return sent
 
 
-def _unlock_forgot(auth_client, username: str) -> None:
-    """Wrong password for a known user grants the forgot-password session."""
+def _unlock_forgot(auth_client, username: str) -> str:
+    """Wrong password for a known user; return the one-time forgot_token from the page."""
     bad = auth_client.post(
         "/login",
         data={"username": username, "password": "not-the-real-password"},
@@ -61,22 +61,31 @@ def _unlock_forgot(auth_client, username: str) -> None:
     assert bad.status_code == 400
     assert "Forgot password?" in bad.text
     assert "forgot_start" in bad.text
+    assert 'name="forgot_token"' in bad.text
+    marker = 'name="forgot_token" value="'
+    assert marker in bad.text
+    token = bad.text.split(marker, 1)[1].split('"', 1)[0]
+    assert token
+    return token
 
 
 def _open_forgot(auth_client, username: str):
-    """Use the login Forgot button path (POST current username, then GET form)."""
-    _unlock_forgot(auth_client, username)
-    started = auth_client.post(
+    """Open the email form via POST from the login Forgot button (GET is never allowed)."""
+    token = _unlock_forgot(auth_client, username)
+    form = auth_client.post(
         "/forgot-password",
-        data={"username": username, "forgot_start": "1"},
+        data={"username": username, "forgot_start": "1", "forgot_token": token},
         follow_redirects=False,
     )
-    assert started.status_code == 303
-    loc = started.headers["location"]
-    assert f"username={username}" in loc
-    form = auth_client.get(loc)
     assert form.status_code == 200
+    assert 'name="forgot_token"' in form.text
     return form
+
+
+def _forgot_token_from_html(html: str) -> str:
+    marker = 'name="forgot_token" value="'
+    assert marker in html
+    return html.split(marker, 1)[1].split('"', 1)[0]
 
 
 @requires_git
@@ -86,15 +95,13 @@ def test_forgot_link_only_after_failed_login(auth_client, auth_ctx):
     assert page.status_code == 200
     assert "Forgot password?" not in page.text
 
-    # Crafted URL without a wrong-password grant is rejected.
-    crafted = auth_client.get(
-        "/forgot-password?username=admin",
-        follow_redirects=False,
-    )
-    assert crafted.status_code == 303
-    assert "/login" in crafted.headers["location"]
+    # Typing /forgot-password (bare or with query) is never allowed.
+    for url in ("/forgot-password", "/forgot-password?username=admin"):
+        crafted = auth_client.get(url, follow_redirects=False)
+        assert crafted.status_code == 303
+        assert "/login" in crafted.headers["location"]
 
-    # Wrong password for a known user → offer forgot (session grant).
+    # Wrong password for a known user → offer forgot (session grant + token).
     bad = auth_client.post(
         "/login",
         data={"username": "admin", "password": "wrong"},
@@ -103,28 +110,44 @@ def test_forgot_link_only_after_failed_login(auth_client, auth_ctx):
     assert "Forgot password?" in bad.text
     assert 'formaction=/forgot-password' in bad.text or 'formaction="/forgot-password"' in bad.text
     assert 'data-forgot-username="admin"' in bad.text
+    token = _forgot_token_from_html(bad.text)
+
+    # Even with a grant, GET still cannot open the form.
+    still_blocked = auth_client.get("/forgot-password", follow_redirects=False)
+    assert still_blocked.status_code == 303
+    still_blocked_q = auth_client.get(
+        "/forgot-password?username=admin",
+        follow_redirects=False,
+    )
+    assert still_blocked_q.status_code == 303
 
     allowed = auth_client.post(
         "/forgot-password",
-        data={"username": "admin", "forgot_start": "1"},
-        follow_redirects=True,
+        data={"username": "admin", "forgot_start": "1", "forgot_token": token},
+        follow_redirects=False,
     )
     assert allowed.status_code == 200
     assert 'value="admin"' in allowed.text
 
+    # POST without the one-time token is rejected.
+    no_token = auth_client.post(
+        "/forgot-password",
+        data={"username": "admin", "forgot_start": "1"},
+        follow_redirects=False,
+    )
+    assert no_token.status_code == 303
+    assert "/login" in no_token.headers["location"]
+
     # Changing the login username then clicking Forgot must not keep the old grant.
-    _unlock_forgot(auth_client, "admin")
+    token2 = _unlock_forgot(auth_client, "admin")
     changed = auth_client.post(
         "/forgot-password",
-        data={"username": "kim1", "forgot_start": "1"},
+        data={"username": "kim1", "forgot_start": "1", "forgot_token": token2},
         follow_redirects=False,
     )
     assert changed.status_code == 303
     assert "/login" in changed.headers["location"]
-    stale = auth_client.get(
-        "/forgot-password?username=admin",
-        follow_redirects=False,
-    )
+    stale = auth_client.get("/forgot-password", follow_redirects=False)
     assert stale.status_code == 303
 
     # Fresh client: unknown username → no forgot link / no grant.
@@ -135,10 +158,7 @@ def test_forgot_link_only_after_failed_login(auth_client, auth_ctx):
         )
         assert unknown.status_code == 400
         assert "Forgot password?" not in unknown.text
-        no_user = other.get(
-            "/forgot-password?username=nosuchuser",
-            follow_redirects=False,
-        )
+        no_user = other.get("/forgot-password", follow_redirects=False)
         assert no_user.status_code == 303
         assert "/login" in no_user.headers["location"]
 
@@ -153,7 +173,6 @@ def test_forgot_password_requires_username_and_matching_email(auth_client, auth_
         assert user is not None
         email = user.email
 
-    # Bare forgot URL (no wrong-password grant) is rejected.
     bare_forgot = auth_client.get("/forgot-password", follow_redirects=False)
     assert bare_forgot.status_code == 303
     assert "/login" in bare_forgot.headers["location"]
@@ -162,29 +181,36 @@ def test_forgot_password_requires_username_and_matching_email(auth_client, auth_
     assert 'name="username"' in form.text
     assert 'value="engineer"' in form.text
     assert "disabled" in form.text
+    token = _forgot_token_from_html(form.text)
 
     wrong = auth_client.post(
         "/forgot-password",
-        data={"username": "engineer", "email": "nobody@example.com"},
+        data={
+            "username": "engineer",
+            "email": "nobody@example.com",
+            "forgot_token": token,
+        },
     )
     assert wrong.status_code == 400
     assert MATCH_ERROR in wrong.text
     assert sent == []
+    token = _forgot_token_from_html(wrong.text)
 
     # Tampered form username (different from session grant) is rejected.
     tampered = auth_client.post(
         "/forgot-password",
-        data={"username": "admin", "email": email},
+        data={"username": "admin", "email": email, "forgot_token": token},
         follow_redirects=False,
     )
     assert tampered.status_code == 303
     assert "/login" in tampered.headers["location"]
 
     # Grant was cleared by the tamper — must unlock again.
-    _open_forgot(auth_client, "engineer")
+    form = _open_forgot(auth_client, "engineer")
+    token = _forgot_token_from_html(form.text)
     posted = auth_client.post(
         "/forgot-password",
-        data={"username": "engineer", "email": email},
+        data={"username": "engineer", "email": email, "forgot_token": token},
     )
     assert posted.status_code == 200
     assert SENT_MESSAGE.split(".")[0] in posted.text
@@ -195,13 +221,16 @@ def test_forgot_password_requires_username_and_matching_email(auth_client, auth_
     assert "/reset-password?token=" in body
     assert "username=engineer" in body
     assert "If you did not ask for this" in body
-    token = body.split("/reset-password?token=")[1].split("&")[0].strip()
+    reset_token = body.split("/reset-password?token=")[1].split("&")[0].strip()
+
+    # After a successful send, GET still cannot open forgot-password.
+    assert auth_client.get("/forgot-password", follow_redirects=False).status_code == 303
 
     # Token alone (no username) is rejected.
-    bare = auth_client.get(f"/reset-password?token={token}")
+    bare = auth_client.get(f"/reset-password?token={reset_token}")
     assert bare.status_code == 400
 
-    page = auth_client.get(f"/reset-password?token={token}&username=engineer")
+    page = auth_client.get(f"/reset-password?token={reset_token}&username=engineer")
     assert page.status_code == 200
     assert 'name="username"' in page.text
     assert "disabled" in page.text
@@ -211,7 +240,7 @@ def test_forgot_password_requires_username_and_matching_email(auth_client, auth_
     bad_user = auth_client.post(
         "/reset-password",
         data={
-            "token": token,
+            "token": reset_token,
             "username": "admin",
             "new_password": "NewPass99!",
             "new_password_confirm": "NewPass99!",
@@ -222,7 +251,7 @@ def test_forgot_password_requires_username_and_matching_email(auth_client, auth_
     saved = auth_client.post(
         "/reset-password",
         data={
-            "token": token,
+            "token": reset_token,
             "username": "engineer",
             "new_password": "NewPass99!",
             "new_password_confirm": "NewPass99!",
@@ -233,7 +262,7 @@ def test_forgot_password_requires_username_and_matching_email(auth_client, auth_
     assert "/login" in saved.headers["location"]
     assert "Password updated" in unquote(saved.headers["location"])
 
-    reuse = auth_client.get(f"/reset-password?token={token}&username=engineer")
+    reuse = auth_client.get(f"/reset-password?token={reset_token}&username=engineer")
     assert reuse.status_code == 400
 
     _login(auth_client, "engineer", "NewPass99!")
@@ -252,13 +281,22 @@ def test_forgot_password_spam_disables_non_admin(auth_client, auth_ctx):
         email = user.email
         user_id = user.id
 
-    _open_forgot(auth_client, "limited")
+    form = _open_forgot(auth_client, "limited")
+    token = _forgot_token_from_html(form.text)
 
+    # Wrong email still counts as attempts against that username (abuse path).
     for _ in range(MAX_ATTEMPTS_PER_USER_PER_DAY):
-        auth_client.post(
+        resp = auth_client.post(
             "/forgot-password",
-            data={"username": "limited", "email": email},
+            data={
+                "username": "limited",
+                "email": "wrong-" + email,
+                "forgot_token": token,
+            },
         )
+        assert resp.status_code == 400
+        if 'name="forgot_token"' in resp.text:
+            token = _forgot_token_from_html(resp.text)
 
     with auth_ctx.session_factory() as db:
         user = db.get(User, user_id)
@@ -270,7 +308,6 @@ def test_forgot_password_spam_disables_non_admin(auth_client, auth_ctx):
         assert len(attempts) >= MAX_ATTEMPTS_PER_USER_PER_DAY
 
     auth_ctx.notifications.notify.assert_called()
-    assert len(sent) >= 1
 
     denied = auth_client.post(
         "/login",
