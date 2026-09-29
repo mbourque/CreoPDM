@@ -19,6 +19,7 @@ from creopdm.services.lock_manager import ProductLockManager
 from creopdm.services.metadata_service import MetadataService
 from creopdm.services.notification_service import NotificationService
 from creopdm.services.object_service import ObjectService
+from creopdm.services.password_reset_service import PasswordResetService
 from creopdm.services.product_service import ProductService
 from creopdm.services.product_watch_service import ProductWatchService
 from creopdm.services.user_service import UserService
@@ -51,6 +52,7 @@ class AppContext:
     email: EmailService
     notifications: NotificationService
     product_watches: ProductWatchService
+    password_resets: PasswordResetService
     user_accounts: UserService = field(default_factory=UserService)
     # When False (tests with StaticUserProvider), skip login redirects.
     auth_enabled: bool = True

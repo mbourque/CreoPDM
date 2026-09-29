@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -174,7 +175,13 @@ def login_page(request: Request, ctx: AppContext = Depends(get_context), db: Ses
     return templates.TemplateResponse(
         request,
         "auth_login.html",
-        {**_base_ctx(request, ctx), "error": None, "next": request.query_params.get("next") or ""},
+        {
+            **_base_ctx(request, ctx),
+            "error": None,
+            "info": request.query_params.get("info") or "",
+            "next": request.query_params.get("next") or "",
+            "show_forgot": False,
+        },
     )
 
 
@@ -206,8 +213,167 @@ def login_submit(
             {
                 **_base_ctx(request, ctx),
                 "error": exc.message,
+                "info": "",
                 "username": username,
                 "next": next,
+                "show_forgot": True,
+            },
+            status_code=400,
+        )
+
+
+@router.get("/forgot-password", response_class=HTMLResponse)
+def forgot_password_page(
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    if not ctx.auth_enabled:
+        return RedirectResponse("/", status_code=303)
+    if ctx.user_accounts.needs_setup(db):
+        return RedirectResponse("/setup", status_code=303)
+    return templates.TemplateResponse(
+        request,
+        "auth_forgot_password.html",
+        {
+            **_base_ctx(request, ctx),
+            "error": None,
+            "info": None,
+            "email": "",
+            "submitted": False,
+        },
+    )
+
+
+@router.post("/forgot-password", response_class=HTMLResponse)
+def forgot_password_submit(
+    request: Request,
+    email: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    if ctx.user_accounts.needs_setup(db):
+        return RedirectResponse("/setup", status_code=303)
+    try:
+        result = ctx.password_resets.request_reset(
+            db,
+            email=email,
+            base_url=str(request.base_url),
+            request_ip=request.client.host if request.client else None,
+            email_enabled=bool(ctx.settings.email.enabled),
+        )
+        db.commit()
+        return templates.TemplateResponse(
+            request,
+            "auth_forgot_password.html",
+            {
+                **_base_ctx(request, ctx),
+                "error": None,
+                "info": result.message,
+                "email": email,
+                "submitted": True,
+            },
+        )
+    except CreoPDMError as exc:
+        db.rollback()
+        return templates.TemplateResponse(
+            request,
+            "auth_forgot_password.html",
+            {
+                **_base_ctx(request, ctx),
+                "error": exc.message,
+                "info": None,
+                "email": email,
+                "submitted": False,
+            },
+            status_code=400,
+        )
+
+
+@router.get("/reset-password", response_class=HTMLResponse)
+def reset_password_page(
+    request: Request,
+    token: str = Query(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    if not ctx.auth_enabled:
+        return RedirectResponse("/", status_code=303)
+    if ctx.user_accounts.needs_setup(db):
+        return RedirectResponse("/setup", status_code=303)
+    user = ctx.password_resets.peek_token(db, token)
+    if user is None:
+        return templates.TemplateResponse(
+            request,
+            "auth_reset_password.html",
+            {
+                **_base_ctx(request, ctx),
+                "invalid": True,
+                "error": "This reset link is invalid or has expired. Request a new one from the sign-in page.",
+                "token": "",
+                "username": "",
+            },
+            status_code=400,
+        )
+    return templates.TemplateResponse(
+        request,
+        "auth_reset_password.html",
+        {
+            **_base_ctx(request, ctx),
+            "invalid": False,
+            "error": None,
+            "token": token,
+            "username": user.username,
+        },
+    )
+
+
+@router.post("/reset-password", response_class=HTMLResponse)
+def reset_password_submit(
+    request: Request,
+    token: str = Form(""),
+    new_password: str = Form(""),
+    new_password_confirm: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    if ctx.user_accounts.needs_setup(db):
+        return RedirectResponse("/setup", status_code=303)
+    if (new_password or "") != (new_password_confirm or ""):
+        user = ctx.password_resets.peek_token(db, token)
+        return templates.TemplateResponse(
+            request,
+            "auth_reset_password.html",
+            {
+                **_base_ctx(request, ctx),
+                "invalid": user is None,
+                "error": "New password and confirmation do not match."
+                if user is not None
+                else "This reset link is invalid or has expired. Request a new one from the sign-in page.",
+                "token": token if user is not None else "",
+                "username": user.username if user is not None else "",
+            },
+            status_code=400,
+        )
+    try:
+        ctx.password_resets.reset_password(db, raw_token=token, new_password=new_password)
+        db.commit()
+        return RedirectResponse(
+            "/login?info=" + quote("Password updated. Sign in with your new password."),
+            status_code=303,
+        )
+    except CreoPDMError as exc:
+        db.rollback()
+        user = ctx.password_resets.peek_token(db, token)
+        return templates.TemplateResponse(
+            request,
+            "auth_reset_password.html",
+            {
+                **_base_ctx(request, ctx),
+                "invalid": user is None,
+                "error": exc.message,
+                "token": token if user is not None else "",
+                "username": user.username if user is not None else "",
             },
             status_code=400,
         )

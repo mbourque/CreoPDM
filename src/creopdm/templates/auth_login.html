@@ -8,6 +8,7 @@
   <form method="post" action="/login" class="settings-form">
     <section class="settings-card">
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      {% if info %}<p class="muted">{{ info }}</p>{% endif %}
       {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
       <label>Username
         <input name="username" type="text" value="{{ username or '' }}" required autocomplete="username" maxlength="64" autofocus>
@@ -15,6 +16,9 @@
       <label>Password
         <input name="password" type="password" required autocomplete="current-password">
       </label>
+      {% if show_forgot %}
+      <p class="muted small"><a href="/forgot-password">Forgot password?</a></p>
+      {% endif %}
       <p><button type="submit" class="btn btn-primary">Sign in</button></p>
     </section>
   </form>

@@ -16,11 +16,13 @@ When the `users` table has **zero** rows, opening the app redirects to **`/setup
 
 | Page | Purpose |
 | --- | --- |
-| `/login` | Username + password |
+| `/login` | Username + password. After a **failed** sign-in, a **Forgot password?** link appears under the password field. |
+| `/forgot-password` | Ask for account email; if a match exists and email is enabled, send a one-hour reset link (same generic message whether or not the email is known). |
+| `/reset-password?token=…` | Choose a new password from the email link (single use). |
 | `/logout` | Clears the session cookie |
-| `/account/password` | Change password (required when `must_change_password` is set) |
+| `/account/password` | Change password while signed in (required when `must_change_password` is set) |
 
-Disabled accounts cannot sign in. Checkout, check-in, and activity rows store the **login username** as text (same columns as before; no `user_id` FK yet).
+Disabled accounts cannot sign in. Too many forgot-password attempts for one email in 24 hours **disable** that account (except full Administration accounts) and notify the administrator email. Checkout, check-in, and activity rows store the **login username** as text (same columns as before; no `user_id` FK yet).
 
 ### Administration
 

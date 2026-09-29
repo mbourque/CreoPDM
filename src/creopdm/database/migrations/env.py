@@ -15,6 +15,8 @@ from creopdm.models import (  # noqa: F401
     EngineeringObject,
     ObjectVersion,
     Parameter,
+    PasswordResetAttempt,
+    PasswordResetToken,
     Product,
     ProductWatch,
     Remote,

@@ -360,6 +360,16 @@ Use a normal browser for these checks. You need the matching Administration perm
 | Create the first admin with display name, username, **email**, and password | Create an **Administrator** with **All products**, sign you in, and take you to the app | Accept a blank email or an incomplete address like `user@host` (no domain suffix); leave email optional |
 | Try `/setup` again after any user exists | Redirect to login | Create a second “first” admin |
 
+### Sign in and forgot password
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Open `/login` with no recent failure | Show username + password only | Show **Forgot password?** before a failed attempt |
+| Enter a wrong password | Show an error and a **Forgot password?** link under the password field | Leave you with no way to recover |
+| Use **Forgot password?** and enter an email | Show a generic “if an account exists…” message; email a 1-hour reset link when the address matches and email is enabled | Reveal whether the email is registered; send mail when email is disabled |
+| Open the reset link and set a new password | Update the password and send you to sign in | Reuse the same link afterward |
+| Spam forgot-password for one account | After many tries in 24 hours, disable that account (not full Administration) and email the administrator address | Keep a non-admin account open under reset spam |
+
 ### Users
 
 | You do | App should | App must not |
@@ -449,6 +459,7 @@ Automated coverage lives mainly in:
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
 - `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `objects.view` / `data-can-checkout`; empty-home `products.create` hero; empty-product `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_objects_view_lands_on_administration`; `test_setup_and_admin_user_require_email`; `test_username_rejects_spaces_and_email_needs_domain`; `test_admin_email_settings_save_and_gate`; `test_admin_membership_product_access_filters_products`; `test_role_assign_must_be_strictly_below_actor`; new users default to no product access)
+- `tests/unit/test_password_reset.py` (forgot-password link after failed login; email reset; spam disable)
 - `tests/unit/test_product_watch.py` (bell when email enabled; per-user watch; subscribe/unsubscribe; one email per bulk action; actor excluded; notifications off skips mail)
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)

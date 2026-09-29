@@ -40,6 +40,7 @@ from creopdm.services.lock_manager import ProductLockManager
 from creopdm.services.metadata_service import MetadataService
 from creopdm.services.notification_service import NotificationService
 from creopdm.services.object_service import ObjectService
+from creopdm.services.password_reset_service import PasswordResetService
 from creopdm.services.product_service import ProductService
 from creopdm.services.product_watch_service import ProductWatchService
 from creopdm.services.user_service import UserService
@@ -98,6 +99,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
     email = EmailService()
     notifications = NotificationService(get_config=lambda: manager.settings.email, email=email)
     product_watches = ProductWatchService(notifications)
+    password_resets = PasswordResetService(user_accounts, email, notifications)
     with session_factory() as db:
         user_accounts.ensure_builtin_roles(db)
         db.commit()
@@ -123,6 +125,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         email=email,
         notifications=notifications,
         product_watches=product_watches,
+        password_resets=password_resets,
         user_accounts=user_accounts,
         auth_enabled=auth_enabled,
     )
@@ -199,6 +202,8 @@ def create_app(context: AppContext | None = None) -> FastAPI:
             "/login",
             "/setup",
             "/logout",
+            "/forgot-password",
+            "/reset-password",
             "/api/health",
             "/api/docs",
             "/openapi.json",

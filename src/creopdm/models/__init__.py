@@ -3,6 +3,7 @@ from creopdm.models.checkout import Checkout
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
+from creopdm.models.password_reset import PasswordResetAttempt, PasswordResetToken
 from creopdm.models.product import Product
 from creopdm.models.remote import Remote
 from creopdm.models.user import Permission, Role, RolePermission, User, UserProduct, UserRole, ProductWatch
@@ -15,6 +16,8 @@ __all__ = [
     "EngineeringObject",
     "ObjectVersion",
     "Parameter",
+    "PasswordResetAttempt",
+    "PasswordResetToken",
     "Permission",
     "Product",
     "ProductWatch",
