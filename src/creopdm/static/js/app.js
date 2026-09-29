@@ -785,14 +785,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const root = fileListRoot();
     const filesTab = !root || root.id === "panel-files" || root.id === "object-table";
     const searching = $("#object-table")?.dataset.searching === "1";
+    const files = listedMetricRows();
     if (filesTab && !searching) {
       metricButtons().forEach((btn) => {
         const strong = btn.querySelector("strong");
-        if (strong) strong.textContent = btn.dataset.folderCount || "0";
+        if (!strong) return;
+        const key = metricKey(btn);
+        // Type chips stay on the SSR folder snapshot. Checkout/modified update
+        // after agent + check-in probes paint dirty rows — recount those.
+        if (isStateMetric(key)) {
+          strong.textContent = String(
+            files.filter((row) => rowMatchesMetric(row, key)).length
+          );
+          return;
+        }
+        strong.textContent = btn.dataset.folderCount || "0";
       });
       return;
     }
-    const files = listedMetricRows();
     metricButtons().forEach((btn) => {
       const strong = btn.querySelector("strong");
       if (!strong) return;
@@ -3560,6 +3570,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     pendingCheckinIds = next;
     pendingCheckinIdsReady = true;
     syncModifiedStateLabels();
+    updateMetricCounts();
   }
 
   function syncModifiedStateLabels() {
@@ -3640,11 +3651,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
       });
       syncModifiedStateLabels();
+      updateMetricCounts();
       syncToolbar();
     } catch {
       if (seq !== pendingCheckinFetch) return;
       pendingCheckinIdsReady = true;
       syncModifiedStateLabels();
+      updateMetricCounts();
       syncToolbar();
     }
   }

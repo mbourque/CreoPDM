@@ -859,9 +859,16 @@ def test_modified_metric_pill_left_of_checked_out():
     assert "function isStateMetric(" in script
     assert 'key === "checked_out" || key === "modified"' in script
     assert "activeStateMetricKeys" in script
+    # Regression: files-tab counts must recount modified after agent probes
+    # (SSR folderCount alone stayed 0 while STATE already showed Modified).
+    counts_fn = _between(script, "function updateMetricCounts(", "function refreshTabMetrics(")
+    assert "isStateMetric(key)" in counts_fn
+    assert "rowMatchesMetric(row, key)" in counts_fn
+    remember = _between(script, "function rememberPendingCheckinIds(", "function syncModifiedStateLabels(")
+    assert "updateMetricCounts()" in remember
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "Click **Modified**" in docs
-
+    assert "pill count matches rows shown as Modified" in docs
 
 def test_newer_local_cache_matches_flat_save_for_nested_vault_path():
     """Regression: older flat agent caches + nested vault paths still detect Modified."""
