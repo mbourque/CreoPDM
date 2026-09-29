@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1263,6 +1264,29 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     listed = auth_client.get("/admin/products")
     assert "On hold" in listed.text
     assert "Read only" in listed.text
+
+    # Regression: vault with untracked CAD leftover must not block state/read-only Save
+    # (old code used git is_dirty → commit and failed with "Could not record the product rename").
+    vault = Path(auth_ctx.config.workspace_root()) / body["vault_folder"]
+    leftover = vault / "orphan-untracked.prt"
+    leftover.write_bytes(b"not-in-git")
+    state_only = auth_client.post(
+        f"/admin/products/{product['uuid']}",
+        data={
+            "name": "Admin Hub Renamed",
+            "number": "AH-2",
+            "description": "Updated",
+            "state": "RELEASED",
+            "read_only": "1",
+        },
+        follow_redirects=False,
+    )
+    assert state_only.status_code == 303, state_only.text
+    assert "Could not record the product rename" not in (state_only.text or "")
+    after = auth_client.get(f"/api/products/{product['uuid']}").json()
+    assert after["state"] == "RELEASED"
+    assert after["read_only"] is True
+    assert leftover.is_file()
 
     # Clear read-only and restore IN_WORK before delete path.
     restored = auth_client.post(

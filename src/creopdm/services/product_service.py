@@ -217,58 +217,96 @@ class ProductService:
         new_description = (description or "").strip() or None
         new_state = parse_product_state(state) if state is not None else None
         user = self._users.get_current_user()
-        vault = self._workspaces.ensure_vault(product)
-        marker_rel = f"{PRODUCT_MARKER_DIR}/{PRODUCT_JSON_NAME}"
-        with self._locks.acquire(product.uuid):
-            captured = None
-            try:
-                captured = self._git.get_head(vault)
-            except Exception:
+        identity_changed = (
+            new_name != product.name
+            or new_number != (product.number or None)
+            or new_description != (product.description or None)
+        )
+        old_name = product.name
+
+        # State / read-only live in the DB only — do not touch the vault Git repo.
+        # (A dirty vault with CAD files used to make "rename" commit fail on Save.)
+        if identity_changed:
+            vault = self._workspaces.ensure_vault(product)
+            marker_rel = f"{PRODUCT_MARKER_DIR}/{PRODUCT_JSON_NAME}"
+            with self._locks.acquire(product.uuid):
                 captured = None
-            self._workspaces.write_product_marker(product, new_name, new_number, new_description)
-            try:
-                self._git.stage_files(vault, [marker_rel])
-                if self._git.is_dirty(vault):
-                    self._git.commit(vault, f"Rename product to {new_name}", user)
-            except Exception as exc:
-                if captured:
-                    self._git.reset_to(vault, captured)
-                raise RepositoryError(
-                    "Could not record the product rename in the vault.",
-                    details={"name": new_name},
-                ) from exc
-            old_name = product.name
-            try:
-                product.name = new_name
-                product.number = new_number
-                product.description = new_description
-                if new_state is not None:
-                    product.state = new_state
-                if read_only is not None:
-                    product.read_only = bool(read_only)
-                product.updated_at = datetime.now(timezone.utc)
-                session.flush()
-                self._activities.record(
-                    session,
-                    ActivityAction.PRODUCT_UPDATED,
-                    user,
-                    product_id=product.id,
-                    details={
-                        "old_name": old_name,
-                        "name": new_name,
-                        "state": product.state,
-                        "read_only": bool(product.read_only),
-                    },
-                )
-            except Exception as exc:
-                if captured:
-                    self._git.reset_to(vault, captured)
-                raise RepositoryError(
-                    "The vault was updated but product metadata could not be saved. "
-                    "The repository was restored.",
-                    details={"name": new_name},
-                ) from exc
-        logger.info("Renamed product %s to %s", product.uuid, new_name)
+                try:
+                    captured = self._git.get_head(vault)
+                except Exception:
+                    captured = None
+                self._workspaces.write_product_marker(product, new_name, new_number, new_description)
+                try:
+                    self._git.stage_files(vault, [marker_rel])
+                    # Only commit when the marker is staged — not when other vault
+                    # files are dirty (checkout leftovers, untracked saves, …).
+                    staged = self._git.status(vault).staged
+                    if staged:
+                        self._git.commit(vault, f"Rename product to {new_name}", user)
+                except Exception as exc:
+                    if captured:
+                        try:
+                            self._git.reset_to(vault, captured)
+                        except Exception:
+                            logger.exception("Could not restore vault after failed product rename")
+                    raise RepositoryError(
+                        "Could not record the product rename in the vault.",
+                        details={"name": new_name, "cause": str(exc)},
+                    ) from exc
+                try:
+                    product.name = new_name
+                    product.number = new_number
+                    product.description = new_description
+                    if new_state is not None:
+                        product.state = new_state
+                    if read_only is not None:
+                        product.read_only = bool(read_only)
+                    product.updated_at = datetime.now(timezone.utc)
+                    session.flush()
+                    self._activities.record(
+                        session,
+                        ActivityAction.PRODUCT_UPDATED,
+                        user,
+                        product_id=product.id,
+                        details={
+                            "old_name": old_name,
+                            "name": new_name,
+                            "state": product.state,
+                            "read_only": bool(product.read_only),
+                        },
+                    )
+                except Exception as exc:
+                    if captured:
+                        try:
+                            self._git.reset_to(vault, captured)
+                        except Exception:
+                            logger.exception("Could not restore vault after failed product metadata save")
+                    raise RepositoryError(
+                        "The vault was updated but product metadata could not be saved. "
+                        "The repository was restored.",
+                        details={"name": new_name},
+                    ) from exc
+        else:
+            if new_state is not None:
+                product.state = new_state
+            if read_only is not None:
+                product.read_only = bool(read_only)
+            product.updated_at = datetime.now(timezone.utc)
+            session.flush()
+            self._activities.record(
+                session,
+                ActivityAction.PRODUCT_UPDATED,
+                user,
+                product_id=product.id,
+                details={
+                    "old_name": old_name,
+                    "name": new_name,
+                    "state": product.state,
+                    "read_only": bool(product.read_only),
+                },
+            )
+
+        logger.info("Updated product %s (%s)", product.uuid, new_name)
         session.commit()
         return product
 
