@@ -64,7 +64,11 @@
       <label>Description <span class="muted small">(optional)</span>
         <input name="description" type="text" value="{{ form.description }}" maxlength="256" autocomplete="off">
       </label>
-      <p class="muted small">Vault folder: <code>{{ form.vault_folder }}</code> (set at create; not renamed here).</p>
+      <label>Vault / workspace folder
+        <input name="vault_folder" type="text" value="{{ form.vault_folder }}" readonly
+               title="Set when the product was created; not renamed here.">
+      </label>
+      <p class="muted small">Set at create; not renamed here.</p>
       <label>Lifecycle state
         <select name="state">
           {% for s in product_states %}
