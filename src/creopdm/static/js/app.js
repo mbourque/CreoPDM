@@ -7740,17 +7740,42 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     void refreshCreoStatusPill();
   }
 
+  function syncEmbeddedOpenOptions() {
+    if (!settingsForm) return;
+    const nested = settingsForm.querySelector("#embedded-open-options");
+    if (!nested) return;
+    const embeddedOn = Boolean(
+      settingsForm.querySelector('input[name="creo_open_mode"][value="embedded"]')?.checked
+    );
+    nested.classList.toggle("is-disabled", !embeddedOn);
+    if (embeddedOn) nested.removeAttribute("aria-disabled");
+    else nested.setAttribute("aria-disabled", "true");
+    nested.querySelectorAll("input, textarea, select").forEach((el) => {
+      el.disabled = !embeddedOn;
+    });
+  }
+
+  settingsForm?.querySelectorAll('input[name="creo_open_mode"]').forEach((radio) => {
+    radio.addEventListener("change", syncEmbeddedOpenOptions);
+  });
+  syncEmbeddedOpenOptions();
+
   settingsForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     showError($("#settings-error"), "");
     const ok = $("#settings-ok");
     if (ok) ok.hidden = true;
+    const jsLibraryInput = settingsForm.querySelector('[name="creo_js_library"]');
+    const jsLibraryValue = jsLibraryInput
+      ? String(jsLibraryInput.value || "").trim() || null
+      : null;
     const data = new FormData(settingsForm);
     const body = {
       creo_open_mode: String(data.get("creo_open_mode") || "association"),
       creo_executable: null,
       creo_view_executable: null,
-      creo_js_library: String(data.get("creo_js_library") || "").trim() || null,
+      // Read even when the nested Embedded fields are disabled for association mode.
+      creo_js_library: jsLibraryValue,
       workspace_root: String(data.get("workspace_root") || "").trim() || null,
       cad_model_extensions: String(data.get("cad_model_extensions") || "")
         .split(/[\s,;]+/)

@@ -509,6 +509,20 @@ a.brand:hover { text-decoration: none; color: inherit; }
   box-sizing: border-box;
 }
 .settings-card > .choice { margin: 0.2rem 0; }
+.settings-nested {
+  margin: 0.2rem 0 0.65rem 1.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.settings-nested > label { margin-top: 0.15rem; }
+.settings-nested.is-disabled {
+  opacity: 0.45;
+}
+.settings-nested.is-disabled input:disabled {
+  background: #f0f2f4;
+  cursor: not-allowed;
+}
 #checkin-new-files { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.4rem 0 0.2rem; }
 #checkin-new-files label { font-weight: 500; }
 .checkin-new-pick {
