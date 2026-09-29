@@ -125,20 +125,8 @@ class PasswordResetService:
                 or 0
             )
 
-        user_hour = 0
         user_day = 0
         if user is not None:
-            user_hour = int(
-                db.scalar(
-                    select(func.count())
-                    .select_from(PasswordResetAttempt)
-                    .where(
-                        PasswordResetAttempt.user_id == user.id,
-                        PasswordResetAttempt.created_at >= hour_ago,
-                    )
-                )
-                or 0
-            )
             user_day = int(
                 db.scalar(
                     select(func.count())
@@ -154,20 +142,38 @@ class PasswordResetService:
         if user is not None and user_day >= MAX_ATTEMPTS_PER_USER_PER_DAY:
             self._maybe_disable_for_abuse(db, user, attempt_count=user_day)
 
-        # Same response whether or not the email matches (no account enumeration).
+        # Same confirmation whether or not the email matches (no account enumeration).
         if not email_ok or user is None:
             return ForgotPasswordResult(message=SENT_MESSAGE, sent=False)
 
         if user.status != UserStatus.ACTIVE.value:
             return ForgotPasswordResult(message=SENT_MESSAGE, sent=False)
 
-        allow_send = (
-            email_enabled
-            and ip_attempts < MAX_ATTEMPTS_PER_IP_PER_HOUR
-            and user_hour < MAX_SENDS_PER_USER_PER_HOUR
+        # Matched account: report real delivery problems (not a soft success).
+        if not email_enabled:
+            raise ValidationAppError(
+                "Password reset email is not configured. Ask an administrator for help."
+            )
+
+        sends_hour = int(
+            db.scalar(
+                select(func.count())
+                .select_from(PasswordResetAttempt)
+                .where(
+                    PasswordResetAttempt.user_id == user.id,
+                    PasswordResetAttempt.sent.is_(True),
+                    PasswordResetAttempt.created_at >= hour_ago,
+                )
+            )
+            or 0
         )
-        if not allow_send:
-            return ForgotPasswordResult(message=SENT_MESSAGE, sent=False)
+        if (
+            ip_attempts >= MAX_ATTEMPTS_PER_IP_PER_HOUR
+            or sends_hour >= MAX_SENDS_PER_USER_PER_HOUR
+        ):
+            raise ValidationAppError(
+                "Too many reset attempts. Try again later or contact an administrator."
+            )
 
         for old in db.scalars(
             select(PasswordResetToken).where(
@@ -209,8 +215,9 @@ class PasswordResetService:
             # Do not leave a usable token if the caller commits attempt bookkeeping.
             token.used_at = datetime.now(timezone.utc)
             db.flush()
-            # Still show the generic message so a failed send is not a tell.
-            return ForgotPasswordResult(message=SENT_MESSAGE, sent=False)
+            raise ValidationAppError(
+                "Could not send the reset email. Try again later or contact an administrator."
+            ) from exc
 
         attempt.sent = True
         db.flush()

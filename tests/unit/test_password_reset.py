@@ -18,6 +18,7 @@ from creopdm.models.password_reset import PasswordResetAttempt, PasswordResetTok
 from creopdm.models.user import User
 from creopdm.services.password_reset_service import (
     MAX_ATTEMPTS_PER_USER_PER_DAY,
+    MAX_SENDS_PER_USER_PER_HOUR,
     SENT_MESSAGE,
     TOKEN_TTL,
     PasswordResetService,
@@ -330,6 +331,64 @@ def test_forgot_password_spam_disables_non_admin(auth_client, auth_ctx):
     )
     assert denied.status_code == 400
     assert "disabled" in denied.text.lower()
+
+
+def test_password_reset_email_disabled_reports_error(auth_ctx):
+    service: PasswordResetService = auth_ctx.password_resets
+    _enable_email(auth_ctx)
+    with auth_ctx.session_factory() as db:
+        auth_ctx.user_accounts.create_first_admin(
+            db,
+            username="admin",
+            display_name="Admin",
+            password="AdminPass1",
+            email="admin@example.com",
+        )
+        db.commit()
+
+    with auth_ctx.session_factory() as db:
+        with pytest.raises(ValidationAppError, match="not configured"):
+            service.request_reset(
+                db,
+                username="admin",
+                email="admin@example.com",
+                base_url="http://test/",
+                email_enabled=False,
+            )
+
+
+@requires_git
+def test_wrong_email_guesses_do_not_block_real_send(auth_client, auth_ctx):
+    """Wrong-email probes must not burn the hourly send budget."""
+    _setup_admin_and_users(auth_client, auth_ctx, ("engineer", BuiltinRole.ENGINEER.value))
+    sent = _enable_email(auth_ctx)
+    with auth_ctx.session_factory() as db:
+        user = db.scalar(select(User).where(User.username == "engineer"))
+        assert user is not None
+        email = user.email
+
+    for i in range(MAX_SENDS_PER_USER_PER_HOUR + 2):
+        form = _open_forgot(auth_client, "engineer")
+        token = _forgot_token_from_html(form.text)
+        resp = auth_client.post(
+            "/forgot-password",
+            data={
+                "username": "engineer",
+                "email": f"guess{i}@example.com",
+                "forgot_token": token,
+            },
+        )
+        assert resp.status_code == 200
+        assert sent == []
+
+    form = _open_forgot(auth_client, "engineer")
+    token = _forgot_token_from_html(form.text)
+    posted = auth_client.post(
+        "/forgot-password",
+        data={"username": "engineer", "email": email, "forgot_token": token},
+    )
+    assert posted.status_code == 200
+    assert len(sent) == 1
 
 
 def test_password_reset_expired_token_rejected(auth_ctx):
