@@ -303,11 +303,12 @@ def login_submit(
         return RedirectResponse(target, status_code=303)
     except CreoPDMError as exc:
         db.rollback()
-        # Forgot password only after wrong password for a known username
-        # (not unknown user, empty fields, or other validation failures).
+        # Forgot password only after wrong password for an *active* known user
+        # (not unknown, disabled, empty fields, or other validation failures).
         known = ctx.user_accounts.get_by_username(db, username)
         show_forgot = bool(
             known is not None
+            and known.status == UserStatus.ACTIVE.value
             and (password or "")
             and not verify_password(password, known.password_hash)
         )
@@ -356,7 +357,7 @@ def forgot_password_submit(
         _clear_forgot_password_grant(request)
         return _forgot_password_redirect_to_login()
     user = ctx.user_accounts.get_by_username(db, _normalize_login_username(username))
-    if user is None:
+    if user is None or user.status != UserStatus.ACTIVE.value:
         _clear_forgot_password_grant(request)
         return _forgot_password_redirect_to_login()
     uname = user.username

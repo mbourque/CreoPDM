@@ -162,6 +162,30 @@ def test_forgot_link_only_after_failed_login(auth_client, auth_ctx):
         assert no_user.status_code == 303
         assert "/login" in no_user.headers["location"]
 
+    # Disabled account → never offer forgot (wrong or correct password).
+    with auth_ctx.session_factory() as db:
+        disabled = db.scalar(select(User).where(User.username == "admin"))
+        assert disabled is not None
+        disabled.status = UserStatus.DISABLED.value
+        db.commit()
+
+    for password in ("wrong", "AdminPass1"):
+        denied = auth_client.post(
+            "/login",
+            data={"username": "admin", "password": password},
+        )
+        assert denied.status_code == 400
+        assert "Forgot password?" not in denied.text
+        assert "forgot_token" not in denied.text
+
+    start = auth_client.post(
+        "/forgot-password",
+        data={"username": "admin", "forgot_start": "1", "forgot_token": "x"},
+        follow_redirects=False,
+    )
+    assert start.status_code == 303
+    assert "/login" in start.headers["location"]
+
 
 @requires_git
 def test_forgot_password_requires_username_and_matching_email(auth_client, auth_ctx):

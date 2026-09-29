@@ -365,7 +365,7 @@ Use a normal browser for these checks. You need the matching Administration perm
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Open `/login` with no recent failure | Show username + password only | Show **Forgot password?** before a failed attempt |
-| Enter a wrong password for a **known** username | Show an error and a **Forgot password?** control under the password field (tied to that username) | Show **Forgot password?** for an unknown username, empty fields, or other validation failures |
+| Enter a wrong password for a **known active** username | Show an error and a **Forgot password?** control under the password field (tied to that username) | Show **Forgot password?** for an unknown username, a **disabled** account, empty fields, or other validation failures |
 | Open `/forgot-password` or `/forgot-password?username=…` in the address bar | Redirect to sign-in | Ever show the forgot form from a typed GET URL |
 | Change the username field after a wrong-password offer, then use **Forgot password?** | Hide the control (in the browser) and reject/clear the grant on the server | Keep using the previous username’s forgot grant |
 | Use **Forgot password?** (after that wrong-password attempt) + any well-formed email | Show the same “if that email matches…” confirmation either way; send a 10-minute reset link **only** when email matches that username; spend the grant so they cannot keep guessing | Tell them the email did not match; leave the form open for more guesses; accept email alone; let them change the username on the form |
