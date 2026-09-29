@@ -131,7 +131,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 | Remove from Product | Files **and/or folders** selected (including empty folders); product allows edits | Nothing selected; product is locked |
 | Remove from Vault | Selected vault files; product allows edits | Nothing selected; product is locked |
 
-Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Same rule for **permissions**: if the signed-in role cannot do an action (or the PC cannot — e.g. Open workspace without creopdm-agent), **do not show the control**. **Set Working Directory**, **Collect all metadata**, and **Rebuild Where Used** follow the same rule: show only inside Creo when Creo.JS is connected (embedded browser); hide them outside Creo / when Session offline. Set Working Directory also needs a product workspace ready and stays hidden on the file **Details** page. On the file **Details** page (every tab, including History) Open, Checkout, Remove, Set Working Directory, and **Check In ▾** are all hidden — that toolbar is **Revert to selected…** only (when an older History row is selected). Check In stays on the Files page.
+Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Same rule for **permissions** and **product lock** (read-only / not In work): the server builds one `product_ui` flag set (role ∩ product state) and the page only shows those controls — if the signed-in role cannot do an action (or the PC cannot — e.g. Open workspace without creopdm-agent), **do not show the control**. **Set Working Directory**, **Collect all metadata**, and **Rebuild Where Used** follow the same rule: show only inside Creo when Creo.JS is connected (embedded browser); hide them outside Creo / when Session offline. Set Working Directory also needs a product workspace ready and stays hidden on the file **Details** page. On the file **Details** page (every tab, including History) Open, Checkout, Remove, Set Working Directory, and **Check In ▾** are all hidden — that toolbar is **Revert to selected…** only (when an older History row is selected). Check In stays on the Files page.
 
 Only one ▾ menu open at a time. Click outside or press Escape to close.
 
@@ -469,8 +469,8 @@ Automated coverage lives mainly in:
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
 - `tests/integration/test_creo_metadata.py` (Collect / Rebuild Where Used gear items are `creo-session-only`, hidden until Creo.JS is connected)
-- `tests/integration/test_checkout.py` (product lock: ON_HOLD / read-only hide Add & Check In via Jinja; Checkout stays for Undo; API rejects mutations)
-- `tests/unit/test_product_state.py` (allows_mutation / ensure helpers)
+- `tests/integration/test_checkout.py` (product lock: ON_HOLD / read-only hide Add & Check In via `product_ui` from `product_state.py`; Checkout stays for Undo; API rejects mutations)
+- `tests/unit/test_product_state.py` (allows_mutation / ensure helpers / `product_ui_capabilities`)
 - Related checkout / check-in / soft-nav tests
 
 Mobile browse is CSS-only in `app.css`: `@media` with `pointer: coarse` and `hover: none` (plus width/height limits). Do **not** gate browse mode on `max-width` alone.

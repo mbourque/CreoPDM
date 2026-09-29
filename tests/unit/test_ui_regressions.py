@@ -91,7 +91,7 @@ def test_remove_from_product_sends_folder_paths():
     assert "selectedFolderPaths()" in remove
     assert "folder_paths" in remove
     sync = _between(script, "function syncToolbar(", "function setCheckinQueueCounts(")
-    assert "mutationActionAllowed(removeBtn)" in sync
+    assert "Boolean(removeBtn)" in sync
     assert "ids.length > 0 || folderPaths.length > 0" in sync
 
 
@@ -205,13 +205,15 @@ def test_metadata_gear_items_require_creo_session():
     app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     script = _app_js()
-    assert "can_update_metadata and selected.allows_mutation" in app_html
-    assert "can_add_objects and (not selected or selected.allows_mutation)" in app_html
-    assert "can_checkin and (not selected or selected.allows_mutation)" in app_html
-    assert 'data-requires-mutation="1"' in app_html
+    assert "product_ui.show_metadata_tools" in app_html
+    assert "product_ui.show_add" in app_html
+    assert "product_ui.show_checkin" in app_html
+    assert "product_ui.show_remove_vault" in app_html
+    assert "product_ui.show_remove_product" in app_html
+    assert 'data-requires-mutation=' not in app_html
     assert "creo-session-only" in app_html
-    assert "productAllowsMutation" in script
-    assert "mutationActionAllowed" in script
+    assert "productAllowsMutation" not in script
+    assert "mutationActionAllowed" not in script
     assert "data-allows-mutation" in app_html
     assert "Rebuild Where Used" in docs and "Collect all metadata" in docs
     assert "read only" in docs.lower() or "read-only" in docs.lower()
@@ -432,15 +434,19 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "agentIsOnline()" in _between(
         script, "function syncToolbar(", "function setCheckinQueueCounts("
     )
-    assert "mutationActionAllowed" in _between(
+    assert "productAllowsMutation" not in _between(
+        script, "function syncToolbar(", "function setCheckinQueueCounts("
+    )
+    assert "mutationActionAllowed" not in _between(
         script, "function syncToolbar(", "function setCheckinQueueCounts("
     )
     assert "mutable &&" not in _between(
         script, "function syncToolbar(", "function setCheckinQueueCounts("
     )
-    assert "can_add_objects and (not selected or selected.allows_mutation)" in html
-    assert "can_checkin and (not selected or selected.allows_mutation)" in html
-    assert 'data-requires-mutation="1"' in html
+    assert "product_ui.show_add" in html
+    assert "product_ui.show_checkin" in html
+    assert "product_ui.show_remove_vault" in html
+    assert 'data-requires-mutation=' not in html
     assert "Start creopdm-agent on this PC to open the local workspace folder" in script
     assert "Opened the vault folder on the CreoPDM host" not in script
     assert "do not show the control" in (
@@ -512,11 +518,11 @@ def test_new_product_and_sidebar_collapse_handlers_present():
         html,
         re.DOTALL,
     )
-    # Empty-product add invite is only for objects.add (not for Viewer, etc.).
-    assert "can_add_objects" in html
+    # Empty-product add invite is only when product_ui allows Add (role ∩ mutable).
+    assert "product_ui.show_add" in html
     assert "Add a Creo model, PDF, or document to get started" in html
     assert re.search(
-        r"\{%\s*elif\s+can_add_objects\s*%\}[^%]*Add a Creo model",
+        r"\{%\s*elif\s+product_ui\.show_add\s*%\}[^%]*Add a Creo model",
         html,
         re.DOTALL,
     )
@@ -668,7 +674,7 @@ def test_history_revert_only_for_older_versions():
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
-    assert "{% if can_revert_objects and history|length > 1 %}" in detail
+    assert "{% if product_ui.show_revert and history|length > 1 %}" in detail
     assert 'id="revert-version-btn"' in detail
     assert 'class="btn btn-danger" id="revert-version-btn"' in detail or 'btn btn-danger' in detail
     assert "red like Remove" in docs
@@ -882,7 +888,7 @@ def test_user_interaction_negative_client_guards():
 
     # Remove from Product enablement includes empty folders (V2 / N16)
     sync = _between(script, "function syncToolbar(", "function setCheckinQueueCounts(")
-    assert "mutationActionAllowed(removeBtn)" in sync
+    assert "Boolean(removeBtn)" in sync
     assert "ids.length > 0 || folderPaths.length > 0" in sync
 
 

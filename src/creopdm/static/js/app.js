@@ -3689,21 +3689,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return selected.some(rowHasCheckinWork);
   }
 
-  // Product lock (read_only / non-IN_WORK): Add/Check In omitted in Jinja;
-  // row can_checkout/can_checkin are false; vault/product Remove use data-requires-mutation.
-  function productAllowsMutation() {
-    const el = $("#metric-filters");
-    if (!el || el.dataset.allowsMutation == null || el.dataset.allowsMutation === "") {
-      return true;
-    }
-    return el.dataset.allowsMutation === "1";
-  }
-
-  function mutationActionAllowed(el) {
-    if (!el || el.dataset.requiresMutation !== "1") return true;
-    return productAllowsMutation();
-  }
-
+  // Product lock: Add/Check In/vault Remove omitted in Jinja via product_ui;
+  // row can_checkout/can_checkin are false when locked. syncToolbar is selection-only.
   function syncToolbar() {
     if (!isListPage) return;
     const selected = selectedRows();
@@ -3732,7 +3719,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       openWorkspaceBtn?.dataset.product ||
       currentProductId() ||
       "";
-    // Add menu is omitted from the DOM when the product is locked (Jinja).
+    // Add menu is omitted from the DOM when the product is locked (Jinja product_ui).
     const canAdd = Boolean(productId);
     setToolbarActionVisible(addMenuBtn, canAdd);
     for (const id of ["create-folder-btn", "add-files-btn", "add-folder-btn", "add-folders-btn"]) {
@@ -3751,7 +3738,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       checkinProductBtn?.dataset.checkoutCount || checkinMenuBtn?.dataset.checkoutCount || 0
     );
     // Product check-in when there is queue work and/or active checkouts to release.
-    // Check In menu is omitted from the DOM when the product is locked (Jinja).
+    // Check In menu is omitted from the DOM when the product is locked (Jinja product_ui).
     const canCheckinProduct =
       Boolean(productId) &&
       (pendingProductSaves > 0 || pendingProductNew > 0 || productCheckoutCount > 0);
@@ -3798,13 +3785,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       (row) => isNewFileQueueRow(row) && row.dataset.localCache !== "1"
     );
     const canDiscardLocal = localNewSelected.length > 0;
+    // Remove from Vault omitted from DOM when locked (product_ui.show_remove_vault).
     const canPurge =
-      mutationActionAllowed(purgeBtn) &&
+      Boolean(purgeBtn) &&
       (vaultNewSelected.length > 0 ||
         selected.some((row) => row.dataset.uuid && row.dataset.inWorkspace !== "0"));
     const folderPaths = selectedFolderPaths();
+    // Remove from Product omitted from DOM when locked (product_ui.show_remove_product).
     const canRemoveProduct =
-      mutationActionAllowed(removeBtn) && (ids.length > 0 || folderPaths.length > 0);
+      Boolean(removeBtn) && (ids.length > 0 || folderPaths.length > 0);
     // Local cache cleanup only — allowed on locked products.
     const canPurgeVersions = Boolean(
       purgeVersionsBtn?.dataset.product || openWorkspaceBtn?.dataset.product || checkinBtn?.dataset.product

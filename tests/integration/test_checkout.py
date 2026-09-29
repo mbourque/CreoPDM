@@ -74,14 +74,18 @@ def test_read_only_product_hides_mutation_toolbar(client, repo_parent):
     assert "read only" in page.text.lower()
     assert 'id="add-menu"' not in page.text
     assert 'id="checkin-menu"' not in page.text
+    assert 'id="purge-workspace-btn"' not in page.text
+    assert 'id="remove-product-btn"' not in page.text
     assert 'id="collect-metadata-btn"' not in page.text
     assert 'id="rebuild-where-used-btn"' not in page.text
     assert 'id="rename-product-btn"' not in page.text
     assert 'id="delete-product-btn"' not in page.text
-    assert 'data-requires-mutation="1"' in page.text
     # Checkout menu stays for Undo; selected/product checkout stay off via row flags.
     assert 'id="checkout-menu"' in page.text
     assert 'id="undo-btn"' in page.text
+    # Local workspace cleanup may remain under Remove.
+    assert 'id="remove-menu"' in page.text
+    assert 'id="discard-local-btn"' in page.text
 
     detail = client.get(f"/api/objects/{obj['uuid']}")
     assert detail.status_code == 200, detail.text

@@ -154,14 +154,33 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
     templates.env.globals["local_time_pretty"] = format_local_pretty
     templates.env.globals["byte_size"] = format_byte_size
     auth_user = getattr(request.state, "auth_user", None)
+    caps = caps_dict(request)
     payload = {
         "request": request,
         **_PAGE_DEFAULTS,
         "auth_user": auth_user,
         "agent_token": getattr(request.state, "agent_token", "") or "",
-        **caps_dict(request),
+        **caps,
         **context,
     }
+    # Role + product lock → one toolbar/gear flag set (see product_state.product_ui_capabilities).
+    if "product_ui" not in payload:
+        from creopdm.product_state import product_ui_capabilities
+
+        lock_product = payload.get("selected")
+        if lock_product is None:
+            lock_product = payload.get("product")
+        payload["product_ui"] = product_ui_capabilities(
+            lock_product,
+            can_add_objects=bool(payload.get("can_add_objects")),
+            can_checkout=bool(payload.get("can_checkout")),
+            can_checkin=bool(payload.get("can_checkin")),
+            can_remove_objects=bool(payload.get("can_remove_objects")),
+            can_edit_product=bool(payload.get("can_edit_product")),
+            can_delete_product=bool(payload.get("can_delete_product")),
+            can_update_metadata=bool(payload.get("can_update_metadata")),
+            can_revert_objects=bool(payload.get("can_revert_objects")),
+        )
     try:
         return templates.TemplateResponse(request, name, payload)
     except TypeError:

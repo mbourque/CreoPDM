@@ -546,7 +546,7 @@
                 title="Open this product’s local workspace on this PC (creopdm-agent cache). Requires creopdm-agent.">Open workspace…</button>
       </div>
     </div>
-    {% if can_checkout %}
+    {% if product_ui.show_checkout %}
     <div class="toolbar-menu" id="checkout-menu" hidden>
       <button type="button" class="btn toolbar-menu-toggle" id="checkout-menu-btn" hidden
               aria-haspopup="menu" aria-expanded="false"
@@ -567,7 +567,7 @@
       </div>
     </div>
     {% endif %}
-    {% if can_checkin %}
+    {% if product_ui.show_checkin %}
     <div class="toolbar-menu" id="checkin-menu" hidden>
       <button type="button" class="btn toolbar-menu-toggle" id="checkin-menu-btn" hidden
               aria-haspopup="menu" aria-expanded="false"
@@ -589,26 +589,30 @@
       </div>
     </div>
     {% endif %}
-    {% if can_revert_objects and history|length > 1 %}
+    {% if product_ui.show_revert and history|length > 1 %}
     <span class="toolbar-tip" id="revert-version-tip" title="Select an older History row, then restore that version’s content and filename to the vault and local workspace as a new check-in.">
       <button type="button" class="btn btn-danger" id="revert-version-btn" disabled hidden
               data-object="{{ object.uuid }}"
               data-product-name="{{ product.name }}">Revert to selected…</button>
     </span>
     {% endif %}
-    {% if can_remove_objects %}
+    {% if product_ui.show_remove_vault or product_ui.show_remove_product %}
     <div class="toolbar-menu" id="remove-menu" hidden>
       <button type="button" class="btn btn-danger toolbar-menu-toggle" id="remove-menu-btn" hidden
               aria-haspopup="menu" aria-expanded="false"
               title="Remove vault copies or remove this file from the product.">Remove ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
+        {% if product_ui.show_remove_vault %}
         <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn" hidden
                 data-uuid="{{ object.uuid }}" data-product-name="{{ product.name }}"
                 title="Delete CreoPDM vault copies of this file. The original in your product folder is not deleted. If you have it checked out, that checkout is cancelled.">Remove from Vault</button>
+        {% endif %}
+        {% if product_ui.show_remove_product %}
         <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-product-btn" hidden
                 data-uuid="{{ object.uuid }}" data-product-name="{{ product.name }}"
                 data-relative-path="{{ object.relative_path }}" data-filename="{{ object.filename }}"
                 title="Remove this file from the product list and delete CreoPDM vault copies. The original in your product folder is not deleted.">Remove from Product</button>
+        {% endif %}
       </div>
     </div>
     {% endif %}
