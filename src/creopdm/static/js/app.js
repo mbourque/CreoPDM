@@ -1141,6 +1141,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
   $("#rebuild-where-used-btn")?.addEventListener("click", async () => {
     closeProductSettings();
+    if (creoOpenMode() !== "embedded") {
+      showError($("#toolbar-error"), "Rebuild Where Used is available when Open mode is Embedded.");
+      return;
+    }
     const productId = $("#rebuild-where-used-btn")?.dataset.product || currentProductId();
     if (!productId) return;
     showError($("#toolbar-error"), "");
@@ -1517,6 +1521,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       showOk("Metadata collection is already running.");
       return;
     }
+    if (creoOpenMode() !== "embedded") {
+      showError(
+        $("#toolbar-error"),
+        "Collect metadata needs Embedded open mode in Creo’s browser."
+      );
+      return;
+    }
     // Bridge often arrives after first paint — same wait as Resume.
     showOk("Waiting for Creo.JS…");
     const ready = await waitForCreoMetadataBridge();
@@ -1608,12 +1619,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   $("#collect-metadata-btn")?.addEventListener("click", async () => {
     closeProductSettings();
+    if (creoOpenMode() !== "embedded") {
+      showError($("#toolbar-error"), "Collect metadata needs Embedded open mode in Creo.");
+      return;
+    }
     const productId = $("#collect-metadata-btn")?.dataset.product || currentProductId();
     if (!productId) return;
     await runCollectAllMetadata(productId);
   });
 
   resumeMetadataCollectIfNeeded();
+  syncMetadataToolsForOpenMode();
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) resumeMetadataCollectIfNeeded();
   });
@@ -4423,6 +4439,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function canGatherCreoMetadata() {
     try {
+      if (creoOpenMode() !== "embedded") return false;
       if (!window.CreoJS) return false;
       if (typeof window.CreoJS.gatherModelMetadata !== "function") return false;
       // Require a real Creo.JS bridge — Embedded mode alone is not enough
@@ -4431,6 +4448,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     } catch {
       return false;
     }
+  }
+
+  function syncMetadataToolsForOpenMode() {
+    const embedded = creoOpenMode() === "embedded";
+    ["#rebuild-where-used-btn", "#collect-metadata-btn"].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.hidden = !embedded;
+    });
   }
 
   async function waitForCreoMetadataBridge({ tries = 40, intervalMs = 250 } = {}) {
@@ -7737,6 +7762,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!pill) return;
     const key = String(mode || "association");
     pill.dataset.creoOpenMode = key;
+    syncMetadataToolsForOpenMode();
     void refreshCreoStatusPill();
   }
 

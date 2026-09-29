@@ -64,7 +64,8 @@
           </svg>
         </button>
         {% endif %}
-        {% if can_edit_product or can_delete_product or can_update_metadata %}
+        {% set show_metadata_tools = can_update_metadata and creo_open_mode == 'embedded' %}
+        {% if can_edit_product or can_delete_product or show_metadata_tools %}
         <div class="product-settings" id="product-settings">
           <button type="button" class="product-settings-btn" id="product-settings-btn"
                   title="Product settings" aria-label="Product settings"
@@ -81,7 +82,7 @@
                     data-number="{{ selected.number or '' }}"
                     data-description="{{ selected.description or '' }}">Rename</button>
             {% endif %}
-            {% if can_update_metadata %}
+            {% if show_metadata_tools %}
             <button type="button" class="product-settings-item" role="menuitem" id="rebuild-where-used-btn"
                     data-product="{{ selected.uuid }}"
                     title="Index vault assemblies/drawings into Where Used links in the background.">Rebuild Where Used</button>

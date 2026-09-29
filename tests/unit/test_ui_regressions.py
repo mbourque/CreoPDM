@@ -198,6 +198,19 @@ def test_settings_muted_help_under_field_top_margin_only():
     assert "margin-top: 0.15rem" in label_help
 
 
+def test_metadata_gear_items_require_embedded_open_mode():
+    """Collect / Rebuild Where Used appear only when Open mode is Embedded."""
+    app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    script = _app_js()
+    assert "show_metadata_tools" in app_html
+    assert "can_update_metadata and creo_open_mode == 'embedded'" in app_html
+    assert "syncMetadataToolsForOpenMode" in script
+    assert 'creoOpenMode() !== "embedded"' in script
+    assert "Rebuild Where Used" in docs and "Collect all metadata" in docs
+    assert "Show only when Open mode is **Embedded**" in docs
+
+
 def test_agent_add_chunks_continue_after_http_error():
     """Regression: one failed /add-paths batch used to abort the rest of a large folder add."""
     script = _app_js()

@@ -383,3 +383,27 @@ def test_rebuild_where_used_writes_dependency_edges(client, repo_parent, data_di
     assert body2["state"] == "done"
     assert body2["edges_added"] == 0
     assert body2["edges_existing"] >= 1
+
+
+@requires_git
+def test_metadata_menu_hidden_unless_embedded(client, repo_parent):
+    """Product gear Collect / Rebuild Where Used only render when Open mode is Embedded."""
+    product = _create_product(client, repo_parent)
+    page = client.get(f"/?product={product['uuid']}")
+    assert page.status_code == 200, page.text
+    assert 'id="collect-metadata-btn"' not in page.text
+    assert 'id="rebuild-where-used-btn"' not in page.text
+
+    embedded = client.put("/api/settings", json={"creo_open_mode": "embedded"})
+    assert embedded.status_code == 200, embedded.text
+    page_emb = client.get(f"/?product={product['uuid']}")
+    assert page_emb.status_code == 200, page_emb.text
+    assert 'id="collect-metadata-btn"' in page_emb.text
+    assert 'id="rebuild-where-used-btn"' in page_emb.text
+
+    restored = client.put("/api/settings", json={"creo_open_mode": "association"})
+    assert restored.status_code == 200, restored.text
+    page_os = client.get(f"/?product={product['uuid']}")
+    assert page_os.status_code == 200, page_os.text
+    assert 'id="collect-metadata-btn"' not in page_os.text
+    assert 'id="rebuild-where-used-btn"' not in page_os.text

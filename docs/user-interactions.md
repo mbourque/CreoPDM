@@ -54,6 +54,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Open an **empty** product (and you **can** add files) | Show that there are no files and invite you to add a Creo model, PDF, or document | |
 | Open an **empty** product (and you **cannot** add files) | Show that there are no files | Tell you to “Add a Creo model…” when you have no `objects.add` |
 | Rename (product settings) | Update the name everywhere you see it | |
+| **Rebuild Where Used** / **Collect all metadata** (product gear) | Show only when Open mode is **Embedded** and you have metadata permission; Collect needs Creo’s embedded browser with Creo.JS | Show those items when Open mode is OS association; Collect without Creo.JS |
 | Click the **bell** next to the gear (when Email notifications are enabled) | Ask to confirm Watch / Stop watching; then toggle **your** watching state for that product | Change watching when you Cancel the confirmation; show the bell when notifications are disabled; show another user’s watching state as your own |
 | Watch a product with a valid account email | Receive email summaries for adds, removes, checkout, undo checkout, check-in, restore, and product rename/info (not for browse or background scans); no historical mail | Email yourself for your own actions |
 | Log in as a different user after someone else watched | Show **not** watching unless **you** subscribed; keep the other user’s subscription | Steal or clear another user’s watch when you open the product or click Stop on your own bell |
@@ -465,6 +466,7 @@ Automated coverage lives mainly in:
 - `tests/unit/test_product_watch.py` (bell when email enabled; per-user watch; subscribe/unsubscribe; one email per bulk action; actor excluded; notifications off skips mail)
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
+- `tests/integration/test_creo_metadata.py` (Collect / Rebuild Where Used gear items only when Open mode is Embedded)
 - Related checkout / check-in / soft-nav tests
 
 Mobile browse is CSS-only in `app.css`: `@media` with `pointer: coarse` and `hover: none` (plus width/height limits). Do **not** gate browse mode on `max-width` alone.
