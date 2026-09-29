@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import shutil
 
+import pytest
 from sqlalchemy import select
 
 from creopdm.models.product import Product
@@ -291,6 +292,74 @@ def test_rename_rejects_location_change(client, repo_parent):
     assert body["name"] == "Stay Put"
     assert body["repository_path"] == ""
     assert not (elsewhere / ".git").exists()
+
+
+@requires_git
+def test_rename_rejects_vault_folder_change(client, repo_parent, data_dir):
+    """vault_folder is immutable after create — API must refuse and leave disk alone."""
+    created = client.post(
+        "/api/products",
+        json={"name": "Fixed Vault", "vault_folder": "Fixed-Vault"},
+    )
+    assert created.status_code == 201, created.text
+    payload = created.json()
+    assert payload["vault_folder"] == "Fixed-Vault"
+    vault_path = data_dir / "vaults" / "Fixed-Vault"
+    assert vault_path.is_dir()
+
+    rejected = client.patch(
+        f"/api/products/{payload['uuid']}",
+        json={
+            "name": "Fixed Vault Mk2",
+            "vault_folder": "Renamed-Vault",
+        },
+    )
+    assert rejected.status_code == 422, rejected.text
+
+    fetched = client.get(f"/api/products/{payload['uuid']}")
+    assert fetched.status_code == 200
+    body = fetched.json()
+    assert body["name"] == "Fixed Vault"
+    assert body["vault_folder"] == "Fixed-Vault"
+    assert vault_path.is_dir()
+    assert not (data_dir / "vaults" / "Renamed-Vault").exists()
+
+    renamed = client.patch(
+        f"/api/products/{payload['uuid']}",
+        json={"name": "Fixed Vault Mk2"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["vault_folder"] == "Fixed-Vault"
+    assert vault_path.is_dir()
+
+
+@requires_git
+def test_product_orm_blocks_vault_folder_assignment(app, client, repo_parent, data_dir):
+    """ORM before_update must stop any code path from rewriting vault_folder."""
+    created = client.post(
+        "/api/products",
+        json={"name": "ORM Guard", "vault_folder": "Orm-Guard"},
+    )
+    assert created.status_code == 201, created.text
+    product_uuid = created.json()["uuid"]
+
+    from creopdm.exceptions import ValidationAppError
+    from creopdm.models.product import Product
+    from creopdm.utils.vault_folder import VAULT_FOLDER_IMMUTABLE_MESSAGE
+
+    with app.state.ctx.session_factory() as session:
+        product = session.scalar(select(Product).where(Product.uuid == product_uuid))
+        assert product is not None
+        product.vault_folder = "Hacked-Vault"
+        with pytest.raises(ValidationAppError, match="cannot be changed") as exc:
+            session.flush()
+        assert exc.value.message == VAULT_FOLDER_IMMUTABLE_MESSAGE
+        session.rollback()
+
+    fetched = client.get(f"/api/products/{product_uuid}").json()
+    assert fetched["vault_folder"] == "Orm-Guard"
+    assert (data_dir / "vaults" / "Orm-Guard").is_dir()
+    assert not (data_dir / "vaults" / "Hacked-Vault").exists()
 
 
 @requires_git

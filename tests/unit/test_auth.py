@@ -1242,6 +1242,29 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert "Lifecycle state" in detail.text
     assert 'name="state"' in detail.text
     assert 'name="read_only"' in detail.text
+    assert 'name="vault_folder"' in detail.text
+    assert "readonly" in detail.text
+    assert "disabled" in detail.text
+    assert "cannot be changed" in detail.text.lower()
+    original_vault = product["vault_folder"]
+
+    # DevTools-style POST that forces a different vault_folder must be rejected.
+    vault_hijack = auth_client.post(
+        f"/admin/products/{product['uuid']}",
+        data={
+            "name": "Admin Hub Renamed",
+            "number": "AH-2",
+            "description": "Updated",
+            "vault_folder": "Hijacked-Vault",
+            "state": "IN_WORK",
+        },
+        follow_redirects=False,
+    )
+    assert vault_hijack.status_code == 400, vault_hijack.text
+    assert "cannot be changed" in vault_hijack.text.lower()
+    still = auth_client.get(f"/api/products/{product['uuid']}").json()
+    assert still["name"] == "Admin Hub Product"
+    assert still["vault_folder"] == original_vault
 
     saved = auth_client.post(
         f"/admin/products/{product['uuid']}",
@@ -1257,6 +1280,7 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert saved.status_code == 303, saved.text
     body = auth_client.get(f"/api/products/{product['uuid']}").json()
     assert body["name"] == "Admin Hub Renamed"
+    assert body["vault_folder"] == original_vault
     assert body["state"] == "ON_HOLD"
     assert body["read_only"] is True
     assert body["allows_mutation"] is False

@@ -217,6 +217,7 @@ class ProductService:
         state: str | None = None,
         read_only: bool | None = None,
     ) -> Product:
+        """Update name/number/description/state/read_only. Never changes vault_folder."""
         product = self.get_product(session, product_uuid)
         new_name = name.strip()
         if not new_name:

@@ -66,9 +66,9 @@
       </label>
       <label>Vault / workspace folder
         <input name="vault_folder" type="text" value="{{ form.vault_folder }}" readonly disabled
-               title="Set when the product was created; not renamed here.">
+               title="Set when the product was created; cannot be changed.">
       </label>
-      <p class="muted small">Set at create; not renamed here.</p>
+      <p class="muted small">Set at create; cannot be changed.</p>
       <label>Lifecycle state
         <select name="state">
           {% for s in product_states %}

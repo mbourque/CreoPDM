@@ -36,6 +36,8 @@ class ProductCreateRequest(BaseModel):
 
 
 class ProductUpdateRequest(BaseModel):
+    """Rename / metadata only. vault_folder is omitted and forbidden (immutable)."""
+
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=255)

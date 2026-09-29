@@ -326,6 +326,17 @@ def test_product_dialog_has_vault_folder_and_use_hash():
     assert "flex-direction: row" in css.split(".product-vault-fields .checkbox-row", 1)[1].split("}", 1)[0]
 
 
+def test_admin_edit_vault_folder_is_readonly_disabled():
+    """Edit form shows vault_folder but must never allow changing it."""
+    html = (ROOT / "src" / "creopdm" / "templates" / "admin_product_form.html").read_text(
+        encoding="utf-8"
+    )
+    # Edit branch: disabled vault field (create branch stays editable).
+    assert "readonly disabled" in html
+    assert "cannot be changed" in html.lower()
+    assert 'name="vault_folder"' in html
+
+
 def test_delete_product_dialog_offers_local_workspace_checkbox():
     html = APP_HTML.read_text(encoding="utf-8")
     assert 'id="delete-local-workspace" checked' in html

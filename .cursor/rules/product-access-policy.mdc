@@ -19,6 +19,10 @@ Anything that changes vault/product content or locks (Add, Checkout, Check In, R
 
 `pages.render()` already injects `product_ui` from role caps ∩ product. Role permissions stay in `permissions.py` / `caps_dict`; combine them only inside `product_ui_capabilities`.
 
+## Vault folder is immutable after create
+
+`Product.vault_folder` is set only in `create_product`. Do **not** add it to `update_product`, `ProductUpdateRequest`, or admin edit Save. The ORM `before_update` listener and `reject_vault_folder_change` enforce this — keep those tests green (`test_rename_rejects_vault_folder_change`, `test_product_orm_blocks_vault_folder_assignment`).
+
 ## Do not
 
 ```text
@@ -26,6 +30,7 @@ Anything that changes vault/product content or locks (Add, Checkout, Check In, R
 # ❌ BAD — syncToolbar: mutable && canCheckout / productAllowsMutation()
 # ❌ BAD — new POST handler without ensure_product_mutable
 # ❌ BAD — ship a mutation without updating test_product_access_policy_contract / lifecycle lock tests
+# ❌ BAD — ProductUpdateRequest.vault_folder or update_product(..., vault_folder=...)
 # ✅ GOOD — product_ui.show_add + ensure_product_mutable in the service + contract/API tests
 ```
 

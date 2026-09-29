@@ -1795,6 +1795,7 @@ def admin_product_update(
     name: str = Form(...),
     number: str = Form(""),
     description: str = Form(""),
+    vault_folder: str = Form(""),
     state: str = Form("IN_WORK"),
     read_only: str = Form(""),
     ctx: AppContext = Depends(get_context),
@@ -1818,6 +1819,10 @@ def admin_product_update(
         uuid=product.uuid,
     )
     try:
+        from creopdm.utils.vault_folder import reject_vault_folder_change
+
+        # Disabled inputs are omitted from POST; if vault_folder is forced in, reject renames.
+        reject_vault_folder_change(product, vault_folder)
         ctx.products.update_product(
             db,
             product_uuid,

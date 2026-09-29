@@ -1,6 +1,12 @@
 from creopdm.exceptions import PathValidationError, ValidationAppError
-from creopdm.utils.vault_folder import normalize_uuid_folder, validate_vault_folder
+from creopdm.utils.vault_folder import (
+    VAULT_FOLDER_IMMUTABLE_MESSAGE,
+    normalize_uuid_folder,
+    reject_vault_folder_change,
+    validate_vault_folder,
+)
 import pytest
+from types import SimpleNamespace
 
 
 def test_validate_vault_folder_allows_uuid_and_slug():
@@ -17,3 +23,18 @@ def test_validate_vault_folder_allows_uuid_and_slug():
 def test_validate_vault_folder_rejects_spaces_and_paths(bad):
     with pytest.raises((ValidationAppError, PathValidationError)):
         validate_vault_folder(bad)
+
+
+def test_reject_vault_folder_change_allows_blank_or_same():
+    product = SimpleNamespace(uuid="u1", vault_folder="Robot-Arm")
+    reject_vault_folder_change(product, None)
+    reject_vault_folder_change(product, "")
+    reject_vault_folder_change(product, "Robot-Arm")
+
+
+def test_reject_vault_folder_change_blocks_rename():
+    product = SimpleNamespace(uuid="u1", vault_folder="Robot-Arm")
+    with pytest.raises(ValidationAppError, match="cannot be changed") as exc:
+        reject_vault_folder_change(product, "Other-Vault")
+    assert exc.value.message == VAULT_FOLDER_IMMUTABLE_MESSAGE
+    assert exc.value.details["vault_folder"] == "Robot-Arm"

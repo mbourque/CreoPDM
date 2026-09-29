@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import re
 import uuid
+from typing import Any
 
 from creopdm.exceptions import PathValidationError, ValidationAppError
 
 # Single path segment: letters, digits, dot, underscore, hyphen; no spaces.
 _VAULT_FOLDER_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,198}[A-Za-z0-9])?$")
 _RESERVED = frozenset({".", "..", ".git", ".creopdm"})
+
+VAULT_FOLDER_IMMUTABLE_MESSAGE = (
+    "Vault/workspace folder cannot be changed after the product is created."
+)
 
 
 def normalize_uuid_folder(value: str) -> str:
@@ -60,3 +65,24 @@ def validate_vault_folder(value: str) -> str:
             details={"vault_folder": raw},
         )
     return raw
+
+
+def current_vault_folder(product: Any) -> str:
+    """Resolved vault folder name for a product (DB column or uuid fallback)."""
+    folder = (getattr(product, "vault_folder", None) or "").strip()
+    if folder:
+        return folder
+    return str(getattr(product, "uuid", "") or "").strip()
+
+
+def reject_vault_folder_change(product: Any, requested: str | None) -> None:
+    """Reject an update that tries to rename the vault folder (blank = ignore)."""
+    text = (requested or "").strip()
+    if not text:
+        return
+    current = current_vault_folder(product)
+    if text != current:
+        raise ValidationAppError(
+            VAULT_FOLDER_IMMUTABLE_MESSAGE,
+            details={"vault_folder": current},
+        )
