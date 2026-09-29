@@ -198,17 +198,20 @@ def test_settings_muted_help_under_field_top_margin_only():
     assert "margin-top: 0.15rem" in label_help
 
 
-def test_metadata_gear_items_require_embedded_open_mode():
-    """Collect / Rebuild Where Used appear only when Open mode is Embedded."""
+def test_metadata_gear_items_require_creo_session():
+    """Collect / Rebuild Where Used use creo-session-only like Set Working Directory."""
     app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     script = _app_js()
-    assert "show_metadata_tools" in app_html
-    assert "can_update_metadata and creo_open_mode == 'embedded'" in app_html
-    assert "syncMetadataToolsForOpenMode" in script
-    assert 'creoOpenMode() !== "embedded"' in script
+    rebuild = app_html.split('id="rebuild-where-used-btn"', 1)[0][-120:]
+    collect = app_html.split('id="collect-metadata-btn"', 1)[0][-120:]
+    assert "creo-session-only" in rebuild
+    assert "creo-session-only" in collect
+    assert 'id="rebuild-where-used-btn"' in app_html and "hidden" in app_html
+    assert "syncProductSettingsVisibility" in script
     assert "Rebuild Where Used" in docs and "Collect all metadata" in docs
-    assert "Show only when Open mode is **Embedded**" in docs
+    assert "inside Creo’s embedded browser" in docs or "inside Creo's embedded browser" in docs
+    assert "standalone browser" in docs
 
 
 def test_agent_add_chunks_continue_after_http_error():

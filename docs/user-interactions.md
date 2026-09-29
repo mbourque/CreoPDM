@@ -54,7 +54,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Open an **empty** product (and you **can** add files) | Show that there are no files and invite you to add a Creo model, PDF, or document | |
 | Open an **empty** product (and you **cannot** add files) | Show that there are no files | Tell you to “Add a Creo model…” when you have no `objects.add` |
 | Rename (product settings) | Update the name everywhere you see it | |
-| **Rebuild Where Used** / **Collect all metadata** (product gear) | Show only when Open mode is **Embedded** and you have metadata permission; Collect needs Creo’s embedded browser with Creo.JS | Show those items when Open mode is OS association; Collect without Creo.JS |
+| **Rebuild Where Used** / **Collect all metadata** (product gear) | Show only inside Creo’s embedded browser when Creo.JS is connected (and you have metadata permission); hide in Chrome/Edge and when Session offline | Show those items in a standalone browser; Collect without Creo.JS |
 | Click the **bell** next to the gear (when Email notifications are enabled) | Ask to confirm Watch / Stop watching; then toggle **your** watching state for that product | Change watching when you Cancel the confirmation; show the bell when notifications are disabled; show another user’s watching state as your own |
 | Watch a product with a valid account email | Receive email summaries for adds, removes, checkout, undo checkout, check-in, restore, and product rename/info (not for browse or background scans); no historical mail | Email yourself for your own actions |
 | Log in as a different user after someone else watched | Show **not** watching unless **you** subscribed; keep the other user’s subscription | Steal or clear another user’s watch when you open the product or click Stop on your own bell |
@@ -129,7 +129,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 | Remove ▾ | Something can be removed (**Files** page) | Nothing selected; always hidden on the file **Details** page |
 | Remove from Product | Files **and/or folders** selected (including empty folders) | Nothing selected |
 
-Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Same rule for **permissions**: if the signed-in role cannot do an action (or the PC cannot — e.g. Open workspace without creopdm-agent), **do not show the control**. **Set Working Directory** follows the same rule: show only inside Creo when Creo.JS is connected (embedded browser, and a product workspace is ready); hide it outside Creo, when disconnected, and on the file **Details** page. On the file **Details** page (every tab, including History) Open, Checkout, Remove, Set Working Directory, and **Check In ▾** are all hidden — that toolbar is **Revert to selected…** only (when an older History row is selected). Check In stays on the Files page.
+Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now. Same rule for **permissions**: if the signed-in role cannot do an action (or the PC cannot — e.g. Open workspace without creopdm-agent), **do not show the control**. **Set Working Directory**, **Collect all metadata**, and **Rebuild Where Used** follow the same rule: show only inside Creo when Creo.JS is connected (embedded browser); hide them outside Creo / when Session offline. Set Working Directory also needs a product workspace ready and stays hidden on the file **Details** page. On the file **Details** page (every tab, including History) Open, Checkout, Remove, Set Working Directory, and **Check In ▾** are all hidden — that toolbar is **Revert to selected…** only (when an older History row is selected). Check In stays on the Files page.
 
 Only one ▾ menu open at a time. Click outside or press Escape to close.
 
@@ -466,7 +466,7 @@ Automated coverage lives mainly in:
 - `tests/unit/test_product_watch.py` (bell when email enabled; per-user watch; subscribe/unsubscribe; one email per bulk action; actor excluded; notifications off skips mail)
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
-- `tests/integration/test_creo_metadata.py` (Collect / Rebuild Where Used gear items only when Open mode is Embedded)
+- `tests/integration/test_creo_metadata.py` (Collect / Rebuild Where Used gear items are `creo-session-only`, hidden until Creo.JS is connected)
 - Related checkout / check-in / soft-nav tests
 
 Mobile browse is CSS-only in `app.css`: `@media` with `pointer: coarse` and `hover: none` (plus width/height limits). Do **not** gate browse mode on `max-width` alone.
