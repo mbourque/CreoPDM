@@ -214,7 +214,7 @@ Otherwise the app asks how you want to open it:
 
 If open seems to do nothing, check the error line under the toolbar, and that creopdm-agent is running on the Creo PC. Large downloads can take a while.
 
-**Settings → Open Creo models with:** **Embedded** only uses Creo.JS when CreoPDM is inside Creo’s embedded browser. Outside Creo (Chrome/Edge/etc.), or when Creo.JS is not connected, Open **always falls back to the OS file association**. Choosing **OS file association** uses that path every time. The Settings page help text states this fallback.
+**Settings → Open Creo models with:** **Embedded** only uses Creo.JS inside Creo’s embedded browser. Outside Creo (or when Creo.JS is offline), Open uses the **OS file association**. Choosing **OS file association** uses that path every time.
 
 **Set Working Directory** (toolbar) does the same WD step on its own; it only appears inside Creo’s browser when Creo.JS is connected.
 
