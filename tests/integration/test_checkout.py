@@ -57,8 +57,14 @@ def test_checkout_blocked_when_product_on_hold(client, repo_parent):
     assert 'id="add-menu"' not in page.text
     assert 'id="checkin-menu"' not in page.text
     assert 'id="checkout-menu"' in page.text
+    assert 'id="checkout-btn"' not in page.text
+    assert 'id="checkout-product-btn"' not in page.text
+    assert 'id="undo-btn"' in page.text
     assert 'data-state="locked"' in page.text
     assert "On hold" in page.text
+    # Role body flag may still be 1; list rows must not advertise checkout.
+    assert page.text.count('data-can-checkout="1"') == 1
+    assert 'data-can-checkout="0"' in page.text
     assert 'id="changes-help"' not in page.text
     assert 'id="checked-out-help"' not in page.text
     assert "Use <strong>Add</strong> for new files and <strong>Check In</strong>" not in page.text
@@ -94,9 +100,15 @@ def test_read_only_product_hides_mutation_toolbar(client, repo_parent):
     assert 'id="rebuild-where-used-btn"' not in page.text
     assert 'id="rename-product-btn"' not in page.text
     assert 'id="delete-product-btn"' not in page.text
-    # Checkout menu stays for Undo; selected/product checkout stay off via row flags.
+    # Checkout menu stays for Undo only; selected/product checkout are omitted.
     assert 'id="checkout-menu"' in page.text
     assert 'id="undo-btn"' in page.text
+    assert 'id="checkout-btn"' not in page.text
+    assert 'id="checkout-product-btn"' not in page.text
+    assert 'id="checkin-menu"' not in page.text
+    # Role body flag may still be 1; list rows must not advertise checkout.
+    assert page.text.count('data-can-checkout="1"') == 1
+    assert 'data-can-checkout="0"' in page.text
     # Local workspace cleanup may remain under Remove.
     assert 'id="remove-menu"' in page.text
     assert 'id="discard-local-btn"' in page.text

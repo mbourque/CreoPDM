@@ -93,6 +93,7 @@ def test_product_ui_in_work_shows_mutation_controls():
     assert ui.show_access_banner is False
     assert ui.show_add is True
     assert ui.show_checkout is True
+    assert ui.show_undo_checkout is True
     assert ui.show_force_undo_checkout is True
     assert ui.show_checkin is True
     assert ui.show_remove is True
@@ -104,15 +105,16 @@ def test_product_ui_in_work_shows_mutation_controls():
     assert ui.show_revert is True
 
 
-def test_product_ui_locked_hides_mutations_keeps_checkout_for_undo():
-    """ON_HOLD / read-only: no Add/Check In/vault remove; Checkout stays for Undo."""
+def test_product_ui_locked_hides_checkout_actions_keeps_undo():
+    """ON_HOLD / read-only: no Checkout selected/product or Check In; Undo stays."""
     product = SimpleNamespace(uuid="p1", state=ProductState.ON_HOLD.value, read_only=False)
     ui = product_ui_capabilities(product, **_full_role_caps())
     assert ui.allows_mutation is False
     assert ui.show_access_banner is True
     assert ui.show_add is False
     assert ui.show_checkin is False
-    assert ui.show_checkout is True
+    assert ui.show_checkout is False
+    assert ui.show_undo_checkout is True
     assert ui.show_force_undo_checkout is True
     assert ui.show_remove is True
     assert ui.show_remove_vault is False
@@ -121,6 +123,15 @@ def test_product_ui_locked_hides_mutations_keeps_checkout_for_undo():
     assert ui.show_delete_product is False
     assert ui.show_metadata_tools is False
     assert ui.show_revert is False
+
+
+def test_product_ui_read_only_hides_checkout_and_checkin():
+    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=True)
+    ui = product_ui_capabilities(product, **_full_role_caps())
+    assert ui.show_checkout is False
+    assert ui.show_checkin is False
+    assert ui.show_undo_checkout is True
+    assert ui.show_add is False
 
 
 def test_product_ui_force_undo_checkout_without_checkout_hides_checkout_actions():
@@ -132,6 +143,7 @@ def test_product_ui_force_undo_checkout_without_checkout_hides_checkout_actions(
         can_force_undo_checkout=True,
     )
     assert ui.show_checkout is False
+    assert ui.show_undo_checkout is False
     assert ui.show_force_undo_checkout is True
     assert ui.show_add is False
 
@@ -144,6 +156,7 @@ def test_product_ui_without_checkin_hides_checkin_menu():
         can_checkin=False,
     )
     assert ui.show_checkout is True
+    assert ui.show_undo_checkout is True
     assert ui.show_checkin is False
     assert ui.show_add is False
 
@@ -163,6 +176,7 @@ def test_product_ui_respects_role_caps_when_mutable():
     )
     assert ui.show_add is False
     assert ui.show_checkout is True
+    assert ui.show_undo_checkout is True
     assert ui.show_checkin is False
     assert ui.show_remove_vault is True
     assert ui.show_rename is False

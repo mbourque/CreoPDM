@@ -49,6 +49,7 @@ def test_templates_gate_toolbar_via_product_ui_only():
     for flag in (
         "show_add",
         "show_checkout",
+        "show_undo_checkout",
         "show_force_undo_checkout",
         "show_checkin",
         "show_remove",
@@ -60,6 +61,7 @@ def test_templates_gate_toolbar_via_product_ui_only():
         "show_access_banner",
     ):
         assert f"product_ui.{flag}" in app, f"app.html missing product_ui.{flag}"
+    assert "product_ui.show_checkout and entry.object_ids" in app
     assert "product_ui.show_revert" in detail
     assert "product_ui.show_remove_vault" in detail
     assert "selected.allows_mutation" not in app
@@ -87,6 +89,7 @@ def test_product_ui_capability_fields_stay_wired():
         "show_access_banner",
         "show_add",
         "show_checkout",
+        "show_undo_checkout",
         "show_force_undo_checkout",
         "show_checkin",
         "show_remove",

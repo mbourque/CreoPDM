@@ -172,7 +172,7 @@
           <tr class="folder-row"
               data-folder="{{ entry.path }}"
               data-object-ids="{{ entry.object_ids|join(',') }}"
-              data-can-checkout="{{ '1' if entry.object_ids else '0' }}"
+              data-can-checkout="{{ '1' if product_ui.show_checkout and entry.object_ids else '0' }}"
               data-can-checkin="0"
               data-owned="0"
               data-checked-out="0"
@@ -414,7 +414,7 @@
                 title="Open this product’s local workspace on this PC (creopdm-agent cache). Requires creopdm-agent.">Open workspace…</button>
       </div>
     </div>
-    {% if product_ui.show_checkout or product_ui.show_force_undo_checkout %}
+    {% if product_ui.show_checkout or product_ui.show_undo_checkout or product_ui.show_force_undo_checkout %}
     <div class="toolbar-menu" id="checkout-menu">
       <button type="button" class="btn toolbar-menu-toggle" id="checkout-menu-btn"
               aria-haspopup="menu" aria-expanded="false" disabled
@@ -428,6 +428,8 @@
                 {% if selected %}data-product="{{ selected.uuid }}" data-checkoutable="{{ checkoutable_count|default(0) }}"{% endif %}
                 {% if not selected or (checkoutable_count|default(0)) == 0 %}disabled{% endif %}
                 title="Check out every file in this product that is available (not locked by someone else).">Checkout product</button>
+        {% endif %}
+        {% if product_ui.show_undo_checkout %}
         <button type="button" class="toolbar-menu-item" role="menuitem" id="undo-btn"
                 disabled
                 title="Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward.">Undo Checkout</button>

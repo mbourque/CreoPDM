@@ -541,12 +541,14 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert html.index('id="checkout-menu"') < html.index('id="undo-btn"')
     assert html.index('id="undo-btn"') < html.index('id="force-undo-btn"')
     assert html.index('id="force-undo-btn"') < html.index('id="checkin-menu"')
-    assert "product_ui.show_checkout or product_ui.show_force_undo_checkout" in html
+    assert "product_ui.show_checkout or product_ui.show_undo_checkout or product_ui.show_force_undo_checkout" in html
+    assert "product_ui.show_undo_checkout" in html
     assert "product_ui.show_checkin" in html
     assert "canForceUndoCheckout" in script
     assert "roleCanCheckout" in script
     assert "roleCanCheckin" in script
     assert "/api/objects/batch/force-undo-checkout" in script
+    assert "product_ui.show_checkout and entry.object_ids" in html
     assert 'id="checkin-menu"' in html
     assert 'id="checkin-product-btn"' in html
     assert 'id="checkin-btn"' in html
