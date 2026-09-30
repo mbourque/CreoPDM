@@ -401,6 +401,13 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "/products/" in soft_fn or r"/products\/" in soft_fn
     assert "objects" in soft_fn
     assert "userCanCheckout" in script
+    assert "userCanCheckin" in script
+    assert "roleCanCheckout" in _between(
+        script, "function syncToolbar(", "function setCheckinQueueCounts("
+    )
+    assert "roleCanCheckin" in _between(
+        script, "function syncToolbar(", "function setCheckinQueueCounts("
+    )
     assert "userCanCheckout()" in _between(
         script, "function promptOpenCheckout(", "function checkoutBeforeOpen("
     )
@@ -416,6 +423,9 @@ def test_soft_nav_skips_creojs_reconnect():
     assert 'hostedCreoJS() && creoOpenMode() === "embedded"' in open_fn
     assert 'openViaAgent(openSpec.path, "association")' in open_fn
     assert 'data-can-checkout=' in (
+        ROOT / "src" / "creopdm" / "templates" / "base.html"
+    ).read_text(encoding="utf-8")
+    assert 'data-can-checkin=' in (
         ROOT / "src" / "creopdm" / "templates" / "base.html"
     ).read_text(encoding="utf-8")
     assert 'data-agent-token=' in (
@@ -531,7 +541,11 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert html.index('id="checkout-menu"') < html.index('id="undo-btn"')
     assert html.index('id="undo-btn"') < html.index('id="force-undo-btn"')
     assert html.index('id="force-undo-btn"') < html.index('id="checkin-menu"')
+    assert "product_ui.show_checkout or product_ui.show_force_undo_checkout" in html
+    assert "product_ui.show_checkin" in html
     assert "canForceUndoCheckout" in script
+    assert "roleCanCheckout" in script
+    assert "roleCanCheckin" in script
     assert "/api/objects/batch/force-undo-checkout" in script
     assert 'id="checkin-menu"' in html
     assert 'id="checkin-product-btn"' in html

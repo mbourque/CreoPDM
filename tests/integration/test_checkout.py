@@ -561,6 +561,8 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert 'id="danger-confirm-details"' in home.text
     assert "data-purgeable=" in home.text
     assert "toolbar-menu-panel" in home.text
+    assert "roleCanCheckout" in script.text
+    assert "roleCanCheckin" in script.text
     assert 'selected.every((row) => row.dataset.canCheckout === "1")' in script.text
     assert "function selectionCanCheckin" in script.text
     assert 'row.dataset.canCheckin === "1"' in script.text

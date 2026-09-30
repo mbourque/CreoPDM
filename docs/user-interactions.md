@@ -234,10 +234,10 @@ If open seems to do nothing, check the error line under the toolbar, and that cr
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Checkout selected | Lock those files and download them for editing, keeping vault folder paths in the local workspace | Steal a file someone else has checked out; flatten nested files to the workspace root |
-| Checkout product | Check out everything that’s free, keeping vault folder paths locally | Offer checkout when nothing is left; flatten nested files to the workspace root |
-| Undo Checkout | Release **your** locks only | Undo someone else’s checkout; delete the vault file; create a new version |
-| Force Undo Checkout | Release **another user’s** checkout lock (abandoned checkout); no new version; confirm first | Appear without `objects.force_undo_checkout`; commit a new version; delete the vault file |
+| Checkout selected | Lock those files and download them for editing, keeping vault folder paths in the local workspace | Steal a file someone else has checked out; flatten nested files to the workspace root; appear without `objects.checkout` |
+| Checkout product | Check out everything that’s free, keeping vault folder paths locally | Offer checkout when nothing is left; flatten nested files to the workspace root; appear without `objects.checkout` |
+| Undo Checkout | Release **your** locks only | Undo someone else’s checkout; delete the vault file; create a new version; appear without `objects.checkout` |
+| Force Undo Checkout | Release **another user’s** checkout lock (abandoned checkout); no new version; confirm first | Appear without `objects.force_undo_checkout`; commit a new version; delete the vault file; unlock Checkout selected/product without `objects.checkout` |
 
 ---
 
@@ -248,8 +248,8 @@ If open seems to do nothing, check the error line under the toolbar, and that cr
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Check in product… | Record pending saves and new files; release unchanged checkouts so the product looks checked in | Run when there’s nothing to do (button should stay disabled) |
-| Check in selected… | Check in / add what you selected | |
+| Check in product… | Record pending saves and new files; release unchanged checkouts so the product looks checked in | Run when there’s nothing to do (button should stay disabled); appear without `objects.checkin` |
+| Check in selected… | Check in / add what you selected | Appear without `objects.checkin` (Add new files still uses Add ▾ / `objects.add`) |
 | Leave the comment blank | Block check-in until you write a comment | Save a version with no comment |
 | Finish successfully | List and status update to match the vault | |
 

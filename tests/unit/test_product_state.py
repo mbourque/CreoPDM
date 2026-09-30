@@ -123,15 +123,28 @@ def test_product_ui_locked_hides_mutations_keeps_checkout_for_undo():
     assert ui.show_revert is False
 
 
-def test_product_ui_force_undo_checkout_without_checkout_still_shows_menu():
+def test_product_ui_force_undo_checkout_without_checkout_hides_checkout_actions():
+    """Force Undo alone must not show Checkout selected/product/Undo (needs objects.checkout)."""
     product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=False)
     ui = product_ui_capabilities(
         product,
         can_checkout=False,
         can_force_undo_checkout=True,
     )
-    assert ui.show_checkout is True
+    assert ui.show_checkout is False
     assert ui.show_force_undo_checkout is True
+    assert ui.show_add is False
+
+
+def test_product_ui_without_checkin_hides_checkin_menu():
+    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=False)
+    ui = product_ui_capabilities(
+        product,
+        can_checkout=True,
+        can_checkin=False,
+    )
+    assert ui.show_checkout is True
+    assert ui.show_checkin is False
     assert ui.show_add is False
 
 

@@ -2516,8 +2516,19 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 _assert_forbidden(auth_client.get(f"/api/objects/{object_id}"))
                 assert f'data-can-view="0"' in home.text
             assert f'data-can-checkout="{"1" if PERMISSION_OBJECTS_CHECKOUT in allowed else "0"}"' in home.text
+            assert f'data-can-checkin="{"1" if PERMISSION_OBJECTS_CHECKIN in allowed else "0"}"' in home.text
             assert f'data-can-force-undo-checkout="{"1" if PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in allowed else "0"}"' in home.text
             assert f'data-can-copy-to-vault="{"1" if PERMISSION_OBJECTS_COPY_TO_VAULT in allowed else "0"}"' in home.text
+            if PERMISSION_OBJECTS_CHECKOUT in allowed:
+                assert 'id="checkout-btn"' in home.text
+                assert 'id="checkout-product-btn"' in home.text
+            else:
+                assert 'id="checkout-btn"' not in home.text
+                assert 'id="checkout-product-btn"' not in home.text
+            if PERMISSION_OBJECTS_CHECKIN in allowed:
+                assert 'id="checkin-menu"' in home.text
+            else:
+                assert 'id="checkin-menu"' not in home.text
             if PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in allowed:
                 assert 'id="force-undo-btn"' in home.text
             else:

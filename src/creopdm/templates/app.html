@@ -414,12 +414,13 @@
                 title="Open this product’s local workspace on this PC (creopdm-agent cache). Requires creopdm-agent.">Open workspace…</button>
       </div>
     </div>
-    {% if product_ui.show_checkout %}
+    {% if product_ui.show_checkout or product_ui.show_force_undo_checkout %}
     <div class="toolbar-menu" id="checkout-menu">
       <button type="button" class="btn toolbar-menu-toggle" id="checkout-menu-btn"
               aria-haspopup="menu" aria-expanded="false" disabled
               title="Check out selected or product files, or undo your checkout.">Checkout ▾</button>
       <div class="toolbar-menu-panel" role="menu" hidden>
+        {% if product_ui.show_checkout %}
         <button type="button" class="toolbar-menu-item" role="menuitem" id="checkout-btn"
                 disabled
                 title="Check out the selected files and download them to the local workspace.">Checkout selected</button>
@@ -430,6 +431,7 @@
         <button type="button" class="toolbar-menu-item" role="menuitem" id="undo-btn"
                 disabled
                 title="Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward.">Undo Checkout</button>
+        {% endif %}
         {% if product_ui.show_force_undo_checkout %}
         <button type="button" class="toolbar-menu-item" role="menuitem" id="force-undo-btn"
                 disabled

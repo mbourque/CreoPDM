@@ -3736,11 +3736,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!canOpenMenu) closeOpenMenu();
     const one = selected.length === 1 ? selected[0] : null;
     setToolbarActionVisible(historyBtn, Boolean(rowHistoryHref(one)));
-    // Checkout selected / product: row flags + checkoutable_count already false when locked.
+    const roleCanCheckout = userCanCheckout();
+    const roleCanCheckin = userCanCheckin();
     const canCheckout =
-      selected.length > 0 && selected.every((row) => row.dataset.canCheckout === "1");
-    const canCheckin = selectionCanCheckin(selected);
-    const canUndo = selected.length > 0 && selected.every((row) => row.dataset.owned === "1");
+      roleCanCheckout &&
+      selected.length > 0 &&
+      selected.every((row) => row.dataset.canCheckout === "1");
+    const canCheckin = roleCanCheckin && selectionCanCheckin(selected);
+    const canUndo =
+      roleCanCheckout &&
+      selected.length > 0 &&
+      selected.every((row) => row.dataset.owned === "1");
     const canForceUndo =
       document.body?.dataset?.canForceUndoCheckout === "1" &&
       selected.length > 0 &&
@@ -3762,7 +3768,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (!canAdd) closeAddMenu();
     const canCheckoutProduct =
-      Boolean(productId) && Number(checkoutProductBtn?.dataset.checkoutable || 0) > 0;
+      roleCanCheckout &&
+      Boolean(productId) &&
+      Number(checkoutProductBtn?.dataset.checkoutable || 0) > 0;
     const pendingProductSaves = Number(
       checkinBtn?.dataset.pendingSaves || checkinMenuBtn?.dataset.pendingSaves || 0
     );
@@ -3775,6 +3783,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Product check-in when there is queue work and/or active checkouts to release.
     // Check In menu is omitted from the DOM when the product is locked (Jinja product_ui).
     const canCheckinProduct =
+      roleCanCheckin &&
       Boolean(productId) &&
       (pendingProductSaves > 0 || pendingProductNew > 0 || productCheckoutCount > 0);
     const canCheckoutMenu = canCheckout || canCheckoutProduct || canUndo || canForceUndo;
@@ -4926,6 +4935,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function userCanCheckout() {
     return document.body?.dataset?.canCheckout === "1";
+  }
+
+  function userCanCheckin() {
+    return document.body?.dataset?.canCheckin === "1";
   }
 
   function promptOpenCheckout({ filename, canCheckout }) {
