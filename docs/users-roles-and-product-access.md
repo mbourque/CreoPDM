@@ -78,8 +78,8 @@ Permission keys (`products.*`, `objects.*` including **`objects.view`** and **`o
 | Starter role (default seed) | Can do | Cannot |
 | --- | --- | --- |
 | **Viewer** | Browse, open/download, Details/History (`objects.view` only; Open goes straight to open — no checkout dialog; Files toolbar **Details** when one file is selected, same as double-click) | Authoring toolbar, Copy to Vault, checkout-on-open, Administration |
-| **Engineer** | View + Add, checkout, check-in, remove, revert, metadata | Create/edit/delete products, Copy to Vault, Force Undo Check In, users, roles, settings |
-| **PDM Manager** | Create/edit products (Files/API) + Engineer authoring + **Copy to Vault** + **Force Undo Check In** | Delete product, Administration → Products (`products.manage`), users, roles, settings, email |
+| **Engineer** | View + Add, checkout, check-in, remove, revert, metadata | Create/edit/delete products, Copy to Vault, Force Undo Checkout, users, roles, settings |
+| **PDM Manager** | Create/edit products (Files/API) + Engineer authoring + **Copy to Vault** + **Force Undo Checkout** | Delete product, Administration → Products (`products.manage`), users, roles, settings, email |
 | **Administrator** | Everything above + delete product + full CreoPDM Administration (including Admin → Products and Email) | — |
 
 Automated coverage: `tests/unit/test_auth.py::test_every_starter_role_login_permission_matrix` creates one ephemeral user per starter role, logs each in, and asserts allow/deny for every built-in permission key (plus Files toolbar chrome and **product membership**: All / one product / none). Dedicated UI + lifecycle coverage: `test_admin_membership_product_access_filters_products`.

@@ -6040,8 +6040,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         : "";
     const confirmMsg =
       count === 1
-        ? "Force Undo Check In for this file?\n\nThe other user’s checkout lock is released. No new version is recorded. Unsaved vault changes for this file may be discarded."
-        : `Force Undo Check In for ${count} files?\n\nOther users’ checkout locks are released. No new version is recorded. Unsaved vault changes may be discarded.${slowNote}`;
+        ? "Force Undo Checkout for this file?\n\nThe other user’s checkout lock is released. No new version is recorded. Unsaved vault changes for this file may be discarded."
+        : `Force Undo Checkout for ${count} files?\n\nOther users’ checkout locks are released. No new version is recorded. Unsaved vault changes may be discarded.${slowNote}`;
     if (!window.confirm(confirmMsg)) return;
     showError($("#toolbar-error"), "");
     if (count === 1) {

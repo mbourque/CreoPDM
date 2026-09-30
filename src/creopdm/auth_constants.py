@@ -71,7 +71,7 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_OBJECTS_CHECKIN, "Check in objects"),
     (
         PERMISSION_OBJECTS_FORCE_CHECKIN,
-        "Force Undo Check In — release another user's checkout without a new version",
+        "Force Undo Checkout — release another user's checkout without a new version",
     ),
     (PERMISSION_OBJECTS_REMOVE, "Remove objects from products"),
     (PERMISSION_OBJECTS_REVERT, "Restore an older version as the working version"),

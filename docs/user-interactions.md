@@ -61,7 +61,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Watch a product with a valid account email | Receive email summaries for adds, removes, checkout, undo checkout, check-in, restore, and product rename/info (not for browse or background scans); no historical mail | Email yourself for your own actions |
 | Log in as a different user after someone else watched | Show **not** watching unless **you** subscribed; keep the other user’s subscription | Steal or clear another user’s watch when you open the product or click Stop on your own bell |
 | Open a product when your account email is invalid | Show the bell disabled with a clear reason | Let you subscribe until email is fixed |
-| **Force Undo Check In** (role permission) | Release another user’s checkout without a new version | Show without `objects.force_checkin`; commit a version |
+| **Force Undo Checkout** (role permission) | Release another user’s checkout without a new version | Show without `objects.force_checkin`; commit a version |
 | Delete product | Ask you to type the **exact** product name; remove CreoPDM’s copy of the product | Delete your original CAD folders on disk just because you deleted the product; delete if you typed the wrong name |
 
 **Name rules (new / rename)**
@@ -125,7 +125,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 | Open ▾ | A product is open (workspace) and/or a file can be opened (**Files** page) | No product and nothing to open; always hidden on the file **Details** page |
 | Open selected… | A file you can open is selected | Nothing useful selected |
 | Open workspace… | A product is open **and** creopdm-agent is running on this PC | No product; agent offline (do not offer a host-vault fallback) |
-| Checkout ▾ | Something can be checked out, undone, or force-undone (**Files** page). On a locked product, **Undo Checkout** / **Force Undo Check In** may still appear | Nothing to do; always hidden on the file **Details** page |
+| Checkout ▾ | Something can be checked out, undone, or force-undone (**Files** page). On a locked product, **Undo Checkout** / **Force Undo Checkout** may still appear | Nothing to do; always hidden on the file **Details** page |
 | Check In ▾ | Something can be checked in or added **and** the product allows edits | Nothing pending; product is locked (read-only / not In work) |
 | Details | One file selected | No file |
 | Copy to Vault | You have **Copy to Vault** permission and selected files are not already in the vault | Nothing to copy; role lacks `objects.copy_to_vault` (hidden for Viewer / Engineer by default) |
@@ -230,14 +230,14 @@ If open seems to do nothing, check the error line under the toolbar, and that cr
 1. **Checkout selected**  
 2. **Checkout product**  
 3. **Undo Checkout**  
-4. **Force Undo Check In** (only with `objects.force_checkin`)
+4. **Force Undo Checkout** (only with `objects.force_checkin`)
 
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Checkout selected | Lock those files and download them for editing, keeping vault folder paths in the local workspace | Steal a file someone else has checked out; flatten nested files to the workspace root |
 | Checkout product | Check out everything that’s free, keeping vault folder paths locally | Offer checkout when nothing is left; flatten nested files to the workspace root |
 | Undo Checkout | Release **your** locks only | Undo someone else’s checkout; delete the vault file; create a new version |
-| Force Undo Check In | Release **another user’s** checkout lock (abandoned checkout); no new version; confirm first | Appear without `objects.force_checkin`; commit a new version; delete the vault file |
+| Force Undo Checkout | Release **another user’s** checkout lock (abandoned checkout); no new version; confirm first | Appear without `objects.force_checkin`; commit a new version; delete the vault file |
 
 ---
 

@@ -199,7 +199,7 @@ def test_undo_checkout(client, repo_parent):
 
 @requires_git
 def test_force_checkin_releases_other_users_checkout(client, repo_parent, identity, data_dir):
-    """Force Undo Check In: release another user's lock; no new vault version."""
+    """Force Undo Checkout: release another user's lock; no new vault version."""
     from creopdm.services.git_service import GitService
 
     product, obj, _location = _create_part(client, repo_parent)

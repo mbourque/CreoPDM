@@ -525,7 +525,7 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert 'id="checkout-product-btn"' in html
     assert "Checkout product" in html
     assert 'id="undo-btn"' in html
-    assert "Force Undo Check In" in html
+    assert "Force Undo Checkout" in html
     assert 'id="force-undo-btn"' in html
     assert html.index('id="checkout-menu"') < html.index('id="undo-btn"')
     assert html.index('id="undo-btn"') < html.index('id="force-undo-btn"')

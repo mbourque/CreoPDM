@@ -195,7 +195,7 @@ def force_checkin_batch(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
-    """Force Undo Check In: release another user's checkout; no new version."""
+    """Force Undo Checkout: release another user's checkout; no new version."""
     require_permission(request, ctx, PERMISSION_OBJECTS_FORCE_CHECKIN)
     objects = load_accessible_objects(request, ctx, db, payload.object_ids)
     result = ctx.checkouts.force_undo_checkout_many(db, payload.object_ids)
@@ -334,7 +334,7 @@ def force_checkin(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ObjectResponse:
-    """Force Undo Check In: release another user's checkout; no new version."""
+    """Force Undo Checkout: release another user's checkout; no new version."""
     require_permission(request, ctx, PERMISSION_OBJECTS_FORCE_CHECKIN)
     obj = ctx.objects.get_object(db, object_id)
     require_product_access(request, ctx, obj.product)

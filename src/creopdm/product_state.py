@@ -81,7 +81,7 @@ def product_ui_capabilities(
 ) -> ProductUiCapabilities:
     """Combine signed-in role permissions with product state / read_only.
 
-    Checkout menu stays available when locked so Undo Checkout / Force Undo Check In
+    Checkout menu stays available when locked so Undo Checkout / Force Undo Checkout
     can appear; add, check-in, vault/product remove, rename, delete, metadata, and
     revert hide. Local workspace remove/purge stay under ``show_remove``.
     """

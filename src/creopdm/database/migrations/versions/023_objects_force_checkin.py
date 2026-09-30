@@ -20,7 +20,7 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 _KEY = "objects.force_checkin"
-_DESC = "Force Undo Check In — release another user's checkout without a new version"
+_DESC = "Force Undo Checkout — release another user's checkout without a new version"
 _GRANT_ROLES = ("Administrator", "PDM Manager")
 
 
