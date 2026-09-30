@@ -30,7 +30,12 @@ from creopdm.context import AppContext
 from creopdm.exceptions import PermissionDeniedError, ProductNotFoundError
 from creopdm.permissions import caps_dict
 from creopdm.utils.bom_match import bom_generic_label, bom_lookup_keys
-from creopdm.utils.classify import display_type_label, resolve_type_icon, type_icon_client_payload
+from creopdm.utils.classify import (
+    display_type_label,
+    matches_cad_models,
+    resolve_type_icon,
+    type_icon_client_payload,
+)
 from creopdm.utils.files import format_byte_size
 from creopdm.utils.folders import folder_crumbs, folder_of, folder_view_counts, normalize_folder_query
 from creopdm.utils.native_dialog import native_picker_available
@@ -486,9 +491,19 @@ def object_detail(
     is_creo = obj.object_type.startswith("CREO_")
     pending = ctx.workspaces.pending_workspace_save(product, obj)
     metadata = ctx.metadata.get(db, object_id)
+    # Where Used is only meaningful for Creo Models (Settings → Creo Models chip list).
+    show_where_used = matches_cad_models(
+        str(obj.filename or ""),
+        ctx.config.cad_models_extensions(),
+        str(getattr(obj, "extension", "") or ""),
+    )
     # Dependency + BOM only — vault byte scan is too slow on large products for SSR.
     # Where Used tab loads the full result (including vault scan) via API.
-    where_used = ctx.metadata.where_used(db, object_id, vault_scan=False)
+    where_used = (
+        ctx.metadata.where_used(db, object_id, vault_scan=False)
+        if show_where_used
+        else None
+    )
     identity = metadata.identity or {}
     materials = metadata.materials or {}
     units = metadata.units or {}
@@ -543,7 +558,8 @@ def object_detail(
             "show_features_tab": show_features_tab,
             "show_structure_tab": show_structure_tab,
             "bom": bom,
-            "where_used": where_used.items,
+            "show_where_used": show_where_used,
+            "where_used": where_used.items if where_used is not None else [],
             "workspace_path": str(ctx.workspaces.vault_for(product)),
             "workspace_folder": folder_of(obj.relative_path),
             "checkout_count": checkout_count,

@@ -755,6 +755,22 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert "local_time_pretty" in APP_HTML.read_text(encoding="utf-8")
 
 
+def test_details_where_used_tab_gated_on_creo_models():
+    """Where Used on Details only when show_where_used (Settings → Creo Models)."""
+    detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(
+        encoding="utf-8"
+    )
+    pages = (ROOT / "src" / "creopdm" / "api" / "pages.py").read_text(encoding="utf-8")
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "{% if show_where_used %}" in detail
+    assert 'data-tab="where-used"' in detail
+    assert "matches_cad_models" in pages
+    assert "cad_models_extensions()" in pages
+    assert "show_where_used" in pages
+    assert "Where Used** only for files whose extension is in **Settings → Creo Models" in docs
+    assert "Show Where Used for Documents" in docs
+
+
 def test_history_revert_only_for_older_versions():
     """Revert control appears only with older history; current row is not reversible."""
     detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(

@@ -111,7 +111,9 @@
     {% if is_assembly %}
     <button type="button" class="tab" data-tab="bom">BOM</button>
     {% endif %}
+    {% if show_where_used %}
     <button type="button" class="tab" data-tab="where-used">Where Used</button>
+    {% endif %}
     <button type="button" class="tab" data-tab="history">History{% if workspace_pending %} · unsaved{% endif %}</button>
   </div>
 
@@ -417,6 +419,7 @@
   </section>
   {% endif %}
 
+  {% if show_where_used %}
   <section class="tab-panel" id="panel-where-used" hidden
            data-object-id="{{ object.uuid }}"
            data-product-id="{{ product.uuid }}"
@@ -459,6 +462,7 @@
       After a bulk Add, use product settings → <strong>Rebuild Where Used</strong> once so links are stored in the database (fast SQL). Creo Check In still refreshes BOM when you capture metadata.
     </p>
   </section>
+  {% endif %}
 
   <section class="tab-panel" id="panel-history" hidden>
     {% if workspace_pending %}

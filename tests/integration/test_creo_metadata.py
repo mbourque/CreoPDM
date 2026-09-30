@@ -129,6 +129,11 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert 'class="object-open bom-name"' in text
     assert 'class="object-open mono bom-name"' not in text
 
+    shaft_detail = client.get(f"/products/{product['uuid']}/objects/{shaft['uuid']}")
+    assert shaft_detail.status_code == 200
+    assert 'data-tab="where-used"' in shaft_detail.text
+    assert 'id="panel-where-used"' in shaft_detail.text
+
     shaft_meta = client.post(
         f"/api/objects/{shaft['uuid']}/creo-metadata",
         json={
@@ -403,3 +408,30 @@ def test_metadata_menu_items_are_creo_session_only(client, repo_parent):
     assert "hidden" in collect.group(0)
     assert "hidden" in rebuild.group(0)
     assert 'id="set-creo-dir-btn"' in page.text
+
+
+@requires_git
+def test_where_used_tab_only_for_creo_models_extensions(client, repo_parent, tmp_path):
+    """Details Where Used follows Settings → Creo Models, not Documents/Other."""
+    product = _create_product(client, repo_parent)
+    part = _add_part(client, product["uuid"], tmp_path, "pin.prt.1")
+    notes = tmp_path / "notes.txt"
+    notes.write_bytes(b"hello")
+    added = client.post(
+        f"/api/products/{product['uuid']}/objects",
+        files={"file": ("notes.txt", notes.read_bytes(), "text/plain")},
+        data={"comment": "Notes"},
+    )
+    assert added.status_code == 201, added.text
+    doc = added.json()
+
+    part_page = client.get(f"/products/{product['uuid']}/objects/{part['uuid']}")
+    assert part_page.status_code == 200, part_page.text
+    assert 'data-tab="where-used"' in part_page.text
+    assert 'id="panel-where-used"' in part_page.text
+
+    doc_page = client.get(f"/products/{product['uuid']}/objects/{doc['uuid']}")
+    assert doc_page.status_code == 200, doc_page.text
+    assert 'data-tab="where-used"' not in doc_page.text
+    assert 'id="panel-where-used"' not in doc_page.text
+    assert 'data-tab="history"' in doc_page.text
