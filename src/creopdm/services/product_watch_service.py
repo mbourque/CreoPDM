@@ -223,3 +223,85 @@ class ProductWatchService:
             message=message,
             to=recipients,
         )
+
+    def notify_force_undo_owners(
+        self,
+        db: Session,
+        *,
+        product: Product,
+        actor: User | None,
+        actor_label: str,
+        owners_to_files: dict[str, list[str]],
+        base_url: str,
+        object_uuid: str | None = None,
+        email_enabled: bool,
+    ) -> None:
+        """Tell each former checkout owner their lock was force-released."""
+        if not email_enabled:
+            logger.info(
+                "force_undo_owner skip product=%s: email notifications disabled",
+                product.uuid,
+            )
+            return
+        actor_username = (actor.username if actor is not None else "") or ""
+        when = format_local(datetime.now(timezone.utc))
+        base = (base_url or "").rstrip("/")
+
+        for username, filenames in owners_to_files.items():
+            uname = (username or "").strip()
+            if not uname or uname.casefold() == actor_username.casefold():
+                continue
+            owner = db.scalar(select(User).where(User.username == uname.casefold()))
+            if owner is None:
+                logger.info(
+                    "force_undo_owner skip product=%s user=%s: no matching account",
+                    product.uuid,
+                    uname,
+                )
+                continue
+            to_addr = _usable_watch_email(getattr(owner, "email", None))
+            if to_addr is None:
+                logger.info(
+                    "force_undo_owner skip product=%s user=%s: no usable email",
+                    product.uuid,
+                    uname,
+                )
+                continue
+            files = [f for f in filenames if (f or "").strip()]
+            if not files:
+                continue
+            if object_uuid and len(files) == 1:
+                link = f"{base}/products/{product.uuid}/objects/{object_uuid}"
+            else:
+                link = f"{base}/?product={product.uuid}"
+            if len(files) == 1:
+                files_block = files[0]
+            else:
+                shown = files[:_MAX_FILES_IN_EMAIL]
+                extra = len(files) - len(shown)
+                lines = "\n".join(f"  - {name}" for name in shown)
+                if extra > 0:
+                    lines += f"\n  … and {extra} more"
+                files_block = f"{len(files)} files:\n{lines}"
+            subject = f"CreoPDM: Force Undo Checkout in {product.name}"
+            message = (
+                f"Product: {product.name}\n"
+                f"Action: Force Undo Checkout\n"
+                f"By: {actor_label}\n"
+                f"When: {when}\n"
+                f"Your checkout was released for:\n"
+                f"{files_block}\n"
+                f"\nOpen: {link}\n"
+            )
+            logger.info(
+                "force_undo_owner notify product=%s user=%s files=%s",
+                product.uuid,
+                uname,
+                files[:5],
+            )
+            self._notifications.notify(
+                NotificationEvent.PRODUCT_ACTIVITY,
+                subject=subject,
+                message=message,
+                to=[to_addr],
+            )

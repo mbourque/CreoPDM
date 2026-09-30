@@ -154,6 +154,41 @@ def _notify_batch_by_product(
         )
 
 
+def _notify_force_undo_owners_by_product(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    objects: list,
+    result: dict,
+) -> None:
+    from collections import defaultdict
+
+    from creopdm.api.watch_notify import notify_force_undo_checkout_owners
+
+    by_uuid = {obj.uuid: obj for obj in objects}
+    # product_id -> previous_user -> filenames
+    owners: dict[int, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    product_by_id = {}
+    for item in result.get("ok") or []:
+        if item.get("status") != "force_cancelled":
+            continue
+        obj = by_uuid.get(item.get("uuid") or "")
+        name = item.get("filename")
+        previous = (item.get("previous_user") or "").strip()
+        if obj is None or not name or not previous:
+            continue
+        owners[obj.product.id][previous].append(name)
+        product_by_id[obj.product.id] = obj.product
+    for product_id, owners_to_files in owners.items():
+        notify_force_undo_checkout_owners(
+            request,
+            ctx,
+            db,
+            product_by_id[product_id],
+            owners_to_files=dict(owners_to_files),
+        )
+
+
 @router.post("/api/objects/batch/checkout", response_model=BatchOperationResponse)
 def checkout_batch(
     payload: BatchObjectRequest,
@@ -201,6 +236,7 @@ def force_undo_checkout_batch(
     result = ctx.checkouts.force_undo_checkout_many(db, payload.object_ids)
     if result.get("ok"):
         _notify_batch_by_product(request, ctx, db, objects, result, "Checkout force-canceled")
+        _notify_force_undo_owners_by_product(request, ctx, db, objects, result)
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.config.workspace_root())}
     )
@@ -338,9 +374,12 @@ def force_undo_checkout(
     require_permission(request, ctx, PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT)
     obj = ctx.objects.get_object(db, object_id)
     require_product_access(request, ctx, obj.product)
-    ctx.checkouts.force_undo_checkout(db, object_id)
+    previous_user = ctx.checkouts.force_undo_checkout(db, object_id)
     obj = ctx.objects.get_object(db, object_id)
-    from creopdm.api.watch_notify import notify_product_watchers
+    from creopdm.api.watch_notify import (
+        notify_force_undo_checkout_owners,
+        notify_product_watchers,
+    )
 
     notify_product_watchers(
         request,
@@ -349,6 +388,14 @@ def force_undo_checkout(
         obj.product,
         action="Checkout force-canceled",
         filenames=[obj.filename],
+        object_uuid=obj.uuid,
+    )
+    notify_force_undo_checkout_owners(
+        request,
+        ctx,
+        db,
+        obj.product,
+        owners_to_files={previous_user: [obj.filename]},
         object_uuid=obj.uuid,
     )
     return present_object(ctx, db, obj)

@@ -61,7 +61,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Watch a product with a valid account email | Receive email summaries for adds, removes, checkout, undo checkout, check-in, restore, and product rename/info (not for browse or background scans); no historical mail | Email yourself for your own actions |
 | Log in as a different user after someone else watched | Show **not** watching unless **you** subscribed; keep the other user’s subscription | Steal or clear another user’s watch when you open the product or click Stop on your own bell |
 | Open a product when your account email is invalid | Show the bell disabled with a clear reason | Let you subscribe until email is fixed |
-| **Force Undo Checkout** (role permission) | Release another user’s checkout without a new version | Show without `objects.force_undo_checkout`; commit a version |
+| **Force Undo Checkout** (role permission) | Release another user’s checkout without a new version; email that user when notifications are enabled (they need a valid account email; watching is not required) | Show without `objects.force_undo_checkout`; commit a version |
 | Delete product | Ask you to type the **exact** product name; remove CreoPDM’s copy of the product | Delete your original CAD folders on disk just because you deleted the product; delete if you typed the wrong name |
 
 **Name rules (new / rename)**
@@ -237,7 +237,7 @@ If open seems to do nothing, check the error line under the toolbar, and that cr
 | Checkout selected | Lock those files and download them for editing, keeping vault folder paths in the local workspace | Steal a file someone else has checked out; flatten nested files to the workspace root; appear without `objects.checkout` |
 | Checkout product | Check out everything that’s free, keeping vault folder paths locally | Offer checkout when nothing is left; flatten nested files to the workspace root; appear without `objects.checkout` |
 | Undo Checkout | Release **your** locks only | Undo someone else’s checkout; delete the vault file; create a new version; appear without `objects.checkout` |
-| Force Undo Checkout | Release **another user’s** checkout lock (abandoned checkout); no new version; confirm first | Appear without `objects.force_undo_checkout`; commit a new version; delete the vault file; unlock Checkout selected/product without `objects.checkout` |
+| Force Undo Checkout | Release **another user’s** checkout lock (abandoned checkout); no new version; confirm first; email the former owner when Email notifications are enabled | Appear without `objects.force_undo_checkout`; commit a new version; delete the vault file; unlock Checkout selected/product without `objects.checkout` |
 
 ---
 
@@ -469,7 +469,7 @@ Automated coverage lives mainly in:
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
 - `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `products.view` / `objects.view` / `data-can-checkout`; empty-home `products.create` hero; empty-product `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_products_view_lands_on_administration`; `test_setup_and_admin_user_require_email`; `test_username_rejects_spaces_and_email_needs_domain`; `test_admin_email_settings_save_and_gate`; `test_admin_membership_product_access_filters_products`; `test_role_assign_must_be_strictly_below_actor`; new users default to no product access)
 - `tests/unit/test_password_reset.py` (forgot link only after wrong password; GET blocked; wrong email same confirmation / one try; spam disable)
-- `tests/unit/test_product_watch.py` (bell when email enabled; per-user watch; subscribe/unsubscribe; one email per bulk action; actor excluded; notifications off skips mail)
+- `tests/unit/test_product_watch.py` (bell when email enabled; per-user watch; subscribe/unsubscribe; one email per bulk action; actor excluded; notifications off skips mail; Force Undo Checkout emails former owner)
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
 - `tests/integration/test_creo_metadata.py` (Collect / Rebuild Where Used gear items are `creo-session-only`, hidden until Creo.JS is connected)

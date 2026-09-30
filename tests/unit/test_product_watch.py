@@ -227,6 +227,69 @@ def test_product_watch_api_subscribe_unsubscribe_and_notify(auth_client, auth_ct
         )
 
 
+@requires_git
+def test_force_undo_checkout_emails_previous_owner(auth_client, auth_ctx, repo_parent):
+    """Force Undo Checkout emails the former checkout owner when notifications are on.
+
+    Owner need not be watching the product. Disabled notifications send nothing.
+    """
+    _setup_admin_and_users(
+        auth_client,
+        auth_ctx,
+        ("owner", BuiltinRole.ENGINEER.value),
+        ("pdm", BuiltinRole.PDM_MANAGER.value),
+    )
+    _login(auth_client, "admin", "AdminPass1")
+    auth_ctx.settings.email.enabled = True
+    product = auth_client.post("/api/products", json={"name": "Force Undo Mail"}).json()
+    product_id = product["uuid"]
+    part = auth_client.post(
+        f"/api/products/{product_id}/objects",
+        files={"file": ("owned.prt", b"x", "application/octet-stream")},
+        data={"comment": "init"},
+    )
+    assert part.status_code == 201, part.text
+    object_id = part.json()["uuid"]
+
+    _login(auth_client, "owner", "OwnerPass1")
+    assert auth_client.post(f"/api/objects/{object_id}/checkout").status_code == 200
+
+    sent: list[tuple] = []
+
+    def capture(to, subject, message):
+        sent.append((list(to) if isinstance(to, list) else [to], subject, message))
+
+    email = MagicMock(spec=EmailService)
+    email.send.side_effect = capture
+    auth_ctx.notifications = NotificationService(
+        get_config=lambda: auth_ctx.settings.email,
+        email=email,
+    )
+    auth_ctx.product_watches = ProductWatchService(auth_ctx.notifications)
+
+    _login(auth_client, "pdm", "PdmPass1")
+    forced = auth_client.post(f"/api/objects/{object_id}/force-undo-checkout")
+    assert forced.status_code == 200, forced.text
+    # Owner mail (not watching) — watchers list empty so only owner email.
+    assert len(sent) == 1
+    recipients, subject, message = sent[0]
+    assert recipients == ["owner@example.com"]
+    assert "Force Undo Checkout" in subject
+    assert "owned.prt" in message
+    assert "Your checkout was released" in message
+    assert "pdm" in message.lower()
+
+    # Notifications off → no owner mail.
+    _login(auth_client, "owner", "OwnerPass1")
+    assert auth_client.post(f"/api/objects/{object_id}/checkout").status_code == 200
+    auth_ctx.settings.email.enabled = False
+    sent.clear()
+    _login(auth_client, "pdm", "PdmPass1")
+    again = auth_client.post(f"/api/objects/{object_id}/force-undo-checkout")
+    assert again.status_code == 200, again.text
+    assert sent == []
+
+
 def test_product_activity_event_requires_explicit_recipients():
     email = MagicMock(spec=EmailService)
     notify = NotificationService(get_config=lambda: _cfg(), email=email)

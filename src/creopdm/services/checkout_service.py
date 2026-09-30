@@ -255,8 +255,11 @@ class CheckoutService:
             )
             logger.info("Cancelled checkout of %s", obj.filename)
 
-    def force_undo_checkout(self, session: Session, object_uuid: str) -> None:
-        """Release any user's checkout without committing a new version."""
+    def force_undo_checkout(self, session: Session, object_uuid: str) -> str:
+        """Release any user's checkout without committing a new version.
+
+        Returns the previous checkout ``user_name`` (login username).
+        """
         obj = self._objects.get_object(session, object_uuid)
         product = obj.product
         user = self._users.get_current_user()
@@ -292,6 +295,7 @@ class CheckoutService:
                 obj.filename,
                 previous_user,
             )
+            return previous_user
 
     def undo_checkout_many(self, session: Session, object_uuids: list[str]) -> dict[str, list]:
         ok: list[dict[str, str]] = []
@@ -353,8 +357,16 @@ class CheckoutService:
                 if existing is None:
                     ok.append({"uuid": object_uuid, "filename": filename, "status": "already_available"})
                     continue
+                previous_user = existing.user_name
                 self.force_undo_checkout(session, object_uuid)
-                ok.append({"uuid": object_uuid, "filename": filename, "status": "force_cancelled"})
+                ok.append(
+                    {
+                        "uuid": object_uuid,
+                        "filename": filename,
+                        "status": "force_cancelled",
+                        "previous_user": previous_user,
+                    }
+                )
             except CreoPDMError as exc:
                 failed.append(
                     {

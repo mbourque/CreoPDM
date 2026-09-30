@@ -44,3 +44,33 @@ def notify_product_watchers(
         object_uuid=object_uuid,
         email_enabled=bool(ctx.settings.email.enabled),
     )
+
+
+def notify_force_undo_checkout_owners(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    product: Product,
+    *,
+    owners_to_files: dict[str, list[str]],
+    object_uuid: str | None = None,
+) -> None:
+    """Email former checkout owners when Force Undo Checkout releases their locks.
+
+    Runs only when email notifications are enabled. Does not require product watch.
+    """
+    auth_user = getattr(request.state, "auth_user", None)
+    if not isinstance(auth_user, User):
+        auth_user = None
+    identity = ctx.users.get_current_user()
+    label = actor_label(auth_user, fallback=identity.user_name or "Someone")
+    ctx.product_watches.notify_force_undo_owners(
+        db,
+        product=product,
+        actor=auth_user,
+        actor_label=label,
+        owners_to_files=owners_to_files,
+        base_url=str(request.base_url),
+        object_uuid=object_uuid,
+        email_enabled=bool(ctx.settings.email.enabled),
+    )
