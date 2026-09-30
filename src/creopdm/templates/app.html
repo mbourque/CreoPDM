@@ -110,7 +110,7 @@
       <p class="muted product-meta">{% if selected.number %}<span class="product-meta-number">{{ selected.number }}</span>{% endif %}{% if selected.number and selected.description %} · {% endif %}{% if selected.description %}{{ selected.description }}{% endif %}</p>
       {% endif %}
       {% if product_ui.show_access_banner %}
-      <p class="warn-note" id="product-access-banner">{% if selected.read_only %}This product is <strong>read only</strong>{% else %}This product is <strong>{{ selected.state.replace('_', ' ') | title }}</strong>{% endif %} — add, checkout, check-in, rename, remove, and delete are blocked.</p>
+      <p class="warn-note" id="product-access-banner">{% if selected.read_only %}This product is <strong>read only</strong>.{% else %}This product is <strong>{{ selected.state.replace('_', ' ') | title }}</strong>.{% endif %}</p>
       {% endif %}
     </div>
 

@@ -49,6 +49,8 @@ def test_checkout_blocked_when_product_on_hold(client, repo_parent):
     assert page.status_code == 200, page.text
     assert 'data-allows-mutation="0"' in page.text
     assert "product-access-banner" in page.text
+    assert "This product is" in page.text
+    assert "are blocked" not in page.text
     assert 'id="product-state-badge"' in page.text
     assert 'data-state="ON_HOLD"' in page.text
     assert "On Hold" in page.text

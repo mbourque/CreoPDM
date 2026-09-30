@@ -248,6 +248,12 @@ def test_product_state_badge_in_files_header():
     assert '.checkout-state[data-state="locked"]::before' in css
     assert "current product state" in docs.lower()
     assert "can_checkout %}available{% else %}locked" in html
+    # Lock banner states the fact only — no laundry list of blocked actions.
+    banner = _between(html, 'id="product-access-banner"', "</p>")
+    assert "This product is" in banner
+    assert "are blocked" not in banner
+    assert "checkout" not in banner.lower()
+    assert "without listing blocked actions" in docs
 
 
 def test_metadata_gear_items_require_creo_session():
