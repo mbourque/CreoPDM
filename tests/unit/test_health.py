@@ -280,8 +280,12 @@ def test_config_layout(data_dir):
     assert ".ncl" in settings.cad.openable_extensions
     assert ".tap" in settings.cad.openable_extensions
     assert ".xml" in settings.cad.openable_extensions
-    assert ".log" in settings.cad.openable_extensions
+    assert ".log" not in settings.cad.openable_extensions
     assert ".lst" in settings.cad.openable_extensions
+    assert ".log" not in settings.cad.purgeable_extensions
+    assert "traceback.log" in settings.ignore.patterns
+    assert "*.log" in settings.ignore.patterns
+    assert "*.log.*" in settings.ignore.patterns
     assert ".dxf" not in settings.cad.extra_extensions
     assert ".frm" not in settings.cad.extra_extensions
     assert ".wrl" not in settings.cad.extra_extensions
@@ -308,6 +312,8 @@ def test_config_layout(data_dir):
     assert "proimpex.errors" in settings.ignore.patterns
     assert "regen_backup_model*.mrd.*" in settings.ignore.patterns
     assert "traceback.log" in settings.ignore.patterns
+    assert "*.log" in settings.ignore.patterns
+    assert "*.log.*" in settings.ignore.patterns
     assert "mapkeys.pro" in settings.ignore.patterns
     assert "config.pro" in settings.ignore.patterns
     assert "config.sup" in settings.ignore.patterns

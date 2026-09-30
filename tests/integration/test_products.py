@@ -56,10 +56,12 @@ def test_create_list_and_get_product(client, repo_parent, data_dir):
     assert "proimpex.errors" in ignore
     assert "regen_backup_model*.mrd.*" in ignore
     assert "traceback.log" in ignore
+    assert "*.log" in ignore
+    assert "*.log.*" in ignore
     assert "config.pro" in ignore
     assert "creo_parametric_customization.ui" in ignore
     assert "Thumbs.db" in ignore
-    for ext in (".inf", ".idx", ".log", ".crc", ".dat", ".out"):
+    for ext in (".inf", ".idx", ".crc", ".dat", ".out"):
         assert f"*{ext}\n" not in ignore and not ignore.endswith(f"*{ext}")
 
     listing = client.get("/api/products")

@@ -89,11 +89,12 @@ def test_get_and_update_settings(client, tmp_path):
     assert ".ncl" in openable
     assert ".tap" in openable
     assert ".xml" in openable
-    assert ".log" in openable
+    assert ".log" not in openable
     assert ".lst" in openable
     assert extra_cad_set(openable) == extra_cad_set(payload["default_cad_openable_extensions"])
     assert ".tph" in payload["purgeable_extensions"]
     assert ".prt" in payload["purgeable_extensions"]
+    assert ".log" not in payload["purgeable_extensions"]
     assert extra_cad_set(payload["purgeable_extensions"]) == extra_cad_set(
         payload["default_purgeable_extensions"]
     )
@@ -119,6 +120,8 @@ def test_get_and_update_settings(client, tmp_path):
     assert "proimpex.errors" in payload["ignore_patterns"]
     assert "regen_backup_model*.mrd.*" in payload["ignore_patterns"]
     assert "traceback.log" in payload["ignore_patterns"]
+    assert "*.log" in payload["ignore_patterns"]
+    assert "*.log.*" in payload["ignore_patterns"]
     assert "config.pro" in payload["ignore_patterns"]
     assert "creo_parametric_customization.ui" in payload["ignore_patterns"]
     assert ".exe" in payload["ignore_patterns"]

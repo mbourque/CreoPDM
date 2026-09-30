@@ -63,6 +63,8 @@ def test_workspace_transients_are_ignored():
     assert CreoFileManager.is_workspace_transient("regen_backup_model.mrd.1")
     assert CreoFileManager.is_workspace_transient("regen_backup_model-asm.mrd.12")
     assert CreoFileManager.is_workspace_transient("traceback.log")
+    assert CreoFileManager.is_workspace_transient("session.log")
+    assert CreoFileManager.is_workspace_transient("session.log.3")
     assert CreoFileManager.is_workspace_transient("mapkeys.pro")
     assert CreoFileManager.is_workspace_transient("config.pro")
     assert CreoFileManager.is_workspace_transient("config.sup")
@@ -362,7 +364,7 @@ def test_cad_dialog_filter_includes_numbered_defaults():
     assert "*.prt;*.prt.*;*.*.prt" in patterns
     assert "*.inf;*.inf.*" in patterns
     assert "*.ncl;*.ncl.*" in patterns
-    assert "*.log;*.log.*" in patterns
+    assert "*.log;*.log.*" not in patterns
     assert "*.*.ncl" not in patterns
     assert "*.*.inf" not in patterns
     assert "*.m_p;*.m_p.*" in patterns

@@ -81,7 +81,8 @@ def test_matches_document_uses_logical_suffix():
 def test_default_extra_cad_extensions():
     assert classify_filename("outline.dxf") == ObjectType.CAD
     assert classify_filename("toolpath.ncl") == ObjectType.CAD
-    assert classify_filename("session.log") == ObjectType.CAD
+    # .log is ignored by default (not openable / extra CAD) → OTHER if it slips through.
+    assert classify_filename("session.log") == ObjectType.OTHER
     assert classify_filename("params.xml") == ObjectType.CAD
     assert classify_filename("cycle.tph") == ObjectType.CAD
     assert classify_filename("setup.inf") == ObjectType.CAD
@@ -255,7 +256,8 @@ def test_display_type_label_defaults_and_overrides():
         {"extension": "mc_error.log", "label": "ModelCHECK Error Log"},
     ]
     assert display_type_label("mc_error.log", "CAD", logs) == "ModelCHECK Error Log"
-    assert display_type_label("mc_error.log.1", "CAD", logs) == "ModelCHECK Error Log"
+    # .log is not purgeable/openable, so .log.N is not stripped for label matching.
+    assert display_type_label("mc_error.log.1", "CAD", logs) == "Cad"
     assert display_type_label("session.log", "CAD", logs) == "Log file"
     defaults = unique_type_labels(DEFAULT_TYPE_LABELS)
     assert display_type_label("index.html", "DOCUMENT", defaults) == "Webpage"

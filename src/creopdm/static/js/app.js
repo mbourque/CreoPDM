@@ -789,7 +789,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if ([".doc", ".docx", ".odt", ".rtf", ".txt", ".md"].includes(key)) return "DOCUMENT";
     if ([".xls", ".xlsx", ".xlsm", ".csv"].includes(key)) return "SPREADSHEET";
     if ([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".svg"].includes(key)) return "IMAGE";
-    if ([".log", ".xml", ".ncl", ".lst"].includes(key)) return "TEXT";
+    if ([".xml", ".ncl", ".lst"].includes(key)) return "TEXT";
     return "CAD";
   }
 

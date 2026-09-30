@@ -537,7 +537,6 @@ DEFAULT_OPENABLE_CAD_EXTENSIONS = (
     ".ncl",
     ".tap",
     ".xml",
-    ".log",
     ".lst",
 )
 
@@ -550,7 +549,6 @@ DEFAULT_PURGEABLE_EXTENSIONS = (
     ".frm",
     ".gph",
     ".inf",
-    ".log",
     ".lsl",
     ".lst",
     ".mat",
@@ -873,6 +871,8 @@ DEFAULT_IGNORE_PATTERNS = (
     "proimpex.errors",
     "regen_backup_model*.mrd.*",
     "traceback.log",
+    "*.log",
+    "*.log.*",
     "mapkeys.pro",
     "config.pro",
     "config.sup",
