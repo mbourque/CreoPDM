@@ -162,6 +162,14 @@ def test_search_objects_includes_nested_folders(client, repo_parent):
     assert "function eventEl" in script.text
     assert "function rowFilename" in script.text
     assert "/objects?q=" in script.text
+    # Product-wide search must not depend on #rename-product-btn (missing when
+    # show_rename is off) — otherwise only the current folder is filtered.
+    assert "currentProductId()" in script.text
+    search_fn = script.text.split("async function searchAllFolders", 1)[1].split(
+        "function onSearchInput", 1
+    )[0]
+    assert "currentProductId()" in search_fn
+    assert 'rename-product-btn' not in search_fn
 
 
 @requires_git

@@ -3310,7 +3310,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function searchAllFolders(query) {
-    const productId = $("#rename-product-btn")?.dataset.product;
+    // Prefer currentProductId() — rename/delete gear items are absent when those
+    // caps are off; metric-filters / URL still carry the product for search.
+    const productId = currentProductId();
     if (!objectTbody || !productId) {
       applyMetricVisibility();
       syncToolbar();
