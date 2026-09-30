@@ -22,6 +22,7 @@ from creopdm.auth_constants import (
     PERMISSION_PRODUCTS_DELETE,
     PERMISSION_PRODUCTS_EDIT,
     PERMISSION_PRODUCTS_MANAGE,
+    PERMISSION_PRODUCTS_VIEW,
     PERMISSION_ROLES_ASSIGN,
     PERMISSION_ROLES_MANAGE,
     PERMISSION_SETTINGS_MANAGE,
@@ -47,6 +48,7 @@ class CapabilityFlags:
     can_create_product: bool
     can_edit_product: bool
     can_delete_product: bool
+    can_view_products: bool
     can_view_objects: bool
     can_add_objects: bool
     can_checkout: bool
@@ -72,6 +74,7 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_create_product=PERMISSION_PRODUCTS_CREATE in keys,
         can_edit_product=PERMISSION_PRODUCTS_EDIT in keys,
         can_delete_product=PERMISSION_PRODUCTS_DELETE in keys,
+        can_view_products=PERMISSION_PRODUCTS_VIEW in keys,
         can_view_objects=PERMISSION_OBJECTS_VIEW in keys,
         can_add_objects=PERMISSION_OBJECTS_ADD in keys,
         can_checkout=PERMISSION_OBJECTS_CHECKOUT in keys,
@@ -109,6 +112,7 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_create_product = caps.can_create_product
     request.state.can_edit_product = caps.can_edit_product
     request.state.can_delete_product = caps.can_delete_product
+    request.state.can_view_products = caps.can_view_products
     request.state.can_view_objects = caps.can_view_objects
     request.state.can_add_objects = caps.can_add_objects
     request.state.can_checkout = caps.can_checkout
@@ -133,6 +137,7 @@ def caps_dict(request: Request) -> dict:
         "can_create_product": bool(getattr(request.state, "can_create_product", False)),
         "can_edit_product": bool(getattr(request.state, "can_edit_product", False)),
         "can_delete_product": bool(getattr(request.state, "can_delete_product", False)),
+        "can_view_products": bool(getattr(request.state, "can_view_products", False)),
         "can_view_objects": bool(getattr(request.state, "can_view_objects", False)),
         "can_add_objects": bool(getattr(request.state, "can_add_objects", False)),
         "can_checkout": bool(getattr(request.state, "can_checkout", False)),
@@ -170,7 +175,7 @@ def can_open_administration(caps: CapabilityFlags) -> bool:
 
 def default_app_path(caps: CapabilityFlags) -> str:
     """Where to send a signed-in user when they have no explicit destination."""
-    if caps.can_view_objects:
+    if caps.can_view_products:
         return "/"
     if can_open_administration(caps):
         return "/admin"

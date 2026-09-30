@@ -3,8 +3,7 @@
 {% block content %}
 <article class="detail settings-page">
   <h1>No Files access</h1>
-  <p>Your account is signed in, but it does not include permission to browse products and files (<code>objects.view</code>).</p>
-  <p class="muted">Ask an administrator to grant <strong>objects.view</strong> (or a role that includes it), or to give you Administration permissions if you only manage users, roles, or settings.</p>
-  <p><a class="btn" href="/logout">Sign out</a></p>
+  <p>Your account is signed in, but it does not include permission to view products (<code>products.view</code>).</p>
+  <p class="muted">Ask an administrator to grant <strong>products.view</strong> (and usually <strong>objects.view</strong> for files), or to give you Administration permissions if you only manage users, roles, or settings.</p>
 </article>
 {% endblock %}

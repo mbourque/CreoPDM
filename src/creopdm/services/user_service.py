@@ -28,6 +28,7 @@ from creopdm.auth_constants import (
     PERMISSION_PRODUCTS_DELETE,
     PERMISSION_PRODUCTS_EDIT,
     PERMISSION_PRODUCTS_MANAGE,
+    PERMISSION_PRODUCTS_VIEW,
     PERMISSION_PRODUCTS_ASSIGN,
     PERMISSION_ROLES_ASSIGN,
     PERMISSION_ROLES_MANAGE,
@@ -345,6 +346,9 @@ class UserService:
 
     def can_delete_product(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_PRODUCTS_DELETE)
+
+    def can_view_products(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_PRODUCTS_VIEW)
 
     def can_add_objects(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_OBJECTS_ADD)

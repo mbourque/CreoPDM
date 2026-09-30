@@ -24,7 +24,7 @@ from creopdm.api.deps import (
     require_product_access,
 )
 from creopdm.api.serializers import product_to_response, revision_display
-from creopdm.auth_constants import PERMISSION_OBJECTS_VIEW
+from creopdm.auth_constants import PERMISSION_OBJECTS_VIEW, PERMISSION_PRODUCTS_VIEW
 from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPSED_COOKIE
 from creopdm.context import AppContext
 from creopdm.exceptions import PermissionDeniedError, ProductNotFoundError
@@ -363,8 +363,8 @@ def home(
 ) -> HTMLResponse:
     if ctx.auth_enabled:
         perms = getattr(request.state, "permissions", None) or frozenset()
-        if PERMISSION_OBJECTS_VIEW not in perms:
-            # Admin-only accounts (no Files browse) → Administration, not a JSON 403.
+        if PERMISSION_PRODUCTS_VIEW not in perms:
+            # Admin-only accounts (no product browse) → Administration, not a JSON 403.
             if (
                 getattr(request.state, "can_manage_users", False)
                 or getattr(request.state, "can_manage_roles", False)

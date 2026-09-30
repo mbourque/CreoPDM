@@ -30,6 +30,7 @@ PERMISSION_PRODUCTS_ASSIGN = "products.assign"
 PERMISSION_PRODUCTS_MANAGE = "products.manage"
 PERMISSION_SETTINGS_MANAGE = "settings.manage"
 PERMISSION_EMAIL_MANAGE = "email.manage"
+PERMISSION_PRODUCTS_VIEW = "products.view"
 PERMISSION_PRODUCTS_CREATE = "products.create"
 PERMISSION_PRODUCTS_EDIT = "products.edit"
 PERMISSION_PRODUCTS_DELETE = "products.delete"
@@ -62,10 +63,11 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_PRODUCTS_MANAGE, "Create, edit, and delete products in Administration"),
     (PERMISSION_SETTINGS_MANAGE, "Change global CreoPDM settings"),
     (PERMISSION_EMAIL_MANAGE, "Configure email and notifications in Administration"),
+    (PERMISSION_PRODUCTS_VIEW, "View products"),
     (PERMISSION_PRODUCTS_CREATE, "Create products"),
     (PERMISSION_PRODUCTS_EDIT, "Edit product properties"),
     (PERMISSION_PRODUCTS_DELETE, "Delete or forget products"),
-    (PERMISSION_OBJECTS_VIEW, "Browse products, history, and open or download files"),
+    (PERMISSION_OBJECTS_VIEW, "Browse file history and open or download files"),
     (PERMISSION_OBJECTS_ADD, "Add files and folders to products"),
     (PERMISSION_OBJECTS_CHECKOUT, "Check out objects and undo own checkout"),
     (PERMISSION_OBJECTS_CHECKIN, "Check in objects"),
@@ -110,7 +112,12 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         "Products",
-        (PERMISSION_PRODUCTS_CREATE, PERMISSION_PRODUCTS_EDIT, PERMISSION_PRODUCTS_DELETE),
+        (
+            PERMISSION_PRODUCTS_VIEW,
+            PERMISSION_PRODUCTS_CREATE,
+            PERMISSION_PRODUCTS_EDIT,
+            PERMISSION_PRODUCTS_DELETE,
+        ),
     ),
     (
         "Objects",
@@ -129,6 +136,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 _AUTHORING = (
+    PERMISSION_PRODUCTS_VIEW,
     PERMISSION_OBJECTS_VIEW,
     PERMISSION_OBJECTS_ADD,
     PERMISSION_OBJECTS_CHECKOUT,
@@ -149,7 +157,7 @@ STARTER_ROLE_PERMISSION_KEYS: dict[str, tuple[str, ...]] = {
         PERMISSION_OBJECTS_COPY_TO_VAULT,
     ),
     StarterRole.ENGINEER.value: _AUTHORING,
-    StarterRole.VIEWER.value: (PERMISSION_OBJECTS_VIEW,),
+    StarterRole.VIEWER.value: (PERMISSION_PRODUCTS_VIEW, PERMISSION_OBJECTS_VIEW),
 }
 
 # Back-compat alias (seed path only — do not overlay at runtime).

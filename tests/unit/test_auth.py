@@ -1379,6 +1379,7 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
         PERMISSION_PRODUCTS_CREATE,
         PERMISSION_PRODUCTS_DELETE,
         PERMISSION_PRODUCTS_MANAGE,
+        PERMISSION_PRODUCTS_VIEW,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_USERS_MANAGE,
         STARTER_ROLE_PERMISSION_KEYS,
@@ -1390,7 +1391,10 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
         db.commit()
         view = db.scalar(select(Permission).where(Permission.key == PERMISSION_OBJECTS_VIEW))
         assert view is not None
-        assert view.description == "Browse products, history, and open or download files"
+        assert view.description == "Browse file history and open or download files"
+        products_view = db.scalar(select(Permission).where(Permission.key == PERMISSION_PRODUCTS_VIEW))
+        assert products_view is not None
+        assert products_view.description == "View products"
         keys_by_role: dict[str, set[str]] = {}
         for role in db.scalars(select(Role)).all():
             perm_ids = {
@@ -1404,7 +1408,11 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
                 for p in db.scalars(select(Permission)).all()
                 if p.id in perm_ids
             }
-    assert keys_by_role[BuiltinRole.VIEWER.value] == {PERMISSION_OBJECTS_VIEW}
+    assert keys_by_role[BuiltinRole.VIEWER.value] == {
+        PERMISSION_PRODUCTS_VIEW,
+        PERMISSION_OBJECTS_VIEW,
+    }
+    assert PERMISSION_PRODUCTS_VIEW in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_OBJECTS_VIEW in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_OBJECTS_CHECKOUT in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_OBJECTS_COPY_TO_VAULT not in keys_by_role[BuiltinRole.ENGINEER.value]
@@ -1429,7 +1437,11 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
 @requires_git
 def test_roles_admin_create_custom_and_gate(auth_client, auth_ctx, repo_parent):
     """roles.manage can create a custom role; caps follow DB only."""
-    from creopdm.auth_constants import PERMISSION_OBJECTS_CHECKOUT, PERMISSION_OBJECTS_VIEW
+    from creopdm.auth_constants import (
+        PERMISSION_OBJECTS_CHECKOUT,
+        PERMISSION_OBJECTS_VIEW,
+        PERMISSION_PRODUCTS_VIEW,
+    )
 
     _setup_admin_and_users(auth_client, auth_ctx)
     _login(auth_client, "admin", "AdminPass1")
@@ -1445,7 +1457,11 @@ def test_roles_admin_create_custom_and_gate(auth_client, auth_ctx, repo_parent):
         data={
             "name": "Checkout Only",
             "description": "Can view and lock files",
-            "permission": [PERMISSION_OBJECTS_VIEW, PERMISSION_OBJECTS_CHECKOUT],
+            "permission": [
+                PERMISSION_PRODUCTS_VIEW,
+                PERMISSION_OBJECTS_VIEW,
+                PERMISSION_OBJECTS_CHECKOUT,
+            ],
         },
         follow_redirects=False,
     )
@@ -1542,7 +1558,7 @@ def test_role_with_no_permissions_cannot_browse(auth_client, auth_ctx, repo_pare
     page = auth_client.get("/no-access")
     assert page.status_code == 200
     assert "No Files access" in page.text
-    assert "objects.view" in page.text
+    assert "products.view" in page.text
 
     home = auth_client.get("/", follow_redirects=False)
     assert home.status_code == 303
@@ -1553,8 +1569,8 @@ def test_role_with_no_permissions_cannot_browse(auth_client, auth_ctx, repo_pare
 
 
 @requires_git
-def test_admin_without_objects_view_lands_on_administration(auth_client, auth_ctx):
-    """Admin/settings-only role (no objects.view) signs in to /admin, not a JSON error."""
+def test_admin_without_products_view_lands_on_administration(auth_client, auth_ctx):
+    """Admin/settings-only role (no products.view) signs in to /admin, not a JSON error."""
     from creopdm.auth_constants import (
         PERMISSION_PRODUCTS_ASSIGN,
         PERMISSION_PRODUCTS_MANAGE,
@@ -2394,6 +2410,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_PRODUCTS_DELETE,
         PERMISSION_PRODUCTS_EDIT,
         PERMISSION_PRODUCTS_MANAGE,
+        PERMISSION_PRODUCTS_VIEW,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_ROLES_ASSIGN,
         PERMISSION_PRODUCTS_ASSIGN,
@@ -2484,17 +2501,22 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         allowed = set(STARTER_ROLE_PERMISSION_KEYS[role_name])
         _login(auth_client, username, password)
 
-        # Browse requires objects.view.
+        # Browse products requires products.view; files still need objects.view.
         assert auth_client.get(f"/api/products/{product_id}").status_code == (
-            200 if PERMISSION_OBJECTS_VIEW in allowed else 403
+            200 if PERMISSION_PRODUCTS_VIEW in allowed else 403
         )
-        if PERMISSION_OBJECTS_VIEW in allowed:
-            assert auth_client.get(f"/api/objects/{object_id}").status_code == 200
+        if PERMISSION_PRODUCTS_VIEW in allowed:
             home = auth_client.get(f"/?product={product_id}")
             assert home.status_code == 200
+            assert f'data-can-view-products="1"' in home.text
+            if PERMISSION_OBJECTS_VIEW in allowed:
+                assert auth_client.get(f"/api/objects/{object_id}").status_code == 200
+                assert f'data-can-view="1"' in home.text
+            else:
+                _assert_forbidden(auth_client.get(f"/api/objects/{object_id}"))
+                assert f'data-can-view="0"' in home.text
             assert f'data-can-checkout="{"1" if PERMISSION_OBJECTS_CHECKOUT in allowed else "0"}"' in home.text
             assert f'data-can-force-undo-checkout="{"1" if PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in allowed else "0"}"' in home.text
-            assert f'data-can-view="1"' in home.text
             assert f'data-can-copy-to-vault="{"1" if PERMISSION_OBJECTS_COPY_TO_VAULT in allowed else "0"}"' in home.text
             if PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in allowed:
                 assert 'id="force-undo-btn"' in home.text
@@ -2542,7 +2564,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             PERMISSION_SETTINGS_MANAGE: auth_client.get("/api/settings", follow_redirects=False),
             PERMISSION_PRODUCTS_MANAGE: auth_client.get("/admin/products", follow_redirects=False),
             PERMISSION_EMAIL_MANAGE: auth_client.get("/admin/email", follow_redirects=False),
-            PERMISSION_OBJECTS_VIEW: auth_client.get(f"/api/products/{product_id}"),
+            PERMISSION_PRODUCTS_VIEW: auth_client.get(f"/api/products/{product_id}"),
+            PERMISSION_OBJECTS_VIEW: auth_client.get(f"/api/objects/{object_id}"),
             PERMISSION_PRODUCTS_CREATE: auth_client.post(
                 "/api/products",
                 json={"name": f"Create-{username}-{uuid4().hex[:6]}"},
@@ -2742,7 +2765,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         assert restricted.status_code == 303, restricted.text
 
         _login(auth_client, username, password)
-        if PERMISSION_OBJECTS_VIEW in allowed:
+        if PERMISSION_PRODUCTS_VIEW in allowed:
             only = auth_client.get("/api/products")
             assert only.status_code == 200, only.text
             assert {p["uuid"] for p in only.json()} == {product_id}, (
@@ -2764,7 +2787,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         assert cleared.status_code == 303, cleared.text
 
         _login(auth_client, username, password)
-        if PERMISSION_OBJECTS_VIEW in allowed:
+        if PERMISSION_PRODUCTS_VIEW in allowed:
             empty = auth_client.get("/api/products")
             assert empty.status_code == 200
             assert empty.json() == [], (

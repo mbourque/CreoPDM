@@ -27,6 +27,7 @@ from creopdm.auth_constants import (
     PERMISSION_PRODUCTS_CREATE,
     PERMISSION_PRODUCTS_DELETE,
     PERMISSION_PRODUCTS_EDIT,
+    PERMISSION_PRODUCTS_VIEW,
 )
 from creopdm.context import AppContext
 from creopdm.constants import ActivityAction
@@ -70,7 +71,7 @@ def list_products(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> list[ProductResponse]:
-    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    require_permission(request, ctx, PERMISSION_PRODUCTS_VIEW)
     return [product_to_response(product) for product in accessible_products(request, ctx, db)]
 
 
@@ -102,7 +103,7 @@ def get_product(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ProductResponse:
-    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    require_permission(request, ctx, PERMISSION_PRODUCTS_VIEW)
     return product_to_response(load_accessible_product(request, ctx, db, product_id))
 
 
