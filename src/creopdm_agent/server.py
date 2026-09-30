@@ -156,6 +156,8 @@ class PickFilesRequest(BaseModel):
     # Settings → Purgeable extensions; older .ext.N saves are omitted when set.
     purgeable_extensions: list[str] = Field(default_factory=list)
     recursive: bool = True
+    # ``add`` = Creo/CAD filters; ``archive`` = *.zip first (Compressed data…).
+    filter_mode: str = "add"
 
 
 def _agent_purgeable_extensions(raw: list[str] | None) -> list[str]:
@@ -731,7 +733,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
 
     @app.post("/pick-files", response_model=PickFilesResponse)
     def pick_files_endpoint(payload: PickFilesRequest) -> PickFilesResponse:
-        """Native multi-select file dialog on this Creo PC (Creo numbered filters)."""
+        """Native file dialog on this Creo PC (Creo filters, or archive filters)."""
         from creopdm.exceptions import ValidationAppError
         from creopdm.utils.native_dialog import pick_files
 
@@ -739,17 +741,26 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         start = Path(raw) if raw else Path.home()
         if not start.is_dir():
             start = start.parent if start.parent.is_dir() else Path.home()
-        title = (payload.title or "").strip() or "Add files to the product"
+        filter_mode = (payload.filter_mode or "add").strip().lower() or "add"
+        title = (payload.title or "").strip() or (
+            "Choose a compressed zip file"
+            if filter_mode in {"archive", "zip", "compressed"}
+            else "Add files to the product"
+        )
         try:
-            selected = pick_files(start, title=title)
+            selected = pick_files(start, title=title, filter_mode=filter_mode)
         except ValidationAppError as exc:
             raise HTTPException(status_code=400, detail=exc.message) from exc
         except Exception as exc:
             logger.exception("Agent file picker failed")
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+        present = [path for path in selected if path.is_file()]
+        if filter_mode in {"archive", "zip", "compressed"}:
+            # One zip path — do not apply Creo numbered-save collapse.
+            paths = [str(path) for path in present]
+            return PickFilesResponse(selected=paths, cancelled=not paths)
         from creopdm.creo.file_manager import CreoFileManager
 
-        present = [path for path in selected if path.is_file()]
         purgeable = _agent_purgeable_extensions(payload.purgeable_extensions)
         try:
             latest = CreoFileManager.filter_to_latest_saves(

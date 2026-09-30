@@ -294,6 +294,12 @@ def test_metadata_gear_items_require_creo_session():
     soft = _between(script, "function softNavigate(", "function leavePage(")
     assert "metadataCollectJob.running" in soft
     assert "busy overlay" in docs.lower()
+    # Product-link soft-nav must not withBusy("Loading…") while Collect owns the overlay.
+    assert "isMetadataCollectRunning" in script
+    assert "warnMetadataCollectBlockingNav" in script
+    click = _between(script, 'document,\n      "click",', 'origAddEventListener.call(window, "popstate"')
+    assert "isMetadataCollectRunning()" in click
+    assert click.index("isMetadataCollectRunning()") < click.index('void api.withBusy("Loading…"')
 
 
 def test_compressed_data_add_requires_agent_and_busy_overlay():
@@ -309,13 +315,18 @@ def test_compressed_data_add_requires_agent_and_busy_overlay():
     assert "creopdm-agent" in docs.lower() or "require creopdm-agent" in docs.lower()
     assert "function openCompressedDialog(" in script
     assert "async function chooseCompressedZip(" in script
+    assert 'filter_mode: "archive"' in script
     assert "/pick-files" in script
     assert "/import-zip" in script
     assert "Uploading and importing compressed data…" in script
     assert "Start creopdm-agent on this Creo PC to add compressed data." in script
+    assert "Zip archives" in docs or "*.zip" in docs
     products = (ROOT / "src" / "creopdm" / "api" / "products.py").read_text(encoding="utf-8")
     assert "/objects/from-zip" in products
     assert "ensure_product_mutable" in products
+    dialog = (ROOT / "src" / "creopdm" / "utils" / "native_dialog.py").read_text(encoding="utf-8")
+    assert "def archive_dialog_filter_pairs(" in dialog
+    assert '"*.zip"' in dialog
 
 
 def test_agent_add_chunks_continue_after_http_error():

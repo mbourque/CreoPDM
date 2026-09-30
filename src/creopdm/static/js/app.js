@@ -235,7 +235,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function closeOpenDialogs({ keepBusy = false } = {}) {
     document.querySelectorAll("dialog[open]").forEach((dialog) => {
-      if (keepBusy && dialog.id === "busy-overlay") return;
+      // Never dismiss the busy overlay while setBusy depth is open (Collect, Add, …).
+      if (dialog.id === "busy-overlay" && (keepBusy || busyDepth > 0)) return;
       try {
         dialog.close();
       } catch {
@@ -1671,6 +1672,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const deleteProductForm = $("#delete-product-form");
   $("#delete-product-btn")?.addEventListener("click", () => {
     closeProductSettings();
+    if (metadataCollectJob.running) {
+      showOk("Finish Collect metadata (or cancel it) before deleting this product.");
+      return;
+    }
     const btn = $("#delete-product-btn");
     showError($("#delete-product-error"), "");
     if (deleteProductForm) deleteProductForm.reset();
@@ -2698,7 +2703,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         body: JSON.stringify({
           initial_directory: addInitialDirectory || "",
           title: "Choose a compressed zip file",
-          purgeable_extensions: [...purgeableExtensionSet()],
+          filter_mode: "archive",
         }),
       });
     } finally {
@@ -2724,7 +2729,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     const zipPath = String(selected[0] || "").trim();
     if (!/\.zip$/i.test(zipPath)) {
-      showError($("#compressed-error"), "Choose a .zip file (use All files in the picker if needed).");
+      showError($("#compressed-error"), "Choose a .zip file.");
       setCompressedSummary("");
       compressedDialog?.showModal();
       return;
@@ -8507,6 +8512,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     withBusy,
     eventEl,
     syncProductAccessUi,
+    isMetadataCollectRunning: () => Boolean(metadataCollectJob.running),
+    warnMetadataCollectBlockingNav: () => {
+      showOk("Finish Collect metadata (or wait for it) before leaving this page.");
+    },
   };
   if (!window.__creopdmSoftNavBound) {
     window.__creopdmSoftNavBound = true;
@@ -8528,6 +8537,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (!href || !api.isSoftNavUrl(href)) return;
         event.preventDefault();
         event.stopPropagation();
+        // Collect already owns the busy overlay — do not nest a Loading busy on top
+        // (that left Loading stuck until the next metadata tick).
+        if (api.isMetadataCollectRunning()) {
+          api.warnMetadataCollectBlockingNav();
+          return;
+        }
         void api.withBusy("Loading…", () => api.softNavigate(href, "push"));
       },
       true
@@ -8535,6 +8550,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     origAddEventListener.call(window, "popstate", () => {
       const api = window.__creopdmSoftNavApi;
       if (!api || !api.isSoftNavUrl(window.location.href)) return;
+      if (api.isMetadataCollectRunning()) {
+        api.warnMetadataCollectBlockingNav();
+        return;
+      }
       void api.withBusy("Loading…", () => api.softNavigate(window.location.href, "none"));
     });
   }

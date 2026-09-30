@@ -93,6 +93,21 @@ def add_files_dialog_filter_pairs() -> list[tuple[str, str]]:
     ]
 
 
+def archive_dialog_filter_pairs() -> list[tuple[str, str]]:
+    """Filter groups for Compressed data…: zip archives first."""
+    return [
+        ("Zip archives (*.zip)", "*.zip"),
+        ("All files (*.*)", "*.*"),
+    ]
+
+
+def _dialog_filter_pairs(filter_mode: str) -> list[tuple[str, str]]:
+    mode = (filter_mode or "add").strip().lower()
+    if mode in {"archive", "zip", "compressed"}:
+        return archive_dialog_filter_pairs()
+    return add_files_dialog_filter_pairs()
+
+
 def _is_windows() -> bool:
     """Isolated so tests can fake Windows without patching os.name (breaks pathlib)."""
     return os.name == "nt"
@@ -103,25 +118,49 @@ def native_picker_available() -> bool:
     return _is_windows()
 
 
-def pick_files(initial_dir: Path, title: str = "Add files to the product") -> list[Path]:
-    """Open a native multi-select file dialog starting in initial_dir.
+def pick_files(
+    initial_dir: Path,
+    title: str = "Add files to the product",
+    *,
+    filter_mode: str = "add",
+) -> list[Path]:
+    """Open a native file dialog starting in initial_dir.
 
-    Does not change the PDM process working directory.
+    ``filter_mode``: ``add`` (Creo/CAD filters, multi-select) or ``archive``
+    (*.zip first, single-select). Does not change the PDM process working directory.
     """
     if not _is_windows():
         logger.info("Native file picker is not available; use the browser file chooser")
         return []
     start = Path(initial_dir)
     start.mkdir(parents=True, exist_ok=True)
+    pairs = _dialog_filter_pairs(filter_mode)
+    allow_multi = (filter_mode or "add").strip().lower() not in {
+        "archive",
+        "zip",
+        "compressed",
+    }
     try:
-        return run_on_sta(lambda: _windows_open_dialog(start, title))
+        return run_on_sta(
+            lambda: _windows_open_dialog(
+                start,
+                title,
+                filter_pairs=pairs,
+                allow_multi=allow_multi,
+            )
+        )
     except ValidationAppError:
         # Keep picker errors (buffer too small, etc.) — do not open a second dialog.
         raise
     except Exception:
         logger.exception("GetOpenFileNameW failed; trying Windows Forms picker")
         try:
-            return _winforms_open_dialog(start, title)
+            return _winforms_open_dialog(
+                start,
+                title,
+                filter_pairs=pairs,
+                allow_multi=allow_multi,
+            )
         except Exception as exc:
             logger.exception("Windows Forms picker also failed")
             raise ValidationAppError(
@@ -189,21 +228,29 @@ def default_product_location_start() -> Path:
     return Path.cwd()
 
 
-def _winforms_open_dialog(initial_dir: Path, title: str) -> list[Path]:
+def _winforms_open_dialog(
+    initial_dir: Path,
+    title: str,
+    *,
+    filter_pairs: list[tuple[str, str]] | None = None,
+    allow_multi: bool = True,
+) -> list[Path]:
     """Fallback picker that does not need Tcl/Tk."""
+    pairs = filter_pairs if filter_pairs is not None else add_files_dialog_filter_pairs()
+    multi = "$true" if allow_multi else "$false"
     script = (
         "Add-Type -AssemblyName System.Windows.Forms; "
         "$d = New-Object System.Windows.Forms.OpenFileDialog; "
         "$d.InitialDirectory = $env:CREOPDM_DIALOG_DIR; "
         "$d.Title = $env:CREOPDM_DIALOG_TITLE; "
-        "$d.Multiselect = $true; "
+        f"$d.Multiselect = {multi}; "
         "$d.Filter = '"
-        + "|".join(f"{label}|{patterns}" for label, patterns in add_files_dialog_filter_pairs())
+        + "|".join(f"{label}|{patterns}" for label, patterns in pairs)
         + "'; "
         "$d.FilterIndex = 1; "
         "$d.CheckFileExists = $true; "
         "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { "
-        "$d.FileNames | ForEach-Object { $_ } }"
+        + ("$d.FileNames | ForEach-Object { $_ } }" if allow_multi else "$d.FileName }")
     )
     env = os.environ.copy()
     env["CREOPDM_DIALOG_DIR"] = str(initial_dir)
@@ -385,7 +432,13 @@ def _windows_folder_dialog(initial_dir: Path, title: str, hwnd: int | None = Non
         release(dialog)
 
 
-def _windows_open_dialog(initial_dir: Path, title: str) -> list[Path]:
+def _windows_open_dialog(
+    initial_dir: Path,
+    title: str,
+    *,
+    filter_pairs: list[tuple[str, str]] | None = None,
+    allow_multi: bool = True,
+) -> list[Path]:
     import ctypes
     from ctypes import wintypes
 
@@ -425,11 +478,13 @@ def _windows_open_dialog(initial_dir: Path, title: str) -> list[Path]:
 
     # Several thousand Creo names need far more than the old 32k WCHAR buffer.
     # Start large so Open succeeds once; grow only if Windows still says too small.
-    buffer_chars = 1_048_576
+    # Single-file archive picks use a modest buffer.
+    buffer_chars = 65_536 if not allow_multi else 1_048_576
     max_buffer_chars = 8_388_608
     # GetOpenFileNameW: pairs are display\0patterns\0… ending with \0\0.
+    pairs = filter_pairs if filter_pairs is not None else add_files_dialog_filter_pairs()
     filter_chunks: list[str] = []
-    for label, patterns in add_files_dialog_filter_pairs():
+    for label, patterns in pairs:
         # Strip "(*.*)" style hints from WinForms labels for the classic dialog.
         short_label = label.split(" (", 1)[0]
         filter_chunks.append(short_label)
@@ -440,6 +495,7 @@ def _windows_open_dialog(initial_dir: Path, title: str) -> list[Path]:
         filter_buf[index] = char
     initial_buf = ctypes.create_unicode_buffer(str(initial_dir))
     title_buf = ctypes.create_unicode_buffer(title)
+    def_ext_buf = ctypes.create_unicode_buffer("zip") if not allow_multi else None
 
     get_open = ctypes.windll.comdlg32.GetOpenFileNameW
     get_open.argtypes = [ctypes.POINTER(OPENFILENAMEW)]
@@ -458,14 +514,18 @@ def _windows_open_dialog(initial_dir: Path, title: str) -> list[Path]:
         ofn.nMaxFile = buffer_chars
         ofn.lpstrInitialDir = ctypes.addressof(initial_buf)
         ofn.lpstrTitle = ctypes.addressof(title_buf)
-        ofn.Flags = (
+        if def_ext_buf is not None:
+            ofn.lpstrDefExt = ctypes.addressof(def_ext_buf)
+        flags = (
             ofn_explorer
-            | ofn_allow_multi
             | ofn_file_must_exist
             | ofn_path_must_exist
             | ofn_no_change_dir
             | ofn_hide_readonly
         )
+        if allow_multi:
+            flags |= ofn_allow_multi
+        ofn.Flags = flags
         ok = get_open(ctypes.byref(ofn))
         if ok:
             raw = ctypes.wstring_at(ctypes.addressof(file_buf), buffer_chars)

@@ -65,3 +65,25 @@ def test_pick_files_validation_error_skips_winforms_fallback(monkeypatch, tmp_pa
     except ValidationAppError as exc:
         assert "Add folder" in exc.message
     assert called == []
+
+
+def test_pick_files_archive_mode_uses_zip_filters(monkeypatch, tmp_path: Path):
+    zip_path = tmp_path / "pack.zip"
+    zip_path.write_bytes(b"PK")
+    seen: dict = {}
+
+    def fake_sta(fn):
+        return fn()
+
+    def fake_open(initial_dir, title, *, filter_pairs=None, allow_multi=True):
+        seen["filter_pairs"] = filter_pairs
+        seen["allow_multi"] = allow_multi
+        return [zip_path]
+
+    monkeypatch.setattr("creopdm.utils.native_dialog._is_windows", lambda: True)
+    monkeypatch.setattr("creopdm.utils.native_dialog.run_on_sta", fake_sta)
+    monkeypatch.setattr("creopdm.utils.native_dialog._windows_open_dialog", fake_open)
+    chosen = pick_files(tmp_path, title="Choose a compressed zip file", filter_mode="archive")
+    assert chosen == [zip_path]
+    assert seen["allow_multi"] is False
+    assert seen["filter_pairs"][0][1] == "*.zip"

@@ -243,7 +243,7 @@ def test_agent_pick_files_and_local_file(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "creopdm.utils.native_dialog.pick_files",
-        lambda initial_dir, title="Add files to the product": [sample],
+        lambda initial_dir, title="Add files to the product", **kwargs: [sample],
     )
     with TestClient(app) as client:
         picked = client.post(
@@ -259,6 +259,36 @@ def test_agent_pick_files_and_local_file(tmp_path, monkeypatch):
         assert downloaded.content == b"creo"
         missing = client.get("/local-file", params={"path": str(tmp_path / "nope.prt.1")})
         assert missing.status_code == 404
+
+
+def test_agent_pick_files_archive_mode_skips_creo_latest_filter(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    root.mkdir()
+    zip_path = tmp_path / "pack.zip"
+    zip_path.write_bytes(b"PK")
+    seen: dict = {}
+
+    def fake_pick(initial_dir, title="Add files to the product", **kwargs):
+        seen["filter_mode"] = kwargs.get("filter_mode", "add")
+        seen["title"] = title
+        return [zip_path]
+
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    monkeypatch.setattr("creopdm.utils.native_dialog.pick_files", fake_pick)
+    with TestClient(app) as client:
+        picked = client.post(
+            "/pick-files",
+            json={
+                "initial_directory": str(tmp_path),
+                "title": "Choose a compressed zip file",
+                "filter_mode": "archive",
+            },
+        )
+        assert picked.status_code == 200, picked.text
+        body = picked.json()
+        assert body["selected"] == [str(zip_path)]
+        assert seen["filter_mode"] == "archive"
 
 
 def test_agent_pick_folder(tmp_path, monkeypatch):
