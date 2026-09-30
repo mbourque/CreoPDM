@@ -610,6 +610,23 @@
   </form>
 </dialog>
 
+<dialog id="compressed-dialog" class="dialog">
+  <form method="dialog" id="compressed-form" {% if selected %}data-product="{{ selected.uuid }}"{% endif %}>
+    <h2>Compressed data</h2>
+    <p class="muted">Upload a <code>.zip</code> from this PC. CreoPDM extracts it on the server and adds the files into the <strong>current</strong> folder (same rules as Add folders…: nested paths kept, one outer zip folder stripped, duplicates skipped, junk ignored). Max 2&nbsp;GB. Needs creopdm-agent.</p>
+    <p class="muted small" id="compressed-location">{% if selected %}Product: {{ selected.name }}{% endif %}</p>
+    <div class="dropzone-actions">
+      <button type="button" class="btn" id="compressed-choose-btn">Choose zip…</button>
+    </div>
+    <p id="compressed-file-summary" class="muted small">No zip chosen yet.</p>
+    <p class="error" id="compressed-error" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="compressed-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="compressed-submit" disabled>Import</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="create-folder-dialog" class="dialog">
   <form method="dialog" id="create-folder-form" {% if selected %}data-product="{{ selected.uuid }}"{% endif %}>
     <h2>Create folder</h2>

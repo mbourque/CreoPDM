@@ -196,8 +196,10 @@ On a normal office network (`http://…`), the app should try the CreoPDM agent�
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Choose **Compressed data…** | Require creopdm-agent; open a native `.zip` picker on this PC | Offer a browser file picker fallback; run without the agent |
-| Pick a `.zip` | Show a busy overlay while the agent uploads and the server extracts + imports; then refresh Files so new rows appear | Leave you with a half-done list and no busy feedback |
+| Choose **Compressed data…** | Open a dialog that explains the zip import; require creopdm-agent | Jump straight to a picker with no explanation; run without the agent |
+| Click **Choose zip…** | Use the same agent file picker as **Add files…**; after you pick, return to the dialog showing the chosen path | Invent a separate zip-only picker |
+| Click **Import** with a `.zip` chosen | Show a busy overlay while the agent uploads and the server extracts + imports; then refresh Files so new rows appear | Leave you with a half-done list and no busy feedback |
+| Pick a non-`.zip` file | Say to choose a `.zip` | Upload it anyway |
 | Zip has one top-level folder only (e.g. `MyExport/…`) | Strip that outer folder and import under the **current** Files location | Keep an extra `MyExport/` layer just because of how the zip was packed |
 | Zip has folders and files | Keep nested structure under the current location (same idea as **Add folders…**) | Flatten everything to basenames; create empty folders from empty zip dirs |
 | File already in the product | Fail that entry (same as Add); import the rest; show a summary | Overwrite vault content or auto-rename CAD files |

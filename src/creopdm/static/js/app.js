@@ -2634,58 +2634,134 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
   $("#add-compressed-btn")?.addEventListener("click", () => {
     closeAddMenu();
-    void runCompressedZipAdd();
+    openCompressedDialog();
   });
   $("#add-cancel")?.addEventListener("click", () => addDialog?.close());
 
   // Shared with form Add and Compressed data… (declared before both handlers use it).
   let addInFlight = false;
+  const compressedDialog = $("#compressed-dialog");
+  const compressedForm = $("#compressed-form");
+  const compressedSummary = $("#compressed-file-summary");
+  const compressedSubmit = $("#compressed-submit");
+  let chosenZipPath = "";
 
-  async function runCompressedZipAdd() {
-    if (addInFlight) {
-      showOk("Add is already running — wait for it to finish.");
-      return;
+  function setCompressedSummary(path) {
+    chosenZipPath = String(path || "").trim();
+    if (compressedSummary) {
+      compressedSummary.textContent = chosenZipPath
+        ? `Chosen: ${chosenZipPath}`
+        : "No zip chosen yet.";
     }
+    if (compressedSubmit instanceof HTMLButtonElement) {
+      compressedSubmit.disabled = !chosenZipPath;
+    }
+  }
+
+  function openCompressedDialog() {
     const productId = currentProductId();
     if (!productId) {
       showError($("#toolbar-error"), "Open a product first.");
       return;
     }
+    showError($("#compressed-error"), "");
+    setCompressedSummary("");
+    const loc = $("#compressed-location");
+    if (loc) {
+      const name =
+        document.querySelector(".product-title")?.textContent?.trim() ||
+        document.body?.dataset?.productName ||
+        "";
+      loc.textContent = name ? `Product: ${name}` : "";
+    }
+    if (compressedForm) compressedForm.dataset.product = productId;
+    compressedDialog?.showModal();
+  }
+
+  async function chooseCompressedZip() {
+    showError($("#compressed-error"), "");
     const agent = await probeCreoAgent();
     if (!agent) {
       showError(
-        $("#toolbar-error"),
+        $("#compressed-error"),
         "Start creopdm-agent on this Creo PC to add compressed data."
       );
       return;
     }
-    setBusy("Waiting for zip picker…");
+    compressedDialog?.close();
+    setBusy("Waiting for file picker…");
     let pickResponse;
     try {
-      pickResponse = await fetch(`${agentBase()}/pick-zip`, {
+      pickResponse = await fetch(`${agentBase()}/pick-files`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           initial_directory: addInitialDirectory || "",
           title: "Choose a compressed zip file",
+          purgeable_extensions: [...purgeableExtensionSet()],
         }),
       });
     } finally {
       clearBusy();
     }
     if (!pickResponse.ok) {
-      showError($("#toolbar-error"), await readError(pickResponse));
+      showError($("#compressed-error"), await readError(pickResponse));
+      compressedDialog?.showModal();
       return;
     }
     let picked;
     try {
       picked = await pickResponse.json();
     } catch {
-      showError($("#toolbar-error"), "Zip picker returned invalid JSON.");
+      showError($("#compressed-error"), "File picker returned invalid JSON.");
+      compressedDialog?.showModal();
       return;
     }
-    if (picked?.cancelled || !picked?.path) return;
+    const selected = Array.isArray(picked?.selected) ? picked.selected : [];
+    if (picked?.cancelled || !selected.length) {
+      compressedDialog?.showModal();
+      return;
+    }
+    const zipPath = String(selected[0] || "").trim();
+    if (!/\.zip$/i.test(zipPath)) {
+      showError($("#compressed-error"), "Choose a .zip file (use All files in the picker if needed).");
+      setCompressedSummary("");
+      compressedDialog?.showModal();
+      return;
+    }
+    setCompressedSummary(zipPath);
+    compressedDialog?.showModal();
+  }
+
+  $("#compressed-choose-btn")?.addEventListener("click", () => {
+    void chooseCompressedZip();
+  });
+  $("#compressed-cancel")?.addEventListener("click", () => compressedDialog?.close());
+  compressedForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (addInFlight) {
+      showError($("#compressed-error"), "Add is already running — wait for it to finish.");
+      return;
+    }
+    const productId = compressedForm.dataset.product || currentProductId();
+    if (!productId) {
+      showError($("#compressed-error"), "Open a product first.");
+      return;
+    }
+    if (!chosenZipPath) {
+      showError($("#compressed-error"), "Choose a .zip file first.");
+      return;
+    }
+    const agent = await probeCreoAgent();
+    if (!agent) {
+      showError(
+        $("#compressed-error"),
+        "Start creopdm-agent on this Creo PC to add compressed data."
+      );
+      return;
+    }
     addInFlight = true;
+    compressedDialog?.close();
     try {
       const result = await withBusy(
         "Uploading and importing compressed data…",
@@ -2696,7 +2772,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             body: JSON.stringify({
               pdm_url: window.location.origin,
               product_id: productId,
-              zip_path: picked.path,
+              zip_path: chosenZipPath,
               parent_folder: currentFolder() || "",
               ...agentPdmAuth(),
             }),
@@ -2734,8 +2810,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       );
     } finally {
       addInFlight = false;
+      setCompressedSummary("");
     }
-  }
+  });
 
   function useNativePicker() {
     return addForm?.dataset.nativePicker !== "0";

@@ -297,16 +297,19 @@ def test_metadata_gear_items_require_creo_session():
 
 
 def test_compressed_data_add_requires_agent_and_busy_overlay():
-    """Add ▾ → Compressed data… uses agent pick/import-zip and a busy overlay."""
+    """Add ▾ → Compressed data… explains first, then pick-files + import-zip."""
     app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     script = _app_js()
     assert 'id="add-compressed-btn"' in app_html
+    assert 'id="compressed-dialog"' in app_html
+    assert 'id="compressed-choose-btn"' in app_html
     assert "Compressed data…" in app_html
     assert "Compressed data…" in docs
     assert "creopdm-agent" in docs.lower() or "require creopdm-agent" in docs.lower()
-    assert "async function runCompressedZipAdd(" in script
-    assert "/pick-zip" in script
+    assert "function openCompressedDialog(" in script
+    assert "async function chooseCompressedZip(" in script
+    assert "/pick-files" in script
     assert "/import-zip" in script
     assert "Uploading and importing compressed data…" in script
     assert "Start creopdm-agent on this Creo PC to add compressed data." in script

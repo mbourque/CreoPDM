@@ -248,16 +248,6 @@ class AddPathsResponse(BaseModel):
     failed: list[BatchAddItem] = Field(default_factory=list)
 
 
-class PickZipRequest(BaseModel):
-    initial_directory: str = ""
-    title: str = "Choose a compressed zip file"
-
-
-class PickZipResponse(BaseModel):
-    path: str = ""
-    cancelled: bool = False
-
-
 class ImportZipRequest(BaseModel):
     """Stream a local .zip to CreoPDM objects/from-zip."""
 
@@ -817,28 +807,6 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             recursive,
         )
         return PickFilesResponse(selected=paths, cancelled=False, folder=str(chosen))
-
-    @app.post("/pick-zip", response_model=PickZipResponse)
-    def pick_zip_endpoint(payload: PickZipRequest) -> PickZipResponse:
-        """Native single-file dialog filtered to *.zip."""
-        from creopdm.exceptions import ValidationAppError
-        from creopdm.utils.native_dialog import pick_zip_file
-
-        raw = (payload.initial_directory or "").strip()
-        start = Path(raw) if raw else Path.home()
-        if not start.is_dir():
-            start = start.parent if start.parent.is_dir() else Path.home()
-        title = (payload.title or "").strip() or "Choose a compressed zip file"
-        try:
-            chosen = pick_zip_file(start, title=title)
-        except ValidationAppError as exc:
-            raise HTTPException(status_code=400, detail=exc.message) from exc
-        except Exception as exc:
-            logger.exception("Agent zip picker failed")
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
-        if chosen is None or not chosen.is_file():
-            return PickZipResponse(cancelled=True)
-        return PickZipResponse(path=str(chosen), cancelled=False)
 
     @app.get("/local-file")
     def local_file(path: str = ""):
