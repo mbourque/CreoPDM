@@ -120,7 +120,7 @@ def test_home_page(client):
     assert "void openPdmObjectFromUi(spec, row)" in script.split("function onFileTableClick")[1].split("function onFileTableDblclick")[0]
     assert "function selectionCanCheckin" in script
     assert "function refreshPendingCheckinIds" in script
-    assert "newerLocalCacheSaves(cacheFiles, objects)" in script.split("async function refreshPendingCheckinIds")[1].split("function rowHasCheckinWork")[0]
+    assert "resolveNewerLocalCacheSaves(cacheFiles, objects, productId)" in script.split("async function refreshPendingCheckinIds")[1].split("function rowHasCheckinWork")[0]
     assert "data-modified-locally" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "function stateSortToken" in script
     assert 'if (s === "MODIFIED") return "0-MODIFIED"' in script

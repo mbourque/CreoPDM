@@ -279,6 +279,24 @@ class CacheFilesResponse(BaseModel):
     files: list[CacheFileInfo] = Field(default_factory=list)
 
 
+class HashPathsRequest(BaseModel):
+    product_id: str = ""
+    vault_folder: str = ""
+    relative_paths: list[str] = Field(default_factory=list)
+
+
+class HashPathResult(BaseModel):
+    relative_path: str
+    content_hash: str = ""
+    size: int = 0
+    ok: bool = True
+    message: str = ""
+
+
+class HashPathsResponse(BaseModel):
+    files: list[HashPathResult] = Field(default_factory=list)
+
+
 class DeletePathsRequest(BaseModel):
     product_id: str = ""
     vault_folder: str = ""
@@ -975,6 +993,74 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 )
         files.sort(key=lambda item: item.relative_path.lower())
         return CacheFilesResponse(root=str(target), files=files)
+
+    @app.post("/hash-paths", response_model=HashPathsResponse)
+    def hash_cache_paths(payload: HashPathsRequest) -> HashPathsResponse:
+        """SHA-256 local agent-cache files (same-size content-replace detection)."""
+        from creopdm.utils.hashing import calculate_sha256
+
+        product_id = (payload.product_id or "").strip()
+        if not product_id:
+            raise HTTPException(status_code=400, detail="product_id is required.")
+        cache_dir = _product_cache_dir(product_id, vault_folder=payload.vault_folder)
+        root = cache_dir.resolve()
+        results: list[HashPathResult] = []
+        index = _load_cache_index(cache_dir)
+        index_dirty = False
+        for raw in payload.relative_paths:
+            rel = str(raw or "").replace("\\", "/").lstrip("/")
+            if not rel or ".." in rel.split("/"):
+                results.append(
+                    HashPathResult(relative_path=rel, ok=False, message="Invalid path.")
+                )
+                continue
+            local = (cache_dir / rel).resolve()
+            try:
+                local.relative_to(root)
+            except ValueError:
+                results.append(
+                    HashPathResult(
+                        relative_path=rel,
+                        ok=False,
+                        message="Path is outside the agent cache.",
+                    )
+                )
+                continue
+            if not local.is_file():
+                results.append(
+                    HashPathResult(
+                        relative_path=rel,
+                        ok=False,
+                        message=f"No local cache file found for {rel}.",
+                    )
+                )
+                continue
+            try:
+                size = int(local.stat().st_size)
+                digest = calculate_sha256(local).lower()
+            except OSError as exc:
+                results.append(
+                    HashPathResult(
+                        relative_path=rel,
+                        ok=False,
+                        message=str(exc),
+                    )
+                )
+                continue
+            index[rel] = {"hash": digest, "size": size}
+            index[local.name] = {"hash": digest, "size": size}
+            index_dirty = True
+            results.append(
+                HashPathResult(
+                    relative_path=rel,
+                    content_hash=digest,
+                    size=size,
+                    ok=True,
+                )
+            )
+        if index_dirty:
+            _save_cache_index(cache_dir, index)
+        return HashPathsResponse(files=results)
 
     @app.post("/push-paths", response_model=PushResponse)
     def push_paths_to_vault(payload: PushPathsRequest) -> PushResponse:

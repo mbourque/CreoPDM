@@ -110,7 +110,7 @@ Empty folders (no files inside yet) must still be selectable and removable.
 | Click the row (not the name) | Select the file | |
 | Click the **file name** | Select, then open in Creo or Windows | Jump straight to Details |
 | Double-click the row | Open **Details** (Overview tab) | Also fire a second “Open” |
-| See **Modified** | Means you have a newer local save that can be checked in | |
+| See **Modified** | Means you have a newer local save **or** a same-name workspace replace (different size or content hash than the vault tip) that can be checked in | |
 
 ---
 
@@ -270,7 +270,7 @@ If open seems to do nothing, check the error line under the toolbar, and that cr
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Check in product… | Record pending saves and new files; release unchanged checkouts so the product looks checked in | Run when there’s nothing to do (button should stay disabled); appear without `objects.checkin` |
+| Check in product… | Record pending saves and new files (including same-name workspace replaces with no new Creo `.N`); release unchanged checkouts so the product looks checked in | Treat a replaced workspace file as unchanged / only Undo checkout when its size or content hash differs from the vault tip; run when there’s nothing to do (button should stay disabled); appear without `objects.checkin` |
 | Check in selected… | Check in / add what you selected | Appear without `objects.checkin` (Add new files still uses Add ▾ / `objects.add`) |
 | Leave the comment blank | Block check-in until you write a comment | Save a version with no comment |
 | Finish successfully | List and status update to match the vault | |

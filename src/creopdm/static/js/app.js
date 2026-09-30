@@ -3926,7 +3926,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           ensureProductObjects(productId),
         ]);
         if (seq !== pendingCheckinFetch) return;
-        newerLocalCacheSaves(cacheFiles, objects).forEach((item) => {
+        const newerLocal = await resolveNewerLocalCacheSaves(cacheFiles, objects, productId);
+        newerLocal.forEach((item) => {
           if (item.uuid && item.can_checkin === "1") ids.push(item.uuid);
         });
       } catch {
@@ -5434,6 +5435,39 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return Array.isArray(body?.files) ? body.files : [];
   }
 
+  /** SHA-256 selected local cache paths (for same-size content-replace detection). */
+  async function hashAgentCachePaths(productId, relativePaths) {
+    const paths = [
+      ...new Set(
+        (relativePaths || [])
+          .map((item) => String(item || "").replace(/\\/g, "/").replace(/^\/+/, ""))
+          .filter(Boolean)
+      ),
+    ];
+    const byPath = new Map();
+    if (!productId || !paths.length) return byPath;
+    const agent = await probeCreoAgent();
+    if (!agent) return byPath;
+    const response = await fetch(`${agentBase()}/hash-paths`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        product_id: productId,
+        vault_folder: currentVaultFolder(),
+        relative_paths: paths,
+      }),
+    });
+    if (!response.ok) return byPath;
+    const body = await response.json().catch(() => null);
+    (Array.isArray(body?.files) ? body.files : []).forEach((item) => {
+      if (!item?.ok) return;
+      const rel = String(item.relative_path || "").replace(/\\/g, "/");
+      const hash = String(item.content_hash || "").trim().toLowerCase();
+      if (rel && hash) byPath.set(rel.toLowerCase(), hash);
+    });
+    return byPath;
+  }
+
   async function pushLocalNewPathsToVault(productId, relativePaths) {
     const paths = [...new Set((relativePaths || []).map((item) => String(item || "").replace(/\\/g, "/").replace(/^\/+/, "")).filter(Boolean))];
     if (!productId || !paths.length) return { ok: [], failed: [], skipped: true };
@@ -5684,6 +5718,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       vaultBasenameCounts.set(base, (vaultBasenameCounts.get(base) || 0) + 1);
     });
     const rows = [];
+    const needsHash = [];
     (Array.isArray(objects) ? objects : []).forEach((obj) => {
       const vaultRel = String(obj.relative_path || obj.filename || "").replace(/\\/g, "/");
       if (!vaultRel) return;
@@ -5697,8 +5732,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       if (!local) return;
       const vaultNumber = creoSaveNumber(obj.filename || PathBasename(vaultRel));
-      if (local.saveNumber <= vaultNumber) return;
-      rows.push({
+      const newerSave = local.saveNumber > vaultNumber;
+      // Same Creo save (incl. non-numbered CAD): detect workspace replace by size, then hash.
+      const vaultSize = Number(obj.current_version?.file_size);
+      const localSize = Number(local.item?.size);
+      const sizesComparable =
+        Number.isFinite(vaultSize)
+        && Number.isFinite(localSize)
+        && vaultSize >= 0
+        && localSize >= 0;
+      const sizeDiffers = sizesComparable && localSize !== vaultSize;
+      const vaultHash = String(obj.current_version?.content_hash || "").trim().toLowerCase();
+      const row = {
         uuid: obj.uuid,
         filename: local.filename,
         recorded_filename: obj.filename || PathBasename(vaultRel),
@@ -5707,12 +5752,47 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         size: local.item.size,
         saved_at: local.item.saved_at || "",
         local_cache: true,
-        newer_save: true,
+        newer_save: newerSave,
         checked_out: obj.owned_by_me ? "1" : "0",
         can_checkin: obj.can_checkin ? "1" : "0",
         can_checkout: obj.can_checkout ? "1" : "0",
-      });
+      };
+      if (newerSave || (local.saveNumber === vaultNumber && sizeDiffers)) {
+        rows.push(row);
+        return;
+      }
+      // Same save + same size: only a content hash can prove a replace.
+      if (
+        local.saveNumber === vaultNumber
+        && sizesComparable
+        && !sizeDiffers
+        && vaultHash
+      ) {
+        needsHash.push({ row, vaultHash, rel: local.rel });
+      }
     });
+    return { rows, needsHash };
+  }
+
+  async function resolveNewerLocalCacheSaves(cacheFiles, objects, productId) {
+    const planned = newerLocalCacheSaves(cacheFiles, objects);
+    const rows = [...(planned.rows || [])];
+    const pending = planned.needsHash || [];
+    if (!pending.length || !productId) return rows;
+    try {
+      const hashes = await hashAgentCachePaths(
+        productId,
+        pending.map((item) => item.rel)
+      );
+      pending.forEach((item) => {
+        const localHash = hashes.get(String(item.rel || "").toLowerCase()) || "";
+        if (localHash && localHash !== item.vaultHash) {
+          rows.push(item.row);
+        }
+      });
+    } catch {
+      /* agent offline / old agent without /hash-paths — size mismatches still apply */
+    }
     return rows;
   }
 
@@ -5756,7 +5836,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     ]);
     return {
       localNew: localOnlyCacheFiles(cacheFiles, known).length,
-      newerLocal: newerLocalCacheSaves(cacheFiles, objects).length,
+      newerLocal: (await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)).length,
     };
   }
 
@@ -6484,7 +6564,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             .map((item) => String(item.relative_path || item.path || "").replace(/\\/g, "/"))
             .filter(Boolean);
           const vaultSaveIds = new Set(pushItems.map((item) => item.object_id));
-          newerLocalCacheSaves(cacheFiles, objects)
+          (await resolveNewerLocalCacheSaves(cacheFiles, objects, productId))
             .filter((item) => item?.uuid && !vaultSaveIds.has(String(item.uuid)))
             .forEach((item) => {
               pushItems.push({
@@ -7690,9 +7770,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const vaultSaveIds = new Set(
         saves.map((item) => String(item.uuid || "")).filter(Boolean)
       );
-      const newerLocal = newerLocalCacheSaves(cacheFiles, objects).filter(
-        (item) => !vaultSaveIds.has(String(item.uuid || ""))
-      );
+      const newerLocal = (
+        await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)
+      ).filter((item) => !vaultSaveIds.has(String(item.uuid || "")));
       const pending = saves.length + created.length + newerLocal.length;
       if (tab) tab.textContent = pending ? `New files · ${pending}` : "New files";
       setCheckinQueueCounts(saves.length + newerLocal.length, created.length);

@@ -1030,6 +1030,43 @@ def test_agent_push_uploads_latest_extra_cad_numbered_save(tmp_path, monkeypatch
         assert puts[0]["body"] == b"newest-tph"
 
 
+def test_agent_hash_paths_detects_same_size_different_content(tmp_path):
+    """Same byte length, different bytes → different SHA-256 (check-in content replace)."""
+    import hashlib
+
+    root = tmp_path / "cache"
+    product_id = "proj-hash"
+    cache = root / product_id
+    cache.mkdir(parents=True)
+    a = b"AAAA"
+    b = b"BBBB"
+    assert len(a) == len(b)
+    (cache / "same.prt").write_bytes(a)
+    (cache / "nested").mkdir()
+    (cache / "nested" / "same.prt").write_bytes(b)
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    with TestClient(app) as client:
+        response = client.post(
+            "/hash-paths",
+            json={
+                "product_id": product_id,
+                "relative_paths": ["same.prt", "nested/same.prt", "missing.prt"],
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        by_path = {item["relative_path"]: item for item in body["files"]}
+        assert by_path["same.prt"]["ok"] is True
+        assert by_path["nested/same.prt"]["ok"] is True
+        assert by_path["missing.prt"]["ok"] is False
+        assert by_path["same.prt"]["content_hash"] == hashlib.sha256(a).hexdigest()
+        assert by_path["nested/same.prt"]["content_hash"] == hashlib.sha256(b).hexdigest()
+        assert by_path["same.prt"]["content_hash"] != by_path["nested/same.prt"]["content_hash"]
+        assert by_path["same.prt"]["size"] == 4
+        assert by_path["nested/same.prt"]["size"] == 4
+
+
 def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     product_id = "proj-new"

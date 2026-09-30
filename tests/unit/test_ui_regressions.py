@@ -1090,6 +1090,20 @@ def test_newer_local_cache_matches_flat_save_for_nested_vault_path():
     assert "Older flat agent caches" in body
 
 
+def test_newer_local_cache_detects_same_save_content_replace_by_size():
+    """Regression: replaced workspace file (no new Creo .N) must still enter check-in push."""
+    script = _app_js()
+    body = _between(script, "function newerLocalCacheSaves(", "async function countLocalNewWorkspaceFiles(")
+    assert "needsHash" in body
+    assert "current_version?.file_size" in body
+    assert "current_version?.content_hash" in body
+    assert "local.saveNumber === vaultNumber" in body
+    assert "localSize !== vaultSize" in body
+    assert "hashAgentCachePaths" in body
+    assert "async function resolveNewerLocalCacheSaves(" in body
+    assert "newer_save: newerSave" in body
+
+
 def test_admin_hub_panel_fills_full_width():
     """max-width on .admin-hub itself left body --bg showing beside the page."""
     css = APP_CSS.read_text(encoding="utf-8")
