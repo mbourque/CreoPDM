@@ -1005,7 +1005,7 @@ def test_creo_status_is_disconnected(client):
     response = client.get("/api/creo/status")
     assert response.status_code == 200
     body = response.json()
-    assert body["label"] in {"Not Connected", "Installed", "Connected"}
+    assert body["label"] in {"Session offline", "Installed", "Connected"}
 
 
 @requires_git

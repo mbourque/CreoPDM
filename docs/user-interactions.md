@@ -33,7 +33,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Click a product, folder breadcrumb, or Administration / Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Not Connected” or drop the Creo link just because you changed folders; hard-reload the page during a folder/product switch |
+| Click a product, folder breadcrumb, or Administration / Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Session offline” or drop the Creo link just because you changed folders; hard-reload the page during a folder/product switch |
 | Sign in as **Viewer** | View products (`products.view`); open/download files and use **Details** (Overview/History) via the bottom toolbar or double-click (`objects.view`); Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove, New product, Copy to Vault, or “Check out … then open” in the Open dialog |
 | Sign in with Administration only (no `products.view`) | Land on **Administration**; breadcrumb has no **Products** link; visiting `/` redirects to `/admin` | See a JSON error; see a Products crumb that opens Files |
 | Sign in with a role that has **no permissions** | Land on a clear **No Files access** page (not JSON); product APIs stay **403** | Use the app as if signed in with Viewer |
@@ -219,7 +219,7 @@ Otherwise the app asks how you want to open it:
 
 If open seems to do nothing, check the error line under the toolbar, and that creopdm-agent is running on the Creo PC. Large downloads can take a while.
 
-**Settings → Open Creo models with:** **Embedded** options (help + Creo.JS path) sit under that radio and are grayed out when **OS file association** is selected. Embedded only uses Creo.JS inside Creo’s embedded browser; otherwise Open uses the OS association.
+**Settings → Open Creo models with:** **Embedded** options (help + Creo.JS path) sit under that radio and are grayed out when **OS file association** is selected. Embedded only uses Creo.JS inside Creo’s embedded browser; otherwise Open uses the OS association. The top-bar Creo pill shows session only (**Creo: Connected** / **Creo: Session offline**), not the open-mode name.
 
 **Set Working Directory** (toolbar) does the same WD step on its own; it only appears inside Creo’s browser when Creo.JS is connected.
 

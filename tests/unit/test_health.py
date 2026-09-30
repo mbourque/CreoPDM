@@ -223,22 +223,28 @@ def test_home_page(client):
     assert "Workspace:" not in text
     assert 'id="checkin-btn"' in text
     assert 'id="creo-status"' in text
-    assert "· OS" in text
+    assert "Creo: Session offline" in text or "Creo: Connected" in text or "Creo: Installed" in text
+    assert "· OS" not in text.split('id="creo-status"', 1)[1].split("</span>", 1)[0]
 
 
-def test_creo_open_name_cache_stays_with_settings_dir(tmp_path, identity):
+def test_creo_open_mode_cache_stays_with_settings_dir(tmp_path, identity):
     first_dir = tmp_path / "one"
     second_dir = tmp_path / "two"
     with TestClient(create_app(build_context(ConfigManager(first_dir), users=identity))) as first:
         changed = first.put("/api/settings", json={"creo_open_mode": "embedded"})
         assert changed.status_code == 200, changed.text
-        assert "· Embedded" in first.get("/").text
+        home = first.get("/").text
+        start = home.index('id="creo-status"')
+        pill = home[start : home.index("</span>", start)]
+        assert 'data-creo-open-mode="embedded"' in pill
+        assert "· Embedded" not in pill
     with TestClient(create_app(build_context(ConfigManager(second_dir), users=identity))) as second:
         text = second.get("/").text
         start = text.index('id="creo-status"')
         pill = text[start : text.index("</span>", start)]
-        assert "· OS" in pill
+        assert 'data-creo-open-mode="association"' in pill
         assert "· Embedded" not in pill
+        assert "· OS" not in pill
 
 
 def test_app_js_strips_creo_error_details(client):

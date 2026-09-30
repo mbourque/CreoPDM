@@ -491,6 +491,11 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "__creopdmSoftNavApi" in script
     assert "origAddEventListener.call" in script
     assert "abort prior page listeners" in script or "no pageAbort signal" in script
+    # Pill label is session state only (not “· Embedded” / “· OS”).
+    assert 'pill.textContent = "Creo: Connected"' in pill_fn
+    assert 'pill.textContent = "Creo: Session offline"' in pill_fn
+    assert "· ${modeName}" not in pill_fn
+    assert "modeName" not in pill_fn
 
 
 def test_checkout_checkin_toolbar_menus_and_open_wd():

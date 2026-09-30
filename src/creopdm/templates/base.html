@@ -41,7 +41,7 @@
       <a class="status-pill" href="/admin">Administration</a>
       {% endif %}
       <span id="creo-status" class="status-pill" data-state="{% if creo_label == 'Connected' %}ok{% else %}idle{% endif %}" data-creo-open-mode="{{ creo_open_mode }}" title="{{ creo_open_title }}">
-        Creo: {{ creo_label }} · {{ creo_open_name }}
+        Creo: {{ creo_label }}
       </span>
       {% if auth_user %}
       <span class="status-pill" title="{{ auth_user.username }}">{{ auth_user.display_name }}</span>

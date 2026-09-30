@@ -136,7 +136,7 @@ _PAGE_DEFAULTS = {
     "watch_unavailable_reason": None,
     "local_time": format_local,
     "local_time_pretty": format_local_pretty,
-    "creo_label": "Not Connected",
+    "creo_label": "Session offline",
     "creo_open_name": "OS",
     "creo_open_mode": "association",
     "creo_open_title": "Opens Creo models as a browser download for the OS association",
@@ -198,7 +198,7 @@ def _creo_label(ctx: AppContext) -> str:
         return "Connected"
     if ctx.creo.is_available():
         return "Installed"
-    return "Not Connected"
+    return "Session offline"
 
 
 def _bundled_creojs_library() -> Path | None:

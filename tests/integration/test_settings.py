@@ -417,18 +417,24 @@ def test_type_labels_shown_in_file_list(client, repo_parent):
     assert "Machined part" in detail.text
 
 
-def test_creo_status_pill_shows_open_mode(client):
+def test_creo_status_pill_session_label_not_open_mode(client):
+    """Pill shows session state only; open mode stays in data/title, not the label."""
     home = client.get("/")
     assert home.status_code == 200
     assert 'id="creo-status"' in home.text
-    assert "· OS" in home.text
+    start = home.text.index('id="creo-status"')
+    pill = home.text[start : home.text.index("</span>", start)]
+    assert "Creo: Session offline" in pill or "Creo: Connected" in pill or "Creo: Installed" in pill
+    assert "· OS" not in pill
+    assert "· Embedded" not in pill
     embedded = client.put("/api/settings", json={"creo_open_mode": "embedded"})
     assert embedded.status_code == 200, embedded.text
     page = client.get("/settings")
     assert page.status_code == 200
     start = page.text.index('id="creo-status"')
     pill = page.text[start : page.text.index("</span>", start)]
-    assert "· Embedded" in pill
+    assert 'data-creo-open-mode="embedded"' in pill
+    assert "· Embedded" not in pill
     assert "Opens CAD in the Creo session showing this page" in pill
     assert "parametric.exe" not in pill.lower()
     assert "Opens CAD with Creo Parametric" not in pill
@@ -438,7 +444,12 @@ def test_creo_status_pill_shows_open_mode(client):
     assert listed.status_code == 200
     start = listed.text.index('id="creo-status"')
     pill = listed.text[start : listed.text.index("</span>", start)]
-    assert "· OS" in pill
+    assert 'data-creo-open-mode="association"' in pill
+    assert "· OS" not in pill
     assert "Opens Creo models as a browser download for the OS association" in pill
     script = client.get("/static/js/app.js")
     assert "function syncCreoStatusPill" in script.text
+    assert 'pill.textContent = "Creo: Connected"' in script.text
+    assert 'pill.textContent = "Creo: Session offline"' in script.text
+    assert "· ${modeName}" not in script.text
+    assert "Connected ·" not in script.text

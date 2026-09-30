@@ -20,7 +20,7 @@ def creo_status(ctx: AppContext = Depends(get_context)) -> CreoStatusResponse:
     elif available:
         label = "Installed"
     else:
-        label = "Not Connected"
+        label = "Session offline"
     return CreoStatusResponse(
         connector=ctx.settings.creo.connector,
         available=available,

@@ -4671,7 +4671,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function refreshCreoStatusPill(prefetchedAgent) {
-    // Soft folder/product swap — never flash Session offline / Not Connected.
+    // Soft folder/product swap — never flash Session offline while Connected.
     if (window.__creopdmSoftNavBusy || softNavBusy) return null;
     let inSession = hostedCreoJS();
     document.querySelectorAll(".creo-session-only").forEach((el) => {
@@ -4702,7 +4702,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const pill = $("#creo-status");
     if (!pill) return null;
     const modeKey = creoOpenMode() || "association";
-    const modeName = modeKey === "embedded" ? "Embedded" : modeKey === "association" ? "OS" : modeKey;
     const wasConnected = pill.dataset.state === "ok";
     if (modeKey === "embedded") {
       const agent =
@@ -4716,22 +4715,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         return agent;
       }
       if (inSession && agent) {
-        pill.textContent = `Creo: Connected · ${modeName}`;
+        pill.textContent = "Creo: Connected";
         pill.dataset.state = "ok";
         pill.title = "Creo.JS session linked. Local creopdm-agent is running.";
       } else if (inSession && !agent) {
-        pill.textContent = `Creo: Agent offline · ${modeName}`;
+        pill.textContent = "Creo: Agent offline";
         pill.dataset.state = "idle";
         pill.title =
           "Creo.JS session is linked, but creopdm-agent is not running on this PC. Start creopdm-agent-tray for Embedded open.";
       } else if (!inSession && agent) {
-        // Agent health ≠ Creo.JS. SSR often says Not Connected from the Linux host.
-        pill.textContent = `Creo: Session offline · ${modeName}`;
+        // Agent health ≠ Creo.JS. SSR often says Session offline from the Linux host.
+        pill.textContent = "Creo: Session offline";
         pill.dataset.state = "idle";
         pill.title =
           "creopdm-agent is running, but this page has no Creo.JS bridge (window.external.ptc). Open CreoPDM inside Creo's embedded browser — not Chrome/Edge — then hard-refresh.";
       } else {
-        pill.textContent = `Creo: Not Connected · ${modeName}`;
+        pill.textContent = "Creo: Session offline";
         pill.dataset.state = "idle";
         pill.title =
           "No Creo.JS bridge and creopdm-agent is offline. Open CreoPDM in Creo's embedded browser and start the agent tray.";
@@ -4747,11 +4746,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const agent = await probeCreoAgent();
     if (window.__creopdmSoftNavBusy || softNavBusy) return agent;
     if (inSession) {
-      pill.textContent = `Creo: Connected · ${modeName}`;
+      pill.textContent = "Creo: Connected";
       pill.dataset.state = "ok";
       pill.title = "Creo.JS session linked (OS open mode).";
     } else {
-      pill.textContent = `Creo: Not Connected · ${modeName}`;
+      pill.textContent = "Creo: Session offline";
       pill.dataset.state = "idle";
       pill.title = "Opens Creo models as a browser download for the OS association";
     }
