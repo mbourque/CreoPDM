@@ -3383,6 +3383,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const checkinMenuBtn = $("#checkin-menu-btn");
   const checkinMenuPanel = checkinMenu?.querySelector(".toolbar-menu-panel");
   const undoBtn = $("#undo-btn");
+  const forceUndoBtn = $("#force-undo-btn");
   const workspaceBtn = $("#workspace-btn");
   const openWorkspaceBtn = $("#open-workspace-btn");
   const setCreoDirBtn = $("#set-creo-dir-btn");
@@ -3740,6 +3741,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       selected.length > 0 && selected.every((row) => row.dataset.canCheckout === "1");
     const canCheckin = selectionCanCheckin(selected);
     const canUndo = selected.length > 0 && selected.every((row) => row.dataset.owned === "1");
+    const canForceUndo =
+      document.body?.dataset?.canForceCheckin === "1" &&
+      selected.length > 0 &&
+      selected.every(
+        (row) => row.dataset.checkedOut === "1" && row.dataset.owned !== "1"
+      );
     const addOnly = selectionIsAddOnly(selected);
     const productId =
       checkinBtn?.dataset.product ||
@@ -3770,7 +3777,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const canCheckinProduct =
       Boolean(productId) &&
       (pendingProductSaves > 0 || pendingProductNew > 0 || productCheckoutCount > 0);
-    const canCheckoutMenu = canCheckout || canCheckoutProduct || canUndo;
+    const canCheckoutMenu = canCheckout || canCheckoutProduct || canUndo || canForceUndo;
     setToolbarActionVisible(checkoutBtn, canCheckout);
     setToolbarActionVisible(checkoutProductBtn, canCheckoutProduct);
     if (checkoutProductBtn) {
@@ -3779,6 +3786,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         : "Nothing left to check out in this product.";
     }
     setToolbarActionVisible(undoBtn, canUndo);
+    setToolbarActionVisible(forceUndoBtn, canForceUndo);
     setToolbarActionVisible(checkoutMenuBtn, canCheckoutMenu);
     if (!canCheckoutMenu) closeCheckoutMenu();
     if (checkinBtn) {
@@ -6018,6 +6026,68 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   });
 
+  forceUndoBtn?.addEventListener("click", async () => {
+    const ids = selectedRows()
+      .filter((row) => row.dataset.checkedOut === "1" && row.dataset.owned !== "1")
+      .flatMap(rowObjectIds);
+    const detailId = forceUndoBtn.dataset.uuid;
+    const objectIds = [...new Set((ids.length ? ids : detailId ? [detailId] : []).filter(Boolean))];
+    if (!objectIds.length) return;
+    const count = objectIds.length;
+    const slowNote =
+      count > BULK_SLOW_WARN_THRESHOLD
+        ? "\n\nThis can take several minutes. Keep this window open until it finishes."
+        : "";
+    const confirmMsg =
+      count === 1
+        ? "Force Undo Check In for this file?\n\nThe other user’s checkout lock is released. No new version is recorded. Unsaved vault changes for this file may be discarded."
+        : `Force Undo Check In for ${count} files?\n\nOther users’ checkout locks are released. No new version is recorded. Unsaved vault changes may be discarded.${slowNote}`;
+    if (!window.confirm(confirmMsg)) return;
+    showError($("#toolbar-error"), "");
+    if (count === 1) {
+      const result = await postAction(
+        `/api/objects/${objectIds[0]}/force-checkin`,
+        undefined,
+        "POST",
+        "Force undoing checkout…"
+      );
+      if (result) {
+        rememberWatchView();
+        applyUndoCheckoutOnRows(objectIds);
+        reloadPage({ keepBusy: true });
+      }
+      return;
+    }
+    const FORCE_CHUNK = 50;
+    const forceResult = await withBusy(`Force undoing checkout… 0 of ${count}`, async () => {
+      const merged = { ok: [], failed: [] };
+      for (let start = 0; start < objectIds.length; start += FORCE_CHUNK) {
+        const chunk = objectIds.slice(start, start + FORCE_CHUNK);
+        setBusyMessage(
+          `Force undoing checkout… ${Math.min(start + chunk.length, count)} of ${count}`
+        );
+        const part = await postAction(
+          "/api/objects/batch/force-checkin",
+          { object_ids: chunk },
+          "POST",
+          ""
+        );
+        if (!part) return null;
+        if (Array.isArray(part.ok)) merged.ok.push(...part.ok);
+        if (Array.isArray(part.failed)) merged.failed.push(...part.failed);
+      }
+      return merged;
+    });
+    if (!forceResult) return;
+    const warning = formatBatch(forceResult);
+    if (warning) showError($("#toolbar-error"), warning);
+    if (forceResult.ok?.length) {
+      const undone = forceResult.ok.map((item) => item.uuid).filter(Boolean);
+      applyUndoCheckoutOnRows(undone.length ? undone : objectIds);
+      reloadPage({ keepBusy: true });
+    }
+  });
+
   async function beginCheckin(scope = "selected") {
     const productScope = scope === "product";
     const selected = productScope ? [] : selectedRows();
@@ -7613,6 +7683,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     setToolbarActionVisible(checkoutBtn, false);
     setToolbarActionVisible(checkoutProductBtn, false);
     setToolbarActionVisible(undoBtn, false);
+    setToolbarActionVisible(forceUndoBtn, false);
     setToolbarActionVisible(checkoutMenuBtn, false);
     setToolbarActionVisible(removeMenuBtn, false);
     setToolbarActionVisible(checkinBtn, false);

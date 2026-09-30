@@ -430,6 +430,11 @@
         <button type="button" class="toolbar-menu-item" role="menuitem" id="undo-btn"
                 disabled
                 title="Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward.">Undo Checkout</button>
+        {% if product_ui.show_force_checkin %}
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="force-undo-btn"
+                disabled
+                title="Release another user’s checkout lock (abandoned checkout). Does not delete the vault file or record a new version.">Force Undo Check In</button>
+        {% endif %}
       </div>
     </div>
     {% endif %}

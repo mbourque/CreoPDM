@@ -55,6 +55,7 @@ class ProductUiCapabilities:
     show_access_banner: bool
     show_add: bool
     show_checkout: bool
+    show_force_checkin: bool
     show_checkin: bool
     show_remove: bool
     show_remove_vault: bool
@@ -70,6 +71,7 @@ def product_ui_capabilities(
     *,
     can_add_objects: bool = False,
     can_checkout: bool = False,
+    can_force_checkin: bool = False,
     can_checkin: bool = False,
     can_remove_objects: bool = False,
     can_edit_product: bool = False,
@@ -79,9 +81,9 @@ def product_ui_capabilities(
 ) -> ProductUiCapabilities:
     """Combine signed-in role permissions with product state / read_only.
 
-    Checkout menu stays available when locked so Undo Checkout can appear; add,
-    check-in, vault/product remove, rename, delete, metadata, and revert hide.
-    Local workspace remove/purge stay under ``show_remove``.
+    Checkout menu stays available when locked so Undo Checkout / Force Undo Check In
+    can appear; add, check-in, vault/product remove, rename, delete, metadata, and
+    revert hide. Local workspace remove/purge stay under ``show_remove``.
     """
     mutable = product_allows_mutation(product)
     has_product = product is not None
@@ -89,7 +91,8 @@ def product_ui_capabilities(
         allows_mutation=mutable,
         show_access_banner=has_product and not mutable,
         show_add=can_add_objects and mutable,
-        show_checkout=can_checkout,
+        show_checkout=can_checkout or can_force_checkin,
+        show_force_checkin=can_force_checkin,
         show_checkin=can_checkin and mutable,
         show_remove=can_remove_objects,
         show_remove_vault=can_remove_objects and mutable,

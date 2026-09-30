@@ -255,6 +255,44 @@ class CheckoutService:
             )
             logger.info("Cancelled checkout of %s", obj.filename)
 
+    def force_undo_checkout(self, session: Session, object_uuid: str) -> None:
+        """Release any user's checkout without committing a new version."""
+        obj = self._objects.get_object(session, object_uuid)
+        product = obj.product
+        user = self._users.get_current_user()
+        with self._locks.acquire(product.uuid):
+            record = self.active_for(session, obj.id)
+            if record is None:
+                raise CheckoutOwnershipError(f"{obj.filename} is not checked out.")
+            previous_user = record.user_name
+            previous_machine = record.machine_name
+            workspace_file = self._workspaces.materialize(
+                product,
+                obj,
+                writable=False,
+                overwrite_modified=True,
+            )
+            record.status = CheckoutStatus.CANCELLED.value
+            session.flush()
+            self._activities.record(
+                session,
+                ActivityAction.CHECKOUT_CANCELLED,
+                user,
+                product_id=product.id,
+                object_id=obj.id,
+                details={
+                    "workspace": str(workspace_file),
+                    "forced": True,
+                    "previous_user": previous_user,
+                    "previous_machine": previous_machine,
+                },
+            )
+            logger.info(
+                "Force-cancelled checkout of %s (was %s)",
+                obj.filename,
+                previous_user,
+            )
+
     def undo_checkout_many(self, session: Session, object_uuids: list[str]) -> dict[str, list]:
         ok: list[dict[str, str]] = []
         failed: list[dict[str, str]] = []
@@ -279,6 +317,44 @@ class CheckoutService:
                     )
                 self.undo_checkout(session, object_uuid)
                 ok.append({"uuid": object_uuid, "filename": filename, "status": "cancelled"})
+            except CreoPDMError as exc:
+                failed.append(
+                    {
+                        "uuid": object_uuid,
+                        "filename": filename,
+                        "code": exc.code,
+                        "message": exc.message,
+                    }
+                )
+            except Exception as exc:
+                failed.append(
+                    {
+                        "uuid": object_uuid,
+                        "filename": filename,
+                        "code": "APPLICATION_ERROR",
+                        "message": str(exc),
+                    }
+                )
+        return {"ok": ok, "failed": failed}
+
+    def force_undo_checkout_many(self, session: Session, object_uuids: list[str]) -> dict[str, list]:
+        ok: list[dict[str, str]] = []
+        failed: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for object_uuid in object_uuids:
+            if not object_uuid or object_uuid in seen:
+                continue
+            seen.add(object_uuid)
+            filename = object_uuid
+            try:
+                obj = self._objects.get_object(session, object_uuid)
+                filename = obj.filename
+                existing = self.active_for(session, obj.id)
+                if existing is None:
+                    ok.append({"uuid": object_uuid, "filename": filename, "status": "already_available"})
+                    continue
+                self.force_undo_checkout(session, object_uuid)
+                ok.append({"uuid": object_uuid, "filename": filename, "status": "force_cancelled"})
             except CreoPDMError as exc:
                 failed.append(
                     {

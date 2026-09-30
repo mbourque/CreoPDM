@@ -76,6 +76,7 @@ def _full_role_caps() -> dict:
     return {
         "can_add_objects": True,
         "can_checkout": True,
+        "can_force_checkin": True,
         "can_checkin": True,
         "can_remove_objects": True,
         "can_edit_product": True,
@@ -92,6 +93,7 @@ def test_product_ui_in_work_shows_mutation_controls():
     assert ui.show_access_banner is False
     assert ui.show_add is True
     assert ui.show_checkout is True
+    assert ui.show_force_checkin is True
     assert ui.show_checkin is True
     assert ui.show_remove is True
     assert ui.show_remove_vault is True
@@ -111,6 +113,7 @@ def test_product_ui_locked_hides_mutations_keeps_checkout_for_undo():
     assert ui.show_add is False
     assert ui.show_checkin is False
     assert ui.show_checkout is True
+    assert ui.show_force_checkin is True
     assert ui.show_remove is True
     assert ui.show_remove_vault is False
     assert ui.show_remove_product is False
@@ -118,6 +121,18 @@ def test_product_ui_locked_hides_mutations_keeps_checkout_for_undo():
     assert ui.show_delete_product is False
     assert ui.show_metadata_tools is False
     assert ui.show_revert is False
+
+
+def test_product_ui_force_checkin_without_checkout_still_shows_menu():
+    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=False)
+    ui = product_ui_capabilities(
+        product,
+        can_checkout=False,
+        can_force_checkin=True,
+    )
+    assert ui.show_checkout is True
+    assert ui.show_force_checkin is True
+    assert ui.show_add is False
 
 
 def test_product_ui_respects_role_caps_when_mutable():

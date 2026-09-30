@@ -37,6 +37,7 @@ PERMISSION_OBJECTS_ADD = "objects.add"
 PERMISSION_OBJECTS_VIEW = "objects.view"
 PERMISSION_OBJECTS_CHECKOUT = "objects.checkout"
 PERMISSION_OBJECTS_CHECKIN = "objects.checkin"
+PERMISSION_OBJECTS_FORCE_CHECKIN = "objects.force_checkin"
 PERMISSION_OBJECTS_REMOVE = "objects.remove"
 PERMISSION_OBJECTS_REVERT = "objects.revert"
 PERMISSION_OBJECTS_METADATA = "objects.metadata"
@@ -68,6 +69,10 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_OBJECTS_ADD, "Add files and folders to products"),
     (PERMISSION_OBJECTS_CHECKOUT, "Check out objects and undo own checkout"),
     (PERMISSION_OBJECTS_CHECKIN, "Check in objects"),
+    (
+        PERMISSION_OBJECTS_FORCE_CHECKIN,
+        "Force Undo Check In — release another user's checkout without a new version",
+    ),
     (PERMISSION_OBJECTS_REMOVE, "Remove objects from products"),
     (PERMISSION_OBJECTS_REVERT, "Restore an older version as the working version"),
     (PERMISSION_OBJECTS_METADATA, "Update Creo metadata on objects"),
@@ -114,6 +119,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             PERMISSION_OBJECTS_ADD,
             PERMISSION_OBJECTS_CHECKOUT,
             PERMISSION_OBJECTS_CHECKIN,
+            PERMISSION_OBJECTS_FORCE_CHECKIN,
             PERMISSION_OBJECTS_REMOVE,
             PERMISSION_OBJECTS_REVERT,
             PERMISSION_OBJECTS_METADATA,
@@ -139,6 +145,7 @@ STARTER_ROLE_PERMISSION_KEYS: dict[str, tuple[str, ...]] = {
         PERMISSION_PRODUCTS_CREATE,
         PERMISSION_PRODUCTS_EDIT,
         *_AUTHORING,
+        PERMISSION_OBJECTS_FORCE_CHECKIN,
         PERMISSION_OBJECTS_COPY_TO_VAULT,
     ),
     StarterRole.ENGINEER.value: _AUTHORING,

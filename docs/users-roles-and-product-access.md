@@ -73,13 +73,13 @@ Empty databases seed four **starter** roles (**Administrator**, **PDM Manager**,
 
 ## Phase 2 (shipped): core role matrix
 
-Permission keys (`products.*`, `objects.*` including **`objects.view`**, `users.manage`, `users.password`, `roles.assign`, `roles.manage`, `products.assign`, `products.manage`, `settings.manage`, `email.manage`) gate APIs (**403** when missing). Browse/open/download requires **`objects.view`** — a role with no permissions cannot use the Files page. After sign-in, accounts **without** `objects.view` land on **`/admin`** when they have any Administration capability, otherwise on a plain **`/no-access`** page (not a JSON error). Administration breadcrumbs omit the **Products** link when `objects.view` is missing. The Files toolbar and product New/Delete controls hide when the matching capability is false. Viewer Open dialog offers view-only open (no “Check out … then open”) when `objects.checkout` is missing (`data-can-checkout` on the page).
+Permission keys (`products.*`, `objects.*` including **`objects.view`** and **`objects.force_checkin`**, `users.manage`, `users.password`, `roles.assign`, `roles.manage`, `products.assign`, `products.manage`, `settings.manage`, `email.manage`) gate APIs (**403** when missing). Browse/open/download requires **`objects.view`** — a role with no permissions cannot use the Files page. After sign-in, accounts **without** `objects.view` land on **`/admin`** when they have any Administration capability, otherwise on a plain **`/no-access`** page (not a JSON error). Administration breadcrumbs omit the **Products** link when `objects.view` is missing. The Files toolbar and product New/Delete controls hide when the matching capability is false. Viewer Open dialog offers view-only open (no “Check out … then open”) when `objects.checkout` is missing (`data-can-checkout` on the page).
 
 | Starter role (default seed) | Can do | Cannot |
 | --- | --- | --- |
 | **Viewer** | Browse, open/download, Details/History (`objects.view` only; Open goes straight to open — no checkout dialog; Files toolbar **Details** when one file is selected, same as double-click) | Authoring toolbar, Copy to Vault, checkout-on-open, Administration |
-| **Engineer** | View + Add, checkout, check-in, remove, revert, metadata | Create/edit/delete products, Copy to Vault, users, roles, settings |
-| **PDM Manager** | Create/edit products (Files/API) + Engineer authoring + **Copy to Vault** | Delete product, Administration → Products (`products.manage`), users, roles, settings, email |
+| **Engineer** | View + Add, checkout, check-in, remove, revert, metadata | Create/edit/delete products, Copy to Vault, Force Undo Check In, users, roles, settings |
+| **PDM Manager** | Create/edit products (Files/API) + Engineer authoring + **Copy to Vault** + **Force Undo Check In** | Delete product, Administration → Products (`products.manage`), users, roles, settings, email |
 | **Administrator** | Everything above + delete product + full CreoPDM Administration (including Admin → Products and Email) | — |
 
 Automated coverage: `tests/unit/test_auth.py::test_every_starter_role_login_permission_matrix` creates one ephemeral user per starter role, logs each in, and asserts allow/deny for every built-in permission key (plus Files toolbar chrome and **product membership**: All / one product / none). Dedicated UI + lifecycle coverage: `test_admin_membership_product_access_filters_products`.
@@ -96,7 +96,7 @@ When `auth_enabled` is false (unit tests with a static identity), all authoring 
 ### Deferred (later phases)
 
 - Product-level roles (different role per product)
-- Override-checkout UI; lifecycle / release product surfaces
+- Lifecycle / release product surfaces
 - Per-user notification subscriptions; Agents / Storage / Audit admin sections
 
 ### Agent auth (shipped)

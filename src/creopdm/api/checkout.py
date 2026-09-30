@@ -22,6 +22,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_CHECKOUT,
     PERMISSION_OBJECTS_COPY_TO_VAULT,
+    PERMISSION_OBJECTS_FORCE_CHECKIN,
     PERMISSION_OBJECTS_VIEW,
 )
 from creopdm.constants import LifecycleState
@@ -187,6 +188,24 @@ def undo_checkout_batch(
     )
 
 
+@router.post("/api/objects/batch/force-checkin", response_model=BatchOperationResponse)
+def force_checkin_batch(
+    payload: BatchObjectRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BatchOperationResponse:
+    """Force Undo Check In: release another user's checkout; no new version."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_FORCE_CHECKIN)
+    objects = load_accessible_objects(request, ctx, db, payload.object_ids)
+    result = ctx.checkouts.force_undo_checkout_many(db, payload.object_ids)
+    if result.get("ok"):
+        _notify_batch_by_product(request, ctx, db, objects, result, "Checkout force-canceled")
+    return BatchOperationResponse.model_validate(
+        {**result, "workspace_root": str(ctx.config.workspace_root())}
+    )
+
+
 @router.post("/api/objects/batch/agent-cache-manifest", response_model=AgentCacheManifestResponse)
 def agent_cache_manifest(
     payload: BatchObjectRequest,
@@ -302,6 +321,33 @@ def undo_checkout(
         db,
         obj.product,
         action="Checkout canceled",
+        filenames=[obj.filename],
+        object_uuid=obj.uuid,
+    )
+    return present_object(ctx, db, obj)
+
+
+@router.post("/api/objects/{object_id}/force-checkin", response_model=ObjectResponse)
+def force_checkin(
+    object_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ObjectResponse:
+    """Force Undo Check In: release another user's checkout; no new version."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_FORCE_CHECKIN)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    ctx.checkouts.force_undo_checkout(db, object_id)
+    obj = ctx.objects.get_object(db, object_id)
+    from creopdm.api.watch_notify import notify_product_watchers
+
+    notify_product_watchers(
+        request,
+        ctx,
+        db,
+        obj.product,
+        action="Checkout force-canceled",
         filenames=[obj.filename],
         object_uuid=obj.uuid,
     )
