@@ -219,6 +219,35 @@ def test_filter_to_latest_saves_uses_disk_siblings_when_only_old_selected(tmp_pa
     assert [path.name for path in chosen] == ["shaft.prt.4"]
 
 
+def test_filter_to_latest_scans_each_parent_once(tmp_path, monkeypatch):
+    """Multi-select of many files must not re-list the same folder per file."""
+    from pathlib import Path
+
+    selected: list[Path] = []
+    for index in range(40):
+        older = tmp_path / f"part{index}.prt.1"
+        latest = tmp_path / f"part{index}.prt.3"
+        older.write_bytes(b"1")
+        latest.write_bytes(b"3")
+        selected.append(older)
+    calls = {"n": 0}
+    real_iterdir = Path.iterdir
+
+    def counting_iterdir(self: Path):
+        try:
+            if self.resolve() == tmp_path.resolve():
+                calls["n"] += 1
+        except OSError:
+            pass
+        return real_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", counting_iterdir)
+    chosen = CreoFileManager.filter_to_latest_saves(selected)
+    assert calls["n"] == 1
+    assert len(chosen) == 40
+    assert {path.name for path in chosen} == {f"part{index}.prt.3" for index in range(40)}
+
+
 def test_filter_to_latest_uses_purgeable_extensions_only(tmp_path):
     """Regression: older .ext.N omission follows Settings → Purgeable, not all CAD."""
     from creopdm.constants import DEFAULT_PURGEABLE_EXTENSIONS

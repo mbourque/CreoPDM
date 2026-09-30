@@ -79,6 +79,26 @@ def test_tray_skips_spawn_when_already_pythonw(monkeypatch):
     assert called == []
 
 
+def test_tray_skips_spawn_when_frozen(monkeypatch):
+    """PyInstaller one-file must not hop to pythonw -m creopdm_agent."""
+    from creopdm_agent import main as agent_main
+
+    monkeypatch.setattr(agent_main.sys, "platform", "win32")
+    monkeypatch.setattr(agent_main.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(agent_main.sys, "executable", r"C:\Tools\creopdm-agent-tray.exe")
+    monkeypatch.delenv(agent_main._TRAY_CHILD_ENV, raising=False)
+    called = []
+
+    def boom(*args, **kwargs):
+        called.append(1)
+        raise AssertionError("must not spawn under frozen exe")
+
+    monkeypatch.setattr(agent_main.subprocess, "Popen", boom)
+    assert agent_main._is_frozen() is True
+    assert agent_main._windows_tray_without_console(["--tray"]) is False
+    assert called == []
+
+
 def test_tray_child_skips_second_spawn(monkeypatch):
     from creopdm_agent import main as agent_main
 

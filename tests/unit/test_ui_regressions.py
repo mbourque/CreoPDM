@@ -147,6 +147,12 @@ def test_choose_files_still_prefers_agent_picker():
     )
     assert "browseViaAgentPicker" in files_click
     assert files_click.index("browseViaAgentPicker") < files_click.index("browseLocalFiles")
+    script = _app_js()
+    pick = _between(script, "async function browseViaAgentPicker(", "async function browseViaAgentFolderPicker(")
+    assert 'setBusy("Waiting for file picker…")' in pick
+    assert 'setBusy("Preparing selection…")' in pick
+    assert "Add folders…" in pick
+    assert 'confirmLargeBulk("Add", bulkCount)' in script
 
 
 def test_browser_folder_pick_explains_secure_context():

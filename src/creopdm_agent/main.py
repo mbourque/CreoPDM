@@ -124,13 +124,21 @@ def _safe_print(message: str) -> None:
         return
 
 
+def _is_frozen() -> bool:
+    """True under PyInstaller / similar one-file bundles."""
+    return bool(getattr(sys, "frozen", False)) or hasattr(sys, "_MEIPASS")
+
+
 def _windows_tray_without_console(argv: list[str] | None) -> bool:
     """If this process has a console (python.exe), re-launch under pythonw and exit.
 
     Already-pythonw launchers stay in-process (a second hop flashes another CMD).
     The child sets ``CREOPDM_AGENT_TRAY_CHILD=1`` so we only hop once.
+    Frozen one-file builds stay in-process (no pythonw / ``-m creopdm_agent``).
     """
     if sys.platform != "win32":
+        return False
+    if _is_frozen():
         return False
     if os.environ.get(_TRAY_CHILD_ENV) == "1":
         return False

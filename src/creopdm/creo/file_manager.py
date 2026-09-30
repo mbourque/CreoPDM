@@ -271,7 +271,12 @@ class CreoFileManager:
         extra_extensions: Iterable[str] | None = None,
         scan_disk_siblings: bool = True,
     ) -> list[Path]:
-        """Keep one file per CAD family: the highest .ext.N. Unnumbered is older."""
+        """Keep one file per CAD family: the highest .ext.N. Unnumbered is older.
+
+        When ``scan_disk_siblings`` is true, each parent folder is listed **once**
+        (not once per selected file) so multi-select of thousands of Creo saves
+        stays responsive after the Open dialog closes.
+        """
         grouped: dict[str, list[Path]] = {}
         order: list[str] = []
         seen: dict[str, set[str]] = {}
@@ -300,14 +305,39 @@ class CreoFileManager:
                 grouped[key] = []
                 order.append(key)
             add(key, path, check_exists=scan_disk_siblings)
-            if not scan_disk_siblings:
-                continue
-            parent = path.parent
-            if parent.is_dir() and cls.is_cad_save_family(path.name, extra_extensions):
+
+        if scan_disk_siblings:
+            parents_needed: dict[str, Path] = {}
+            logicals_by_parent: dict[str, set[str]] = {}
+            for path in paths:
+                if not cls.is_cad_save_family(path.name, extra_extensions):
+                    continue
+                parent = path.parent
+                parent_key = os.path.normcase(os.path.abspath(parent))
+                parents_needed[parent_key] = parent
                 logical = cls.logical_filename(path.name, extra_extensions).lower()
-                for sibling in parent.iterdir():
-                    if sibling.is_file() and cls.logical_filename(sibling.name, extra_extensions).lower() == logical:
-                        add(key, sibling, check_exists=False)
+                logicals_by_parent.setdefault(parent_key, set()).add(logical)
+            for parent_key, parent in parents_needed.items():
+                wanted = logicals_by_parent.get(parent_key) or set()
+                if not wanted:
+                    continue
+                try:
+                    if not parent.is_dir():
+                        continue
+                    children = list(parent.iterdir())
+                except OSError:
+                    continue
+                for sibling in children:
+                    if not sibling.is_file():
+                        continue
+                    logical = cls.logical_filename(sibling.name, extra_extensions).lower()
+                    if logical not in wanted:
+                        continue
+                    key = f"{parent_key}/{logical}"
+                    if key not in grouped:
+                        grouped[key] = []
+                        order.append(key)
+                    add(key, sibling, check_exists=False)
 
         chosen: list[Path] = []
         for key in order:

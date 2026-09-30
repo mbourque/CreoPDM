@@ -253,6 +253,16 @@ creopdm-agent
 
 Or: `python -m creopdm_agent` / `python -m creopdm_agent --tray`.
 
+### Shareable tray EXE (no Python on the Creo PC)
+
+On a Windows machine that already has this repo’s venv:
+
+```powershell
+.\build-agent-tray.ps1
+```
+
+Copy `dist\creopdm-agent-tray.exe` to the other Creo PC and run it. That is a real PyInstaller one-file build — not the venv launcher stub under `.venv\Scripts\`.
+
 ### Use with Embedded Creo
 
 1. Keep CreoPDM running on the server (for example `systemctl --user` on Linux).

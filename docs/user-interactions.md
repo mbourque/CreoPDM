@@ -164,9 +164,12 @@ Menu order:
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Pick or drop individual files | Copy them into the product at the current location | |
+| Pick a very large multi-select (hundreds/thousands) | Keep a busy message after the OS picker closes while it resolves latest numbered saves, then show the Add dialog summary; warn before starting a bulk Add | Sit frozen with the Add dialog closed and no busy feedback after you confirm the OS picker |
 | Drop a whole folder tree | Tell you to use Add folder… / Add folders… | Quietly import the whole tree as “files” |
 | Click Add with nothing chosen | Ask you to choose files first | Start an empty import |
 | Click Add twice quickly | Say an add is already running | Run two imports at once |
+
+For thousands of Creo models, prefer **Add folders…** (picks a folder and lists files on the agent) over multi-select in **Add files…**.
 
 ### Add folder… (one folder, top level only)
 

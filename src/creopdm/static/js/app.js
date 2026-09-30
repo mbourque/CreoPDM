@@ -2624,22 +2624,44 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function browseViaAgentPicker() {
     const agent = await probeCreoAgent();
     if (!agent) return false;
-    const pickResponse = await fetch(`${agentBase()}/pick-files`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        initial_directory: addInitialDirectory || "",
-        title: "Add files to the product",
-        purgeable_extensions: [...purgeableExtensionSet()],
-      }),
-    });
+    // Busy stays up after the OS dialog closes while the agent resolves latest
+    // numbered saves (can take a while for thousands of files).
+    setBusy("Waiting for file picker…");
+    let pickResponse;
+    try {
+      pickResponse = await fetch(`${agentBase()}/pick-files`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          initial_directory: addInitialDirectory || "",
+          title: "Add files to the product",
+          purgeable_extensions: [...purgeableExtensionSet()],
+        }),
+      });
+    } finally {
+      clearBusy();
+    }
     if (!pickResponse.ok) {
       showError($("#add-error"), await readError(pickResponse));
       return true;
     }
-    const picked = await pickResponse.json();
+    setBusy("Preparing selection…");
+    let picked;
+    try {
+      picked = await pickResponse.json();
+    } finally {
+      clearBusy();
+    }
     const paths = Array.isArray(picked.selected) ? picked.selected : [];
-    if (!paths.length) return true;
+    if (!paths.length) {
+      if (!picked.cancelled) {
+        showError(
+          $("#add-error"),
+          "No importable files in that selection. For large libraries, use Add folders… instead of Add files…"
+        );
+      }
+      return true;
+    }
     // Keep absolute paths on the agent — do not pull thousands of bodies into the browser.
     applyAgentPickedPaths(paths);
     return true;
@@ -2649,21 +2671,33 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const agent = await probeCreoAgent();
     if (!agent) return false;
     const recursive = isRecursiveAddMode();
-    const pickResponse = await fetch(`${agentBase()}/pick-folder`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        initial_directory: addInitialDirectory || "",
-        title: recursive ? "Add folders to the product" : "Add a folder to the product",
-        purgeable_extensions: [...purgeableExtensionSet()],
-        recursive,
-      }),
-    });
+    setBusy("Waiting for folder picker…");
+    let pickResponse;
+    try {
+      pickResponse = await fetch(`${agentBase()}/pick-folder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          initial_directory: addInitialDirectory || "",
+          title: recursive ? "Add folders to the product" : "Add a folder to the product",
+          purgeable_extensions: [...purgeableExtensionSet()],
+          recursive,
+        }),
+      });
+    } finally {
+      clearBusy();
+    }
     if (!pickResponse.ok) {
       showError($("#add-error"), await readError(pickResponse));
       return true;
     }
-    const picked = await pickResponse.json();
+    setBusy("Reading folder…");
+    let picked;
+    try {
+      picked = await pickResponse.json();
+    } finally {
+      clearBusy();
+    }
     if (picked.cancelled) return true;
     const paths = Array.isArray(picked.selected) ? picked.selected : [];
     const folder = String(picked.folder || "").trim();
@@ -2824,6 +2858,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     const comment = String(new FormData(addForm).get("comment") || "").trim();
     const recursive = isRecursiveAddMode();
+    const bulkCount =
+      chosenAgentFolderBatches.reduce((sum, item) => sum + (item.paths?.length || 0), 0) ||
+      chosenAgentPaths.length ||
+      chosenPaths.length ||
+      chosenUploads.length ||
+      0;
+    if (bulkCount && !confirmLargeBulk("Add", bulkCount)) return;
     addInFlight = true;
     let result;
     try {
