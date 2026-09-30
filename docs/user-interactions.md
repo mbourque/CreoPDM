@@ -54,7 +54,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Open an **empty** product (and you **can** add files) | Show that there are no files and invite you to add a Creo model, PDF, or document | |
 | Open an **empty** product (and you **cannot** add files) | Show that there are no files | Tell you to “Add a Creo model…” when you have no `objects.add` |
 | Rename (product settings) | Update the name everywhere you see it | |
-| **Rebuild Where Used** / **Collect all metadata** (product gear) | Show only inside Creo’s embedded browser when Creo.JS is connected (and you have metadata permission); hide when the product is read-only or not **In work**; hide in Chrome/Edge and when Session offline | Show those items in a standalone browser; Collect without Creo.JS; show when the product is read-only / On hold / Released / Closed / Archived |
+| **Rebuild Where Used** / **Collect all metadata** (product gear) | Show only inside Creo’s embedded browser when Creo.JS is connected (and you have metadata permission); hide when the product is read-only or not **In work**; hide in Chrome/Edge and when Session offline. **Collect** shows the same busy overlay as Add (progress count) and blocks navigation until it finishes | Show those items in a standalone browser; Collect without Creo.JS; show when the product is read-only / On hold / Released / Closed / Archived; let you browse away mid-Collect and leave it half done |
 | Product is **read only** or not **In work** | Show the product state badge next to the product name (same blue-dot style as file State); show a short banner (“This product is **On Hold**.” / “This product is **read only**.”) without listing blocked actions; **Checkout** column shows **Read only** / **On hold** / etc. (not **Available**); hide Add, **Checkout selected**, **Checkout product**, Check In, Remove from Product, Rename, Delete product, Collect, Rebuild; keep **Undo Checkout** / **Force Undo Checkout** when the role allows; selecting a folder must not enable checkout; API rejects those mutations (including product delete). Open / History / Copy to workspace still work. **Archived** products are hidden from the Files list (restore from Administration → Products) | Leave Checkout selected / Checkout product / Check In visible when the product cannot be modified; allow Delete/Rename while read-only; show Archived in the normal Files product list; hide the product state from the Files header; show **Available** in Checkout when checkout is blocked; list every blocked action in the banner; let folder select offer Checkout selected |
 | Open a product on Files | Always show the current product state next to the name (**In Work**, **On Hold**, …); append **Read only** on the badge when that flag is set | Only show state in Administration |
 | Click the **bell** next to the gear (when Email notifications are enabled) | Ask to confirm Watch / Stop watching; then toggle **your** watching state for that product | Change watching when you Cancel the confirmation; show the bell when notifications are disabled; show another user’s watching state as your own |
@@ -177,12 +177,16 @@ For thousands of Creo models, prefer **Add folders…** (picks a folder and list
 |--------|------------|--------------|
 | Pick one folder | Import only files sitting **directly** in that folder | Pull in files from subfolders |
 | Folder only has files in subfolders | Explain that nothing top-level was found | Import nested files anyway |
+| Leave **Keep chosen folder name** on | Store as `Library/part.prt` under the current location | |
+| Turn **Keep chosen folder name** off | Store as `part.prt` in the current location | Still create a `Library/` folder just because you picked that disk folder |
 
 ### Add folders… (one or more folders, including subfolders)
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Pick folder trees | Keep the folder structure (e.g. Alpha/lib/part.prt stays nested) | Flatten everything to the product root |
+| Pick folder trees | Keep nested structure under each chosen folder | Flatten everything to a single basename pile |
+| Leave **Keep chosen folder name** on | Keep the chosen folder name (e.g. `Alpha/lib/part.prt`) | |
+| Turn **Keep chosen folder name** off | Omit the chosen folder name (`lib/part.prt` in the current location) | Drop nested subfolders when the option is only meant to omit the outer folder name |
 | Pick several roots | Import each tree | Lose sibling folders |
 
 On a normal office network (`http://…`), the app should try the CreoPDM agent’s folder picker first (more reliable than the browser’s).

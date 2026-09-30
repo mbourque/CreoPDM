@@ -222,6 +222,10 @@ class AddPathsRequest(BaseModel):
     comment: str | None = None
     # Folder pick: keep vault-relative paths under this directory.
     base_folder: str = ""
+    # When true (default), vault paths start with the chosen folder name
+    # (Library/part.prt). When false, paths are relative to that folder only
+    # (part.prt or sub/part.prt).
+    keep_root_folder: bool = True
     # Files view location on the PDM product — prefix vault paths with this.
     parent_folder: str = ""
     # Browser batch progress (for logs only).
@@ -1131,8 +1135,11 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                         f"File is outside the chosen folder ({root}); skipped to avoid flattening.",
                     )
                     continue
-                # Choose Folder: Documents/foo.docx, Documents/Word/…, Documents/Snagit/…
-                rel = f"{root.name}/{inner}" if root.name else inner
+                # Keep root: Library/sub/part.prt. Omit root: sub/part.prt.
+                if payload.keep_root_folder and root.name:
+                    rel = f"{root.name}/{inner}"
+                else:
+                    rel = inner
             else:
                 rel = path.name
             parent = (payload.parent_folder or "").strip().replace("\\", "/").strip("/")

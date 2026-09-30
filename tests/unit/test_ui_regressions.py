@@ -137,6 +137,12 @@ def test_choose_folder_uses_agent_before_browser_picker():
     assert "browseViaAgentFolderPicker" in folder_click
     assert folder_click.index("browseViaAgentFolderPicker") < folder_click.index("browseLocalFolder")
     assert "useNativePicker()" in folder_click
+    html = APP_HTML.read_text(encoding="utf-8")
+    assert 'id="add-keep-root-folder"' in html
+    assert "function keepRootFolder" in script
+    assert "keep_root_folder: keepRootFolder()" in script
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "Keep chosen folder name" in docs
 
 
 def test_choose_files_still_prefers_agent_picker():
@@ -279,6 +285,15 @@ def test_metadata_gear_items_require_creo_session():
     assert "data-allows-mutation" in app_html
     assert "Rebuild Where Used" in docs and "Collect all metadata" in docs
     assert "read only" in docs.lower() or "read-only" in docs.lower()
+    # Collect blocks the UI like Add — progress on busy overlay, no mid-run soft-nav.
+    loop = _between(script, "async function runMetadataCollectLoop(", "async function runCollectAllMetadata(")
+    assert 'setBusy("Collecting Creo metadata…")' in loop
+    assert "setBusyMessage(message)" in loop
+    assert "clearBusy()" in loop
+    assert "beforeunload" in script
+    soft = _between(script, "function softNavigate(", "function leavePage(")
+    assert "metadataCollectJob.running" in soft
+    assert "busy overlay" in docs.lower()
 
 
 def test_agent_add_chunks_continue_after_http_error():

@@ -112,6 +112,19 @@ def test_import_relative_path_nests_under_parent_folder(tmp_path):
         service.import_relative_path(product, part, None, parent_folder="Incoming")
         == "Incoming/top.prt"
     )
+    assert service.import_relative_path(product, part, kit, keep_root_folder=False) == "top.prt"
+    nested = kit / "sub" / "pin.prt"
+    nested.parent.mkdir()
+    nested.write_bytes(b"pin")
+    assert (
+        service.import_relative_path(product, nested, kit, keep_root_folder=False) == "sub/pin.prt"
+    )
+    assert (
+        service.import_relative_path(
+            product, nested, kit, parent_folder="Incoming", keep_root_folder=False
+        )
+        == "Incoming/sub/pin.prt"
+    )
 
 
 def test_purge_newer_creo_saves_keeps_restored_tip(tmp_path):

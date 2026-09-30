@@ -263,6 +263,8 @@ class ImportLocalRequest(BaseModel):
     recursive: bool = True
     comment: str | None = None
     base_folder: str | None = None
+    # When true (default), vault paths include the chosen folder name.
+    keep_root_folder: bool = True
     # Files view location — imported paths land under this vault folder.
     parent_folder: str = ""
 

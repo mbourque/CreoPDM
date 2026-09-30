@@ -762,12 +762,14 @@ class WorkspaceService:
         source: Path,
         base_folder: Path | str | None = None,
         parent_folder: str | None = None,
+        *,
+        keep_root_folder: bool = True,
     ) -> str | None:
         """Workspace-relative path used when adding a file.
 
-        Choose Folder keeps the chosen folder name as a group, including nested
-        files. Choose Files stores the file at the workspace root (or under
-        parent_folder when the Files view is inside a subfolder).
+        Choose Folder can keep the chosen folder name as a group (default), or
+        omit it so files land in the current product location. Nested relative
+        paths under the chosen folder are always preserved.
         """
         from creopdm.utils.folders import normalize_folder_query
 
@@ -781,10 +783,15 @@ class WorkspaceService:
                 return None
             stored = CreoFileManager.canonical_repository_name(rel.name)
             parent = rel.parent
-            if parent.as_posix() == ".":
-                relative = f"{base.name}/{stored}"
+            if keep_root_folder:
+                if parent.as_posix() == ".":
+                    relative = f"{base.name}/{stored}"
+                else:
+                    relative = (Path(base.name) / parent / stored).as_posix()
+            elif parent.as_posix() == ".":
+                relative = stored
             else:
-                relative = (Path(base.name) / parent / stored).as_posix()
+                relative = (parent / stored).as_posix()
         parent = normalize_folder_query(parent_folder)
         if not parent:
             return relative

@@ -730,7 +730,11 @@ def import_from_disk(
                         path,
                         path.name,
                         ctx.workspaces.import_relative_path(
-                            product, path, base_folder, parent_folder=parent_folder
+                            product,
+                            path,
+                            base_folder,
+                            parent_folder=parent_folder,
+                            keep_root_folder=bool(payload.keep_root_folder),
                         ),
                     )
                 )
@@ -762,7 +766,11 @@ def import_from_disk(
                 path,
                 path.name,
                 ctx.workspaces.import_relative_path(
-                    product, path, base_folder, parent_folder=parent_folder
+                    product,
+                    path,
+                    base_folder,
+                    parent_folder=parent_folder,
+                    keep_root_folder=bool(payload.keep_root_folder),
                 ),
             )
             for path in selected

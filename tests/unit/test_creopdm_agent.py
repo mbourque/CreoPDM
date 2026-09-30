@@ -396,6 +396,59 @@ def test_agent_add_paths_uses_base_folder_for_relative_paths(tmp_path, monkeypat
         assert uploaded[0][1] == "kit/sub/pin.prt.1"
 
 
+def test_agent_add_paths_can_omit_root_folder_name(tmp_path, monkeypatch):
+    """keep_root_folder=false stores paths relative to the chosen folder only."""
+    root = tmp_path / "cache"
+    root.mkdir()
+    folder = tmp_path / "kit"
+    nested = folder / "sub"
+    nested.mkdir(parents=True)
+    part = nested / "pin.prt.1"
+    part.write_bytes(b"prt")
+    top = folder / "shaft.prt.1"
+    top.write_bytes(b"prt")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), pdm_url="http://pdm.test")
+    app = create_agent_app(settings)
+    uploaded: list[str] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"ok": [], "failed": []}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            for item in files or []:
+                if item[0] == "relative_paths":
+                    uploaded.append(item[1][1] if isinstance(item[1], tuple) else item[1])
+            return FakeResponse()
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        response = client.post(
+            "/add-paths",
+            json={
+                "pdm_url": "http://pdm.test",
+                "product_id": "proj1",
+                "absolute_paths": [str(part), str(top)],
+                "base_folder": str(folder),
+                "keep_root_folder": False,
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert set(uploaded) == {"sub/pin.prt.1", "shaft.prt.1"}
+
+
 def test_agent_add_paths_omits_older_purgeable_versions(tmp_path, monkeypatch):
     """Regression: Settings → Purgeable drives which .ext.N siblings are skipped on upload."""
     root = tmp_path / "cache"

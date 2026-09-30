@@ -266,8 +266,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   // Serialize soft navigations so a refresh after Remove is never dropped, and
   // callers can await the real shell swap (the old queue resolved too early).
   let softNavTail = Promise.resolve();
+  // Declared early so softNavigate / leavePage / reloadPage can block mid-Collect.
+  const metadataCollectJob = { running: false, cancel: false };
 
   function softNavigate(url, historyMode = "push") {
+    if (metadataCollectJob.running) {
+      showOk("Finish Collect metadata (or wait for it) before leaving this page.");
+      return Promise.resolve();
+    }
     const absolute = new URL(url, window.location.href);
     if (!isSoftNavUrl(absolute.href)) {
       window.location.href = absolute.href;
@@ -347,6 +353,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function leavePage(url) {
+    if (metadataCollectJob.running) {
+      showOk("Finish Collect metadata (or wait for it) before leaving this page.");
+      return;
+    }
     closeOpenDialogs();
     // Always soft-nav shell pages — hard reload SSR-paints Not Connected and kills Creo.JS.
     if (isSoftNavUrl(url)) {
@@ -357,6 +367,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function reloadPage(options = {}) {
+    if (metadataCollectJob.running) {
+      showOk("Finish Collect metadata (or wait for it) before refreshing.");
+      return;
+    }
     const keepBusy = Boolean(options.keepBusy);
     const busyMessage = options.busyMessage || "Refreshing…";
     closeOpenDialogs({ keepBusy });
@@ -1234,7 +1248,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   const METADATA_COLLECT_WARN_THRESHOLD = 50;
   const METADATA_COLLECT_KEY = "creopdmMetadataCollect";
-  const metadataCollectJob = { running: false, cancel: false };
   const cancelMetadataBtn = $("#cancel-metadata-collect-btn");
   const resumeMetadataBtn = $("#resume-metadata-collect-btn");
 
@@ -1311,7 +1324,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (total > METADATA_COLLECT_WARN_THRESHOLD) {
         warn.hidden = false;
         warn.textContent =
-          `This is ${total} models (over ${METADATA_COLLECT_WARN_THRESHOLD}). It can take a long time and may make Creo sluggish. Cancel or Resume from the toolbar. Progress survives navigation within CreoPDM.`;
+          `This is ${total} models (over ${METADATA_COLLECT_WARN_THRESHOLD}). It can take a long time and may make Creo sluggish. A busy overlay stays up until Collect finishes — keep this CreoPDM window open.`;
       } else {
         warn.hidden = true;
         warn.textContent = "";
@@ -1431,6 +1444,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     metadataCollectJob.cancel = false;
     syncMetadataCollectControls();
     showError($("#toolbar-error"), "");
+    setBusy("Collecting Creo metadata…");
     let index = Math.max(0, Number(state.index) || 0);
     let captured = Number(state.captured) || 0;
     let failed = Number(state.failed) || 0;
@@ -1444,6 +1458,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           ` (${captured} saved, ${failed} skipped` +
           (lastReason ? `, last: ${lastReason}` : "") +
           `)`;
+        setBusyMessage(message);
         showOk(message);
         saveMetadataCollectState({
           ...state,
@@ -1464,6 +1479,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const pauseMsg =
             `Creo busy / timeout on ${target.filename} — waiting ${waitSec}s then continuing ` +
             `(${index} of ${targets.length}; ${captured} saved, ${failed} skipped).`;
+          setBusyMessage(pauseMsg);
           showOk(pauseMsg);
           saveMetadataCollectState({
             ...state,
@@ -1528,6 +1544,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         saveMetadataCollectState(null);
       }
     } finally {
+      clearBusy();
       metadataCollectJob.running = false;
       metadataCollectJob.cancel = false;
       syncMetadataCollectControls();
@@ -1641,6 +1658,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
   window.addEventListener("pageshow", () => {
     resumeMetadataCollectIfNeeded();
+  });
+  window.addEventListener("beforeunload", (event) => {
+    if (!metadataCollectJob.running) return;
+    event.preventDefault();
+    event.returnValue = "";
   });
 
   $("#product-cancel")?.addEventListener("click", () => productDialog?.close());
@@ -1935,6 +1957,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const hint = $("#add-drop-hint");
     const filesBtn = $("#choose-workspace-files");
     const folderBtn = $("#choose-workspace-folder");
+    const keepRootRow = $("#add-keep-root-row");
+    const keepRootHint = $("#add-keep-root-hint");
+    const keepRoot = $("#add-keep-root-folder");
+    const showKeepRoot = resolved === "folders" || resolved === "folder";
+    if (keepRootRow) keepRootRow.hidden = !showKeepRoot;
+    if (keepRootHint) keepRootHint.hidden = !showKeepRoot;
+    if (keepRoot && showKeepRoot) keepRoot.checked = true;
     if (resolved === "files") {
       if (title) title.textContent = "Add files";
       if (lead) {
@@ -1977,6 +2006,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         folderBtn.textContent = "Choose Folder";
       }
     }
+  }
+
+  function keepRootFolder() {
+    const el = $("#add-keep-root-folder");
+    const row = $("#add-keep-root-row");
+    if (!el || row?.hidden) return true;
+    return Boolean(el.checked);
   }
 
   function openAddDialog(mode) {
@@ -2911,6 +2947,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
                 product_id: productId,
                 absolute_paths: chunk,
                 base_folder: baseFolder || "",
+                keep_root_folder: keepRootFolder(),
                 parent_folder: parentFolder,
                 comment: offset === 0 ? commentOnce || null : null,
                 client_offset: offset,
@@ -3021,6 +3058,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           folders: chosenFolders,
           recursive,
           parent_folder: parentFolder || "",
+          keep_root_folder: keepRootFolder(),
           comment: comment || null,
         };
       } else if (chosenBaseFolder) {
@@ -3029,6 +3067,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           base_folder: chosenBaseFolder,
           recursive,
           parent_folder: parentFolder || "",
+          keep_root_folder: keepRootFolder(),
           comment: comment || null,
         };
       } else {

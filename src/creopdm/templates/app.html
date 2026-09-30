@@ -585,6 +585,13 @@
         <button type="button" class="btn" id="choose-workspace-folder" hidden>Choose Folder</button>
       </div>
       <p id="chosen-file-summary" class="muted small"></p>
+      <label class="choice" id="add-keep-root-row" hidden>
+        <input type="checkbox" id="add-keep-root-folder" checked>
+        Keep chosen folder name in the product
+      </label>
+      <p class="muted small" id="add-keep-root-hint" hidden>
+        On: <code>Library/part.prt</code>. Off: files go in the current location (<code>part.prt</code> or nested <code>sub/part.prt</code>).
+      </p>
       <span class="muted small" id="add-drop-hint">Drop files here, or choose them. Copies go into the vault.</span>
     </div>
     <input id="add-file-input" class="sr-file" type="file" multiple>
