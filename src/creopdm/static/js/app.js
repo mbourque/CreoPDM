@@ -3742,7 +3742,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const canCheckin = selectionCanCheckin(selected);
     const canUndo = selected.length > 0 && selected.every((row) => row.dataset.owned === "1");
     const canForceUndo =
-      document.body?.dataset?.canForceCheckin === "1" &&
+      document.body?.dataset?.canForceUndoCheckout === "1" &&
       selected.length > 0 &&
       selected.every(
         (row) => row.dataset.checkedOut === "1" && row.dataset.owned !== "1"
@@ -6046,7 +6046,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     showError($("#toolbar-error"), "");
     if (count === 1) {
       const result = await postAction(
-        `/api/objects/${objectIds[0]}/force-checkin`,
+        `/api/objects/${objectIds[0]}/force-undo-checkout`,
         undefined,
         "POST",
         "Force undoing checkout…"
@@ -6067,7 +6067,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           `Force undoing checkout… ${Math.min(start + chunk.length, count)} of ${count}`
         );
         const part = await postAction(
-          "/api/objects/batch/force-checkin",
+          "/api/objects/batch/force-undo-checkout",
           { object_ids: chunk },
           "POST",
           ""

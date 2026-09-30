@@ -19,7 +19,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_CHECKOUT,
     PERMISSION_OBJECTS_COPY_TO_VAULT,
-    PERMISSION_OBJECTS_FORCE_CHECKIN,
+    PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT,
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
@@ -358,8 +358,8 @@ class UserService:
     def can_checkin(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_OBJECTS_CHECKIN)
 
-    def can_force_checkin(self, user: User) -> bool:
-        return self.has_permission(user, PERMISSION_OBJECTS_FORCE_CHECKIN)
+    def can_force_undo_checkout(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT)
 
     def can_remove_objects(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_OBJECTS_REMOVE)

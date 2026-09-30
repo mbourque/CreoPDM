@@ -12,7 +12,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_CHECKOUT,
     PERMISSION_OBJECTS_COPY_TO_VAULT,
-    PERMISSION_OBJECTS_FORCE_CHECKIN,
+    PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT,
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
@@ -51,7 +51,7 @@ class CapabilityFlags:
     can_add_objects: bool
     can_checkout: bool
     can_checkin: bool
-    can_force_checkin: bool
+    can_force_undo_checkout: bool
     can_remove_objects: bool
     can_revert_objects: bool
     can_update_metadata: bool
@@ -76,7 +76,7 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_add_objects=PERMISSION_OBJECTS_ADD in keys,
         can_checkout=PERMISSION_OBJECTS_CHECKOUT in keys,
         can_checkin=PERMISSION_OBJECTS_CHECKIN in keys,
-        can_force_checkin=PERMISSION_OBJECTS_FORCE_CHECKIN in keys,
+        can_force_undo_checkout=PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in keys,
         can_remove_objects=PERMISSION_OBJECTS_REMOVE in keys,
         can_revert_objects=PERMISSION_OBJECTS_REVERT in keys,
         can_update_metadata=PERMISSION_OBJECTS_METADATA in keys,
@@ -113,7 +113,7 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_add_objects = caps.can_add_objects
     request.state.can_checkout = caps.can_checkout
     request.state.can_checkin = caps.can_checkin
-    request.state.can_force_checkin = caps.can_force_checkin
+    request.state.can_force_undo_checkout = caps.can_force_undo_checkout
     request.state.can_remove_objects = caps.can_remove_objects
     request.state.can_revert_objects = caps.can_revert_objects
     request.state.can_update_metadata = caps.can_update_metadata
@@ -137,7 +137,7 @@ def caps_dict(request: Request) -> dict:
         "can_add_objects": bool(getattr(request.state, "can_add_objects", False)),
         "can_checkout": bool(getattr(request.state, "can_checkout", False)),
         "can_checkin": bool(getattr(request.state, "can_checkin", False)),
-        "can_force_checkin": bool(getattr(request.state, "can_force_checkin", False)),
+        "can_force_undo_checkout": bool(getattr(request.state, "can_force_undo_checkout", False)),
         "can_remove_objects": bool(getattr(request.state, "can_remove_objects", False)),
         "can_revert_objects": bool(getattr(request.state, "can_revert_objects", False)),
         "can_update_metadata": bool(getattr(request.state, "can_update_metadata", False)),

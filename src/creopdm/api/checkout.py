@@ -22,7 +22,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_CHECKOUT,
     PERMISSION_OBJECTS_COPY_TO_VAULT,
-    PERMISSION_OBJECTS_FORCE_CHECKIN,
+    PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT,
     PERMISSION_OBJECTS_VIEW,
 )
 from creopdm.constants import LifecycleState
@@ -188,15 +188,15 @@ def undo_checkout_batch(
     )
 
 
-@router.post("/api/objects/batch/force-checkin", response_model=BatchOperationResponse)
-def force_checkin_batch(
+@router.post("/api/objects/batch/force-undo-checkout", response_model=BatchOperationResponse)
+def force_undo_checkout_batch(
     payload: BatchObjectRequest,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     """Force Undo Checkout: release another user's checkout; no new version."""
-    require_permission(request, ctx, PERMISSION_OBJECTS_FORCE_CHECKIN)
+    require_permission(request, ctx, PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT)
     objects = load_accessible_objects(request, ctx, db, payload.object_ids)
     result = ctx.checkouts.force_undo_checkout_many(db, payload.object_ids)
     if result.get("ok"):
@@ -327,15 +327,15 @@ def undo_checkout(
     return present_object(ctx, db, obj)
 
 
-@router.post("/api/objects/{object_id}/force-checkin", response_model=ObjectResponse)
-def force_checkin(
+@router.post("/api/objects/{object_id}/force-undo-checkout", response_model=ObjectResponse)
+def force_undo_checkout(
     object_id: str,
     request: Request,
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ObjectResponse:
     """Force Undo Checkout: release another user's checkout; no new version."""
-    require_permission(request, ctx, PERMISSION_OBJECTS_FORCE_CHECKIN)
+    require_permission(request, ctx, PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT)
     obj = ctx.objects.get_object(db, object_id)
     require_product_access(request, ctx, obj.product)
     ctx.checkouts.force_undo_checkout(db, object_id)

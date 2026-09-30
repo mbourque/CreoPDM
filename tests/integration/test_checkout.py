@@ -198,7 +198,7 @@ def test_undo_checkout(client, repo_parent):
 
 
 @requires_git
-def test_force_checkin_releases_other_users_checkout(client, repo_parent, identity, data_dir):
+def test_force_undo_checkout_releases_other_users_checkout(client, repo_parent, identity, data_dir):
     """Force Undo Checkout: release another user's lock; no new vault version."""
     from creopdm.services.git_service import GitService
 
@@ -214,7 +214,7 @@ def test_force_checkin_releases_other_users_checkout(client, repo_parent, identi
     assert denied_undo.status_code == 403, denied_undo.text
     assert denied_undo.json()["error"]["code"] == "CHECKOUT_OWNERSHIP"
 
-    forced = client.post(f"/api/objects/{obj['uuid']}/force-checkin")
+    forced = client.post(f"/api/objects/{obj['uuid']}/force-undo-checkout")
     assert forced.status_code == 200, forced.text
     body = forced.json()
     assert body["owned_by_me"] is False
@@ -223,7 +223,7 @@ def test_force_checkin_releases_other_users_checkout(client, repo_parent, identi
     assert not body.get("checkout_user")
     assert git.get_head(vault) == head_before
 
-    again = client.post(f"/api/objects/{obj['uuid']}/force-checkin")
+    again = client.post(f"/api/objects/{obj['uuid']}/force-undo-checkout")
     assert again.status_code == 403, again.text
     assert again.json()["error"]["code"] == "CHECKOUT_OWNERSHIP"
 

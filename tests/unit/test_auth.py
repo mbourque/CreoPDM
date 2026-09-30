@@ -1374,7 +1374,7 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
         PERMISSION_EMAIL_MANAGE,
         PERMISSION_OBJECTS_CHECKOUT,
         PERMISSION_OBJECTS_COPY_TO_VAULT,
-        PERMISSION_OBJECTS_FORCE_CHECKIN,
+        PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT,
         PERMISSION_OBJECTS_VIEW,
         PERMISSION_PRODUCTS_CREATE,
         PERMISSION_PRODUCTS_DELETE,
@@ -1408,11 +1408,11 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
     assert PERMISSION_OBJECTS_VIEW in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_OBJECTS_CHECKOUT in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_OBJECTS_COPY_TO_VAULT not in keys_by_role[BuiltinRole.ENGINEER.value]
-    assert PERMISSION_OBJECTS_FORCE_CHECKIN not in keys_by_role[BuiltinRole.ENGINEER.value]
+    assert PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT not in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_PRODUCTS_CREATE not in keys_by_role[BuiltinRole.ENGINEER.value]
     assert PERMISSION_PRODUCTS_CREATE in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_OBJECTS_COPY_TO_VAULT in keys_by_role[BuiltinRole.PDM_MANAGER.value]
-    assert PERMISSION_OBJECTS_FORCE_CHECKIN in keys_by_role[BuiltinRole.PDM_MANAGER.value]
+    assert PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_PRODUCTS_DELETE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_PRODUCTS_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_EMAIL_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
@@ -1421,7 +1421,7 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
     assert PERMISSION_EMAIL_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_ROLES_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_OBJECTS_COPY_TO_VAULT in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
-    assert PERMISSION_OBJECTS_FORCE_CHECKIN in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
+    assert PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     for role_name, expected in STARTER_ROLE_PERMISSION_KEYS.items():
         assert keys_by_role[role_name] >= set(expected)
 
@@ -2385,7 +2385,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_OBJECTS_CHECKIN,
         PERMISSION_OBJECTS_CHECKOUT,
         PERMISSION_OBJECTS_COPY_TO_VAULT,
-        PERMISSION_OBJECTS_FORCE_CHECKIN,
+        PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT,
         PERMISSION_OBJECTS_METADATA,
         PERMISSION_OBJECTS_REMOVE,
         PERMISSION_OBJECTS_REVERT,
@@ -2493,10 +2493,10 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             home = auth_client.get(f"/?product={product_id}")
             assert home.status_code == 200
             assert f'data-can-checkout="{"1" if PERMISSION_OBJECTS_CHECKOUT in allowed else "0"}"' in home.text
-            assert f'data-can-force-checkin="{"1" if PERMISSION_OBJECTS_FORCE_CHECKIN in allowed else "0"}"' in home.text
+            assert f'data-can-force-undo-checkout="{"1" if PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in allowed else "0"}"' in home.text
             assert f'data-can-view="1"' in home.text
             assert f'data-can-copy-to-vault="{"1" if PERMISSION_OBJECTS_COPY_TO_VAULT in allowed else "0"}"' in home.text
-            if PERMISSION_OBJECTS_FORCE_CHECKIN in allowed:
+            if PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in allowed:
                 assert 'id="force-undo-btn"' in home.text
             else:
                 assert 'id="force-undo-btn"' not in home.text
@@ -2572,8 +2572,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 f"/api/objects/{object_id}/checkin",
                 json={"comment": "checkin probe"},
             ),
-            PERMISSION_OBJECTS_FORCE_CHECKIN: auth_client.post(
-                f"/api/objects/{object_id}/force-checkin"
+            PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT: auth_client.post(
+                f"/api/objects/{object_id}/force-undo-checkout"
             ),
             PERMISSION_OBJECTS_REMOVE: auth_client.post(
                 "/api/objects/batch/remove",

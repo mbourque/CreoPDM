@@ -1,6 +1,6 @@
-"""Alembic migration: add objects.force_checkin for Admin + PDM Manager.
+"""Alembic migration: add objects.force_undo_checkout for Admin + PDM Manager.
 
-Revision ID: 023_objects_force_checkin
+Revision ID: 023_objects_force_undo
 Revises: 022_product_state
 Create Date: 2026-09-30
 
@@ -14,14 +14,15 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "023_objects_force_checkin"
+revision: str = "023_objects_force_undo"
 down_revision: Union[str, None] = "022_product_state"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-_KEY = "objects.force_checkin"
+_KEY = "objects.force_undo_checkout"
 _DESC = "Force Undo Checkout — release another user's checkout without a new version"
 _GRANT_ROLES = ("Administrator", "PDM Manager")
+_LEGACY_KEY = "objects.force_checkin"
 
 
 def upgrade() -> None:
@@ -42,10 +43,25 @@ def upgrade() -> None:
         sa.column("permission_id", sa.Integer),
     )
     conn = op.get_bind()
+
+    # Drop short-lived objects.force_checkin if an earlier draft migration ran.
+    legacy_id = conn.execute(
+        sa.select(permissions.c.id).where(permissions.c.key == _LEGACY_KEY)
+    ).scalar()
+    if legacy_id is not None:
+        conn.execute(
+            sa.delete(role_permissions).where(role_permissions.c.permission_id == legacy_id)
+        )
+        conn.execute(sa.delete(permissions).where(permissions.c.id == legacy_id))
+
     perm_id = conn.execute(sa.select(permissions.c.id).where(permissions.c.key == _KEY)).scalar()
     if perm_id is None:
         conn.execute(sa.insert(permissions).values(key=_KEY, description=_DESC))
         perm_id = conn.execute(sa.select(permissions.c.id).where(permissions.c.key == _KEY)).scalar()
+    else:
+        conn.execute(
+            sa.update(permissions).where(permissions.c.id == perm_id).values(description=_DESC)
+        )
 
     if perm_id is None:
         return

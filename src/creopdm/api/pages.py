@@ -174,7 +174,7 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
             lock_product,
             can_add_objects=bool(payload.get("can_add_objects")),
             can_checkout=bool(payload.get("can_checkout")),
-            can_force_checkin=bool(payload.get("can_force_checkin")),
+            can_force_undo_checkout=bool(payload.get("can_force_undo_checkout")),
             can_checkin=bool(payload.get("can_checkin")),
             can_remove_objects=bool(payload.get("can_remove_objects")),
             can_edit_product=bool(payload.get("can_edit_product")),

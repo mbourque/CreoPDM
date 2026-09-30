@@ -49,7 +49,7 @@ def test_templates_gate_toolbar_via_product_ui_only():
     for flag in (
         "show_add",
         "show_checkout",
-        "show_force_checkin",
+        "show_force_undo_checkout",
         "show_checkin",
         "show_remove",
         "show_remove_vault",
@@ -87,7 +87,7 @@ def test_product_ui_capability_fields_stay_wired():
         "show_access_banner",
         "show_add",
         "show_checkout",
-        "show_force_checkin",
+        "show_force_undo_checkout",
         "show_checkin",
         "show_remove",
         "show_remove_vault",
