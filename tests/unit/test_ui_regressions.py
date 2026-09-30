@@ -296,6 +296,25 @@ def test_metadata_gear_items_require_creo_session():
     assert "busy overlay" in docs.lower()
 
 
+def test_compressed_data_add_requires_agent_and_busy_overlay():
+    """Add ▾ → Compressed data… uses agent pick/import-zip and a busy overlay."""
+    app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    script = _app_js()
+    assert 'id="add-compressed-btn"' in app_html
+    assert "Compressed data…" in app_html
+    assert "Compressed data…" in docs
+    assert "creopdm-agent" in docs.lower() or "require creopdm-agent" in docs.lower()
+    assert "async function runCompressedZipAdd(" in script
+    assert "/pick-zip" in script
+    assert "/import-zip" in script
+    assert "Uploading and importing compressed data…" in script
+    assert "Start creopdm-agent on this Creo PC to add compressed data." in script
+    products = (ROOT / "src" / "creopdm" / "api" / "products.py").read_text(encoding="utf-8")
+    assert "/objects/from-zip" in products
+    assert "ensure_product_mutable" in products
+
+
 def test_agent_add_chunks_continue_after_http_error():
     """Regression: one failed /add-paths batch used to abort the rest of a large folder add."""
     script = _app_js()

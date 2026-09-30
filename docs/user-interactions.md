@@ -147,6 +147,7 @@ Menu order:
 2. **Add files…**
 3. **Add folder…**
 4. **Add folders…**
+5. **Compressed data…**
 
 ### Create folder…
 
@@ -190,6 +191,18 @@ For thousands of Creo models, prefer **Add folders…** (picks a folder and list
 | Pick several roots | Import each tree | Lose sibling folders |
 
 On a normal office network (`http://…`), the app should try the CreoPDM agent’s folder picker first (more reliable than the browser’s).
+
+### Compressed data…
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Choose **Compressed data…** | Require creopdm-agent; open a native `.zip` picker on this PC | Offer a browser file picker fallback; run without the agent |
+| Pick a `.zip` | Show a busy overlay while the agent uploads and the server extracts + imports; then refresh Files so new rows appear | Leave you with a half-done list and no busy feedback |
+| Zip has one top-level folder only (e.g. `MyExport/…`) | Strip that outer folder and import under the **current** Files location | Keep an extra `MyExport/` layer just because of how the zip was packed |
+| Zip has folders and files | Keep nested structure under the current location (same idea as **Add folders…**) | Flatten everything to basenames; create empty folders from empty zip dirs |
+| File already in the product | Fail that entry (same as Add); import the rest; show a summary | Overwrite vault content or auto-rename CAD files |
+| Zip over 2 GB, password-protected, or corrupt | Clear error; add nothing | Hang or invent content |
+| Junk (`.DS_Store`, `__MACOSX`, Thumbs.db, ignore patterns) | Skip like other Add paths | Import OS metadata junk as product files |
 
 ---
 
@@ -443,7 +456,7 @@ Needs `email.manage`.
 7. Confirm with the real product name.  
 8. Folder is gone from the list immediately; no F5 needed.
 
-Try the same with **Add folder…** and **Add folders…**.
+Try the same with **Add folder…**, **Add folders…**, and **Compressed data…** (agent + `.zip`).
 
 ### Things that should fail (and say why)
 

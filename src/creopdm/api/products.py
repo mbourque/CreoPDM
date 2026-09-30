@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import mimetypes
+import shutil
 import tempfile
 from pathlib import Path
 from urllib.parse import quote
@@ -986,6 +987,144 @@ async def import_from_uploads(
             pass
     if not jobs and not failed:
         raise ValidationAppError("Drop files or a folder first.")
+    db.commit()
+    index_flag = None
+    if ctx.where_used_index.maybe_start_after_add(product.uuid, len(ok)) is not None:
+        index_flag = "started"
+    if ok:
+        from creopdm.api.watch_notify import notify_product_watchers
+
+        notify_product_watchers(
+            request,
+            ctx,
+            db,
+            product,
+            action="Files added",
+            filenames=[item.filename for item in ok if item.filename],
+        )
+    return BatchOperationResponse(
+        ok=ok,
+        failed=failed,
+        workspace_root=str(ctx.workspaces.vault_for(product)),
+        where_used_index=index_flag,
+    )
+
+
+@router.post("/api/products/{product_id}/objects/from-zip", response_model=BatchOperationResponse)
+async def import_from_zip(
+    product_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> BatchOperationResponse:
+    """Upload one .zip, extract on the host, import like Add folders… (strip single root)."""
+    from creopdm.product_state import ensure_product_mutable
+    from creopdm.utils.zip_import import (
+        MAX_ZIP_IMPORT_BYTES,
+        assert_zip_filename,
+        extract_zip_to_temp,
+        plan_zip_import_jobs,
+    )
+
+    require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
+    try:
+        form = await request.form(max_files=5, max_fields=20)
+    except OSError as exc:
+        if getattr(exc, "errno", None) == 28:
+            raise ValidationAppError(
+                "CreoPDM host disk is full (could not receive the upload). "
+                "Free space under /tmp and ~/.local/share/CreoPDM, then retry."
+            ) from exc
+        raise
+    uploaded = form.get("file") or form.get("files")
+    comment_raw = form.get("comment")
+    note = str(comment_raw).strip() if comment_raw not in (None, "") else None
+    parent_raw = form.get("parent_folder")
+    parent_folder = str(parent_raw or "").strip().replace("\\", "/").strip("/")
+    product = load_accessible_product(request, ctx, db, product_id)
+    ensure_product_mutable(product, action="add files")
+
+    if uploaded is None or not hasattr(uploaded, "read"):
+        raise ValidationAppError("Choose a .zip file first.")
+    filename = assert_zip_filename(getattr(uploaded, "filename", None) or "archive.zip")
+
+    zip_tmp: Path | None = None
+    extract_parent: Path | None = None
+    ok: list[BatchItemResult] = []
+    failed: list[BatchItemResult] = []
+    try:
+        handle = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}")
+        zip_tmp = Path(handle.name)
+        total = 0
+        try:
+            while True:
+                try:
+                    chunk = await uploaded.read(1024 * 1024)
+                except OSError as exc:
+                    if getattr(exc, "errno", None) == 28:
+                        raise ValidationAppError(
+                            "CreoPDM host disk is full while reading the upload."
+                        ) from exc
+                    raise
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_ZIP_IMPORT_BYTES:
+                    raise ValidationAppError(
+                        "That zip is larger than the 2 GB limit."
+                    )
+                handle.write(chunk)
+        finally:
+            handle.close()
+        if total <= 0:
+            raise ValidationAppError("The uploaded zip is empty.")
+
+        extract_parent, extract_dir = extract_zip_to_temp(zip_tmp)
+        jobs = plan_zip_import_jobs(
+            extract_dir,
+            parent_folder=parent_folder,
+            purgeable_extensions=ctx.config.purgeable_cad_extensions(),
+            ignore_patterns=ctx.config.ignore_patterns(),
+        )
+        if not jobs:
+            raise ValidationAppError("No files to add were found in that zip.")
+        for outcome in ctx.objects.import_files(db, product, jobs, note):
+            if outcome.error is not None:
+                failed.append(
+                    BatchItemResult(
+                        uuid="",
+                        filename=outcome.filename,
+                        code=outcome.error.code,
+                        message=outcome.error.message,
+                    )
+                )
+            elif outcome.obj is not None:
+                ok.append(
+                    BatchItemResult(
+                        uuid=outcome.obj.uuid,
+                        filename=outcome.filename,
+                        status="added",
+                    )
+                )
+            else:
+                failed.append(
+                    BatchItemResult(
+                        uuid="",
+                        filename=outcome.filename,
+                        code="APPLICATION_ERROR",
+                        message="The file was not added.",
+                    )
+                )
+    finally:
+        if zip_tmp is not None:
+            zip_tmp.unlink(missing_ok=True)
+        if extract_parent is not None:
+            shutil.rmtree(extract_parent, ignore_errors=True)
+        try:
+            await form.close()
+        except Exception:
+            pass
+
     db.commit()
     index_flag = None
     if ctx.where_used_index.maybe_start_after_add(product.uuid, len(ok)) is not None:

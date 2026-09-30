@@ -504,3 +504,64 @@ def _windows_open_dialog(initial_dir: Path, title: str) -> list[Path]:
             "The file picker could not be opened.",
             details={"windows_error": err},
         )
+
+
+def pick_zip_file(
+    initial_dir: Path,
+    title: str = "Choose a compressed zip file",
+) -> Path | None:
+    """Native single-file picker filtered to *.zip. Returns None if cancelled."""
+    if not _is_windows():
+        logger.info("Native zip picker is not available")
+        return None
+    start = Path(initial_dir)
+    if not start.is_dir():
+        start = start.parent if start.parent.is_dir() else Path.home()
+    start.mkdir(parents=True, exist_ok=True)
+    try:
+        return run_on_sta(lambda: _winforms_zip_dialog(start, title))
+    except ValidationAppError:
+        raise
+    except Exception as exc:
+        logger.exception("Zip file picker failed")
+        raise ValidationAppError(
+            "The zip file picker could not be opened.",
+            details={"reason": str(exc)},
+        ) from exc
+
+
+def _winforms_zip_dialog(initial_dir: Path, title: str) -> Path | None:
+    script = (
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "[void][System.Windows.Forms.Application]::EnableVisualStyles(); "
+        "$d = New-Object System.Windows.Forms.OpenFileDialog; "
+        "$d.Title = $env:CREOPDM_DIALOG_TITLE; "
+        "$d.InitialDirectory = $env:CREOPDM_DIALOG_DIR; "
+        "$d.Filter = 'Zip archives (*.zip)|*.zip|All files (*.*)|*.*'; "
+        "$d.FilterIndex = 1; "
+        "$d.Multiselect = $false; "
+        "$d.CheckFileExists = $true; "
+        "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { "
+        "$d.FileName }"
+    )
+    env = os.environ.copy()
+    env["CREOPDM_DIALOG_DIR"] = str(initial_dir)
+    env["CREOPDM_DIALOG_TITLE"] = title
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-STA", "-WindowStyle", "Hidden", "-Command", script],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+        shell=False,
+    )
+    if result.returncode != 0:
+        raise ValidationAppError(
+            "The zip file picker could not be opened.",
+            details={"stderr": (result.stderr or "").strip()[:400]},
+        )
+    line = (result.stdout or "").strip().splitlines()
+    if not line:
+        return None
+    chosen = Path(line[-1].strip())
+    return chosen if chosen.is_file() else None

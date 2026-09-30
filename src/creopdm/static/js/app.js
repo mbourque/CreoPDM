@@ -2632,7 +2632,110 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     closeAddMenu();
     openAddDialog("folder");
   });
+  $("#add-compressed-btn")?.addEventListener("click", () => {
+    closeAddMenu();
+    void runCompressedZipAdd();
+  });
   $("#add-cancel")?.addEventListener("click", () => addDialog?.close());
+
+  // Shared with form Add and Compressed data… (declared before both handlers use it).
+  let addInFlight = false;
+
+  async function runCompressedZipAdd() {
+    if (addInFlight) {
+      showOk("Add is already running — wait for it to finish.");
+      return;
+    }
+    const productId = currentProductId();
+    if (!productId) {
+      showError($("#toolbar-error"), "Open a product first.");
+      return;
+    }
+    const agent = await probeCreoAgent();
+    if (!agent) {
+      showError(
+        $("#toolbar-error"),
+        "Start creopdm-agent on this Creo PC to add compressed data."
+      );
+      return;
+    }
+    setBusy("Waiting for zip picker…");
+    let pickResponse;
+    try {
+      pickResponse = await fetch(`${agentBase()}/pick-zip`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          initial_directory: addInitialDirectory || "",
+          title: "Choose a compressed zip file",
+        }),
+      });
+    } finally {
+      clearBusy();
+    }
+    if (!pickResponse.ok) {
+      showError($("#toolbar-error"), await readError(pickResponse));
+      return;
+    }
+    let picked;
+    try {
+      picked = await pickResponse.json();
+    } catch {
+      showError($("#toolbar-error"), "Zip picker returned invalid JSON.");
+      return;
+    }
+    if (picked?.cancelled || !picked?.path) return;
+    addInFlight = true;
+    try {
+      const result = await withBusy(
+        "Uploading and importing compressed data…",
+        async () => {
+          const response = await fetch(`${agentBase()}/import-zip`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              pdm_url: window.location.origin,
+              product_id: productId,
+              zip_path: picked.path,
+              parent_folder: currentFolder() || "",
+              ...agentPdmAuth(),
+            }),
+          });
+          if (!response.ok) {
+            throw new Error(await readError(response));
+          }
+          return response.json();
+        }
+      );
+      const failed = result?.failed || [];
+      const okCount = result?.ok?.length || 0;
+      if (failed.length && !okCount) {
+        const first = failed[0]?.message || "Could not import the zip.";
+        showError($("#toolbar-error"), first);
+        return;
+      }
+      if (failed.length && okCount) {
+        const sample = failed
+          .slice(0, 3)
+          .map((item) => item.filename || "file")
+          .join(", ");
+        showError(
+          $("#toolbar-error"),
+          `Imported ${okCount} file(s); ${failed.length} failed (${sample}${failed.length > 3 ? ", …" : ""}).`
+        );
+      } else if (okCount) {
+        showOk(`Imported ${okCount} file(s) from the zip.`);
+      }
+      if (okCount) reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
+    } catch (err) {
+      showError(
+        $("#toolbar-error"),
+        err?.message || "Could not import the compressed zip."
+      );
+    } finally {
+      addInFlight = false;
+    }
+  }
 
   function useNativePicker() {
     return addForm?.dataset.nativePicker !== "0";
@@ -2869,7 +2972,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     handleDroppedTransfer(transfer);
   });
 
-  let addInFlight = false;
   addForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (addInFlight) {
@@ -3845,7 +3947,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Add menu is omitted from the DOM when the product is locked (Jinja product_ui).
     const canAdd = Boolean(productId);
     setToolbarActionVisible(addMenuBtn, canAdd);
-    for (const id of ["create-folder-btn", "add-files-btn", "add-folder-btn", "add-folders-btn"]) {
+    for (const id of ["create-folder-btn", "add-files-btn", "add-folder-btn", "add-folders-btn", "add-compressed-btn"]) {
       setToolbarActionVisible($("#" + id), canAdd);
     }
     if (!canAdd) closeAddMenu();

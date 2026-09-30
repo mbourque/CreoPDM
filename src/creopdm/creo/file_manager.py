@@ -18,7 +18,7 @@ _UUIDISH_STEM = re.compile(
     r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{6,12}$",
     re.IGNORECASE,
 )
-_SKIP_IMPORT_DIRS = {".git", ".creopdm", "__pycache__"}
+_SKIP_IMPORT_DIRS = {".git", ".creopdm", "__pycache__", "__macosx"}
 _SKIP_IMPORT_SUFFIXES = {".bak", ".tmp"}
 
 

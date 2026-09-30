@@ -103,6 +103,14 @@ def test_locked_product_rejects_all_mutation_apis(client, repo_parent):
         client.post(f"/api/products/{pid}/forget", json={"confirm_name": product["name"]}),
         hint="forget product",
     )
+    _assert_locked(
+        client.post(
+            f"/api/products/{pid}/objects/from-zip",
+            files={"file": ("pack.zip", b"PK\x05\x06" + b"\x00" * 18, "application/zip")},
+            data={"parent_folder": ""},
+        ),
+        hint="from-zip",
+    )
 
     # Undo checkout remains allowed on locked products (release lock only).
     undone = client.post(f"/api/objects/{oid}/undo-checkout")

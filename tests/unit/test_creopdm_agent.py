@@ -1338,3 +1338,81 @@ def test_agent_purge_versions_dry_run_lists_without_deleting(tmp_path):
         assert (cache / "shaft.prt").is_file()
         assert (cache / "shaft.prt.1").is_file()
         assert (cache / "shaft.prt.3").is_file()
+
+
+def test_agent_import_zip_streams_to_from_zip(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    root.mkdir()
+    zip_path = tmp_path / "pack.zip"
+    zip_path.write_bytes(b"PK\x05\x06" + b"\x00" * 18)
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), pdm_url="http://pdm.test")
+    app = create_agent_app(settings)
+    uploaded: list[dict] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {
+                "ok": [{"filename": "shaft.prt.1", "uuid": "u1", "status": "added"}],
+                "failed": [],
+            }
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            uploaded.append({"url": url, "data": dict(data or {}), "files": files})
+            return FakeResponse()
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        response = client.post(
+            "/import-zip",
+            json={
+                "pdm_url": "http://pdm.test",
+                "product_id": "proj-zip",
+                "zip_path": str(zip_path),
+                "parent_folder": "Drawings",
+                "comment": "zip add",
+                "token": "tok",
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["ok"][0]["filename"] == "shaft.prt.1"
+        assert body["failed"] == []
+        assert uploaded
+        assert uploaded[0]["url"].endswith("/api/products/proj-zip/objects/from-zip")
+        assert uploaded[0]["data"]["parent_folder"] == "Drawings"
+        assert uploaded[0]["data"]["comment"] == "zip add"
+
+
+def test_agent_import_zip_rejects_oversize(tmp_path, monkeypatch):
+    root = tmp_path / "cache"
+    root.mkdir()
+    zip_path = tmp_path / "huge.zip"
+    zip_path.write_bytes(b"x" * 100)
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), pdm_url="http://pdm.test")
+    app = create_agent_app(settings)
+    import creopdm.utils.zip_import as zip_mod
+
+    monkeypatch.setattr(zip_mod, "MAX_ZIP_IMPORT_BYTES", 50)
+    with TestClient(app) as client:
+        response = client.post(
+            "/import-zip",
+            json={
+                "pdm_url": "http://pdm.test",
+                "product_id": "proj-zip",
+                "zip_path": str(zip_path),
+            },
+        )
+        assert response.status_code == 400, response.text
+        assert "2 GB" in response.json()["detail"]

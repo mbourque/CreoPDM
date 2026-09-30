@@ -397,6 +397,9 @@
         <button type="button" class="toolbar-menu-item" role="menuitem" id="add-folders-btn"
                 {% if not selected %}disabled{% endif %}
                 title="Pick one or more folders and import all nested files.">Add folders…</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="add-compressed-btn"
+                {% if not selected %}disabled{% endif %}
+                title="Upload a .zip via creopdm-agent; the server extracts and imports it.">Compressed data…</button>
       </div>
     </div>
     {% endif %}

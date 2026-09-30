@@ -248,6 +248,33 @@ class AddPathsResponse(BaseModel):
     failed: list[BatchAddItem] = Field(default_factory=list)
 
 
+class PickZipRequest(BaseModel):
+    initial_directory: str = ""
+    title: str = "Choose a compressed zip file"
+
+
+class PickZipResponse(BaseModel):
+    path: str = ""
+    cancelled: bool = False
+
+
+class ImportZipRequest(BaseModel):
+    """Stream a local .zip to CreoPDM objects/from-zip."""
+
+    pdm_url: str = ""
+    product_id: str = ""
+    token: str | None = None
+    zip_path: str = ""
+    parent_folder: str = ""
+    comment: str | None = None
+
+
+class ImportZipResponse(BaseModel):
+    ok: list[BatchAddItem] = Field(default_factory=list)
+    failed: list[BatchAddItem] = Field(default_factory=list)
+    message: str = ""
+
+
 class CacheFileInfo(BaseModel):
     relative_path: str
     filename: str
@@ -791,6 +818,28 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         )
         return PickFilesResponse(selected=paths, cancelled=False, folder=str(chosen))
 
+    @app.post("/pick-zip", response_model=PickZipResponse)
+    def pick_zip_endpoint(payload: PickZipRequest) -> PickZipResponse:
+        """Native single-file dialog filtered to *.zip."""
+        from creopdm.exceptions import ValidationAppError
+        from creopdm.utils.native_dialog import pick_zip_file
+
+        raw = (payload.initial_directory or "").strip()
+        start = Path(raw) if raw else Path.home()
+        if not start.is_dir():
+            start = start.parent if start.parent.is_dir() else Path.home()
+        title = (payload.title or "").strip() or "Choose a compressed zip file"
+        try:
+            chosen = pick_zip_file(start, title=title)
+        except ValidationAppError as exc:
+            raise HTTPException(status_code=400, detail=exc.message) from exc
+        except Exception as exc:
+            logger.exception("Agent zip picker failed")
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        if chosen is None or not chosen.is_file():
+            return PickZipResponse(cancelled=True)
+        return PickZipResponse(path=str(chosen), cancelled=False)
+
     @app.get("/local-file")
     def local_file(path: str = ""):
         """Read a local file the user just picked (Add upload via agent)."""
@@ -1308,6 +1357,118 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             summary,
         )
         return AddPathsResponse(ok=ok, failed=failed)
+
+    @app.post("/import-zip", response_model=ImportZipResponse)
+    def import_zip_to_product(payload: ImportZipRequest) -> ImportZipResponse:
+        """Upload a local .zip to CreoPDM from-zip (server extracts and imports)."""
+        from creopdm.exceptions import ValidationAppError
+        from creopdm.utils.zip_import import MAX_ZIP_IMPORT_BYTES, assert_zip_filename
+
+        base = _normalize_base(payload.pdm_url or settings.pdm_url)
+        product_id = (payload.product_id or "").strip()
+        if not product_id:
+            raise HTTPException(status_code=400, detail="product_id is required.")
+        if not base:
+            raise HTTPException(status_code=400, detail="pdm_url is required.")
+        raw = (payload.zip_path or "").strip()
+        if not raw:
+            raise HTTPException(status_code=400, detail="zip_path is required.")
+        path = Path(raw)
+        if not path.is_file():
+            raise HTTPException(status_code=400, detail=f"Zip not found: {raw}")
+        try:
+            filename = assert_zip_filename(path.name)
+        except ValidationAppError as exc:
+            raise HTTPException(status_code=400, detail=exc.message) from exc
+        try:
+            size = path.stat().st_size
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail=f"Could not read zip: {exc}") from exc
+        if size <= 0:
+            raise HTTPException(status_code=400, detail="The zip file is empty.")
+        if size > MAX_ZIP_IMPORT_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail="That zip is larger than the 2 GB limit.",
+            )
+        headers: dict[str, str] = {}
+        token = (payload.token or settings.token or "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        url = f"{base}/api/products/{quote(product_id)}/objects/from-zip"
+        parent = (payload.parent_folder or "").strip().replace("\\", "/").strip("/")
+        data: dict[str, str] = {}
+        if parent:
+            data["parent_folder"] = parent
+        comment = (payload.comment or "").strip()
+        if comment:
+            data["comment"] = comment
+        zip_timeout = httpx.Timeout(connect=30.0, read=3600.0, write=3600.0, pool=30.0)
+        try:
+            with path.open("rb") as handle:
+                files = {
+                    "file": (filename, handle, "application/zip"),
+                }
+                with httpx.Client(timeout=zip_timeout, follow_redirects=True) as client:
+                    response = client.post(
+                        url,
+                        headers=headers,
+                        data=data or None,
+                        files=files,
+                    )
+        except httpx.HTTPError as exc:
+            logger.warning("Agent import-zip NETWORK: %s", exc)
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not reach CreoPDM: {exc}",
+            ) from exc
+        if response.status_code >= 400:
+            detail = ""
+            try:
+                body = response.json()
+                detail = (
+                    body.get("error", {}).get("message")
+                    or body.get("detail")
+                    or response.text
+                )
+            except Exception:
+                detail = response.text[:300]
+            message = detail or f"CreoPDM returned {response.status_code}"
+            logger.warning("Agent import-zip HTTP %s: %s", response.status_code, message)
+            raise HTTPException(status_code=400, detail=message)
+        try:
+            body = response.json()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="CreoPDM returned invalid JSON after zip import.",
+            ) from exc
+        ok = [
+            BatchAddItem(
+                uuid=str(item.get("uuid") or ""),
+                filename=str(item.get("filename") or ""),
+                status=str(item.get("status") or "added"),
+            )
+            for item in (body.get("ok") or [])
+            if isinstance(item, dict)
+        ]
+        failed = [
+            BatchAddItem(
+                uuid=str(item.get("uuid") or ""),
+                filename=str(item.get("filename") or ""),
+                code=str(item.get("code") or ""),
+                message=str(item.get("message") or ""),
+            )
+            for item in (body.get("failed") or [])
+            if isinstance(item, dict)
+        ]
+        logger.info(
+            "Agent import-zip done: ok=%s failed=%s (%s)",
+            len(ok),
+            len(failed),
+            path.name,
+        )
+        return ImportZipResponse(ok=ok, failed=failed)
 
     @app.post("/delete-paths", response_model=DeletePathsResponse)
     def delete_cache_paths(payload: DeletePathsRequest) -> DeletePathsResponse:

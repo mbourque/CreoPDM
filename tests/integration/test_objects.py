@@ -433,6 +433,58 @@ def test_choose_folder_does_not_scan_files(client, repo_parent, monkeypatch, tmp
 
 
 @requires_git
+def test_from_zip_strips_root_imports_nested_and_skips_duplicate(client, repo_parent):
+    import io
+    import zipfile
+
+    product, _location = _create_product(client, repo_parent)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("MyExport/shaft.prt.1", b"shaft-bytes")
+        zf.writestr("MyExport/lib/pin.prt.1", b"pin-bytes")
+        zf.writestr("MyExport/.DS_Store", b"junk")
+        zf.writestr("__MACOSX/._shaft.prt", b"apple")
+    payload = buf.getvalue()
+    added = client.post(
+        f"/api/products/{product['uuid']}/objects/from-zip",
+        files={"file": ("pack.zip", payload, "application/zip")},
+        data={"parent_folder": "", "comment": "Zip import"},
+    )
+    assert added.status_code == 200, added.text
+    body = added.json()
+    assert {item["filename"] for item in body["ok"]} == {"shaft.prt.1", "pin.prt.1"}
+    assert body["failed"] == []
+    listing = {
+        item["relative_path"]: item["filename"]
+        for item in client.get(f"/api/products/{product['uuid']}/objects").json()
+    }
+    assert listing.get("shaft.prt.1") == "shaft.prt.1"
+    assert listing.get("lib/pin.prt.1") == "pin.prt.1"
+
+    again = client.post(
+        f"/api/products/{product['uuid']}/objects/from-zip",
+        files={"file": ("pack.zip", payload, "application/zip")},
+        data={"parent_folder": ""},
+    )
+    assert again.status_code == 200, again.text
+    again_body = again.json()
+    assert again_body["ok"] == []
+    assert len(again_body["failed"]) == 2
+    assert all("already in this product" in (item["message"] or "").lower() for item in again_body["failed"])
+
+
+@requires_git
+def test_from_zip_rejects_non_zip_name(client, repo_parent):
+    product, _location = _create_product(client, repo_parent)
+    response = client.post(
+        f"/api/products/{product['uuid']}/objects/from-zip",
+        files={"file": ("pack.rar", b"not-zip", "application/octet-stream")},
+    )
+    assert response.status_code == 400, response.text
+    assert "Only .zip" in response.json()["error"]["message"]
+
+
+@requires_git
 def test_from_disk_folder_rejects_empty_directory(client, repo_parent, tmp_path):
     product, _location = _create_product(client, repo_parent)
     empty = tmp_path / "EmptyBox"
