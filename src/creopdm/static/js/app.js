@@ -4028,12 +4028,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!productId) return;
     const seq = ++pendingCheckinFetch;
     try {
-      const ids = [];
+      // Interim paint from SSR only — do not seed the final pending set from
+      // data-modified-locally (that attribute used to stick forever and kept
+      // rematerialized matching tips painted Modified after a clean hash check).
+      const ssrIds = [];
       document.querySelectorAll(".object-row[data-modified-locally='1'][data-uuid]").forEach((row) => {
-        ids.push(row.dataset.uuid);
+        ssrIds.push(row.dataset.uuid);
       });
-      // Paint Modified from SSR flags immediately; agent/vault merge follows.
-      if (ids.length) rememberPendingCheckinIds(ids, { merge: true });
+      if (ssrIds.length) rememberPendingCheckinIds(ssrIds, { merge: true });
+      const ids = [];
       const response = await fetch(`/api/products/${encodeURIComponent(productId)}/checkin-preview`);
       if (seq !== pendingCheckinFetch) return;
       if (response.ok) {
@@ -4064,9 +4067,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       document.querySelectorAll(".object-row[data-uuid]").forEach((row) => {
         const id = row.dataset.uuid;
         if (!id) return;
-        if (pendingCheckinIds.has(String(id))) {
-          row.dataset.modifiedLocally = "1";
-        }
+        // Authoritative clear: matching rematerialize must drop Modified.
+        row.dataset.modifiedLocally = pendingCheckinIds.has(String(id)) ? "1" : "0";
       });
       syncModifiedStateLabels();
       updateMetricCounts();
@@ -5873,7 +5875,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
       }
       if (!local) return;
-      const vaultNumber = creoSaveNumber(obj.filename || PathBasename(vaultRel));
+      const vaultNumber = Math.max(
+        creoSaveNumber(obj.filename || PathBasename(vaultRel)),
+        creoSaveNumber(obj.current_version?.filename || ""),
+        creoSaveNumber(PathBasename(vaultRel))
+      );
       const newerSave = local.saveNumber > vaultNumber;
       // Same Creo save: never trust size/mtime alone — content hash is authoritative
       // (materialize can disagree on size metadata while bytes match).

@@ -1136,6 +1136,21 @@ def test_newer_local_cache_detects_same_save_content_replace_by_hash():
     assert "content hash is authoritative" in body
     assert "if (newerSave)" in body
     assert "sizeDiffers" not in body
+    assert "Math.max(" in body
+    assert "current_version?.filename" in body
+
+
+def test_refresh_pending_clears_sticky_modified_locally():
+    """Rematerialized matching tip must clear data-modified-locally, not re-seed it."""
+    script = _app_js()
+    body = _between(script, "async function refreshPendingCheckinIds(", "function rowHasCheckinWork(")
+    assert "do not seed the final pending set from" in body
+    assert 'row.dataset.modifiedLocally = pendingCheckinIds.has(String(id)) ? "1" : "0"' in body
+    # Final pending ids come from preview/agent/queue — not from existing DOM flags.
+    assert "const ids = [];" in body
+    assert "ssrIds" in body
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "leave Modified stuck after a later refresh proves the tip matches" in docs
 
 
 def test_pending_from_status_requires_hash_for_dirty_tip():
