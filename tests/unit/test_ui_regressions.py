@@ -639,15 +639,26 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "data-can-copy-to-vault" in base
     assert "data-can-export-product" in base
     assert "data-can-export-objects" in base
-    assert 'id="export-btn"' in html
-    assert ">Export…<" in html
+    assert 'id="export-menu"' in html
+    assert 'id="export-menu-btn"' in html
+    assert ">Export ▾<" in html
+    assert 'id="export-product-btn"' in html
+    assert ">Export product…<" in html
+    assert 'id="export-selected-btn"' in html
+    assert ">Export selected…<" in html
     assert 'id="export-confirm-dialog"' in html
-    assert "function confirmExportZip" in script
+    assert "function confirmExportZip" in html or "function confirmExportZip" in script
+    assert "async function beginExport" in script
+    assert 'beginExport("product")' in script
+    assert 'beginExport("selected")' in script
     assert "canExportProduct" in script
+    assert "exportSelectedBtn.disabled" in script
     assert "/api/products/" in script and "/export" in script
     assert "${agentBase()}/export-zip" in script
     assert "Preparing export…" in script
-    assert "window.confirm(confirmMsg)" not in script.split("exportBtn?.addEventListener")[1].split("openWorkspaceBtn?.addEventListener")[0]
+    assert "window.confirm(" not in _between(
+        script, "async function beginExport(mode) {", "exportProductBtn?.addEventListener"
+    )
     assert "canCopyToVault" in script
     assert "setWorkingDirectory" in _between(
         script, "async function openPdmObjectFromUi(", "function agentBase("
@@ -661,7 +672,10 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "only inside Creo’s embedded browser" in docs or "only inside Creo's embedded browser" in docs
     assert "opens immediately" in docs.lower() or "Open dialog" in docs
-    assert "## 11. Export…" in docs
+    assert "## 11. Export ▾" in docs
+    assert "Export product…" in docs
+    assert "Export selected…" in docs
+    assert "greyed out until" in docs.lower() or "greyed out until" in docs
     assert "products.export" in docs
     assert "objects.export" in docs
 

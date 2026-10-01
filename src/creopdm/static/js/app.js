@@ -3686,7 +3686,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const undoBtn = $("#undo-btn");
   const forceUndoBtn = $("#force-undo-btn");
   const workspaceBtn = $("#workspace-btn");
-  const exportBtn = $("#export-btn");
+  const exportMenu = $("#export-menu");
+  const exportMenuBtn = $("#export-menu-btn");
+  const exportMenuPanel = exportMenu?.querySelector(".toolbar-menu-panel");
+  const exportProductBtn = $("#export-product-btn");
+  const exportSelectedBtn = $("#export-selected-btn");
   const openWorkspaceBtn = $("#open-workspace-btn");
   const setCreoDirBtn = $("#set-creo-dir-btn");
   const purgeBtn = $("#purge-workspace-btn");
@@ -3733,6 +3737,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     closeToolbarMenu(checkinMenu, checkinMenuBtn, checkinMenuPanel);
   }
 
+  function closeExportMenu() {
+    closeToolbarMenu(exportMenu, exportMenuBtn, exportMenuPanel);
+  }
+
   function closeAddMenu() {
     closeToolbarMenu(addMenu, addMenuBtn, addMenuPanel);
   }
@@ -3745,6 +3753,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     closeRemoveMenu();
     closeCheckoutMenu();
     closeCheckinMenu();
+    closeExportMenu();
     closeAddMenu();
     closeOpenMenu();
   }
@@ -3752,6 +3761,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function openRemoveMenu() {
     closeCheckoutMenu();
     closeCheckinMenu();
+    closeExportMenu();
     closeAddMenu();
     closeOpenMenu();
     openToolbarMenu(removeMenu, removeMenuBtn, removeMenuPanel);
@@ -3767,6 +3777,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     else {
       closeRemoveMenu();
       closeCheckinMenu();
+      closeExportMenu();
       closeAddMenu();
       closeOpenMenu();
       openToolbarMenu(checkoutMenu, checkoutMenuBtn, checkoutMenuPanel);
@@ -3778,9 +3789,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     else {
       closeRemoveMenu();
       closeCheckoutMenu();
+      closeExportMenu();
       closeAddMenu();
       closeOpenMenu();
       openToolbarMenu(checkinMenu, checkinMenuBtn, checkinMenuPanel);
+    }
+  }
+
+  function toggleExportMenu() {
+    if (exportMenu?.classList.contains("is-open")) closeExportMenu();
+    else {
+      closeRemoveMenu();
+      closeCheckoutMenu();
+      closeCheckinMenu();
+      closeAddMenu();
+      closeOpenMenu();
+      openToolbarMenu(exportMenu, exportMenuBtn, exportMenuPanel);
     }
   }
 
@@ -3790,6 +3814,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       closeRemoveMenu();
       closeCheckoutMenu();
       closeCheckinMenu();
+      closeExportMenu();
       closeOpenMenu();
       openToolbarMenu(addMenu, addMenuBtn, addMenuPanel);
     }
@@ -3801,6 +3826,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       closeRemoveMenu();
       closeCheckoutMenu();
       closeCheckinMenu();
+      closeExportMenu();
       closeAddMenu();
       openToolbarMenu(openMenu, openMenuBtn, openMenuPanel);
     }
@@ -4128,16 +4154,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     );
     const canExportProduct = document.body?.dataset?.canExportProduct === "1";
     const canExportObjects = document.body?.dataset?.canExportObjects === "1";
+    // Visual selection only — do not treat checkout/open fallback ids as an export selection.
     const exportHasSelection =
-      selectedIds().length > 0 || selectedFolderPaths().length > 0;
-    const canExport =
-      Boolean(productId) &&
-      ((exportHasSelection && canExportObjects) || (!exportHasSelection && canExportProduct));
-    setToolbarActionVisible(exportBtn, canExport);
-    if (exportBtn) {
-      exportBtn.title = exportHasSelection
-        ? "Download the selected vault files/folders as a zip. Does not check out or lock anything."
-        : "Download the entire product vault tip as a zip. Does not check out or lock anything.";
+      selectedRows().flatMap(rowObjectIds).length > 0 || selectedFolderPaths().length > 0;
+    const canShowExportMenu =
+      Boolean(productId) && (canExportProduct || canExportObjects);
+    setToolbarActionVisible(exportMenuBtn, canShowExportMenu);
+    if (!canShowExportMenu) closeExportMenu();
+    // Export product stays enabled whenever the menu is shown and the role allows it.
+    if (exportProductBtn) {
+      exportProductBtn.hidden = false;
+      exportProductBtn.disabled = !canShowExportMenu || !canExportProduct;
+    }
+    // Export selected stays visible but greyed until files/folders are selected.
+    if (exportSelectedBtn) {
+      exportSelectedBtn.hidden = false;
+      exportSelectedBtn.disabled =
+        !canShowExportMenu || !canExportObjects || !exportHasSelection;
     }
     const localNewSelected = selected.filter(
       (row) => isNewFileQueueRow(row) && row.dataset.localCache === "1"
@@ -6341,40 +6374,51 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     else showOk(`${copied} file(s) copied to the vault.`);
   });
 
-  exportBtn?.addEventListener("click", async () => {
+  async function beginExport(mode) {
+    const scopeSelected = mode === "selected";
     const productId =
-      exportBtn.dataset.product ||
+      exportMenuBtn?.dataset.product ||
+      exportProductBtn?.dataset.product ||
+      exportSelectedBtn?.dataset.product ||
       checkinBtn?.dataset.product ||
       openWorkspaceBtn?.dataset.product ||
       currentProductId() ||
       "";
     if (!productId) return;
-    const ids = selectedIds();
-    const folderPaths = selectedFolderPaths();
-    const selectedScope = ids.length > 0 || folderPaths.length > 0;
+    const ids = scopeSelected
+      ? selectedRows().flatMap(rowObjectIds)
+      : [];
+    const folderPaths = scopeSelected ? selectedFolderPaths() : [];
     const canExportProduct = document.body?.dataset?.canExportProduct === "1";
     const canExportObjects = document.body?.dataset?.canExportObjects === "1";
-    if (selectedScope && !canExportObjects) {
-      showError($("#toolbar-error"), "Your role cannot export a selection (objects.export).");
-      return;
-    }
-    if (!selectedScope && !canExportProduct) {
+    if (scopeSelected) {
+      if (!canExportObjects) {
+        showError($("#toolbar-error"), "Your role cannot export a selection (objects.export).");
+        return;
+      }
+      if (!ids.length && !folderPaths.length) {
+        showError($("#toolbar-error"), "Select files or folders to export.");
+        return;
+      }
+    } else if (!canExportProduct) {
       showError($("#toolbar-error"), "Your role cannot export a whole product (products.export).");
       return;
     }
     const productName =
-      exportBtn.dataset.productName ||
+      exportMenuBtn?.dataset.productName ||
+      exportProductBtn?.dataset.productName ||
+      exportSelectedBtn?.dataset.productName ||
       checkinBtn?.dataset.productName ||
       openWorkspaceBtn?.dataset.productName ||
       "this product";
-    const title = selectedScope ? "Export selection" : "Export product";
+    const title = scopeSelected ? "Export selection" : "Export product";
     const scopeBits = [
       ids.length ? `${ids.length} file(s)` : "",
       folderPaths.length ? `${folderPaths.length} folder(s)` : "",
     ]
       .filter(Boolean)
       .join(", ");
-    const lead = selectedScope
+    const lead = scopeSelected
       ? `Export the selected files/folders from “${productName}” as a zip${scopeBits ? ` (${scopeBits})` : ""}?`
       : `Export the entire product “${productName}” as a zip?`;
     if (!(await confirmExportZip({ title, lead }))) return;
@@ -6383,10 +6427,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const safeName = String(productName || "product")
       .replace(/[^\w.\-]+/g, "_")
       .replace(/^_+|_+$/g, "") || "product";
-    const suggested = `${safeName}-${selectedScope ? "selection" : "export"}.zip`;
+    const suggested = `${safeName}-${scopeSelected ? "selection" : "export"}.zip`;
     const payload = {
-      object_ids: selectedScope ? ids : [],
-      folder_paths: selectedScope ? folderPaths : [],
+      object_ids: scopeSelected ? ids : [],
+      folder_paths: scopeSelected ? folderPaths : [],
     };
 
     const browserDownload = async () => {
@@ -6458,6 +6502,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     } catch (err) {
       showError($("#toolbar-error"), err?.message || String(err));
     }
+  }
+
+  exportProductBtn?.addEventListener("click", async () => {
+    closeExportMenu();
+    await beginExport("product");
+  });
+  exportSelectedBtn?.addEventListener("click", async () => {
+    closeExportMenu();
+    await beginExport("selected");
   });
 
   openWorkspaceBtn?.addEventListener("click", async () => {
@@ -7539,6 +7592,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const item = eventEl(event)?.closest(".toolbar-menu-item");
     if (item && !item.disabled) closeCheckinMenu();
   });
+  exportMenuBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleExportMenu();
+  });
+  exportMenuPanel?.addEventListener("click", (event) => {
+    const item = eventEl(event)?.closest(".toolbar-menu-item");
+    if (item && !item.disabled) closeExportMenu();
+  });
   document.addEventListener("click", (event) => {
     const node = eventEl(event);
     if (removeMenu?.classList.contains("is-open") && !removeMenu.contains(node)) closeRemoveMenu();
@@ -7546,6 +7608,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (openMenu?.classList.contains("is-open") && !openMenu.contains(node)) closeOpenMenu();
     if (checkoutMenu?.classList.contains("is-open") && !checkoutMenu.contains(node)) closeCheckoutMenu();
     if (checkinMenu?.classList.contains("is-open") && !checkinMenu.contains(node)) closeCheckinMenu();
+    if (exportMenu?.classList.contains("is-open") && !exportMenu.contains(node)) closeExportMenu();
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeAllToolbarMenus();

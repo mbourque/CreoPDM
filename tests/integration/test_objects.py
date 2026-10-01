@@ -486,7 +486,7 @@ def test_from_zip_rejects_non_zip_name(client, repo_parent):
 
 @requires_git
 def test_export_product_and_selection_zip(client, repo_parent, tmp_path):
-    """Export… — whole product and selection download vault tip as zip."""
+    """Export ▾ — whole product and selection download vault tip as zip."""
     import io
     import zipfile
 

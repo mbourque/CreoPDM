@@ -20,7 +20,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 8. [Open, workspace, history](#8-open-workspace-history)
 9. [Checkout ▾](#9-checkout-)
 10. [Check In ▾](#10-check-in-)
-11. [Export…](#11-export)
+11. [Export ▾](#11-export)
 12. [Remove ▾](#12-remove-)
 13. [Typing the product name to confirm](#13-typing-the-product-name-to-confirm)
 14. [Mobile browse](#14-mobile-browse)
@@ -35,7 +35,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Click a product, folder breadcrumb, or Administration / Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Session offline” or drop the Creo link just because you changed folders; hard-reload the page during a folder/product switch |
-| Sign in as **Viewer** | View products (`products.view`); open/download files and use **Details** (Overview/History) via the bottom toolbar or double-click (`objects.view`); Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove / Export…, New product, Copy to Vault, or “Check out … then open” in the Open dialog |
+| Sign in as **Viewer** | View products (`products.view`); open/download files and use **Details** (Overview/History) via the bottom toolbar or double-click (`objects.view`); Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove / Export ▾, New product, Copy to Vault, or “Check out … then open” in the Open dialog |
 | Sign in with Administration only (no `products.view`) | Land on **Administration**; breadcrumb has no **Products** link; visiting `/` redirects to `/admin` | See a JSON error; see a Products crumb that opens Files |
 | Sign in with a role that has **no permissions** | Land on a clear **No Files access** page (not JSON); product APIs stay **403** | Use the app as if signed in with Viewer |
 | Add or remove files/folders | Update the list so it matches reality | Leave old rows on screen until you press F5 |
@@ -117,7 +117,7 @@ Empty folders (no files inside yet) must still be selectable and removable.
 
 ## 6. Toolbar buttons (overview)
 
-Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **Checkout ▾** → **Check In ▾** → **Details** → **Copy to Vault** → **Export…** → **Remove ▾**.
+Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **Checkout ▾** → **Check In ▾** → **Details** → **Copy to Vault** → **Export ▾** → **Remove ▾**.
 
 | Button | Available when | Hidden when |
 |--------|----------------|-------------|
@@ -130,7 +130,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 | Check In ▾ | Something can be checked in or added **and** the product allows edits | Nothing pending; product is locked (read-only / not In work) |
 | Details | One file selected | No file |
 | Copy to Vault | You have **Copy to Vault** permission and selected files are not already in the vault | Nothing to copy; role lacks `objects.copy_to_vault` (hidden for Viewer / Engineer by default) |
-| Export… | A product is open **and** you have export permission for the current scope: nothing selected needs `products.export` (whole product); a selection needs `objects.export`. Works on locked / Released products | No product; role lacks the needed export permission for that scope; always hidden on the file **Details** page |
+| Export ▾ | A product is open **and** you have `products.export` and/or `objects.export`. Works on locked / Released products | No product; role lacks both export permissions; always hidden on the file **Details** page |
 | Remove ▾ | Something can be removed (**Files** page). Local workspace remove/purge still work on a locked product | Nothing selected; always hidden on the file **Details** page |
 | Remove from Product | Files **and/or folders** selected (including empty folders); product allows edits | Nothing selected; product is locked |
 | Remove from Vault | Selected vault files; product allows edits | Nothing selected; product is locked |
@@ -279,14 +279,15 @@ If open seems to do nothing, check the error line under the toolbar, and that cr
 
 ---
 
-## 11. Export…
+## 11. Export ▾
 
-Single toolbar button **Export…** (not a menu). Confirm, then busy overlay, then save the zip (creopdm-agent Save As when available; otherwise browser download).
+Toolbar menu **Export ▾** (same pattern as Check In ▾). Confirm, then busy overlay, then save the zip (creopdm-agent Save As when available; otherwise browser download).
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Click **Export…** with nothing selected | Confirm whole-product export in the CreoPDM dialog; zip the vault tip for every file; require `products.export` | Check out or lock anything; require the product to be In work; appear without `products.export`; use a browser `confirm` |
-| Click **Export…** with files and/or folders selected | Confirm selection export in the CreoPDM dialog; zip only those vault tip files (folders include descendants); require `objects.export` | Export the whole product while a selection is active; appear without `objects.export`; use a browser `confirm` |
+| Open **Export ▾** | Show **Export product…** (when you have `products.export`) always enabled; show **Export selected…** (when you have `objects.export`) greyed out until files or folders are selected | Hide **Export product…** just because nothing is selected; require the product to be In work |
+| Click **Export product…** | Confirm whole-product export in the CreoPDM dialog; zip the vault tip for every file; require `products.export` | Check out or lock anything; use a browser `confirm`; switch to selection export because something is selected |
+| Click **Export selected…** with files and/or folders selected | Confirm selection export in the CreoPDM dialog; zip only those vault tip files (folders include descendants); require `objects.export` | Run while the menu item is greyed (nothing selected); appear without `objects.export`; use a browser `confirm` |
 | Cancel the confirm or Save dialog | Stop with no zip | Leave a partial download claimed as success |
 | Agent offline | Fall back to a browser zip download | Fail only because the agent is offline |
 

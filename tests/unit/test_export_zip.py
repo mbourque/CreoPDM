@@ -1,4 +1,4 @@
-"""Unit tests for Export… vault tip zip packing."""
+"""Unit tests for Export ▾ vault tip zip packing."""
 
 from __future__ import annotations
 

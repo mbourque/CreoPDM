@@ -472,11 +472,26 @@
     </span>
     {% endif %}
     {% if can_export_product or can_export_objects %}
-    <span class="toolbar-tip" title="Download vault tip files as a zip. Nothing selected exports the whole product; a selection exports only those files or folders. Does not check out or lock anything.">
-      <button type="button" class="btn" id="export-btn"
+    <div class="toolbar-menu" id="export-menu">
+      <button type="button" class="btn toolbar-menu-toggle" id="export-menu-btn"
+              aria-haspopup="menu" aria-expanded="false" disabled
               {% if selected %}data-product="{{ selected.uuid }}" data-product-name="{{ selected.name }}"{% endif %}
-              disabled>Export…</button>
-    </span>
+              title="Download vault tip files as a zip. Does not check out or lock anything.">Export ▾</button>
+      <div class="toolbar-menu-panel" role="menu" hidden>
+        {% if can_export_product %}
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="export-product-btn"
+                {% if selected %}data-product="{{ selected.uuid }}" data-product-name="{{ selected.name }}"{% endif %}
+                disabled
+                title="Download the entire product vault tip as a zip.">Export product…</button>
+        {% endif %}
+        {% if can_export_objects %}
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="export-selected-btn"
+                {% if selected %}data-product="{{ selected.uuid }}" data-product-name="{{ selected.name }}"{% endif %}
+                disabled
+                title="Download the selected vault files or folders as a zip. Greyed out until something is selected.">Export selected…</button>
+        {% endif %}
+      </div>
+    </div>
     {% endif %}
     {% if product_ui.show_remove %}
     <div class="toolbar-menu" id="remove-menu">
