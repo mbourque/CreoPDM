@@ -61,7 +61,7 @@ def verify_agent_token(token: str, secret: str, *, now: int | None = None) -> st
     except ValueError:
         return None
     current = int(now if now is not None else time.time())
-    if current > expires:
+    if current >= expires:
         return None
     payload = f"{uid}.{expires}"
     expected = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
