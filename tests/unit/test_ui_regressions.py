@@ -814,6 +814,11 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert "text-transform: uppercase" in css
     assert "<dt>Number</dt>" not in overview
     assert "<dt>Name</dt>" in overview
+    assert "<dt>Model type</dt>" in overview
+    assert "<dt>Model role</dt>" in overview
+    assert "identity.model_type" in overview
+    assert "identity.model_role" in overview
+    assert "Model type" in docs and "Model role" in docs
     assert "label the model **Name**" in docs or "model **Name**" in docs
     assert "label the model identity as Number" in docs
     assert "skips duplicate identity fields" in docs

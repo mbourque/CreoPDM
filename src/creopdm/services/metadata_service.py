@@ -29,14 +29,15 @@ from creopdm.schemas.common import (
     WhereUsedResponse,
 )
 from creopdm.services.object_service import ObjectService
-from creopdm.utils.bom_match import bom_lookup_keys, bom_where_used_keys
-from creopdm.utils.classify import display_type_label
-from creopdm.utils.cad_name_matcher import CadNameMatcher
 from creopdm.utils.creo_companions import (
     model_references_filename,
     needs_open_companions,
     read_model_scan_blob,
 )
+from creopdm.utils.creo_model_class import normalize_creo_identity
+from creopdm.utils.bom_match import bom_lookup_keys, bom_where_used_keys
+from creopdm.utils.classify import display_type_label
+from creopdm.utils.cad_name_matcher import CadNameMatcher
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +78,10 @@ class MetadataService:
             )
 
         if payload.identity is not None:
-            version.identity_json = _dumps(payload.identity)
-            common = str(payload.identity.get("common_name") or "").strip()
+            identity = dict(payload.identity)
+            normalize_creo_identity(identity)
+            version.identity_json = _dumps(identity)
+            common = str(identity.get("common_name") or "").strip()
             if common and (not obj.name or obj.name == obj.filename):
                 obj.name = common[:255]
 
@@ -156,6 +159,8 @@ class MetadataService:
             )
 
         identity = _loads(version.identity_json)
+        if isinstance(identity, dict):
+            normalize_creo_identity(identity)
         materials = _loads(version.materials_json)
         bom = _loads(version.bom_json)
         units = _loads(version.units_json)

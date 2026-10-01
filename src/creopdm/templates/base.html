@@ -710,6 +710,121 @@ function eraseUndisplayedModelsQuiet() {
         return false;
     }
 }
+function creoModelTypeLabel(type) {
+    /**
+     * Normalize Creo.JS pfcModelType (enum int or MDL_* / label string) to CreoPDM codes:
+     * PART, ASSEMBLY, DRAWING, MFG, LAYOUT, FORMAT, REPORT, DIAGRAM, MARKUP, SECTION.
+     */
+    if (type == null || type === "") return "";
+    var mapped = "";
+    try {
+        if (typeof pfcModelType !== "undefined") {
+            if (type === pfcModelType.MDL_PART) mapped = "PART";
+            else if (type === pfcModelType.MDL_ASSEMBLY) mapped = "ASSEMBLY";
+            else if (type === pfcModelType.MDL_DRAWING) mapped = "DRAWING";
+            else if (type === pfcModelType.MDL_MFG) mapped = "MFG";
+            else if (type === pfcModelType.MDL_LAYOUT) mapped = "LAYOUT";
+            else if (type === pfcModelType.MDL_DWG_FORMAT) mapped = "FORMAT";
+            else if (type === pfcModelType.MDL_REPORT) mapped = "REPORT";
+            else if (type === pfcModelType.MDL_DIAGRAM) mapped = "DIAGRAM";
+            else if (type === pfcModelType.MDL_MARKUP) mapped = "MARKUP";
+            else if (type === pfcModelType.MDL_2D_SECTION) mapped = "SECTION";
+            else if (typeof pfcModelType.MDL_CE_SOLID !== "undefined" && type === pfcModelType.MDL_CE_SOLID) {
+                mapped = "LAYOUT";
+            }
+        }
+    } catch (errMap) {
+        mapped = "";
+    }
+    if (mapped) return mapped;
+    var raw = String(type).trim().toUpperCase().replace(/\s+/g, "_");
+    if (!raw || raw === "MDL_UNSPECIFIED" || raw === "MODELTYPE_NIL" || raw === "NIL") return "";
+    var fromName = {
+        MDL_PART: "PART",
+        PART: "PART",
+        MDL_ASSEMBLY: "ASSEMBLY",
+        ASSEMBLY: "ASSEMBLY",
+        MDL_DRAWING: "DRAWING",
+        DRAWING: "DRAWING",
+        MDL_MFG: "MFG",
+        MFG: "MFG",
+        MDL_LAYOUT: "LAYOUT",
+        LAYOUT: "LAYOUT",
+        MDL_DWG_FORMAT: "FORMAT",
+        FORMAT: "FORMAT",
+        DWG_FORMAT: "FORMAT",
+        MDL_REPORT: "REPORT",
+        REPORT: "REPORT",
+        MDL_DIAGRAM: "DIAGRAM",
+        DIAGRAM: "DIAGRAM",
+        MDL_MARKUP: "MARKUP",
+        MARKUP: "MARKUP",
+        MDL_2D_SECTION: "SECTION",
+        SECTION: "SECTION",
+        "2D_SECTION": "SECTION",
+        MDL_CE_SOLID: "LAYOUT"
+    };
+    if (fromName[raw]) return fromName[raw];
+    if (raw.indexOf("MDL_") === 0) {
+        var stripped = raw.slice(4);
+        if (fromName[stripped]) return fromName[stripped];
+        if (stripped === "DWG_FORMAT") return "FORMAT";
+        if (stripped === "2D_SECTION") return "SECTION";
+    }
+    return "";
+}
+function creoModelIsSkeleton(model) {
+    try {
+        if (typeof model.IsSkeleton === "boolean") return model.IsSkeleton;
+    } catch (errBool) {}
+    try {
+        if (typeof model.IsSkeleton === "function") return Boolean(model.IsSkeleton());
+    } catch (errFn) {}
+    return false;
+}
+function creoModelHasSheetmetalBody(model) {
+    try {
+        var bodies = null;
+        if (typeof model.ListSolidBodies === "function") bodies = model.ListSolidBodies();
+        else if (typeof model.ListBodies === "function") bodies = model.ListBodies();
+        if (!bodies) return false;
+        var bodyItems = creoFeatureItems(bodies);
+        for (var b = 0; b < bodyItems.length; b++) {
+            var body = bodyItems[b];
+            if (!body) continue;
+            try {
+                if (typeof body.IsSheetmetal === "boolean" && body.IsSheetmetal) return true;
+                if (typeof body.IsSheetmetal === "function" && body.IsSheetmetal()) return true;
+            } catch (errBody) {}
+        }
+    } catch (errBodies) {}
+    return false;
+}
+function creoGatherModelRole(model, modelType) {
+    /**
+     * Mutually exclusive CreoPDM model_role. Family table / flexible / etc. stay elsewhere.
+     * Detects SKELETON and SHEETMETAL via Creo.JS; defaults PART → SOLID when known solid part.
+     */
+    var kind = String(modelType || "").trim().toUpperCase();
+    if (!kind || !model) return "";
+    try {
+        if (creoModelIsSkeleton(model)) return "SKELETON";
+    } catch (errSk) {}
+    if (kind === "PART") {
+        try {
+            if (creoModelHasSheetmetalBody(model)) return "SHEETMETAL";
+        } catch (errSm) {}
+        return "SOLID";
+    }
+    if (kind === "ASSEMBLY") {
+        // No reliable universal Creo.JS subtype API yet — leave blank unless skeleton.
+        return "";
+    }
+    if (kind === "MFG") {
+        return "";
+    }
+    return "";
+}
 function creoGatherIdentity(model) {
     var identity = {
         file_name: "",
@@ -719,6 +834,7 @@ function creoGatherIdentity(model) {
         instance_name: "",
         origin: "",
         model_type: "",
+        model_role: "",
         is_modified: false,
         version_stamp: null
     };
@@ -730,8 +846,9 @@ function creoGatherIdentity(model) {
     try { identity.origin = String(model.Origin || ""); } catch (e6) {}
     try {
         var type = model.Type;
-        identity.model_type = type != null ? String(type) : "";
+        identity.model_type = creoModelTypeLabel(type);
     } catch (e7) {}
+    try { identity.model_role = creoGatherModelRole(model, identity.model_type); } catch (e7b) {}
     try { identity.is_modified = Boolean(model.IsModified); } catch (e8) {}
     try {
         if (typeof model.VersionStamp !== "undefined" && model.VersionStamp != null) {
@@ -1701,6 +1818,11 @@ function gatherModelMetadata(filename, filePath) {
         // Upgrade for units/features/BOM; mass is unsupported (Creo.JS unbound solid APIs).
         var solidModel = creoUpgradeSolidModel(session, model, null);
         if (!solidModel) solidModel = model;
+        // Skeleton / sheet-metal body probes need a bound solid when Retrieve returned a thin handle.
+        try {
+            var role = creoGatherModelRole(solidModel, identity.model_type);
+            if (role) identity.model_role = role;
+        } catch (errRole) {}
         var units = creoGatherUnits(solidModel, null, session);
         var mass = null;
         var family_table = creoGatherFamilyTable(model);

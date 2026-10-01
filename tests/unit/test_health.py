@@ -160,6 +160,12 @@ def test_home_page(client):
     assert "empty_identity" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "retrieve_failed" in text
     assert "function creoGatherMaterials" in text
+    assert "function creoModelTypeLabel" in text
+    assert "function creoGatherModelRole" in text
+    assert "creoModelHasSheetmetalBody" in text
+    assert "model_role" in text
+    assert "IsSkeleton" in text
+    assert "IsSheetmetal" in text
     assert "creoFeatureItems(model.ListMaterials())" in text
     assert "PTC_MATERIAL_NAME" in text
     assert "ListSolidBodies" in text

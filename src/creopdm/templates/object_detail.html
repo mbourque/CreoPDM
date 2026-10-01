@@ -153,6 +153,12 @@
           {% if show_generic %}
           <dt>Generic</dt><dd>{{ id_generic }}</dd>
           {% endif %}
+          {% if identity.model_type %}
+          <dt>Model type</dt><dd>{{ identity.model_type }}</dd>
+          {% endif %}
+          {% if identity.model_role %}
+          <dt>Model role</dt><dd>{{ identity.model_role }}</dd>
+          {% endif %}
           {% if object.creo_release %}
           <dt>Creo</dt><dd>{{ object.creo_release }}</dd>
           {% endif %}

@@ -43,6 +43,7 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
             "generic_name": "",
             "origin": "C:/cache/frame.asm.1",
             "model_type": "MDL_ASSEMBLY",
+            "model_role": "",
             "is_modified": False,
         },
         "parameters": [
@@ -93,6 +94,8 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     body = posted.json()
     assert body["captured"] is True
     assert body["identity"]["common_name"] == "Main Frame"
+    assert body["identity"]["model_type"] == "ASSEMBLY"
+    assert body["identity"].get("model_role") in ("", None)
     assert body["parameters"][0]["name"] == "DESCRIPTION"
     assert body["parameters"][0]["is_designated"] is True
     assert len(body["dependencies"]) == 1
@@ -102,6 +105,26 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     fetched = client.get(f"/api/objects/{frame['uuid']}/creo-metadata")
     assert fetched.status_code == 200
     assert fetched.json()["parameters"][0]["value"] == "Frame assembly"
+
+    shaft_meta = client.post(
+        f"/api/objects/{shaft['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "shaft.prt",
+                "model_type": "PART",
+                "model_role": "SHEETMETAL",
+            }
+        },
+    )
+    assert shaft_meta.status_code == 200, shaft_meta.text
+    assert shaft_meta.json()["identity"]["model_type"] == "PART"
+    assert shaft_meta.json()["identity"]["model_role"] == "SHEETMETAL"
+    shaft_detail = client.get(f"/products/{product['uuid']}/objects/{shaft['uuid']}")
+    assert shaft_detail.status_code == 200
+    assert "Model type" in shaft_detail.text
+    assert "PART" in shaft_detail.text
+    assert "Model role" in shaft_detail.text
+    assert "SHEETMETAL" in shaft_detail.text
 
     where = client.get(f"/api/objects/{shaft['uuid']}/where-used")
     assert where.status_code == 200, where.text
@@ -117,6 +140,8 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert 'data-tab="parameters"' in text
     assert 'data-tab="parameters" disabled' not in text
     assert "Main Frame" in text
+    assert "Model type" in text
+    assert "ASSEMBLY" in text
     assert "DESCRIPTION" in text
     assert 'data-tab="structure"' in text
     assert 'data-tab="bom"' in text
