@@ -808,44 +808,139 @@ function creoModelTypeLabel(type) {
 function creoModelIsSkeleton(model) {
     /**
      * PTC: pfcSolid.IsSkeleton — true for a skeleton or concept model.
-     * Prefer the readonly boolean property; cast via pfcSolid when the retrieve
-     * handle is unbound (same Collect quirk as sheet-metal body APIs).
+     * Creo 8/9 OTK often leaves GetIsSkeleton null on retrieve handles; only trust
+     * explicit true (never treat false/null as definitive on an unbound handle).
      */
     if (!model) return false;
-    function readIsSkeleton(handle) {
+    function readIsSkeletonTrue(handle) {
         if (!handle) return false;
         try {
             if (handle.IsSkeleton === true) return true;
-            if (handle.IsSkeleton === false) return false;
         } catch (errBool) {}
         try {
-            if (typeof handle.IsSkeleton === "function" && handle.IsSkeleton()) return true;
-        } catch (errFn) {}
+            if (typeof handle.GetIsSkeleton === "function" && handle.GetIsSkeleton() === true) {
+                return true;
+            }
+        } catch (errGet) {}
         try {
-            // Some Creo.JS builds expose truthy/falsey without strict boolean typeof.
-            if (handle.IsSkeleton) return true;
-        } catch (errTruth) {}
+            if (typeof handle.IsSkeleton === "function" && handle.IsSkeleton() === true) {
+                return true;
+            }
+        } catch (errFn) {}
         return false;
     }
-    if (readIsSkeleton(model)) return true;
+    var handles = [model];
     try {
         if (typeof pfcSolid !== "undefined" && typeof pfcSolid.cast === "function") {
             var asSolid = pfcSolid.cast(model);
-            if (asSolid && asSolid !== model && readIsSkeleton(asSolid)) return true;
+            if (asSolid && asSolid !== model) handles.push(asSolid);
         }
     } catch (errSolid) {}
     try {
         if (typeof pfcPart !== "undefined" && typeof pfcPart.cast === "function") {
             var asPart = pfcPart.cast(model);
-            if (asPart && asPart !== model && readIsSkeleton(asPart)) return true;
+            if (asPart && asPart !== model) handles.push(asPart);
         }
     } catch (errPart) {}
     try {
         if (typeof pfcAssembly !== "undefined" && typeof pfcAssembly.cast === "function") {
             var asAsm = pfcAssembly.cast(model);
-            if (asAsm && asAsm !== model && readIsSkeleton(asAsm)) return true;
+            if (asAsm && asAsm !== model) handles.push(asAsm);
         }
     } catch (errAsm) {}
+    for (var h = 0; h < handles.length; h++) {
+        if (readIsSkeletonTrue(handles[h])) return true;
+    }
+    return false;
+}
+function creoFilenameLooksLikeSkeleton(filename) {
+    /**
+     * Common Creo skeleton naming when IsSkeleton is unbound during Collect:
+     *   name_skel.prt, name_skeleton.prt, skel_name.prt, skeleton_name.prt
+     */
+    var logical = creoLogicalFileName(filename || "").toLowerCase();
+    var root = creoModelRoot(logical).toLowerCase();
+    if (!root) return false;
+    if (/_skel$/.test(root) || /_skeleton$/.test(root)) return true;
+    if (/^skel_/.test(root) || /^skeleton_/.test(root)) return true;
+    if (root === "skel" || root === "skeleton") return true;
+    return false;
+}
+function creoSessionModelIsAssemblySkeleton(session, model) {
+    /**
+     * Fallback: pfcAssembly.GetSkeleton() on session assemblies — if this model is
+     * that assembly's skeleton, it is a skeleton even when IsSkeleton is unbound.
+     */
+    if (!session || !model) return false;
+    var target = "";
+    try { target = creoLogicalFileName(String(model.FileName || "")).toLowerCase(); } catch (errN) {
+        target = "";
+    }
+    if (!target) return false;
+    var listed = null;
+    try {
+        if (typeof session.ListModels === "function") listed = session.ListModels();
+    } catch (errList) {
+        listed = null;
+    }
+    var models = creoFeatureItems(listed);
+    for (var i = 0; i < models.length; i++) {
+        var other = models[i];
+        if (!other || other === model) continue;
+        try {
+            var isAsm = false;
+            if (typeof pfcModelType !== "undefined" && other.Type === pfcModelType.MDL_ASSEMBLY) {
+                isAsm = true;
+            } else if (other.isInstanceOf && other.isInstanceOf("pfcAssembly")) {
+                isAsm = true;
+            }
+            if (!isAsm) continue;
+        } catch (errType) {
+            continue;
+        }
+        var skel = null;
+        try {
+            if (creoHasCallable(other, "GetSkeleton")) skel = other.GetSkeleton();
+        } catch (errSkel) {
+            skel = null;
+        }
+        if (!skel) {
+            try {
+                if (typeof pfcAssembly !== "undefined" && typeof pfcAssembly.cast === "function") {
+                    var castAsm = pfcAssembly.cast(other);
+                    if (castAsm && creoHasCallable(castAsm, "GetSkeleton")) {
+                        skel = castAsm.GetSkeleton();
+                    }
+                }
+            } catch (errCast) {
+                skel = null;
+            }
+        }
+        if (!skel) continue;
+        try {
+            var skelName = creoLogicalFileName(String(skel.FileName || "")).toLowerCase();
+            if (skelName && skelName === target) return true;
+        } catch (errCmp) {}
+        try {
+            if (skel === model) return true;
+        } catch (errSame) {}
+    }
+    return false;
+}
+function creoDetectSkeletonRole(session, model, filename) {
+    try {
+        if (creoModelIsSkeleton(model)) return true;
+    } catch (errIs) {}
+    try {
+        if (creoSessionModelIsAssemblySkeleton(session, model)) return true;
+    } catch (errSess) {}
+    try {
+        var name = filename || "";
+        if (!name) {
+            try { name = String(model.FileName || ""); } catch (errN) { name = ""; }
+        }
+        if (creoFilenameLooksLikeSkeleton(name)) return true;
+    } catch (errFn) {}
     return false;
 }
 function creoBodyIsSheetmetal(body) {
@@ -1013,16 +1108,16 @@ function creoClassifyManufacturing(session, model, identity) {
         }
     }
 }
-function creoGatherModelRole(model, modelType, parameters) {
+function creoGatherModelRole(model, modelType, parameters, session, filename) {
     /**
      * Mutually exclusive CreoPDM model_role. Family table / flexible / etc. stay elsewhere.
-     * Skeleton: pfcSolid.IsSkeleton (PART or ASSEMBLY). MFG type → role MFG.
-     * PART sheet-metal: SMT_THICKNESS first, then body.IsSheetmetal.
+     * Skeleton: IsSkeleton, else assembly GetSkeleton match, else _skel / _skeleton name.
+     * MFG type → role MFG. PART sheet-metal: SMT_THICKNESS first, then body.IsSheetmetal.
      */
     var kind = String(modelType || "").trim().toUpperCase();
     if (!kind || !model) return "";
     try {
-        if (creoModelIsSkeleton(model)) return "SKELETON";
+        if (creoDetectSkeletonRole(session, model, filename)) return "SKELETON";
     } catch (errSk) {}
     if (kind === "MFG") {
         return "MFG";
@@ -2079,7 +2174,9 @@ function gatherModelMetadata(filename, filePath) {
         var identity = creoGatherIdentity(model);
         try { creoClassifyManufacturing(session, model, identity); } catch (errMfgClass) {}
         try {
-            identity.model_role = creoGatherModelRole(model, identity.model_type) || identity.model_role || "";
+            identity.model_role = creoGatherModelRole(
+                model, identity.model_type, null, session, filename
+            ) || identity.model_role || "";
         } catch (errRoleEarly) {}
         var parameters = creoGatherParameters(model);
         var materials = creoGatherMaterials(model, parameters);
@@ -2094,7 +2191,9 @@ function gatherModelMetadata(filename, filePath) {
         // Re-check MFG after upgrade; skeleton / sheet-metal need a bound solid.
         try { creoClassifyManufacturing(session, solidModel, identity); } catch (errMfg2) {}
         try {
-            var role = creoGatherModelRole(solidModel, identity.model_type, parameters);
+            var role = creoGatherModelRole(
+                solidModel, identity.model_type, parameters, session, filename || identity.file_name
+            );
             if (role) identity.model_role = role;
         } catch (errRole) {}
         var units = creoGatherUnits(solidModel, null, session);
@@ -2135,9 +2234,11 @@ function gatherModelMetadata(filename, filePath) {
                 }
             }
         } catch (errBom) {}
-        // Final role pass after params are gathered (SMT_THICKNESS / body.IsSheetmetal).
+        // Final role pass after params are gathered (SMT_THICKNESS / body.IsSheetmetal / skeleton).
         try {
-            var roleFinal = creoGatherModelRole(solidModel, identity.model_type, parameters);
+            var roleFinal = creoGatherModelRole(
+                solidModel, identity.model_type, parameters, session, filename || identity.file_name
+            );
             if (roleFinal) identity.model_role = roleFinal;
         } catch (errRoleFinal) {}
         var eraseKeys = [];
