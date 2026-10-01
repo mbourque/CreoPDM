@@ -17,9 +17,11 @@ from creopdm_agent.server import (
     create_agent_app,
 )
 from creopdm.config import ConfigManager
-from creopdm.exceptions import PathValidationError
+from creopdm.exceptions import PathValidationError, RepositoryError
 from creopdm.services.git_service import GitService, clear_stale_git_index_lock
 from creopdm.services.workspace_service import WorkspaceService
+from creopdm.utils.identity import UserIdentity
+from tests.conftest import requires_git
 
 
 def test_find_planned_cache_file_prefers_relative_folder(tmp_path: Path):
@@ -176,3 +178,57 @@ def test_clear_stale_git_index_lock_still_removes_old_file(tmp_path: Path):
     os.utime(lock, (old, old))
     assert clear_stale_git_index_lock(tmp_path, max_age_sec=20) is True
     assert not lock.exists()
+
+
+@requires_git
+def test_remove_product_folder_commits_before_disk_delete(tmp_path: Path):
+    """Happy path: Git records the removal, then the folder leaves disk."""
+    manager = ConfigManager(tmp_path / "data")
+    manager.ensure_layout()
+    git = GitService()
+    workspaces = WorkspaceService(manager, git)
+    product = SimpleNamespace(uuid="u-folder", vault_folder="u-folder")
+    user = UserIdentity("tester", "test-pc")
+    vault = workspaces.vault_for(product)
+    git.init_repository(vault, "main")
+    folder = vault / "Drawings"
+    folder.mkdir()
+    keep = folder / ".gitkeep"
+    keep.write_text("", encoding="utf-8")
+    git.stage_files(vault, ["Drawings/.gitkeep"])
+    git.commit(vault, "add Drawings", user)
+
+    workspaces.remove_product_folder(product, "Drawings", user)
+    assert not folder.exists()
+    status = git.status(vault)
+    assert not status.staged
+    assert not status.unstaged
+    assert not status.untracked
+
+
+@requires_git
+def test_remove_product_folder_git_failure_leaves_disk(tmp_path: Path, monkeypatch):
+    """Regression: do not delete disk when Git commit fails (no silent split)."""
+    manager = ConfigManager(tmp_path / "data")
+    manager.ensure_layout()
+    git = GitService()
+    workspaces = WorkspaceService(manager, git)
+    product = SimpleNamespace(uuid="u-fail", vault_folder="u-fail")
+    user = UserIdentity("tester", "test-pc")
+    vault = workspaces.vault_for(product)
+    git.init_repository(vault, "main")
+    folder = vault / "Incoming"
+    folder.mkdir()
+    keep = folder / ".gitkeep"
+    keep.write_bytes(b"")
+    git.stage_files(vault, ["Incoming/.gitkeep"])
+    git.commit(vault, "add Incoming", user)
+
+    def boom(*_a, **_k):
+        raise RepositoryError("simulated commit failure")
+
+    monkeypatch.setattr(git, "commit", boom)
+    with pytest.raises(RepositoryError, match="simulated commit failure"):
+        workspaces.remove_product_folder(product, "Incoming", user)
+    assert keep.is_file()
+    assert folder.is_dir()

@@ -20,7 +20,7 @@ from creopdm.constants import (
 )
 from creopdm.config import ConfigManager
 from creopdm.creo.file_manager import CreoFileManager
-from creopdm.exceptions import PathValidationError, RepositoryError, WorkspaceConflictError
+from creopdm.exceptions import CreoPDMError, PathValidationError, RepositoryError, WorkspaceConflictError
 from creopdm.logging_setup import get_logger
 from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
@@ -176,7 +176,11 @@ class WorkspaceService:
         folder: str,
         user: UserIdentity,
     ) -> str:
-        """Remove a vault folder tree (including .gitkeep) after its objects are gone."""
+        """Remove a vault folder tree (including .gitkeep) after its objects are gone.
+
+        Git is updated before the disk tree is deleted so a Git failure leaves the
+        folder on disk and surfaces an error (no silent disk/Git split).
+        """
         from creopdm.utils.folders import normalize_folder_query
 
         relative = normalize_folder_query(folder)
@@ -190,7 +194,6 @@ class WorkspaceService:
         tracked: list[str] = []
         if target.is_file():
             tracked.append(relative)
-            remove_file(target)
         elif target.is_dir():
             skip = _RESERVED_WORKSPACE_DIRS
             for dirpath, dirnames, filenames in os.walk(target):
@@ -199,16 +202,26 @@ class WorkspaceService:
                 for name in filenames:
                     rel = name if rel_dir == "." else f"{rel_dir}/{name}"
                     tracked.append(rel.replace("\\", "/"))
-            remove_tree(target)
         if tracked and self._git is not None and self._git.is_repository(vault):
             try:
-                self._git.remove_files(vault, tracked, keep_working_copy=False)
+                # Keep working copies until commit succeeds, then wipe disk.
+                self._git.remove_files(vault, tracked, keep_working_copy=True)
                 status = self._git.status(vault)
                 if status.staged or status.unstaged:
                     self._git.commit(vault, f"Remove folder {relative}", user)
-            except Exception:
+            except CreoPDMError:
+                raise
+            except Exception as exc:
                 logger.exception("Could not commit removal of folder %s", relative)
-                # Disk tree is already gone; avoid failing the whole remove.
+                raise RepositoryError(
+                    f"Could not record removal of folder {relative} in Git. "
+                    "The folder was left on disk so you can retry.",
+                    details={"folder": relative},
+                ) from exc
+        if target.is_file():
+            remove_file(target)
+        elif target.is_dir():
+            remove_tree(target)
         logger.info("Removed product folder %s (%s tracked path(s))", relative, len(tracked))
         return relative
 
