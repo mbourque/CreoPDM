@@ -17,6 +17,31 @@ def test_relative_path_accepts_nested_file():
     assert path.as_posix() == "CAD/shaft.prt"
 
 
+def test_relative_path_rejects_nested_git():
+    """Nested .git would break the vault Git repo; never allow it as content."""
+    for bad in (
+        ".git",
+        ".GIT/config",
+        "CAD/.git/HEAD",
+        "lib/.Git/objects/pack",
+    ):
+        with pytest.raises(PathValidationError, match="reserved"):
+            assert_safe_relative_path(bad)
+    # CreoPDM empty-folder marker and bookkeeping path segment .creopdm are
+    # allowed here (git stage of .creopdm); product imports use a stricter helper.
+    assert assert_safe_relative_path("Empty/.gitkeep").as_posix() == "Empty/.gitkeep"
+    assert assert_safe_relative_path(".creopdm/product.json").as_posix() == ".creopdm/product.json"
+
+
+def test_product_content_path_rejects_git_and_creopdm():
+    from creopdm.utils.paths import assert_product_content_relative_path
+
+    for bad in (".git/config", "CAD/.git/x", ".creopdm/cache", "docs/.creopdm/x"):
+        with pytest.raises(PathValidationError, match="reserved"):
+            assert_product_content_relative_path(bad)
+    assert assert_product_content_relative_path("CAD/shaft.prt").as_posix() == "CAD/shaft.prt"
+
+
 def test_relative_path_rejects_traversal():
     with pytest.raises(PathValidationError):
         assert_safe_relative_path("../secret.prt")

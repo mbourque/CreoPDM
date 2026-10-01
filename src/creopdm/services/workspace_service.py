@@ -39,7 +39,7 @@ from creopdm.utils.files import (
 from creopdm.utils.hashing import calculate_sha256
 from creopdm.utils.identity import UserIdentity
 from creopdm.utils.ignore import sync_gitignore
-from creopdm.utils.paths import assert_safe_relative_path, ensure_within
+from creopdm.utils.paths import assert_product_content_relative_path, assert_safe_relative_path, ensure_within
 
 logger = get_logger("workspace")
 
@@ -495,15 +495,11 @@ class WorkspaceService:
         file is allowed only for untracked staging when ``allow_existing_untracked``
         is true — callers must refuse paths that already belong to a PDM object.
         """
-        relative = assert_safe_relative_path(str(relative_path or "").replace("\\", "/")).as_posix()
+        relative = assert_product_content_relative_path(
+            str(relative_path or "").replace("\\", "/")
+        ).as_posix()
         if not data:
             raise PathValidationError("The uploaded file is empty.")
-        parts = Path(relative).parts
-        if any(part.lower() in _RESERVED_WORKSPACE_DIRS for part in parts):
-            raise PathValidationError(
-                "That path uses a reserved folder name and cannot be staged.",
-                details={"relative_path": relative},
-            )
         name = Path(relative).name
         if self._is_ignored(name):
             raise PathValidationError(f"{name} is ignored and cannot be staged.")

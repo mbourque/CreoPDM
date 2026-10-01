@@ -281,18 +281,24 @@ class GitService:
     def stage_files(self, path: Path, files: list[str]) -> None:
         if not files:
             return
-        logger.info("git add (%s files)", len(files))
-        for chunk in _chunks(files):
+        from creopdm.utils.paths import assert_safe_relative_path
+
+        safe = [assert_safe_relative_path(item).as_posix() for item in files]
+        logger.info("git add (%s files)", len(safe))
+        for chunk in _chunks(safe):
             self.run_with_index_lock_retry(["add", "--", *chunk], cwd=path, quiet=True)
 
     def remove_files(self, path: Path, files: list[str], *, keep_working_copy: bool = False) -> None:
         if not files:
             return
+        from creopdm.utils.paths import assert_safe_relative_path
+
+        safe = [assert_safe_relative_path(item).as_posix() for item in files]
         args = ["rm", "-f", "--ignore-unmatch"]
         if keep_working_copy:
             args.append("--cached")
-        logger.info("git rm %s(%s files)", "--cached " if keep_working_copy else "", len(files))
-        for chunk in _chunks(files):
+        logger.info("git rm %s(%s files)", "--cached " if keep_working_copy else "", len(safe))
+        for chunk in _chunks(safe):
             self.run_with_index_lock_retry([*args, "--", *chunk], cwd=path, quiet=True)
 
     def commit(

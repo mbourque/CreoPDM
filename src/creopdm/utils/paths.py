@@ -9,6 +9,11 @@ from creopdm.exceptions import PathValidationError
 
 _WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:")
 
+# Nested .git under product content would collide with CreoPDM's vault Git.
+RESERVED_VAULT_PATH_PARTS = frozenset({".git"})
+# Product imports must not write into CreoPDM bookkeeping either.
+RESERVED_PRODUCT_CONTENT_PARTS = frozenset({".git", ".creopdm", "__pycache__"})
+
 
 def normalize_fs_path(path: str | Path) -> Path:
     """Expand and resolve a filesystem path."""
@@ -16,7 +21,7 @@ def normalize_fs_path(path: str | Path) -> Path:
 
 
 def assert_safe_relative_path(relative: str) -> Path:
-    """Reject absolute paths, drive letters, and parent-directory traversal."""
+    """Reject absolute paths, drive letters, traversal, and nested ``.git``."""
     if not relative or not relative.strip():
         raise PathValidationError("A relative file path is required.")
     raw = relative.replace("\\", "/").strip()
@@ -33,7 +38,23 @@ def assert_safe_relative_path(relative: str) -> Path:
         raise PathValidationError("Path traversal is not allowed.")
     if any(part.startswith("/") for part in parts):
         raise PathValidationError("Invalid path component.")
+    if any(part.lower() in RESERVED_VAULT_PATH_PARTS for part in parts):
+        raise PathValidationError(
+            "That path uses a reserved name (.git) and cannot be stored in the vault.",
+            details={"relative_path": raw},
+        )
     return Path(*parts)
+
+
+def assert_product_content_relative_path(relative: str) -> Path:
+    """Like assert_safe_relative_path, plus block ``.creopdm`` bookkeeping paths."""
+    path = assert_safe_relative_path(relative)
+    if any(part.lower() in RESERVED_PRODUCT_CONTENT_PARTS for part in path.parts):
+        raise PathValidationError(
+            "That path uses a reserved name (.git / .creopdm) and cannot be stored in the vault.",
+            details={"relative_path": path.as_posix()},
+        )
+    return path
 
 
 def ensure_within(base: Path, target: Path) -> Path:

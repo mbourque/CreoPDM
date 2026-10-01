@@ -52,7 +52,7 @@ from creopdm.utils.files import copy_file, copy_file_hashed, set_file_readonly, 
 from creopdm.utils.hashing import calculate_sha256
 from creopdm.utils.identity import CurrentUserProvider
 from creopdm.utils.paths import (
-    assert_safe_relative_path,
+    assert_product_content_relative_path,
     ensure_within,
     sanitize_filename,
 )
@@ -137,12 +137,12 @@ class ObjectService:
         display_name = sanitize_filename(original_name or source_path.name)
         stored_name = CreoFileManager.canonical_repository_name(display_name)
         if relative_path:
-            rel = assert_safe_relative_path(relative_path)
+            rel = assert_product_content_relative_path(relative_path)
             if rel.name != stored_name:
                 rel = rel.parent / stored_name
         else:
             rel = Path(stored_name)
-        relative = assert_safe_relative_path(str(rel).replace("\\", "/")).as_posix()
+        relative = assert_product_content_relative_path(str(rel).replace("\\", "/")).as_posix()
         logical = CreoFileManager.logical_repo_path(relative, extras)
         number = CreoFileManager.save_number(stored_name, extras)
         return logical, stored_name, number
@@ -661,16 +661,13 @@ class ObjectService:
             extension = Path(logical_name).suffix.lower() or Path(stored_name).suffix.lower()
             stem = Path(logical_name).stem
             if relative_path:
-                rel = assert_safe_relative_path(relative_path)
+                rel = assert_product_content_relative_path(relative_path)
                 if rel.name != stored_name:
                     rel = rel.parent / stored_name
             else:
                 rel = Path(stored_name)
-            rel = assert_safe_relative_path(str(rel).replace("\\", "/"))
+            rel = assert_product_content_relative_path(str(rel).replace("\\", "/"))
             relative = rel.as_posix()
-            reserved = {part.lower() for part in rel.parts}
-            if reserved & {".git", ".creopdm"}:
-                raise PathValidationError("That location is reserved for CreoPDM.")
             logical = CreoFileManager.logical_repo_path(relative, extras)
             if logical in pending_logical:
                 other = pending_logical[logical]
@@ -1001,7 +998,7 @@ class ObjectService:
     def _later_save_relative(existing: EngineeringObject, stored_name: str) -> str:
         parent = Path(str(existing.relative_path or "").replace("\\", "/")).parent
         relative = stored_name if parent.as_posix() == "." else (parent / stored_name).as_posix()
-        return assert_safe_relative_path(relative).as_posix()
+        return assert_product_content_relative_path(relative).as_posix()
 
     def _stage_later_workspace_save(
         self,
