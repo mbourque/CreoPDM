@@ -162,10 +162,15 @@ def test_home_page(client):
     assert "function creoGatherMaterials" in text
     assert "function creoModelTypeLabel" in text
     assert "function creoGatherModelRole" in text
+    assert "function creoClassifyManufacturing" in text
+    assert "creoSessionHasMfgModel" in text
+    assert "preferMfgIfNeeded" in text
+    assert "tryRetrieveAsMfg" in text
     assert "creoModelHasSheetmetalBody" in text
     assert "model_role" in text
     assert "IsSkeleton" in text
     assert "IsSheetmetal" in text
+    assert "pfcModelType.MDL_MFG" in text
     assert "creoFeatureItems(model.ListMaterials())" in text
     assert "PTC_MATERIAL_NAME" in text
     assert "ListSolidBodies" in text

@@ -710,6 +710,38 @@ function eraseUndisplayedModelsQuiet() {
         return false;
     }
 }
+function creoLogicalExtension(filename) {
+    var logical = creoLogicalFileName(filename).toLowerCase();
+    var dot = logical.lastIndexOf(".");
+    return dot >= 0 ? logical.substring(dot) : "";
+}
+function creoSessionHasMfgModel(session, filename) {
+    /**
+     * Manufacturing assemblies often live as *.asm on disk but are MDL_MFG in Creo
+     * (see openAsmAsMfg). Probe GetModel(root, MDL_MFG) the same way.
+     */
+    if (!session || typeof pfcModelType === "undefined") {
+        return false;
+    }
+    var root = creoModelRoot(creoLogicalFileName(filename || ""));
+    if (!root) return false;
+    try {
+        if (typeof session.GetModel === "function") {
+            var mfg = session.GetModel(root, pfcModelType.MDL_MFG);
+            if (mfg) return true;
+        }
+    } catch (errMfg) {}
+    try {
+        if (typeof pfcModelDescriptor !== "undefined"
+            && typeof pfcModelDescriptor.Create === "function"
+            && typeof session.GetModelFromDescr === "function") {
+            var descr = pfcModelDescriptor.Create(pfcModelType.MDL_MFG, root, "");
+            var fromDescr = session.GetModelFromDescr(descr);
+            if (fromDescr) return true;
+        }
+    } catch (errDescr) {}
+    return false;
+}
 function creoModelTypeLabel(type) {
     /**
      * Normalize Creo.JS pfcModelType (enum int or MDL_* / label string) to CreoPDM codes:
@@ -800,16 +832,53 @@ function creoModelHasSheetmetalBody(model) {
     } catch (errBodies) {}
     return false;
 }
+function creoClassifyManufacturing(session, model, identity) {
+    /**
+     * Promote ASSEMBLY/PART → MFG when Creo has the same root as MDL_MFG, or the
+     * file extension is .mfg. Manufacturing assemblies commonly report Type=ASSEMBLY
+     * when retrieved via CreateFromFileName / .asm.
+     */
+    if (!identity) return;
+    var fileName = "";
+    try { fileName = String(identity.file_name || model.FileName || ""); } catch (errN) { fileName = ""; }
+    if (creoLogicalExtension(fileName) === ".mfg") {
+        identity.model_type = "MFG";
+    }
+    if (identity.model_type === "MFG") return;
+    try {
+        if (model && typeof model.isInstanceOf === "function" && model.isInstanceOf("pfcMFG")) {
+            identity.model_type = "MFG";
+            return;
+        }
+    } catch (errInst) {}
+    try {
+        if (typeof model.GetDescr === "function") {
+            var descr = model.GetDescr();
+            if (descr && descr.Type != null && creoModelTypeLabel(descr.Type) === "MFG") {
+                identity.model_type = "MFG";
+                return;
+            }
+        }
+    } catch (errDescr) {}
+    if (identity.model_type === "ASSEMBLY" || identity.model_type === "PART" || !identity.model_type) {
+        if (creoSessionHasMfgModel(session, fileName)) {
+            identity.model_type = "MFG";
+        }
+    }
+}
 function creoGatherModelRole(model, modelType) {
     /**
      * Mutually exclusive CreoPDM model_role. Family table / flexible / etc. stay elsewhere.
-     * Detects SKELETON and SHEETMETAL via Creo.JS; defaults PART → SOLID when known solid part.
+     * MFG type → role MFG (manufacturing assembly/part). PART uses skeleton / sheet metal / SOLID.
      */
     var kind = String(modelType || "").trim().toUpperCase();
     if (!kind || !model) return "";
     try {
         if (creoModelIsSkeleton(model)) return "SKELETON";
     } catch (errSk) {}
+    if (kind === "MFG") {
+        return "MFG";
+    }
     if (kind === "PART") {
         try {
             if (creoModelHasSheetmetalBody(model)) return "SHEETMETAL";
@@ -817,10 +886,6 @@ function creoGatherModelRole(model, modelType) {
         return "SOLID";
     }
     if (kind === "ASSEMBLY") {
-        // No reliable universal Creo.JS subtype API yet — leave blank unless skeleton.
-        return "";
-    }
-    if (kind === "MFG") {
         return "";
     }
     return "";
@@ -1751,6 +1816,39 @@ function creoRetrieveForMetadata(session, filePath, filename) {
         } catch (errRet) {}
         return null;
     }
+    function tryRetrieveAsMfg(nameHint) {
+        // Manufacturing assemblies are often *.asm but must be opened as MDL_MFG.
+        if (typeof pfcModelType === "undefined" || typeof pfcModelDescriptor === "undefined") {
+            return null;
+        }
+        var root = creoModelRoot(creoLogicalFileName(nameHint || shortName || ""));
+        if (!root) return null;
+        try {
+            var mfgDescr = pfcModelDescriptor.Create(pfcModelType.MDL_MFG, root, "");
+            if (typeof session.RetrieveModelWithOpts === "function"
+                && typeof pfcRetrieveModelOptions !== "undefined") {
+                try {
+                    var mfgOpts = pfcRetrieveModelOptions.Create();
+                    try { mfgOpts.AskUserAboutReps = false; } catch (errAsk2) {}
+                    var mfgGot = session.RetrieveModelWithOpts(mfgDescr, mfgOpts);
+                    if (mfgGot) return mfgGot;
+                } catch (errMfgOpts) {}
+            }
+            return session.RetrieveModel(mfgDescr);
+        } catch (errMfgRet) {
+            return null;
+        }
+    }
+    function preferMfgIfNeeded(got, nameHint) {
+        if (!got) return null;
+        var label = "";
+        try { label = creoModelTypeLabel(got.Type); } catch (errT) { label = ""; }
+        if (label === "MFG") return got;
+        var ext = creoLogicalExtension(nameHint || shortName || "");
+        if (ext !== ".asm" && ext !== ".mfg") return got;
+        var asMfg = tryRetrieveAsMfg(nameHint || shortName);
+        return asMfg || got;
+    }
     try {
         if (fullPath) {
             var dir = fullPath.replace(/[\\\/][^\\\/]+$/, "");
@@ -1766,18 +1864,21 @@ function creoRetrieveForMetadata(session, filePath, filename) {
                 } catch (errDir) {}
             }
             // Prefer names relative to the cache WD (companions resolve). Full path last.
-            model = tryRetrieve(diskName);
+            model = preferMfgIfNeeded(tryRetrieve(diskName), diskName || logicalFromDisk);
             if (model) return model;
             if (logicalFromDisk && logicalFromDisk.toLowerCase() !== String(diskName || "").toLowerCase()) {
-                model = tryRetrieve(logicalFromDisk);
+                model = preferMfgIfNeeded(tryRetrieve(logicalFromDisk), logicalFromDisk);
                 if (model) return model;
             }
-            model = tryRetrieve(fullPath);
+            model = preferMfgIfNeeded(tryRetrieve(fullPath), diskName || logicalFromDisk);
             if (model) return model;
         }
         if (shortName) {
             model = creoFindSessionModel(session, shortName);
-            if (model) return model;
+            if (model) {
+                model = preferMfgIfNeeded(model, shortName);
+                if (model) return model;
+            }
             // Do not RetrieveModel by bare name when no filePath — Creo spams
             // "'PART' cannot be retrieved" when the file is not on search path.
         }
@@ -1812,13 +1913,18 @@ function gatherModelMetadata(filename, filePath) {
             };
         }
         var identity = creoGatherIdentity(model);
+        try { creoClassifyManufacturing(session, model, identity); } catch (errMfgClass) {}
+        try {
+            identity.model_role = creoGatherModelRole(model, identity.model_type) || identity.model_role || "";
+        } catch (errRoleEarly) {}
         var parameters = creoGatherParameters(model);
         var materials = creoGatherMaterials(model, parameters);
         var dependencies = creoGatherDependencies(model);
         // Upgrade for units/features/BOM; mass is unsupported (Creo.JS unbound solid APIs).
         var solidModel = creoUpgradeSolidModel(session, model, null);
         if (!solidModel) solidModel = model;
-        // Skeleton / sheet-metal body probes need a bound solid when Retrieve returned a thin handle.
+        // Re-check MFG after upgrade; skeleton / sheet-metal need a bound solid.
+        try { creoClassifyManufacturing(session, solidModel, identity); } catch (errMfg2) {}
         try {
             var role = creoGatherModelRole(solidModel, identity.model_type);
             if (role) identity.model_role = role;

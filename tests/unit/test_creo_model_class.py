@@ -23,6 +23,7 @@ def test_normalize_creo_model_role_aliases():
     assert normalize_creo_model_role("SHEET_METAL") == "SHEETMETAL"
     assert normalize_creo_model_role("SKELETON") == "SKELETON"
     assert normalize_creo_model_role("SOLID") == "SOLID"
+    assert normalize_creo_model_role("MFG") == "MFG"
     assert normalize_creo_model_role("nope") == ""
 
 

@@ -48,6 +48,7 @@ _MODEL_ROLE_ALIASES: dict[str, str] = {
     "NC": "NC",
     "MOLD": "MOLD",
     "CAST": "CAST",
+    "MFG": "MFG",
     "SHEETMETAL_MFG": "SHEETMETAL_MFG",
     "SHEET_METAL_MFG": "SHEETMETAL_MFG",
 }
