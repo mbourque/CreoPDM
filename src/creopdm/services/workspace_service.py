@@ -585,7 +585,8 @@ class WorkspaceService:
         recorded = obj.filename
         newer_save = path.name.lower() != recorded.lower()
         modified = self._file_modified(path, obj)
-        if not newer_save and not modified:
+        # Content hash must differ — name/.N alone is not enough (materialize).
+        if not modified:
             return None
         stamp = datetime.fromtimestamp(path.stat().st_mtime)
         return {
@@ -593,7 +594,7 @@ class WorkspaceService:
             "recorded_filename": recorded,
             "file_size": path.stat().st_size,
             "newer_save": newer_save,
-            "modified": modified,
+            "modified": True,
             "next_display": f"{obj.revision}.{obj.iteration + 1}",
             "saved_at": stamp.strftime("%Y-%m-%d %H:%M"),
         }
@@ -629,10 +630,9 @@ class WorkspaceService:
                 path = candidate
         if path is None or not path.is_file():
             return None
-        # Newer Creo .N is always pending. Dirty tip needs a real content change —
-        # do not trust git dirty alone (stat noise / false dirty after materialize).
-        content_changed = self._file_modified(path, obj)
-        if not newer_save and not content_changed:
+        # Content hash must differ — do not trust git dirty or a higher .N alone
+        # (stat noise / same-bytes rematerialize).
+        if not self._file_modified(path, obj):
             return None
         stamp = datetime.fromtimestamp(path.stat().st_mtime)
         return {

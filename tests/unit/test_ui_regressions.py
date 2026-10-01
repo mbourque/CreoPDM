@@ -1124,20 +1124,21 @@ def test_newer_local_cache_matches_flat_save_for_nested_vault_path():
 
 
 def test_newer_local_cache_detects_same_save_content_replace_by_hash():
-    """Same Creo .N: only content-hash mismatch counts (not size/mtime after materialize)."""
+    """Modified requires content-hash mismatch — never .N / size / mtime alone."""
     script = _app_js()
     body = _between(script, "function newerLocalCacheSaves(", "async function countLocalNewWorkspaceFiles(")
     assert "needsHash" in body
     assert "current_version?.content_hash" in body
-    assert "local.saveNumber === vaultNumber" in body
     assert "hashAgentCachePaths" in body
     assert "async function resolveNewerLocalCacheSaves(" in body
     assert "newer_save: newerSave" in body
-    assert "content hash is authoritative" in body
-    assert "if (newerSave)" in body
+    assert "Content hash must differ" in body
+    assert "if (newerSave)" not in body
+    assert "rows.push(row)" not in body
     assert "sizeDiffers" not in body
     assert "Math.max(" in body
     assert "current_version?.filename" in body
+    assert "local.saveNumber < vaultNumber" in body
 
 
 def test_refresh_pending_clears_sticky_modified_locally():
@@ -1154,14 +1155,18 @@ def test_refresh_pending_clears_sticky_modified_locally():
 
 
 def test_pending_from_status_requires_hash_for_dirty_tip():
-    """Git dirty tip with matching content_hash must not appear as Modified."""
+    """Git dirty tip / higher .N with matching content_hash must not appear as Modified."""
     text = (ROOT / "src" / "creopdm" / "services" / "workspace_service.py").read_text(
         encoding="utf-8"
     )
     pending = _between(text, "def _pending_from_status(", "def product_checkin_queue(")
     assert "_file_modified" in pending
-    assert "not newer_save and not content_changed" in pending
-
+    assert "if not self._file_modified(path, obj):" in pending
+    assert "not newer_save and not content_changed" not in pending
+    workspace = _between(text, "def pending_workspace_save(", "def _pending_from_status(")
+    assert "if not modified:" in workspace
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "content hash** differs from the vault tip" in docs
 
 def test_admin_hub_panel_fills_full_width():
     """max-width on .admin-hub itself left body --bg showing beside the page."""

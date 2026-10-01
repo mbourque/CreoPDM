@@ -5881,9 +5881,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         creoSaveNumber(PathBasename(vaultRel))
       );
       const newerSave = local.saveNumber > vaultNumber;
-      // Same Creo save: never trust size/mtime alone — content hash is authoritative
-      // (materialize can disagree on size metadata while bytes match).
+      // Content hash must differ — never trust .N / size / mtime alone
+      // (materialize can rewrite the tip with matching bytes).
       const vaultHash = String(obj.current_version?.content_hash || "").trim().toLowerCase();
+      if (!vaultHash) return;
+      // Older local tip than vault is not pending check-in work.
+      if (local.saveNumber < vaultNumber) return;
       const row = {
         uuid: obj.uuid,
         filename: local.filename,
@@ -5898,15 +5901,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         can_checkin: obj.can_checkin ? "1" : "0",
         can_checkout: obj.can_checkout ? "1" : "0",
       };
-      // Higher Creo .N is a real newer save — no hash needed.
-      if (newerSave) {
-        rows.push(row);
-        return;
-      }
-      // Same save tip: only a content-hash mismatch proves a workspace replace.
-      if (local.saveNumber === vaultNumber && vaultHash) {
-        needsHash.push({ row, vaultHash, rel: local.rel });
-      }
+      needsHash.push({ row, vaultHash, rel: local.rel });
     });
     return { rows, needsHash };
   }
@@ -5928,7 +5923,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
       });
     } catch {
-      /* agent offline / old agent without /hash-paths — size mismatches still apply */
+      /* agent offline / old agent without /hash-paths — do not guess from size */
     }
     return rows;
   }

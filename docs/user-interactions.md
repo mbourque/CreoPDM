@@ -112,7 +112,7 @@ Empty folders (no files inside yet) must still be selectable and removable.
 | Click the row (not the name) | Select the file | |
 | Click the **file name** | Select, then open in Creo or Windows | Jump straight to Details |
 | Double-click the row | Open **Details** (Overview tab) | Also fire a second “Open” |
-| See **Modified** | Means you have a newer local Creo `.N` save **or** the same tip with a different **content hash** than the vault (size/date alone after materialize do not count). After refresh, clear Modified when vault/local no longer report that file as pending | Treat a rematerialized copy with the same hash as changed just because the timestamp or size metadata differs; leave Modified stuck after a later refresh proves the tip matches |
+| See **Modified** | Means the local tip’s **content hash** differs from the vault tip (a higher Creo `.N` usually does; size/date alone never counts). After refresh, clear Modified when vault/local no longer report that file as pending | Treat a rematerialized copy with the same hash as changed (including when only `.N`, size, or date differs); leave Modified stuck after a later refresh proves the tip matches |
 
 ---
 
