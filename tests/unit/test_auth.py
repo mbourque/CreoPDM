@@ -2401,6 +2401,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_OBJECTS_CHECKIN,
         PERMISSION_OBJECTS_CHECKOUT,
         PERMISSION_OBJECTS_COPY_TO_VAULT,
+        PERMISSION_OBJECTS_EXPORT,
         PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT,
         PERMISSION_OBJECTS_METADATA,
         PERMISSION_OBJECTS_REMOVE,
@@ -2409,6 +2410,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_PRODUCTS_CREATE,
         PERMISSION_PRODUCTS_DELETE,
         PERMISSION_PRODUCTS_EDIT,
+        PERMISSION_PRODUCTS_EXPORT,
         PERMISSION_PRODUCTS_MANAGE,
         PERMISSION_PRODUCTS_VIEW,
         PERMISSION_ROLES_MANAGE,
@@ -2519,6 +2521,8 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             assert f'data-can-checkin="{"1" if PERMISSION_OBJECTS_CHECKIN in allowed else "0"}"' in home.text
             assert f'data-can-force-undo-checkout="{"1" if PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in allowed else "0"}"' in home.text
             assert f'data-can-copy-to-vault="{"1" if PERMISSION_OBJECTS_COPY_TO_VAULT in allowed else "0"}"' in home.text
+            assert f'data-can-export-product="{"1" if PERMISSION_PRODUCTS_EXPORT in allowed else "0"}"' in home.text
+            assert f'data-can-export-objects="{"1" if PERMISSION_OBJECTS_EXPORT in allowed else "0"}"' in home.text
             if PERMISSION_OBJECTS_CHECKOUT in allowed:
                 assert 'id="checkout-btn"' in home.text
                 assert 'id="checkout-product-btn"' in home.text
@@ -2537,6 +2541,18 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 assert 'id="workspace-btn"' in home.text
             else:
                 assert 'id="workspace-btn"' not in home.text
+            if PERMISSION_PRODUCTS_EXPORT in allowed or PERMISSION_OBJECTS_EXPORT in allowed:
+                assert 'id="export-menu"' in home.text
+            else:
+                assert 'id="export-menu"' not in home.text
+            if PERMISSION_PRODUCTS_EXPORT in allowed:
+                assert 'id="export-product-btn"' in home.text
+            else:
+                assert 'id="export-product-btn"' not in home.text
+            if PERMISSION_OBJECTS_EXPORT in allowed:
+                assert 'id="export-selected-btn"' in home.text
+            else:
+                assert 'id="export-selected-btn"' not in home.text
             if PERMISSION_OBJECTS_ADD in allowed:
                 assert 'id="add-menu"' in home.text
             else:
@@ -2623,6 +2639,14 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             PERMISSION_OBJECTS_COPY_TO_VAULT: auth_client.post(
                 "/api/objects/batch/workspace",
                 json={"object_ids": ["00000000-0000-0000-0000-000000000000"]},
+            ),
+            PERMISSION_PRODUCTS_EXPORT: auth_client.post(
+                f"/api/products/{product_id}/export",
+                json={"object_ids": [], "folder_paths": []},
+            ),
+            PERMISSION_OBJECTS_EXPORT: auth_client.post(
+                f"/api/products/{product_id}/export",
+                json={"object_ids": [object_id], "folder_paths": []},
             ),
         }
 
