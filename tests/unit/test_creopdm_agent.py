@@ -125,6 +125,58 @@ def test_agent_materialize_preserves_vault_folders(tmp_path, monkeypatch):
         assert not (workdir / "pin.prt.1").exists()
 
 
+def test_agent_materialize_preserves_spaces_in_vault_folders(tmp_path, monkeypatch):
+    """Vault folder 'from ptc' must stay spaced in cache (not from_ptc)."""
+    root = tmp_path / "cache"
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+
+    class FakeResponse:
+        def __init__(self, body: bytes):
+            self.status_code = 200
+            self.content = body
+            self.headers = {}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers=None):
+            return FakeResponse(b"gab-bytes")
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    product_id = "nc-library"
+    cache = root / product_id
+    legacy = cache / "NC" / "Fixtures" / "angle-irons" / "from_ptc"
+    legacy.mkdir(parents=True)
+    (legacy / "gab.prt.1").write_bytes(b"old-sanitized")
+    with TestClient(app) as client:
+        saved = client.post(
+            "/materialize",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "object_id": "gab",
+                "product_id": product_id,
+                "relative_path": "NC/Fixtures/angle-irons/from ptc/gab.prt",
+                "filename": "gab.prt",
+                "disk_name": "gab.prt.1",
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        body = saved.json()
+        path = Path(body["path"])
+        workdir = Path(body["working_directory"])
+        assert path == workdir / "NC" / "Fixtures" / "angle-irons" / "from ptc" / "gab.prt.1"
+        assert path.read_bytes() == b"gab-bytes"
+        assert not (legacy / "gab.prt.1").is_file()
+
+
 def test_agent_materialize_replace_newer_trashes_higher_local_saves(tmp_path, monkeypatch):
     """History revert / open-without-checkout must drop local .prt.3 when vault tip is .prt.1."""
     root = tmp_path / "cache"

@@ -5737,6 +5737,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return parts.length ? `${parts.join("/")}/${logical}` : logical;
   }
 
+  /** Match historical agent path sanitizer (spaces → _). New agent keeps spaces. */
+  function agentCacheSafeSegment(value) {
+    const text = String(value || "").trim().replace(/[^A-Za-z0-9._\-]+/g, "_");
+    return (text || "x").slice(0, 180);
+  }
+
+  function agentCacheSafeRelativePath(rel) {
+    const norm = String(rel || "").replace(/\\/g, "/").replace(/^\/+/, "");
+    const parts = norm.split("/").filter((part) => part && part !== "." && part !== "..");
+    if (!parts.length) return "";
+    return parts.map((part) => agentCacheSafeSegment(part)).join("/");
+  }
+
   function rememberKnownWorkspacePaths(exact, logical, basenames) {
     knownWorkspacePaths = {
       exact: new Set(exact || []),
@@ -5756,6 +5769,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     exact.add(path.toLowerCase());
     logical.add(logicalRelativePath(path).toLowerCase());
     basenames.add(logicalUploadName(PathBasename(path)).toLowerCase());
+    // Vault "from ptc/…" must also match older agent-cache "from_ptc/…".
+    const safe = agentCacheSafeRelativePath(path);
+    if (safe && safe.toLowerCase() !== path.toLowerCase()) {
+      exact.add(safe.toLowerCase());
+      logical.add(logicalRelativePath(safe).toLowerCase());
+    }
   }
 
   async function loadKnownWorkspacePaths(productId, extraRels = []) {
@@ -5845,6 +5864,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (!prev || saveNumber > prev.saveNumber) {
         bestByLogical.set(key, entry);
       }
+      // Also index under legacy-safe key so vault "from ptc" finds cache "from_ptc".
+      const safeKey = logicalRelativePath(agentCacheSafeRelativePath(rel)).toLowerCase();
+      if (safeKey && safeKey !== key) {
+        const prevSafe = bestByLogical.get(safeKey);
+        if (!prevSafe || saveNumber > prevSafe.saveNumber) {
+          bestByLogical.set(safeKey, entry);
+        }
+      }
       const prevBase = bestByBasename.get(base);
       const flatter =
         prevBase
@@ -5867,7 +5894,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const vaultRel = String(obj.relative_path || obj.filename || "").replace(/\\/g, "/");
       if (!vaultRel) return;
       const key = logicalRelativePath(vaultRel).toLowerCase();
-      let local = bestByLogical.get(key);
+      const safeKey = logicalRelativePath(agentCacheSafeRelativePath(vaultRel)).toLowerCase();
+      let local = bestByLogical.get(key) || bestByLogical.get(safeKey);
       if (!local) {
         const base = logicalUploadName(PathBasename(vaultRel)).toLowerCase();
         if ((vaultBasenameCounts.get(base) || 0) === 1) {

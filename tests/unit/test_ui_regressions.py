@@ -1123,6 +1123,20 @@ def test_newer_local_cache_matches_flat_save_for_nested_vault_path():
     assert "Older flat agent caches" in body
 
 
+def test_agent_cache_matches_legacy_underscore_folder_paths():
+    """Vault 'from ptc' must match older agent-cache 'from_ptc' (not count as New)."""
+    script = _app_js()
+    assert "function agentCacheSafeRelativePath(" in script
+    assert "function agentCacheSafeSegment(" in script
+    mark = _between(script, "function markKnownPath(", "async function loadKnownWorkspacePaths(")
+    assert "agentCacheSafeRelativePath(path)" in mark
+    body = _between(script, "function newerLocalCacheSaves(", "async function countLocalNewWorkspaceFiles(")
+    assert "agentCacheSafeRelativePath(vaultRel)" in body
+    assert "agentCacheSafeRelativePath(rel)" in body
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "from_ptc" in docs
+
+
 def test_newer_local_cache_detects_same_save_content_replace_by_hash():
     """Modified requires content-hash mismatch — never .N / size / mtime alone."""
     script = _app_js()

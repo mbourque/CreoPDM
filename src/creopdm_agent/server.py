@@ -21,13 +21,32 @@ from creopdm_agent.trash import move_to_trash
 
 logger = logging.getLogger("creopdm_agent")
 
-_SAFE_NAME = re.compile(r"[^A-Za-z0-9._\-]+")
+# Allow spaces so vault folders like "from ptc" stay "from ptc" in the agent
+# cache (older builds turned spaces into underscores → false New/Modified).
+_SAFE_NAME = re.compile(r"[^A-Za-z0-9._\- ]+")
+_LEGACY_SAFE_NAME = re.compile(r"[^A-Za-z0-9._\-]+")
 _CACHE_INDEX_NAME = "_creopdm_cache_index.json"
 
 
 def _safe_segment(value: str, fallback: str = "file") -> str:
     text = _SAFE_NAME.sub("_", (value or "").strip()) or fallback
     return text[:180]
+
+
+def _legacy_safe_segment(value: str, fallback: str = "file") -> str:
+    """Pre-space-preserving sanitizer (spaces → _). Used to find old cache paths."""
+    text = _LEGACY_SAFE_NAME.sub("_", (value or "").strip()) or fallback
+    return text[:180]
+
+
+def _legacy_cache_dest_relative(relative_path: str | None, disk_name: str) -> Path:
+    leaf = _legacy_safe_segment(Path(disk_name or "").name or "model.bin", "model.bin")
+    rel = (relative_path or "").replace("\\", "/").lstrip("/")
+    parts = [part for part in rel.split("/") if part and part not in {".", ".."}]
+    if len(parts) <= 1:
+        return Path(leaf)
+    dirs = [_legacy_safe_segment(part, "x") for part in parts[:-1]]
+    return Path(*dirs) / leaf
 
 
 def _apply_mtime(path: Path, timestamp: float | None) -> None:
@@ -462,6 +481,16 @@ def _download(
     target.write_bytes(response.content)
     # write_bytes stamps "now"; restore vault mtime from Last-Modified when present.
     _apply_mtime(target, _mtime_from_http_headers(getattr(response, "headers", None)))
+    # Drop legacy underscore path when vault folders used spaces ("from ptc" → "from_ptc").
+    legacy_rel = _legacy_cache_dest_relative(item.relative_path, disk_name)
+    if legacy_rel != dest_rel:
+        legacy = target_dir / legacy_rel
+        if legacy.is_file() and legacy.resolve() != target.resolve():
+            try:
+                move_to_trash(legacy)
+                logger.info("Trashed legacy sanitized cache path %s", legacy_rel.as_posix())
+            except OSError as exc:
+                logger.debug("Could not trash legacy cache path %s: %s", legacy, exc)
     logger.info("Wrote %s (%s bytes) → %s", dest_rel.as_posix(), len(response.content), target)
     return target, logical, disk_name, len(response.content)
 
