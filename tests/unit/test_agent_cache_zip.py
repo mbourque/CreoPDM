@@ -29,6 +29,29 @@ def test_extract_cache_zip_preserves_nested_folders(tmp_path):
     assert not (target / "part.prt.1").exists()
 
 
+def test_extract_cache_zip_preserves_entry_mtime(tmp_path):
+    """Materialize zip must not stamp extract time — keep ZipInfo date_time."""
+    import os
+    import time
+
+    target = tmp_path / "proj"
+    target.mkdir()
+    source = tmp_path / "shaft.prt.1"
+    source.write_bytes(b"vault-bytes")
+    vault_mtime = 1_650_000_000.0
+    os.utime(source, (vault_mtime, vault_mtime))
+    archive = tmp_path / "pack.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.write(source, arcname="CAD/shaft.prt.1")
+    before = time.time()
+    _extract_cache_zip(archive, target)
+    dest = target / "CAD" / "shaft.prt.1"
+    assert dest.read_bytes() == b"vault-bytes"
+    # Zip stores local civil time at 2s resolution; allow a small skew.
+    assert abs(dest.stat().st_mtime - vault_mtime) < 3
+    assert dest.stat().st_mtime < before - 60
+
+
 def test_cache_dest_relative_keeps_vault_folders():
     from creopdm_agent.server import _cache_dest_relative
 

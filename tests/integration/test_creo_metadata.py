@@ -138,6 +138,9 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert skel_meta.json()["identity"]["model_role"] == "SKELETON"
     listed_skel = client.get(f"/api/products/{product['uuid']}/objects")
     assert {item["uuid"]: item["type_label"] for item in listed_skel.json()}[shaft["uuid"]] == "SKELETON"
+    found_skel = client.get(f"/api/products/{product['uuid']}/objects", params={"q": "SKELETON"})
+    assert found_skel.status_code == 200
+    assert shaft["uuid"] in {item["uuid"] for item in found_skel.json()}
     # Restore sheet-metal role for later Detail assertions.
     shaft_meta = client.post(
         f"/api/objects/{shaft['uuid']}/creo-metadata",
@@ -150,6 +153,9 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
         },
     )
     assert shaft_meta.status_code == 200, shaft_meta.text
+    found_smt = client.get(f"/api/products/{product['uuid']}/objects", params={"q": "SHEETMETAL"})
+    assert found_smt.status_code == 200
+    assert shaft["uuid"] in {item["uuid"] for item in found_smt.json()}
     mfg_meta = client.post(
         f"/api/objects/{frame['uuid']}/creo-metadata",
         json={

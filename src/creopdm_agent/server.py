@@ -30,6 +30,52 @@ def _safe_segment(value: str, fallback: str = "file") -> str:
     return text[:180]
 
 
+def _apply_mtime(path: Path, timestamp: float | None) -> None:
+    """Set atime/mtime after write_bytes so materialize matches vault dates."""
+    if timestamp is None or not path.is_file():
+        return
+    try:
+        ts = float(timestamp)
+        if ts <= 0:
+            return
+        os.utime(path, (ts, ts))
+    except OSError as exc:
+        logger.debug("Could not set mtime on %s: %s", path, exc)
+
+
+def _mtime_from_http_headers(headers: object) -> float | None:
+    """Parse Last-Modified from an httpx / Starlette response headers mapping."""
+    if headers is None:
+        return None
+    raw = None
+    try:
+        get = getattr(headers, "get", None)
+        if callable(get):
+            raw = get("last-modified") or get("Last-Modified")
+        elif isinstance(headers, dict):
+            raw = headers.get("last-modified") or headers.get("Last-Modified")
+    except Exception:
+        raw = None
+    if not raw:
+        return None
+    try:
+        from email.utils import parsedate_to_datetime
+
+        return parsedate_to_datetime(str(raw)).timestamp()
+    except Exception:
+        return None
+
+
+def _mtime_from_zipinfo(info: zipfile.ZipInfo) -> float | None:
+    """Zip entry local date_time → epoch seconds (same approach as zipfile.extract)."""
+    try:
+        import time
+
+        return time.mktime(info.date_time + (0, 0, -1))
+    except Exception:
+        return None
+
+
 def _cache_dest_relative(relative_path: str | None, disk_name: str) -> Path:
     """Relative path under the product cache, preserving vault folders.
 
@@ -414,6 +460,8 @@ def _download(
             detail=f"CreoPDM returned {response.status_code} for {url}",
         )
     target.write_bytes(response.content)
+    # write_bytes stamps "now"; restore vault mtime from Last-Modified when present.
+    _apply_mtime(target, _mtime_from_http_headers(getattr(response, "headers", None)))
     logger.info("Wrote %s (%s bytes) → %s", dest_rel.as_posix(), len(response.content), target)
     return target, logical, disk_name, len(response.content)
 
@@ -448,6 +496,7 @@ def _extract_cache_zip(
             dest.parent.mkdir(parents=True, exist_ok=True)
             data = zf.read(info.filename)
             dest.write_bytes(data)
+            _apply_mtime(dest, _mtime_from_zipinfo(info))
             extracted += 1
             nbytes += len(data)
             rel_key = dest.relative_to(target_dir).as_posix()

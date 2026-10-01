@@ -235,12 +235,16 @@ def test_search_objects_supports_glob_wildcards(client, repo_parent):
     assert "^CAD/" in home.text
     script = client.get("/static/js/app.js")
     assert "function rowMatchesSearchQuery" in script.text
+    assert "dataset.sortType" in script.text
+    assert "Type column" in Path("docs/user-interactions.md").read_text(encoding="utf-8")
     assert "function parseSearchAnchors" in script.text
     assert "function globToRegExp" in script.text
     docs = Path("docs/user-interactions.md").read_text(encoding="utf-8")
     assert "*.prt" in docs
     assert "^CAD/" in docs
     assert "Hover the search box" in docs
+    assert "SHEETMETAL" in docs
+    assert "SKELETON" in docs
 
 
 @requires_git

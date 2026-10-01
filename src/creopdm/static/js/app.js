@@ -943,6 +943,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const name = rowFilename(row) || "";
     const path = String(row.dataset.relativePath || row.dataset.folder || "").replace(/\\/g, "/");
     const base = path.split("/").pop() || "";
+    // Type column label (data-sort-type is "folder/TYPE").
+    const typeLabel = String(row.dataset.sortType || "").includes("/")
+      ? String(row.dataset.sortType || "").split("/").pop() || ""
+      : String(row.dataset.sortType || "");
+    const objectType = String(row.dataset.objectType || "");
     if (body.includes("*") || body.includes("?")) {
       let re;
       try {
@@ -950,10 +955,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       } catch {
         return false;
       }
-      return re.test(name) || re.test(path) || (base && re.test(base));
+      return (
+        re.test(name)
+        || re.test(path)
+        || (base && re.test(base))
+        || (typeLabel && re.test(typeLabel))
+        || (objectType && re.test(objectType))
+      );
     }
     const needle = body.toLowerCase();
-    const fields = [name, path, base].filter(Boolean).map((item) => item.toLowerCase());
+    const fields = [name, path, base, typeLabel, objectType]
+      .filter(Boolean)
+      .map((item) => item.toLowerCase());
     if (anchoredStart || anchoredEnd) {
       return fields.some((text) => {
         if (anchoredStart && anchoredEnd) return text === needle;

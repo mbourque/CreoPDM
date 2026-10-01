@@ -11,11 +11,15 @@ def test_agent_health_and_materialize(tmp_path, monkeypatch):
     settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
     app = create_agent_app(settings)
     seen: list[str] = []
+    # Fixed vault mtime so materialize must not leave "now" on disk.
+    vault_mtime = 1_700_000_000.0
+    from email.utils import formatdate
 
     class FakeResponse:
         def __init__(self, body: bytes):
             self.status_code = 200
             self.content = body
+            self.headers = {"Last-Modified": formatdate(vault_mtime, usegmt=True)}
 
     class FakeClient:
         def __init__(self, *args, **kwargs):
@@ -67,6 +71,8 @@ def test_agent_health_and_materialize(tmp_path, monkeypatch):
         assert body["companions_written"] == 1
         assert Path(body["path"]).read_bytes() == b"asm-bytes"
         assert (Path(body["working_directory"]) / "pin.prt.1").read_bytes() == b"prt-bytes"
+        assert abs(Path(body["path"]).stat().st_mtime - vault_mtime) < 2
+        assert abs((Path(body["working_directory"]) / "pin.prt.1").stat().st_mtime - vault_mtime) < 2
         assert any("/api/objects/pin/content" in url for url in seen)
         workdir = client.get("/workdir", params={"product_id": "proj1"})
         assert workdir.status_code == 200

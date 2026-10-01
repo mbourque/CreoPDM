@@ -202,6 +202,17 @@ class ObjectService:
                         Parameter.value.ilike(like, escape="\\"),
                     )
                 )
+                # Files Type column uses identity model_role/model_type (SHEETMETAL, SKELETON, …).
+                identity_match = (
+                    select(ObjectVersion.id)
+                    .where(
+                        ObjectVersion.id == EngineeringObject.current_version_id,
+                        ObjectVersion.identity_json.is_not(None),
+                        ObjectVersion.identity_json.ilike(like, escape="\\"),
+                    )
+                    .correlate(EngineeringObject)
+                    .exists()
+                )
                 stmt = stmt.where(
                     or_(
                         EngineeringObject.name.ilike(like, escape="\\"),
@@ -212,6 +223,7 @@ class ObjectService:
                         EngineeringObject.revision.ilike(like, escape="\\"),
                         EngineeringObject.lifecycle_state.ilike(like, escape="\\"),
                         EngineeringObject.id.in_(param_match),
+                        identity_match,
                     )
                 )
         return list(
