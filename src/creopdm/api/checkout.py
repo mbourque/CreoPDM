@@ -101,6 +101,18 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
             and obj.lifecycle_state == LifecycleState.IN_WORK.value
         )
         can_checkin = (view.can_checkin or force_checkin) if mutable else False
+        # Files list Type column prefers Creo metadata model_type (PART/ASSEMBLY/MFG/…).
+        meta_type = ""
+        if obj.current_version is not None:
+            from creopdm.utils.creo_model_class import model_type_from_identity_json
+
+            meta_type = model_type_from_identity_json(obj.current_version.identity_json)
+        type_label = meta_type or display_type_label(
+            obj.filename,
+            obj.object_type,
+            names=name_labels,
+            extensions=ext_labels,
+        )
         presented.append(
             object_to_response(
                 obj,
@@ -110,12 +122,7 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
                 current_user=user,
                 can_checkin=can_checkin,
                 in_workspace=obj.uuid in in_workspace,
-                type_label=display_type_label(
-                    obj.filename,
-                    obj.object_type,
-                    names=name_labels,
-                    extensions=ext_labels,
-                ),
+                type_label=type_label,
             )
         )
     return presented

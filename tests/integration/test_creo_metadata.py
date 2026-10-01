@@ -119,6 +119,28 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert shaft_meta.status_code == 200, shaft_meta.text
     assert shaft_meta.json()["identity"]["model_type"] == "PART"
     assert shaft_meta.json()["identity"]["model_role"] == "SHEETMETAL"
+    listed = client.get(f"/api/products/{product['uuid']}/objects")
+    assert listed.status_code == 200
+    by_uuid = {item["uuid"]: item for item in listed.json()}
+    assert by_uuid[shaft["uuid"]]["type_label"] == "PART"
+    assert by_uuid[frame["uuid"]]["type_label"] == "ASSEMBLY"
+    mfg_meta = client.post(
+        f"/api/objects/{frame['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "frame.asm",
+                "common_name": "Main Frame",
+                "model_type": "MFG",
+                "model_role": "MFG",
+            }
+        },
+    )
+    assert mfg_meta.status_code == 200, mfg_meta.text
+    listed_mfg = client.get(f"/api/products/{product['uuid']}/objects")
+    assert {item["uuid"]: item["type_label"] for item in listed_mfg.json()}[frame["uuid"]] == "MFG"
+    home_mfg = client.get(f"/?product={product['uuid']}")
+    assert home_mfg.status_code == 200
+    assert ">MFG<" in home_mfg.text or "title=\"MFG\"" in home_mfg.text
     shaft_detail = client.get(f"/products/{product['uuid']}/objects/{shaft['uuid']}")
     assert shaft_detail.status_code == 200
     assert "Model type" in shaft_detail.text

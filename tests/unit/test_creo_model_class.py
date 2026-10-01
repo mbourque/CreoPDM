@@ -34,3 +34,12 @@ def test_normalize_creo_identity_mutates_dict():
     assert identity["model_type"] == "PART"
     assert identity["model_role"] == "SHEETMETAL"
     assert identity["common_name"] == "Pin"
+
+
+def test_model_type_from_identity_json():
+    from creopdm.utils.creo_model_class import model_type_from_identity_json
+
+    assert model_type_from_identity_json(None) == ""
+    assert model_type_from_identity_json("{") == ""
+    assert model_type_from_identity_json('{"model_type":"MDL_MFG"}') == "MFG"
+    assert model_type_from_identity_json('{"model_type":"ASSEMBLY"}') == "ASSEMBLY"

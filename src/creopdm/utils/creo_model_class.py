@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 # Stored on version.identity_json as model_type / model_role.
@@ -85,3 +86,16 @@ def normalize_creo_identity(identity: dict[str, Any] | None) -> dict[str, Any] |
     identity["model_type"] = normalize_creo_model_type(identity.get("model_type"))
     identity["model_role"] = normalize_creo_model_role(identity.get("model_role"))
     return identity
+
+
+def model_type_from_identity_json(raw: str | None) -> str:
+    """Return normalized model_type from a version.identity_json blob, or ''."""
+    if not raw:
+        return ""
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return normalize_creo_model_type(data.get("model_type"))
