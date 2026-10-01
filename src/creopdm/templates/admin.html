@@ -10,7 +10,7 @@
     <span>Administration</span>
   </nav>
   <h1>Administration</h1>
-  <p class="muted">Server tools for users, roles, products, membership, email, and settings.</p>
+  <p class="muted">Server tools for users, roles, products, membership, email, and system settings.</p>
 
   <div class="admin-tile-grid">
     {% if can_manage_users %}
@@ -45,10 +45,18 @@
     {% endif %}
     {% if can_manage_settings %}
     <section class="admin-tile">
-      <h2><a href="/settings">Settings</a></h2>
+      <h2><a href="/settings">System Settings</a></h2>
       <p>Server options: Creo open mode, vault folder, file types, and related defaults.</p>
     </section>
     {% endif %}
+    <section class="admin-tile is-disabled" aria-disabled="true" title="Coming soon">
+      <h2><span>Audit</span></h2>
+      <p>Coming soon: review sign-ins, checkouts, and admin changes on this server.</p>
+    </section>
+    <section class="admin-tile is-disabled" aria-disabled="true" title="Coming soon">
+      <h2><span>AI</span></h2>
+      <p>Coming soon: configure AI help for search, metadata, and workspace tasks.</p>
+    </section>
   </div>
 </article>
 {% endblock %}

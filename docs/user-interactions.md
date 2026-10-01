@@ -24,7 +24,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 12. [Remove ▾](#12-remove-)
 13. [Typing the product name to confirm](#13-typing-the-product-name-to-confirm)
 14. [Mobile browse](#14-mobile-browse)
-15. [Administration (users, roles, membership, email)](#15-administration-users-roles-membership-email)
+15. [Administration (users, roles, membership, email, system settings)](#15-administration-users-roles-membership-email-system-settings)
 16. [Quick walkthroughs](#16-quick-walkthroughs)
 17. [For developers (tests)](#17-for-developers-tests)
 
@@ -34,7 +34,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Click a product, folder breadcrumb, or Administration / Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Session offline” or drop the Creo link just because you changed folders; hard-reload the page during a folder/product switch |
+| Click a product, folder breadcrumb, or Administration / System Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Session offline” or drop the Creo link just because you changed folders; hard-reload the page during a folder/product switch |
 | Sign in as **Viewer** | View products (`products.view`); open/download files and use **Details** (Overview/History) via the bottom toolbar or double-click (`objects.view`); Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove / Export ▾, New product, Copy to Vault, or “Check out … then open” in the Open dialog |
 | Sign in with Administration only (no `products.view`) | Land on **Administration**; breadcrumb has no **Products** link; visiting `/` redirects to `/admin` | See a JSON error; see a Products crumb that opens Files |
 | Sign in with a role that has **no permissions** | Land on a clear **No Files access** page (not JSON); product APIs stay **403** | Use the app as if signed in with Viewer |
@@ -396,9 +396,16 @@ Phone-only **browse** mode (portrait or landscape). No Add / Checkout / Check In
 
 ---
 
-## 15. Administration (users, roles, membership, email)
+## 15. Administration (users, roles, membership, email, system settings)
 
-Use a normal browser for these checks. You need the matching Administration permission for each tile.
+Use a normal browser for these checks. You need the matching Administration permission for each live tile. **Audit** and **AI** tiles are always shown as disabled placeholders (coming soon) with a short description under the title.
+
+### Hub
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Open **Administration** | Show permission-gated tiles (Users, Roles, Membership, Products, Email, **System Settings**) plus greyed **Audit** and **AI** placeholders with short “coming soon” descriptions | Link Audit/AI anywhere; label the settings tile only **Settings** |
+| Open **System Settings** | Open `/settings` (Creo open mode, vault, file types, …) | |
 
 ### First-run setup
 

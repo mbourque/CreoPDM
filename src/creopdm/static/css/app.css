@@ -460,6 +460,18 @@ a.brand:hover { text-decoration: none; color: inherit; }
   color: var(--accent-2);
   text-decoration: underline;
 }
+.admin-tile.is-disabled {
+  opacity: 0.55;
+  background: #f4f6f8;
+  cursor: not-allowed;
+}
+.admin-tile.is-disabled h2 span {
+  color: #6a7a88;
+  font-weight: 700;
+}
+.admin-tile.is-disabled p {
+  color: #7a8792;
+}
 .admin-tile p {
   margin: 0;
   font-size: 0.9rem;

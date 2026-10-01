@@ -164,7 +164,17 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
                 "common_name": "Main Frame",
                 "model_type": "MFG",
                 "model_role": "MFG",
-            }
+            },
+            "parameters": [
+                {
+                    "name": "DESCRIPTION",
+                    "value": "Frame assembly",
+                    "data_type": "STRING",
+                    "units": None,
+                    "description": "Title",
+                    "is_designated": True,
+                }
+            ],
         },
     )
     assert mfg_meta.status_code == 200, mfg_meta.text
@@ -195,7 +205,8 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert 'data-tab="parameters" disabled' not in text
     assert "Main Frame" in text
     assert "Model type" in text
-    assert "ASSEMBLY" in text
+    assert "MFG" in text
+    assert "Model role" in text
     assert "DESCRIPTION" in text
     assert 'data-tab="structure"' in text
     assert 'data-tab="bom"' in text
