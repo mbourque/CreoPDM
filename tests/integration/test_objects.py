@@ -218,12 +218,15 @@ def test_search_objects_supports_glob_wildcards(client, repo_parent):
     home = client.get(f"/?product={product['uuid']}")
     assert home.status_code == 200
     assert 'placeholder="Search all files in product"' in home.text
+    assert 'title="Wildcards:' in home.text
+    assert "*.prt" in home.text
+    assert "CAD/*.prt" in home.text
     script = client.get("/static/js/app.js")
     assert "function rowMatchesSearchQuery" in script.text
     assert "function globToRegExp" in script.text
     docs = Path("docs/user-interactions.md").read_text(encoding="utf-8")
     assert "*.prt" in docs
-    assert "wildcards" in docs.lower()
+    assert "Hover the search box" in docs
 
 
 @requires_git
