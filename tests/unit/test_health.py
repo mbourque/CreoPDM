@@ -178,19 +178,25 @@ def test_home_page(client):
     assert "ListSolidBodies" in text
     assert "ListBodies" in text
     assert "GetDefaultBody" in text
-    assert "FEATTYPE_WALL" in text
-    assert "creoModelHasSheetmetalFeature" in text
-    assert "creoFeaturesIndicateSheetmetal" in text
     assert "SMT_THICKNESS" in text
+    assert "creoModelHasSmtThicknessParam" in text
+    assert "GetParam" in text
     assert "creoListModelBodies" in text
-    # Body list + feature fallback both run inside sheet-metal detection.
+    # Sheet-metal: SMT_THICKNESS primary; body.IsSheetmetal secondary; no feature lookup.
+    assert "creoModelHasSheetmetalFeature" not in text
+    assert "creoFeaturesIndicateSheetmetal" not in text
+    assert "FEATTYPE_WALL" not in text
     sheet_fn = text.split("function creoModelHasSheetmetalBody", 1)[1].split(
         "function creoClassifyManufacturing", 1
     )[0]
     assert "creoListModelBodies" in sheet_fn
-    assert "creoModelHasSheetmetalFeature" in sheet_fn
-    assert sheet_fn.index("creoListModelBodies") < sheet_fn.index("creoModelHasSheetmetalFeature")
+    assert "creoModelHasSheetmetalFeature" not in sheet_fn
     assert "pfcPart.cast" in sheet_fn
+    role_fn = text.split("function creoGatherModelRole", 1)[1].split(
+        "function creoGatherIdentity", 1
+    )[0]
+    assert "creoModelHasSmtThicknessParam" in role_fn
+    assert role_fn.index("creoModelHasSmtThicknessParam") < role_fn.index("creoModelHasSheetmetalBody")
     assert "allowUndisplayed" in text
     assert "eraseUndisplayedModelsQuiet" in text
     assert "Do not RetrieveModel by bare name" in text

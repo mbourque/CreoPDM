@@ -877,70 +877,51 @@ function creoListModelBodies(part) {
     } catch (errLsb) {}
     return out;
 }
-function creoModelHasSheetmetalFeature(model) {
-    /**
-     * Silent Collect often leaves body.IsSheetmetal unbound; sheet-metal walls still
-     * list via ListFeaturesByType(FEATTYPE_WALL) / FEATTYPE_SHEETMETAL_*.
-     */
-    if (!model || typeof pfcFeatureType === "undefined") return false;
-    var typeNames = [
-        "FEATTYPE_WALL",
-        "FEATTYPE_SHEETMETAL_CUT",
-        "FEATTYPE_SHEETMETAL_CONVERSION",
-        "FEATTYPE_SHEETMETAL_SHEAR",
-        "FEATTYPE_SHEETMETAL_PUNCH_POINT",
-        "FEATTYPE_SHEETMETAL_OPTIMIZE",
-        "FEATTYPE_SHEETMETAL_POPULATE",
-        "FEATTYPE_SHEETMETAL_ZONE",
-        "FEATTYPE_SHEETMETAL_CLAMP"
-    ];
-    for (var t = 0; t < typeNames.length; t++) {
-        var featType = null;
-        try { featType = pfcFeatureType[typeNames[t]]; } catch (errT) { featType = null; }
-        if (featType == null) continue;
-        try {
-            var listed = model.ListFeaturesByType(true, featType);
-            var items = creoFeatureItems(listed);
-            if (items.length) return true;
-        } catch (errList) {}
-        try {
-            var listedAll = model.ListFeaturesByType(false, featType);
-            if (creoFeatureItems(listedAll).length) return true;
-        } catch (errAll) {}
-    }
-    return false;
-}
-function creoFeaturesIndicateSheetmetal(featureRows) {
-    if (!featureRows || !featureRows.length) return false;
-    for (var i = 0; i < featureRows.length; i++) {
-        var row = featureRows[i] || {};
-        var blob = (String(row.type || "") + " " + String(row.subtype || "") + " " + String(row.name || ""))
-            .toUpperCase();
-        if (!blob.trim()) continue;
-        if (blob.indexOf("SHEETMETAL") >= 0 || blob.indexOf("SHEET METAL") >= 0) return true;
-        if (blob.indexOf("SHEET_METAL") >= 0) return true;
-        // Wall / First Wall / Flat Wall are sheet-metal; avoid plain "FLANGE" (solid flange).
-        if (/\bWALL\b/.test(blob) || /\bUNBEND\b/.test(blob) || /\bBEND\b/.test(blob)) return true;
-        if (blob.indexOf("SMT_") >= 0) return true;
-    }
-    return false;
-}
 function creoParametersIndicateSheetmetal(parameters) {
     if (!parameters || !parameters.length) return false;
     for (var i = 0; i < parameters.length; i++) {
         var pname = String((parameters[i] && parameters[i].name) || "").toUpperCase();
         if (!pname) continue;
-        if (pname === "SMT_THICKNESS" || pname.indexOf("SMT_") === 0) return true;
-        if (pname.indexOf("SHEETMETAL") >= 0 || pname.indexOf("SHEET_METAL") >= 0) return true;
+        // Every sheet-metal part has SMT_THICKNESS.
+        if (pname === "SMT_THICKNESS") return true;
     }
+    return false;
+}
+function creoModelHasSmtThicknessParam(model) {
+    /**
+     * Primary sheet-metal signal: all Creo sheet-metal parts expose SMT_THICKNESS.
+     * Prefer GetParam; also scan ListParams via Count/Item when GetParam is unbound.
+     */
+    if (!model) return false;
+    try {
+        if (creoHasCallable(model, "GetParam")) {
+            var got = model.GetParam("SMT_THICKNESS");
+            if (got) return true;
+        }
+    } catch (errGet) {}
+    try {
+        if (creoHasCallable(model, "GetParam")) {
+            var gotLower = model.GetParam("smt_thickness");
+            if (gotLower) return true;
+        }
+    } catch (errGet2) {}
+    try {
+        var listed = null;
+        if (creoHasCallable(model, "ListParams")) listed = model.ListParams();
+        var items = creoFeatureItems(listed);
+        for (var i = 0; i < items.length; i++) {
+            var pname = "";
+            try { pname = String(items[i].Name || "").toUpperCase(); } catch (errN) { pname = ""; }
+            if (pname === "SMT_THICKNESS") return true;
+        }
+    } catch (errList) {}
     return false;
 }
 function creoModelHasSheetmetalBody(model) {
     /**
-     * Creo.JS sheet-metal detection (silent Collect-safe):
-     *   1) GetDefaultBody().IsSheetmetal()  — documented pfcSolid API
-     *   2) ListBodies / ListSolidBodies + IsSheetmetal() — user / CurrentModel sample
-     *   3) FEATTYPE_WALL / FEATTYPE_SHEETMETAL_* — works when body APIs are unbound
+     * Secondary sheet-metal check (after SMT_THICKNESS):
+     *   GetDefaultBody / ListBodies / ListSolidBodies → IsSheetmetal()
+     * Feature-type lookup is intentionally not used — SMT_THICKNESS is stronger.
      */
     if (!model) return false;
     var handles = [model];
@@ -957,14 +938,10 @@ function creoModelHasSheetmetalBody(model) {
         }
     } catch (errSolid) {}
     for (var h = 0; h < handles.length; h++) {
-        var part = handles[h];
-        var bodies = creoListModelBodies(part);
+        var bodies = creoListModelBodies(handles[h]);
         for (var b = 0; b < bodies.length; b++) {
             if (creoBodyIsSheetmetal(bodies[b])) return true;
         }
-        try {
-            if (creoModelHasSheetmetalFeature(part)) return true;
-        } catch (errFeat) {}
     }
     return false;
 }
@@ -1002,10 +979,11 @@ function creoClassifyManufacturing(session, model, identity) {
         }
     }
 }
-function creoGatherModelRole(model, modelType, parameters, featureRows) {
+function creoGatherModelRole(model, modelType, parameters) {
     /**
      * Mutually exclusive CreoPDM model_role. Family table / flexible / etc. stay elsewhere.
-     * MFG type → role MFG (manufacturing assembly/part). PART uses skeleton / sheet metal / SOLID.
+     * MFG type → role MFG. PART sheet-metal: SMT_THICKNESS first, then body.IsSheetmetal.
+     * Feature-type lookup is not used — SMT_THICKNESS is the reliable Creo signal.
      */
     var kind = String(modelType || "").trim().toUpperCase();
     if (!kind || !model) return "";
@@ -1017,14 +995,14 @@ function creoGatherModelRole(model, modelType, parameters, featureRows) {
     }
     if (kind === "PART") {
         try {
-            if (creoModelHasSheetmetalBody(model)) return "SHEETMETAL";
-        } catch (errSm) {}
+            if (creoModelHasSmtThicknessParam(model)) return "SHEETMETAL";
+        } catch (errSmt) {}
         try {
             if (creoParametersIndicateSheetmetal(parameters)) return "SHEETMETAL";
         } catch (errPar) {}
         try {
-            if (creoFeaturesIndicateSheetmetal(featureRows)) return "SHEETMETAL";
-        } catch (errFeatRows) {}
+            if (creoModelHasSheetmetalBody(model)) return "SHEETMETAL";
+        } catch (errSm) {}
         return "SOLID";
     }
     if (kind === "ASSEMBLY") {
@@ -1067,13 +1045,23 @@ function creoGatherIdentity(model) {
 function creoGatherParameters(model) {
     var rows = [];
     try {
-        if (typeof model.ListParams !== "function") return rows;
+        if (!creoHasCallable(model, "ListParams") && typeof model.ListParams === "undefined") {
+            return rows;
+        }
         var listed = model.ListParams();
-        var count = listed && typeof listed.getCount === "function"
-            ? listed.getCount()
-            : (listed && listed.length) || 0;
-        for (var i = 0; i < count; i++) {
-            var param = typeof listed.get === "function" ? listed.get(i) : listed[i];
+        // Creo.JS sequences often use Count/Item (same as materials/features).
+        var items = creoFeatureItems(listed);
+        if (!items.length) {
+            var count = listed && typeof listed.getCount === "function"
+                ? listed.getCount()
+                : (listed && listed.length) || 0;
+            for (var j = 0; j < count; j++) {
+                var fallback = typeof listed.get === "function" ? listed.get(j) : listed[j];
+                if (fallback) items.push(fallback);
+            }
+        }
+        for (var i = 0; i < items.length; i++) {
+            var param = items[i];
             if (!param) continue;
             var name = "";
             try { name = String(param.Name || ""); } catch (errN) { name = ""; }
@@ -2072,7 +2060,7 @@ function gatherModelMetadata(filename, filePath) {
         // Re-check MFG after upgrade; skeleton / sheet-metal need a bound solid.
         try { creoClassifyManufacturing(session, solidModel, identity); } catch (errMfg2) {}
         try {
-            var role = creoGatherModelRole(solidModel, identity.model_type, parameters, null);
+            var role = creoGatherModelRole(solidModel, identity.model_type, parameters);
             if (role) identity.model_role = role;
         } catch (errRole) {}
         var units = creoGatherUnits(solidModel, null, session);
@@ -2113,9 +2101,9 @@ function gatherModelMetadata(filename, filePath) {
                 }
             }
         } catch (errBom) {}
-        // Final role pass: features/params catch sheet-metal when body.IsSheetmetal is unbound.
+        // Final role pass after params are gathered (SMT_THICKNESS / body.IsSheetmetal).
         try {
-            var roleFinal = creoGatherModelRole(solidModel, identity.model_type, parameters, features);
+            var roleFinal = creoGatherModelRole(solidModel, identity.model_type, parameters);
             if (roleFinal) identity.model_role = roleFinal;
         } catch (errRoleFinal) {}
         var eraseKeys = [];
