@@ -285,8 +285,8 @@ Single toolbar button **Export…** (not a menu). Confirm, then busy overlay, th
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Click **Export…** with nothing selected | Confirm whole-product export; zip the vault tip for every file; require `products.export` | Check out or lock anything; require the product to be In work; appear without `products.export` |
-| Click **Export…** with files and/or folders selected | Confirm selection export; zip only those vault tip files (folders include descendants); require `objects.export` | Export the whole product while a selection is active; appear without `objects.export` |
+| Click **Export…** with nothing selected | Confirm whole-product export in the CreoPDM dialog; zip the vault tip for every file; require `products.export` | Check out or lock anything; require the product to be In work; appear without `products.export`; use a browser `confirm` |
+| Click **Export…** with files and/or folders selected | Confirm selection export in the CreoPDM dialog; zip only those vault tip files (folders include descendants); require `objects.export` | Export the whole product while a selection is active; appear without `objects.export`; use a browser `confirm` |
 | Cancel the confirm or Save dialog | Stop with no zip | Leave a partial download claimed as success |
 | Agent offline | Fall back to a browser zip download | Fail only because the agent is offline |
 

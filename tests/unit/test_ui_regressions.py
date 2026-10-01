@@ -641,10 +641,13 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "data-can-export-objects" in base
     assert 'id="export-btn"' in html
     assert ">Export…<" in html
+    assert 'id="export-confirm-dialog"' in html
+    assert "function confirmExportZip" in script
     assert "canExportProduct" in script
     assert "/api/products/" in script and "/export" in script
     assert "${agentBase()}/export-zip" in script
     assert "Preparing export…" in script
+    assert "window.confirm(confirmMsg)" not in script.split("exportBtn?.addEventListener")[1].split("openWorkspaceBtn?.addEventListener")[0]
     assert "canCopyToVault" in script
     assert "setWorkingDirectory" in _between(
         script, "async function openPdmObjectFromUi(", "function agentBase("

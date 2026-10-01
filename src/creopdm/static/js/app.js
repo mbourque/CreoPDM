@@ -1353,6 +1353,41 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   }
 
+  function confirmExportZip({ title, lead }) {
+    const dialog = $("#export-confirm-dialog");
+    const form = $("#export-confirm-form");
+    const titleEl = $("#export-confirm-title");
+    const leadEl = $("#export-confirm-lead");
+    const cancelBtn = $("#export-confirm-cancel");
+    if (!(dialog instanceof HTMLDialogElement) || !form || !titleEl || !leadEl) {
+      return Promise.resolve(window.confirm(`${title}\n\n${lead}`));
+    }
+    titleEl.textContent = title || "Export…";
+    leadEl.textContent = lead || "";
+    return new Promise((resolve) => {
+      const finish = (ok) => {
+        form.removeEventListener("submit", onSubmit);
+        cancelBtn?.removeEventListener("click", onCancel);
+        dialog.removeEventListener("cancel", onDialogCancel);
+        if (dialog.open) dialog.close();
+        resolve(ok);
+      };
+      const onSubmit = (event) => {
+        event.preventDefault();
+        finish(true);
+      };
+      const onCancel = () => finish(false);
+      const onDialogCancel = (event) => {
+        event.preventDefault();
+        finish(false);
+      };
+      form.addEventListener("submit", onSubmit);
+      cancelBtn?.addEventListener("click", onCancel);
+      dialog.addEventListener("cancel", onDialogCancel);
+      if (!dialog.open) dialog.showModal();
+    });
+  }
+
   async function pushOneCreoMetadataTarget(target) {
     const METADATA_ITEM_TIMEOUT_MS = 90000;
     let settled = false;
@@ -6332,16 +6367,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       checkinBtn?.dataset.productName ||
       openWorkspaceBtn?.dataset.productName ||
       "this product";
-    const confirmMsg = selectedScope
-      ? `Export the selected files/folders from “${productName}” as a zip?\n\n` +
-        `This downloads the current vault tip only. It does not check out files or change locks.\n` +
-        (ids.length ? `${ids.length} file(s)` : "") +
-        (ids.length && folderPaths.length ? ", " : "") +
-        (folderPaths.length ? `${folderPaths.length} folder(s)` : "") +
-        "."
-      : `Export the entire product “${productName}” as a zip?\n\n` +
-        `This downloads the current vault tip for all files. It does not check out files or change locks.`;
-    if (!window.confirm(confirmMsg)) return;
+    const title = selectedScope ? "Export selection" : "Export product";
+    const scopeBits = [
+      ids.length ? `${ids.length} file(s)` : "",
+      folderPaths.length ? `${folderPaths.length} folder(s)` : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const lead = selectedScope
+      ? `Export the selected files/folders from “${productName}” as a zip${scopeBits ? ` (${scopeBits})` : ""}?`
+      : `Export the entire product “${productName}” as a zip?`;
+    if (!(await confirmExportZip({ title, lead }))) return;
     showError($("#toolbar-error"), "");
     showOk("");
     const safeName = String(productName || "product")

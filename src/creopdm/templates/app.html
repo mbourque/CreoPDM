@@ -531,6 +531,21 @@
   </form>
 </dialog>
 
+<dialog id="export-confirm-dialog" class="dialog">
+  <form method="dialog" id="export-confirm-form">
+    <h2 id="export-confirm-title">Export…</h2>
+    <p id="export-confirm-lead"></p>
+    <p class="muted small" id="export-confirm-note">
+      Downloads the current vault tip only. Does not check out files or change locks.
+      With creopdm-agent running you choose where to save; otherwise the browser downloads the zip.
+    </p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="export-confirm-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" id="export-confirm-ok">Export</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="product-dialog" class="dialog">
   <form method="dialog" id="product-form">
     <h2 id="product-dialog-title">New product</h2>
