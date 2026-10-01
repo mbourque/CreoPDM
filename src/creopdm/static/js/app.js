@@ -5875,15 +5875,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (!local) return;
       const vaultNumber = creoSaveNumber(obj.filename || PathBasename(vaultRel));
       const newerSave = local.saveNumber > vaultNumber;
-      // Same Creo save (incl. non-numbered CAD): detect workspace replace by size, then hash.
-      const vaultSize = Number(obj.current_version?.file_size);
-      const localSize = Number(local.item?.size);
-      const sizesComparable =
-        Number.isFinite(vaultSize)
-        && Number.isFinite(localSize)
-        && vaultSize >= 0
-        && localSize >= 0;
-      const sizeDiffers = sizesComparable && localSize !== vaultSize;
+      // Same Creo save: never trust size/mtime alone — content hash is authoritative
+      // (materialize can disagree on size metadata while bytes match).
       const vaultHash = String(obj.current_version?.content_hash || "").trim().toLowerCase();
       const row = {
         uuid: obj.uuid,
@@ -5899,17 +5892,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         can_checkin: obj.can_checkin ? "1" : "0",
         can_checkout: obj.can_checkout ? "1" : "0",
       };
-      if (newerSave || (local.saveNumber === vaultNumber && sizeDiffers)) {
+      // Higher Creo .N is a real newer save — no hash needed.
+      if (newerSave) {
         rows.push(row);
         return;
       }
-      // Same save + same size: only a content hash can prove a replace.
-      if (
-        local.saveNumber === vaultNumber
-        && sizesComparable
-        && !sizeDiffers
-        && vaultHash
-      ) {
+      // Same save tip: only a content-hash mismatch proves a workspace replace.
+      if (local.saveNumber === vaultNumber && vaultHash) {
         needsHash.push({ row, vaultHash, rel: local.rel });
       }
     });
