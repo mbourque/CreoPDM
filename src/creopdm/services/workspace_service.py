@@ -627,7 +627,7 @@ class WorkspaceService:
             candidate = vault / rel
             if candidate.is_file():
                 path = candidate
-        if (path is None or not path.is_file():
+        if path is None or not path.is_file():
             return None
         # Newer Creo .N is always pending. Dirty tip needs a real content change —
         # do not trust git dirty alone (stat noise / false dirty after materialize).
