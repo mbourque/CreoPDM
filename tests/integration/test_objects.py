@@ -215,17 +215,31 @@ def test_search_objects_supports_glob_wildcards(client, repo_parent):
     substring = client.get(f"/api/products/{product['uuid']}/objects", params={"q": "shaft"})
     assert {item["relative_path"] for item in substring.json()} == {"CAD/shaft.prt"}
 
+    starts = client.get(f"/api/products/{product['uuid']}/objects", params={"q": "^CAD/"})
+    assert starts.status_code == 200, starts.text
+    assert {item["relative_path"] for item in starts.json()} == {
+        "CAD/shaft.prt",
+        "CAD/bracket.prt.2",
+    }
+
+    ends = client.get(f"/api/products/{product['uuid']}/objects", params={"q": ".prt$"})
+    assert ends.status_code == 200, ends.text
+    assert {item["relative_path"] for item in ends.json()} == {"CAD/shaft.prt"}
+
     home = client.get(f"/?product={product['uuid']}")
     assert home.status_code == 200
     assert 'placeholder="Search all files in product"' in home.text
     assert 'title="Wildcards:' in home.text
-    assert "*.prt" in home.text
-    assert "CAD/*.prt" in home.text
+    assert "^ = starts with" in home.text
+    assert "$ = ends with" in home.text
+    assert "^CAD/" in home.text
     script = client.get("/static/js/app.js")
     assert "function rowMatchesSearchQuery" in script.text
+    assert "function parseSearchAnchors" in script.text
     assert "function globToRegExp" in script.text
     docs = Path("docs/user-interactions.md").read_text(encoding="utf-8")
     assert "*.prt" in docs
+    assert "^CAD/" in docs
     assert "Hover the search box" in docs
 
 

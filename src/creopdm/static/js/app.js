@@ -918,6 +918,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return row.classList.contains("is-row-hidden");
   }
 
+  function parseSearchAnchors(query) {
+    let q = String(query || "").trim();
+    const anchoredStart = q.startsWith("^");
+    if (anchoredStart) q = q.slice(1);
+    const anchoredEnd = q.endsWith("$");
+    if (anchoredEnd) q = q.slice(0, -1);
+    return { body: q, anchoredStart, anchoredEnd };
+  }
+
   function globToRegExp(pattern) {
     const body = String(pattern || "")
       .replace(/[.+^${}()|[\]\\]/g, "\\$&")
@@ -927,21 +936,33 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function rowMatchesSearchQuery(row, query) {
-    const q = String(query || "").trim();
-    if (!q) return true;
-    if (q.includes("*") || q.includes("?")) {
+    const raw = String(query || "").trim();
+    if (!raw) return true;
+    const { body, anchoredStart, anchoredEnd } = parseSearchAnchors(raw);
+    if (!body) return true;
+    const name = rowFilename(row) || "";
+    const path = String(row.dataset.relativePath || row.dataset.folder || "").replace(/\\/g, "/");
+    const base = path.split("/").pop() || "";
+    if (body.includes("*") || body.includes("?")) {
       let re;
       try {
-        re = globToRegExp(q);
+        re = globToRegExp(body);
       } catch {
         return false;
       }
-      const name = rowFilename(row) || "";
-      const path = String(row.dataset.relativePath || row.dataset.folder || "").replace(/\\/g, "/");
-      const base = path.split("/").pop() || "";
       return re.test(name) || re.test(path) || (base && re.test(base));
     }
-    return (row.textContent || "").toLowerCase().includes(q.toLowerCase());
+    const needle = body.toLowerCase();
+    const fields = [name, path, base].filter(Boolean).map((item) => item.toLowerCase());
+    if (anchoredStart || anchoredEnd) {
+      return fields.some((text) => {
+        if (anchoredStart && anchoredEnd) return text === needle;
+        if (anchoredStart) return text.startsWith(needle);
+        return text.endsWith(needle);
+      });
+    }
+    if (fields.some((text) => text.includes(needle))) return true;
+    return (row.textContent || "").toLowerCase().includes(needle);
   }
 
   function applyMetricVisibility() {

@@ -77,7 +77,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Click a breadcrumb (Home / folder path) | Take you to that folder; Creo stays connected | |
-| Type in Search | Show matching files across the product. Plain text is a substring match; `*` / `?` wildcards work (`*.prt`, `*.prt.*`, …). Hover the search box for short examples | Treat `*.prt` as literal characters to find |
+| Type in Search | Show matching files across the product. Plain text is a substring match; `*` / `?` wildcards and `^` / `$` anchors work (`*.prt`, `^CAD/`, `.prt$`). Hover the search box for short examples | Treat `*.prt` as literal characters to find; run full regex |
 | Clear Search | Show the normal folder view again | Bring back folders/files you already removed |
 | Click a metric (Parts, Assemblies, …) | Filter and select those files; click again to clear | Jump into a folder or leave the page |
 | Click **Modified** | Filter and select files with local changes you can check in; click again to clear. **Modified** pill count matches rows shown as Modified (including after local/agent detection) | Select unmodified checkouts or someone else’s files; leave the pill at 0 while a row shows Modified |

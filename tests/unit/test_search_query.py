@@ -1,4 +1,4 @@
-"""Unit tests for Search box glob → SQL ILIKE conversion."""
+"""Unit tests for Search box glob / anchor → SQL ILIKE conversion."""
 
 from creopdm.utils.search_query import sql_like_from_search_query
 
@@ -25,6 +25,16 @@ def test_glob_star_and_question():
 def test_glob_escapes_literal_like_specials():
     assert sql_like_from_search_query("*%*") == r"%\%%"
     assert sql_like_from_search_query("*_*") == r"%\_%"
+
+
+def test_caret_and_dollar_anchors():
+    assert sql_like_from_search_query("^CAD/") == "CAD/%"
+    assert sql_like_from_search_query(".prt$") == "%.prt"
+    assert sql_like_from_search_query("^shaft.prt$") == "shaft.prt"
+    assert sql_like_from_search_query("^CAD/*.prt") == "CAD/%.prt"
+    assert sql_like_from_search_query("^") is None
+    assert sql_like_from_search_query("$") is None
+    assert sql_like_from_search_query("^$") is None
 
 
 def test_blank_query_is_none():
