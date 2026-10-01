@@ -10,6 +10,7 @@ When the user asks about remaining Astra findings, leftover security/reliability
 | # | Topic | Worry level |
 |---|---|---|
 | **6** | Agent `/local-file` + CORS `*` — unauthenticated localhost file read | **Highest** (security) |
+| **11** | Agent Bearer tokens not revocable on logout / password change (stateless 14-day HMAC); add per-user `token_version` in payload and bump on logout, password reset/change, admin password set, disable | Medium (security) |
 | **7** | `from-disk` absolute paths on the server | Medium (if server can see those paths) |
 | **3** | Git commit before DB commit (check-in / add) — crash or request-end `db.commit()` failure can orphan Git tips; fix later with a pending-op / journal table + startup reconcile (not just in-request `restore_checkpoint`) | Failure-path correctness |
 | **2** | Recovery `git reset --hard` can wipe uncommitted vault edits | Failure-path only |
