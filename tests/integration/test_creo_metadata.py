@@ -122,7 +122,7 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     listed = client.get(f"/api/products/{product['uuid']}/objects")
     assert listed.status_code == 200
     by_uuid = {item["uuid"]: item for item in listed.json()}
-    assert by_uuid[shaft["uuid"]]["type_label"] == "PART"
+    assert by_uuid[shaft["uuid"]]["type_label"] == "SHEETMETAL"
     assert by_uuid[frame["uuid"]]["type_label"] == "ASSEMBLY"
     mfg_meta = client.post(
         f"/api/objects/{frame['uuid']}/creo-metadata",

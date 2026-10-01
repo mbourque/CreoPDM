@@ -46,3 +46,31 @@ def test_model_type_from_identity_json():
     assert model_type_from_identity_json('{"model_type":"ASSEMBLY"}') == "ASSEMBLY"
     assert resolve_type_icon(type_label="MFG") == "mfg.png"
     assert resolve_type_icon(type_label="Manufacturing Model") == "mfg.png"
+
+
+def test_files_list_type_prefers_distinctive_role():
+    from creopdm.utils.classify import resolve_type_icon
+    from creopdm.utils.creo_model_class import files_list_type_from_identity_json
+
+    assert (
+        files_list_type_from_identity_json(
+            '{"model_type":"PART","model_role":"SHEETMETAL"}'
+        )
+        == "SHEETMETAL"
+    )
+    assert (
+        files_list_type_from_identity_json('{"model_type":"PART","model_role":"SOLID"}')
+        == "PART"
+    )
+    assert (
+        files_list_type_from_identity_json(
+            '{"model_type":"PART","model_role":"SKELETON"}'
+        )
+        == "SKELETON"
+    )
+    assert (
+        files_list_type_from_identity_json('{"model_type":"MFG","model_role":"MFG"}')
+        == "MFG"
+    )
+    assert files_list_type_from_identity_json('{"model_type":"ASSEMBLY"}') == "ASSEMBLY"
+    assert resolve_type_icon(type_label="SHEETMETAL") == "part.png"

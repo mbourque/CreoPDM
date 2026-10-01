@@ -84,7 +84,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Click **Checked out** | Filter and select checked out files in the current group; click again to clear | |
 | Switch tabs: **Files** / **Checked out** / **New files** | Show that list; show Add/Check In help blurbs only when those actions are available (role ∩ product state) | Tell you to Add or Check In when you cannot do those actions |
 | Click a column header | Sort; click again to reverse | |
-| Collect Creo metadata | When metadata includes **Model type**, the Files **Type** column shows that code (PART, ASSEMBLY, MFG, …) instead of the extension-based label | Keep showing “Creo Assembly” for a manufacturing assembly after metadata says MFG |
+| Collect Creo metadata | When metadata includes **Model type** / **Model role**, the Files **Type** column prefers a distinctive role (SHEETMETAL, SKELETON, MFG, …) else the model type (PART, ASSEMBLY, …) instead of the extension-based label | Keep showing “Creo Assembly” for a manufacturing assembly after metadata says MFG; keep showing PART for a sheet-metal part after role is SHEETMETAL |
 
 **New files tab** shows files waiting in the **vault** (and sometimes local cache) that aren’t fully in the product yet. Deleting only from your PC workspace does **not** clear vault “new” files — those live on the CreoPDM vault until you remove them from there. The Add/Check In help blurb shows only when you can Add **and** Check In; otherwise it is hidden (files can still list; local workspace remove may still work).
 

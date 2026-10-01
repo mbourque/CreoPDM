@@ -101,12 +101,12 @@ def present_objects(ctx: AppContext, db: Session, objects: list) -> list[ObjectR
             and obj.lifecycle_state == LifecycleState.IN_WORK.value
         )
         can_checkin = (view.can_checkin or force_checkin) if mutable else False
-        # Files list Type column prefers Creo metadata model_type (PART/ASSEMBLY/MFG/…).
+        # Files list Type: distinctive model_role (SHEETMETAL/…) else model_type (PART/MFG/…).
         meta_type = ""
         if obj.current_version is not None:
-            from creopdm.utils.creo_model_class import model_type_from_identity_json
+            from creopdm.utils.creo_model_class import files_list_type_from_identity_json
 
-            meta_type = model_type_from_identity_json(obj.current_version.identity_json)
+            meta_type = files_list_type_from_identity_json(obj.current_version.identity_json)
         type_label = meta_type or display_type_label(
             obj.filename,
             obj.object_type,

@@ -99,3 +99,45 @@ def model_type_from_identity_json(raw: str | None) -> str:
     if not isinstance(data, dict):
         return ""
     return normalize_creo_model_type(data.get("model_type"))
+
+
+# Roles that are useful as the Files list Type column (not generic SOLID).
+_FILES_LIST_ROLE_LABELS: frozenset[str] = frozenset(
+    {
+        "SHEETMETAL",
+        "SKELETON",
+        "BULK",
+        "HARNESS",
+        "PIPE",
+        "MFG",
+        "SHEETMETAL_MFG",
+        "NC",
+        "MOLD",
+        "CAST",
+        "INTERCHANGE",
+        "MOLD_LAYOUT",
+        "CONFIGURABLE_MODULE",
+        "CABLING_DATA",
+    }
+)
+
+
+def files_list_type_from_identity_json(raw: str | None) -> str:
+    """
+    Label for the Files list Type column from collected Creo identity.
+
+    Prefer a distinctive model_role (SHEETMETAL, SKELETON, MFG, …) over a generic
+    model_type (PART). SOLID is never shown — fall through to PART/ASSEMBLY/….
+    """
+    if not raw:
+        return ""
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    role = normalize_creo_model_role(data.get("model_role"))
+    if role in _FILES_LIST_ROLE_LABELS:
+        return role
+    return normalize_creo_model_type(data.get("model_type"))
