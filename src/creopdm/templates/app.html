@@ -462,7 +462,7 @@
         <button type="button" class="toolbar-menu-item" role="menuitem" id="checkin-btn"
                 {% if selected %}data-product="{{ selected.uuid }}" data-pending-saves="{{ pending_saves|default(0) }}" data-new-files="{{ new_workspace_files|default(0) }}"{% endif %}
                 disabled
-                title="Check in selected files.">Check in selected…</button>
+                title="Select Modified files or new files to check in. Clean checkouts alone are not enough — use Check in product… to release them.">Check in selected…</button>
       </div>
     </div>
     {% endif %}

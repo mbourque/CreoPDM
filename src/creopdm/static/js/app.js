@@ -4109,6 +4109,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return selected.some(rowHasCheckinWork);
   }
 
+  function checkinSelectedHoverTitle(selected, canCheckin, addOnly) {
+    if (addOnly) {
+      return "Add selected new files to the product (uploads local workspace files first).";
+    }
+    if (canCheckin) return "Check in selected files.";
+    if (!selected.length) {
+      return "Select Modified files or new files to check in. Clean checkouts alone are not enough — use Check in product… to release them.";
+    }
+    const anyEligible = selected.some(
+      (row) => row.dataset.canCheckin === "1" || isNewFileQueueRow(row)
+    );
+    const allEligible = selected.every(
+      (row) => row.dataset.canCheckin === "1" || isNewFileQueueRow(row)
+    );
+    if (!anyEligible) {
+      return "None of the selected files can be checked in (not checked out to you, or not eligible).";
+    }
+    if (!allEligible) {
+      return "Every selected file must be eligible to check in. Remove files you do not own from the selection.";
+    }
+    return "Nothing to check in for this selection — content matches the vault tip (no Modified save). Use Check in product… to release unchanged checkouts, or Undo Checkout.";
+  }
+
   // Product lock: Add/Check In/vault Remove omitted in Jinja via product_ui;
   // row can_checkout/can_checkin are false when locked. syncToolbar is selection-only.
   function syncToolbar() {
@@ -4191,15 +4214,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!canCheckoutMenu) closeCheckoutMenu();
     if (checkinBtn) {
       checkinBtn.textContent = addOnly ? "Add selected…" : "Check in selected…";
-      checkinBtn.title = addOnly
-        ? "Add selected new files to the product (uploads local workspace files first)."
-        : canCheckin
-          ? "Check in selected files."
-          : selected.some((row) => row.dataset.canCheckin === "1")
-            ? "Nothing to check in for this selection. Save changes in Creo first, or use Undo Checkout to release locks."
-            : "Check in selected files.";
+      checkinBtn.title = checkinSelectedHoverTitle(selected, canCheckin, addOnly);
     }
-    setToolbarActionVisible(checkinBtn, canCheckin);
+    // Check in selected stays visible in the menu but greyed when the selection
+    // has no pending work (clean checkout / rematerialized match) — hover title explains why.
+    if (checkinBtn) {
+      checkinBtn.hidden = false;
+      checkinBtn.disabled = !canCheckin;
+    }
     setToolbarActionVisible(checkinProductBtn, canCheckinProduct);
     if (checkinProductBtn) {
       checkinProductBtn.title = canCheckinProduct

@@ -1002,6 +1002,13 @@ def test_toolbar_hides_inactive_actions():
     assert "openBtn.disabled =" not in sync
     assert "| Hidden when |" in docs
     assert "are **hidden** (not greyed out)" in docs
+    # Export selected + Check in selected stay greyed with a hover reason.
+    assert "**Export selected…** and **Check in selected…**" in docs
+    assert "function checkinSelectedHoverTitle(" in script
+    assert "checkinBtn.hidden = false" in sync
+    assert "checkinBtn.disabled = !canCheckin" in sync
+    assert "content matches the vault tip" in script
+    assert "keep **Check in selected…** visible but **greyed**" in docs
     # Set Working Directory: hide outside Creo / when disconnected; Details always hides it.
     creo = _between(script, "async function refreshCreoStatusPill(", "function showCreoSessionControls(")
     assert "Set Working Directory: only when inside Creo" in creo
