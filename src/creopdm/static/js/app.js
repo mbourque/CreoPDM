@@ -918,6 +918,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return row.classList.contains("is-row-hidden");
   }
 
+  function globToRegExp(pattern) {
+    const body = String(pattern || "")
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*/g, ".*")
+      .replace(/\?/g, ".");
+    return new RegExp(`^${body}$`, "i");
+  }
+
+  function rowMatchesSearchQuery(row, query) {
+    const q = String(query || "").trim();
+    if (!q) return true;
+    if (q.includes("*") || q.includes("?")) {
+      let re;
+      try {
+        re = globToRegExp(q);
+      } catch {
+        return false;
+      }
+      const name = rowFilename(row) || "";
+      const path = String(row.dataset.relativePath || row.dataset.folder || "").replace(/\\/g, "/");
+      const base = path.split("/").pop() || "";
+      return re.test(name) || re.test(path) || (base && re.test(base));
+    }
+    return (row.textContent || "").toLowerCase().includes(q.toLowerCase());
+  }
+
   function applyMetricVisibility() {
     const metrics = metricButtons();
     const typeFilterBtns = metrics.filter((btn) => {
@@ -933,15 +959,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (mode === "select" && isParentMetric(key) && typeFilterBtns.length) return false;
       return true;
     });
-    const q = ($("#search-input")?.value || "").trim().toLowerCase();
+    const q = ($("#search-input")?.value || "").trim();
     const searchingAll = $("#object-table")?.dataset.searching === "1";
     rows().forEach((row) => {
       if (row.classList.contains("folder-row")) {
-        const matchesSearch = searchingAll ? false : (!q || row.textContent.toLowerCase().includes(q));
+        const matchesSearch = searchingAll ? false : rowMatchesSearchQuery(row, q);
         setRowHidden(row, Boolean(q) && !matchesSearch);
         return;
       }
-      const matchesSearch = searchingAll || !q || row.textContent.toLowerCase().includes(q);
+      const matchesSearch = searchingAll || rowMatchesSearchQuery(row, q);
       const matchesView = !viewBtns.length || viewBtns.some((btn) => rowMatchesMetric(row, metricKey(btn)));
       const matchesState = !stateKeys.length || stateKeys.every((key) => rowMatchesMetric(row, key));
       setRowHidden(row, !(matchesSearch && matchesView && matchesState));

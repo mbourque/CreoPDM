@@ -91,7 +91,8 @@ def test_home_page(client):
     assert 'id="add-menu"' in text
     assert 'src="/client/app.js' in text
     assert "push169" not in text
-    assert "export3" in text
+    assert "export3" not in text
+    assert "search1" in text
     assert "toolbar51" in text
     assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

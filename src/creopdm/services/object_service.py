@@ -192,22 +192,28 @@ class ObjectService:
         if lifecycle_state:
             stmt = stmt.where(EngineeringObject.lifecycle_state == lifecycle_state)
         if query:
-            like = f"%{query.strip()}%"
-            param_match = select(Parameter.object_id).where(
-                or_(Parameter.name.ilike(like), Parameter.value.ilike(like))
-            )
-            stmt = stmt.where(
-                or_(
-                    EngineeringObject.name.ilike(like),
-                    EngineeringObject.number.ilike(like),
-                    EngineeringObject.filename.ilike(like),
-                    EngineeringObject.relative_path.ilike(like),
-                    EngineeringObject.object_type.ilike(like),
-                    EngineeringObject.revision.ilike(like),
-                    EngineeringObject.lifecycle_state.ilike(like),
-                    EngineeringObject.id.in_(param_match),
+            from creopdm.utils.search_query import sql_like_from_search_query
+
+            like = sql_like_from_search_query(query)
+            if like:
+                param_match = select(Parameter.object_id).where(
+                    or_(
+                        Parameter.name.ilike(like, escape="\\"),
+                        Parameter.value.ilike(like, escape="\\"),
+                    )
                 )
-            )
+                stmt = stmt.where(
+                    or_(
+                        EngineeringObject.name.ilike(like, escape="\\"),
+                        EngineeringObject.number.ilike(like, escape="\\"),
+                        EngineeringObject.filename.ilike(like, escape="\\"),
+                        EngineeringObject.relative_path.ilike(like, escape="\\"),
+                        EngineeringObject.object_type.ilike(like, escape="\\"),
+                        EngineeringObject.revision.ilike(like, escape="\\"),
+                        EngineeringObject.lifecycle_state.ilike(like, escape="\\"),
+                        EngineeringObject.id.in_(param_match),
+                    )
+                )
         return list(
             session.scalars(
                 stmt.order_by(

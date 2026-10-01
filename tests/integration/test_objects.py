@@ -173,6 +173,60 @@ def test_search_objects_includes_nested_folders(client, repo_parent):
 
 
 @requires_git
+def test_search_objects_supports_glob_wildcards(client, repo_parent):
+    """Search accepts *.prt / *.* / *.prt.* style globs, not only substrings."""
+    product, _location = _create_product(client, repo_parent)
+    added = client.post(
+        f"/api/products/{product['uuid']}/objects/from-uploads",
+        files=[
+            ("files", ("shaft.prt", b"part-bytes", "application/octet-stream")),
+            ("files", ("notes.txt", b"notes", "text/plain")),
+            ("files", ("bracket.prt.2", b"numbered", "application/octet-stream")),
+        ],
+        data={
+            "relative_paths": ["CAD/shaft.prt", "docs/notes.txt", "CAD/bracket.prt.2"],
+            "comment": "Glob search fixtures",
+        },
+    )
+    assert added.status_code == 200, added.text
+    assert added.json()["failed"] == []
+
+    by_ext = client.get(f"/api/products/{product['uuid']}/objects", params={"q": "*.prt"})
+    assert by_ext.status_code == 200, by_ext.text
+    assert {item["relative_path"] for item in by_ext.json()} == {"CAD/shaft.prt"}
+
+    numbered = client.get(f"/api/products/{product['uuid']}/objects", params={"q": "*.prt.*"})
+    assert numbered.status_code == 200, numbered.text
+    assert {item["relative_path"] for item in numbered.json()} == {"CAD/bracket.prt.2"}
+
+    dotted = client.get(f"/api/products/{product['uuid']}/objects", params={"q": "*.*"})
+    assert dotted.status_code == 200, dotted.text
+    assert {item["relative_path"] for item in dotted.json()} == {
+        "CAD/shaft.prt",
+        "docs/notes.txt",
+        "CAD/bracket.prt.2",
+    }
+
+    everything = client.get(f"/api/products/{product['uuid']}/objects", params={"q": "*"})
+    assert everything.status_code == 200, everything.text
+    assert len(everything.json()) >= 3
+
+    # Literal "*.prt" must not be required — plain substring still works.
+    substring = client.get(f"/api/products/{product['uuid']}/objects", params={"q": "shaft"})
+    assert {item["relative_path"] for item in substring.json()} == {"CAD/shaft.prt"}
+
+    home = client.get(f"/?product={product['uuid']}")
+    assert home.status_code == 200
+    assert "*.prt" in home.text
+    script = client.get("/static/js/app.js")
+    assert "function rowMatchesSearchQuery" in script.text
+    assert "function globToRegExp" in script.text
+    docs = Path("docs/user-interactions.md").read_text(encoding="utf-8")
+    assert "*.prt" in docs
+    assert "wildcards" in docs.lower()
+
+
+@requires_git
 def test_extra_cad_extensions_go_to_cad_folder(client, repo_parent, tmp_path):
     product, _location = _create_product(client, repo_parent)
     dxf = tmp_path / "outline.dxf"
