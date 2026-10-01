@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from creopdm.auth_constants import ADMINISTRATION_PERMISSION_KEYS, UserStatus
@@ -275,6 +275,8 @@ class PasswordResetService:
         uname = _normalize_username(username)
         if not uname:
             raise ValidationAppError("Username is required.")
+        # Validate before consuming so a bad password does not burn the link.
+        validated = validate_password(new_password)
         token = self._load_valid_token(db, raw_token)
         if token is None:
             raise ValidationAppError(
@@ -291,11 +293,16 @@ class PasswordResetService:
             )
         if user.status != UserStatus.ACTIVE.value:
             raise ValidationAppError("This account is disabled. Contact an administrator.")
-        user.password_hash = hash_password(validate_password(new_password))
-        user.must_change_password = False
-        user.updated_at = datetime.now(timezone.utc)
         now = datetime.now(timezone.utc)
+        if not self._consume_unused_token(db, token_id=token.id, now=now):
+            # Lost a concurrent race, or the token expired/was used between load and update.
+            raise ValidationAppError(
+                "This reset link is invalid or has expired. Request a new one from the sign-in page."
+            )
         token.used_at = now
+        user.password_hash = hash_password(validated)
+        user.must_change_password = False
+        user.updated_at = now
         for other in db.scalars(
             select(PasswordResetToken).where(
                 PasswordResetToken.user_id == user.id,
@@ -306,6 +313,20 @@ class PasswordResetService:
             other.used_at = now
         db.flush()
         return user
+
+    def _consume_unused_token(self, db: Session, *, token_id: int, now: datetime) -> bool:
+        """Mark a still-valid unused token as used. True only when this call won the race."""
+        result = db.execute(
+            update(PasswordResetToken)
+            .where(
+                PasswordResetToken.id == token_id,
+                PasswordResetToken.used_at.is_(None),
+                PasswordResetToken.expires_at >= now,
+            )
+            .values(used_at=now),
+            execution_options={"synchronize_session": False},
+        )
+        return int(result.rowcount or 0) == 1
 
     def _load_valid_token(self, db: Session, raw_token: str) -> PasswordResetToken | None:
         raw = (raw_token or "").strip()

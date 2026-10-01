@@ -23,6 +23,7 @@ from creopdm.services.password_reset_service import (
     TOKEN_TTL,
     PasswordResetService,
 )
+from creopdm.utils.passwords import verify_password
 from tests.conftest import requires_git
 from tests.unit.test_auth import _login, _setup_admin_and_users
 
@@ -463,3 +464,102 @@ def test_password_reset_expired_token_rejected(auth_ctx):
                 username="admin",
                 new_password="AnotherPass1",
             )
+
+
+def test_reset_token_consumed_atomically(auth_ctx):
+    """Only one consume wins; a second concurrent-style claim must fail."""
+    service: PasswordResetService = auth_ctx.password_resets
+    sent = _enable_email(auth_ctx)
+    with auth_ctx.session_factory() as db:
+        auth_ctx.user_accounts.create_first_admin(
+            db,
+            username="admin",
+            display_name="Admin",
+            password="AdminPass1",
+            email="admin@example.com",
+        )
+        db.commit()
+
+    with auth_ctx.session_factory() as db:
+        result = service.request_reset(
+            db,
+            username="admin",
+            email="admin@example.com",
+            base_url="http://test/",
+            email_enabled=True,
+        )
+        assert result.sent is True
+        raw = sent[0][2].split("/reset-password?token=")[1].split("&")[0].strip()
+        row = db.scalar(select(PasswordResetToken))
+        assert row is not None
+        token_id = row.id
+        db.commit()
+
+    now = datetime.now(timezone.utc)
+    with auth_ctx.session_factory() as db:
+        assert service._consume_unused_token(db, token_id=token_id, now=now) is True
+        # Same session: already used → second claim loses.
+        assert service._consume_unused_token(db, token_id=token_id, now=now) is False
+        db.commit()
+
+    with auth_ctx.session_factory() as db:
+        assert service._consume_unused_token(db, token_id=token_id, now=now) is False
+        with pytest.raises(ValidationAppError, match="invalid or has expired"):
+            service.reset_password(
+                db,
+                raw_token=raw,
+                username="admin",
+                new_password="HijackedPass1",
+            )
+        user = db.scalar(select(User).where(User.username == "admin"))
+        assert user is not None
+        assert verify_password("AdminPass1", user.password_hash)
+        assert not verify_password("HijackedPass1", user.password_hash)
+
+
+def test_reset_password_marks_token_used_before_commit_visible(auth_ctx):
+    """Successful reset consumes the token so a second reset cannot change the password again."""
+    service: PasswordResetService = auth_ctx.password_resets
+    sent = _enable_email(auth_ctx)
+    with auth_ctx.session_factory() as db:
+        auth_ctx.user_accounts.create_first_admin(
+            db,
+            username="admin",
+            display_name="Admin",
+            password="AdminPass1",
+            email="admin@example.com",
+        )
+        db.commit()
+
+    with auth_ctx.session_factory() as db:
+        service.request_reset(
+            db,
+            username="admin",
+            email="admin@example.com",
+            base_url="http://test/",
+            email_enabled=True,
+        )
+        raw = sent[0][2].split("/reset-password?token=")[1].split("&")[0].strip()
+        db.commit()
+
+    with auth_ctx.session_factory() as db:
+        service.reset_password(
+            db,
+            raw_token=raw,
+            username="admin",
+            new_password="FirstPass99!",
+        )
+        db.commit()
+
+    with auth_ctx.session_factory() as db:
+        with pytest.raises(ValidationAppError, match="invalid or has expired"):
+            service.reset_password(
+                db,
+                raw_token=raw,
+                username="admin",
+                new_password="SecondPass99!",
+            )
+        user = db.scalar(select(User).where(User.username == "admin"))
+        assert user is not None
+        assert verify_password("FirstPass99!", user.password_hash)
+        assert not verify_password("SecondPass99!", user.password_hash)
