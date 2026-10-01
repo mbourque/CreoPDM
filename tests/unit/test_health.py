@@ -176,6 +176,14 @@ def test_home_page(client):
     assert "creoFeatureItems(model.ListMaterials())" in text
     assert "PTC_MATERIAL_NAME" in text
     assert "ListSolidBodies" in text
+    assert "ListBodies" in text
+    # Prefer ListBodies before ListSolidBodies for sheet-metal role detection.
+    sheet_fn = text.split("function creoModelHasSheetmetalBody", 1)[1].split(
+        "function creoClassifyManufacturing", 1
+    )[0]
+    assert sheet_fn.index('"ListBodies"') < sheet_fn.index('"ListSolidBodies"')
+    assert "pfcPart.cast" in sheet_fn
+    assert "bodies.Item(i)" in sheet_fn
     assert "allowUndisplayed" in text
     assert "eraseUndisplayedModelsQuiet" in text
     assert "Do not RetrieveModel by bare name" in text
