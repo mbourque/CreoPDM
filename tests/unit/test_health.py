@@ -177,13 +177,20 @@ def test_home_page(client):
     assert "PTC_MATERIAL_NAME" in text
     assert "ListSolidBodies" in text
     assert "ListBodies" in text
-    # Prefer ListBodies before ListSolidBodies for sheet-metal role detection.
+    assert "GetDefaultBody" in text
+    assert "FEATTYPE_WALL" in text
+    assert "creoModelHasSheetmetalFeature" in text
+    assert "creoFeaturesIndicateSheetmetal" in text
+    assert "SMT_THICKNESS" in text
+    assert "creoListModelBodies" in text
+    # Body list + feature fallback both run inside sheet-metal detection.
     sheet_fn = text.split("function creoModelHasSheetmetalBody", 1)[1].split(
         "function creoClassifyManufacturing", 1
     )[0]
-    assert sheet_fn.index('"ListBodies"') < sheet_fn.index('"ListSolidBodies"')
+    assert "creoListModelBodies" in sheet_fn
+    assert "creoModelHasSheetmetalFeature" in sheet_fn
+    assert sheet_fn.index("creoListModelBodies") < sheet_fn.index("creoModelHasSheetmetalFeature")
     assert "pfcPart.cast" in sheet_fn
-    assert "bodies.Item(i)" in sheet_fn
     assert "allowUndisplayed" in text
     assert "eraseUndisplayedModelsQuiet" in text
     assert "Do not RetrieveModel by bare name" in text
