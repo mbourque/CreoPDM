@@ -117,6 +117,8 @@ def test_home_page(client):
     assert (Path("src/creopdm/static/icons/part.png").is_file())
     assert (Path("src/creopdm/static/icons/assembly.png").is_file())
     assert (Path("src/creopdm/static/icons/drawing.png").is_file())
+    assert (Path("src/creopdm/static/icons/mfg.png").is_file())
+    assert '"MFG": "mfg.png"' in open("src/creopdm/constants.py", encoding="utf-8").read()
     script = open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "function openSpecFromRow" in script
     assert "cancelPendingOpen" in script

@@ -38,8 +38,11 @@ def test_normalize_creo_identity_mutates_dict():
 
 def test_model_type_from_identity_json():
     from creopdm.utils.creo_model_class import model_type_from_identity_json
+    from creopdm.utils.classify import resolve_type_icon
 
     assert model_type_from_identity_json(None) == ""
     assert model_type_from_identity_json("{") == ""
     assert model_type_from_identity_json('{"model_type":"MDL_MFG"}') == "MFG"
     assert model_type_from_identity_json('{"model_type":"ASSEMBLY"}') == "ASSEMBLY"
+    assert resolve_type_icon(type_label="MFG") == "mfg.png"
+    assert resolve_type_icon(type_label="Manufacturing Model") == "mfg.png"
