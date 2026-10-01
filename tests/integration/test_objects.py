@@ -217,7 +217,7 @@ def test_search_objects_supports_glob_wildcards(client, repo_parent):
 
     home = client.get(f"/?product={product['uuid']}")
     assert home.status_code == 200
-    assert "*.prt" in home.text
+    assert 'placeholder="Search all files in product"' in home.text
     script = client.get("/static/js/app.js")
     assert "function rowMatchesSearchQuery" in script.text
     assert "function globToRegExp" in script.text
