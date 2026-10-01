@@ -3651,6 +3651,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const undoBtn = $("#undo-btn");
   const forceUndoBtn = $("#force-undo-btn");
   const workspaceBtn = $("#workspace-btn");
+  const exportBtn = $("#export-btn");
   const openWorkspaceBtn = $("#open-workspace-btn");
   const setCreoDirBtn = $("#set-creo-dir-btn");
   const purgeBtn = $("#purge-workspace-btn");
@@ -4090,6 +4091,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       document.body?.dataset?.canCopyToVault === "1" &&
         selected.some((row) => row.dataset.inWorkspace !== "1")
     );
+    const canExportProduct = document.body?.dataset?.canExportProduct === "1";
+    const canExportObjects = document.body?.dataset?.canExportObjects === "1";
+    const exportHasSelection =
+      selectedIds().length > 0 || selectedFolderPaths().length > 0;
+    const canExport =
+      Boolean(productId) &&
+      ((exportHasSelection && canExportObjects) || (!exportHasSelection && canExportProduct));
+    setToolbarActionVisible(exportBtn, canExport);
+    if (exportBtn) {
+      exportBtn.title = exportHasSelection
+        ? "Download the selected vault files/folders as a zip. Does not check out or lock anything."
+        : "Download the entire product vault tip as a zip. Does not check out or lock anything.";
+    }
     const localNewSelected = selected.filter(
       (row) => isNewFileQueueRow(row) && row.dataset.localCache === "1"
     );
@@ -6290,6 +6304,124 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const copied = result.ok?.length || 0;
     if (warning) showError($("#toolbar-error"), warning);
     else showOk(`${copied} file(s) copied to the vault.`);
+  });
+
+  exportBtn?.addEventListener("click", async () => {
+    const productId =
+      exportBtn.dataset.product ||
+      checkinBtn?.dataset.product ||
+      openWorkspaceBtn?.dataset.product ||
+      currentProductId() ||
+      "";
+    if (!productId) return;
+    const ids = selectedIds();
+    const folderPaths = selectedFolderPaths();
+    const selectedScope = ids.length > 0 || folderPaths.length > 0;
+    const canExportProduct = document.body?.dataset?.canExportProduct === "1";
+    const canExportObjects = document.body?.dataset?.canExportObjects === "1";
+    if (selectedScope && !canExportObjects) {
+      showError($("#toolbar-error"), "Your role cannot export a selection (objects.export).");
+      return;
+    }
+    if (!selectedScope && !canExportProduct) {
+      showError($("#toolbar-error"), "Your role cannot export a whole product (products.export).");
+      return;
+    }
+    const productName =
+      exportBtn.dataset.productName ||
+      checkinBtn?.dataset.productName ||
+      openWorkspaceBtn?.dataset.productName ||
+      "this product";
+    const confirmMsg = selectedScope
+      ? `Export the selected files/folders from “${productName}” as a zip?\n\n` +
+        `This downloads the current vault tip only. It does not check out files or change locks.\n` +
+        (ids.length ? `${ids.length} file(s)` : "") +
+        (ids.length && folderPaths.length ? ", " : "") +
+        (folderPaths.length ? `${folderPaths.length} folder(s)` : "") +
+        "."
+      : `Export the entire product “${productName}” as a zip?\n\n` +
+        `This downloads the current vault tip for all files. It does not check out files or change locks.`;
+    if (!window.confirm(confirmMsg)) return;
+    showError($("#toolbar-error"), "");
+    showOk("");
+    const safeName = String(productName || "product")
+      .replace(/[^\w.\-]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "product";
+    const suggested = `${safeName}-${selectedScope ? "selection" : "export"}.zip`;
+    const payload = {
+      object_ids: selectedScope ? ids : [],
+      folder_paths: selectedScope ? folderPaths : [],
+    };
+
+    const browserDownload = async () => {
+      const response = await fetch(`/api/products/${encodeURIComponent(productId)}/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        throw new Error(await readError(response));
+      }
+      const blob = await response.blob();
+      const headerName = response.headers.get("X-CreoPDM-Export-Name");
+      let filename = suggested;
+      if (headerName) {
+        try {
+          filename = decodeURIComponent(headerName);
+        } catch {
+          filename = suggested;
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      const count = Number(response.headers.get("X-CreoPDM-File-Count") || 0);
+      return count;
+    };
+
+    try {
+      const count = await withBusy("Preparing export…", async () => {
+        const agent = await probeCreoAgent();
+        if (agent) {
+          const response = await fetch(`${agentBase()}/export-zip`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              pdm_url: window.location.origin,
+              ...agentPdmAuth(),
+              product_id: productId,
+              object_ids: payload.object_ids,
+              folder_paths: payload.folder_paths,
+              suggested_name: suggested,
+            }),
+          });
+          if (!response.ok) {
+            throw new Error(await readError(response));
+          }
+          const body = await response.json().catch(() => null);
+          if (body?.cancelled) return null;
+          if (!body?.ok) {
+            throw new Error(body?.message || "Export failed.");
+          }
+          return Number(body.file_count || 0);
+        }
+        return browserDownload();
+      });
+      if (count == null) return;
+      showOk(
+        count
+          ? `Exported ${count} file(s) to a zip.`
+          : "Export zip saved."
+      );
+    } catch (err) {
+      showError($("#toolbar-error"), err?.message || String(err));
+    }
   });
 
   openWorkspaceBtn?.addEventListener("click", async () => {

@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -22,12 +22,14 @@ from creopdm.api.serializers import product_to_response
 from creopdm.auth_constants import (
     PERMISSION_OBJECTS_ADD,
     PERMISSION_OBJECTS_CHECKIN,
+    PERMISSION_OBJECTS_EXPORT,
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_VIEW,
     PERMISSION_PRODUCTS_CREATE,
     PERMISSION_PRODUCTS_DELETE,
     PERMISSION_PRODUCTS_EDIT,
+    PERMISSION_PRODUCTS_EXPORT,
     PERMISSION_PRODUCTS_VIEW,
 )
 from creopdm.context import AppContext
@@ -46,6 +48,7 @@ from creopdm.schemas.common import (
     ImportLocalRequest,
     ObjectResponse,
     ProductCreateRequest,
+    ProductExportRequest,
     ProductResponse,
     ProductStatusResponse,
     ProductUpdateRequest,
@@ -59,6 +62,7 @@ from creopdm.schemas.common import (
     WorkspacePickerResponse,
     WorkspaceWatchResponse,
 )
+from creopdm.services.export_zip import build_export_zip, export_zip_basename
 from creopdm.utils.launch import open_windows_folder
 from creopdm.utils.native_dialog import pick_files, pick_folder
 
@@ -281,6 +285,55 @@ def list_objects(
         lifecycle_state=lifecycle_state,
     )
     return present_objects(ctx, db, objects)
+
+
+@router.post("/api/products/{product_id}/export")
+def export_product_zip(
+    product_id: str,
+    payload: ProductExportRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> FileResponse:
+    """Zip vault tip files for download. Does not checkout or lock anything."""
+    product = load_accessible_product(request, ctx, db, product_id)
+    selected = bool(payload.object_ids or payload.folder_paths)
+    if selected:
+        require_permission(request, ctx, PERMISSION_OBJECTS_EXPORT)
+        requested = list(payload.object_ids)
+        for folder in payload.folder_paths:
+            requested.extend(ctx.objects.uuids_under_folder(db, product.id, folder))
+        requested = list(dict.fromkeys(requested))
+        if not requested:
+            raise ValidationAppError("Nothing to export for that selection.")
+        objects = ctx.objects.get_objects(db, requested)
+        by_uuid = {obj.uuid: obj for obj in objects}
+        ordered = [by_uuid[uid] for uid in requested if uid in by_uuid]
+        missing = [uid for uid in requested if uid not in by_uuid]
+        if missing and not ordered:
+            raise ValidationAppError("Nothing to export for that selection.")
+        for obj in ordered:
+            if obj.product_id != product.id:
+                raise ValidationAppError("All exported files must belong to this product.")
+    else:
+        require_permission(request, ctx, PERMISSION_PRODUCTS_EXPORT)
+        ordered = ctx.objects.list_objects(db, product.id)
+    zip_path, count = build_export_zip(ctx.workspaces, product, ordered)
+    background_tasks.add_task(lambda path=zip_path: path.unlink(missing_ok=True))
+    filename = export_zip_basename(product, selected=selected)
+    disposition = f"attachment; filename*=UTF-8''{quote(filename)}"
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=filename,
+        content_disposition_type="attachment",
+        headers={
+            "Content-Disposition": disposition,
+            "X-CreoPDM-File-Count": str(count),
+            "X-CreoPDM-Export-Name": quote(filename),
+        },
+    )
 
 
 @router.get("/api/products/{product_id}/status", response_model=ProductStatusResponse)

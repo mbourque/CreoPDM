@@ -485,6 +485,69 @@ def test_from_zip_rejects_non_zip_name(client, repo_parent):
 
 
 @requires_git
+def test_export_product_and_selection_zip(client, repo_parent, tmp_path):
+    """Export… — whole product and selection download vault tip as zip."""
+    import io
+    import zipfile
+
+    product, _location = _create_product(client, repo_parent)
+    kit = tmp_path / "Kit"
+    (kit / "lib").mkdir(parents=True)
+    (kit / "lib" / "a.prt").write_bytes(b"aaa")
+    (kit / "b.prt").write_bytes(b"bbb")
+    added = client.post(
+        f"/api/products/{product['uuid']}/objects/from-disk",
+        json={"folder": str(kit), "base_folder": str(kit), "recursive": True, "comment": "Kit"},
+    )
+    assert added.status_code == 200, added.text
+    listing = client.get(f"/api/products/{product['uuid']}/objects").json()
+    by_name = {item["filename"]: item for item in listing}
+    assert "a.prt" in by_name and "b.prt" in by_name
+
+    whole = client.post(
+        f"/api/products/{product['uuid']}/export",
+        json={"object_ids": [], "folder_paths": []},
+    )
+    assert whole.status_code == 200, whole.text
+    assert whole.headers.get("content-type", "").startswith("application/zip")
+    assert int(whole.headers.get("X-CreoPDM-File-Count") or 0) == 2
+    with zipfile.ZipFile(io.BytesIO(whole.content)) as zf:
+        names = set(zf.namelist())
+        assert any(n.endswith("a.prt") for n in names)
+        assert any(n.endswith("b.prt") for n in names)
+
+    selected = client.post(
+        f"/api/products/{product['uuid']}/export",
+        json={"object_ids": [by_name["a.prt"]["uuid"]], "folder_paths": []},
+    )
+    assert selected.status_code == 200, selected.text
+    assert int(selected.headers.get("X-CreoPDM-File-Count") or 0) == 1
+    with zipfile.ZipFile(io.BytesIO(selected.content)) as zf:
+        assert len(zf.namelist()) == 1
+        assert zf.namelist()[0].endswith("a.prt")
+        assert zf.read(zf.namelist()[0]) == b"aaa"
+
+    folder_rel = Path(by_name["a.prt"]["relative_path"]).parent.as_posix()
+    folder_export = client.post(
+        f"/api/products/{product['uuid']}/export",
+        json={"object_ids": [], "folder_paths": [folder_rel]},
+    )
+    assert folder_export.status_code == 200, folder_export.text
+    assert int(folder_export.headers.get("X-CreoPDM-File-Count") or 0) >= 1
+
+
+@requires_git
+def test_export_empty_product_rejected(client, repo_parent):
+    product, _location = _create_product(client, repo_parent)
+    response = client.post(
+        f"/api/products/{product['uuid']}/export",
+        json={"object_ids": [], "folder_paths": []},
+    )
+    assert response.status_code == 400
+    assert "Nothing to export" in response.json()["error"]["message"]
+
+
+@requires_git
 def test_from_disk_folder_rejects_empty_directory(client, repo_parent, tmp_path):
     product, _location = _create_product(client, repo_parent)
     empty = tmp_path / "EmptyBox"

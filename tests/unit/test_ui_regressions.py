@@ -637,6 +637,14 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "Uses the creopdm-agent cache folder on this PC so Creo opens and saves" not in base
     assert "open-checkout-set-wd" in script
     assert "data-can-copy-to-vault" in base
+    assert "data-can-export-product" in base
+    assert "data-can-export-objects" in base
+    assert 'id="export-btn"' in html
+    assert ">Export…<" in html
+    assert "canExportProduct" in script
+    assert "/api/products/" in script and "/export" in script
+    assert "${agentBase()}/export-zip" in script
+    assert "Preparing export…" in script
     assert "canCopyToVault" in script
     assert "setWorkingDirectory" in _between(
         script, "async function openPdmObjectFromUi(", "function agentBase("
@@ -650,6 +658,9 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "only inside Creo’s embedded browser" in docs or "only inside Creo's embedded browser" in docs
     assert "opens immediately" in docs.lower() or "Open dialog" in docs
+    assert "## 11. Export…" in docs
+    assert "products.export" in docs
+    assert "objects.export" in docs
 
 
 def test_new_product_and_sidebar_collapse_handlers_present():
@@ -745,7 +756,7 @@ def test_mobile_browse_css_is_minimal():
     assert "only folders" in docs or "**only folders**" in docs or "Tap a **folder**" in docs
     assert "browse-only" in docs
     assert "**Name** and **Rev**" in docs
-    assert "## 13. Mobile browse" in docs
+    assert "## 14. Mobile browse" in docs
     assert "`pointer: coarse`" in docs
     assert "**desktop** browser" in docs
     assert "Rotate the phone" in docs

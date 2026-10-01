@@ -26,6 +26,8 @@
   data-can-view="{{ '1' if can_view_objects else '0' }}"
   data-can-view-products="{{ '1' if can_view_products else '0' }}"
   data-can-copy-to-vault="{{ '1' if can_copy_to_vault else '0' }}"
+  data-can-export-product="{{ '1' if can_export_product else '0' }}"
+  data-can-export-objects="{{ '1' if can_export_objects else '0' }}"
   data-agent-token="{{ agent_token | default('') }}"
 >
   <header class="topbar">
@@ -1765,6 +1767,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-push169"></script>
+  <script src="/client/app.js?v={{ app_version }}-export1"></script>
 </body>
 </html>

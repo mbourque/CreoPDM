@@ -178,6 +178,24 @@ class PickFilesResponse(BaseModel):
     folder: str = ""
 
 
+class ExportZipRequest(BaseModel):
+    pdm_url: str = ""
+    product_id: str = ""
+    object_ids: list[str] = Field(default_factory=list)
+    folder_paths: list[str] = Field(default_factory=list)
+    suggested_name: str = "export.zip"
+    token: str | None = None
+
+
+class ExportZipResponse(BaseModel):
+    ok: bool = True
+    cancelled: bool = False
+    path: str = ""
+    bytes_written: int = 0
+    file_count: int = 0
+    message: str = ""
+
+
 class PushItem(BaseModel):
     object_id: str
     filename: str = ""
@@ -790,6 +808,83 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             latest = present
         paths = [str(path) for path in latest]
         return PickFilesResponse(selected=paths, cancelled=not paths)
+
+    @app.post("/export-zip", response_model=ExportZipResponse)
+    def export_zip_endpoint(payload: ExportZipRequest) -> ExportZipResponse:
+        """Ask where to save, download product/selection zip from CreoPDM, write it."""
+        from creopdm.utils.native_dialog import pick_save_file
+
+        product_id = (payload.product_id or "").strip()
+        if not product_id:
+            raise HTTPException(status_code=400, detail="product_id is required.")
+        suggested = Path(payload.suggested_name or "export.zip").name
+        if not suggested.lower().endswith(".zip"):
+            suggested = f"{suggested}.zip"
+        start = Path.home() / "Downloads"
+        if not start.is_dir():
+            start = Path.home()
+        try:
+            chosen = pick_save_file(
+                start,
+                title="Save CreoPDM export zip",
+                default_name=suggested,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        if chosen is None:
+            return ExportZipResponse(ok=True, cancelled=True, message="Cancelled.")
+        dest = Path(chosen)
+        if dest.suffix.lower() != ".zip":
+            dest = dest.with_suffix(".zip")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+
+        base = _normalize_base(payload.pdm_url or settings.pdm_url)
+        headers: dict[str, str] = {}
+        token = (payload.token or settings.token or "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        url = f"{base}/api/products/{quote(product_id)}/export"
+        body = {
+            "object_ids": list(payload.object_ids or []),
+            "folder_paths": list(payload.folder_paths or []),
+        }
+        try:
+            with httpx.Client(timeout=600.0, follow_redirects=True) as client:
+                response = client.post(url, headers=headers, json=body)
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not reach CreoPDM to build the export: {exc}",
+            ) from exc
+        if response.status_code >= 400:
+            detail = ""
+            try:
+                payload_err = response.json()
+                detail = (
+                    payload_err.get("error", {}).get("message")
+                    or payload_err.get("detail")
+                    or response.text
+                )
+            except Exception:
+                detail = response.text[:300]
+            raise HTTPException(
+                status_code=502,
+                detail=detail or f"CreoPDM returned {response.status_code}",
+            )
+        data = response.content
+        dest.write_bytes(data)
+        file_count = 0
+        try:
+            file_count = int(response.headers.get("X-CreoPDM-File-Count") or 0)
+        except ValueError:
+            file_count = 0
+        logger.info("Saved export zip %s (%s bytes, %s files)", dest, len(data), file_count)
+        return ExportZipResponse(
+            ok=True,
+            path=str(dest),
+            bytes_written=len(data),
+            file_count=file_count,
+        )
 
     @app.post("/pick-folder", response_model=PickFilesResponse)
     def pick_folder_endpoint(payload: PickFilesRequest) -> PickFilesResponse:

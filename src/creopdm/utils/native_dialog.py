@@ -196,6 +196,43 @@ def pick_folder(initial_dir: Path, title: str = "Choose product folder") -> Path
         ) from fallback
 
 
+def pick_save_file(
+    initial_dir: Path,
+    *,
+    title: str = "Save zip as",
+    default_name: str = "export.zip",
+) -> Path | None:
+    """Native Save As dialog for a single zip path. None if cancelled."""
+    if not _is_windows():
+        logger.info("Native save dialog is not available")
+        return None
+    start = Path(initial_dir)
+    if not start.is_dir():
+        start = start.parent if start.parent.is_dir() else Path.home()
+    leaf = Path(default_name or "export.zip").name
+    if not leaf.lower().endswith(".zip"):
+        leaf = f"{leaf}.zip"
+    try:
+        return run_on_sta(
+            lambda: _windows_save_dialog(
+                start,
+                title,
+                default_name=leaf,
+                filter_pairs=[("Zip archive", "*.zip"), ("All files", "*.*")],
+            )
+        )
+    except Exception:
+        logger.exception("GetSaveFileNameW failed; trying Windows Forms save")
+        try:
+            return _winforms_save_dialog(start, title, default_name=leaf)
+        except Exception as exc:
+            logger.exception("Windows Forms save dialog also failed")
+            raise ValidationAppError(
+                "The save dialog could not be opened.",
+                details={"reason": str(exc)},
+            ) from exc
+
+
 def _dialog_owner_hwnd():
     """Own native pickers from the browser window, not the uvicorn console.
 
@@ -304,6 +341,149 @@ def _winforms_folder_dialog(initial_dir: Path, title: str) -> Path | None:
         return None
     chosen = Path(line[-1].strip())
     return chosen if chosen.is_dir() else None
+
+
+def _winforms_save_dialog(
+    initial_dir: Path,
+    title: str,
+    *,
+    default_name: str,
+) -> Path | None:
+    script = (
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "[void][System.Windows.Forms.Application]::EnableVisualStyles(); "
+        "$d = New-Object System.Windows.Forms.SaveFileDialog; "
+        "$d.Title = $env:CREOPDM_DIALOG_TITLE; "
+        "$d.InitialDirectory = $env:CREOPDM_DIALOG_DIR; "
+        "$d.FileName = $env:CREOPDM_DIALOG_FILE; "
+        "$d.Filter = 'Zip archive (*.zip)|*.zip|All files (*.*)|*.*'; "
+        "$d.FilterIndex = 1; "
+        "$d.DefaultExt = 'zip'; "
+        "$d.AddExtension = $true; "
+        "$d.OverwritePrompt = $true; "
+        "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { "
+        "$d.FileName }"
+    )
+    env = os.environ.copy()
+    env["CREOPDM_DIALOG_DIR"] = str(initial_dir)
+    env["CREOPDM_DIALOG_TITLE"] = title
+    env["CREOPDM_DIALOG_FILE"] = default_name
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-STA", "-WindowStyle", "Hidden", "-Command", script],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+        shell=False,
+    )
+    if result.returncode != 0:
+        raise ValidationAppError(
+            "The save dialog could not be opened.",
+            details={"stderr": (result.stderr or "").strip()[:400]},
+        )
+    line = (result.stdout or "").strip().splitlines()
+    if not line:
+        return None
+    return Path(line[-1].strip())
+
+
+def _windows_save_dialog(
+    initial_dir: Path,
+    title: str,
+    *,
+    default_name: str,
+    filter_pairs: list[tuple[str, str]] | None = None,
+) -> Path | None:
+    import ctypes
+    from ctypes import wintypes
+
+    ofn_explorer = 0x00080000
+    ofn_path_must_exist = 0x00000800
+    ofn_overwrite_prompt = 0x00000002
+    ofn_no_change_dir = 0x00000008
+    ofn_hidereadonly = 0x00000004
+
+    class OPENFILENAMEW(ctypes.Structure):
+        _fields_ = [
+            ("lStructSize", wintypes.DWORD),
+            ("hwndOwner", wintypes.HWND),
+            ("hInstance", wintypes.HINSTANCE),
+            ("lpstrFilter", ctypes.c_void_p),
+            ("lpstrCustomFilter", ctypes.c_void_p),
+            ("nMaxCustFilter", wintypes.DWORD),
+            ("nFilterIndex", wintypes.DWORD),
+            ("lpstrFile", ctypes.c_void_p),
+            ("nMaxFile", wintypes.DWORD),
+            ("lpstrFileTitle", ctypes.c_void_p),
+            ("nMaxFileTitle", wintypes.DWORD),
+            ("lpstrInitialDir", ctypes.c_void_p),
+            ("lpstrTitle", ctypes.c_void_p),
+            ("Flags", wintypes.DWORD),
+            ("nFileOffset", wintypes.WORD),
+            ("nFileExtension", wintypes.WORD),
+            ("lpstrDefExt", ctypes.c_void_p),
+            ("lCustData", wintypes.LPARAM),
+            ("lpfnHook", ctypes.c_void_p),
+            ("lpTemplateName", ctypes.c_void_p),
+            ("pvReserved", ctypes.c_void_p),
+            ("dwReserved", wintypes.DWORD),
+            ("FlagsEx", wintypes.DWORD),
+        ]
+
+    pairs = filter_pairs or [("Zip archive", "*.zip"), ("All files", "*.*")]
+    filter_chunks: list[str] = []
+    for label, patterns in pairs:
+        filter_chunks.append(label.split(" (", 1)[0])
+        filter_chunks.append(patterns)
+    filter_text = "\0".join(filter_chunks) + "\0\0"
+    filter_buf = ctypes.create_unicode_buffer(len(filter_text) + 2)
+    for index, char in enumerate(filter_text):
+        filter_buf[index] = char
+    initial_buf = ctypes.create_unicode_buffer(str(initial_dir))
+    title_buf = ctypes.create_unicode_buffer(title)
+    def_ext_buf = ctypes.create_unicode_buffer("zip")
+    buffer_chars = 65_536
+    file_buf = ctypes.create_unicode_buffer(buffer_chars)
+    file_buf.value = default_name
+
+    get_save = ctypes.windll.comdlg32.GetSaveFileNameW
+    get_save.argtypes = [ctypes.POINTER(OPENFILENAMEW)]
+    get_save.restype = wintypes.BOOL
+    get_err = ctypes.windll.comdlg32.CommDlgExtendedError
+    get_err.restype = wintypes.DWORD
+
+    ofn = OPENFILENAMEW()
+    ofn.lStructSize = ctypes.sizeof(OPENFILENAMEW)
+    ofn.hwndOwner = _dialog_owner_hwnd()
+    ofn.lpstrFilter = ctypes.addressof(filter_buf)
+    ofn.nFilterIndex = 1
+    ofn.lpstrFile = ctypes.addressof(file_buf)
+    ofn.nMaxFile = buffer_chars
+    ofn.lpstrInitialDir = ctypes.addressof(initial_buf)
+    ofn.lpstrTitle = ctypes.addressof(title_buf)
+    ofn.lpstrDefExt = ctypes.addressof(def_ext_buf)
+    ofn.Flags = (
+        ofn_explorer
+        | ofn_path_must_exist
+        | ofn_overwrite_prompt
+        | ofn_no_change_dir
+        | ofn_hidereadonly
+    )
+    ok = get_save(ctypes.byref(ofn))
+    if not ok:
+        err = int(get_err() or 0)
+        if not err:
+            return None
+        raise ValidationAppError(
+            "The save dialog could not be opened.",
+            details={"windows_error": err},
+        )
+    chosen = Path(file_buf.value.strip())
+    if not chosen.name:
+        return None
+    if chosen.suffix.lower() != ".zip":
+        chosen = chosen.with_suffix(".zip")
+    return chosen
 
 
 def _windows_folder_dialog(initial_dir: Path, title: str, hwnd: int | None = None) -> Path | None:

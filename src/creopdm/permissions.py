@@ -12,6 +12,7 @@ from creopdm.auth_constants import (
     PERMISSION_OBJECTS_CHECKIN,
     PERMISSION_OBJECTS_CHECKOUT,
     PERMISSION_OBJECTS_COPY_TO_VAULT,
+    PERMISSION_OBJECTS_EXPORT,
     PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT,
     PERMISSION_OBJECTS_METADATA,
     PERMISSION_OBJECTS_REMOVE,
@@ -21,6 +22,7 @@ from creopdm.auth_constants import (
     PERMISSION_PRODUCTS_CREATE,
     PERMISSION_PRODUCTS_DELETE,
     PERMISSION_PRODUCTS_EDIT,
+    PERMISSION_PRODUCTS_EXPORT,
     PERMISSION_PRODUCTS_MANAGE,
     PERMISSION_PRODUCTS_VIEW,
     PERMISSION_ROLES_ASSIGN,
@@ -58,6 +60,8 @@ class CapabilityFlags:
     can_revert_objects: bool
     can_update_metadata: bool
     can_copy_to_vault: bool
+    can_export_product: bool
+    can_export_objects: bool
 
 
 def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
@@ -84,6 +88,8 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_revert_objects=PERMISSION_OBJECTS_REVERT in keys,
         can_update_metadata=PERMISSION_OBJECTS_METADATA in keys,
         can_copy_to_vault=PERMISSION_OBJECTS_COPY_TO_VAULT in keys,
+        can_export_product=PERMISSION_PRODUCTS_EXPORT in keys,
+        can_export_objects=PERMISSION_OBJECTS_EXPORT in keys,
     )
 
 
@@ -122,6 +128,8 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_revert_objects = caps.can_revert_objects
     request.state.can_update_metadata = caps.can_update_metadata
     request.state.can_copy_to_vault = caps.can_copy_to_vault
+    request.state.can_export_product = caps.can_export_product
+    request.state.can_export_objects = caps.can_export_objects
 
 
 def caps_dict(request: Request) -> dict:
@@ -147,6 +155,8 @@ def caps_dict(request: Request) -> dict:
         "can_revert_objects": bool(getattr(request.state, "can_revert_objects", False)),
         "can_update_metadata": bool(getattr(request.state, "can_update_metadata", False)),
         "can_copy_to_vault": bool(getattr(request.state, "can_copy_to_vault", False)),
+        "can_export_product": bool(getattr(request.state, "can_export_product", False)),
+        "can_export_objects": bool(getattr(request.state, "can_export_objects", False)),
     }
     flags["can_open_administration"] = (
         flags["can_manage_users"]

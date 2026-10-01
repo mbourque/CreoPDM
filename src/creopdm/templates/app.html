@@ -471,6 +471,13 @@
       <button type="button" class="btn" id="workspace-btn" disabled>Copy to Vault</button>
     </span>
     {% endif %}
+    {% if can_export_product or can_export_objects %}
+    <span class="toolbar-tip" title="Download vault tip files as a zip. Nothing selected exports the whole product; a selection exports only those files or folders. Does not check out or lock anything.">
+      <button type="button" class="btn" id="export-btn"
+              {% if selected %}data-product="{{ selected.uuid }}" data-product-name="{{ selected.name }}"{% endif %}
+              disabled>Export…</button>
+    </span>
+    {% endif %}
     {% if product_ui.show_remove %}
     <div class="toolbar-menu" id="remove-menu">
       <button type="button" class="btn btn-danger toolbar-menu-toggle" id="remove-menu-btn"

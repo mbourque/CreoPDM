@@ -309,6 +309,25 @@ class BatchObjectRequest(BaseModel):
     object_ids: list[str] = Field(min_length=1)
 
 
+class ProductExportRequest(BaseModel):
+    """Empty lists = entire product; otherwise selected files and/or folders."""
+
+    object_ids: list[str] = Field(default_factory=list)
+    folder_paths: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def normalize_export_targets(self) -> "ProductExportRequest":
+        ids = [str(item).strip() for item in (self.object_ids or []) if str(item or "").strip()]
+        folders = [
+            str(item).replace("\\", "/").strip().strip("/")
+            for item in (self.folder_paths or [])
+            if str(item or "").strip()
+        ]
+        self.object_ids = list(dict.fromkeys(ids))
+        self.folder_paths = list(dict.fromkeys(folders))
+        return self
+
+
 class BatchRemoveRequest(BaseModel):
     """Remove by object id and/or whole vault folder paths (descendants included)."""
 

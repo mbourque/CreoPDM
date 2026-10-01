@@ -43,6 +43,8 @@ PERMISSION_OBJECTS_REMOVE = "objects.remove"
 PERMISSION_OBJECTS_REVERT = "objects.revert"
 PERMISSION_OBJECTS_METADATA = "objects.metadata"
 PERMISSION_OBJECTS_COPY_TO_VAULT = "objects.copy_to_vault"
+PERMISSION_PRODUCTS_EXPORT = "products.export"
+PERMISSION_OBJECTS_EXPORT = "objects.export"
 
 STARTER_ROLE_DESCRIPTIONS: dict[str, str] = {
     StarterRole.ADMINISTRATOR.value: "Full system administration access.",
@@ -79,6 +81,8 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_OBJECTS_REVERT, "Restore an older version as the working version"),
     (PERMISSION_OBJECTS_METADATA, "Update Creo metadata on objects"),
     (PERMISSION_OBJECTS_COPY_TO_VAULT, "Copy selected files into the vault (Copy to Vault)"),
+    (PERMISSION_PRODUCTS_EXPORT, "Export an entire product as a zip download"),
+    (PERMISSION_OBJECTS_EXPORT, "Export selected files or folders as a zip download"),
 )
 
 # CreoPDM Administration caps. At least one ACTIVE user must keep all of them.
@@ -117,6 +121,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             PERMISSION_PRODUCTS_CREATE,
             PERMISSION_PRODUCTS_EDIT,
             PERMISSION_PRODUCTS_DELETE,
+            PERMISSION_PRODUCTS_EXPORT,
         ),
     ),
     (
@@ -131,6 +136,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             PERMISSION_OBJECTS_REVERT,
             PERMISSION_OBJECTS_METADATA,
             PERMISSION_OBJECTS_COPY_TO_VAULT,
+            PERMISSION_OBJECTS_EXPORT,
         ),
     ),
 )
@@ -144,6 +150,8 @@ _AUTHORING = (
     PERMISSION_OBJECTS_REMOVE,
     PERMISSION_OBJECTS_REVERT,
     PERMISSION_OBJECTS_METADATA,
+    PERMISSION_PRODUCTS_EXPORT,
+    PERMISSION_OBJECTS_EXPORT,
 )
 
 # Seed-only templates when the roles table is empty. Runtime caps come from DB.
