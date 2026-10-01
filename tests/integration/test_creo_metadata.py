@@ -124,6 +124,32 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     by_uuid = {item["uuid"]: item for item in listed.json()}
     assert by_uuid[shaft["uuid"]]["type_label"] == "SHEETMETAL"
     assert by_uuid[frame["uuid"]]["type_label"] == "ASSEMBLY"
+    skel_meta = client.post(
+        f"/api/objects/{shaft['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "shaft.prt",
+                "model_type": "PART",
+                "model_role": "SKELETON",
+            }
+        },
+    )
+    assert skel_meta.status_code == 200, skel_meta.text
+    assert skel_meta.json()["identity"]["model_role"] == "SKELETON"
+    listed_skel = client.get(f"/api/products/{product['uuid']}/objects")
+    assert {item["uuid"]: item["type_label"] for item in listed_skel.json()}[shaft["uuid"]] == "SKELETON"
+    # Restore sheet-metal role for later Detail assertions.
+    shaft_meta = client.post(
+        f"/api/objects/{shaft['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "shaft.prt",
+                "model_type": "PART",
+                "model_role": "SHEETMETAL",
+            }
+        },
+    )
+    assert shaft_meta.status_code == 200, shaft_meta.text
     mfg_meta = client.post(
         f"/api/objects/{frame['uuid']}/creo-metadata",
         json={

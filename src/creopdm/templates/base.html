@@ -806,12 +806,46 @@ function creoModelTypeLabel(type) {
     return "";
 }
 function creoModelIsSkeleton(model) {
+    /**
+     * PTC: pfcSolid.IsSkeleton — true for a skeleton or concept model.
+     * Prefer the readonly boolean property; cast via pfcSolid when the retrieve
+     * handle is unbound (same Collect quirk as sheet-metal body APIs).
+     */
+    if (!model) return false;
+    function readIsSkeleton(handle) {
+        if (!handle) return false;
+        try {
+            if (handle.IsSkeleton === true) return true;
+            if (handle.IsSkeleton === false) return false;
+        } catch (errBool) {}
+        try {
+            if (typeof handle.IsSkeleton === "function" && handle.IsSkeleton()) return true;
+        } catch (errFn) {}
+        try {
+            // Some Creo.JS builds expose truthy/falsey without strict boolean typeof.
+            if (handle.IsSkeleton) return true;
+        } catch (errTruth) {}
+        return false;
+    }
+    if (readIsSkeleton(model)) return true;
     try {
-        if (typeof model.IsSkeleton === "boolean") return model.IsSkeleton;
-    } catch (errBool) {}
+        if (typeof pfcSolid !== "undefined" && typeof pfcSolid.cast === "function") {
+            var asSolid = pfcSolid.cast(model);
+            if (asSolid && asSolid !== model && readIsSkeleton(asSolid)) return true;
+        }
+    } catch (errSolid) {}
     try {
-        if (typeof model.IsSkeleton === "function") return Boolean(model.IsSkeleton());
-    } catch (errFn) {}
+        if (typeof pfcPart !== "undefined" && typeof pfcPart.cast === "function") {
+            var asPart = pfcPart.cast(model);
+            if (asPart && asPart !== model && readIsSkeleton(asPart)) return true;
+        }
+    } catch (errPart) {}
+    try {
+        if (typeof pfcAssembly !== "undefined" && typeof pfcAssembly.cast === "function") {
+            var asAsm = pfcAssembly.cast(model);
+            if (asAsm && asAsm !== model && readIsSkeleton(asAsm)) return true;
+        }
+    } catch (errAsm) {}
     return false;
 }
 function creoBodyIsSheetmetal(body) {
@@ -982,8 +1016,8 @@ function creoClassifyManufacturing(session, model, identity) {
 function creoGatherModelRole(model, modelType, parameters) {
     /**
      * Mutually exclusive CreoPDM model_role. Family table / flexible / etc. stay elsewhere.
-     * MFG type → role MFG. PART sheet-metal: SMT_THICKNESS first, then body.IsSheetmetal.
-     * Feature-type lookup is not used — SMT_THICKNESS is the reliable Creo signal.
+     * Skeleton: pfcSolid.IsSkeleton (PART or ASSEMBLY). MFG type → role MFG.
+     * PART sheet-metal: SMT_THICKNESS first, then body.IsSheetmetal.
      */
     var kind = String(modelType || "").trim().toUpperCase();
     if (!kind || !model) return "";
