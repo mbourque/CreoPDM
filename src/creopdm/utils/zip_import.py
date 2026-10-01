@@ -9,6 +9,7 @@ from pathlib import Path
 
 from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import PathValidationError, ValidationAppError
+from creopdm.utils.paths import assert_safe_relative_path
 
 # Hard cap for uploaded zip body (plan: 2 GB).
 MAX_ZIP_IMPORT_BYTES = 2 * 1024 * 1024 * 1024
@@ -19,6 +20,7 @@ _SKIP_ZIP_DIR_NAMES = frozenset(
 _SKIP_ZIP_FILE_NAMES = frozenset(
     {name.lower() for name in (".ds_store", "thumbs.db", "desktop.ini")}
 )
+_RESERVED_VAULT_PARTS = frozenset({".git", ".creopdm"})
 
 
 def assert_zip_filename(name: str) -> str:
@@ -94,6 +96,26 @@ def strip_single_zip_root(extract_dir: Path) -> Path:
     return extract_dir
 
 
+def normalize_zip_parent_folder(parent_folder: str = "") -> str:
+    """Safe vault-relative parent for zip import, or '' for product root."""
+    parent = (parent_folder or "").strip().replace("\\", "/").strip("/")
+    if not parent:
+        return ""
+    path = assert_safe_relative_path(parent)
+    parts_lower = {part.lower() for part in path.parts}
+    if parts_lower & _RESERVED_VAULT_PARTS:
+        raise PathValidationError(
+            "That location is reserved for CreoPDM.",
+            details={"parent_folder": parent},
+        )
+    if parts_lower & _SKIP_ZIP_DIR_NAMES:
+        raise PathValidationError(
+            "That folder cannot be used as an import destination.",
+            details={"parent_folder": parent},
+        )
+    return path.as_posix()
+
+
 def plan_zip_import_jobs(
     extract_dir: Path,
     *,
@@ -109,7 +131,7 @@ def plan_zip_import_jobs(
         ignore_patterns,
         recursive=True,
     )
-    parent = (parent_folder or "").strip().replace("\\", "/").strip("/")
+    parent = normalize_zip_parent_folder(parent_folder)
     jobs: list[tuple[Path, str, str]] = []
     for path in selected:
         try:
@@ -117,7 +139,13 @@ def plan_zip_import_jobs(
         except ValueError:
             inner = path.name
         relative = f"{parent}/{inner}" if parent else inner
-        jobs.append((path, path.name, relative))
+        safe = assert_safe_relative_path(relative)
+        if {part.lower() for part in safe.parts} & _RESERVED_VAULT_PARTS:
+            raise PathValidationError(
+                "That location is reserved for CreoPDM.",
+                details={"relative_path": relative},
+            )
+        jobs.append((path, path.name, safe.as_posix()))
     return jobs
 
 

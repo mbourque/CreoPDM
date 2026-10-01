@@ -8,12 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from creopdm.exceptions import ValidationAppError
+from creopdm.exceptions import PathValidationError, ValidationAppError
 from creopdm.utils.zip_import import (
     MAX_ZIP_IMPORT_BYTES,
     assert_zip_filename,
     extract_zip_safely,
     extract_zip_to_temp,
+    normalize_zip_parent_folder,
     plan_zip_import_jobs,
     strip_single_zip_root,
 )
@@ -101,6 +102,29 @@ def test_extract_neutralizes_dotdot_zip_slip(tmp_path: Path):
     assert not outside.exists()
     assert (dest / "outside.prt").is_file()
     assert (dest / "outside.prt").read_bytes() == b"nope"
+
+
+def test_normalize_zip_parent_folder_rejects_traversal_and_reserved():
+    assert normalize_zip_parent_folder("") == ""
+    assert normalize_zip_parent_folder("Drawings/RevA") == "Drawings/RevA"
+    with pytest.raises(PathValidationError, match="traversal|relative"):
+        normalize_zip_parent_folder("../outside")
+    with pytest.raises(PathValidationError, match="traversal|relative"):
+        normalize_zip_parent_folder("CAD/../../etc")
+    with pytest.raises(PathValidationError, match="reserved"):
+        normalize_zip_parent_folder(".git/hooks")
+    with pytest.raises(PathValidationError, match="reserved"):
+        normalize_zip_parent_folder("lib/.creopdm")
+
+
+def test_plan_zip_import_rejects_unsafe_parent_folder(tmp_path: Path):
+    extract = tmp_path / "extracted"
+    extract.mkdir()
+    (extract / "pin.prt").write_bytes(b"pin")
+    with pytest.raises(PathValidationError, match="traversal|relative"):
+        plan_zip_import_jobs(extract, parent_folder="../../outside")
+    with pytest.raises(PathValidationError, match="reserved"):
+        plan_zip_import_jobs(extract, parent_folder=".git")
 
 
 def test_extract_rejects_corrupt_zip(tmp_path: Path):
