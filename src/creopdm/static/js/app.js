@@ -640,6 +640,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   const FILTERS = {
     files: null,
+    folders: null,
     creo_parts: ["CREO_PART"],
     assemblies: ["CREO_ASSEMBLY"],
     drawings: ["CREO_DRAWING"],
@@ -648,6 +649,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   };
   const CAD_MODEL_CHILD_FILTERS = new Set(["creo_parts", "assemblies", "drawings"]);
   const METRIC_LABELS = {
+    folders: "folders",
     files: "all files",
     cad_models: "Creo models",
     creo_parts: "parts",
@@ -723,6 +725,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function rowMatchesMetric(row, key) {
+    if (key === "folders") {
+      return row.classList.contains("folder-row");
+    }
     if (key === "checked_out") {
       return rowAttr(row, "data-checked-out") === "1" || row.dataset.checkedOut === "1";
     }
@@ -736,6 +741,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       );
       return owned && dirty;
     }
+    if (row.classList.contains("folder-row")) return false;
     if (key === "cad_models") return cadModelsExtensions().includes(rowExtension(row));
     if (key === "documents") return documentExtensions().includes(rowExtension(row));
     if (key === "other") return !cadModelsExtensions().includes(rowExtension(row));
@@ -817,17 +823,43 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return [...root.querySelectorAll(".object-row")];
   }
 
+  function listedFolderRows() {
+    const root = fileListRoot();
+    if (!root) return [];
+    if (root.id === "panel-changes" || root.id === "changes-table") return [];
+    if (root.id === "panel-checked-out" || root.id === "checked-out-table") return [];
+    return [...root.querySelectorAll(".folder-row")];
+  }
+
+  function syncFoldersMetricVisibility(count) {
+    const btn = metricButtons().find((item) => metricKey(item) === "folders");
+    if (!btn) return;
+    const li = btn.closest("li");
+    const show = count > 0;
+    if (li) li.hidden = !show;
+    btn.hidden = !show;
+    if (!show && metricMode(btn) !== "off") {
+      setMetricMode(btn, "off");
+    }
+  }
+
   function updateMetricCounts() {
     rememberMetricCounts();
     const root = fileListRoot();
     const filesTab = !root || root.id === "panel-files" || root.id === "object-table";
     const searching = $("#object-table")?.dataset.searching === "1";
     const files = listedMetricRows();
+    const folderRows = listedFolderRows();
+    syncFoldersMetricVisibility(folderRows.length);
     if (filesTab && !searching) {
       metricButtons().forEach((btn) => {
         const strong = btn.querySelector("strong");
         if (!strong) return;
         const key = metricKey(btn);
+        if (key === "folders") {
+          strong.textContent = String(folderRows.length);
+          return;
+        }
         // Type chips stay on the SSR folder snapshot. Checkout/modified update
         // after agent + check-in probes paint dirty rows — recount those.
         if (isStateMetric(key)) {
@@ -844,6 +876,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const strong = btn.querySelector("strong");
       if (!strong) return;
       const key = metricKey(btn);
+      if (key === "folders") {
+        strong.textContent = String(folderRows.length);
+        return;
+      }
       const count = key === "files"
         ? files.length
         : files.filter((row) => rowMatchesMetric(row, key)).length;
@@ -879,6 +915,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       btn.title = mode === "off"
         ? "Show and select all files. Clears type chips. Click again to clear."
         : "Showing all files (selected). Click to clear.";
+      return;
+    }
+    if (key === "folders") {
+      btn.title = mode === "off"
+        ? "Filter to folders and select them. Click again to clear."
+        : "Showing folders (selected). Click to clear.";
       return;
     }
     if (key === "checked_out") {
@@ -993,12 +1035,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (mode === "select" && isParentMetric(key) && typeFilterBtns.length) return false;
       return true;
     });
+    const foldersOnly =
+      viewBtns.length > 0 && viewBtns.every((btn) => metricKey(btn) === "folders");
     const q = ($("#search-input")?.value || "").trim();
     const searchingAll = $("#object-table")?.dataset.searching === "1";
     rows().forEach((row) => {
       if (row.classList.contains("folder-row")) {
         const matchesSearch = searchingAll ? false : rowMatchesSearchQuery(row, q);
+        // Folders-only filter: keep folders. Other type chips leave folders visible.
         setRowHidden(row, Boolean(q) && !matchesSearch);
+        return;
+      }
+      if (foldersOnly) {
+        setRowHidden(row, true);
         return;
       }
       const matchesSearch = searchingAll || rowMatchesSearchQuery(row, q);
@@ -1017,9 +1066,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!selecting.length) return;
     const typeActive = selecting.filter((btn) => !isStateMetric(metricKey(btn)));
     const stateKeys = selecting.filter((btn) => isStateMetric(metricKey(btn))).map((btn) => metricKey(btn));
+    const foldersSelecting = typeActive.some((btn) => metricKey(btn) === "folders");
     rows().forEach((row) => {
-      // Folder rows are selected by click for Remove — do not clear them here.
-      if (row.classList.contains("folder-row")) return;
+      if (row.classList.contains("folder-row")) {
+        if (foldersSelecting) {
+          markRowSelected(row, !rowIsHidden(row));
+        }
+        // Otherwise leave folder click-selection alone (Remove, etc.).
+        return;
+      }
       const matchesType = !typeActive.length || typeActive.some((btn) => rowMatchesMetric(row, metricKey(btn)));
       const matchesState = !stateKeys.length || stateKeys.every((key) => rowMatchesMetric(row, key));
       markRowSelected(row, matchesType && matchesState && !rowIsHidden(row));
@@ -4989,8 +5044,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (item !== btn && !isStateMetric(metricKey(item))) setMetricMode(item, "off");
       });
     }
+    if (key === "folders" && next !== "off") {
+      metricButtons().forEach((item) => {
+        if (item !== btn && !isStateMetric(metricKey(item))) setMetricMode(item, "off");
+      });
+    }
     if (key !== "files" && !isStateMetric(key) && next !== "off") {
       clearMetricFilters(new Set(["files"]));
+    }
+    if (key !== "folders" && key !== "files" && !isStateMetric(key) && next !== "off") {
+      clearMetricFilters(new Set(["folders"]));
     }
     if (key === "cad_models" && next !== "off") {
       clearMetricFilters(CAD_MODEL_CHILD_FILTERS);

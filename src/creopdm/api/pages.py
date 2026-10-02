@@ -439,6 +439,7 @@ def home(
         ctx.config.cad_models_extensions(),
         ctx.config.document_extensions(),
     )
+    status["folders"] = sum(1 for entry in list_entries if entry.get("kind") == "folder")
 
     return render(
         request,

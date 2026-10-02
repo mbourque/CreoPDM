@@ -1104,11 +1104,33 @@ def test_folder_row_click_selects_double_click_opens():
     assert 'classList.contains("folder-row")' in select_only
     assert "syncToolbar()" in select_only
     apply_sel = _between(script, "function applyMetricSelection(", "function metricSelectionActive(")
-    assert 'classList.contains("folder-row")) return' in apply_sel or 'folder-row")) return' in apply_sel
+    assert 'classList.contains("folder-row")' in apply_sel
+    assert "foldersSelecting" in apply_sel
     assert "markRowSelected(row, false)" not in apply_sel
     css = APP_CSS.read_text(encoding="utf-8")
     assert "cursor: default" in css.split(".folder-row {", 1)[1].split("}", 1)[0]
     assert "width: fit-content" in css
+
+
+def test_folders_metric_pill_before_files():
+    """Folders pill sits before Files; selects folder rows; hidden when count is 0."""
+    html = APP_HTML.read_text(encoding="utf-8")
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert 'data-filter="folders"' in html
+    assert html.index('data-filter="folders"') < html.index('data-filter="files"')
+    assert "status.folders" in html
+    assert "{% if not status.folders %} hidden{% endif %}" in html or "not status.folders" in html
+    match = _between(script, "function rowMatchesMetric(", "function rememberMetricCounts(")
+    assert 'key === "folders"' in match
+    assert 'classList.contains("folder-row")' in match
+    counts = _between(script, "function updateMetricCounts(", "function refreshTabMetrics(")
+    assert "syncFoldersMetricVisibility" in counts
+    assert 'key === "folders"' in counts
+    chip = _between(script, "function onMetricChip(", "document.querySelector(\"#metric-filters\")")
+    assert 'key === "folders"' in chip
+    assert "Click **Folders**" in docs
+    assert "**hide** the pill when there are no folders" in docs
 
 
 def test_user_interaction_negative_client_guards():
