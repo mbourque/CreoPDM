@@ -300,8 +300,9 @@ Starter roles: Administrator, PDM Manager, and Engineer get both export permissi
 
 1. **Remove from Workspace** — trash local copies on this PC only; vault and product list unchanged  
 2. **Purge workspace** — trash older local numbered saves that are below the vault version; vault unchanged  
-3. **Remove from Vault** — delete CreoPDM’s vault copies; your original CAD folder stays; checkouts cancelled  
-4. **Remove from Product** — remove from this product and delete vault copies; originals stay  
+3. **Delete workspace…** — trash this product’s entire local agent-cache folder on this PC (including local-only new files); vault and product list unchanged  
+4. **Remove from Vault** — delete CreoPDM’s vault copies; your original CAD folder stays; checkouts cancelled  
+5. **Remove from Product** — remove from this product and delete vault copies; originals stay  
 
 Destructive actions ask you to type the product name ([§13](#13-typing-the-product-name-to-confirm)).
 
@@ -318,6 +319,15 @@ Destructive actions ask you to type the product name ([§13](#13-typing-the-prod
 |--------|------------|--------------|
 | Confirm purge | Remove only older local saves; keep vault copy and newer local work | Delete anything from the vault |
 | Nothing to purge | Say so; delete nothing | |
+
+### Delete workspace…
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Open **Delete workspace…** | Ask you to type the product name; warn that the whole local workspace on this PC is deleted, including local-only **new** files that were never added; say vault copies and the product list stay (rematerialize later) | Use a plain browser `confirm`; delete vault files or change the product list |
+| Confirm with the correct product name | Move the local agent-cache folder to the Recycle Bin on this PC | Leave local-only new files behind when the delete succeeded |
+| Agent not running / Creo still has the folder open | Show a clear error; change nothing on the vault | Silently fail or claim vault was cleared |
+| Cancel / wrong product name | Change nothing | |
 
 ### Remove from Vault
 
@@ -340,7 +350,7 @@ Destructive actions ask you to type the product name ([§13](#13-typing-the-prod
 
 ## 13. Typing the product name to confirm
 
-Used for delete product, remove from product/vault, purge, History **Revert to selected…**, and similar.
+Used for delete product, remove from product/vault, purge, **Delete workspace…**, History **Revert to selected…**, and similar.
 
 | You do | App should | App must not |
 |--------|------------|--------------|

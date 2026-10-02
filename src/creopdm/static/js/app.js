@@ -3755,6 +3755,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const setCreoDirBtn = $("#set-creo-dir-btn");
   const purgeBtn = $("#purge-workspace-btn");
   const purgeVersionsBtn = $("#purge-versions-btn");
+  const deleteWorkspaceBtn = $("#delete-workspace-btn");
   const removeBtn = $("#remove-product-btn");
   const discardLocalBtn = $("#discard-local-btn");
   const removeMenu = $("#remove-menu");
@@ -4276,10 +4277,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const canPurgeVersions = Boolean(
       purgeVersionsBtn?.dataset.product || openWorkspaceBtn?.dataset.product || checkinBtn?.dataset.product
     );
-    const canRemoveMenu = canDiscardLocal || canPurge || canRemoveProduct || canPurgeVersions;
+    const canDeleteWorkspace = Boolean(
+      deleteWorkspaceBtn?.dataset.product
+      || openWorkspaceBtn?.dataset.product
+      || checkinBtn?.dataset.product
+      || currentProductId()
+    );
+    const canRemoveMenu =
+      canDiscardLocal || canPurge || canRemoveProduct || canPurgeVersions || canDeleteWorkspace;
     setToolbarActionVisible(discardLocalBtn, canDiscardLocal);
     setToolbarActionVisible(purgeBtn, canPurge);
     setToolbarActionVisible(purgeVersionsBtn, canPurgeVersions);
+    setToolbarActionVisible(deleteWorkspaceBtn, canDeleteWorkspace);
     setToolbarActionVisible(removeBtn, canRemoveProduct);
     setToolbarActionVisible(removeMenuBtn, canRemoveMenu);
     if (!canRemoveMenu) closeRemoveMenu();
@@ -7441,6 +7450,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return (
       $("#delete-product-btn")?.dataset.name
       || $("#revert-version-btn")?.dataset.productName
+      || deleteWorkspaceBtn?.dataset.productName
       || purgeVersionsBtn?.dataset.productName
       || purgeBtn?.dataset.productName
       || removeBtn?.dataset.productName
@@ -7953,6 +7963,77 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const removed = result.deleted || result.ok?.length || 0;
     if (removed) showOk(`${removed} older local save(s) purged.`);
     else showOk("No older local saves to purge.");
+    if (activeListTab() === "changes") await loadChangesTab();
+    else pollWorkspaceWatch();
+  });
+
+  async function deleteLocalProductWorkspace(productId) {
+    if (!productId) return null;
+    const agent = await probeCreoAgent();
+    if (!agent) return null;
+    const response = await fetch(`${agentBase()}/delete-product-cache`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        product_id: productId,
+        vault_folder: currentVaultFolder(),
+      }),
+    });
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(
+          "Local creopdm-agent does not support Delete workspace yet. Restart the creopdm-agent tray (or reinstall from this repo), then try again."
+        );
+      }
+      throw new Error(await readError(response));
+    }
+    return response.json();
+  }
+
+  deleteWorkspaceBtn?.addEventListener("click", async () => {
+    const productId =
+      deleteWorkspaceBtn.dataset.product
+      || checkinBtn?.dataset.product
+      || openWorkspaceBtn?.dataset.product
+      || currentProductId();
+    if (!productId) return;
+    showError($("#toolbar-error"), "");
+    const confirmed = await confirmByProductName({
+      title: "Delete workspace",
+      lead:
+        "This deletes this product’s entire local workspace on this PC (the creopdm-agent cache folder). "
+        + "Local-only new files that were never added to the product are deleted. "
+        + "Vault copies and the product file list are not changed — open or rematerialize from the vault when you need files again.",
+      note:
+        "Close open models in Creo first if Creo’s working directory is this workspace. "
+        + "This cannot be undone from CreoPDM. Restore from the Recycle Bin on this PC if needed.",
+      submitLabel: "Delete workspace",
+    });
+    if (!confirmed.ok) return;
+    showError($("#toolbar-error"), "");
+    const result = await withBusy("Deleting local workspace…", async () => {
+      try {
+        return await deleteLocalProductWorkspace(productId);
+      } catch (err) {
+        showError($("#toolbar-error"), err?.message || String(err));
+        return false;
+      }
+    });
+    if (result === false) return;
+    if (!result) {
+      showError(
+        $("#toolbar-error"),
+        "Start creopdm-agent on this Creo PC to delete the local workspace."
+      );
+      return;
+    }
+    knownWorkspacePaths.at = 0;
+    cachedProductObjects.at = 0;
+    if (result.deleted) {
+      showOk(result.message || "Local workspace moved to the Recycle Bin.");
+    } else {
+      showOk(result.message || "Local workspace folder was already gone.");
+    }
     if (activeListTab() === "changes") await loadChangesTab();
     else pollWorkspaceWatch();
   });

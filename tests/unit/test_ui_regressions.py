@@ -406,6 +406,25 @@ def test_delete_product_dialog_offers_local_workspace_checkbox():
     assert "delete-local-workspace" in script
 
 
+def test_delete_workspace_menu_warns_new_files_vault_safe():
+    """Remove ▾ → Delete workspace… confirms with product name; vault stays."""
+    html = APP_HTML.read_text(encoding="utf-8")
+    assert 'id="delete-workspace-btn"' in html
+    assert ">Delete workspace…<" in html
+    assert html.index('id="purge-versions-btn"') < html.index('id="delete-workspace-btn"')
+    script = _app_js()
+    assert "async function deleteLocalProductWorkspace(" in script
+    assert 'title: "Delete workspace"' in script
+    assert "Local-only new files that were never added" in script
+    assert "Vault copies and the product file list are not changed" in script
+    assert "deleteWorkspaceBtn?.addEventListener(" in script
+    assert "setToolbarActionVisible(deleteWorkspaceBtn, canDeleteWorkspace)" in script
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "### Delete workspace…" in docs
+    assert "local-only **new** files" in docs
+    assert "vault copies and the product list stay" in docs
+
+
 def test_soft_nav_does_not_silently_drop_when_busy():
     """Regression: soft-nav must serialize refreshes (never no-op or hard-reload)."""
     body = _between(_app_js(), "function softNavigate(", "function leavePage(")

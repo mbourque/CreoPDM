@@ -542,9 +542,15 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert 'beginCheckin("product")' in script.text
     assert 'id="discard-local-btn"' in home.text
     assert 'id="purge-versions-btn"' in home.text
+    assert 'id="delete-workspace-btn"' in home.text
+    assert ">Delete workspace…<" in home.text
     assert 'id="purge-workspace-btn"' in home.text
     assert "function deleteLocalWorkspacePaths" in script.text
+    assert "function deleteLocalProductWorkspace" in script.text
     assert "function purgeLocalVersionsOlderThanVault" in script.text
+    assert "Local-only new files that were never added" in script.text
+    assert "Vault copies and the product file list are not changed" in script.text
+    assert 'title: "Delete workspace"' in script.text
     assert "function formatPurgeConfirmDetails" in script.text
     assert "function newerLocalCacheSaves" in script.text
     assert "function materializeCheckedOutToAgentCache" in script.text
