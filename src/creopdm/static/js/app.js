@@ -5551,6 +5551,77 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return [];
   }
 
+  function checkedInObjectIdsFromResult(result) {
+    const ids = [];
+    const seen = new Set();
+    const push = (id) => {
+      const key = String(id || "").trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      ids.push(key);
+    };
+    if (Array.isArray(result?.ok)) {
+      result.ok.forEach((item) => {
+        if (item && item.uuid) push(item.uuid);
+      });
+    } else if (result?.uuid) {
+      push(result.uuid);
+    }
+    return ids;
+  }
+
+  /**
+   * After a clean check-in the vault tip is logical (shaft.prt), but Creo may
+   * still leave shaft.prt.2 in the agent cache. Rematerialize with replace_newer
+   * so the local tip matches vault and higher .N siblings are trashed.
+   */
+  async function rematerializeCheckedInLocalTips(result) {
+    const ids = checkedInObjectIdsFromResult(result);
+    if (!ids.length) return { agentOffline: false, ok: 0, failed: 0 };
+    const agent = await probeCreoAgent();
+    if (!agent) return { agentOffline: true, ok: 0, failed: 0 };
+    let ok = 0;
+    let failed = 0;
+    const total = ids.length;
+    await withBusy(
+      total === 1
+        ? "Updating local workspace…"
+        : `Updating local workspace… 0 of ${total}`,
+      async () => {
+        for (let i = 0; i < ids.length; i += 1) {
+          if (total > 1) {
+            setBusyMessage(`Updating local workspace… ${i + 1} of ${total}`);
+          }
+          const objectId = ids[i];
+          try {
+            const prepared = await postAction(
+              "/api/creo/open",
+              {
+                object_id: objectId,
+                launch: false,
+                include_companions: false,
+              },
+              "POST",
+              ""
+            );
+            if (!prepared) {
+              failed += 1;
+              continue;
+            }
+            await materializeViaAgent({
+              ...prepared,
+              replace_newer: true,
+            });
+            ok += 1;
+          } catch {
+            failed += 1;
+          }
+        }
+      }
+    );
+    return { agentOffline: false, ok, failed };
+  }
+
   function whenCreoJSReady(timeoutMs = 20000) {
     return new Promise((resolve, reject) => {
       let settled = false;
@@ -8021,6 +8092,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       // Always patch the table first — Creo often skips navigation from this dialog.
       applyCheckedInResult(result);
+      // Drop local Creo .N leftovers (e.g. shaft.prt.2) and rematerialize logical tip.
+      await rematerializeCheckedInLocalTips(result);
       if (canGatherCreoMetadata()) {
         await withBusy("Capturing Creo metadata…", async () => {
           await pushCreoMetadataForItems(metadataTargetsFromResult(result));

@@ -730,8 +730,9 @@ def _find_cache_file(cache_dir: Path, filename: str) -> Path | None:
 def _purge_newer_local_saves(cache_dir: Path, kept: Path) -> list[str]:
     """Trash same-logical Creo saves with a higher .N than ``kept`` under the cache.
 
-    Used after History revert so local workspace matches the restored vault tip
-    (e.g. drop start_part.prt.3 when vault tip is start_part.prt.1).
+    Used after History revert and after clean check-in rematerialize so the local
+    workspace matches the vault tip (e.g. drop ``shaft.prt.2`` when kept is the
+    logical ``shaft.prt``, or drop ``.prt.3`` when kept is ``.prt.1``).
     """
     from creopdm.creo.file_manager import CreoFileManager
 

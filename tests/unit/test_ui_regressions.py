@@ -1340,6 +1340,35 @@ def test_checkin_dialog_keeps_local_tip_name():
     assert "strip the Creo `.N` in the Check In dialog" in docs
 
 
+def test_checkin_success_rematerializes_and_drops_local_n():
+    """Clean check-in must rematerialize logical tip and trash leftover .prt.2 locally."""
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "function rematerializeCheckedInLocalTips" in script
+    assert "function checkedInObjectIdsFromResult" in script
+    submit = _between(
+        script,
+        'checkinForm?.addEventListener("submit"',
+        'historyBtn?.addEventListener("click"',
+    )
+    assert "await rematerializeCheckedInLocalTips(result)" in submit
+    assert "applyCheckedInResult(result)" in submit
+    assert submit.index("await rematerializeCheckedInLocalTips(result)") > submit.index(
+        "applyCheckedInResult(result)"
+    )
+    helper = _between(
+        script,
+        "async function rematerializeCheckedInLocalTips(",
+        "function whenCreoJSReady(",
+    )
+    assert "replace_newer: true" in helper
+    assert '"/api/creo/open"' in helper or "'/api/creo/open'" in helper
+    assert "materializeViaAgent" in helper
+    assert "Updating local workspace" in helper
+    assert "trash higher local `.N` leftovers" in docs
+    assert "leave `shaft.prt.2`" in docs
+
+
 def test_pending_from_status_requires_hash_for_dirty_tip():
     """Git dirty tip / higher .N with matching content_hash must not appear as Modified."""
     text = (ROOT / "src" / "creopdm" / "services" / "workspace_service.py").read_text(

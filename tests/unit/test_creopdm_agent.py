@@ -239,6 +239,61 @@ def test_agent_materialize_replace_newer_trashes_higher_local_saves(tmp_path, mo
         assert (nested / "other.prt.9").read_bytes() == b"keep"
 
 
+def test_agent_materialize_replace_newer_drops_prt2_when_tip_is_logical(tmp_path, monkeypatch):
+    """After clean check-in, rematerialize logical tip must trash leftover .prt.2."""
+    root = tmp_path / "cache"
+    product_id = "5e9399ce-1754-488b-aaa4-290ad5b5d5a2"
+    cache = root / product_id
+    cache.mkdir(parents=True)
+    (cache / "600610010003.prt").write_bytes(b"old-logical")
+    (cache / "600610010003.prt.2").write_bytes(b"checked-in-tip")
+    (cache / "other.prt.2").write_bytes(b"keep-other")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+
+    class FakeResponse:
+        def __init__(self, body: bytes):
+            self.status_code = 200
+            self.content = body
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers=None):
+            return FakeResponse(b"vault-logical")
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        saved = client.post(
+            "/materialize",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "object_id": "part-logical",
+                "product_id": product_id,
+                "relative_path": "600610010003.prt",
+                "filename": "600610010003.prt",
+                "disk_name": "600610010003.prt",
+                "replace_newer": True,
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        body = saved.json()
+        assert body["disk_name"] == "600610010003.prt"
+        assert Path(body["path"]).read_bytes() == b"vault-logical"
+        purged = set(body.get("purged_newer") or [])
+        assert "600610010003.prt.2" in purged
+        assert not (cache / "600610010003.prt.2").exists()
+        assert (cache / "600610010003.prt").is_file()
+        assert (cache / "other.prt.2").read_bytes() == b"keep-other"
+
+
 def test_agent_open_folder_uses_product_cache(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
