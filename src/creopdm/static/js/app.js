@@ -1070,8 +1070,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const filesSelecting = typeActive.some((btn) => metricKey(btn) === "files");
     rows().forEach((row) => {
       if (row.classList.contains("folder-row")) {
-        if (foldersSelecting || filesSelecting) {
+        if (foldersSelecting) {
           markRowSelected(row, !rowIsHidden(row));
+        } else if (filesSelecting) {
+          // Files can stay on without Folders — clear folder selection.
+          markRowSelected(row, false);
         }
         // Otherwise leave folder click-selection alone (Remove, etc.).
         return;
