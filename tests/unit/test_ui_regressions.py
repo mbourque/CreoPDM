@@ -1106,9 +1106,11 @@ def test_folder_row_click_selects_double_click_opens():
     apply_sel = _between(script, "function applyMetricSelection(", "function metricSelectionActive(")
     assert 'classList.contains("folder-row")' in apply_sel
     assert "foldersSelecting" in apply_sel
-    assert "filesSelecting" in apply_sel
-    assert "markRowSelected(row, false)" in apply_sel
-    assert "Files can stay on without Folders" in apply_sel
+    assert "Folder selection follows the Folders pill only" in apply_sel
+    assert "markRowSelected(row, foldersSelecting && !rowIsHidden(row))" in apply_sel
+    vis = _between(script, "function applyMetricVisibility(", "function applyMetricSelection(")
+    assert "fileTypeFilterOn" in vis
+    assert "foldersFilterOn" in vis
     css = APP_CSS.read_text(encoding="utf-8")
     assert "cursor: default" in css.split(".folder-row {", 1)[1].split("}", 1)[0]
     assert "width: fit-content" in css
@@ -1137,9 +1139,11 @@ def test_folders_metric_pill_before_files():
     assert "**hide** the pill when there are no folders" in docs
     assert "stays **on** together with **Files**" in docs
     assert "turning **Folders** off **unselects** folder rows" in docs
+    assert "hides and unselects** folders" in docs
     apply_sel = _between(script, "function applyMetricSelection(", "function metricSelectionActive(")
-    assert "Files can stay on without Folders" in apply_sel
-    assert apply_sel.index("foldersSelecting") < apply_sel.index("Files can stay on without Folders")
+    assert "Folder selection follows the Folders pill only" in apply_sel
+    vis = _between(script, "function applyMetricVisibility(", "function applyMetricSelection(")
+    assert "fileTypeFilterOn && !foldersFilterOn" in vis
 
 
 def test_user_interaction_negative_client_guards():

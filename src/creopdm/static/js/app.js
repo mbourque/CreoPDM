@@ -1037,13 +1037,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
     const foldersOnly =
       viewBtns.length > 0 && viewBtns.every((btn) => metricKey(btn) === "folders");
+    const foldersFilterOn = viewBtns.some((btn) => metricKey(btn) === "folders");
+    const fileTypeFilterOn = viewBtns.some((btn) => {
+      const key = metricKey(btn);
+      return key !== "folders" && key !== "files";
+    });
     const q = ($("#search-input")?.value || "").trim();
     const searchingAll = $("#object-table")?.dataset.searching === "1";
     rows().forEach((row) => {
       if (row.classList.contains("folder-row")) {
         const matchesSearch = searchingAll ? false : rowMatchesSearchQuery(row, q);
-        // Folders-only filter: keep folders. Other type chips leave folders visible.
-        setRowHidden(row, Boolean(q) && !matchesSearch);
+        if (Boolean(q) && !matchesSearch) {
+          setRowHidden(row, true);
+          return;
+        }
+        // Creo Models / Parts / … without Folders: hide folder rows.
+        // Files alone (Folders off) still shows folders, unselected.
+        if (fileTypeFilterOn && !foldersFilterOn) {
+          setRowHidden(row, true);
+          return;
+        }
+        setRowHidden(row, false);
         return;
       }
       if (foldersOnly) {
@@ -1067,16 +1081,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const typeActive = selecting.filter((btn) => !isStateMetric(metricKey(btn)));
     const stateKeys = selecting.filter((btn) => isStateMetric(metricKey(btn))).map((btn) => metricKey(btn));
     const foldersSelecting = typeActive.some((btn) => metricKey(btn) === "folders");
-    const filesSelecting = typeActive.some((btn) => metricKey(btn) === "files");
     rows().forEach((row) => {
       if (row.classList.contains("folder-row")) {
-        if (foldersSelecting) {
-          markRowSelected(row, !rowIsHidden(row));
-        } else if (filesSelecting) {
-          // Files can stay on without Folders — clear folder selection.
-          markRowSelected(row, false);
-        }
-        // Otherwise leave folder click-selection alone (Remove, etc.).
+        // Folder selection follows the Folders pill only — never stick after it turns off.
+        markRowSelected(row, foldersSelecting && !rowIsHidden(row));
         return;
       }
       const matchesType = !typeActive.length || typeActive.some((btn) => rowMatchesMetric(row, metricKey(btn)));
