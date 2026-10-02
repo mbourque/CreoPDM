@@ -965,11 +965,16 @@ def test_history_revert_only_for_older_versions():
     )
     assert "confirmByProductName" in revert_click
     assert "window.confirm" not in revert_click
-    assert "tryEraseRevertedModelFromCreo" in revert_click
+    assert "tryEraseModelsFromCreoSession" in revert_click
+    assert "creoYieldForDeferredErase" in revert_click
     assert "eraseSessionModelsByNames" in script
     assert "CREO_REVERT_SESSION_HINT" in revert_click
     assert "File → Erase" in revert_click
     assert "Removed from Creo session" in revert_click
+    # Erase before rematerialize so locked .N leftovers can be trashed.
+    assert revert_click.index("tryEraseModelsFromCreoSession") < revert_click.index(
+        "materializeViaAgent"
+    )
     assert "Version History" not in detail
     assert "File History" not in detail
     assert "subpanel-versions" not in detail
@@ -1011,6 +1016,7 @@ def test_history_revert_only_for_older_versions():
     assert "keep old geometry in memory" in docs
     assert "File → Erase" in docs
     assert "pretend Creo already shows the restored geometry" in docs
+    assert "function tryEraseModelsFromCreoSession" in script
     assert "function tryEraseRevertedModelFromCreo" in script
     assert "allowUndisplayed: false" in script
     assert "bottom toolbar" in docs.lower() or "at the bottom" in docs.lower()
@@ -1345,7 +1351,9 @@ def test_checkin_success_rematerializes_and_drops_local_n():
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "function rematerializeCheckedInLocalTips" in script
-    assert "function checkedInObjectIdsFromResult" in script
+    assert "function checkedInItemsFromResult" in script
+    assert "function tryEraseModelsFromCreoSession" in script
+    assert "function creoYieldForDeferredErase" in script
     submit = _between(
         script,
         'checkinForm?.addEventListener("submit"',
@@ -1356,17 +1364,23 @@ def test_checkin_success_rematerializes_and_drops_local_n():
     assert submit.index("await rematerializeCheckedInLocalTips(result)") > submit.index(
         "applyCheckedInResult(result)"
     )
+    assert "CREO_SESSION_DISK_HINT" in submit
     helper = _between(
         script,
         "async function rematerializeCheckedInLocalTips(",
         "function whenCreoJSReady(",
     )
+    assert "tryEraseModelsFromCreoSession" in helper
+    assert "creoYieldForDeferredErase" in helper
     assert "replace_newer: true" in helper
     assert '"/api/creo/open"' in helper or "'/api/creo/open'" in helper
     assert "materializeViaAgent" in helper
     assert "Updating local workspace" in helper
+    # Erase must run before rematerialize so locked .N files can be trashed.
+    assert helper.index("tryEraseModelsFromCreoSession") < helper.index("materializeViaAgent")
     assert "trash higher local `.N` leftovers" in docs
     assert "leave `shaft.prt.2`" in docs
+    assert "Erase** the model from the Creo session" in docs
 
 
 def test_pending_from_status_requires_hash_for_dirty_tip():

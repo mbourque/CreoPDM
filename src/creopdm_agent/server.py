@@ -771,9 +771,18 @@ def _purge_newer_local_saves(cache_dir: Path, kept: Path) -> list[str]:
             except ValueError:
                 rel = entry
             try:
+                try:
+                    from creopdm.utils.files import set_file_writable
+
+                    set_file_writable(resolved)
+                except Exception:
+                    pass
                 move_to_trash(resolved)
             except OSError as exc:
                 logger.warning("Could not trash newer local save %s: %s", rel, exc)
+                continue
+            if resolved.exists():
+                logger.warning("Newer local save still on disk after trash attempt: %s", rel)
                 continue
             removed.append(rel)
             logger.info("Trashed newer local save after vault replace: %s", rel)
