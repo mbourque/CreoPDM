@@ -90,9 +90,9 @@ def test_canonical_name_strips_creo_save_numbers():
     assert CreoFileManager.canonical_repository_name("preview.2.pvz") == "preview.pvz"
 
 
-def test_workspace_materialize_name_adds_dot_one_for_logical_vault_tip():
-    assert CreoFileManager.workspace_materialize_name("shaft.prt") == "shaft.prt.1"
-    assert CreoFileManager.workspace_materialize_name("shaft.prt.3") == "shaft.prt.3"
+def test_workspace_materialize_name_matches_logical_vault_tip():
+    assert CreoFileManager.workspace_materialize_name("shaft.prt") == "shaft.prt"
+    assert CreoFileManager.workspace_materialize_name("shaft.prt.3") == "shaft.prt"
     assert CreoFileManager.workspace_materialize_name("notes.pdf") == "notes.pdf"
     assert CreoFileManager.purge_floor_for_vault_tip("shaft.prt") == 1
     assert CreoFileManager.purge_floor_for_vault_tip("shaft.prt.3") == 3

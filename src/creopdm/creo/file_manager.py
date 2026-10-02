@@ -208,17 +208,11 @@ class CreoFileManager:
     ) -> str:
         """Agent-cache / Creo disk leaf when materializing a vault tip.
 
-        Vault tips are logical (``shaft.prt``). The local cache prefers
-        ``shaft.prt.1`` so Creo and newer-save detection keep working. Legacy
-        numbered vault tips keep their basename until migrated.
+        Matches the vault tip: logical CAD name (``shaft.prt``), no Creo ``.N``.
+        Later Creo saves create ``.prt.1+`` siblings for newer-save detection.
         """
         name = Path(str(vault_filename).replace("\\", "/")).name
-        if cls.save_number(name, extra_extensions) > 0:
-            return name
-        logical = cls.logical_filename(name, extra_extensions)
-        if cls.is_versioned_extension(Path(logical).suffix, extra_extensions):
-            return f"{logical}.1"
-        return logical
+        return cls.canonical_repository_name(name, extra_extensions)
 
     @classmethod
     def purge_floor_for_vault_tip(
@@ -552,7 +546,7 @@ class CreoFileManager:
             nested_parent = folder / logical_path.parent
             if nested_parent.is_dir():
                 parents.append(nested_parent)
-            # Flat agent cache: Documents/shaft.prt → shaft.prt.1 at cache root.
+            # Flat agent cache: Documents/shaft.prt → shaft.prt at cache root.
             nested = logical_path.parent.as_posix() not in ("", ".")
             if nested and basename_counts.get(wanted, 0) == 1 and folder.is_dir():
                 if not any(parent.resolve() == folder_resolved for parent in parents):

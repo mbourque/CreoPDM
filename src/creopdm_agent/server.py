@@ -100,9 +100,10 @@ def _mtime_from_zipinfo(info: zipfile.ZipInfo) -> float | None:
 def _cache_dest_relative(relative_path: str | None, disk_name: str) -> Path:
     """Relative path under the product cache, preserving vault folders.
 
-    Leaf name is always ``disk_name`` (Creo numbered save when present). Parent
-    folders come from ``relative_path`` so ``lib/step/pin.prt`` + ``pin.prt.1``
-    becomes ``lib/step/pin.prt.1``.
+    Leaf name is always ``disk_name`` (logical tip, or an explicit Creo numbered
+    save when the client still sends one). Parent folders come from
+    ``relative_path`` so ``lib/step/pin.prt`` + ``pin.prt`` becomes
+    ``lib/step/pin.prt``.
     """
     leaf = _safe_segment(Path(disk_name or "").name or "model.bin", "model.bin")
     rel = (relative_path or "").replace("\\", "/").lstrip("/")

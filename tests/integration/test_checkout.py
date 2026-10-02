@@ -259,9 +259,9 @@ def test_agent_cache_archive_zip(client, repo_parent):
     assert "application/zip" in archive.headers.get("content-type", "")
     with zipfile.ZipFile(io.BytesIO(archive.content)) as zf:
         names = set(zf.namelist())
-        shaft_bytes = zf.read("shaft.prt.1")
-        bracket_bytes = zf.read("bracket.prt.1")
-    assert names == {"shaft.prt.1", "bracket.prt.1"}
+        shaft_bytes = zf.read("shaft.prt")
+        bracket_bytes = zf.read("bracket.prt")
+    assert names == {"shaft.prt", "bracket.prt"}
     assert shaft_bytes == b"original-content"
     assert bracket_bytes == b"bracket-content"
 
@@ -274,11 +274,11 @@ def test_agent_cache_archive_zip(client, repo_parent):
     assert body["product_id"] == product["uuid"]
     assert len(body["items"]) == 2
     by_name = {item["disk_name"]: item for item in body["items"]}
-    assert "shaft.prt.1" in by_name
-    assert "bracket.prt.1" in by_name
-    assert by_name["shaft.prt.1"]["relative_path"] == "shaft.prt"
-    assert len(by_name["shaft.prt.1"]["content_hash"]) == 64
-    assert by_name["shaft.prt.1"]["file_size"] == len(b"original-content")
+    assert "shaft.prt" in by_name
+    assert "bracket.prt" in by_name
+    assert by_name["shaft.prt"]["relative_path"] == "shaft.prt"
+    assert len(by_name["shaft.prt"]["content_hash"]) == 64
+    assert by_name["shaft.prt"]["file_size"] == len(b"original-content")
 
 
 @requires_git
@@ -302,14 +302,14 @@ def test_agent_cache_archive_preserves_nested_paths(client, repo_parent):
     )
     assert archive.status_code == 200, archive.text
     with zipfile.ZipFile(io.BytesIO(archive.content)) as zf:
-        assert zf.namelist() == ["lib/step/pin.prt.1"]
-        assert zf.read("lib/step/pin.prt.1") == b"nested-pin-bytes"
+        assert zf.namelist() == ["lib/step/pin.prt"]
+        assert zf.read("lib/step/pin.prt") == b"nested-pin-bytes"
     manifest = client.post(
         "/api/objects/batch/agent-cache-manifest",
         json={"object_ids": [obj["uuid"]]},
     ).json()
     assert manifest["items"][0]["relative_path"] == "lib/step/pin.prt"
-    assert manifest["items"][0]["disk_name"] == "pin.prt.1"
+    assert manifest["items"][0]["disk_name"] == "pin.prt"
 
 
 @requires_git

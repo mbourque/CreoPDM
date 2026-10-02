@@ -66,8 +66,8 @@ def build_agent_cache_zip(
 ) -> tuple[Path, int]:
     """Write vault files to a temp zip, preserving nested relative paths.
 
-    Zip leaf names use the agent-cache disk name (``shaft.prt.1`` for a logical
-    vault tip) so extract lands where Creo and newer-save detection expect.
+    Zip leaf names use the same logical disk name as the vault tip
+    (``shaft.prt``) so materialize does not invent Creo ``.N`` suffixes.
     """
     if not objects:
         raise ValidationAppError("No files to download.")

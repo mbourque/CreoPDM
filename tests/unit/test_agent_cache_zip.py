@@ -98,9 +98,9 @@ def test_manifest_disk_name_uses_workspace_materialize_leaf():
         current_version=version,
     )
     items = manifest_items_for_objects([logical, numbered])
-    assert items[0]["disk_name"] == "shaft.prt.1"
+    assert items[0]["disk_name"] == "shaft.prt"
     assert items[0]["relative_path"] == "lib/shaft.prt"
-    assert items[1]["disk_name"] == "legacy.prt.3"
+    assert items[1]["disk_name"] == "legacy.prt"
 
 
 def test_plan_skips_matching_hash_keeps_newer_save(tmp_path):

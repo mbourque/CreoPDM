@@ -143,7 +143,7 @@ def test_open_prepare_includes_creo_release(data_dir, repo_parent, identity: Sta
         body = prepared.json()
         assert body["creo_release"] == "13.4.1.0"
         assert body["filename"] == "shaft.prt"
-        assert body["disk_name"] == "shaft.prt.1"
+        assert body["disk_name"] == "shaft.prt"
 
 
 @requires_git
