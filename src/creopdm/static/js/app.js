@@ -4905,6 +4905,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       roleCanCheckout &&
       selected.length > 0 &&
       selected.every((row) => row.dataset.canCheckout === "1");
+    const canUndo =
+      Boolean(undoBtn) &&
+      roleCanCheckout &&
+      selected.length > 0 &&
+      selected.every((row) => row.dataset.owned === "1");
     const addOnly = selectionIsAddOnly(selected);
     // Match toolbar: Check in selected stays in the DOM when the menu exists; enable only when work is pending.
     // Context menu hides when not possible (no greyed items).
@@ -4922,6 +4927,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       exportHasSelection;
     return {
       canCheckout,
+      canUndo,
       canCheckin,
       canDownload,
       canExport,
@@ -4931,18 +4937,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function ensureFilesContextMenu() {
     let menu = document.getElementById("files-context-menu");
-    if (menu) return menu;
-    menu = document.createElement("div");
-    menu.id = "files-context-menu";
-    menu.className = "files-context-menu";
-    menu.setAttribute("role", "menu");
-    menu.hidden = true;
     const items = [
       {
         id: "files-context-checkout",
         action: "checkout",
         label: "Checkout selected",
         title: "Check out the selected files and download them to the local workspace.",
+      },
+      {
+        id: "files-context-undo",
+        action: "undo",
+        label: "Undo Checkout",
+        title: "Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward.",
       },
       {
         id: "files-context-checkin",
@@ -4963,7 +4969,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         title: "Download the selected vault files or folders as a zip.",
       },
     ];
+    if (!menu) {
+      menu = document.createElement("div");
+      menu.id = "files-context-menu";
+      menu.className = "files-context-menu";
+      menu.setAttribute("role", "menu");
+      menu.hidden = true;
+      document.body.appendChild(menu);
+    }
     items.forEach((spec) => {
+      if (menu.querySelector(`#${spec.id}`)) return;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "toolbar-menu-item";
@@ -4972,9 +4987,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       btn.setAttribute("role", "menuitem");
       btn.textContent = spec.label;
       btn.title = spec.title;
-      menu.appendChild(btn);
+      // Keep toolbar-like order when inserting into an older menu node.
+      const order = items.map((item) => item.id);
+      const index = order.indexOf(spec.id);
+      let inserted = false;
+      for (let i = index + 1; i < order.length; i += 1) {
+        const next = menu.querySelector(`#${order[i]}`);
+        if (next) {
+          menu.insertBefore(btn, next);
+          inserted = true;
+          break;
+        }
+      }
+      if (!inserted) menu.appendChild(btn);
     });
-    document.body.appendChild(menu);
     return menu;
   }
 
@@ -5004,16 +5030,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function openFilesContextMenu(clientX, clientY) {
     syncToolbar();
     const caps = filesContextMenuCapabilities();
-    if (!caps.canCheckout && !caps.canCheckin && !caps.canDownload && !caps.canExport) {
+    if (!caps.canCheckout && !caps.canUndo && !caps.canCheckin && !caps.canDownload && !caps.canExport) {
       return false;
     }
     closeAllToolbarMenus();
     const menu = ensureFilesContextMenu();
     const checkoutItem = menu.querySelector("#files-context-checkout");
+    const undoItem = menu.querySelector("#files-context-undo");
     const checkinItem = menu.querySelector("#files-context-checkin");
     const downloadItem = menu.querySelector("#files-context-download");
     const exportItem = menu.querySelector("#files-context-export");
     if (checkoutItem) checkoutItem.hidden = !caps.canCheckout;
+    if (undoItem) undoItem.hidden = !caps.canUndo;
     if (checkinItem) {
       checkinItem.hidden = !caps.canCheckin;
       checkinItem.textContent = caps.checkinLabel;
@@ -5083,6 +5111,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (action === "checkout") {
       checkoutBtn?.click();
+      return;
+    }
+    if (action === "undo") {
+      undoBtn?.click();
       return;
     }
     if (action === "checkin") {

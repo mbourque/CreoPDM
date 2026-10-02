@@ -1063,20 +1063,25 @@ def test_files_context_menu_download_to_workspace():
     assert "function runFilesContextMenuAction(" in script
     assert "Download selected to workspace" in script
     assert "Checkout selected" in script
+    assert "Undo Checkout" in script
     assert "Check in selected…" in script
     assert "Export selected…" in script
     assert 'dataset?.canView === "1"' in script
     caps = _between(script, "function filesContextMenuCapabilities(", "function ensureFilesContextMenu(")
     assert "selectionCanCheckin(selected)" in caps
     assert 'dataset.canCheckout === "1"' in caps
+    assert 'dataset.owned === "1"' in caps
+    assert "canUndo" in caps
     assert "canExportObjects" in caps
     open_menu = _between(script, "function openFilesContextMenu(", "async function downloadSelectedToWorkspace(")
     assert "checkoutItem.hidden = !caps.canCheckout" in open_menu
+    assert "undoItem.hidden = !caps.canUndo" in open_menu
     assert "checkinItem.hidden = !caps.canCheckin" in open_menu
     assert "downloadItem.hidden = !caps.canDownload" in open_menu
     assert "exportItem.hidden = !caps.canExport" in open_menu
     run = _between(script, "function runFilesContextMenuAction(", "function onFileTableContextMenu(")
     assert "checkoutBtn?.click()" in run
+    assert "undoBtn?.click()" in run
     assert "checkinBtn?.click()" in run
     assert "exportSelectedBtn?.click()" in run
     download = _between(
@@ -1089,6 +1094,7 @@ def test_files_context_menu_download_to_workspace():
     assert ".files-context-menu" in css
     assert "**Right-click** a file or folder row" in docs
     assert "**Checkout selected**" in docs
+    assert "**Undo Checkout**" in docs
     assert "**Export selected…**" in docs
     assert "**hide** each item when that action is not possible" in docs
     assert "without `objects.view`" in docs or "`objects.view`" in docs
