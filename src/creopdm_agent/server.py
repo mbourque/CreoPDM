@@ -1477,18 +1477,15 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         ok: list[BatchAddItem] = []
         # Small chunks avoid reverse-proxy body limits on Snagit media batches.
         chunk_size = 5
-        user_comment = (payload.comment or "").strip()
-        # Client total is the full picker count (e.g. 935). Without it, each
-        # 5-file upload invents "Add 5 files" and History looks wrong.
+        from creopdm.utils.import_comments import resolve_add_commit_message
+
         batch_total = int(payload.client_total or 0) or len(jobs)
-        if user_comment:
-            comment = user_comment
-        elif batch_total == 1 and jobs:
-            comment = f"Add {jobs[0][0].name}"
-        elif batch_total > 1:
-            comment = f"Add {batch_total} files"
-        else:
-            comment = None
+        comment = resolve_add_commit_message(
+            payload.comment,
+            planned_count=len(jobs),
+            batch_total=batch_total,
+            single_filename=jobs[0][0].name if len(jobs) == 1 else None,
+        )
         with httpx.Client(timeout=600.0, follow_redirects=True) as client:
             for offset in range(0, len(jobs), chunk_size):
                 chunk = jobs[offset : offset + chunk_size]
@@ -1516,9 +1513,11 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                             offset + len(chunk),
                         )
                         continue
-                    # Same comment on every upload chunk (not only the first).
+                    # Same comment + batch_total on every upload chunk.
                     if comment:
                         data["comment"] = comment
+                    if batch_total > 0:
+                        data["batch_total"] = str(batch_total)
                     try:
                         response = client.post(url, headers=headers, data=data or None, files=files)
                     except httpx.HTTPError as exc:

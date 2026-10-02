@@ -262,6 +262,8 @@ class ImportLocalRequest(BaseModel):
     folders: list[str] = Field(default_factory=list)
     recursive: bool = True
     comment: str | None = None
+    # Full picker count when this request is one chunk of a larger Add.
+    batch_total: int | None = None
     base_folder: str | None = None
     # When true (default), vault paths include the chosen folder name.
     keep_root_folder: bool = True

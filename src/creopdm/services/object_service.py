@@ -488,11 +488,16 @@ class ObjectService:
         product: Product,
         jobs: list[tuple[Path, str | None, str | None]],
         comment: str | None = None,
+        batch_total: int | None = None,
     ) -> list[ImportJobResult]:
         """Copy accepted files, then one Git add and one commit.
 
         Ignored, duplicate, and older saves are skipped per file. A later Creo
         numbered save of an existing object becomes the next iteration.
+
+        ``batch_total`` is the full picker count when this call is one chunk of a
+        larger Add — used for the auto History comment so chunk size (e.g. 5)
+        is not mistaken for the batch size.
         """
         if not jobs:
             return []
@@ -532,18 +537,23 @@ class ObjectService:
         if not plans:
             return results
 
+        from creopdm.utils.import_comments import resolve_add_commit_message
+
         git_plans = [item for item in plans if item.kind in {"new", "later"}]
         stage_plans = [item for item in plans if item.kind == "stage"]
-        raw_comment = (comment or "").strip()
         if git_plans:
-            if raw_comment:
-                message = raw_comment
-            elif len(git_plans) == 1:
-                message = f"Add {git_plans[0].stored_name}"
-            else:
-                message = f"Add {len(git_plans)} files"
+            message = resolve_add_commit_message(
+                comment,
+                planned_count=len(git_plans),
+                batch_total=batch_total,
+                single_filename=git_plans[0].stored_name if len(git_plans) == 1 else None,
+            )
         else:
-            message = raw_comment or "Add files"
+            message = resolve_add_commit_message(
+                comment,
+                planned_count=0,
+                batch_total=batch_total,
+            )
 
         created: list[Path] = []
         repo = self._vault(product)

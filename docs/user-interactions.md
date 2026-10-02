@@ -169,7 +169,7 @@ Menu order:
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Pick or drop individual files | Copy them into the product at the current location; store Creo models under the **logical** name (`shaft.prt`, not `shaft.prt.3`) so Git versions one stable path; blank comment becomes `Add {name}` or `Add N files` using the **full** pick count (not each upload chunk of 5) | Keep Creo `.N` in the vault filename; label History `Add 5 files` just because the agent uploaded in 5-file chunks |
+| Pick or drop individual files | Copy them into the product at the current location; store Creo models under the **logical** name (`shaft.prt`, not `shaft.prt.3`) so Git versions one stable path; blank comment becomes `Add {name}` or `Add N files` using the **full** pick count on **every** upload chunk (agent 5-file chunks, browser chunks, multi-folder Add) | Keep Creo `.N` in the vault filename; label History `Add 5 files` just because the agent uploaded in 5-file chunks; put the typed comment only on the first chunk |
 | Pick a very large multi-select (hundreds/thousands) | Keep a busy message after the OS picker closes while it resolves latest numbered saves, then show the Add dialog summary; warn before starting a bulk Add | Sit frozen with the Add dialog closed and no busy feedback after you confirm the OS picker |
 | Drop a whole folder tree | Tell you to use Add folder… / Add folders… | Quietly import the whole tree as “files” |
 | Click Add with nothing chosen | Ask you to choose files first | Start an empty import |

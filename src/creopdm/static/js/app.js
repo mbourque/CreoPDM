@@ -3371,7 +3371,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const part = await addAgentPathChunks(
             batch.paths,
             batch.folder,
+            // Prefer typed comment; else full multi-folder pick count (not this folder alone).
             comment
+              || (bulkCount > 1 ? `Add ${bulkCount} files` : "")
           );
           if (!part) return combined.ok.length ? combined : null;
           combined.ok.push(...(part.ok || []));
@@ -3395,6 +3397,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             comment
             || (total > 1 ? `Add ${total} files` : total === 1 ? `Add ${chunk[0]?.file?.name || "file"}` : "");
           if (uploadComment) data.append("comment", uploadComment);
+          data.append("batch_total", String(total));
           if (parentFolder) data.append("parent_folder", parentFolder);
           chunk.forEach((item) => {
             data.append("files", item.file, item.file.name);
