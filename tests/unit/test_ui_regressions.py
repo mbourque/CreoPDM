@@ -1050,6 +1050,35 @@ def test_toolbar_hides_inactive_actions():
     assert "show only inside creo" in docs.lower()
 
 
+def test_files_context_menu_download_to_workspace():
+    """Right-click selected rows: Download to workspace when objects.view; no checkout."""
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    css = APP_CSS.read_text(encoding="utf-8")
+    assert "function onFileTableContextMenu(" in script
+    assert 'addEventListener("contextmenu", onFileTableContextMenu)' in script
+    assert "function openFilesContextMenu(" in script
+    assert "function downloadSelectedToWorkspace(" in script
+    assert "Download to workspace" in script
+    assert 'dataset?.canView === "1"' in script
+    assert "materializeCheckedOutToAgentCache" in _between(
+        script,
+        "async function downloadSelectedToWorkspace(",
+        "function onFileTableContextMenu(",
+    )
+    download = _between(
+        script,
+        "async function downloadSelectedToWorkspace(",
+        "function onFileTableContextMenu(",
+    )
+    assert "/api/objects/batch/checkout" not in download
+    assert "Start creopdm-agent" in download
+    assert ".files-context-menu" in css
+    assert "**Right-click** a file or folder row" in docs
+    assert "**Download to workspace**" in docs
+    assert "without `objects.view`" in docs
+
+
 def test_folder_row_click_selects_double_click_opens():
     """Regression: folder name link opens; row chrome selects; double-click opens."""
     script = _app_js()

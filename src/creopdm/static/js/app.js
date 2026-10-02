@@ -4812,6 +4812,167 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   document.querySelector("#changes-table")?.addEventListener("click", onFileTableClick);
   document.querySelector("#changes-table")?.addEventListener("dblclick", onFileTableDblclick);
 
+  function canViewObjects() {
+    return document.body?.dataset?.canView === "1";
+  }
+
+  function selectedDownloadIds() {
+    return [
+      ...new Set(selectedRows().flatMap(rowObjectIds).map((id) => String(id || "").trim()).filter(Boolean)),
+    ];
+  }
+
+  function ensureFilesContextMenu() {
+    let menu = document.getElementById("files-context-menu");
+    if (menu) return menu;
+    menu = document.createElement("div");
+    menu.id = "files-context-menu";
+    menu.className = "files-context-menu";
+    menu.setAttribute("role", "menu");
+    menu.hidden = true;
+    const downloadBtn = document.createElement("button");
+    downloadBtn.type = "button";
+    downloadBtn.className = "toolbar-menu-item";
+    downloadBtn.id = "files-context-download";
+    downloadBtn.setAttribute("role", "menuitem");
+    downloadBtn.textContent = "Download to workspace";
+    downloadBtn.title = "Download the selected files into this product’s local workspace on this PC.";
+    menu.appendChild(downloadBtn);
+    document.body.appendChild(menu);
+    return menu;
+  }
+
+  function closeFilesContextMenu() {
+    const menu = document.getElementById("files-context-menu");
+    if (menu) menu.hidden = true;
+  }
+
+  function positionFilesContextMenu(menu, clientX, clientY) {
+    menu.hidden = false;
+    menu.style.left = "0px";
+    menu.style.top = "0px";
+    const rect = menu.getBoundingClientRect();
+    const pad = 8;
+    let left = clientX;
+    let top = clientY;
+    if (left + rect.width > window.innerWidth - pad) {
+      left = Math.max(pad, window.innerWidth - rect.width - pad);
+    }
+    if (top + rect.height > window.innerHeight - pad) {
+      top = Math.max(pad, window.innerHeight - rect.height - pad);
+    }
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+  }
+
+  function openFilesContextMenu(clientX, clientY) {
+    if (!canViewObjects()) return false;
+    const ids = selectedDownloadIds();
+    if (!ids.length) return false;
+    closeAllToolbarMenus();
+    const menu = ensureFilesContextMenu();
+    const downloadBtn = menu.querySelector("#files-context-download");
+    if (downloadBtn) downloadBtn.hidden = false;
+    positionFilesContextMenu(menu, clientX, clientY);
+    return true;
+  }
+
+  async function downloadSelectedToWorkspace() {
+    closeFilesContextMenu();
+    if (!canViewObjects()) return;
+    const ids = selectedDownloadIds();
+    if (!ids.length) {
+      showError($("#toolbar-error"), "Select one or more files to download.");
+      return;
+    }
+    if (!confirmLargeBulk("Download to workspace", ids.length)) return;
+    showError($("#toolbar-error"), "");
+    const sync = await withBusy("Downloading to local workspace…", async () => {
+      try {
+        return await materializeCheckedOutToAgentCache(ids, (done, total) => {
+          if (total >= BULK_AGENT_CACHE_ZIP_THRESHOLD && done === 0) {
+            setBusyMessage(`Checking local cache for ${total} files…`);
+          } else {
+            setBusyMessage(`Downloading to local workspace… ${done} of ${total}`);
+          }
+        });
+      } catch (err) {
+        showError($("#toolbar-error"), err?.message || String(err));
+        return null;
+      }
+    });
+    if (!sync) return;
+    if (sync.agentOffline) {
+      showError(
+        $("#toolbar-error"),
+        "Start creopdm-agent on this Creo PC to download files into the local workspace."
+      );
+      return;
+    }
+    if (sync.failed && !sync.ok) {
+      showError($("#toolbar-error"), "Could not download the selected files into the local workspace.");
+      return;
+    }
+    if (sync.ok) {
+      const note = sync.failed
+        ? `${sync.ok} file(s) in local workspace (${sync.failed} failed).`
+        : sync.downloaded != null && (sync.skipped || sync.keptNewer)
+          ? `${sync.ok} file(s) ready (${sync.downloaded} downloaded, ${sync.skipped || 0} already local` +
+            (sync.keptNewer ? `, ${sync.keptNewer} kept newer local` : "") +
+            `).`
+          : `${sync.ok} file(s) downloaded to the local workspace.`;
+      showOk(note);
+    }
+  }
+
+  function onFileTableContextMenu(event) {
+    const target = eventEl(event);
+    const row = target?.closest?.(".object-row, .queue-row, .folder-row");
+    if (!row || rowIsHidden(row)) return;
+    if (!row.classList.contains("is-selected")) {
+      selectOnly(row);
+    }
+    if (!openFilesContextMenu(event.clientX, event.clientY)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  document.querySelector("#object-table")?.addEventListener("contextmenu", onFileTableContextMenu);
+  document.querySelector("#checked-out-table")?.addEventListener("contextmenu", onFileTableContextMenu);
+  document.querySelector("#changes-table")?.addEventListener("contextmenu", onFileTableContextMenu);
+
+  // Menu lives on document.body (survives soft-nav). Rebind actions each boot;
+  // document listeners are registered once with the native addEventListener so
+  // soft-nav abort does not remove them.
+  window.__creopdmCloseFilesContextMenu = closeFilesContextMenu;
+  window.__creopdmDownloadSelectedToWorkspace = downloadSelectedToWorkspace;
+  if (!window.__creopdmFilesContextMenuBound) {
+    window.__creopdmFilesContextMenuBound = true;
+    origAddEventListener.call(
+      document,
+      "click",
+      (event) => {
+        const menu = document.getElementById("files-context-menu");
+        if (!menu || menu.hidden) return;
+        const node = event.target;
+        if (node instanceof Element && node.closest("#files-context-download")) {
+          event.preventDefault();
+          void window.__creopdmDownloadSelectedToWorkspace?.();
+          return;
+        }
+        if (!(node instanceof Element) || !node.closest("#files-context-menu")) {
+          window.__creopdmCloseFilesContextMenu?.();
+        }
+      },
+      true
+    );
+    origAddEventListener.call(document, "keydown", (event) => {
+      if (event.key === "Escape") window.__creopdmCloseFilesContextMenu?.();
+    });
+    origAddEventListener.call(window, "scroll", () => window.__creopdmCloseFilesContextMenu?.(), true);
+    origAddEventListener.call(window, "resize", () => window.__creopdmCloseFilesContextMenu?.());
+  }
+
   function onMetricChip(event) {
     const btn = eventEl(event)?.closest(".metric");
     if (!btn || btn.disabled) return;

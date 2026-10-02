@@ -924,6 +924,24 @@ span.object-open:hover { text-decoration: underline; }
 .toolbar-menu-item:disabled { opacity: 0.45; cursor: not-allowed; }
 .toolbar-menu-item.is-danger { color: #9b1c1c; }
 .toolbar-menu-item.is-danger:hover:not(:disabled) { background: #fdf2f2; }
+
+/* Files list right-click menu (replaces browser context menu when offered). */
+.files-context-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 12.5rem;
+  max-width: min(22rem, calc(100vw - 1rem));
+  padding: 0.25rem;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(16, 24, 32, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.files-context-menu[hidden] { display: none !important; }
+.files-context-menu .toolbar-menu-item { width: 100%; }
 /* Keep disabled actions in layout so enabling them does not shift neighbors. */
 .toolbar-messages { width: 100%; min-width: 0; }
 .toolbar-messages .error, .toolbar-messages .ok { overflow-wrap: anywhere; }
