@@ -7326,6 +7326,37 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (!confirmLargeBulk("Check in product", bulkHint)) return;
       }
     }
+    // Prefer the local Creo tip (.prt.2) over the vault logical row name before push,
+    // so the dialog can show which save is being recorded.
+    if (!addOnly && productId && pushItems.length) {
+      try {
+        const [cacheFiles, objects, queueResp] = await Promise.all([
+          listAgentCacheFiles(productId),
+          ensureProductObjects(productId),
+          fetch(`/api/products/${encodeURIComponent(productId)}/checkin-queue`),
+        ]);
+        const tipById = new Map();
+        if (queueResp.ok) {
+          const queueBody = await queueResp.json();
+          (queueBody.saves || []).forEach((item) => {
+            if (item?.uuid && item.filename) {
+              tipById.set(String(item.uuid), String(item.filename));
+            }
+          });
+        }
+        (await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)).forEach((item) => {
+          if (item?.uuid && item.filename) {
+            tipById.set(String(item.uuid), String(item.filename));
+          }
+        });
+        pushItems.forEach((item) => {
+          const tip = tipById.get(String(item.object_id));
+          if (tip) item.filename = tip;
+        });
+      } catch {
+        /* keep row filenames */
+      }
+    }
     let agentOffline = false;
     const preview = await withBusy(addOnly ? "Preparing…" : "Preparing check-in…", async () => {
       if (!addOnly && productId && pushItems.length) {
@@ -7416,6 +7447,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       objectLabelText = `${queued.length || (data.new_files || []).length} files`;
     }
     $("#checkin-filename").textContent = objectLabelText;
+    const vaultTipNote = $("#checkin-vault-tip");
+    if (vaultTipNote) {
+      const tipLeaf = PathBasename(objectLabelText || "");
+      const vaultLeaf = logicalUploadName(tipLeaf);
+      if (
+        !addOnly &&
+        tipLeaf &&
+        vaultLeaf &&
+        tipLeaf.toLowerCase() !== vaultLeaf.toLowerCase()
+      ) {
+        vaultTipNote.hidden = false;
+        vaultTipNote.textContent = `Checking in local save ${tipLeaf}; vault tip will be ${vaultLeaf} (Creo .N stripped).`;
+      } else {
+        vaultTipNote.hidden = true;
+        vaultTipNote.textContent = "";
+      }
+    }
     $("#checkin-current").textContent = data.current_display;
     $("#checkin-next").textContent = data.next_display;
     ["checkin-current", "checkin-next", "checkin-current-label", "checkin-next-label"].forEach((itemId) => {

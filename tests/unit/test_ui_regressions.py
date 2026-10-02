@@ -1311,9 +1311,14 @@ def test_refresh_pending_clears_sticky_modified_locally():
 def test_checkin_dialog_keeps_local_tip_name():
     """After push, dialog must still show shaft.prt.2 — not strip to vault logical tip."""
     script = _app_js()
+    html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     assert "tipNameForCheckin" in script
     assert "Prefer the on-disk tip the user saw" in script
+    assert "Prefer the local Creo tip" in script
     assert "tipNameForCheckin(id, pendingNames[index])" in script
+    assert 'id="checkin-vault-tip"' in html
+    assert "vault tip will be" in script
+    assert "Creo .N stripped" in script
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "strip the Creo `.N` in the Check In dialog" in docs
 
