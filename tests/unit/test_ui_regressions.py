@@ -1051,32 +1051,47 @@ def test_toolbar_hides_inactive_actions():
 
 
 def test_files_context_menu_download_to_workspace():
-    """Right-click selected rows: Download selected to workspace when objects.view; no checkout."""
+    """Right-click selected rows: toolbar-matched actions; hide when not possible."""
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     css = APP_CSS.read_text(encoding="utf-8")
     assert "function onFileTableContextMenu(" in script
     assert 'addEventListener("contextmenu", onFileTableContextMenu)' in script
     assert "function openFilesContextMenu(" in script
+    assert "function filesContextMenuCapabilities(" in script
     assert "function downloadSelectedToWorkspace(" in script
+    assert "function runFilesContextMenuAction(" in script
     assert "Download selected to workspace" in script
+    assert "Checkout selected" in script
+    assert "Check in selected…" in script
+    assert "Export selected…" in script
     assert 'dataset?.canView === "1"' in script
-    assert "materializeCheckedOutToAgentCache" in _between(
-        script,
-        "async function downloadSelectedToWorkspace(",
-        "function onFileTableContextMenu(",
-    )
+    caps = _between(script, "function filesContextMenuCapabilities(", "function ensureFilesContextMenu(")
+    assert "selectionCanCheckin(selected)" in caps
+    assert 'dataset.canCheckout === "1"' in caps
+    assert "canExportObjects" in caps
+    open_menu = _between(script, "function openFilesContextMenu(", "async function downloadSelectedToWorkspace(")
+    assert "checkoutItem.hidden = !caps.canCheckout" in open_menu
+    assert "checkinItem.hidden = !caps.canCheckin" in open_menu
+    assert "downloadItem.hidden = !caps.canDownload" in open_menu
+    assert "exportItem.hidden = !caps.canExport" in open_menu
+    run = _between(script, "function runFilesContextMenuAction(", "function onFileTableContextMenu(")
+    assert "checkoutBtn?.click()" in run
+    assert "checkinBtn?.click()" in run
+    assert "exportSelectedBtn?.click()" in run
     download = _between(
         script,
         "async function downloadSelectedToWorkspace(",
-        "function onFileTableContextMenu(",
+        "function runFilesContextMenuAction(",
     )
     assert "/api/objects/batch/checkout" not in download
     assert "Start creopdm-agent" in download
     assert ".files-context-menu" in css
     assert "**Right-click** a file or folder row" in docs
-    assert "**Download selected to workspace**" in docs
-    assert "without `objects.view`" in docs
+    assert "**Checkout selected**" in docs
+    assert "**Export selected…**" in docs
+    assert "**hide** each item when that action is not possible" in docs
+    assert "without `objects.view`" in docs or "`objects.view`" in docs
 
 
 def test_folder_row_click_selects_double_click_opens():

@@ -4896,6 +4896,39 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     ];
   }
 
+  function filesContextMenuCapabilities() {
+    const selected = selectedRows();
+    const roleCanCheckout = userCanCheckout();
+    const roleCanCheckin = userCanCheckin();
+    const canCheckout =
+      Boolean(checkoutBtn) &&
+      roleCanCheckout &&
+      selected.length > 0 &&
+      selected.every((row) => row.dataset.canCheckout === "1");
+    const addOnly = selectionIsAddOnly(selected);
+    // Match toolbar: Check in selected stays in the DOM when the menu exists; enable only when work is pending.
+    // Context menu hides when not possible (no greyed items).
+    const canCheckin =
+      Boolean(checkinBtn) &&
+      roleCanCheckin &&
+      selectionCanCheckin(selected);
+    const canDownload = canViewObjects() && selectedDownloadIds().length > 0;
+    const canExportObjects = document.body?.dataset?.canExportObjects === "1";
+    const exportHasSelection =
+      selected.flatMap(rowObjectIds).length > 0 || selectedFolderPaths().length > 0;
+    const canExport =
+      Boolean(exportSelectedBtn) &&
+      canExportObjects &&
+      exportHasSelection;
+    return {
+      canCheckout,
+      canCheckin,
+      canDownload,
+      canExport,
+      checkinLabel: addOnly ? "Add selected…" : "Check in selected…",
+    };
+  }
+
   function ensureFilesContextMenu() {
     let menu = document.getElementById("files-context-menu");
     if (menu) return menu;
@@ -4904,14 +4937,43 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     menu.className = "files-context-menu";
     menu.setAttribute("role", "menu");
     menu.hidden = true;
-    const downloadBtn = document.createElement("button");
-    downloadBtn.type = "button";
-    downloadBtn.className = "toolbar-menu-item";
-    downloadBtn.id = "files-context-download";
-    downloadBtn.setAttribute("role", "menuitem");
-    downloadBtn.textContent = "Download selected to workspace";
-    downloadBtn.title = "Download the selected files into this product’s local workspace on this PC.";
-    menu.appendChild(downloadBtn);
+    const items = [
+      {
+        id: "files-context-checkout",
+        action: "checkout",
+        label: "Checkout selected",
+        title: "Check out the selected files and download them to the local workspace.",
+      },
+      {
+        id: "files-context-checkin",
+        action: "checkin",
+        label: "Check in selected…",
+        title: "Check in selected files.",
+      },
+      {
+        id: "files-context-download",
+        action: "download",
+        label: "Download selected to workspace",
+        title: "Download the selected files into this product’s local workspace on this PC.",
+      },
+      {
+        id: "files-context-export",
+        action: "export",
+        label: "Export selected…",
+        title: "Download the selected vault files or folders as a zip.",
+      },
+    ];
+    items.forEach((spec) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "toolbar-menu-item";
+      btn.id = spec.id;
+      btn.dataset.action = spec.action;
+      btn.setAttribute("role", "menuitem");
+      btn.textContent = spec.label;
+      btn.title = spec.title;
+      menu.appendChild(btn);
+    });
     document.body.appendChild(menu);
     return menu;
   }
@@ -4940,13 +5002,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function openFilesContextMenu(clientX, clientY) {
-    if (!canViewObjects()) return false;
-    const ids = selectedDownloadIds();
-    if (!ids.length) return false;
+    syncToolbar();
+    const caps = filesContextMenuCapabilities();
+    if (!caps.canCheckout && !caps.canCheckin && !caps.canDownload && !caps.canExport) {
+      return false;
+    }
     closeAllToolbarMenus();
     const menu = ensureFilesContextMenu();
-    const downloadBtn = menu.querySelector("#files-context-download");
-    if (downloadBtn) downloadBtn.hidden = false;
+    const checkoutItem = menu.querySelector("#files-context-checkout");
+    const checkinItem = menu.querySelector("#files-context-checkin");
+    const downloadItem = menu.querySelector("#files-context-download");
+    const exportItem = menu.querySelector("#files-context-export");
+    if (checkoutItem) checkoutItem.hidden = !caps.canCheckout;
+    if (checkinItem) {
+      checkinItem.hidden = !caps.canCheckin;
+      checkinItem.textContent = caps.checkinLabel;
+      checkinItem.title = caps.checkinLabel === "Add selected…"
+        ? "Add selected new files to the product (uploads local workspace files first)."
+        : "Check in selected files.";
+    }
+    if (downloadItem) downloadItem.hidden = !caps.canDownload;
+    if (exportItem) exportItem.hidden = !caps.canExport;
     positionFilesContextMenu(menu, clientX, clientY);
     return true;
   }
@@ -4999,6 +5075,25 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  function runFilesContextMenuAction(action) {
+    closeFilesContextMenu();
+    if (action === "download") {
+      void downloadSelectedToWorkspace();
+      return;
+    }
+    if (action === "checkout") {
+      checkoutBtn?.click();
+      return;
+    }
+    if (action === "checkin") {
+      checkinBtn?.click();
+      return;
+    }
+    if (action === "export") {
+      exportSelectedBtn?.click();
+    }
+  }
+
   function onFileTableContextMenu(event) {
     const target = eventEl(event);
     const row = target?.closest?.(".object-row, .queue-row, .folder-row");
@@ -5019,7 +5114,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   // document listeners are registered once with the native addEventListener so
   // soft-nav abort does not remove them.
   window.__creopdmCloseFilesContextMenu = closeFilesContextMenu;
-  window.__creopdmDownloadSelectedToWorkspace = downloadSelectedToWorkspace;
+  window.__creopdmRunFilesContextMenuAction = runFilesContextMenuAction;
   if (!window.__creopdmFilesContextMenuBound) {
     window.__creopdmFilesContextMenuBound = true;
     origAddEventListener.call(
@@ -5029,10 +5124,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const menu = document.getElementById("files-context-menu");
         if (!menu || menu.hidden) return;
         const node = event.target;
-        if (node instanceof Element && node.closest("#files-context-download")) {
-          event.preventDefault();
-          void window.__creopdmDownloadSelectedToWorkspace?.();
-          return;
+        if (node instanceof Element) {
+          const item = node.closest("#files-context-menu [data-action]");
+          if (item && menu.contains(item)) {
+            event.preventDefault();
+            window.__creopdmRunFilesContextMenuAction?.(item.getAttribute("data-action") || "");
+            return;
+          }
         }
         if (!(node instanceof Element) || !node.closest("#files-context-menu")) {
           window.__creopdmCloseFilesContextMenu?.();
