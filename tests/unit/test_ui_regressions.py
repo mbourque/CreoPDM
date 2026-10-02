@@ -504,8 +504,15 @@ def test_soft_nav_skips_creojs_reconnect():
     assert 'openViaAgent(openSpec.path, "association")' in open_fn
     open_wrap = _between(script, "async function openPdmObject(", "async function openPdmObjectWork(")
     assert 'withBusy("Opening…"' in open_wrap
+    assert "withTimeout(" in open_wrap
+    assert "Open timed out" in open_wrap
     assert "Downloading to local cache…" in open_fn
     assert "Opening in Creo…" in open_fn
+    # Session offline must not block Opening… on creoJSReady before the path choice.
+    assert "Do not await creoJSReady first" in open_fn
+    assert open_fn.index("const useCreoSession") < open_fn.index("await creoJSReady")
+    ready = _between(script, "function whenCreoJSReady(", "async function refreshCreoStatusPill(")
+    assert "session may be offline" in ready
     assert 'data-can-checkout=' in (
         ROOT / "src" / "creopdm" / "templates" / "base.html"
     ).read_text(encoding="utf-8")
@@ -958,6 +965,11 @@ def test_history_revert_only_for_older_versions():
     )
     assert "confirmByProductName" in revert_click
     assert "window.confirm" not in revert_click
+    assert "tryEraseRevertedModelFromCreo" in revert_click
+    assert "eraseSessionModelsByNames" in script
+    assert "CREO_REVERT_SESSION_HINT" in revert_click
+    assert "File → Erase" in revert_click
+    assert "Removed from Creo session" in revert_click
     assert "Version History" not in detail
     assert "File History" not in detail
     assert "subpanel-versions" not in detail
@@ -996,6 +1008,11 @@ def test_history_revert_only_for_older_versions():
     assert "plain browser `confirm`" in docs
     assert "History **Revert to selected…**" in docs
     assert "no Check In prompt" in docs
+    assert "keep old geometry in memory" in docs
+    assert "File → Erase" in docs
+    assert "pretend Creo already shows the restored geometry" in docs
+    assert "function tryEraseRevertedModelFromCreo" in script
+    assert "allowUndisplayed: false" in script
     assert "bottom toolbar" in docs.lower() or "at the bottom" in docs.lower()
     assert "Open the file **Details** page on the **Overview** tab" in docs
     assert "Open the History tab by default" in docs

@@ -233,6 +233,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  function withTimeout(promise, ms, message) {
+    let timer = 0;
+    return Promise.race([
+      Promise.resolve(promise).finally(() => {
+        if (timer) window.clearTimeout(timer);
+      }),
+      new Promise((_, reject) => {
+        timer = window.setTimeout(() => {
+          reject(new Error(message || "Timed out."));
+        }, ms);
+      }),
+    ]);
+  }
+
+  function abortSignalAfter(ms) {
+    if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+      return AbortSignal.timeout(ms);
+    }
+    const controller = new AbortController();
+    window.setTimeout(() => controller.abort(), ms);
+    return controller.signal;
+  }
+
   function closeOpenDialogs({ keepBusy = false } = {}) {
     document.querySelectorAll("dialog[open]").forEach((dialog) => {
       // Never dismiss the busy overlay while setBusy depth is open (Collect, Add, …).
@@ -5334,6 +5357,34 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  /**
+   * After History revert, vault/local tips are restored but Creo may still hold
+   * the old model in memory. Best-effort Erase() by logical name (same helper as
+   * Collect metadata). Fails quietly when the model is displayed in a window.
+   */
+  async function tryEraseRevertedModelFromCreo(filename) {
+    const name = String(filename || "").trim();
+    if (!name) return { erased: 0, attempted: false };
+    if (!canGatherCreoMetadata()) return { erased: 0, attempted: false };
+    if (typeof window.CreoJS?.eraseSessionModelsByNames !== "function") {
+      return { erased: 0, attempted: false };
+    }
+    try {
+      await whenCreoJSReady(4000);
+      const result = await window.CreoJS.eraseSessionModelsByNames([name], {
+        allowUndisplayed: false,
+      });
+      const erased = Number(result && result.erased) || 0;
+      return { erased, attempted: true };
+    } catch {
+      return { erased: 0, attempted: true };
+    }
+  }
+
+  const CREO_REVERT_SESSION_HINT =
+    "If this model is still open in Creo, close the window or use File → Erase, "
+    + "then Open again from CreoPDM.";
+
   async function waitForCreoMetadataBridge({ tries = 40, intervalMs = 250 } = {}) {
     await creoJSReady;
     if (canGatherCreoMetadata()) return true;
@@ -5500,16 +5551,30 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return [];
   }
 
-  function whenCreoJSReady() {
+  function whenCreoJSReady(timeoutMs = 20000) {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (ok, err) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        if (ok) resolve();
+        else reject(err || new Error("Creo.JS did not become ready."));
+      };
+      const timer = window.setTimeout(() => {
+        finish(
+          false,
+          new Error("Creo.JS did not become ready (session may be offline). Try Open again or use OS association.")
+        );
+      }, timeoutMs);
       try {
-        if (typeof window.CreoJS.$ADD_ON_LOAD === "function") {
-          window.CreoJS.$ADD_ON_LOAD(resolve);
+        if (typeof window.CreoJS?.$ADD_ON_LOAD === "function") {
+          window.CreoJS.$ADD_ON_LOAD(() => finish(true));
           return;
         }
-        resolve();
+        finish(true);
       } catch (err) {
-        reject(err);
+        finish(false, err);
       }
     });
   }
@@ -5953,7 +6018,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function probeCreoAgent() {
     try {
-      const response = await fetch(`${agentBase()}/health`, { method: "GET" });
+      const response = await fetch(`${agentBase()}/health`, {
+        method: "GET",
+        signal: abortSignalAfter(5000),
+      });
       if (!response.ok) {
         window.__creopdmAgentOnline = false;
         return null;
@@ -6440,6 +6508,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const response = await fetch(`${agentBase()}/materialize`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: abortSignalAfter(180000),
       body: JSON.stringify({
         pdm_url: window.location.origin,
         ...agentPdmAuth(),
@@ -6544,6 +6613,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const response = await fetch(`${agentBase()}/open`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: abortSignalAfter(60000),
       body: JSON.stringify({ path: localPath, mode: mode || "association" }),
     });
     if (!response.ok) {
@@ -6555,15 +6625,30 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function openPdmObject(target) {
     // Keep the busy overlay up through prepare + materialize until Creo/OS open starts.
-    return withBusy("Opening…", async () => openPdmObjectWork(target));
+    // Always clear on timeout/error so Session offline / hung agent cannot leave Opening… stuck.
+    return withBusy("Opening…", async () => {
+      try {
+        return await withTimeout(
+          openPdmObjectWork(target),
+          180000,
+          "Open timed out. Check creopdm-agent and that Creo is Connected, then try again."
+        );
+      } catch (err) {
+        const message = err && err.message ? err.message : String(err);
+        showError($("#toolbar-error"), message || "Could not open the file.");
+        return null;
+      }
+    });
   }
 
   async function openPdmObjectWork(target) {
-    await creoJSReady;
     // Only use Creo.JS when we are actually in Creo's embedded browser.
     // Outside Creo (Chrome/Edge), always materialize + Windows association.
+    // Do not await creoJSReady first — Session offline can stall that load forever
+    // while the Opening… overlay stays up.
     const useCreoSession = hostedCreoJS() && creoOpenMode() === "embedded";
     if (useCreoSession) {
+      await creoJSReady;
       const prepared = await postAction(
         "/api/creo/open",
         openRequestBody(target, false),
@@ -6609,12 +6694,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         try {
           setBusyMessage("Opening in Creo…");
           await whenCreoJSReady();
-          const opened = await window.CreoJS.openModel(
-            openSpec.working_directory,
-            openSpec.filename || prepared.filename,
-            prepared.creo_release || "",
-            openSpec.disk_name || openSpec.filename || prepared.filename,
-            openSpec.path || ""
+          const opened = await withTimeout(
+            window.CreoJS.openModel(
+              openSpec.working_directory,
+              openSpec.filename || prepared.filename,
+              prepared.creo_release || "",
+              openSpec.disk_name || openSpec.filename || prepared.filename,
+              openSpec.path || ""
+            ),
+            90000,
+            "Creo did not finish opening the model (session may be offline)."
           );
           const openedText = opened == null ? "" : String(opened);
           if (openedText.indexOf("CREOPDM_ERROR:") === 0) {
@@ -6647,12 +6736,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const diskName = openSpec.disk_name || openSpec.filename || prepared.filename;
           // Do not set Creo session WD — the File > Open trail navigates to the
           // agent cache folder via opt_EMBED_BROWSER_TB_SAB_LAYOUT.
-          const opened = await window.CreoJS.openModel(
-            directory,
-            openSpec.filename || prepared.filename,
-            "",
-            diskName,
-            openSpec.path || ""
+          const opened = await withTimeout(
+            window.CreoJS.openModel(
+              directory,
+              openSpec.filename || prepared.filename,
+              "",
+              diskName,
+              openSpec.path || ""
+            ),
+            90000,
+            "Creo did not finish opening the Multi-CAD file (session may be offline)."
           );
           const openedText = opened == null ? "" : String(opened);
           if (openedText.indexOf("CREOPDM_ERROR:") === 0) {
@@ -9006,11 +9099,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const confirmed = await confirmByProductName({
       title: `Revert to ${display}`,
       lead:
-        "This restores that content and filename (including Creo .prt.N) to the vault "
-        + "and local workspace now. You do not need to Check In afterward. "
-        + "Newer numbered siblings are removed so the tip matches the restored name. "
+        "This restores that version’s content to the vault tip and local workspace now "
+        + "(logical name like shaft.prt). You do not need to Check In afterward. "
+        + "Newer numbered siblings are removed so Open does not prefer a leftover .N. "
         + "The current tip stays in History as an older row.",
-      note: "Records a new version automatically. This cannot be undone by Cancel after you confirm.",
+      note:
+        "Records a new version automatically. This cannot be undone by Cancel after you confirm. "
+        + "If the model is already open in Creo, Creo may keep old geometry in memory until you "
+        + "close the window or use File → Erase. When Creo is connected, CreoPDM will try to "
+        + "remove it from session automatically.",
       submitLabel: "Revert",
     });
     if (!confirmed.ok) return;
@@ -9051,15 +9148,28 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             `Vault restored, but the local workspace still has a newer Creo save (${detail}). `
             + "Open the file again or use Purge workspace after the agent is running.";
         }
-        return { localSynced, localWarning };
+        const erase = await tryEraseRevertedModelFromCreo(
+          body.filename || body.disk_name || row?.dataset?.filename || ""
+        );
+        return { localSynced, localWarning, erase };
       });
+      const erased = Number(result?.erase?.erased) || 0;
       if (result?.localWarning) {
-        showError($("#toolbar-error"), result.localWarning);
+        showError(
+          $("#toolbar-error"),
+          `${result.localWarning} ${CREO_REVERT_SESSION_HINT}`
+        );
+      } else if (erased > 0) {
+        showOk(
+          `Reverted to ${display}. Vault and local workspace updated. `
+          + "Removed from Creo session — Open again to load the restored file."
+        );
       } else {
         showOk(
-          result?.localSynced
-            ? `Reverted to ${display}. Vault and local workspace updated.`
-            : `Reverted to ${display}.`
+          (result?.localSynced
+            ? `Reverted to ${display}. Vault and local workspace updated. `
+            : `Reverted to ${display}. `)
+          + CREO_REVERT_SESSION_HINT
         );
       }
       reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
