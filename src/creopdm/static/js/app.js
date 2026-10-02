@@ -6554,6 +6554,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function openPdmObject(target) {
+    // Keep the busy overlay up through prepare + materialize until Creo/OS open starts.
+    return withBusy("Opening…", async () => openPdmObjectWork(target));
+  }
+
+  async function openPdmObjectWork(target) {
     await creoJSReady;
     // Only use Creo.JS when we are actually in Creo's embedded browser.
     // Outside Creo (Chrome/Edge), always materialize + Windows association.
@@ -6581,6 +6586,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           return null;
         }
         try {
+          setBusyMessage("Downloading to local cache…");
           openSpec = await materializeViaAgent(prepared);
         } catch (err) {
           const message = err && err.message ? err.message : String(err);
@@ -6601,6 +6607,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           return null;
         }
         try {
+          setBusyMessage("Opening in Creo…");
           await whenCreoJSReady();
           const opened = await window.CreoJS.openModel(
             openSpec.working_directory,
@@ -6634,6 +6641,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           return null;
         }
         try {
+          setBusyMessage("Opening in Creo…");
           await whenCreoJSReady();
           const directory = openSpec.working_directory || "";
           const diskName = openSpec.disk_name || openSpec.filename || prepared.filename;
@@ -6671,8 +6679,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const agent = await probeCreoAgent();
           if (agent) {
             if (!needsCache) {
+              setBusyMessage("Downloading to local cache…");
               openSpec = await materializeViaAgent(prepared);
             }
+            setBusyMessage("Opening…");
             await openViaAgent(openSpec.path, "association");
             return prepared;
           }
@@ -6702,11 +6712,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     try {
       const agent = await probeCreoAgent();
       if (agent) {
+        setBusyMessage("Downloading to local cache…");
         const openSpec = await materializeViaAgent(prepared);
         if (!openSpec?.path) {
           showError($("#toolbar-error"), "Local agent did not return a cache path.");
           return null;
         }
+        setBusyMessage("Opening…");
         await openViaAgent(openSpec.path, "association");
         return prepared;
       }

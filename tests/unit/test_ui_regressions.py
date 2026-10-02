@@ -499,9 +499,13 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "showWd" in prompt_fn
     assert "agentPdmAuth" in script
     assert "...agentPdmAuth()" in script or "agentPdmAuth()" in script
-    open_fn = _between(script, "async function openPdmObject(", "function openPdmLaunchResult(")
+    open_fn = _between(script, "async function openPdmObjectWork(", "function openPdmLaunchResult(")
     assert 'hostedCreoJS() && creoOpenMode() === "embedded"' in open_fn
     assert 'openViaAgent(openSpec.path, "association")' in open_fn
+    open_wrap = _between(script, "async function openPdmObject(", "async function openPdmObjectWork(")
+    assert 'withBusy("Opening…"' in open_wrap
+    assert "Downloading to local cache…" in open_fn
+    assert "Opening in Creo…" in open_fn
     assert 'data-can-checkout=' in (
         ROOT / "src" / "creopdm" / "templates" / "base.html"
     ).read_text(encoding="utf-8")
