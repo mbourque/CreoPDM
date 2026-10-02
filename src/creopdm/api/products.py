@@ -277,6 +277,17 @@ def list_objects(
 ) -> list[ObjectResponse]:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     product = load_accessible_product(request, ctx, db, product_id)
+    try:
+        ctx.objects.migrate_numbered_vault_tips(
+            db, product, vault=ctx.workspaces.ensure_vault(product)
+        )
+    except Exception:
+        # Migration is best-effort; listing must still work.
+        from creopdm.logging_setup import get_logger
+
+        get_logger("products").exception(
+            "Vault-name migrate failed for product %s", product.uuid
+        )
     objects = ctx.objects.search(
         db,
         product,
@@ -544,7 +555,7 @@ def workspace_purge_floors(
         logical_name = CreoFileManager.logical_filename(obj.filename, purgeable)
         if Path(logical_name).suffix.lower() not in allowed:
             continue
-        min_keep = CreoFileManager.save_number(obj.filename, purgeable)
+        min_keep = CreoFileManager.purge_floor_for_vault_tip(obj.filename, purgeable)
         if min_keep <= 0:
             continue
         logical_path = CreoFileManager.logical_repo_path(obj.relative_path, purgeable)

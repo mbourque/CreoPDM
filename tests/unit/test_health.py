@@ -94,7 +94,7 @@ def test_home_page(client):
     assert "export3" not in text
     assert "search1" not in text
     assert "search2" in text
-    assert "toolbar51" in text
+    assert "toolbar52" in text
     assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "folder | urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

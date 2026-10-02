@@ -264,7 +264,13 @@ def agent_cache_manifest(
         raise ValidationAppError("All files must belong to the same product.")
     return AgentCacheManifestResponse(
         product_id=objects[0].product.uuid,
-        items=[AgentCacheManifestItem.model_validate(item) for item in manifest_items_for_objects(objects)],
+        items=[
+            AgentCacheManifestItem.model_validate(item)
+            for item in manifest_items_for_objects(
+                objects,
+                extra_extensions=ctx.workspaces._cad_extensions(),
+            )
+        ],
     )
 
 

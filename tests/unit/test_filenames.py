@@ -83,10 +83,20 @@ def test_app_identity():
     assert APP_VERSION == "0.3.0"
 
 
-def test_canonical_name_keeps_creo_save_numbers():
-    assert CreoFileManager.canonical_repository_name("shaft.prt.3") == "shaft.prt.3"
-    assert CreoFileManager.canonical_repository_name("motor.asm.7") == "motor.asm.7"
+def test_canonical_name_strips_creo_save_numbers():
+    assert CreoFileManager.canonical_repository_name("shaft.prt.3") == "shaft.prt"
+    assert CreoFileManager.canonical_repository_name("motor.asm.7") == "motor.asm"
     assert CreoFileManager.canonical_repository_name("shaft.prt") == "shaft.prt"
+    assert CreoFileManager.canonical_repository_name("preview.2.pvz") == "preview.pvz"
+
+
+def test_workspace_materialize_name_adds_dot_one_for_logical_vault_tip():
+    assert CreoFileManager.workspace_materialize_name("shaft.prt") == "shaft.prt.1"
+    assert CreoFileManager.workspace_materialize_name("shaft.prt.3") == "shaft.prt.3"
+    assert CreoFileManager.workspace_materialize_name("notes.pdf") == "notes.pdf"
+    assert CreoFileManager.purge_floor_for_vault_tip("shaft.prt") == 1
+    assert CreoFileManager.purge_floor_for_vault_tip("shaft.prt.3") == 3
+    assert CreoFileManager.purge_floor_for_vault_tip("notes.pdf") == 0
 
 
 def test_latest_creo_version_in_directory(tmp_path):

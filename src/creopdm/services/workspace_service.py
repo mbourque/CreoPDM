@@ -795,7 +795,8 @@ class WorkspaceService:
                 rel = path.resolve().relative_to(base.resolve())
             except ValueError:
                 return None
-            stored = CreoFileManager.canonical_repository_name(rel.name)
+            extras = self._cad_extensions()
+            stored = CreoFileManager.canonical_repository_name(rel.name, extras)
             parent = rel.parent
             if keep_root_folder:
                 if parent.as_posix() == ".":
@@ -810,7 +811,9 @@ class WorkspaceService:
         if not parent:
             return relative
         if relative is None:
-            relative = CreoFileManager.canonical_repository_name(path.name)
+            relative = CreoFileManager.canonical_repository_name(
+                path.name, self._cad_extensions()
+            )
         if relative == parent or relative.startswith(f"{parent}/"):
             return relative
         return f"{parent}/{relative}"
@@ -886,10 +889,13 @@ class WorkspaceService:
                 yield path
 
     def sibling_relative(self, obj: EngineeringObject, workspace_file: Path) -> str:
-        """Repo-relative path that keeps the workspace filename, including Creo save numbers."""
+        """Repo-relative vault path for a workspace file (Creo .N stripped)."""
         current = Path(obj.relative_path.replace("\\", "/"))
         parent = current.parent
-        name = workspace_file.name
+        name = CreoFileManager.canonical_repository_name(
+            workspace_file.name,
+            self._cad_extensions(),
+        )
         if parent.as_posix() == ".":
             return name.replace("\\", "/")
         return (parent / name).as_posix()
@@ -897,8 +903,8 @@ class WorkspaceService:
     def purge_newer_creo_saves(self, product: Product, kept: Path) -> list[Path]:
         """Delete same-logical Creo saves with a higher .N than ``kept`` in its folder.
 
-        Used after revert so locate_content does not prefer an old tip like .prt.3
-        over the restored .prt.1.
+        After check-in/revert onto a logical tip (``shaft.prt``, save 0), this
+        removes leftover ``.prt.1+`` siblings so locate_content prefers the tip.
         """
         extras = self._cad_extensions()
         if not kept.is_file():
@@ -937,10 +943,11 @@ class WorkspaceService:
                 logger.warning("Could not remove newer Creo save %s: %s", child, exc)
         return removed
 
-    @staticmethod
-    def _canonical_relative(root: Path, path: Path) -> str:
+    def _canonical_relative(self, root: Path, path: Path) -> str:
         relative = path.resolve().relative_to(root.resolve())
-        canonical_name = CreoFileManager.canonical_repository_name(relative.name)
+        canonical_name = CreoFileManager.canonical_repository_name(
+            relative.name, self._cad_extensions()
+        )
         parent = relative.parent
         if parent.as_posix() == ".":
             return canonical_name

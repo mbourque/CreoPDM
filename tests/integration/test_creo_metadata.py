@@ -99,7 +99,7 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert body["parameters"][0]["name"] == "DESCRIPTION"
     assert body["parameters"][0]["is_designated"] is True
     assert len(body["dependencies"]) == 1
-    assert body["dependencies"][0]["filename"] == "shaft.prt.1"
+    assert body["dependencies"][0]["filename"] == "shaft.prt"
     assert body["dependencies"][0]["quantity"] == 2.0
 
     fetched = client.get(f"/api/objects/{frame['uuid']}/creo-metadata")
@@ -195,7 +195,7 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     items = where.json()["items"]
     assert len(items) == 1
     assert items[0]["object_id"] == frame["uuid"]
-    assert items[0]["filename"] == "frame.asm.1"
+    assert items[0]["filename"] == "frame.asm"
     assert items[0]["quantity"] == 2.0
 
     detail = client.get(f"/products/{product['uuid']}/objects/{frame['uuid']}")
@@ -262,7 +262,7 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert shaft_meta.status_code == 200, shaft_meta.text
     shaft_detail = client.get(f"/products/{product['uuid']}/objects/{shaft['uuid']}")
     assert shaft_detail.status_code == 200
-    assert "frame.asm.1" in shaft_detail.text
+    assert "frame.asm" in shaft_detail.text
     assert "ALUMINUM_WROUGHT" in shaft_detail.text
     assert "(Assigned)" in shaft_detail.text
     assert 'class="is-assigned"' in shaft_detail.text
@@ -339,8 +339,8 @@ def test_where_used_from_nested_bom_and_family_table_name(client, repo_parent, t
     assert posted.status_code == 200, posted.text
     deps = posted.json()["dependencies"]
     child_names = {item["filename"] for item in deps}
-    assert "pin.prt.1" in child_names
-    assert "SPLIT-RIVET.prt.1" in child_names
+    assert "pin.prt" in child_names
+    assert "SPLIT-RIVET.prt" in child_names
 
     pin_where = client.get(f"/api/objects/{pin['uuid']}/where-used")
     assert pin_where.status_code == 200, pin_where.text
@@ -358,7 +358,7 @@ def test_where_used_from_nested_bom_and_family_table_name(client, repo_parent, t
 
     pin_detail = client.get(f"/products/{product['uuid']}/objects/{pin['uuid']}")
     assert pin_detail.status_code == 200
-    assert "frame.asm.1" in pin_detail.text
+    assert "frame.asm" in pin_detail.text
 
 
 @requires_git

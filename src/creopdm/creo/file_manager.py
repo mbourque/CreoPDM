@@ -187,9 +187,57 @@ class CreoFileManager:
         return number
 
     @classmethod
-    def canonical_repository_name(cls, filename: str) -> str:
-        """Filename stored in the repository. Creo save numbers such as .prt.3 are kept."""
-        return Path(str(filename).replace("\\", "/")).name
+    def canonical_repository_name(
+        cls,
+        filename: str,
+        extra_extensions: Iterable[str] | None = None,
+    ) -> str:
+        """Filename stored in the vault. Creo save numbers (.prt.3) are stripped.
+
+        Git then versions one stable path per CAD family instead of renaming
+        ``shaft.prt.1`` → ``shaft.prt.2`` on every check-in.
+        """
+        name = Path(str(filename).replace("\\", "/")).name
+        return cls.normalize_creo_filename(name, extra_extensions)
+
+    @classmethod
+    def workspace_materialize_name(
+        cls,
+        vault_filename: str,
+        extra_extensions: Iterable[str] | None = None,
+    ) -> str:
+        """Agent-cache / Creo disk leaf when materializing a vault tip.
+
+        Vault tips are logical (``shaft.prt``). The local cache prefers
+        ``shaft.prt.1`` so Creo and newer-save detection keep working. Legacy
+        numbered vault tips keep their basename until migrated.
+        """
+        name = Path(str(vault_filename).replace("\\", "/")).name
+        if cls.save_number(name, extra_extensions) > 0:
+            return name
+        logical = cls.logical_filename(name, extra_extensions)
+        if cls.is_versioned_extension(Path(logical).suffix, extra_extensions):
+            return f"{logical}.1"
+        return logical
+
+    @classmethod
+    def purge_floor_for_vault_tip(
+        cls,
+        vault_filename: str,
+        extra_extensions: Iterable[str] | None = None,
+    ) -> int:
+        """Minimum local save number to keep when purging below the vault tip.
+
+        Logical vault tips (save 0) use floor 1 so unnumbered cache leftovers
+        can be purged while ``.prt.1+`` remain for newer-save workflows.
+        """
+        number = cls.save_number(vault_filename, extra_extensions)
+        if number > 0:
+            return number
+        logical = cls.logical_filename(vault_filename, extra_extensions)
+        if cls.is_versioned_extension(Path(logical).suffix, extra_extensions):
+            return 1
+        return 0
 
     @classmethod
     def logical_filename(

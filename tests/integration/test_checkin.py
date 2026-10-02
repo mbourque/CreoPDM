@@ -167,7 +167,7 @@ def test_workspace_watch_stamp_changes_when_creo_saves(client, repo_parent, data
 
 
 @requires_git
-def test_checkin_keeps_creo_numbered_filename(client, repo_parent, data_dir):
+def test_checkin_stores_logical_vault_tip(client, repo_parent, data_dir):
     product, obj = _create_part(client, repo_parent)
     assert obj["filename"] == "shaft.prt"
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
@@ -185,19 +185,21 @@ def test_checkin_keeps_creo_numbered_filename(client, repo_parent, data_dir):
     )
     assert checked.status_code == 200, checked.text
     payload = checked.json()
-    assert payload["filename"] == "shaft.prt.4"
-    assert payload["relative_path"] == "shaft.prt.4"
-    assert (data_dir / "vaults" / product["uuid"] / "shaft.prt.4").is_file()
+    assert payload["filename"] == "shaft.prt"
+    assert payload["relative_path"] == "shaft.prt"
+    assert (data_dir / "vaults" / product["uuid"] / "shaft.prt").is_file()
+    assert (data_dir / "vaults" / product["uuid"] / "shaft.prt").read_bytes() == b"creo-save-4"
+    assert not (data_dir / "vaults" / product["uuid"] / "shaft.prt.4").exists()
 
     history = client.get(f"/api/objects/{obj['uuid']}/history").json()
-    assert history[0]["filename"] == "shaft.prt.4"
-    assert history[0]["relative_path"] == "shaft.prt.4"
+    assert history[0]["filename"] == "shaft.prt"
+    assert history[0]["relative_path"] == "shaft.prt"
     assert history[-1]["filename"] == "shaft.prt"
     assert history[-1]["relative_path"] == "shaft.prt"
     page = client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
     assert page.status_code == 200
-    assert "shaft.prt.4" in page.text
-    assert "from shaft.prt" in page.text
+    assert "shaft.prt" in page.text
+    assert "not checked in" not in page.text
 
 
 @requires_git
@@ -214,10 +216,10 @@ def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_paren
     )
     assert created.status_code == 201, created.text
     obj = created.json()
-    assert obj["filename"] == "shaft.prt.3"
+    assert obj["filename"] == "shaft.prt"
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
     workspace = data_dir / "vaults" / product["uuid"]
-    assert (workspace / "shaft.prt.3").read_bytes() == b"v3-content"
+    assert (workspace / "shaft.prt").read_bytes() == b"v3-content"
     (workspace / "shaft.prt.4").write_bytes(b"creo-save-4")
     (workspace / "trail.txt.5").write_bytes(b"trail")
     (workspace / "747912f5-13ee-41f0-90d7-537c290.idx").write_bytes(b"idx")
@@ -238,7 +240,7 @@ def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_paren
     assert page.status_code == 200
     assert "not checked in" in page.text
     assert "shaft.prt.4" in page.text
-    assert "from shaft.prt.3" in page.text
+    assert "from shaft.prt" in page.text
     assert "Creo saved a newer file in the vault" in page.text
 
     checked = client.post(
@@ -247,14 +249,14 @@ def test_checkin_uses_later_numbered_save_of_checked_out_file(client, repo_paren
     )
     assert checked.status_code == 200, checked.text
     payload = checked.json()
-    assert payload["filename"] == "shaft.prt.4"
-    assert payload["relative_path"] == "shaft.prt.4"
+    assert payload["filename"] == "shaft.prt"
+    assert payload["relative_path"] == "shaft.prt"
     vault = data_dir / "vaults" / product["uuid"]
-    assert (vault / "shaft.prt.4").read_bytes() == b"creo-save-4"
+    assert (vault / "shaft.prt").read_bytes() == b"creo-save-4"
+    assert not (vault / "shaft.prt.4").exists()
     page = client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
     assert page.status_code == 200
-    assert "shaft.prt.4" in page.text
-    assert "from shaft.prt.3" in page.text
+    assert "shaft.prt" in page.text
     assert "not checked in" not in page.text
     assert "Creo saved a newer file in the vault" not in page.text
 
@@ -278,7 +280,7 @@ def test_force_checkin_records_workspace_save_without_checkout(client, repo_pare
         f"/api/objects/{created['uuid']}/checkin",
         json={"comment": "Recorded .4"},
     ).status_code == 200
-    (workspace / "shaft.prt.5").write_bytes(b"save-5")
+    (workspace / "shaft.prt.5").write_bytes(b"save-5-force")
 
     listing = client.get(f"/api/objects/{created['uuid']}").json()
     assert listing["owned_by_me"] is False
@@ -298,10 +300,11 @@ def test_force_checkin_records_workspace_save_without_checkout(client, repo_pare
     )
     assert checked.status_code == 200, checked.text
     payload = checked.json()
-    assert payload["filename"] == "shaft.prt.5"
+    assert payload["filename"] == "shaft.prt"
     assert payload["owned_by_me"] is False
     assert payload["can_checkin"] is False
-    assert (workspace / "shaft.prt.5").read_bytes() == b"save-5"
+    assert (workspace / "shaft.prt").read_bytes() == b"save-5-force"
+    assert not (workspace / "shaft.prt.5").exists()
 
 
 @requires_git
@@ -326,7 +329,7 @@ def test_checkin_after_undo_checkout_records_numbered_save(client, repo_parent, 
     )
     assert checked.status_code == 200, checked.text
     payload = checked.json()
-    assert payload["filename"] == "shaft.prt.2"
+    assert payload["filename"] == "shaft.prt"
     assert payload["current_version"]["comment"] == "Keep the Creo save after undo"
 
 
@@ -549,10 +552,11 @@ def test_workspace_purge_floors_from_vault_objects(client, repo_parent, data_dir
     assert ".tph" in body["model_extensions"]
     by_path = {item["logical_path"]: item for item in body["floors"]}
     assert "shaft.prt" in by_path
-    assert by_path["shaft.prt"]["min_keep"] == 3
+    assert by_path["shaft.prt"]["min_keep"] == 1
     assert "op10.tph" in by_path
     assert by_path["op10.tph"]["min_keep"] == 1
-    assert "blank.prt" not in by_path
+    assert "blank.prt" in by_path
+    assert by_path["blank.prt"]["min_keep"] == 1
     assert "notes.pdf" not in by_path
 
 
@@ -588,10 +592,11 @@ def test_product_checkin_queue_records_pending_save_and_new_file(client, repo_pa
     assert result.status_code == 200, result.text
     assert result.json()["failed"] == []
     current = client.get(f"/api/objects/{created['uuid']}").json()
-    assert current["filename"] == "shaft.prt.4"
+    assert current["filename"] == "shaft.prt"
     listing = {item["filename"] for item in client.get(f"/api/products/{product['uuid']}/objects").json()}
     assert "bushing.prt" in listing
-    assert (workspace / "shaft.prt.4").read_bytes() == b"save-4"
+    assert (workspace / "shaft.prt").read_bytes() == b"save-4"
+    assert not (workspace / "shaft.prt.4").exists()
 
 
 _CREO_UGC_HEADER = (
@@ -621,7 +626,7 @@ def test_checkin_records_creo_release_from_workspace_file(client, repo_parent, d
     obj = created.json()
     assert obj["creo_release"] == "13.4.1.0"
     assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
-    workspace = data_dir / "vaults" / product["uuid"] / "shaft.prt.1"
+    workspace = data_dir / "vaults" / product["uuid"] / "shaft.prt"
     workspace.write_bytes(_CREO_UGC_HEADER_NEXT)
     checked = client.post(
         f"/api/objects/{obj['uuid']}/checkin",
@@ -656,9 +661,9 @@ def test_workspace_content_put_then_checkin(client, repo_parent, data_dir, ident
     body = uploaded.json()
     assert body["ok"] is True
     assert body["object_id"] == obj["uuid"]
-    assert body["filename"] == "shaft.prt.4"
+    assert body["filename"] == "shaft.prt"
     assert body["bytes_written"] == len(b"from-agent-cache")
-    staged = data_dir / "vaults" / product["uuid"] / "shaft.prt.4"
+    staged = data_dir / "vaults" / product["uuid"] / "shaft.prt"
     assert staged.read_bytes() == b"from-agent-cache"
 
     wrong_name = client.put(
@@ -749,8 +754,8 @@ def test_revert_to_older_version_restores_vault_content(client, repo_parent, dat
 
 
 @requires_git
-def test_revert_restores_creo_save_number_not_current_tip(client, repo_parent, data_dir):
-    """Regression: revert must restore start_part.prt.1, not overwrite .prt.3 in place."""
+def test_revert_restores_logical_vault_tip(client, repo_parent, data_dir):
+    """Revert restores older bytes onto the logical tip (strip Creo .N)."""
     product = client.post("/api/products", json={"name": "Creo Saves"}).json()
     created = client.post(
         f"/api/products/{product['uuid']}/objects",
@@ -766,41 +771,41 @@ def test_revert_restores_creo_save_number_not_current_tip(client, repo_parent, d
     assert created.status_code == 201, created.text
     obj = created.json()
     object_id = obj["uuid"]
-    assert obj["filename"] == "start_part.prt.1"
-    assert "model-templates" in (obj.get("relative_path") or "")
+    assert obj["filename"] == "start_part.prt"
+    assert obj["relative_path"] == "model-templates/start_part.prt"
     vault = data_dir / "vaults" / product["uuid"] / "model-templates"
     vault.mkdir(parents=True, exist_ok=True)
 
     assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
-    (vault / "start_part.prt.1").write_bytes(b"v1-bytes")
+    (vault / "start_part.prt").write_bytes(b"v1-bytes")
     (vault / "start_part.prt.2").write_bytes(b"v2-bytes")
     check2 = client.post(
         f"/api/objects/{object_id}/checkin",
         json={"comment": "Save 2"},
     )
     assert check2.status_code == 200, check2.text
-    assert check2.json()["filename"] == "start_part.prt.2"
+    assert check2.json()["filename"] == "start_part.prt"
 
     assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
-    (vault / "start_part.prt.2").write_bytes(b"v2-bytes")
+    (vault / "start_part.prt").write_bytes(b"v2-bytes")
     (vault / "start_part.prt.3").write_bytes(b"v3-bytes")
     check3 = client.post(
         f"/api/objects/{object_id}/checkin",
         json={"comment": "Save 3"},
     )
     assert check3.status_code == 200, check3.text
-    assert check3.json()["filename"] == "start_part.prt.3"
+    assert check3.json()["filename"] == "start_part.prt"
 
     history = client.get(f"/api/objects/{object_id}/history").json()
-    older = next(item for item in history if item["filename"] == "start_part.prt.1")
+    older = next(item for item in history if item["iteration"] == 1)
     reverted = client.post(
         f"/api/objects/{object_id}/versions/{older['uuid']}/revert"
     )
     assert reverted.status_code == 200, reverted.text
     body = reverted.json()
-    assert body["filename"] == "start_part.prt.1"
-    assert body["relative_path"].endswith("start_part.prt.1")
-    assert (vault / "start_part.prt.1").read_bytes() == b"v1-bytes"
+    assert body["filename"] == "start_part.prt"
+    assert body["relative_path"].endswith("start_part.prt")
+    assert (vault / "start_part.prt").read_bytes() == b"v1-bytes"
     assert not (vault / "start_part.prt.3").exists()
     assert not (vault / "start_part.prt.2").exists()
     assert body["owned_by_me"] is False
@@ -808,11 +813,8 @@ def test_revert_restores_creo_save_number_not_current_tip(client, repo_parent, d
 
 
 @requires_git
-def test_revert_renames_tip_when_content_already_matches(client, repo_parent, data_dir):
-    """Regression: after a bad tip overwrite, revert must still rename .prt.3 → .prt.1.
-
-    Same bytes must not surface as 'No changes to check in' / leave a checkout.
-    """
+def test_revert_records_even_when_tip_bytes_already_match(client, repo_parent, data_dir):
+    """Revert must still create a history row when tip bytes already match the older version."""
     product = client.post("/api/products", json={"name": "Creo Rename"}).json()
     created = client.post(
         f"/api/products/{product['uuid']}/objects",
@@ -825,33 +827,33 @@ def test_revert_renames_tip_when_content_already_matches(client, repo_parent, da
     vault.mkdir(parents=True, exist_ok=True)
 
     assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
-    (vault / "start_part.prt.1").write_bytes(b"same-bytes")
+    (vault / "start_part.prt").write_bytes(b"same-bytes")
     (vault / "start_part.prt.3").write_bytes(b"other-bytes")
     check3 = client.post(f"/api/objects/{object_id}/checkin", json={"comment": "Save 3"})
     assert check3.status_code == 200, check3.text
-    assert check3.json()["filename"] == "start_part.prt.3"
+    assert check3.json()["filename"] == "start_part.prt"
 
-    # Simulate prior broken revert: tip name stays .prt.3 but bytes match A.1.
+    # Tip already has A.1 bytes (no rename needed after strip).
     assert client.post(f"/api/objects/{object_id}/checkout").status_code == 200
-    (vault / "start_part.prt.3").write_bytes(b"same-bytes")
+    (vault / "start_part.prt").write_bytes(b"same-bytes")
     bad = client.post(
         f"/api/objects/{object_id}/checkin",
         json={"comment": "Reverted to A.1"},
     )
     assert bad.status_code == 200, bad.text
-    assert bad.json()["filename"] == "start_part.prt.3"
+    assert bad.json()["filename"] == "start_part.prt"
 
     history = client.get(f"/api/objects/{object_id}/history").json()
-    older = next(item for item in history if item["filename"] == "start_part.prt.1")
+    older = next(item for item in history if item["iteration"] == 1)
     reverted = client.post(
         f"/api/objects/{object_id}/versions/{older['uuid']}/revert"
     )
     assert reverted.status_code == 200, reverted.text
     body = reverted.json()
-    assert body["filename"] == "start_part.prt.1"
+    assert body["filename"] == "start_part.prt"
     assert body["owned_by_me"] is False
     assert "No changes to check in" not in (reverted.text or "")
-    assert (vault / "start_part.prt.1").read_bytes() == b"same-bytes"
+    assert (vault / "start_part.prt").read_bytes() == b"same-bytes"
     assert not (vault / "start_part.prt.3").exists()
 
 

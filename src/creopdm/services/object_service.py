@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -135,7 +137,7 @@ class ObjectService:
     ) -> tuple[str, str, int]:
         """Return (logical_repo_path, stored_name, save_number) for an import job."""
         display_name = sanitize_filename(original_name or source_path.name)
-        stored_name = CreoFileManager.canonical_repository_name(display_name)
+        stored_name = CreoFileManager.canonical_repository_name(display_name, extras)
         if relative_path:
             rel = assert_product_content_relative_path(relative_path)
             if rel.name != stored_name:
@@ -144,7 +146,8 @@ class ObjectService:
             rel = Path(stored_name)
         relative = assert_product_content_relative_path(str(rel).replace("\\", "/")).as_posix()
         logical = CreoFileManager.logical_repo_path(relative, extras)
-        number = CreoFileManager.save_number(stored_name, extras)
+        # Save number comes from the source name; vault tip is always logical.
+        number = CreoFileManager.save_number(display_name, extras)
         return logical, stored_name, number
 
     def _prefer_latest_import_jobs(
@@ -577,6 +580,10 @@ class ObjectService:
                     plan.creo_release = creo_release_for(destination, plan.stored_name)
                     if created_copy:
                         created.append(destination)
+                    try:
+                        os.utime(destination, None)
+                    except OSError:
+                        pass
                     if index == 1 or index == total or index % 25 == 0:
                         logger.info("Copied %s/%s from source", index, total)
                 if git_plans:
@@ -609,6 +616,7 @@ class ObjectService:
                     self._record_import_activity(session, product, git_plans, user)
                     for plan in git_plans:
                         destination = ensure_within(repo, repo / Path(plan.relative))
+                        self._purge_numbered_siblings(destination)
                         try:
                             set_file_readonly(destination)
                         except Exception:
@@ -655,7 +663,7 @@ class ObjectService:
                     details={"path": str(source_path)},
                 )
             display_name = sanitize_filename(original_name or source_path.name)
-            stored_name = CreoFileManager.canonical_repository_name(display_name)
+            stored_name = CreoFileManager.canonical_repository_name(display_name, extras)
             if CreoFileManager.is_ignored(stored_name, ignore):
                 raise PathValidationError(
                     f"{stored_name} is an ignored session file and is not stored in CreoPDM.",
@@ -691,37 +699,49 @@ class ObjectService:
             kind = "new"
             old_relative: str | None = None
             if existing is not None:
-                incoming_n = CreoFileManager.save_number(stored_name, extras)
+                # Compare Creo save numbers from the source leaf; vault tips are logical
+                # (recorded_n is 0). Same bytes → duplicate. Higher .N or any new bytes
+                # on a logical tip → later save. Lower .N than a still-numbered tip → reject.
+                incoming_n = CreoFileManager.save_number(display_name, extras)
                 recorded_n = CreoFileManager.save_number(existing.filename, extras)
-                if incoming_n > recorded_n:
-                    if existing.lifecycle_state != LifecycleState.IN_WORK.value:
-                        raise ReleasedObjectError(
-                            f"{existing.filename} is {existing.lifecycle_state.replace('_', ' ').title()} "
-                            "and cannot take a later save.",
-                            details={"uuid": existing.uuid},
-                        )
-                    active = checkouts.get(existing.id)
-                    if active is not None:
-                        if active.user_name != user_name:
-                            raise ObjectAlreadyCheckedOutError(
-                                f"{existing.filename} is checked out by {active.user_name}.",
-                                details={"uuid": existing.uuid, "user": active.user_name},
-                            )
-                        kind = "stage"
-                    else:
-                        kind = "later"
-                    relative = self._later_save_relative(existing, stored_name)
-                    old_relative = existing.relative_path.replace("\\", "/")
-                elif incoming_n < recorded_n:
-                    raise DuplicateObjectError(
-                        f"{stored_name} is an older save of {existing.filename}, which is already in this product.",
-                        details={"relative_path": existing.relative_path, "existing": existing.filename},
-                    )
-                else:
+                current_hash = ""
+                if existing.current_version is not None:
+                    current_hash = (existing.current_version.content_hash or "").lower()
+                source_hash = calculate_sha256(source_path).lower() if source_path.is_file() else ""
+                if current_hash and source_hash and source_hash == current_hash:
                     raise DuplicateObjectError(
                         f"{stored_name} is already in this product as {existing.filename}.",
                         details={"relative_path": existing.relative_path, "existing": existing.filename},
                     )
+                if recorded_n > 0 and incoming_n < recorded_n:
+                    raise DuplicateObjectError(
+                        f"{stored_name} is an older save of {existing.filename}, which is already in this product.",
+                        details={"relative_path": existing.relative_path, "existing": existing.filename},
+                    )
+                if recorded_n > 0 and incoming_n == recorded_n:
+                    raise DuplicateObjectError(
+                        f"{stored_name} is already in this product as {existing.filename}.",
+                        details={"relative_path": existing.relative_path, "existing": existing.filename},
+                    )
+                # incoming_n > recorded_n, or logical tip (recorded_n==0) with new bytes
+                if existing.lifecycle_state != LifecycleState.IN_WORK.value:
+                    raise ReleasedObjectError(
+                        f"{existing.filename} is {existing.lifecycle_state.replace('_', ' ').title()} "
+                        "and cannot take a later save.",
+                        details={"uuid": existing.uuid},
+                    )
+                active = checkouts.get(existing.id)
+                if active is not None:
+                    if active.user_name != user_name:
+                        raise ObjectAlreadyCheckedOutError(
+                            f"{existing.filename} is checked out by {active.user_name}.",
+                            details={"uuid": existing.uuid, "user": active.user_name},
+                        )
+                    kind = "stage"
+                else:
+                    kind = "later"
+                relative = self._later_save_relative(existing, stored_name)
+                old_relative = existing.relative_path.replace("\\", "/")
             content_hash = ""
             file_size = 0
             creo_release = None
@@ -947,6 +967,10 @@ class ObjectService:
         with self._locks.acquire(product.uuid):
             created_copy = copy_file(source_path, destination)
             try:
+                os.utime(destination, None)
+            except OSError:
+                pass
+            try:
                 git_hash = self._store.store_version(
                     repo,
                     [relative],
@@ -958,6 +982,7 @@ class ObjectService:
                 if created_copy:
                     self._remove_copied_file(destination)
                 raise
+            self._purge_numbered_siblings(destination)
             existing.filename = stored_name
             existing.relative_path = relative
             existing.updated_at = now
@@ -1085,6 +1110,161 @@ class ObjectService:
             if CreoFileManager.logical_repo_path(item.relative_path, extras) == logical:
                 return item
         return None
+
+    def _purge_numbered_siblings(self, tip: Path) -> None:
+        """Delete same-logical Creo saves with a higher .N than ``tip`` in its folder."""
+        extras = self._cad_extensions()
+        if not tip.is_file():
+            return
+        folder = tip.parent
+        try:
+            tip_resolved = tip.resolve()
+        except OSError:
+            tip_resolved = tip
+        keep_num = CreoFileManager.save_number(tip.name, extras)
+        logical = CreoFileManager.logical_filename(tip.name, extras).lower()
+        try:
+            children = list(folder.iterdir())
+        except OSError:
+            return
+        for child in children:
+            if not child.is_file():
+                continue
+            try:
+                if child.resolve() == tip_resolved:
+                    continue
+            except OSError:
+                if child.name == tip.name:
+                    continue
+            if CreoFileManager.logical_filename(child.name, extras).lower() != logical:
+                continue
+            if CreoFileManager.save_number(child.name, extras) <= keep_num:
+                continue
+            try:
+                set_file_writable(child)
+                child.unlink()
+                logger.info("Removed numbered Creo sibling after vault write: %s", child)
+            except OSError as exc:
+                logger.warning("Could not remove numbered sibling %s: %s", child, exc)
+
+    def migrate_numbered_vault_tips(
+        self,
+        session: Session,
+        product: Product,
+        *,
+        vault: Path,
+    ) -> int:
+        """Rename legacy tip paths ``shaft.prt.N`` → ``shaft.prt`` in git + DB.
+
+        Safe to call repeatedly: ``product.json`` flag ``logical_vault_names``
+        skips when already done. On-touch check-in/Add also normalizes files.
+        """
+        from creopdm.constants import PRODUCT_JSON_NAME, PRODUCT_MARKER_DIR
+
+        marker_path = vault / PRODUCT_MARKER_DIR / PRODUCT_JSON_NAME
+        payload: dict = {}
+        if marker_path.is_file():
+            try:
+                loaded = json.loads(marker_path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    payload = loaded
+            except (json.JSONDecodeError, OSError):
+                payload = {}
+        if payload.get("logical_vault_names"):
+            return 0
+
+        extras = self._cad_extensions()
+        objects = list(self.list_objects(session, product.id))
+        renames: list[tuple[EngineeringObject, str, str]] = []
+        claimed: set[str] = set()
+        for obj in objects:
+            if CreoFileManager.save_number(obj.filename, extras) <= 0:
+                continue
+            old_relative = str(obj.relative_path or obj.filename).replace("\\", "/")
+            new_name = CreoFileManager.canonical_repository_name(obj.filename, extras)
+            parent = Path(old_relative).parent
+            new_relative = (
+                new_name if parent.as_posix() == "." else (parent / new_name).as_posix()
+            )
+            if new_relative == old_relative:
+                continue
+            if new_relative.lower() in claimed:
+                logger.warning(
+                    "Skip vault-name migrate for %s: target %s already claimed",
+                    old_relative,
+                    new_relative,
+                )
+                continue
+            clash = self.existing_logical(session, product.id, new_relative, exclude_id=obj.id)
+            if clash is not None:
+                logger.warning(
+                    "Skip vault-name migrate for %s: clashes with %s",
+                    old_relative,
+                    clash.filename,
+                )
+                continue
+            claimed.add(new_relative.lower())
+            renames.append((obj, old_relative, new_relative))
+
+        def _stamp_done() -> None:
+            marker_path.parent.mkdir(parents=True, exist_ok=True)
+            current: dict = {}
+            if marker_path.is_file():
+                try:
+                    loaded = json.loads(marker_path.read_text(encoding="utf-8"))
+                    if isinstance(loaded, dict):
+                        current = loaded
+                except (json.JSONDecodeError, OSError):
+                    current = {}
+            current["logical_vault_names"] = 1
+            marker_path.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
+
+        if not renames:
+            _stamp_done()
+            return 0
+
+        user = self._users.get_current_user()
+        add_paths = [new_rel for _obj, _old, new_rel in renames]
+        remove_paths = [old for _obj, old, new_rel in renames if old != new_rel]
+        with self._locks.acquire(product.uuid):
+            for obj, old_relative, new_relative in renames:
+                source = ensure_within(vault, vault / Path(old_relative))
+                destination = ensure_within(vault, vault / Path(new_relative))
+                if source.is_file():
+                    copy_file(source, destination)
+                elif not destination.is_file():
+                    logger.warning(
+                        "Migrate skipped missing vault file %s → %s",
+                        old_relative,
+                        new_relative,
+                    )
+                    continue
+                self._purge_numbered_siblings(destination)
+                tip_name = Path(new_relative).name
+                obj.filename = tip_name
+                obj.relative_path = new_relative
+                if obj.current_version is not None:
+                    obj.current_version.filename = tip_name
+                    obj.current_version.relative_path = new_relative
+            try:
+                self._store.store_version(
+                    vault,
+                    add_paths,
+                    "Normalize Creo vault filenames (strip save numbers)",
+                    user,
+                    allow_empty=True,
+                    remove_relative_paths=remove_paths,
+                )
+            except Exception:
+                logger.exception("Git store failed during vault-name migrate for %s", product.uuid)
+                raise
+            _stamp_done()
+        logger.info(
+            "Migrated %s numbered vault tip(s) to logical names for product %s",
+            len(renames),
+            product.uuid,
+        )
+        return len(renames)
 
     def search(
         self,

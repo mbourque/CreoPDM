@@ -11,6 +11,7 @@ from creopdm.exceptions import PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
+from creopdm.creo.file_manager import CreoFileManager
 from creopdm.services.workspace_service import WorkspaceService
 
 logger = get_logger("agent_cache_zip")
@@ -33,13 +34,18 @@ def _vault_source(workspaces: WorkspaceService, product: Product, obj: Engineeri
     return source
 
 
-def manifest_items_for_objects(objects: list[EngineeringObject]) -> list[dict[str, object]]:
+def manifest_items_for_objects(
+    objects: list[EngineeringObject],
+    *,
+    extra_extensions: list[str] | None = None,
+) -> list[dict[str, object]]:
     """Build cache identities from loaded objects (order preserved)."""
     items: list[dict[str, object]] = []
     for obj in objects:
         version = obj.current_version
         relative = str(obj.relative_path or obj.filename or "").replace("\\", "/")
-        disk_name = Path(relative).name
+        vault_leaf = Path(relative).name
+        disk_name = CreoFileManager.workspace_materialize_name(vault_leaf, extra_extensions)
         items.append(
             {
                 "object_id": obj.uuid,
@@ -58,9 +64,14 @@ def build_agent_cache_zip(
     product: Product,
     objects: list[EngineeringObject],
 ) -> tuple[Path, int]:
-    """Write vault files to a temp zip, preserving nested relative paths."""
+    """Write vault files to a temp zip, preserving nested relative paths.
+
+    Zip leaf names use the agent-cache disk name (``shaft.prt.1`` for a logical
+    vault tip) so extract lands where Creo and newer-save detection expect.
+    """
     if not objects:
         raise ValidationAppError("No files to download.")
+    extras = workspaces._cad_extensions()
     fd, raw_name = tempfile.mkstemp(suffix=".zip", prefix="creopdm-cache-")
     os.close(fd)
     archive = Path(raw_name)
@@ -71,10 +82,11 @@ def build_agent_cache_zip(
                 source = _vault_source(workspaces, product, obj)
                 relative = str(obj.relative_path or obj.filename or "").replace("\\", "/")
                 parent = Path(relative).parent.as_posix()
+                disk_name = CreoFileManager.workspace_materialize_name(source.name, extras)
                 if parent in {".", ""}:
-                    arcname = source.name
+                    arcname = disk_name
                 else:
-                    arcname = f"{parent}/{source.name}"
+                    arcname = f"{parent}/{disk_name}"
                 zf.write(source, arcname=arcname)
                 written += 1
                 if written == 1 or written % 500 == 0:

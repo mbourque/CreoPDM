@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +12,7 @@ from sqlalchemy import select
 
 from creopdm.constants import ActivityAction, CheckoutStatus, DEFAULT_REVISION, LifecycleState
 from creopdm.creo.base import CreoConnector, CreoModelRef
+from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import (
     CheckoutOwnershipError,
     CreoPDMError,
@@ -109,6 +111,8 @@ class CheckinService:
         object_uuid: str,
         comment: str,
         add_relative_paths: list[str] | None = None,
+        *,
+        allow_unchanged: bool = False,
     ) -> EngineeringObject:
         message = (comment or "").strip()
         if not message:
@@ -152,17 +156,21 @@ class CheckinService:
             captured_head = self._store.capture_checkpoint(repo)
             previous_git = obj.current_version.git_commit_hash if obj.current_version else None
             copy_file(workspace_file, repo_file)
+            # Drop numbered Creo siblings so the vault tip stays the logical path.
+            self._workspaces.purge_newer_creo_saves(product, repo_file)
+            try:
+                os.utime(repo_file, None)
+            except OSError:
+                pass
             same_bytes = (
                 obj.current_version is not None
                 and content_hash == obj.current_version.content_hash
             )
-            path_changed = (
-                old_relative != new_relative
-                or workspace_file.name != (obj.filename or "")
-            )
-            # Same content with a Creo save-number rename (e.g. revert .prt.3 → .prt.1)
-            # is still a real check-in.
-            if same_bytes and not to_add and not path_changed:
+            path_changed = old_relative != new_relative
+            # Same content with a Creo save-number rename (e.g. migrate
+            # shaft.prt.3 → shaft.prt) is still a real check-in. Revert may
+            # also force a new history row when tip bytes already match.
+            if same_bytes and not to_add and not path_changed and not allow_unchanged:
                 raise ValidationAppError(
                     "No changes to check in. Use Undo Checkout to release the lock without a new version.",
                     details={"filename": obj.filename},
@@ -174,7 +182,7 @@ class CheckinService:
                     [new_relative],
                     message,
                     user,
-                    allow_empty=same_bytes,
+                    allow_empty=same_bytes or allow_unchanged,
                     remove_relative_paths=remove_paths,
                 )
             except Exception:
@@ -183,7 +191,8 @@ class CheckinService:
 
             now = datetime.now(timezone.utc)
             new_iteration = obj.iteration + 1
-            obj.filename = workspace_file.name
+            tip_name = Path(new_relative).name
+            obj.filename = tip_name
             obj.relative_path = new_relative
             version = ObjectVersion(
                 uuid=str(uuid.uuid4()),
@@ -193,7 +202,7 @@ class CheckinService:
                 git_commit_hash=git_hash or previous_git,
                 content_hash=content_hash,
                 file_size=file_size,
-                filename=obj.filename,
+                filename=tip_name,
                 relative_path=new_relative,
                 creo_release=creo_release,
                 created_by=user.user_name,
@@ -294,8 +303,9 @@ class CheckinService:
                 details={"version": version_uuid},
             ) from last_error
 
-        # Always restore to the version's recorded path/name (e.g. …/start_part.prt.1),
-        # not whichever path git show happened to accept for reading bytes.
+        # Always restore onto the logical vault tip (strip Creo .N). Older history
+        # rows may still name shaft.prt.1 — Git reads that path; the working tip
+        # becomes shaft.prt so Git owns subsequent history.
         dest_rel = ""
         for raw in (target.relative_path, target.filename):
             text = str(raw or "").replace("\\", "/").strip().lstrip("/")
@@ -311,6 +321,13 @@ class CheckinService:
             break
         if not dest_rel:
             dest_rel = source_rel.replace("\\", "/").lstrip("/")
+        extras = self._workspaces._cad_extensions()
+        dest_name = CreoFileManager.canonical_repository_name(Path(dest_rel).name, extras)
+        dest_parent = Path(dest_rel).parent
+        if dest_parent.as_posix() == ".":
+            dest_rel = dest_name
+        else:
+            dest_rel = (dest_parent / dest_name).as_posix()
 
         tip_rel = str(obj.relative_path or "").replace("\\", "/").strip().lstrip("/")
         with self._locks.acquire(product.uuid):
@@ -321,14 +338,13 @@ class CheckinService:
                 # Need a writable checkout so check-in can record the restored bytes.
                 self._checkouts.checkout(session, object_uuid)
 
-            # Restore the Git path/name from that commit (e.g. start_part.prt.1), not
-            # overwrite the current tip filename (e.g. start_part.prt.3).
+            # Restore bytes onto the logical tip path.
             try:
-                self._store.restore_version(repo, dest_rel, target.git_commit_hash)
+                self._store.restore_version(repo, source_rel, target.git_commit_hash)
             except Exception:
                 logger.warning(
                     "git checkout of %s@%s failed; writing blob directly",
-                    dest_rel,
+                    source_rel,
                     (target.git_commit_hash or "")[:8],
                     exc_info=True,
                 )
@@ -343,9 +359,7 @@ class CheckinService:
             except Exception:
                 pass
 
-            # Drop higher .N siblings so locate_content prefers the restored save
-            # (e.g. .prt.1) instead of the tip (.prt.3). Leave obj.filename as the tip
-            # so check-in still git-rms the old tip path when the basename changes.
+            # Drop numbered siblings so locate_content prefers the logical tip.
             self._workspaces.purge_newer_creo_saves(product, dest)
             if tip_rel and tip_rel != dest_rel:
                 tip_path = self._workspaces.file_path(product, tip_rel)
@@ -374,7 +388,7 @@ class CheckinService:
         # Revert always records the restored tip as a new version — never leave the
         # user checked out with a "please check in" prompt.
         try:
-            restored = self.checkin(session, object_uuid, comment)
+            restored = self.checkin(session, object_uuid, comment, allow_unchanged=True)
         except Exception:
             try:
                 self._checkouts.undo_checkout(session, object_uuid)

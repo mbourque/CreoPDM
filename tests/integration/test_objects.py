@@ -35,10 +35,10 @@ def test_import_creo_and_document_files(client, repo_parent, tmp_path):
     )
     assert part_resp.status_code == 201, part_resp.text
     part = part_resp.json()
-    assert part["filename"] == "shaft.prt.3"
+    assert part["filename"] == "shaft.prt"
     assert part["object_type"] == "CREO_PART"
     assert part["display_revision"] == "A.1"
-    assert part["relative_path"] == "shaft.prt.3"
+    assert part["relative_path"] == "shaft.prt"
     assert part["current_version"]["content_hash"]
     assert part["current_version"]["comment"] == "Initial shaft"
 
@@ -54,21 +54,21 @@ def test_import_creo_and_document_files(client, repo_parent, tmp_path):
 
     listing = client.get(f"/api/products/{product['uuid']}/objects")
     names = {item["filename"] for item in listing.json()}
-    assert names == {"shaft.prt.3", "spec.pdf"}
+    assert names == {"shaft.prt", "spec.pdf"}
 
     history = client.get(f"/api/objects/{part['uuid']}/history")
     assert history.status_code == 200
     first = history.json()[0]
     assert first["iteration"] == 1
-    assert first["filename"] == "shaft.prt.3"
-    assert first["relative_path"] == "shaft.prt.3"
+    assert first["filename"] == "shaft.prt"
+    assert first["relative_path"] == "shaft.prt"
     assert first.get("creo_release") in {None, ""}
 
     detail = client.get(f"/api/objects/{part['uuid']}")
     assert detail.status_code == 200
     page = client.get(f"/products/{product['uuid']}/objects/{part['uuid']}")
     assert page.status_code == 200
-    assert "shaft.prt.3" in page.text
+    assert "shaft.prt" in page.text
     # History table shows check-in comments per revision.
     assert 'id="history-files-table"' in page.text
     assert 'data-sort="comment"' in page.text.split('id="history-files-table"', 1)[1]
@@ -109,10 +109,10 @@ def test_import_from_uploads_keeps_highest_creo_save(client, repo_parent):
     )
     assert added.status_code == 200, added.text
     body = added.json()
-    assert {item["filename"] for item in body["ok"]} == {"base.prt.3", "cnc-router.asm.8"}
+    assert {item["filename"] for item in body["ok"]} == {"base.prt", "cnc-router.asm"}
     assert body["failed"] == []
     listing = {item["filename"] for item in client.get(f"/api/products/{product['uuid']}/objects").json()}
-    assert listing == {"base.prt.3", "cnc-router.asm.8"}
+    assert listing == {"base.prt", "cnc-router.asm"}
     product, _location = _create_product(client, repo_parent)
     added = client.post(
         f"/api/products/{product['uuid']}/objects/from-uploads",
@@ -193,18 +193,22 @@ def test_search_objects_supports_glob_wildcards(client, repo_parent):
 
     by_ext = client.get(f"/api/products/{product['uuid']}/objects", params={"q": "*.prt"})
     assert by_ext.status_code == 200, by_ext.text
-    assert {item["relative_path"] for item in by_ext.json()} == {"CAD/shaft.prt"}
+    assert {item["relative_path"] for item in by_ext.json()} == {
+        "CAD/shaft.prt",
+        "CAD/bracket.prt",
+    }
 
+    # Vault tips are logical — numbered leaf patterns do not match stored names.
     numbered = client.get(f"/api/products/{product['uuid']}/objects", params={"q": "*.prt.*"})
     assert numbered.status_code == 200, numbered.text
-    assert {item["relative_path"] for item in numbered.json()} == {"CAD/bracket.prt.2"}
+    assert {item["relative_path"] for item in numbered.json()} == set()
 
     dotted = client.get(f"/api/products/{product['uuid']}/objects", params={"q": "*.*"})
     assert dotted.status_code == 200, dotted.text
     assert {item["relative_path"] for item in dotted.json()} == {
         "CAD/shaft.prt",
         "docs/notes.txt",
-        "CAD/bracket.prt.2",
+        "CAD/bracket.prt",
     }
 
     everything = client.get(f"/api/products/{product['uuid']}/objects", params={"q": "*"})
@@ -219,12 +223,15 @@ def test_search_objects_supports_glob_wildcards(client, repo_parent):
     assert starts.status_code == 200, starts.text
     assert {item["relative_path"] for item in starts.json()} == {
         "CAD/shaft.prt",
-        "CAD/bracket.prt.2",
+        "CAD/bracket.prt",
     }
 
     ends = client.get(f"/api/products/{product['uuid']}/objects", params={"q": ".prt$"})
     assert ends.status_code == 200, ends.text
-    assert {item["relative_path"] for item in ends.json()} == {"CAD/shaft.prt"}
+    assert {item["relative_path"] for item in ends.json()} == {
+        "CAD/shaft.prt",
+        "CAD/bracket.prt",
+    }
 
     home = client.get(f"/?product={product['uuid']}")
     assert home.status_code == 200
@@ -308,9 +315,9 @@ def test_numbered_extra_cad_goes_to_cad_folder(client, repo_parent, tmp_path):
     )
     assert added.status_code == 201, added.text
     body = added.json()
-    assert body["filename"] == "setup.inf.1"
+    assert body["filename"] == "setup.inf"
     assert body["object_type"] == "CAD"
-    assert body["relative_path"] == "setup.inf.1"
+    assert body["relative_path"] == "setup.inf"
     later = client.post(
         f"/api/products/{product['uuid']}/objects",
         files={"file": ("setup.inf.2", b"later-inf", "application/octet-stream")},
@@ -319,7 +326,7 @@ def test_numbered_extra_cad_goes_to_cad_folder(client, repo_parent, tmp_path):
     assert later.status_code == 201, later.text
     body = later.json()
     assert body["uuid"] == added.json()["uuid"]
-    assert body["filename"] == "setup.inf.2"
+    assert body["filename"] == "setup.inf"
     assert body["display_revision"] == "A.2"
 
 
@@ -349,9 +356,9 @@ def test_choose_files_starts_in_product_folder(client, repo_parent):
     assert imported.status_code == 200, imported.text
     body = imported.json()
     assert len(body["ok"]) == 1
-    assert body["ok"][0]["filename"] == "pin.prt.6"
+    assert body["ok"][0]["filename"] == "pin.prt"
     listing = client.get(f"/api/products/{product['uuid']}/objects").json()
-    assert any(item["filename"] == "pin.prt.6" and item["relative_path"] == "pin.prt.6" for item in listing)
+    assert any(item["filename"] == "pin.prt" and item["relative_path"] == "pin.prt" for item in listing)
     assert pin.is_file()
     assert pin.read_bytes() == b"vault-pin"
     page = client.get(f"/?product={product['uuid']}")
@@ -423,7 +430,7 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data
     assert imported.status_code == 200, imported.text
     listing = client.get(f"/api/products/{product['uuid']}/objects").json()
     listed = {item["filename"]: item["relative_path"] for item in listing}
-    assert listed == {"shaft.prt.4": "Incoming/shaft.prt.4", "pin.prt": "Incoming/lib/pin.prt"}
+    assert listed == {"shaft.prt": "Incoming/shaft.prt", "pin.prt": "Incoming/lib/pin.prt"}
     page = client.get(f"/?product={product['uuid']}")
     assert page.status_code == 200, page.text
     assert 'class="folder-row"' in page.text
@@ -435,14 +442,14 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data
     inside = client.get(f"/?product={product['uuid']}&folder=Incoming")
     assert inside.status_code == 200, inside.text
     assert 'data-folder="Incoming/lib"' in inside.text
-    assert "shaft.prt.4" in inside.text
+    assert "shaft.prt" in inside.text
     assert 'id="metric-filters"' in inside.text
     assert 'data-filter="cad_models"' in inside.text
     assert "disabled" not in inside.text.split('data-filter="cad_models"')[1].split("</button>")[0]
     assert 'data-cad-models="' in inside.text
     assert ".prt" in inside.text.split('data-cad-models="')[1].split('"')[0]
     assert 'data-extension=".prt"' in inside.text
-    assert 'data-filename="shaft.prt.4"' in inside.text
+    assert 'data-filename="shaft.prt"' in inside.text
     assert 'data-filter="creo_parts"' in inside.text
     assert "disabled" not in inside.text.split('data-filter="creo_parts"')[1].split("</button>")[0]
     assert "disabled" not in inside.text.split('data-filter="assemblies"')[1].split("</button>")[0]
@@ -466,7 +473,7 @@ def test_choose_folder_lists_latest_files(client, repo_parent, monkeypatch, data
     assert (location / "Incoming" / "shaft.prt.4").is_file()
     assert (location / "Incoming" / "lib" / "pin.prt").is_file()
     workspace = data_dir / "vaults" / product["uuid"]
-    assert (workspace / "Incoming" / "shaft.prt.4").is_file()
+    assert (workspace / "Incoming" / "shaft.prt").is_file()
     assert (workspace / "Incoming" / "lib" / "pin.prt").is_file()
 
 
@@ -527,14 +534,14 @@ def test_from_zip_strips_root_imports_nested_and_skips_duplicate(client, repo_pa
     )
     assert added.status_code == 200, added.text
     body = added.json()
-    assert {item["filename"] for item in body["ok"]} == {"shaft.prt.1", "pin.prt.1"}
+    assert {item["filename"] for item in body["ok"]} == {"shaft.prt", "pin.prt"}
     assert body["failed"] == []
     listing = {
         item["relative_path"]: item["filename"]
         for item in client.get(f"/api/products/{product['uuid']}/objects").json()
     }
-    assert listing.get("shaft.prt.1") == "shaft.prt.1"
-    assert listing.get("lib/pin.prt.1") == "pin.prt.1"
+    assert listing.get("shaft.prt") == "shaft.prt"
+    assert listing.get("lib/pin.prt") == "pin.prt"
 
     again = client.post(
         f"/api/products/{product['uuid']}/objects/from-zip",
@@ -1016,10 +1023,10 @@ def test_from_disk_adds_only_latest_numbered_revision(client, repo_parent):
     body = imported.json()
     assert not body["failed"]
     added = {item["filename"] for item in body["ok"]}
-    assert added == {"parallels.prt.3", "notes.pdf"}
+    assert added == {"parallels.prt", "notes.pdf"}
     listing = client.get(f"/api/products/{product['uuid']}/objects").json()
     names = {item["filename"] for item in listing}
-    assert names == {"parallels.prt.3", "notes.pdf"}
+    assert names == {"parallels.prt", "notes.pdf"}
     assert older.is_file() and first.is_file() and latest.is_file()
     assert older.read_bytes() == b"old-generic"
     assert first.read_bytes() == b"rev-1"
@@ -1074,7 +1081,7 @@ def test_numbered_creo_file_is_same_object(client, repo_parent):
         data={"comment": "Add base"},
     )
     assert first.status_code == 201, first.text
-    assert first.json()["filename"] == "base.prt.3"
+    assert first.json()["filename"] == "base.prt"
     second = client.post(
         f"/api/products/{product['uuid']}/objects",
         files={"file": ("base.prt.4", b"later-save", "application/octet-stream")},
@@ -1083,19 +1090,29 @@ def test_numbered_creo_file_is_same_object(client, repo_parent):
     assert second.status_code == 201, second.text
     body = second.json()
     assert body["uuid"] == first.json()["uuid"]
-    assert body["filename"] == "base.prt.4"
-    assert body["relative_path"] == "base.prt.4"
+    assert body["filename"] == "base.prt"
+    assert body["relative_path"] == "base.prt"
     assert body["display_revision"] == "A.2"
     listing = client.get(f"/api/products/{product['uuid']}/objects").json()
     assert len(listing) == 1
-    assert listing[0]["filename"] == "base.prt.4"
+    assert listing[0]["filename"] == "base.prt"
     older = client.post(
         f"/api/products/{product['uuid']}/objects",
         files={"file": ("base.prt.2", b"older-save", "application/octet-stream")},
         data={"comment": "Older save"},
     )
-    assert older.status_code == 409
-    assert older.json()["error"]["code"] == "DUPLICATE_OBJECT"
+    # Logical tips do not remember the prior .N; a different-bytes Add is a later save.
+    # Same-bytes Add of an older .N is rejected as duplicate (see content-hash guard).
+    assert older.status_code == 201, older.text
+    assert older.json()["uuid"] == first.json()["uuid"]
+    assert older.json()["display_revision"] == "A.3"
+    same_bytes = client.post(
+        f"/api/products/{product['uuid']}/objects",
+        files={"file": ("base.prt.9", b"older-save", "application/octet-stream")},
+        data={"comment": "Same content again"},
+    )
+    assert same_bytes.status_code == 409
+    assert same_bytes.json()["error"]["code"] == "DUPLICATE_OBJECT"
 
 
 @requires_git
@@ -1108,7 +1125,7 @@ def test_from_disk_later_numbered_save_updates_workspace(client, repo_parent, tm
         json={"paths": [str(first)], "comment": "Initial mill"},
     )
     assert added.status_code == 200, added.text
-    assert added.json()["ok"][0]["filename"] == "bridgeport_mill.prt.4"
+    assert added.json()["ok"][0]["filename"] == "bridgeport_mill.prt"
     later = tmp_path / "elsewhere" / "bridgeport_mill.prt.6"
     later.parent.mkdir()
     later.write_bytes(b"save-6")
@@ -1118,14 +1135,14 @@ def test_from_disk_later_numbered_save_updates_workspace(client, repo_parent, tm
     )
     assert updated.status_code == 200, updated.text
     assert updated.json()["failed"] == []
-    assert updated.json()["ok"][0]["filename"] == "bridgeport_mill.prt.6"
+    assert updated.json()["ok"][0]["filename"] == "bridgeport_mill.prt"
     listing = client.get(f"/api/products/{product['uuid']}/objects").json()
     assert len(listing) == 1
-    assert listing[0]["filename"] == "bridgeport_mill.prt.6"
+    assert listing[0]["filename"] == "bridgeport_mill.prt"
     assert listing[0]["display_revision"] == "A.2"
     workspace = data_dir / "vaults" / product["uuid"]
-    assert (workspace / "bridgeport_mill.prt.6").is_file()
-    assert (workspace / "bridgeport_mill.prt.6").read_bytes() == b"save-6"
+    assert (workspace / "bridgeport_mill.prt").is_file()
+    assert (workspace / "bridgeport_mill.prt").read_bytes() == b"save-6"
 
 
 @requires_git
@@ -1149,16 +1166,16 @@ def test_from_disk_later_save_while_checked_out_stays_working_copy(client, repo_
     assert updated.status_code == 200, updated.text
     assert updated.json()["failed"] == []
     listing = client.get(f"/api/products/{product['uuid']}/objects").json()[0]
-    assert listing["filename"] == "bridgeport_mill.prt.4"
+    assert listing["filename"] == "bridgeport_mill.prt"
     assert listing["owned_by_me"] is True
     workspace = data_dir / "vaults" / product["uuid"]
-    assert (workspace / "bridgeport_mill.prt.6").read_bytes() == b"save-6"
+    assert (workspace / "bridgeport_mill.prt").read_bytes() == b"save-6"
     checked = client.post(
         f"/api/objects/{obj['uuid']}/checkin",
         json={"comment": "Record later mill save"},
     )
     assert checked.status_code == 200, checked.text
-    assert checked.json()["filename"] == "bridgeport_mill.prt.6"
+    assert checked.json()["filename"] == "bridgeport_mill.prt"
     assert checked.json()["owned_by_me"] is False
 
 
@@ -1424,8 +1441,8 @@ def test_batch_add_later_save_same_commit(client, repo_parent, tmp_path, data_di
     assert batch.status_code == 200, batch.text
     assert batch.json()["failed"] == []
     listing = {item["filename"]: item for item in client.get(f"/api/products/{product['uuid']}/objects").json()}
-    assert listing["bridgeport_mill.prt.6"]["display_revision"] == "A.2"
-    assert listing["bridgeport_mill.prt.6"]["uuid"] == added.json()["ok"][0]["uuid"]
+    assert listing["bridgeport_mill.prt"]["display_revision"] == "A.2"
+    assert listing["bridgeport_mill.prt"]["uuid"] == added.json()["ok"][0]["uuid"]
     assert "notes.txt" in listing
     assert later.is_file()
     assert notes.is_file()

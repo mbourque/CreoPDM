@@ -208,7 +208,9 @@ class CreoService:
                     "product_id": str(product.uuid),
                     "relative_path": str(obj.relative_path).replace("\\", "/"),
                     "filename": logical,
-                    "disk_name": companion_path.name,
+                    "disk_name": CreoFileManager.workspace_materialize_name(
+                        companion_path.name, (*models, *all_cad)
+                    ),
                 }
             )
         if out:
@@ -282,7 +284,9 @@ class CreoService:
             "path": str(path.resolve()),
             "method": method,
             "filename": logical,
-            "disk_name": path.name,
+            "disk_name": CreoFileManager.workspace_materialize_name(
+                path.name, (*models, *all_cad)
+            ),
             "working_directory": str(workdir.resolve()),
             "object_id": object_id or None,
             "product_id": product_id or None,

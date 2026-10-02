@@ -79,6 +79,30 @@ def test_cache_index_dotfile_migrates_legacy_and_hides(tmp_path):
     assert is_hidden(modern)
 
 
+def test_manifest_disk_name_uses_workspace_materialize_leaf():
+    from types import SimpleNamespace
+
+    from creopdm.services.agent_cache_zip import manifest_items_for_objects
+
+    version = SimpleNamespace(content_hash="abc", file_size=3)
+    logical = SimpleNamespace(
+        uuid="u1",
+        filename="shaft.prt",
+        relative_path="lib/shaft.prt",
+        current_version=version,
+    )
+    numbered = SimpleNamespace(
+        uuid="u2",
+        filename="legacy.prt.3",
+        relative_path="legacy.prt.3",
+        current_version=version,
+    )
+    items = manifest_items_for_objects([logical, numbered])
+    assert items[0]["disk_name"] == "shaft.prt.1"
+    assert items[0]["relative_path"] == "lib/shaft.prt"
+    assert items[1]["disk_name"] == "legacy.prt.3"
+
+
 def test_plan_skips_matching_hash_keeps_newer_save(tmp_path):
     cache = tmp_path / "proj"
     cache.mkdir()
