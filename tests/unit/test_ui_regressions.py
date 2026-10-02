@@ -1150,13 +1150,25 @@ def test_folders_metric_pill_before_files():
     chip = _between(script, "function onMetricChip(", "document.querySelector(\"#metric-filters\")")
     assert 'key === "folders"' in chip
     assert 'other !== "folders"' in chip
-    assert "listedFolderRows().length" in chip
+    assert "setMetricMode(foldersBtn, \"filter\")" not in chip
+    assert "listedFolderRows().length" not in chip
+    restore = _between(script, "function restoreStoredFilters(", "function clearProductViewStorage(")
+    assert "setMetricMode(foldersBtn, \"filter\")" not in restore
     assert "Click **Folders**" in docs
     assert "including **0**" in docs
     assert "Hide the **Folders** pill when the count is 0" in docs
     assert "stays **on** together with **Files**" in docs
-    assert "turning **Folders** off **unselects** folder rows" in docs
+    assert "does not force Folders back on" in docs
+    assert "turning **Folders** or **Files** off **stays off**" in docs
+    assert "latest pill state wins" in docs
+    assert "turning **Folders** off **unselects** folder rows" in docs or "unselects** folder rows" in docs
     assert "hides and unselects** folders" in docs
+    assert "re-activate Folders or Files after navigation" in docs
+    read_filters = _between(script, "function readStoredFilters(", "function writeStoredFilters(")
+    assert 'filterStoreKey("_last")' in read_filters
+    assert read_filters.index('filterStoreKey("_last")') < read_filters.index(
+        "filterStoreKey(currentFolder())"
+    )
     apply_sel = _between(script, "function applyMetricSelection(", "function metricSelectionActive(")
     assert "Folder selection follows the Folders pill only" in apply_sel
     vis = _between(script, "function applyMetricVisibility(", "function applyMetricSelection(")

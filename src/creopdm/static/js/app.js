@@ -4622,7 +4622,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function readStoredFilters() {
     const product = currentProductId();
     if (!product) return null;
-    const keys = [filterStoreKey(currentFolder()), filterStoreKey("_last")];
+    // Prefer _last (most recent pill clicks) so turning Files/Folders off
+    // survives navigating into another folder that still has an older snapshot.
+    const keys = [filterStoreKey("_last"), filterStoreKey(currentFolder())];
     for (const key of keys) {
       if (!key) continue;
       try {
@@ -4669,14 +4671,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (files && metricMode(files) !== "off") {
       metricButtons().forEach((item) => {
         const other = metricKey(item);
+        // Files keeps Folders as stored (on or off) — do not force Folders back on.
         if (item !== files && !isStateMetric(other) && other !== "folders") {
           setMetricMode(item, "off");
         }
       });
-      const foldersBtn = metricButtons().find((item) => metricKey(item) === "folders");
-      if (foldersBtn && listedFolderRows().length > 0) {
-        setMetricMode(foldersBtn, "filter");
-      }
     }
     const cadModels = metricButtons().find((btn) => metricKey(btn) === "cad_models");
     if (cadModels && metricMode(cadModels) !== "off") clearMetricFilters(CAD_MODEL_CHILD_FILTERS);
@@ -5178,15 +5177,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (key === "files" && next !== "off") {
       metricButtons().forEach((item) => {
         const other = metricKey(item);
-        // Files keeps Folders on (both stay filtered together).
+        // Files does not clear Folders — leave Folders as the user left it (on or off).
         if (item !== btn && !isStateMetric(other) && other !== "folders") {
           setMetricMode(item, "off");
         }
       });
-      const foldersBtn = metricButtons().find((item) => metricKey(item) === "folders");
-      if (foldersBtn && listedFolderRows().length > 0) {
-        setMetricMode(foldersBtn, "filter");
-      }
     }
     if (key === "folders" && next !== "off") {
       metricButtons().forEach((item) => {
