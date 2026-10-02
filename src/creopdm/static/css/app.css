@@ -821,7 +821,6 @@ span.object-open {
 }
 button.object-open:hover,
 span.object-open:hover { text-decoration: underline; }
-.detail-head .object-open { font-size: inherit; color: inherit; }
 .grid tr.is-latest td { background: #eef6f1; }
 .grid tr.is-pending td { background: #fff6e8; }
 .grid tr.version-row { cursor: pointer; }
@@ -1206,15 +1205,22 @@ body.is-file-drag #file-drop-overlay {
   line-height: 1.2;
 }
 .detail-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
-.detail-head h1 {
+.detail-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 0.75rem;
+}
+.detail-head h1,
+.detail-filename {
   margin: 0;
   font-size: 1.15rem;
   font-weight: 650;
 }
-.detail-head .object-open {
-  font-size: inherit;
-  font-weight: inherit;
-  color: inherit;
+.detail-open-btn {
+  flex: 0 0 auto;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.9rem;
 }
 .detail-meta { display: flex; gap: 0.6rem; align-items: center; }
 .detail-meta .rev {
@@ -1621,7 +1627,8 @@ body.is-file-drag #file-drop-overlay {
   .detail-tab-title h1 {
     font-size: 1.2rem;
   }
-  .detail-head h1 {
+  .detail-head h1,
+  .detail-filename {
     font-size: 1rem;
   }
   #history-files-table th:nth-child(n + 3),

@@ -7483,7 +7483,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (objectId) {
         const name =
           owned[0]?.dataset.filename ||
-          document.querySelector(".detail-head .object-open")?.textContent?.trim() ||
+          $("#detail-open-btn")?.dataset?.filename ||
+          document.querySelector(".detail-filename")?.textContent?.trim() ||
           "";
         pushItems.push({
           object_id: objectId,
@@ -9793,18 +9794,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     pollWorkspaceWatch();
   }
 
-  document.querySelector(".detail-head .object-open")?.addEventListener("click", async (event) => {
+  document.querySelector("#detail-open-btn")?.addEventListener("click", async (event) => {
     event.preventDefault();
-    const link = event.currentTarget;
-    const id = link?.dataset?.uuid;
+    const btn = event.currentTarget;
+    const id = btn?.dataset?.uuid;
     if (!id) return;
-    const owned = Boolean(undoBtn && !undoBtn.disabled);
-    const canCheckout = Boolean(checkoutBtn && !checkoutBtn.disabled);
     await openPdmObjectFromUi(id, {
       dataset: {
-        filename: link.textContent?.trim() || id,
-        canCheckout: canCheckout ? "1" : "0",
-        owned: owned ? "1" : "0",
+        filename: btn.dataset.filename || id,
+        canCheckout: btn.dataset.canCheckout === "1" ? "1" : "0",
+        owned: btn.dataset.owned === "1" ? "1" : "0",
       },
     });
   });

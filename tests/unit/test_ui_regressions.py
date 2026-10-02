@@ -930,6 +930,16 @@ def test_history_revert_only_for_older_versions():
     assert 'id="detail-tab-title-text"' in detail
     assert ">Details</h1>" in detail
     assert "hidden" not in detail.split('id="detail-tab-title"', 1)[1].split(">", 1)[0]
+    assert 'id="detail-open-btn"' in detail
+    assert 'class="btn detail-open-btn"' in detail or "detail-open-btn" in detail
+    assert 'class="detail-title-row"' in detail
+    assert 'class="detail-filename"' in detail
+    assert 'data-can-checkout=' in detail.split('id="detail-open-btn"', 1)[1].split(">", 1)[0]
+    assert 'data-owned=' in detail.split('id="detail-open-btn"', 1)[1].split(">", 1)[0]
+    assert 'id="detail-open-btn"' in script or '#detail-open-btn' in script
+    assert "openPdmObjectFromUi" in script
+    assert "Open…** button beside" in docs or "Open…** button beside it" in docs
+    assert "omit **Open…** next to the Details file name" in docs
     assert 'id="open-menu-btn"' in detail and "Open ▾" in detail
     assert 'id="checkout-menu-btn"' in detail and "Checkout ▾" in detail
     assert 'id="checkin-menu-btn"' in detail and "Check In ▾" in detail

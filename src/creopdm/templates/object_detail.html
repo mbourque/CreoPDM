@@ -76,7 +76,15 @@
 
   <header class="detail-head">
     <div>
-      <h1><button type="button" class="object-open" data-uuid="{{ object.uuid }}" title="Open this file">{{ object.filename }}</button></h1>
+      <div class="detail-title-row">
+        <h1 class="detail-filename">{{ object.filename }}</h1>
+        <button type="button" class="btn detail-open-btn" id="detail-open-btn"
+                data-uuid="{{ object.uuid }}"
+                data-filename="{{ object.filename }}"
+                data-can-checkout="{% if object.can_checkout %}1{% else %}0{% endif %}"
+                data-owned="{% if object.owned_by_me %}1{% else %}0{% endif %}"
+                title="Open this file in Creo or its Windows associated program.">Open…</button>
+      </div>
       <p class="muted">{{ object.type_label }} · {{ object.relative_path }}</p>
     </div>
     <div class="detail-meta">
