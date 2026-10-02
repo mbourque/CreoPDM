@@ -323,13 +323,27 @@ class ProductService:
         return product
 
     def delete_product(self, session: Session, product_uuid: str) -> None:
-        """Hide the product in CreoPDM. Never delete repository files from disk."""
+        """Unregister the product and delete its CreoPDM vault folder.
+
+        Original CAD folders the user imported from are never touched. The vault
+        under the configured vaults root is removed so deletes do not leave
+        orphan Git trees on disk.
+        """
         product = self.get_product(session, product_uuid)
         ensure_product_deletable(product, action="delete this product")
-        product.active = False
-        product.updated_at = datetime.now(timezone.utc)
-        session.flush()
-        logger.info("Deactivated product %s", product.uuid)
+        workspace = self._workspaces.vault_for(product)
+        leftover = self._workspaces.leftover_source(product)
+        with self._locks.acquire(product.uuid):
+            if leftover is not None:
+                self._workspaces.strip_location_git(leftover)
+            if workspace.exists() and not remove_tree(workspace):
+                raise RepositoryError(
+                    "Could not delete the vault folder. Close File Explorer or other "
+                    "programs using that folder, then try again.",
+                    details={"path": str(workspace)},
+                )
+            self._delete_product_records(session, product)
+        logger.info("Deleted product %s (vault removed)", product.uuid)
 
     def forget_product(
         self,
@@ -349,6 +363,7 @@ class ProductService:
             )
         leftover = self._workspaces.leftover_source(product)
         name = product.name
+        vault = workspace_path if workspace_path is not None else self._workspaces.vault_for(product)
         warnings: list[str] = []
         with self._locks.acquire(product.uuid):
             if leftover is not None:
@@ -357,10 +372,11 @@ class ProductService:
                     warnings.append(
                         "Git metadata is still present because a program has the old product folder open."
                     )
-            if workspace_path is not None and not remove_tree(workspace_path):
-                warnings.append(
-                    "The workspace folder is still open in another program (often File Explorer). "
-                    "Close that window and delete the leftover workspace folder if you want it gone."
+            if vault.exists() and not remove_tree(vault):
+                raise RepositoryError(
+                    "Could not delete the vault folder. Close File Explorer or other "
+                    "programs using that folder, then try again.",
+                    details={"path": str(vault)},
                 )
             self._delete_product_records(session, product)
         logger.info("Deleted product %s", product_uuid)

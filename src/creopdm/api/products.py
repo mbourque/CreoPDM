@@ -731,11 +731,14 @@ def workspace_file_content(
             details={"relative_path": path},
         )
     media_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-    disposition = f"attachment; filename*=UTF-8''{quote(target.name)}"
+    download_name = CreoFileManager.canonical_repository_name(
+        target.name, ctx.workspaces._cad_extensions()
+    )
+    disposition = f"attachment; filename*=UTF-8''{quote(download_name)}"
     return FileResponse(
         target,
         media_type=media_type,
-        filename=target.name,
+        filename=download_name,
         content_disposition_type="attachment",
         headers={"Content-Disposition": disposition},
     )

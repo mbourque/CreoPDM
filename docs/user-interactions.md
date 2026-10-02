@@ -63,7 +63,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Log in as a different user after someone else watched | Show **not** watching unless **you** subscribed; keep the other user’s subscription | Steal or clear another user’s watch when you open the product or click Stop on your own bell |
 | Open a product when your account email is invalid | Show the bell disabled with a clear reason | Let you subscribe until email is fixed |
 | **Force Undo Checkout** (role permission) | Release another user’s checkout without a new version; email that user when notifications are enabled (they need a valid account email; watching is not required) | Show without `objects.force_undo_checkout`; commit a version |
-| Delete product | Ask you to type the **exact** product name; remove CreoPDM’s copy of the product | Delete your original CAD folders on disk just because you deleted the product; delete if you typed the wrong name |
+| Delete product | Ask you to type the **exact** product name; remove CreoPDM’s vault (working copies + Git) and unregister the product | Delete your original CAD folders on disk just because you deleted the product; delete if you typed the wrong name; leave an orphan vault folder under the vaults root |
 
 **Name rules (new / rename)**
 
@@ -289,8 +289,8 @@ Toolbar menu **Export ▾** (same pattern as Check In ▾). Confirm, then busy o
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Open **Export ▾** | Show **Export product…** (when you have `products.export`) always enabled; show **Export selected…** (when you have `objects.export`) greyed out until files or folders are selected | Hide **Export product…** just because nothing is selected; require the product to be In work |
-| Click **Export product…** | Confirm whole-product export in the CreoPDM dialog; zip the vault tip for every file; require `products.export` | Check out or lock anything; use a browser `confirm`; switch to selection export because something is selected |
-| Click **Export selected…** with files and/or folders selected | Confirm selection export in the CreoPDM dialog; zip only those vault tip files (folders include descendants); require `objects.export` | Run while the menu item is greyed (nothing selected); appear without `objects.export`; use a browser `confirm` |
+| Click **Export product…** | Confirm whole-product export in the CreoPDM dialog; zip the vault tip for every file under the **logical** name (`shaft.prt`, not `shaft.prt.1`); require `products.export` | Check out or lock anything; use a browser `confirm`; switch to selection export because something is selected; pack Creo `.N` save numbers into the zip |
+| Click **Export selected…** with files and/or folders selected | Confirm selection export in the CreoPDM dialog; zip only those vault tip files (folders include descendants) under logical names; require `objects.export` | Run while the menu item is greyed (nothing selected); appear without `objects.export`; use a browser `confirm`; pack Creo `.N` save numbers into the zip |
 | Cancel the confirm or Save dialog | Stop with no zip | Leave a partial download claimed as success |
 | Agent offline | Fall back to a browser zip download | Fail only because the agent is offline |
 

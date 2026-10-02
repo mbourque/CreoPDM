@@ -1208,7 +1208,7 @@ def test_pdm_manager_can_create_not_delete_no_products_admin(auth_client, auth_c
 
 @requires_git
 def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo_parent):
-    """Administration → Products lists all products and supports create/edit/soft-delete."""
+    """Administration → Products lists all products and supports create/edit/delete."""
     _setup_admin_and_users(auth_client, auth_ctx)
     _login(auth_client, "admin", "AdminPass1")
     hub = auth_client.get("/admin")
@@ -1341,6 +1341,7 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert deleted.status_code == 303, deleted.text
     assert deleted.headers["location"] == "/admin/products"
     assert auth_client.get(f"/api/products/{product['uuid']}").status_code == 404
+    assert not vault.exists()
 
 
 @requires_git

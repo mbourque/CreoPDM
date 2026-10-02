@@ -1897,8 +1897,13 @@ def admin_product_delete(
             status_code=400,
         )
     try:
-        ctx.products.delete_product(db, product_uuid)
-        db.commit()
+        workspace = ctx.workspaces.vault_for(product)
+        ctx.products.forget_product(
+            db,
+            product_uuid,
+            confirm_name=confirm_name,
+            workspace_path=workspace,
+        )
         return RedirectResponse("/admin/products", status_code=303)
     except CreoPDMError as exc:
         db.rollback()

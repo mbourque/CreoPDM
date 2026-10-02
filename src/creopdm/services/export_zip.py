@@ -8,6 +8,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.models.object import EngineeringObject
@@ -32,14 +33,28 @@ def export_zip_basename(product: Product, *, selected: bool) -> str:
         return f"creopdm-{suffix}.zip"
 
 
+def _export_arcname(relative: str, source_name: str, extras: list[str] | None) -> str:
+    """Zip leaf uses the logical vault name (``shaft.prt``, not ``shaft.prt.1``)."""
+    parent = Path(relative.replace("\\", "/")).parent.as_posix()
+    leaf = CreoFileManager.canonical_repository_name(source_name, extras)
+    if parent in {".", ""}:
+        return leaf
+    return f"{parent}/{leaf}"
+
+
 def build_export_zip(
     workspaces: WorkspaceService,
     product: Product,
     objects: list[EngineeringObject],
 ) -> tuple[Path, int]:
-    """Zip vault tip files (nested relative paths). Excludes .git / .creopdm bookkeeping."""
+    """Zip vault tip files (nested relative paths). Excludes .git / .creopdm bookkeeping.
+
+    Arc names are always logical CAD names so Export matches the vault tip
+    (``shaft.prt``), even when a legacy vault file is still numbered.
+    """
     if not objects:
         raise ValidationAppError("Nothing to export.")
+    extras = workspaces._cad_extensions()
     fd, raw_name = tempfile.mkstemp(suffix=".zip", prefix="creopdm-export-")
     os.close(fd)
     archive = Path(raw_name)
@@ -52,11 +67,7 @@ def build_export_zip(
                 parts = [part for part in Path(relative).parts if part not in (".",)]
                 if any(part.lower() in {".git", ".creopdm"} for part in parts):
                     continue
-                parent = Path(relative).parent.as_posix()
-                if parent in {".", ""}:
-                    arcname = source.name
-                else:
-                    arcname = f"{parent}/{source.name}"
+                arcname = _export_arcname(relative, source.name, extras)
                 zf.write(source, arcname=arcname)
                 written += 1
                 if written == 1 or written % 500 == 0:

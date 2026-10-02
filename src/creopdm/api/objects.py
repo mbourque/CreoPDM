@@ -21,6 +21,7 @@ from creopdm.auth_constants import (
 )
 from creopdm.context import AppContext
 from creopdm.constants import ActivityAction
+from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import CheckoutOwnershipError, CreoPDMError, PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.schemas.common import (
@@ -77,7 +78,10 @@ def object_content(
             f"Vault file not found: {obj.filename}.",
             details={"object_id": object_id},
         )
-    return _file_response(path, path.name)
+    # Browser / Open download name matches vault tip (logical), not a Creo .N cache leaf.
+    extras = ctx.workspaces._cad_extensions()
+    download_name = CreoFileManager.canonical_repository_name(path.name, extras)
+    return _file_response(path, download_name)
 
 
 @router.put("/api/objects/{object_id}/workspace-content", response_model=WorkspaceContentResponse)

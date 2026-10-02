@@ -433,13 +433,15 @@ def test_open_workspace_opens_current_files_folder(client, repo_parent, data_dir
 
 
 @requires_git
-def test_delete_product_is_soft(client, repo_parent, data_dir):
+def test_delete_product_removes_vault(client, repo_parent, data_dir):
     payload, location = _create_product(client, repo_parent, name="Pump")
+    vault = data_dir / "vaults" / payload["uuid"]
+    assert (vault / ".git").exists()
     deleted = client.delete(f"/api/products/{payload['uuid']}")
     assert deleted.status_code == 204
     listing = client.get("/api/products")
     assert all(item["uuid"] != payload["uuid"] for item in listing.json())
-    assert (data_dir / "vaults" / payload["uuid"] / ".git").exists()
+    assert not vault.exists()
 
 
 @requires_git

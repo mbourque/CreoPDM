@@ -55,6 +55,34 @@ def test_build_export_zip_packs_nested_tip(tmp_path: Path):
         archive.unlink(missing_ok=True)
 
 
+def test_build_export_zip_strips_creo_save_number(tmp_path: Path):
+    """Export must hand out logical names even if a legacy vault tip is still numbered."""
+    manager = ConfigManager(tmp_path / "data")
+    manager.ensure_layout()
+    workspaces = WorkspaceService(manager, None)
+    product = SimpleNamespace(uuid="p1", vault_folder="p1", name="Demo")
+    vault = workspaces.vault_for(product)
+    numbered = vault / "lib" / "shaft.prt.3"
+    numbered.parent.mkdir(parents=True)
+    numbered.write_bytes(b"shaft-bytes")
+    objects = [
+        SimpleNamespace(
+            uuid="o1",
+            filename="shaft.prt.3",
+            relative_path="lib/shaft.prt.3",
+            current_version=None,
+        ),
+    ]
+    archive, count = build_export_zip(workspaces, product, objects)
+    try:
+        assert count == 1
+        with zipfile.ZipFile(archive) as zf:
+            assert zf.namelist() == ["lib/shaft.prt"]
+            assert zf.read("lib/shaft.prt") == b"shaft-bytes"
+    finally:
+        archive.unlink(missing_ok=True)
+
+
 def test_build_export_zip_rejects_empty(tmp_path: Path):
     manager = ConfigManager(tmp_path / "data")
     manager.ensure_layout()
