@@ -1051,7 +1051,7 @@ def test_toolbar_hides_inactive_actions():
 
 
 def test_files_context_menu_download_to_workspace():
-    """Right-click selected rows: Download to workspace when objects.view; no checkout."""
+    """Right-click selected rows: Download selected to workspace when objects.view; no checkout."""
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     css = APP_CSS.read_text(encoding="utf-8")
@@ -1059,7 +1059,7 @@ def test_files_context_menu_download_to_workspace():
     assert 'addEventListener("contextmenu", onFileTableContextMenu)' in script
     assert "function openFilesContextMenu(" in script
     assert "function downloadSelectedToWorkspace(" in script
-    assert "Download to workspace" in script
+    assert "Download selected to workspace" in script
     assert 'dataset?.canView === "1"' in script
     assert "materializeCheckedOutToAgentCache" in _between(
         script,
@@ -1075,7 +1075,7 @@ def test_files_context_menu_download_to_workspace():
     assert "Start creopdm-agent" in download
     assert ".files-context-menu" in css
     assert "**Right-click** a file or folder row" in docs
-    assert "**Download to workspace**" in docs
+    assert "**Download selected to workspace**" in docs
     assert "without `objects.view`" in docs
 
 

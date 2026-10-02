@@ -4835,7 +4835,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     downloadBtn.className = "toolbar-menu-item";
     downloadBtn.id = "files-context-download";
     downloadBtn.setAttribute("role", "menuitem");
-    downloadBtn.textContent = "Download to workspace";
+    downloadBtn.textContent = "Download selected to workspace";
     downloadBtn.title = "Download the selected files into this product’s local workspace on this PC.";
     menu.appendChild(downloadBtn);
     document.body.appendChild(menu);
@@ -4885,7 +4885,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       showError($("#toolbar-error"), "Select one or more files to download.");
       return;
     }
-    if (!confirmLargeBulk("Download to workspace", ids.length)) return;
+    if (!confirmLargeBulk("Download selected to workspace", ids.length)) return;
     showError($("#toolbar-error"), "");
     const sync = await withBusy("Downloading to local workspace…", async () => {
       try {
