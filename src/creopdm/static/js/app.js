@@ -831,18 +831,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return [...root.querySelectorAll(".folder-row")];
   }
 
-  function syncFoldersMetricVisibility(count) {
-    const btn = metricButtons().find((item) => metricKey(item) === "folders");
-    if (!btn) return;
-    const li = btn.closest("li");
-    const show = count > 0;
-    if (li) li.hidden = !show;
-    btn.hidden = !show;
-    if (!show && metricMode(btn) !== "off") {
-      setMetricMode(btn, "off");
-    }
-  }
-
   function updateMetricCounts() {
     rememberMetricCounts();
     const root = fileListRoot();
@@ -850,7 +838,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const searching = $("#object-table")?.dataset.searching === "1";
     const files = listedMetricRows();
     const folderRows = listedFolderRows();
-    syncFoldersMetricVisibility(folderRows.length);
     if (filesTab && !searching) {
       metricButtons().forEach((btn) => {
         const strong = btn.querySelector("strong");

@@ -1138,26 +1138,22 @@ def test_folder_row_click_selects_double_click_opens():
 
 
 def test_folders_metric_pill_before_files():
-    """Folders pill sits before Files; selects folder rows; hidden when count is 0."""
+    """Folders pill sits before Files; selects folder rows; stays visible at 0."""
     html = APP_HTML.read_text(encoding="utf-8")
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert 'data-filter="folders"' in html
     assert html.index('data-filter="folders"') < html.index('data-filter="files"')
     assert "status.folders" in html
-    assert "{% if not status.folders %} hidden{% endif %}" in html or "not status.folders" in html
-    match = _between(script, "function rowMatchesMetric(", "function rememberMetricCounts(")
-    assert 'key === "folders"' in match
-    assert 'classList.contains("folder-row")' in match
-    counts = _between(script, "function updateMetricCounts(", "function refreshTabMetrics(")
-    assert "syncFoldersMetricVisibility" in counts
-    assert 'key === "folders"' in counts
+    assert "{% if not status.folders %}" not in html
+    assert "syncFoldersMetricVisibility" not in script
     chip = _between(script, "function onMetricChip(", "document.querySelector(\"#metric-filters\")")
     assert 'key === "folders"' in chip
     assert 'other !== "folders"' in chip
     assert "listedFolderRows().length" in chip
     assert "Click **Folders**" in docs
-    assert "**hide** the pill when there are no folders" in docs
+    assert "including **0**" in docs
+    assert "Hide the **Folders** pill when the count is 0" in docs
     assert "stays **on** together with **Files**" in docs
     assert "turning **Folders** off **unselects** folder rows" in docs
     assert "hides and unselects** folders" in docs
