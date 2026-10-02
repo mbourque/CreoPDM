@@ -3288,6 +3288,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const parts = text.split(/[/\\]/);
           return parts[parts.length - 1] || text;
         };
+        // Stable History comment for every chunk (blank → "Add 935 files", not "Add 5 files").
+        const effectiveComment =
+          String(commentOnce || "").trim()
+          || (total > 1 ? `Add ${total} files` : total === 1 ? `Add ${basenameOf(list[0])}` : "");
         for (let offset = 0; offset < list.length; offset += chunkSize) {
           const chunk = list.slice(offset, offset + chunkSize);
           const done = Math.min(offset + chunk.length, total);
@@ -3305,7 +3309,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
                 base_folder: baseFolder || "",
                 keep_root_folder: keepRootFolder(),
                 parent_folder: parentFolder,
-                comment: offset === 0 ? commentOnce || null : null,
+                comment: effectiveComment || null,
                 client_offset: offset,
                 client_total: total,
                 purgeable_extensions: [...purgeableExtensionSet()],
@@ -3367,7 +3371,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const part = await addAgentPathChunks(
             batch.paths,
             batch.folder,
-            i === 0 ? comment : null
+            comment
           );
           if (!part) return combined.ok.length ? combined : null;
           combined.ok.push(...(part.ok || []));
@@ -3387,7 +3391,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const done = Math.min(offset + chunk.length, total);
           setBusyMessage(`Adding files… ${done} of ${total}`);
           const data = new FormData();
-          if (comment && offset === 0) data.append("comment", comment);
+          const uploadComment =
+            comment
+            || (total > 1 ? `Add ${total} files` : total === 1 ? `Add ${chunk[0]?.file?.name || "file"}` : "");
+          if (uploadComment) data.append("comment", uploadComment);
           if (parentFolder) data.append("parent_folder", parentFolder);
           chunk.forEach((item) => {
             data.append("files", item.file, item.file.name);

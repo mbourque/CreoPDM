@@ -1407,6 +1407,76 @@ def test_agent_add_paths_posts_multipart_to_pdm(tmp_path, monkeypatch):
     assert set(posts[0]["file_names"]) == {"pin.prt.1", "shaft.prt.2"}
 
 
+def test_agent_add_paths_comment_on_every_upload_chunk(tmp_path, monkeypatch):
+    """Bulk add must not invent 'Add 5 files' on later 5-file upload chunks."""
+    root = tmp_path / "src"
+    root.mkdir()
+    paths = []
+    for i in range(12):
+        path = root / f"part{i:02d}.prt"
+        path.write_bytes(b"x")
+        paths.append(str(path))
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(tmp_path / "cache"))
+    app = create_agent_app(settings)
+    posts: list[dict] = []
+
+    class FakeResponse:
+        def __init__(self, status_code: int, payload: dict):
+            self.status_code = status_code
+            self._payload = payload
+            self.text = ""
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            posts.append({"url": url, "data": dict(data or {}), "files": len(files or [])})
+            ok = []
+            for entry in files or []:
+                if entry[0] == "files":
+                    ok.append({"uuid": "u", "filename": entry[1][0], "status": "added"})
+            return FakeResponse(200, {"ok": ok, "failed": []})
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        blank = client.post(
+            "/add-paths",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "product_id": "proj-bulk",
+                "absolute_paths": paths,
+                "client_total": 935,
+            },
+        )
+        assert blank.status_code == 200, blank.text
+        assert len(posts) >= 3  # 12 files / chunk_size 5
+        assert all(post["data"].get("comment") == "Add 935 files" for post in posts)
+
+        posts.clear()
+        typed = client.post(
+            "/add-paths",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "product_id": "proj-bulk",
+                "absolute_paths": paths,
+                "comment": "Library import",
+                "client_total": 935,
+            },
+        )
+        assert typed.status_code == 200, typed.text
+        assert all(post["data"].get("comment") == "Library import" for post in posts)
+
+
 def test_agent_purge_versions_deletes_only_older_than_vault_floor(tmp_path):
     root = tmp_path / "cache"
     product_id = "proj-purge"
