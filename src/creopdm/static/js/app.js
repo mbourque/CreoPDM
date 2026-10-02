@@ -7378,13 +7378,44 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         "Start creopdm-agent on this Creo PC to sync local workspace saves into the vault before check-in."
       );
     }
+    // Prefer the on-disk tip the user saw (shaft.prt.2), not the logical vault name
+    // after push (shaft.prt) — so the dialog matches the New files / Files list.
+    const tipNameForCheckin = (objectId, fallback) => {
+      const id = String(objectId || "");
+      const fromPush = pushItems.find((item) => String(item.object_id) === id);
+      if (fromPush?.filename) return String(fromPush.filename);
+      const fromQueued = queued.find((row) => row.dataset.uuid === id);
+      if (fromQueued?.dataset?.filename) return fromQueued.dataset.filename;
+      const fromOwned = owned.find((row) => row.dataset.uuid === id);
+      if (fromOwned?.dataset?.filename) return fromOwned.dataset.filename;
+      if (id) {
+        const row = document.querySelector(
+          `tr.queue-row[data-uuid="${CSS.escape(id)}"], tr[data-uuid="${CSS.escape(id)}"]`
+        );
+        if (row?.dataset?.filename) return row.dataset.filename;
+      }
+      return fallback || "";
+    };
     const title = $("#checkin-dialog-title");
     if (title) {
       title.textContent = addOnly ? "Add files" : productScope ? "Check in product" : "Check In";
     }
-    $("#checkin-filename").textContent = addOnly
-      ? (queued.length === 1 ? queued[0].dataset.filename || data.filename : `${queued.length || (data.new_files || []).length} files`)
-      : data.filename;
+    let objectLabelText = data.filename;
+    if (!addOnly) {
+      if (!useQueue) {
+        objectLabelText = tipNameForCheckin(objectId, data.filename);
+      } else {
+        const pendingIdsForLabel = data.object_ids || [];
+        if (pendingIdsForLabel.length === 1) {
+          objectLabelText = tipNameForCheckin(pendingIdsForLabel[0], data.filename);
+        }
+      }
+    } else if (queued.length === 1) {
+      objectLabelText = queued[0].dataset.filename || data.filename;
+    } else {
+      objectLabelText = `${queued.length || (data.new_files || []).length} files`;
+    }
+    $("#checkin-filename").textContent = objectLabelText;
     $("#checkin-current").textContent = data.current_display;
     $("#checkin-next").textContent = data.next_display;
     ["checkin-current", "checkin-next", "checkin-current-label", "checkin-next-label"].forEach((itemId) => {
@@ -7461,8 +7492,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const names = addOnly
         ? []
         : productScope || !queued.length
-          ? pendingNames
-          : pendingIds.map((id, index) => (wantedIds.has(id) ? pendingNames[index] : "")).filter(Boolean);
+          ? pendingIds.map((id, index) => tipNameForCheckin(id, pendingNames[index]))
+          : pendingIds
+              .map((id, index) => (wantedIds.has(id) ? tipNameForCheckin(id, pendingNames[index]) : ""))
+              .filter(Boolean);
       names.forEach((name) => {
         const item = document.createElement("li");
         item.textContent = `✓ Check in ${name}`;

@@ -1308,6 +1308,16 @@ def test_refresh_pending_clears_sticky_modified_locally():
     assert "leave Modified stuck after a later refresh proves the tip matches" in docs
 
 
+def test_checkin_dialog_keeps_local_tip_name():
+    """After push, dialog must still show shaft.prt.2 — not strip to vault logical tip."""
+    script = _app_js()
+    assert "tipNameForCheckin" in script
+    assert "Prefer the on-disk tip the user saw" in script
+    assert "tipNameForCheckin(id, pendingNames[index])" in script
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "strip the Creo `.N` in the Check In dialog" in docs
+
+
 def test_pending_from_status_requires_hash_for_dirty_tip():
     """Git dirty tip / higher .N with matching content_hash must not appear as Modified."""
     text = (ROOT / "src" / "creopdm" / "services" / "workspace_service.py").read_text(
