@@ -1067,9 +1067,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const typeActive = selecting.filter((btn) => !isStateMetric(metricKey(btn)));
     const stateKeys = selecting.filter((btn) => isStateMetric(metricKey(btn))).map((btn) => metricKey(btn));
     const foldersSelecting = typeActive.some((btn) => metricKey(btn) === "folders");
+    const filesSelecting = typeActive.some((btn) => metricKey(btn) === "files");
     rows().forEach((row) => {
       if (row.classList.contains("folder-row")) {
-        if (foldersSelecting) {
+        if (foldersSelecting || filesSelecting) {
           markRowSelected(row, !rowIsHidden(row));
         }
         // Otherwise leave folder click-selection alone (Remove, etc.).
@@ -4669,8 +4670,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const files = metricButtons().find((btn) => metricKey(btn) === "files");
     if (files && metricMode(files) !== "off") {
       metricButtons().forEach((item) => {
-        if (item !== files && !isStateMetric(metricKey(item))) setMetricMode(item, "off");
+        const other = metricKey(item);
+        if (item !== files && !isStateMetric(other) && other !== "folders") {
+          setMetricMode(item, "off");
+        }
       });
+      const foldersBtn = metricButtons().find((item) => metricKey(item) === "folders");
+      if (foldersBtn && listedFolderRows().length > 0) {
+        setMetricMode(foldersBtn, "filter");
+      }
     }
     const cadModels = metricButtons().find((btn) => metricKey(btn) === "cad_models");
     if (cadModels && metricMode(cadModels) !== "off") clearMetricFilters(CAD_MODEL_CHILD_FILTERS);
@@ -5041,15 +5049,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     setMetricMode(btn, next);
     if (key === "files" && next !== "off") {
       metricButtons().forEach((item) => {
-        if (item !== btn && !isStateMetric(metricKey(item))) setMetricMode(item, "off");
+        const other = metricKey(item);
+        // Files keeps Folders on (both stay filtered together).
+        if (item !== btn && !isStateMetric(other) && other !== "folders") {
+          setMetricMode(item, "off");
+        }
       });
+      const foldersBtn = metricButtons().find((item) => metricKey(item) === "folders");
+      if (foldersBtn && listedFolderRows().length > 0) {
+        setMetricMode(foldersBtn, "filter");
+      }
     }
     if (key === "folders" && next !== "off") {
       metricButtons().forEach((item) => {
-        if (item !== btn && !isStateMetric(metricKey(item))) setMetricMode(item, "off");
+        const other = metricKey(item);
+        // Folders may stay with Files; clear other type chips only.
+        if (item !== btn && !isStateMetric(other) && other !== "files") {
+          setMetricMode(item, "off");
+        }
       });
     }
-    if (key !== "files" && !isStateMetric(key) && next !== "off") {
+    if (key !== "files" && key !== "folders" && !isStateMetric(key) && next !== "off") {
       clearMetricFilters(new Set(["files"]));
     }
     if (key !== "folders" && key !== "files" && !isStateMetric(key) && next !== "off") {

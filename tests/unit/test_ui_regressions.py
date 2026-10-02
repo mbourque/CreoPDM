@@ -1129,8 +1129,11 @@ def test_folders_metric_pill_before_files():
     assert 'key === "folders"' in counts
     chip = _between(script, "function onMetricChip(", "document.querySelector(\"#metric-filters\")")
     assert 'key === "folders"' in chip
+    assert 'other !== "folders"' in chip
+    assert "listedFolderRows().length" in chip
     assert "Click **Folders**" in docs
     assert "**hide** the pill when there are no folders" in docs
+    assert "stays **on** together with **Files**" in docs
 
 
 def test_user_interaction_negative_client_guards():
