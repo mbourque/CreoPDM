@@ -407,7 +407,7 @@ def test_delete_product_dialog_offers_local_workspace_checkbox():
 
 
 def test_delete_workspace_menu_warns_new_files_vault_safe():
-    """Remove ▾ → Delete workspace… confirms with product name; vault stays."""
+    """Remove ▾ → Delete workspace… warns; no product-name typing; vault stays."""
     html = APP_HTML.read_text(encoding="utf-8")
     assert 'id="delete-workspace-btn"' in html
     assert ">Delete workspace…<" in html
@@ -417,12 +417,19 @@ def test_delete_workspace_menu_warns_new_files_vault_safe():
     assert 'title: "Delete workspace"' in script
     assert "Local-only new files that were never added" in script
     assert "Vault copies and the product file list are not changed" in script
+    assert "requireProductName: false" in script
     assert "deleteWorkspaceBtn?.addEventListener(" in script
     assert "setToolbarActionVisible(deleteWorkspaceBtn, canDeleteWorkspace)" in script
+    base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert 'id="danger-confirm-name-label"' in base
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "### Delete workspace…" in docs
     assert "local-only **new** files" in docs
-    assert "vault copies and the product list stay" in docs
+    assert "does **not** require typing the product name" in docs
+    delete_section = docs.split("### Delete workspace…", 1)[1].split("### Remove from Vault", 1)[0]
+    assert "Show a warning dialog (Cancel / Delete workspace)" in delete_section
+    assert "| Confirm |" in delete_section
+    assert "Confirm with the correct product name" not in delete_section
 
 
 def test_soft_nav_does_not_silently_drop_when_busy():

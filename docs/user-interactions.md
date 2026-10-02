@@ -324,10 +324,10 @@ Destructive actions ask you to type the product name ([§13](#13-typing-the-prod
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Open **Delete workspace…** | Ask you to type the product name; warn that the whole local workspace on this PC is deleted, including local-only **new** files that were never added; say vault copies and the product list stay (rematerialize later) | Use a plain browser `confirm`; delete vault files or change the product list |
-| Confirm with the correct product name | Move the local agent-cache folder to the Recycle Bin on this PC | Leave local-only new files behind when the delete succeeded |
+| Open **Delete workspace…** | Show a warning dialog (Cancel / Delete workspace) explaining the whole local workspace on this PC is deleted, including local-only **new** files that were never added; say vault copies and the product list stay (rematerialize later) | Ask you to type the product name; use a plain browser `confirm`; delete vault files or change the product list |
+| Confirm | Move the local agent-cache folder to the Recycle Bin on this PC | Leave local-only new files behind when the delete succeeded |
 | Agent not running / Creo still has the folder open | Show a clear error; change nothing on the vault | Silently fail or claim vault was cleared |
-| Cancel / wrong product name | Change nothing | |
+| Cancel | Change nothing | |
 
 ### Remove from Vault
 
@@ -350,7 +350,7 @@ Destructive actions ask you to type the product name ([§13](#13-typing-the-prod
 
 ## 13. Typing the product name to confirm
 
-Used for delete product, remove from product/vault, purge, **Delete workspace…**, History **Revert to selected…**, and similar.
+Used for delete product, remove from product/vault, purge, History **Revert to selected…**, and similar. **Delete workspace…** uses the same warning dialog but does **not** require typing the product name.
 
 | You do | App should | App must not |
 |--------|------------|--------------|

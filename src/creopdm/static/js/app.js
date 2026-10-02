@@ -7466,11 +7466,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     submitLabel,
     detailsHtml = "",
     workspaceOption = false,
+    requireProductName = true,
   }) {
     const dialog = $("#danger-confirm-dialog");
     const form = $("#danger-confirm-form");
     const expected = expectedProductName();
-    if (!dialog || !form || !expected) {
+    if (!dialog || !form || (requireProductName && !expected)) {
       return Promise.resolve({ ok: false, deleteWorkspaceFiles: false });
     }
     const titleEl = $("#danger-confirm-title");
@@ -7482,6 +7483,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const workspaceWrap = $("#danger-confirm-workspace-wrap");
     const workspaceHint = $("#danger-confirm-workspace-hint");
     const workspaceCheck = $("#danger-confirm-workspace");
+    const nameLabel = $("#danger-confirm-name-label") || form.querySelector('label[for="danger-confirm-input"]') || form.querySelector("label:has(#danger-confirm-input)");
+    const nameInput = $("#danger-confirm-input");
     if (titleEl) titleEl.textContent = title;
     if (leadEl) leadEl.textContent = lead;
     if (noteStrong) noteStrong.textContent = note || "";
@@ -7500,6 +7503,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       workspaceCheck.disabled = !workspaceOption;
       workspaceCheck.checked = Boolean(workspaceOption);
     }
+    if (nameLabel) nameLabel.hidden = !requireProductName;
+    if (nameInput) {
+      nameInput.required = Boolean(requireProductName);
+      nameInput.hidden = !requireProductName;
+      if (!requireProductName) nameInput.value = "";
+    }
     return new Promise((resolve) => {
       let settled = false;
       const finish = (ok) => {
@@ -7514,6 +7523,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         if (workspaceWrap) workspaceWrap.hidden = true;
         if (workspaceHint) workspaceHint.hidden = true;
+        if (nameLabel) nameLabel.hidden = false;
+        if (nameInput) {
+          nameInput.hidden = false;
+          nameInput.required = true;
+        }
         const deleteWorkspaceFiles = Boolean(ok && workspaceOption && workspaceCheck?.checked);
         if (dialog.open) dialog.close();
         resolve({ ok: Boolean(ok), deleteWorkspaceFiles });
@@ -7522,10 +7536,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const onClose = () => finish(false);
       const onSubmit = (event) => {
         event.preventDefault();
-        const typed = String(new FormData(form).get("confirm_name") || "").trim();
-        if (typed !== expected) {
-          showError($("#danger-confirm-error"), "Type the product name exactly to confirm.");
-          return;
+        if (requireProductName) {
+          const typed = String(new FormData(form).get("confirm_name") || "").trim();
+          if (typed !== expected) {
+            showError($("#danger-confirm-error"), "Type the product name exactly to confirm.");
+            return;
+          }
         }
         finish(true);
       };
@@ -7533,7 +7549,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       $("#danger-confirm-cancel")?.addEventListener("click", onCancel);
       dialog.addEventListener("close", onClose);
       dialog.showModal();
-      $("#danger-confirm-input")?.focus();
+      if (requireProductName) $("#danger-confirm-input")?.focus();
+      else submitBtn?.focus();
     });
   }
 
@@ -8008,6 +8025,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         "Close open models in Creo first if Creo’s working directory is this workspace. "
         + "This cannot be undone from CreoPDM. Restore from the Recycle Bin on this PC if needed.",
       submitLabel: "Delete workspace",
+      requireProductName: false,
     });
     if (!confirmed.ok) return;
     showError($("#toolbar-error"), "");
