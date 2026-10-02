@@ -9,7 +9,9 @@ from creopdm_agent.config import AgentConfig
 from creopdm_agent.server import (
     CachePlanItem,
     _extract_cache_zip,
+    _load_cache_index,
     _plan_cache_downloads,
+    _save_cache_index,
     create_agent_app,
 )
 
@@ -58,6 +60,23 @@ def test_cache_dest_relative_keeps_vault_folders():
     assert _cache_dest_relative("lib/step/pin.prt", "pin.prt.1").as_posix() == "lib/step/pin.prt.1"
     assert _cache_dest_relative("pin.prt", "pin.prt.1").as_posix() == "pin.prt.1"
     assert _cache_dest_relative("", "top.asm.1").as_posix() == "top.asm.1"
+
+
+def test_cache_index_dotfile_migrates_legacy_and_hides(tmp_path):
+    """Legacy _creopdm_cache_index.json loads; save writes .creopdm_cache_index.json (+ hidden)."""
+    from creopdm.utils.files import is_hidden
+
+    cache = tmp_path / "proj"
+    cache.mkdir()
+    legacy = cache / "_creopdm_cache_index.json"
+    legacy.write_text('{"pin.prt.1": {"hash": "abc", "size": 3}}', encoding="utf-8")
+    loaded = _load_cache_index(cache)
+    assert loaded["pin.prt.1"]["hash"] == "abc"
+    _save_cache_index(cache, {"pin.prt.1": {"hash": "abc", "size": 3}})
+    modern = cache / ".creopdm_cache_index.json"
+    assert modern.is_file()
+    assert not legacy.exists()
+    assert is_hidden(modern)
 
 
 def test_plan_skips_matching_hash_keeps_newer_save(tmp_path):
@@ -271,4 +290,5 @@ def test_agent_materialize_zip_downloads_and_extracts(tmp_path, monkeypatch):
         assert not (cache / "shaft.prt.1").exists()
         assert any("agent-cache-manifest" in url for url in seen)
         assert any("agent-cache-archive" in url for url in seen)
-        assert (cache / "_creopdm_cache_index.json").is_file()
+        assert (cache / ".creopdm_cache_index.json").is_file()
+        assert not (cache / "_creopdm_cache_index.json").exists()

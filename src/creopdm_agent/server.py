@@ -25,7 +25,9 @@ logger = logging.getLogger("creopdm_agent")
 # cache (older builds turned spaces into underscores → false New/Modified).
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9._\- ]+")
 _LEGACY_SAFE_NAME = re.compile(r"[^A-Za-z0-9._\-]+")
-_CACHE_INDEX_NAME = "_creopdm_cache_index.json"
+# Dotfile (+ Windows hidden attr on save). Legacy underscore name is migrated on load.
+_CACHE_INDEX_NAME = ".creopdm_cache_index.json"
+_LEGACY_CACHE_INDEX_NAME = "_creopdm_cache_index.json"
 
 
 def _safe_segment(value: str, fallback: str = "file") -> str:
@@ -548,6 +550,9 @@ _extract_flat_zip = _extract_cache_zip
 
 def _load_cache_index(cache_dir: Path) -> dict[str, dict[str, object]]:
     path = cache_dir / _CACHE_INDEX_NAME
+    legacy = cache_dir / _LEGACY_CACHE_INDEX_NAME
+    if not path.is_file() and legacy.is_file():
+        path = legacy
     if not path.is_file():
         return {}
     try:
@@ -568,11 +573,21 @@ def _load_cache_index(cache_dir: Path) -> dict[str, dict[str, object]]:
 def _save_cache_index(cache_dir: Path, index: dict[str, dict[str, object]]) -> None:
     import json
 
+    from creopdm.utils.files import set_hidden
+
     path = cache_dir / _CACHE_INDEX_NAME
     try:
         path.write_text(json.dumps(index, indent=0, sort_keys=True), encoding="utf-8")
+        set_hidden(path, True)
     except OSError as exc:
         logger.warning("Could not write cache index %s: %s", path, exc)
+        return
+    legacy = cache_dir / _LEGACY_CACHE_INDEX_NAME
+    if legacy.is_file() and legacy.resolve() != path.resolve():
+        try:
+            legacy.unlink()
+        except OSError as exc:
+            logger.warning("Could not remove legacy cache index %s: %s", legacy, exc)
 
 
 def _remember_cache_file(cache_dir: Path, disk_name: str, content_hash: str, size: int) -> None:
