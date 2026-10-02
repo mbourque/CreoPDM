@@ -5545,7 +5545,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!result) return [];
     if (Array.isArray(result.ok)) {
       return result.ok
-        .filter((item) => item && item.uuid && item.filename)
+        .filter((item) => {
+          if (!item || !item.uuid || !item.filename) return false;
+          const status = String(item.status || "").trim().toLowerCase();
+          // Same filter as checkedInItemsFromResult — skip undo-checkout rows.
+          return !status || status === "checked_in";
+        })
         .map((item) => ({
           uuid: item.uuid,
           filename: item.filename,
@@ -5582,7 +5587,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     };
     if (Array.isArray(result?.ok)) {
       result.ok.forEach((item) => {
-        if (item && item.uuid) push(item.uuid, item.filename);
+        if (!item || !item.uuid) return;
+        // Product check-in merges undo-checkout rows into result.ok — those must
+        // not rematerialize/erase (that closed every open Creo model).
+        const status = String(item.status || "").trim().toLowerCase();
+        if (status && status !== "checked_in") return;
+        push(item.uuid, item.filename);
       });
     } else if (result?.uuid) {
       push(result.uuid, result.filename);
@@ -5596,21 +5606,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   /**
    * After a clean check-in the vault tip is logical (shaft.prt), but Creo may
-   * still leave shaft.prt.2 in the agent cache — and may lock/recreate it while
-   * the model is in session. Erase from Creo first, then rematerialize with
-   * replace_newer so higher .N siblings can be trashed.
+   * still leave shaft.prt.2 in the agent cache. Rematerialize with replace_newer
+   * so higher .N siblings are trashed.
+   *
+   * Do NOT Erase from the Creo session here — check-in leaves models open for
+   * continued work (and product check-in must not wipe unrelated open files).
+   * History revert still erases; if .N stays locked, the toast hints File → Erase.
    */
   async function rematerializeCheckedInLocalTips(result) {
     const items = checkedInItemsFromResult(result);
     if (!items.length) return { agentOffline: false, ok: 0, failed: 0, erased: 0 };
     const agent = await probeCreoAgent();
     if (!agent) return { agentOffline: true, ok: 0, failed: 0, erased: 0 };
-
-    const eraseNames = items.map((item) => item.filename).filter(Boolean);
-    const erase = await tryEraseModelsFromCreoSession(eraseNames);
-    if (erase.attempted) {
-      await creoYieldForDeferredErase();
-    }
 
     let ok = 0;
     let failed = 0;
@@ -5657,44 +5664,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
     );
 
-    // Second erase pass: Creo may still hold the checked-in tip in memory.
-    const eraseAfter = await tryEraseModelsFromCreoSession(eraseNames);
-    if (eraseAfter.attempted) {
-      await creoYieldForDeferredErase(400);
-      // Retry rematerialize once when nothing was purged — often .N was locked.
-      if (ok > 0 && purgedTotal === 0) {
-        try {
-          for (const item of items) {
-            const response = await fetch("/api/creo/open", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                object_id: item.uuid,
-                launch: false,
-                include_companions: false,
-              }),
-            });
-            if (!response.ok) continue;
-            const prepared = await response.json();
-            const openSpec = await materializeViaAgent({
-              ...prepared,
-              replace_newer: true,
-            });
-            purgedTotal += Array.isArray(openSpec?.purged_newer)
-              ? openSpec.purged_newer.length
-              : 0;
-          }
-        } catch {
-          /* best-effort second pass */
-        }
-      }
-    }
-
     return {
       agentOffline: false,
       ok,
       failed,
-      erased: Math.max(Number(erase?.erased) || 0, Number(eraseAfter?.erased) || 0),
+      erased: 0,
       purged: purgedTotal,
     };
   }
@@ -8169,7 +8143,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       // Always patch the table first — Creo often skips navigation from this dialog.
       applyCheckedInResult(result);
-      // Erase Creo session (best-effort), drop local .N leftovers, rematerialize logical tip.
+      // Drop local .N leftovers and rematerialize logical tip — do not Erase Creo session
+      // (keeps open models; product check-in must not wipe unrelated windows).
       const localSync = await rematerializeCheckedInLocalTips(result);
       if (canGatherCreoMetadata()) {
         await withBusy("Capturing Creo metadata…", async () => {
@@ -8178,15 +8153,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       if (localSync?.agentOffline) {
         showOk(
-          "Checked in. Start creopdm-agent, then Open the file to refresh the local workspace. "
-          + CREO_SESSION_DISK_HINT
+          "Checked in. Start creopdm-agent, then Open the file to refresh the local workspace."
         );
-      } else if ((Number(localSync?.erased) || 0) > 0) {
-        showOk(
-          "Checked in. Local workspace updated and removed from Creo session — Open again if needed."
-        );
+      } else if ((Number(localSync?.purged) || 0) > 0) {
+        showOk("Checked in. Local workspace updated (removed leftover Creo .N saves).");
       } else {
-        showOk(`Checked in. Local workspace updated. ${CREO_SESSION_DISK_HINT}`);
+        showOk(
+          "Checked in. Local workspace updated. "
+          + "If a higher .N file remains on disk while the model is still open in Creo, "
+          + "close that window or use File → Erase, then Open again from CreoPDM."
+        );
       }
       rememberWatchView({ tab: "files", ids: [] });
       reloadPageAfterDialog();

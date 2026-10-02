@@ -1352,8 +1352,6 @@ def test_checkin_success_rematerializes_and_drops_local_n():
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "function rematerializeCheckedInLocalTips" in script
     assert "function checkedInItemsFromResult" in script
-    assert "function tryEraseModelsFromCreoSession" in script
-    assert "function creoYieldForDeferredErase" in script
     submit = _between(
         script,
         'checkinForm?.addEventListener("submit"',
@@ -1364,23 +1362,29 @@ def test_checkin_success_rematerializes_and_drops_local_n():
     assert submit.index("await rematerializeCheckedInLocalTips(result)") > submit.index(
         "applyCheckedInResult(result)"
     )
-    assert "CREO_SESSION_DISK_HINT" in submit
+    # Check-in must not wipe open Creo models (product check-in used to erase undos).
+    assert "tryEraseModelsFromCreoSession" not in submit
+    assert "removed from Creo session" not in submit
     helper = _between(
         script,
         "async function rematerializeCheckedInLocalTips(",
         "function whenCreoJSReady(",
     )
-    assert "tryEraseModelsFromCreoSession" in helper
-    assert "creoYieldForDeferredErase" in helper
+    assert "tryEraseModelsFromCreoSession" not in helper
     assert "replace_newer: true" in helper
     assert '"/api/creo/open"' in helper or "'/api/creo/open'" in helper
     assert "materializeViaAgent" in helper
     assert "Updating local workspace" in helper
-    # Erase must run before rematerialize so locked .N files can be trashed.
-    assert helper.index("tryEraseModelsFromCreoSession") < helper.index("materializeViaAgent")
+    items_fn = _between(
+        script,
+        "function checkedInItemsFromResult(",
+        "function checkedInObjectIdsFromResult(",
+    )
+    assert 'status !== "checked_in"' in items_fn or "status !== 'checked_in'" in items_fn
     assert "trash higher local `.N` leftovers" in docs
     assert "leave `shaft.prt.2`" in docs
-    assert "Erase** the model from the Creo session" in docs
+    assert "keep Creo windows open" in docs
+    assert "Erase unrelated open models" in docs
 
 
 def test_pending_from_status_requires_hash_for_dirty_tip():
