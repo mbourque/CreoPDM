@@ -1622,6 +1622,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     let captured = Number(state.captured) || 0;
     let failed = Number(state.failed) || 0;
     let lastReason = "";
+    let shouldRefreshList = false;
     try {
       while (index < targets.length) {
         if (metadataCollectJob.cancel) break;
@@ -1716,11 +1717,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         showOk(msg);
         saveMetadataCollectState(null);
       }
+      // Type column (SHEETMETAL / MFG / …) comes from SSR — refresh Files after saves.
+      shouldRefreshList = captured > 0;
     } finally {
       clearBusy();
       metadataCollectJob.running = false;
       metadataCollectJob.cancel = false;
       syncMetadataCollectControls();
+    }
+    if (shouldRefreshList) {
+      await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
     }
   }
 

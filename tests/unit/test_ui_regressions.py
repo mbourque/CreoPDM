@@ -297,10 +297,16 @@ def test_metadata_gear_items_require_creo_session():
     assert 'setBusy("Collecting Creo metadata…")' in loop
     assert "setBusyMessage(message)" in loop
     assert "clearBusy()" in loop
+    # Type labels are SSR — must refresh Files after Collect saves (not only on F5).
+    assert "shouldRefreshList = captured > 0" in loop
+    assert 'await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" })' in loop
+    assert loop.index("metadataCollectJob.running = false") < loop.index("await reloadPage(")
     assert "beforeunload" in script
     soft = _between(script, "function softNavigate(", "function leavePage(")
     assert "metadataCollectJob.running" in soft
     assert "busy overlay" in docs.lower()
+    assert "refresh the Files list" in docs
+    assert "stale Type labels until a hard refresh" in docs
     # Product-link soft-nav must not withBusy("Loading…") while Collect owns the overlay.
     assert "isMetadataCollectRunning" in script
     assert "warnMetadataCollectBlockingNav" in script
