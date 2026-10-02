@@ -522,8 +522,9 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "Downloading to local cache…" in open_fn
     assert "Opening in Creo…" in open_fn
     # Session offline must not block Opening… on creoJSReady before the path choice.
+    # Match the real await (trailing ;) — the comment also contains "await creoJSReady".
     assert "Do not await creoJSReady first" in open_fn
-    assert open_fn.index("const useCreoSession") < open_fn.index("await creoJSReady")
+    assert open_fn.index("const useCreoSession") < open_fn.index("await creoJSReady;")
     ready = _between(script, "function whenCreoJSReady(", "async function refreshCreoStatusPill(")
     assert "session may be offline" in ready
     assert 'data-can-checkout=' in (
@@ -934,6 +935,11 @@ def test_history_revert_only_for_older_versions():
     assert 'class="btn detail-open-btn"' in detail or "detail-open-btn" in detail
     assert 'class="detail-title-row"' in detail
     assert 'class="detail-filename"' in detail
+    css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    title_row = _between(css, ".detail-title-row {", ".detail-head h1,")
+    assert "flex-wrap: nowrap" in title_row
+    assert "width: fit-content" in title_row
+    assert "flex-wrap: wrap" not in title_row
     assert 'data-can-checkout=' in detail.split('id="detail-open-btn"', 1)[1].split(">", 1)[0]
     assert 'data-owned=' in detail.split('id="detail-open-btn"', 1)[1].split(">", 1)[0]
     assert 'id="detail-open-btn"' in script or '#detail-open-btn' in script
