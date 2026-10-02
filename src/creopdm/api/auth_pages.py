@@ -81,6 +81,7 @@ def _base_ctx(
         "creo_open_mode": "association",
         "agent_base_url": ctx.settings.ui.agent_base_url,
         "workspace_poll_interval_ms": ctx.settings.ui.workspace_poll_interval_ms,
+        "workspace_poll_idle_minutes": ctx.settings.ui.workspace_poll_idle_minutes,
     }
 
 

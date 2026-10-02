@@ -1214,3 +1214,22 @@ def test_admin_hub_panel_fills_full_width():
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "System Settings" in docs
     assert "Audit** and **AI**" in docs or "**Audit** and **AI**" in docs
+
+
+def test_workspace_poll_pauses_after_idle_setting():
+    """File-list watch stops after configured idle minutes until user activity."""
+    script = _app_js()
+    body = _between(script, "function watchIdleMinutes(", "async function pollWorkspaceWatch(")
+    assert "function isWatchIdle(" in body
+    assert "function noteUserActivity(" in body
+    assert "return isWatchIdle()" in body
+    settings = (ROOT / "src" / "creopdm" / "templates" / "settings.html").read_text(encoding="utf-8")
+    assert 'name="workspace_poll_idle_minutes"' in settings
+    assert "Pause refresh after idle" in settings
+    base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "data-workspace-poll-idle-minutes=" in base
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "Pause refresh after idle" in docs
+    assert "Stop file-list / agent workspace polling" in docs
+    cfg = (ROOT / "src" / "creopdm" / "config.py").read_text(encoding="utf-8")
+    assert "workspace_poll_idle_minutes: int = 10" in cfg

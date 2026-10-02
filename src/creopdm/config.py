@@ -176,6 +176,9 @@ class UiConfig(BaseModel):
     agent_base_url: str = "http://127.0.0.1:8766"
     # How often the product page polls workspace-watch for pending saves / new files.
     workspace_poll_interval_ms: int = 5000
+    # Pause file-list polling after this many minutes with no pointer/keyboard/touch activity.
+    # 0 = never pause for idle (tab-hidden still pauses).
+    workspace_poll_idle_minutes: int = 10
 
     @field_validator("agent_base_url")
     @classmethod
@@ -195,6 +198,19 @@ class UiConfig(BaseModel):
         if ms > 120_000:
             return 120_000
         return ms
+
+    @field_validator("workspace_poll_idle_minutes")
+    @classmethod
+    def normalize_workspace_poll_idle(cls, value: object) -> int:
+        try:
+            minutes = int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError) as exc:
+            raise ValueError("File list idle pause must be an integer.") from exc
+        if minutes < 0:
+            return 0
+        if minutes > 24 * 60:
+            return 24 * 60
+        return minutes
 
 
 def _normalize_extension_list(value: object, default: tuple[str, ...] | list[str]) -> list[str]:

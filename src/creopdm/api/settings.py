@@ -87,6 +87,7 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         port=settings.server.port,
         agent_base_url=settings.ui.agent_base_url,
         workspace_poll_interval_ms=settings.ui.workspace_poll_interval_ms,
+        workspace_poll_idle_minutes=settings.ui.workspace_poll_idle_minutes,
     )
 
 
@@ -222,5 +223,7 @@ def update_settings(
         current.ui.agent_base_url = payload.agent_base_url
     if payload.workspace_poll_interval_ms is not None:
         current.ui.workspace_poll_interval_ms = payload.workspace_poll_interval_ms
+    if payload.workspace_poll_idle_minutes is not None:
+        current.ui.workspace_poll_idle_minutes = payload.workspace_poll_idle_minutes
     apply_settings(ctx, current)
     return settings_to_response(ctx)

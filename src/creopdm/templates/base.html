@@ -20,6 +20,7 @@
 <body
   data-agent-base="{{ agent_base_url | default('http://127.0.0.1:8766') }}"
   data-workspace-poll-ms="{{ workspace_poll_interval_ms | default('5000') }}"
+  data-workspace-poll-idle-minutes="{{ workspace_poll_idle_minutes | default('10') }}"
   data-can-checkout="{{ '1' if can_checkout else '0' }}"
   data-can-checkin="{{ '1' if can_checkin else '0' }}"
   data-can-force-undo-checkout="{{ '1' if can_force_undo_checkout else '0' }}"

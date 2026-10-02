@@ -8647,6 +8647,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const parsed = Number.parseInt(raw, 10);
         return Number.isFinite(parsed) ? parsed : 2000;
       })(),
+      workspace_poll_idle_minutes: (() => {
+        const raw = String(data.get("workspace_poll_idle_minutes") || "").trim();
+        if (!raw) return 10;
+        const parsed = Number.parseInt(raw, 10);
+        return Number.isFinite(parsed) ? parsed : 10;
+      })(),
     };
     const response = await fetch("/api/settings", {
       method: "PUT",
@@ -8800,16 +8806,44 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
   restoreWatchView();
 
+  function watchIdleMinutes() {
+    const idleMinutesRaw = Number.parseInt(
+      document.body?.dataset?.workspacePollIdleMinutes || "10",
+      10
+    );
+    return Number.isFinite(idleMinutesRaw)
+      ? Math.min(24 * 60, Math.max(0, idleMinutesRaw))
+      : 10;
+  }
+
+  function isWatchIdle() {
+    const idleMinutes = watchIdleMinutes();
+    return idleMinutes > 0 && Date.now() - lastUserActivityAt > idleMinutes * 60 * 1000;
+  }
+
   function watchPaused() {
     if (document.hidden || busyDepth > 0) return true;
     // Ignore the busy overlay — it is also a <dialog>, and keepBusy reload leaves it open.
-    return [...document.querySelectorAll("dialog[open]")].some((dialog) => dialog.id !== "busy-overlay");
+    if ([...document.querySelectorAll("dialog[open]")].some((dialog) => dialog.id !== "busy-overlay")) {
+      return true;
+    }
+    return isWatchIdle();
   }
 
   const watchProductId = openWorkspaceBtn?.dataset.product || addForm?.dataset.product;
   let watchStamp = null;
   let watchReloadTimer = 0;
   let lastPendingCheckinCount = null;
+  let lastUserActivityAt = Date.now();
+
+  function noteUserActivity() {
+    const wasIdle = isWatchIdle();
+    lastUserActivityAt = Date.now();
+    // Resume immediately when the user comes back after an idle pause.
+    if (wasIdle && watchProductId && !document.hidden) {
+      void pollWorkspaceWatch();
+    }
+  }
 
   async function pollWorkspaceWatch() {
     if (!watchProductId || watchPaused()) return;
@@ -8873,7 +8907,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const pollMs = Number.isFinite(pollMsRaw) ? Math.min(120000, Math.max(500, pollMsRaw)) : 5000;
     trackedInterval(pollWorkspaceWatch, pollMs);
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) pollWorkspaceWatch();
+      if (!document.hidden) {
+        noteUserActivity();
+        pollWorkspaceWatch();
+      }
+    });
+    ["pointerdown", "mousemove", "keydown", "touchstart", "scroll", "wheel"].forEach((eventName) => {
+      document.addEventListener(eventName, noteUserActivity, { passive: true, capture: true });
     });
     pollWorkspaceWatch();
   }

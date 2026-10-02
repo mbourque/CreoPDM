@@ -138,6 +138,7 @@ def test_get_and_update_settings(client, tmp_path):
     assert payload["port"] == 0
     assert payload["agent_base_url"] == "http://127.0.0.1:8766"
     assert payload["workspace_poll_interval_ms"] == 5000
+    assert payload["workspace_poll_idle_minutes"] == 10
 
     fake_creo = tmp_path / "parametric.exe"
     fake_creo.write_bytes(b"fake")
@@ -268,7 +269,21 @@ def test_get_and_update_settings(client, tmp_path):
     assert 'name="port"' in page.text
     assert 'name="agent_base_url"' in page.text
     assert 'name="workspace_poll_interval_ms"' in page.text
+    assert 'name="workspace_poll_idle_minutes"' in page.text
+    assert "Pause refresh after idle" in page.text
     assert 'value="8765"' in page.text
+    idle = client.put(
+        "/api/settings",
+        json={"creo_open_mode": "association", "workspace_poll_idle_minutes": 30},
+    )
+    assert idle.status_code == 200, idle.text
+    assert idle.json()["workspace_poll_idle_minutes"] == 30
+    idle_off = client.put(
+        "/api/settings",
+        json={"creo_open_mode": "association", "workspace_poll_idle_minutes": 0},
+    )
+    assert idle_off.status_code == 200, idle_off.text
+    assert idle_off.json()["workspace_poll_idle_minutes"] == 0
     assert 'name="creo_view_executable"' not in page.text
     assert 'name="creo_executable"' not in page.text
     assert 'href="/settings/types"' in page.text

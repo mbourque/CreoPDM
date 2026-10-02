@@ -134,6 +134,10 @@
         <input name="workspace_poll_interval_ms" type="number" min="500" max="120000" step="100" value="{{ settings.workspace_poll_interval_ms }}" placeholder="5000">
       </label>
       <p class="muted small">500–120000 ms. Default 5000 (5 seconds). Reload the product page after saving. This also drives how often the page asks the local agent for new workspace files.</p>
+      <label>Pause refresh after idle (minutes)
+        <input name="workspace_poll_idle_minutes" type="number" min="0" max="1440" step="1" value="{{ settings.workspace_poll_idle_minutes }}" placeholder="10">
+      </label>
+      <p class="muted small">0–1440. Default 10. After this many minutes with no mouse, keyboard, or touch activity, file-list polling stops until you interact again. 0 = never pause for idle (hidden tabs still pause). Reload the product page after saving.</p>
     </section>
 
     <section class="settings-card">

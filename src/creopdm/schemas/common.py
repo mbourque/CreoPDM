@@ -434,6 +434,7 @@ class SettingsResponse(BaseModel):
     port: int = 0
     agent_base_url: str = "http://127.0.0.1:8766"
     workspace_poll_interval_ms: int = 5000
+    workspace_poll_idle_minutes: int = 10
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -456,6 +457,7 @@ class SettingsUpdateRequest(BaseModel):
     port: int | None = None
     agent_base_url: str | None = None
     workspace_poll_interval_ms: int | None = None
+    workspace_poll_idle_minutes: int | None = None
 
     @field_validator("creo_open_mode")
     @classmethod
@@ -593,6 +595,18 @@ class SettingsUpdateRequest(BaseModel):
         if ms > 120_000:
             return 120_000
         return ms
+
+    @field_validator("workspace_poll_idle_minutes")
+    @classmethod
+    def valid_workspace_poll_idle(cls, value: int | None) -> int | None:
+        if value is None:
+            return None
+        minutes = int(value)
+        if minutes < 0:
+            return 0
+        if minutes > 24 * 60:
+            return 24 * 60
+        return minutes
 
 
 class CreoParamPayload(BaseModel):
