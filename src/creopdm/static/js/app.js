@@ -4886,6 +4886,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const selected = selectedRows();
     const roleCanCheckout = userCanCheckout();
     const roleCanCheckin = userCanCheckin();
+    const canOpen = Boolean(openBtn) && Boolean(selectedOpenSpec());
+    const one = selected.length === 1 ? selected[0] : null;
+    const canDetails = Boolean(historyBtn) && Boolean(rowHistoryHref(one));
     const canCheckout =
       Boolean(checkoutBtn) &&
       roleCanCheckout &&
@@ -4912,6 +4915,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       canExportObjects &&
       exportHasSelection;
     return {
+      canOpen,
+      canDetails,
       canCheckout,
       canUndo,
       canCheckin,
@@ -4924,6 +4929,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function ensureFilesContextMenu() {
     let menu = document.getElementById("files-context-menu");
     const items = [
+      {
+        id: "files-context-open",
+        action: "open",
+        label: "Open selected…",
+        title: "Open the selected file in Creo or its Windows associated program.",
+      },
+      {
+        id: "files-context-details",
+        action: "details",
+        label: "Details",
+        title: "Open Details for the selected file (Overview and History). Same as double-clicking the row.",
+      },
       {
         id: "files-context-checkout",
         action: "checkout",
@@ -5016,16 +5033,28 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function openFilesContextMenu(clientX, clientY) {
     syncToolbar();
     const caps = filesContextMenuCapabilities();
-    if (!caps.canCheckout && !caps.canUndo && !caps.canCheckin && !caps.canDownload && !caps.canExport) {
+    if (
+      !caps.canOpen
+      && !caps.canDetails
+      && !caps.canCheckout
+      && !caps.canUndo
+      && !caps.canCheckin
+      && !caps.canDownload
+      && !caps.canExport
+    ) {
       return false;
     }
     closeAllToolbarMenus();
     const menu = ensureFilesContextMenu();
+    const openItem = menu.querySelector("#files-context-open");
+    const detailsItem = menu.querySelector("#files-context-details");
     const checkoutItem = menu.querySelector("#files-context-checkout");
     const undoItem = menu.querySelector("#files-context-undo");
     const checkinItem = menu.querySelector("#files-context-checkin");
     const downloadItem = menu.querySelector("#files-context-download");
     const exportItem = menu.querySelector("#files-context-export");
+    if (openItem) openItem.hidden = !caps.canOpen;
+    if (detailsItem) detailsItem.hidden = !caps.canDetails;
     if (checkoutItem) checkoutItem.hidden = !caps.canCheckout;
     if (undoItem) undoItem.hidden = !caps.canUndo;
     if (checkinItem) {
@@ -5091,6 +5120,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function runFilesContextMenuAction(action) {
     closeFilesContextMenu();
+    if (action === "open") {
+      openBtn?.click();
+      return;
+    }
+    if (action === "details") {
+      historyBtn?.click();
+      return;
+    }
     if (action === "download") {
       void downloadSelectedToWorkspace();
       return;

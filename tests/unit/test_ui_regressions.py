@@ -1062,24 +1062,32 @@ def test_files_context_menu_download_to_workspace():
     assert "function downloadSelectedToWorkspace(" in script
     assert "function runFilesContextMenuAction(" in script
     assert "Download selected to workspace" in script
+    assert "Open selected…" in script
+    assert ">Details<" in script or '"Details"' in script
     assert "Checkout selected" in script
     assert "Undo Checkout" in script
     assert "Check in selected…" in script
     assert "Export selected…" in script
     assert 'dataset?.canView === "1"' in script
     caps = _between(script, "function filesContextMenuCapabilities(", "function ensureFilesContextMenu(")
+    assert "selectedOpenSpec()" in caps
+    assert "rowHistoryHref(one)" in caps
     assert "selectionCanCheckin(selected)" in caps
     assert 'dataset.canCheckout === "1"' in caps
     assert 'dataset.owned === "1"' in caps
     assert "canUndo" in caps
     assert "canExportObjects" in caps
     open_menu = _between(script, "function openFilesContextMenu(", "async function downloadSelectedToWorkspace(")
+    assert "openItem.hidden = !caps.canOpen" in open_menu
+    assert "detailsItem.hidden = !caps.canDetails" in open_menu
     assert "checkoutItem.hidden = !caps.canCheckout" in open_menu
     assert "undoItem.hidden = !caps.canUndo" in open_menu
     assert "checkinItem.hidden = !caps.canCheckin" in open_menu
     assert "downloadItem.hidden = !caps.canDownload" in open_menu
     assert "exportItem.hidden = !caps.canExport" in open_menu
     run = _between(script, "function runFilesContextMenuAction(", "function onFileTableContextMenu(")
+    assert "openBtn?.click()" in run
+    assert "historyBtn?.click()" in run
     assert "checkoutBtn?.click()" in run
     assert "undoBtn?.click()" in run
     assert "checkinBtn?.click()" in run
@@ -1093,6 +1101,8 @@ def test_files_context_menu_download_to_workspace():
     assert "Start creopdm-agent" in download
     assert ".files-context-menu" in css
     assert "**Right-click** a file or folder row" in docs
+    assert "**Open selected…**" in docs
+    assert "**Details**" in docs
     assert "**Checkout selected**" in docs
     assert "**Undo Checkout**" in docs
     assert "**Export selected…**" in docs
