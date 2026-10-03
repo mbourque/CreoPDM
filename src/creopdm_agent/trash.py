@@ -45,6 +45,30 @@ def move_to_trash(path: Path) -> None:
         target.unlink()
 
 
+def clear_directory_contents(directory: Path) -> tuple[int, list[str]]:
+    """Trash each direct child of ``directory``; leave the folder itself.
+
+    Creo's working directory often locks the workspace folder (WinError 32) while
+    still allowing children to be removed. Returns ``(removed_count, failures)``.
+    """
+    root = Path(directory)
+    if not root.is_dir():
+        return 0, []
+    removed = 0
+    failed: list[str] = []
+    for child in sorted(root.iterdir(), key=lambda p: p.name.lower()):
+        label = child.name
+        try:
+            move_to_trash(child)
+            if child.exists():
+                failed.append(f"{label}: still present after delete")
+            else:
+                removed += 1
+        except OSError as exc:
+            failed.append(f"{label}: {exc}")
+    return removed, failed
+
+
 def _windows_recycle_bin(path: Path) -> None:
     import ctypes
     from ctypes import wintypes

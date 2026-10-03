@@ -1320,7 +1320,10 @@ def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
         assert not (cache / "nested" / "extra.txt").exists()
 
 
-def test_agent_delete_product_cache_removes_folder(tmp_path):
+def test_agent_delete_product_cache_clears_contents_keeps_folder(tmp_path):
+    """Clear workspace must trash children but leave the WD folder (Creo lock)."""
+    from creopdm_agent.trash import clear_directory_contents
+
     root = tmp_path / "cache"
     vault = "robot-arm"
     cache = root / vault
@@ -1329,6 +1332,7 @@ def test_agent_delete_product_cache_removes_folder(tmp_path):
     nested = cache / "docs"
     nested.mkdir()
     (nested / "notes.txt").write_text("hi", encoding="utf-8")
+    (cache / ".creopdm_cache_index.json").write_text("{}", encoding="utf-8")
     settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
     app = create_agent_app(settings)
     with TestClient(app) as client:
@@ -1340,13 +1344,19 @@ def test_agent_delete_product_cache_removes_folder(tmp_path):
         body = response.json()
         assert body["ok"] is True
         assert body["deleted"] is True
-        assert not cache.exists()
+        assert cache.is_dir()
+        assert list(cache.iterdir()) == []
+        assert "contents" in body["message"].lower() or "Recycle Bin" in body["message"]
         again = client.post(
             "/delete-product-cache",
             json={"product_id": "ignored-uuid", "vault_folder": vault},
         )
         assert again.status_code == 200, again.text
         assert again.json()["deleted"] is False
+        assert cache.is_dir()
+    # Helper unit: empty dir is a no-op success path for callers.
+    removed, failed = clear_directory_contents(cache)
+    assert removed == 0 and failed == []
 
 
 def test_agent_delete_paths_trashes_creo_numbered_siblings(tmp_path):

@@ -303,7 +303,7 @@ Starter roles: Administrator, PDM Manager, and Engineer get both export permissi
 
 1. **Remove from Workspace** — trash local copies on this PC only; vault and product list unchanged  
 2. **Purge workspace** — trash older local numbered saves that are below the vault version; vault unchanged  
-3. **Delete workspace…** — trash this product’s entire local agent-cache folder on this PC (including local-only new files); vault and product list unchanged  
+3. **Clear workspace…** — trash everything **inside** this product’s local agent-cache folder on this PC (including local-only new files); keep the empty folder so Creo’s working directory can stay set; vault and product list unchanged  
 4. **Remove from Vault** — delete CreoPDM’s vault copies; your original CAD folder stays; checkouts cancelled  
 5. **Remove from Product** — remove from this product and delete vault copies; originals stay  
 
@@ -323,13 +323,13 @@ Destructive actions ask you to type the product name ([§13](#13-typing-the-prod
 | Confirm purge | Remove only older local saves below the vault tip floor (logical vault tips use floor `.1`); keep vault copy and newer local work | Delete anything from the vault |
 | Nothing to purge | Say so; delete nothing | |
 
-### Delete workspace…
+### Clear workspace…
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Open **Delete workspace…** | Show a warning dialog (Cancel / Delete workspace) explaining the whole local workspace on this PC is deleted, including local-only **new** files that were never added; say vault copies and the product list stay (rematerialize later) | Ask you to type the product name; use a plain browser `confirm`; delete vault files or change the product list |
-| Confirm | Move the local agent-cache folder to the Recycle Bin on this PC | Leave local-only new files behind when the delete succeeded |
-| Agent not running / Creo still has the folder open | Show a clear error; change nothing on the vault | Silently fail or claim vault was cleared |
+| Open **Clear workspace…** | Show the same danger-confirm warning dialog used elsewhere (Cancel / Clear workspace) — no product-name typing — explaining everything inside the local workspace on this PC is deleted, including local-only **new** files that were never added; say the empty folder stays (Creo WD can remain); vault copies and the product list stay (rematerialize later) | Ask you to type the product name; use a plain browser `confirm`; delete the workspace folder itself when Creo’s WD points there; delete vault files or change the product list |
+| Confirm | Move local cache **contents** to the Recycle Bin on this PC; leave the workspace folder | Leave local-only new files behind when the clear succeeded; fail just because Creo’s working directory is still the workspace folder |
+| Agent not running / Creo still has files open | Show a clear error; change nothing on the vault | Silently fail or claim vault was cleared |
 | Cancel | Change nothing | |
 
 ### Remove from Vault
@@ -353,7 +353,7 @@ Destructive actions ask you to type the product name ([§13](#13-typing-the-prod
 
 ## 13. Typing the product name to confirm
 
-Used for delete product, remove from product/vault, purge, History **Revert to selected…**, and similar. **Delete workspace…** uses the same warning dialog but does **not** require typing the product name.
+Used for delete product, remove from product/vault, purge, History **Revert to selected…**, and similar. **Clear workspace…** uses the same danger-confirm warning dialog but does **not** require typing the product name.
 
 | You do | App should | App must not |
 |--------|------------|--------------|

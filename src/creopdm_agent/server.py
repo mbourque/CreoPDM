@@ -17,7 +17,7 @@ from starlette.responses import JSONResponse, Response
 
 from creopdm_agent import __version__
 from creopdm_agent.config import AgentConfig
-from creopdm_agent.trash import move_to_trash
+from creopdm_agent.trash import clear_directory_contents, move_to_trash
 
 logger = logging.getLogger("creopdm_agent")
 
@@ -1914,9 +1914,10 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
 
     @app.post("/delete-product-cache", response_model=DeleteProductCacheResponse)
     def delete_product_cache(payload: DeleteProductCacheRequest) -> DeleteProductCacheResponse:
-        """Remove the whole local agent-cache folder for a product (Recycle Bin when possible).
+        """Clear local agent-cache contents for a product (Recycle Bin when possible).
 
-        May fail while Creo still has files open or its working directory is that folder.
+        Keeps the workspace folder itself so Creo's working directory can stay pointed
+        here (removing the folder fails with WinError 32 while WD is set).
         """
         product_id = (payload.product_id or "").strip()
         vault_folder = (payload.vault_folder or "").strip()
@@ -1929,10 +1930,10 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(
                 status_code=403,
-                detail="Refusing to delete a path outside the agent cache.",
+                detail="Refusing to clear a path outside the agent cache.",
             ) from exc
         if cache_dir.resolve() == root_resolved:
-            raise HTTPException(status_code=400, detail="Refusing to delete the agent cache root.")
+            raise HTTPException(status_code=400, detail="Refusing to clear the agent cache root.")
         if not cache_dir.exists():
             return DeleteProductCacheResponse(
                 ok=True,
@@ -1940,30 +1941,26 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 path=str(cache_dir),
                 message="Local workspace folder was already gone.",
             )
-        try:
-            move_to_trash(cache_dir)
-        except OSError as exc:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Could not delete the local workspace. Close open files in Creo "
-                    f"(and change Creo's working directory if it still points here): {exc}"
-                ),
-            ) from exc
-        if cache_dir.exists():
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Could not delete the local workspace. Close open files in Creo "
-                    "or change Creo's working directory away from this folder, then try again."
-                ),
+        removed, failed = clear_directory_contents(cache_dir)
+        if failed:
+            detail = (
+                f"Cleared {removed} item(s), but could not remove: {'; '.join(failed)}. "
+                "Close open models in Creo (File → Erase), then try Clear workspace again."
             )
-        logger.info("Deleted local product cache %s", cache_dir)
+            raise HTTPException(status_code=409, detail=detail)
+        if removed == 0:
+            return DeleteProductCacheResponse(
+                ok=True,
+                deleted=False,
+                path=str(cache_dir),
+                message="Local workspace was already empty.",
+            )
+        logger.info("Cleared local product cache contents under %s (%s items)", cache_dir, removed)
         return DeleteProductCacheResponse(
             ok=True,
             deleted=True,
             path=str(cache_dir),
-            message="Local workspace moved to the Recycle Bin.",
+            message="Local workspace contents moved to the Recycle Bin.",
         )
 
     @app.post("/purge-versions", response_model=PurgeVersionsResponse)

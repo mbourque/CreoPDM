@@ -8949,7 +8949,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!response.ok) {
       if (response.status === 404) {
         throw new Error(
-          "Local creopdm-agent does not support Delete workspace yet. Restart the creopdm-agent tray (or reinstall from this repo), then try again."
+          "Local creopdm-agent does not support Clear workspace yet. Restart the creopdm-agent tray (or reinstall from this repo), then try again."
         );
       }
       throw new Error(await readError(response));
@@ -8965,21 +8965,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       || currentProductId();
     if (!productId) return;
     showError($("#toolbar-error"), "");
+    // Same danger-confirm overlay as Remove / Purge (no product-name typing).
     const confirmed = await confirmByProductName({
-      title: "Delete workspace",
+      title: "Clear workspace",
       lead:
-        "This deletes this product’s entire local workspace on this PC (the creopdm-agent cache folder). "
+        "This clears this product’s local workspace on this PC (everything inside the creopdm-agent cache folder). "
         + "Local-only new files that were never added to the product are deleted. "
+        + "The empty workspace folder stays so Creo’s working directory can remain set. "
         + "Vault copies and the product file list are not changed — open or rematerialize from the vault when you need files again.",
       note:
-        "Close open models in Creo first if Creo’s working directory is this workspace. "
+        "Close open models in Creo first (File → Erase) if files are locked. "
         + "This cannot be undone from CreoPDM. Restore from the Recycle Bin on this PC if needed.",
-      submitLabel: "Delete workspace",
+      submitLabel: "Clear workspace",
       requireProductName: false,
     });
     if (!confirmed.ok) return;
     showError($("#toolbar-error"), "");
-    const result = await withBusy("Deleting local workspace…", async () => {
+    const result = await withBusy("Clearing local workspace…", async () => {
       try {
         return await deleteLocalProductWorkspace(productId);
       } catch (err) {
@@ -8991,16 +8993,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!result) {
       showError(
         $("#toolbar-error"),
-        "Start creopdm-agent on this Creo PC to delete the local workspace."
+        "Start creopdm-agent on this Creo PC to clear the local workspace."
       );
       return;
     }
     knownWorkspacePaths.at = 0;
     cachedProductObjects.at = 0;
     if (result.deleted) {
-      showOk(result.message || "Local workspace moved to the Recycle Bin.");
+      showOk(result.message || "Local workspace contents moved to the Recycle Bin.");
     } else {
-      showOk(result.message || "Local workspace folder was already gone.");
+      showOk(result.message || "Local workspace was already empty.");
     }
     if (activeListTab() === "changes") await loadChangesTab();
     else pollWorkspaceWatch();
