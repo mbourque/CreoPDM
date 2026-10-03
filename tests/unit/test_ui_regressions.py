@@ -571,18 +571,24 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "Never re-probe agent or reconnect" in script
     block = script.split("function showCreoSessionControls(")[1].split("async function agentWorkdir(")[0]
     assert "if (soft)" in block
-    soft_branch = block.split("if (soft)")[1].split("} else {")[0]
+    assert "else if (!isListPage)" in block
+    assert "skip agent /health" in block or "Skip agent /health" in block or "no Open workspace toolbar" in block
+    soft_branch = block.split("if (soft)")[1].split("} else if (!isListPage)")[0]
     assert "syncCreoSessionControlsFromBridge()" in soft_branch
     assert "probeCreoAgent" not in soft_branch
     assert "bridgePoll" not in soft_branch
     assert "refreshCreoStatusPill" not in soft_branch
     assert "creoJSReady.then" not in soft_branch
+    non_list = block.split("else if (!isListPage)")[1].split("} else {")[0]
+    assert "syncCreoSessionControlsFromBridge()" in non_list
+    assert "probeCreoAgent" not in non_list
 
     # Status poll must survive soft boots and skip updates while soft-nav busy.
     assert "__creopdmStatusPollId" in block
     assert "Survive soft folder/product boots" in block
     poll_cb = script.split("window.__creopdmStatusPollId = window.setInterval(")[1].split("}, interval)")[0]
     assert "__creopdmSoftNavBusy" in poll_cb
+    assert 'querySelector("#object-table")' in poll_cb
 
     # Pill refresh must not flash Session offline during soft nav / bridge flake.
     pill_fn = _between(script, "async function refreshCreoStatusPill(", "function showCreoSessionControls(")
@@ -591,6 +597,9 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "wasConnected" in pill_fn
     assert "Do not require a healthy agent probe" in pill_fn
     assert "Session offline" in pill_fn
+    # Association open mode must reuse a prefetched /health (not probe twice).
+    assert "association mode used to /health twice" in pill_fn
+    assert "prefetchedAgent !== undefined ? prefetchedAgent : await probeCreoAgent()" in pill_fn
     # Soft-nav click/popstate must survive soft boots (not pageAbort-bound).
     assert "__creopdmSoftNavBound" in script
     assert "__creopdmSoftNavApi" in script
@@ -1488,3 +1497,5 @@ def test_workspace_poll_only_on_files_list_page():
     assert "isListPage && pendingProductId" in script
     assert "Stop workspace-watch / file-list change polling" in docs
     assert "Keep polling for list/check-in changes while Admin" in docs
+    assert "do not probe creopdm-agent `/health`" in docs or "do not probe creopdm-agent" in docs
+    assert "hit agent `/health` on every Admin" in docs or "hit agent /health on every Admin" in docs

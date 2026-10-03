@@ -5790,7 +5790,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return null;
     }
     // Keep agent online flag fresh so Open workspace… can hide when offline.
-    const agent = await probeCreoAgent();
+    // Prefer the caller's probe — association mode used to /health twice on every load.
+    const agent =
+      prefetchedAgent !== undefined ? prefetchedAgent : await probeCreoAgent();
     if (window.__creopdmSoftNavBusy || softNavBusy) return agent;
     if (inSession) {
       pill.textContent = "Creo: Connected";
@@ -5848,11 +5850,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   // pill (both live outside main.shell). Never re-probe agent or reconnect.
   if (soft) {
     syncCreoSessionControlsFromBridge();
+  } else if (!isListPage) {
+    // Admin / Settings / Details / login: no Open workspace toolbar — skip agent /health.
+    syncCreoSessionControlsFromBridge();
   } else {
   void creoJSReady.then(() => {
     void (async () => {
       // CREOPDM_STATUS_POLL_V2: at most one /health on load; repeat only if agent says > 0.
-      // Always probe once — Open workspace… visibility depends on agent online.
+      // Files list only — Open workspace… visibility depends on agent online.
       const agent = await probeCreoAgent();
       await refreshCreoStatusPill(agent);
       syncToolbar();
@@ -5878,6 +5883,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         // Survive soft folder/product boots (those abort pageIntervals).
         window.__creopdmStatusPollId = window.setInterval(() => {
           if (window.__creopdmSoftNavBusy) return;
+          // Stop probing after soft-nav away from the Files list.
+          if (!document.querySelector("#object-table")) return;
           void refreshCreoStatusPill().then(() => syncToolbar());
         }, interval);
       }

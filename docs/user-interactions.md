@@ -419,7 +419,7 @@ Use a normal browser for these checks. You need the matching Administration perm
 | Open **Administration** | Show permission-gated tiles (Users, Roles, Membership, Products, Email, **System Settings**) plus greyed **Audit** and **AI** placeholders with short “coming soon” descriptions | Link Audit/AI anywhere; label the settings tile only **Settings** |
 | Open **System Settings** | Open `/settings` (Creo open mode, vault, file types, Local Creo agent refresh / idle pause, …) | |
 | Leave a product Files page open with no mouse/keyboard/touch for longer than **Pause refresh after idle** | Stop file-list / agent workspace polling until the user interacts again (or the tab becomes visible again); default 10 minutes; **0** = never pause for idle | Keep polling overnight while the tab sits idle with a non-zero idle pause |
-| Open **Administration**, **System Settings**, or a file **Details** page (or soft-nav away from the product Files list) | Stop workspace-watch / file-list change polling while that page is open; resume when you return to a product Files list | Keep polling for list/check-in changes while Admin, Settings, or Details is open |
+| Open **Administration**, **System Settings**, or a file **Details** page (or soft-nav away from the product Files list) | Stop workspace-watch / file-list change polling while that page is open; do not probe creopdm-agent `/health` for the status pill on those pages (Files list only); resume when you return to a product Files list | Keep polling for list/check-in changes while Admin, Settings, or Details is open; hit agent `/health` on every Admin/login load |
 
 ### First-run setup
 
