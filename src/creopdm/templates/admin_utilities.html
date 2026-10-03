@@ -57,7 +57,7 @@
         <select name="product_id" required>
           <option value="">Select a product…</option>
           {% for product in compact_products %}
-          <option value="{{ product.uuid }}" {% if compact_product_id == product.uuid %}selected{% endif %}>{{ product.name }}{% if not product.active %} (archived){% endif %}</option>
+          <option value="{{ product.uuid }}" {% if compact_product_id == product.uuid %}selected{% endif %}>{{ product.name }}{% if product.state == 'ARCHIVED' %} (archived){% elif not product.active %} (inactive){% endif %}</option>
           {% endfor %}
         </select>
       </label>

@@ -90,8 +90,7 @@
 
   <section class="settings-card" style="margin-top: 1rem;">
     <h2>Remove product</h2>
-    {% if form.state == 'IN_WORK' and not form.read_only %}
-    <p class="muted small">Deletes the CreoPDM vault (working copies and Git history) and unregisters the product. Original CAD folders you imported from are not deleted. Type the exact product name to confirm.</p>
+    <p class="muted small">Deletes the CreoPDM vault (working copies and Git history) and unregisters the product from the database. Works for Archived / locked products too. Original CAD folders you imported from are not deleted. Type the exact product name to confirm.</p>
     {% if delete_error %}<p class="error">{{ delete_error }}</p>{% endif %}
     <form method="post" action="/admin/products/{{ form.uuid }}/delete" class="settings-form">
       <label>Type <strong>{{ form.name }}</strong> to confirm
@@ -99,10 +98,6 @@
       </label>
       <button type="submit" class="btn btn-danger">Remove product</button>
     </form>
-    {% else %}
-    <p class="muted small">Set lifecycle to <strong>In work</strong> and clear <strong>Read only</strong>, then Save, before removing this product.</p>
-    {% if delete_error %}<p class="error">{{ delete_error }}</p>{% endif %}
-    {% endif %}
   </section>
 {% endif %}
 </article>

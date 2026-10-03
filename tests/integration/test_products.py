@@ -445,6 +445,49 @@ def test_delete_product_removes_vault(client, repo_parent, data_dir):
 
 
 @requires_git
+def test_forget_archived_and_inactive_products_purges_db(client, app, data_dir):
+    """Archive / inactive must not trap vaults — Remove/forget deletes the row."""
+    from sqlalchemy import select
+
+    from creopdm.models.product import Product
+
+    archived = client.post("/api/products", json={"name": "Old Archived"}).json()
+    inactive = client.post("/api/products", json={"name": "Old Inactive"}).json()
+    vault_a = data_dir / "vaults" / (archived.get("vault_folder") or archived["uuid"])
+    vault_i = data_dir / "vaults" / (inactive.get("vault_folder") or inactive["uuid"])
+    assert vault_a.is_dir()
+    assert vault_i.is_dir()
+
+    with app.state.ctx.session_factory() as db:
+        row_a = db.scalar(select(Product).where(Product.uuid == archived["uuid"]))
+        row_i = db.scalar(select(Product).where(Product.uuid == inactive["uuid"]))
+        assert row_a is not None and row_i is not None
+        row_a.state = "ARCHIVED"
+        row_i.active = False
+        db.commit()
+
+    # Archived is hidden from normal Files list but still forgetable.
+    listing = client.get("/api/products").json()
+    assert all(item["uuid"] != archived["uuid"] for item in listing)
+
+    gone_a = client.post(
+        f"/api/products/{archived['uuid']}/forget",
+        json={"confirm_name": "Old Archived"},
+    )
+    assert gone_a.status_code == 200, gone_a.text
+    gone_i = client.post(
+        f"/api/products/{inactive['uuid']}/forget",
+        json={"confirm_name": "Old Inactive"},
+    )
+    assert gone_i.status_code == 200, gone_i.text
+    assert not vault_a.exists()
+    assert not vault_i.exists()
+    with app.state.ctx.session_factory() as db:
+        assert db.scalar(select(Product).where(Product.uuid == archived["uuid"])) is None
+        assert db.scalar(select(Product).where(Product.uuid == inactive["uuid"])) is None
+
+
+@requires_git
 def test_forget_product_strips_git_and_keeps_models(client, app, repo_parent, data_dir):
     payload, location = _create_product(client, repo_parent, name="Ribbed")
     _attach_legacy_location(app, payload["uuid"], location)

@@ -86,6 +86,16 @@ class ProductService:
             )
         return product
 
+    def load_product_for_delete(self, session: Session, product_uuid: str) -> Product:
+        """Load any product row for unregister — including inactive / archived."""
+        product = session.scalar(select(Product).where(Product.uuid == product_uuid))
+        if product is None:
+            raise ProductNotFoundError(
+                "Product not found.",
+                details={"uuid": product_uuid},
+            )
+        return product
+
     def get_product(self, session: Session, product_uuid: str) -> Product:
         product = self._load_product(session, product_uuid)
         self._workspaces.ensure_vault(product)
@@ -327,9 +337,9 @@ class ProductService:
 
         Original CAD folders the user imported from are never touched. The vault
         under the configured vaults root is removed so deletes do not leave
-        orphan Git trees on disk.
+        orphan Git trees on disk. Works for inactive / Archived products too.
         """
-        product = self.get_product(session, product_uuid)
+        product = self.load_product_for_delete(session, product_uuid)
         ensure_product_deletable(product, action="delete this product")
         workspace = self._workspaces.vault_for(product)
         leftover = self._workspaces.leftover_source(product)
@@ -353,7 +363,7 @@ class ProductService:
         workspace_path: Path | None = None,
     ) -> dict[str, str]:
         """Unregister the product and delete the workspace Git vault."""
-        product = self._load_product(session, product_uuid)
+        product = self.load_product_for_delete(session, product_uuid)
         ensure_product_deletable(product, action="delete this product")
         expected = product.name.strip()
         if confirm_name.strip() != expected:

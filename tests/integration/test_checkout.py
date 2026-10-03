@@ -99,7 +99,8 @@ def test_read_only_product_hides_mutation_toolbar(client, repo_parent):
     assert 'id="collect-metadata-btn"' not in page.text
     assert 'id="rebuild-where-used-btn"' not in page.text
     assert 'id="rename-product-btn"' not in page.text
-    assert 'id="delete-product-btn"' not in page.text
+    # Delete product stays available on locked products (purge vault + DB).
+    assert 'id="delete-product-btn"' in page.text
     # Checkout menu stays for Undo only; selected/product checkout are omitted.
     assert 'id="checkout-menu"' in page.text
     assert 'id="undo-btn"' in page.text
@@ -121,8 +122,9 @@ def test_read_only_product_hides_mutation_toolbar(client, repo_parent):
     assert 'data-state="locked"' in page.text
 
     deleted = client.delete(f"/api/products/{product['uuid']}")
-    assert deleted.status_code == 400, deleted.text
-    assert "read-only" in deleted.json()["error"]["message"].lower()
+    assert deleted.status_code == 204, deleted.text
+    listing = client.get("/api/products")
+    assert all(item["uuid"] != product["uuid"] for item in listing.json())
 
 
 @requires_git

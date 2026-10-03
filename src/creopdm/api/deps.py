@@ -96,3 +96,15 @@ def load_accessible_product(
     product = ctx.products.get_product(db, product_id)
     require_product_access(request, ctx, product)
     return product
+
+
+def load_accessible_product_for_delete(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    product_id: str,
+) -> Product:
+    """Load any product row for unregister (inactive / archived included)."""
+    product = ctx.products.load_product_for_delete(db, product_id)
+    require_product_access(request, ctx, product)
+    return product

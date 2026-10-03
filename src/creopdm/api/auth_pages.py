@@ -1668,7 +1668,10 @@ def admin_products(request: Request, ctx: AppContext = Depends(get_context), db:
     manager = _require_products_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    products = [product_to_response(p) for p in ctx.products.list_products(db, include_archived=True)]
+    products = [
+        product_to_response(p)
+        for p in ctx.products.list_products(db, include_inactive=True, include_archived=True)
+    ]
     return templates.TemplateResponse(
         request,
         "admin_products.html",
@@ -1766,7 +1769,8 @@ def admin_product_detail(
     if _is_blocked(manager):
         return manager
     try:
-        product = ctx.products.get_product(db, product_uuid)
+        # Include inactive rows so orphaned soft-deleted products can be Removed.
+        product = ctx.products.load_product_for_delete(db, product_uuid)
     except CreoPDMError:
         return RedirectResponse("/admin/products", status_code=303)
     payload = product_to_response(product)
@@ -1869,7 +1873,7 @@ def admin_product_delete(
     if _is_blocked(manager):
         return manager
     try:
-        product = ctx.products.get_product(db, product_uuid)
+        product = ctx.products.load_product_for_delete(db, product_uuid)
     except CreoPDMError:
         return RedirectResponse("/admin/products", status_code=303)
     payload = product_to_response(product)

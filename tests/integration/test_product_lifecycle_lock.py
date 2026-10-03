@@ -96,14 +96,6 @@ def test_locked_product_rejects_all_mutation_apis(client, repo_parent):
         hint="creo metadata",
     )
     _assert_locked(
-        client.delete(f"/api/products/{pid}"),
-        hint="delete product",
-    )
-    _assert_locked(
-        client.post(f"/api/products/{pid}/forget", json={"confirm_name": product["name"]}),
-        hint="forget product",
-    )
-    _assert_locked(
         client.post(
             f"/api/products/{pid}/objects/from-zip",
             files={"file": ("pack.zip", b"PK\x05\x06" + b"\x00" * 18, "application/zip")},
@@ -115,3 +107,10 @@ def test_locked_product_rejects_all_mutation_apis(client, repo_parent):
     # Undo checkout remains allowed on locked products (release lock only).
     undone = client.post(f"/api/objects/{oid}/undo-checkout")
     assert undone.status_code == 200, undone.text
+
+    # Product delete/forget must still purge locked products (name confirm).
+    forgotten = client.post(f"/api/products/{pid}/forget", json={"confirm_name": product["name"]})
+    assert forgotten.status_code == 200, forgotten.text
+    listing = client.get("/api/products")
+    assert listing.status_code == 200
+    assert all(item["uuid"] != pid for item in listing.json())

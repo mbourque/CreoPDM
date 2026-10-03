@@ -37,28 +37,25 @@ def test_product_state_defaults_allow_mutation():
         ProductState.ARCHIVED.value,
     ],
 )
-def test_non_in_work_blocks_mutation_and_delete(state):
+def test_non_in_work_blocks_mutation_but_allows_delete(state):
     product = SimpleNamespace(uuid="p1", state=state, read_only=False)
     assert product_allows_mutation(product) is False
-    assert product_allows_delete(product) is False
+    assert product_allows_delete(product) is True
     with pytest.raises(ValidationAppError) as exc:
         ensure_product_mutable(product, action="check out files")
     assert "cannot check out files" in exc.value.message
     assert product_state_label(state) in exc.value.message
-    with pytest.raises(ValidationAppError):
-        ensure_product_deletable(product)
+    ensure_product_deletable(product)
 
 
-def test_read_only_blocks_even_when_in_work():
+def test_read_only_blocks_mutation_but_allows_delete():
     product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=True)
     assert product_allows_mutation(product) is False
-    assert product_allows_delete(product) is False
+    assert product_allows_delete(product) is True
     with pytest.raises(ValidationAppError) as exc:
         ensure_product_mutable(product)
     assert "read-only" in exc.value.message.lower()
-    with pytest.raises(ValidationAppError) as exc2:
-        ensure_product_deletable(product, action="delete this product")
-    assert "read-only" in exc2.value.message.lower()
+    ensure_product_deletable(product, action="delete this product")
 
 
 def test_archived_helper():
@@ -120,7 +117,7 @@ def test_product_ui_locked_hides_checkout_actions_keeps_undo():
     assert ui.show_remove_vault is False
     assert ui.show_remove_product is False
     assert ui.show_rename is False
-    assert ui.show_delete_product is False
+    assert ui.show_delete_product is True
     assert ui.show_metadata_tools is False
     assert ui.show_revert is False
 

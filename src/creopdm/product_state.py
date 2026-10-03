@@ -43,8 +43,11 @@ def product_allows_mutation(product: Any) -> bool:
 
 
 def product_allows_delete(product: Any) -> bool:
-    """Product unregister / object remove — same gate as mutations (incl. read-only)."""
-    return product_allows_mutation(product)
+    """Product unregister is always allowed when the role can delete (name confirm).
+
+    Lifecycle lock / read-only must not trap vaults or DB rows after Archive.
+    """
+    return product is not None
 
 
 @dataclass(frozen=True)
@@ -101,7 +104,9 @@ def product_ui_capabilities(
         show_remove_vault=can_remove_objects and mutable,
         show_remove_product=can_remove_objects and mutable,
         show_rename=has_product and can_edit_product and mutable,
-        show_delete_product=has_product and can_delete_product and mutable,
+        # Delete/unregister must stay available on locked / Archived products so
+        # vaults are not trapped (typed product-name confirm is the safety gate).
+        show_delete_product=has_product and can_delete_product,
         show_metadata_tools=has_product and can_update_metadata and mutable,
         show_revert=can_revert_objects and mutable,
     )
@@ -123,8 +128,13 @@ def ensure_product_mutable(product: Product, *, action: str = "modify this produ
 
 
 def ensure_product_deletable(product: Product, *, action: str = "delete this product") -> None:
-    """Block product delete/forget when read-only or not In work."""
-    ensure_product_mutable(product, action=action)
+    """Product delete/forget is not blocked by lifecycle or read-only.
+
+    Kept as the API/service gate hook (contract tests require ``ensure_product_deletable``).
+    Callers still require ``products.delete`` and an exact product-name confirm.
+    """
+    if product is None:
+        raise ValidationAppError(f"Cannot {action}: product is missing.")
 
 
 def parse_product_state(raw: str | None) -> str:

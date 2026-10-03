@@ -16,6 +16,7 @@ from creopdm.api.deps import (
     get_context,
     get_db,
     load_accessible_product,
+    load_accessible_product_for_delete,
     require_permission,
 )
 from creopdm.api.serializers import product_to_response
@@ -238,7 +239,7 @@ def delete_product(
     ctx: AppContext = Depends(get_context),
 ) -> None:
     require_permission(request, ctx, PERMISSION_PRODUCTS_DELETE)
-    load_accessible_product(request, ctx, db, product_id)
+    load_accessible_product_for_delete(request, ctx, db, product_id)
     ctx.products.delete_product(db, product_id)
 
 
@@ -251,7 +252,7 @@ def forget_product(
     ctx: AppContext = Depends(get_context),
 ) -> ForgetProductResponse:
     require_permission(request, ctx, PERMISSION_PRODUCTS_DELETE)
-    product = load_accessible_product(request, ctx, db, product_id)
+    product = load_accessible_product_for_delete(request, ctx, db, product_id)
     workspace = ctx.workspaces.vault_for(product)
     result = ctx.products.forget_product(
         db,
