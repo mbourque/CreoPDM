@@ -368,6 +368,25 @@ a.brand:hover { text-decoration: none; color: inherit; }
 }
 .settings-form { max-width: 40rem; display: flex; flex-direction: column; gap: 1.1rem; }
 .settings-form-wide { max-width: 48rem; }
+/* Admin Products list: keep Created/State on one line; vault id ellipsizes. */
+.admin-products-table {
+  max-width: none;
+}
+.admin-products-table .data-table {
+  width: 100%;
+}
+.admin-products-table .col-created,
+.admin-products-table .col-number,
+.admin-products-table .col-state,
+.admin-products-table .col-access {
+  white-space: nowrap;
+}
+.admin-products-table .col-vault {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .type-label-table { table-layout: fixed; }
 .type-label-table th:first-child,
 .type-label-table td:first-child { width: 38%; }

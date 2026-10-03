@@ -15,16 +15,17 @@
   <p class="muted">Every product on this CreoPDM server (including Archived). Click a name to edit or Remove, or add a new product.</p>
   <p><a class="btn btn-primary" href="/admin/products/new">Add product</a></p>
 
-  <section class="settings-card settings-form-wide">
+  <section class="settings-card admin-products-table">
+    <div class="table-scroll">
     <table class="data-table">
       <thead>
         <tr>
           <th>Name</th>
-          <th>Created</th>
-          <th>Number</th>
-          <th>State</th>
-          <th>Access</th>
-          <th>Vault folder</th>
+          <th class="col-created">Created</th>
+          <th class="col-number">Number</th>
+          <th class="col-state">State</th>
+          <th class="col-access">Access</th>
+          <th class="col-vault">Vault folder</th>
           <th>Description</th>
         </tr>
       </thead>
@@ -35,11 +36,11 @@
             <a href="/admin/products/{{ p.uuid }}">{{ p.name }}</a>
             {% if not p.active %}<span class="muted"> (inactive)</span>{% endif %}
           </td>
-          <td>{% if p.created_at %}<span title="{{ local_time_pretty(p.created_at) }}">{{ local_time(p.created_at) }}</span>{% else %}—{% endif %}</td>
-          <td>{{ p.number or "—" }}</td>
-          <td>{{ product_state_labels.get(p.state, p.state) }}</td>
-          <td>{% if p.read_only %}Read only{% else %}—{% endif %}</td>
-          <td class="mono">{{ p.vault_folder }}</td>
+          <td class="col-created">{% if p.created_at %}<span title="{{ local_time_pretty(p.created_at) }}">{{ local_time(p.created_at) }}</span>{% else %}—{% endif %}</td>
+          <td class="col-number">{{ p.number or "—" }}</td>
+          <td class="col-state">{{ product_state_labels.get(p.state, p.state) }}</td>
+          <td class="col-access">{% if p.read_only %}Read only{% else %}—{% endif %}</td>
+          <td class="mono col-vault" title="{{ p.vault_folder }}">{{ p.vault_folder }}</td>
           <td>{{ p.description or "—" }}</td>
         </tr>
         {% else %}
@@ -47,6 +48,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </section>
 </article>
 {% endblock %}

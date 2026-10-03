@@ -1444,6 +1444,8 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert listed.status_code == 200
     assert "Admin Hub Product" in listed.text
     assert ">Created<" in listed.text
+    assert "admin-products-table" in listed.text
+    assert "col-created" in listed.text
 
     api = auth_client.get("/api/products").json()
     product = next(p for p in api if p["name"] == "Admin Hub Product")
