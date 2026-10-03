@@ -269,7 +269,7 @@ Copy `dist\creopdm-agent-tray.exe` to the other Creo PC and run it. That is a re
 2. Keep `creopdm-agent-tray` running on the Creo PC.
 3. In CreoPDM Settings, set open mode to **Embedded Creo Browser**.
 4. In Creo's built-in browser, open the CreoPDM URL (the Linux **Other PCs** address).
-5. Open a model — the page calls the agent at `http://127.0.0.1:8766`, which fetches the file (and assembly companions) into the local workspace, then Creo.JS opens native Creo-openable files. SolidWorks / CATIA / Inventor Multi-CAD files are materialized locally; CreoPDM drives **File > Open** in the running session and navigates the dialog to the workspace folder (session working directory is left unchanged).
+5. Open a model — the page calls the agent at `http://127.0.0.1:8766`, which fetches the file (and assembly dependencies) into the local workspace, then Creo.JS opens native Creo-openable files. SolidWorks / CATIA / Inventor Multi-CAD files are materialized locally; CreoPDM drives **File > Open** in the running session and navigates the dialog to the workspace folder (session working directory is left unchanged).
 6. **Set Working Directory** uses the local workspace folder for the current product (not the remote server path).
 
 Quick check that the agent is up: open `http://127.0.0.1:8766/health` in a normal browser on the Creo PC.

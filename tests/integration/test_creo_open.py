@@ -622,7 +622,7 @@ def test_open_embedded_still_opens_creo_view(data_dir, repo_parent, identity: St
 
 
 @requires_git
-def test_open_include_companions_false_skips_neighbors(
+def test_open_include_dependencies_false_skips_neighbors(
     data_dir, repo_parent, identity: StaticUserProvider
 ):
     recorder = RecordingConnector()
@@ -630,7 +630,7 @@ def test_open_include_companions_false_skips_neighbors(
     ctx.creo = recorder
     ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
     with TestClient(create_app(ctx)) as client:
-        product = client.post("/api/products", json={"name": "CompanionsFlag"}).json()
+        product = client.post("/api/products", json={"name": "DependenciesFlag"}).json()
         part = client.post(
             f"/api/products/{product['uuid']}/objects",
             files={"file": ("pin.prt", b"part", "application/octet-stream")},
@@ -643,35 +643,35 @@ def test_open_include_companions_false_skips_neighbors(
         )
         assert part.status_code == 201, part.text
         assert asm.status_code == 201, asm.text
-        with_companions = client.post(
+        with_deps = client.post(
             "/api/creo/open",
             json={"object_id": asm.json()["uuid"], "launch": False},
         )
-        assert with_companions.status_code == 200, with_companions.text
-        assert with_companions.json()["companions"]
+        assert with_deps.status_code == 200, with_deps.text
+        assert with_deps.json()["dependencies"]
         skipped = client.post(
             "/api/creo/open",
             json={
                 "object_id": asm.json()["uuid"],
                 "launch": False,
-                "include_companions": False,
+                "include_dependencies": False,
             },
         )
         assert skipped.status_code == 200, skipped.text
-        assert skipped.json()["companions"] == []
+        assert skipped.json()["dependencies"] == []
 
 
 @requires_git
-def test_open_companions_nested_tree_without_where_used(
+def test_open_dependencies_nested_tree_without_where_used(
     data_dir, repo_parent, identity: StaticUserProvider
 ):
-    """Open must pull sub-asms + parts from vault bytes — no Dependency / Rebuild."""
+    """Open must pull sub-asms + parts from vault bytes — no Where Used rebuild."""
     recorder = RecordingConnector()
     ctx = build_context(ConfigManager(), users=identity)
     ctx.creo = recorder
     ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
     with TestClient(create_app(ctx)) as client:
-        product = client.post("/api/products", json={"name": "AutoCompanions"}).json()
+        product = client.post("/api/products", json={"name": "AutoDependencies"}).json()
         part = client.post(
             f"/api/products/{product['uuid']}/objects",
             files={"file": ("pin.prt", b"part-bytes", "application/octet-stream")},
@@ -696,6 +696,6 @@ def test_open_companions_nested_tree_without_where_used(
             json={"object_id": top.json()["uuid"], "launch": False},
         )
         assert opened.status_code == 200, opened.text
-        names = {item["filename"] for item in opened.json()["companions"]}
+        names = {item["filename"] for item in opened.json()["dependencies"]}
         assert "sub.asm" in names
         assert "pin.prt" in names

@@ -20,9 +20,9 @@ from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.utils.classify import classify_filename, is_creo_js_openable, is_creo_openable, is_creo_view
-from creopdm.utils.creo_companions import (
-    collect_open_companion_objects,
-    needs_open_companions,
+from creopdm.utils.creo_dependencies import (
+    collect_open_dependency_objects,
+    needs_open_dependencies,
 )
 from creopdm.utils.creo_header import creo_release_for, is_creo_native_model
 from creopdm.utils.launch import working_directory_for
@@ -40,8 +40,8 @@ _OPEN_DEPENDENCY_TYPES = frozenset(
         DependencyType.UNKNOWN.value,
     }
 )
-_MAX_DEP_COMPANION_DEPTH = 12
-_MAX_DEP_COMPANIONS = 2500
+_MAX_DEP_DEPENDENCY_DEPTH = 12
+_MAX_DEP_DEPENDENCIES = 2500
 
 
 class CreoService:
@@ -65,7 +65,7 @@ class CreoService:
         session: Session,
         object_uuid: str,
         launch: bool = True,
-        include_companions: bool = True,
+        include_dependencies: bool = True,
     ) -> dict:
         obj = self._objects.get_object(session, object_uuid)
         product = obj.product
@@ -107,9 +107,9 @@ class CreoService:
             file_release = creo_release_for(path, path.name) or ""
             if not file_release and obj.current_version is not None:
                 file_release = obj.current_version.creo_release or ""
-        companions: list[dict[str, str | None]] = []
-        if include_companions:
-            companions = self._companions_for(
+        dependencies: list[dict[str, str | None]] = []
+        if include_dependencies:
+            dependencies = self._dependencies_for(
                 session,
                 product,
                 path=path,
@@ -127,7 +127,7 @@ class CreoService:
             object_id=object_uuid,
             product_id=str(product.uuid),
             relative_path=obj.relative_path,
-            companions=companions,
+            dependencies=dependencies,
         )
         # Not checked out to me: align local cache to vault tip (drop higher .N leftovers).
         # Checked out to me: keep local newer Creo saves for check-in.
@@ -140,7 +140,7 @@ class CreoService:
         product: Product,
         relative_path: str,
         launch: bool = True,
-        include_companions: bool = True,
+        include_dependencies: bool = True,
     ) -> dict:
         path = self._workspaces.file_path(product, relative_path)
         if not path.is_file():
@@ -155,9 +155,9 @@ class CreoService:
             document_extensions=self._workspaces._config.document_extensions(),
         )
         rel = str(relative_path).replace("\\", "/")
-        companions: list[dict[str, str | None]] = []
-        if include_companions:
-            companions = self._companions_for(
+        dependencies: list[dict[str, str | None]] = []
+        if include_dependencies:
+            dependencies = self._dependencies_for(
                 session,
                 product,
                 path=path,
@@ -177,10 +177,10 @@ class CreoService:
             browser_url=f"/api/products/{product.uuid}/workspace/content?path={quote(rel)}",
             product_id=str(product.uuid),
             relative_path=rel,
-            companions=companions,
+            dependencies=dependencies,
         )
 
-    def _dependency_companion_objects(
+    def _where_used_dependency_objects(
         self,
         session: Session,
         product_id: int,
@@ -201,9 +201,9 @@ class CreoService:
         queue: list[tuple[int, int]] = [(root_object_id, 0)]
         seen_parents = {root_object_id}
         found: dict[int, EngineeringObject] = {}
-        while queue and len(found) < _MAX_DEP_COMPANIONS:
+        while queue and len(found) < _MAX_DEP_DEPENDENCIES:
             parent_id, depth = queue.pop(0)
-            if depth >= _MAX_DEP_COMPANION_DEPTH:
+            if depth >= _MAX_DEP_DEPENDENCY_DEPTH:
                 continue
             edges = session.scalars(
                 select(Dependency).where(
@@ -226,14 +226,14 @@ class CreoService:
                 if child.id in found:
                     continue
                 found[child.id] = child
-                if len(found) >= _MAX_DEP_COMPANIONS:
+                if len(found) >= _MAX_DEP_DEPENDENCIES:
                     break
-                if needs_open_companions(child.object_type, child.filename) and child.id not in seen_parents:
+                if needs_open_dependencies(child.object_type, child.filename) and child.id not in seen_parents:
                     seen_parents.add(child.id)
                     queue.append((child.id, depth + 1))
         return list(found.values())
 
-    def _companions_for(
+    def _dependencies_for(
         self,
         session: Session,
         product: Product,
@@ -244,7 +244,7 @@ class CreoService:
         filename: str,
         skip_object_id: int | None,
     ) -> list[dict[str, str | None]]:
-        if not needs_open_companions(object_type, filename):
+        if not needs_open_dependencies(object_type, filename):
             return []
         models = self._workspaces._config.model_cad_extensions()
         all_cad = self._workspaces._cad_extensions()
@@ -275,7 +275,7 @@ class CreoService:
                 except Exception:  # noqa: BLE001
                     return None
 
-        for obj in collect_open_companion_objects(
+        for obj in collect_open_dependency_objects(
             primary_relative=relative_path,
             primary_filename=filename,
             object_type=object_type,
@@ -292,7 +292,7 @@ class CreoService:
             by_id[int(obj_id)] = obj  # type: ignore[arg-type]
 
         if root_id is not None:
-            for obj in self._dependency_companion_objects(session, product.id, root_id):
+            for obj in self._where_used_dependency_objects(session, product.id, root_id):
                 by_id.setdefault(int(obj.id), obj)
         chosen = list(by_id.values())
 
@@ -301,18 +301,18 @@ class CreoService:
             if skip_object_id is not None and obj.id == skip_object_id:
                 continue
             try:
-                companion_path = self._workspaces.locate_content(product, obj)
+                dep_path = self._workspaces.locate_content(product, obj)
             except PathValidationError:
-                companion_path = self._workspaces.materialize(
+                dep_path = self._workspaces.materialize(
                     product,
                     obj,
                     writable=False,
                     overwrite_modified=True,
                 )
-            if not companion_path.is_file():
+            if not dep_path.is_file():
                 continue
             logical = CreoFileManager.normalize_creo_filename(
-                companion_path.name, (*models, *all_cad)
+                dep_path.name, (*models, *all_cad)
             )
             out.append(
                 {
@@ -321,13 +321,13 @@ class CreoService:
                     "relative_path": str(obj.relative_path).replace("\\", "/"),
                     "filename": logical,
                     "disk_name": CreoFileManager.workspace_materialize_name(
-                        companion_path.name, (*models, *all_cad)
+                        dep_path.name, (*models, *all_cad)
                     ),
                 }
             )
         if out:
             logger.info(
-                "Prepared %s open companions for %s",
+                "Prepared %s open dependencies for %s",
                 len(out),
                 Path(filename).name,
             )
@@ -344,7 +344,7 @@ class CreoService:
         object_id: str = "",
         product_id: str = "",
         relative_path: str = "",
-        companions: list[dict[str, str | None]] | None = None,
+        dependencies: list[dict[str, str | None]] | None = None,
     ) -> dict:
         workdir = working_directory_for(path)
         models = self._workspaces._config.model_cad_extensions()
@@ -408,7 +408,7 @@ class CreoService:
             "requires_agent_cache": requires_agent_cache,
             "creo_release": creo_release or "",
             "url": url,
-            "companions": companions or [],
+            "dependencies": dependencies or [],
         }
 
     def _open_path(self, path: Path, *, browser_url: str = "") -> str:

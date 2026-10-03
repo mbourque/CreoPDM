@@ -44,7 +44,7 @@ def open_in_creo(
             db,
             payload.object_id,
             launch=payload.launch,
-            include_companions=payload.include_companions,
+            include_dependencies=payload.include_dependencies,
         )
     else:
         product = load_accessible_product(request, ctx, db, payload.product_id or "")
@@ -53,6 +53,6 @@ def open_in_creo(
             product,
             payload.relative_path or "",
             launch=payload.launch,
-            include_companions=payload.include_companions,
+            include_dependencies=payload.include_dependencies,
         )
     return CreoOpenResponse.model_validate(result)

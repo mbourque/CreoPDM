@@ -5532,7 +5532,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         body: JSON.stringify({
           object_id: objectId,
           launch: false,
-          include_companions: true,
+          include_dependencies: true,
         }),
       });
       if (!response.ok) return null;
@@ -5745,7 +5745,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               body: JSON.stringify({
                 object_id: item.uuid,
                 launch: false,
-                include_companions: false,
+                include_dependencies: false,
               }),
             });
             if (!response.ok) {
@@ -6080,10 +6080,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     void setCreoWorkingDirectory();
   });
 
-  function openRequestBody(target, launch, includeCompanions) {
+  function openRequestBody(target, launch, includeDependencies) {
     const spec = typeof target === "string" ? { objectId: target } : target || {};
     const body = { launch: Boolean(launch) };
-    if (includeCompanions !== undefined) body.include_companions = Boolean(includeCompanions);
+    if (includeDependencies !== undefined) body.include_dependencies = Boolean(includeDependencies);
     if (spec.objectId) {
       body.object_id = spec.objectId;
       return body;
@@ -6177,8 +6177,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const form = $("#open-checkout-form");
     const lead = $("#open-checkout-lead");
     const fileWrap = $("#open-checkout-file-wrap");
-    const companionsWrap = $("#open-checkout-companions-wrap");
-    const companionsNote = $("#open-checkout-companions-note");
+    const dependenciesWrap = $("#open-checkout-dependencies-wrap");
+    const dependenciesNote = $("#open-checkout-dependencies-note");
     const wdWrap = $("#open-checkout-wd-wrap");
     const wdBox = $("#open-checkout-set-wd");
     const openRadio = $("#open-action-open");
@@ -6205,8 +6205,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     showError(err, "");
     if (fileWrap) fileWrap.hidden = false;
-    if (companionsWrap) companionsWrap.hidden = false;
-    if (companionsNote) companionsNote.hidden = false;
+    if (dependenciesWrap) dependenciesWrap.hidden = false;
+    if (dependenciesNote) dependenciesNote.hidden = false;
     if (wdWrap) wdWrap.hidden = !showWd;
     openRadio.checked = true;
     if (wdBox) {
@@ -6214,9 +6214,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       wdBox.checked = showWd;
     }
     const fileRadio = $("#open-action-checkout-file");
-    const companionsRadio = $("#open-action-checkout-companions");
+    const dependenciesRadio = $("#open-action-checkout-dependencies");
     if (fileRadio) fileRadio.disabled = false;
-    if (companionsRadio) companionsRadio.disabled = false;
+    if (dependenciesRadio) dependenciesRadio.disabled = false;
 
     return new Promise((resolve) => {
       const finish = (action) => {
@@ -6271,10 +6271,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   }
 
-  async function checkoutBeforeOpen(target, withCompanions) {
+  async function checkoutBeforeOpen(target, withDependencies) {
     const objectId = openTargetObjectId(target);
     if (!objectId) return [];
-    if (!withCompanions) {
+    if (!withDependencies) {
       const result = await postAction(
         `/api/objects/${objectId}/checkout`,
         undefined,
@@ -6287,12 +6287,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       "/api/creo/open",
       openRequestBody(target, false, true),
       "POST",
-      "Finding companions…"
+      "Finding dependencies…"
     );
     if (!prepared) return null;
     const ids = [
       objectId,
-      ...((prepared.companions || []).map((item) => item.object_id).filter(Boolean)),
+      ...((prepared.dependencies || []).map((item) => item.object_id).filter(Boolean)),
     ];
     const unique = [...new Set(ids)];
     if (unique.length === 1) {
@@ -6341,10 +6341,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const action = typeof choice === "string" ? choice : choice?.action;
     const setWd = Boolean(choice && typeof choice === "object" && choice.setWorkingDirectory);
     if (action === "cancel") return null;
-    if (action === "checkout-file" || action === "checkout-companions") {
+    if (action === "checkout-file" || action === "checkout-dependencies") {
       const checkedOutIds = await checkoutBeforeOpen(
         target,
-        action === "checkout-companions"
+        action === "checkout-dependencies"
       );
       if (!checkedOutIds) return null;
       // Paint before openModel — Creo collapses the embedded browser on Display.
@@ -6844,12 +6844,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function setOpenPrepareBusyMessage() {
-    setBusyMessage("Finding companions…");
+    setBusyMessage("Finding dependencies…");
   }
 
   function setOpenDownloadBusyMessage(prepared) {
-    const companions = Array.isArray(prepared?.companions) ? prepared.companions : [];
-    const total = 1 + companions.length;
+    const dependencies = Array.isArray(prepared?.dependencies) ? prepared.dependencies : [];
+    const total = 1 + dependencies.length;
     if (total > 1) {
       setBusyMessage(`Downloading ${total} files to local workspace…`);
     } else {
@@ -6858,7 +6858,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function materializeViaAgent(prepared) {
-    const companions = Array.isArray(prepared.companions) ? prepared.companions : [];
+    const dependencies = Array.isArray(prepared.dependencies) ? prepared.dependencies : [];
     const response = await fetch(`${agentBase()}/materialize`, {
       method: "POST",
       headers: agentAuthHeaders({ "Content-Type": "application/json" }),
@@ -6873,7 +6873,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         filename: prepared.filename || null,
         disk_name: prepared.disk_name || prepared.filename || null,
         replace_newer: Boolean(prepared.replace_newer),
-        companions: companions.map((item) => ({
+        dependencies: dependencies.map((item) => ({
           object_id: item.object_id || null,
           product_id: item.product_id || prepared.product_id || currentProductId() || null,
           relative_path: item.relative_path || null,
@@ -6946,7 +6946,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       try {
         const prepared = await postAction(
           "/api/creo/open",
-          { object_id: objectId, launch: false, include_companions: false },
+          { object_id: objectId, launch: false, include_dependencies: false },
           "POST",
           ""
         );
@@ -9557,7 +9557,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               filename: body.filename || null,
               disk_name: body.filename || null,
               replace_newer: true,
-              companions: [],
+              dependencies: [],
             });
             localSynced = true;
           } else {

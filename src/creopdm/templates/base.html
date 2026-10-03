@@ -110,13 +110,13 @@
           <input type="radio" name="open_action" value="checkout-file" id="open-action-checkout-file">
           Check out this file, then open
         </label>
-        <label class="choice" id="open-checkout-companions-wrap">
-          <input type="radio" name="open_action" value="checkout-companions" id="open-action-checkout-companions">
-          Check out this file and its companions, then open
+        <label class="choice" id="open-checkout-dependencies-wrap">
+          <input type="radio" name="open_action" value="checkout-dependencies" id="open-action-checkout-dependencies">
+          Check out this file and its dependencies, then open
         </label>
       </div>
-      <p class="muted small" id="open-checkout-companions-note">
-        Companions are related models Creo needs nearby (for example parts referenced by an assembly). Checking them out takes locks on those files too.
+      <p class="muted small" id="open-checkout-dependencies-note">
+        Dependencies are related models Creo needs nearby (for example parts referenced by an assembly). Checking them out takes locks on those files too.
       </p>
       <label class="choice" id="open-checkout-wd-wrap">
         <input type="checkbox" id="open-checkout-set-wd" checked>
@@ -407,14 +407,14 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
         var versionName = diskName || filename;
         var shortDisk = creoBasename(diskName || filename || fullPath || "");
         // Nested agent-cache layout (vault folders preserved): Creo resolves
-        // companions from the file's folder, not the product cache root.
+        // dependencies from the file's folder, not the product cache root.
         var fileDir = fullPath ? creoParentDir(fullPath) : "";
         var openWd = fileDir || directory || "";
         var relativeName = (fullPath && directory)
             ? creoRelativeToDir(fullPath, directory)
             : "";
         // Native assemblies need the session WD on the cache folder so Creo can
-        // resolve companions. Restore the prior WD after the open so the
+        // resolve dependencies. Restore the prior WD after the open so the
         // user's session directory is not left on the agent cache.
         // Multi-CAD trails navigate the File Open dialog and must not ChangeDirectory.
         if (openWd && creoIsNativeVersioned(versionName)) {
@@ -2047,7 +2047,7 @@ function creoGatherBomTree(model, session) {
 function creoRetrieveForMetadata(session, filePath, filename) {
     /**
      * Load a model into session for metadata only (no Display / window activate).
-     * Always ChangeDirectory into the file's folder first so assembly companions
+     * Always ChangeDirectory into the file's folder first so assembly dependencies
      * beside it resolve — then try numbered disk name and logical name.ext.
      */
     if (!session) return null;
@@ -2129,7 +2129,7 @@ function creoRetrieveForMetadata(session, filePath, filename) {
                     }
                 } catch (errDir) {}
             }
-            // Prefer names relative to the cache WD (companions resolve). Full path last.
+            // Prefer names relative to the cache WD (dependencies resolve). Full path last.
             model = preferMfgIfNeeded(tryRetrieve(diskName), diskName || logicalFromDisk);
             if (model) return model;
             if (logicalFromDisk && logicalFromDisk.toLowerCase() !== String(diskName || "").toLowerCase()) {

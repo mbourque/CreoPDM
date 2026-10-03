@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from creopdm.utils.creo_companions import (
-    collect_open_companion_objects,
+from creopdm.utils.creo_dependencies import (
+    collect_open_dependency_objects,
     names_referenced_in_model,
-    needs_open_companions,
-    select_companion_objects,
+    needs_open_dependencies,
+    select_dependency_objects,
 )
 
 
@@ -23,10 +23,10 @@ class _Obj:
         self.id = obj_id if obj_id is not None else hash(relative_path) % 10_000_000
 
 
-def test_needs_companions_for_asm_and_drw_only():
-    assert needs_open_companions("CREO_ASSEMBLY", "top.asm") is True
-    assert needs_open_companions("CREO_DRAWING", "top.drw") is True
-    assert needs_open_companions("CREO_PART", "pin.prt") is False
+def test_needs_dependencies_for_asm_and_drw_only():
+    assert needs_open_dependencies("CREO_ASSEMBLY", "top.asm") is True
+    assert needs_open_dependencies("CREO_DRAWING", "top.drw") is True
+    assert needs_open_dependencies("CREO_PART", "pin.prt") is False
 
 
 def test_names_referenced_in_model(tmp_path: Path):
@@ -39,7 +39,7 @@ def test_names_referenced_in_model(tmp_path: Path):
 
 
 def test_model_references_filename_matches_stem_and_logical(tmp_path: Path):
-    from creopdm.utils.creo_companions import model_references_filename
+    from creopdm.utils.creo_dependencies import model_references_filename
 
     asm = tmp_path / "top.asm.1"
     asm.write_bytes(b"header ... CLASP-CLASP_MIR.PRT ... footer")
@@ -47,7 +47,7 @@ def test_model_references_filename_matches_stem_and_logical(tmp_path: Path):
     assert model_references_filename(asm, "missing.prt.1") is False
 
 
-def test_select_companion_objects_prefers_referenced(tmp_path: Path):
+def test_select_dependency_objects_prefers_referenced(tmp_path: Path):
     asm = tmp_path / "top.asm.1"
     asm.write_bytes(b"assembly uses PIN.PRT only")
     siblings = [
@@ -55,7 +55,7 @@ def test_select_companion_objects_prefers_referenced(tmp_path: Path):
         _Obj("CAD/pin.prt", "pin.prt"),
         _Obj("CAD/unused.prt", "unused.prt"),
     ]
-    chosen = select_companion_objects(
+    chosen = select_dependency_objects(
         primary_relative="CAD/top.asm",
         primary_filename="top.asm",
         object_type="CREO_ASSEMBLY",
@@ -67,7 +67,7 @@ def test_select_companion_objects_prefers_referenced(tmp_path: Path):
     names = {obj.filename for obj in chosen}
     assert names == {"pin.prt"}
     # Product scope still finds a part in another folder when the asm bytes name it.
-    cross = select_companion_objects(
+    cross = select_dependency_objects(
         primary_relative="CAD/top.asm",
         primary_filename="top.asm",
         object_type="CREO_ASSEMBLY",
@@ -81,13 +81,13 @@ def test_select_companion_objects_prefers_referenced(tmp_path: Path):
     assert {obj.filename for obj in cross} == {"pin.prt"}
 
 
-def test_select_companion_objects_skips_huge_unreferenced_pool(tmp_path: Path):
+def test_select_dependency_objects_skips_huge_unreferenced_pool(tmp_path: Path):
     asm = tmp_path / "top.asm.1"
     asm.write_bytes(b"no matching names here")
     siblings = [_Obj("CAD/top.asm", "top.asm", object_type="CREO_ASSEMBLY")] + [
         _Obj(f"CAD/part{i}.prt", f"part{i}.prt") for i in range(80)
     ]
-    chosen = select_companion_objects(
+    chosen = select_dependency_objects(
         primary_relative="CAD/top.asm",
         primary_filename="top.asm",
         object_type="CREO_ASSEMBLY",
@@ -99,7 +99,7 @@ def test_select_companion_objects_skips_huge_unreferenced_pool(tmp_path: Path):
     assert chosen == []
 
 
-def test_collect_open_companions_walks_subassembly_tree(tmp_path: Path):
+def test_collect_open_dependencies_walks_subassembly_tree(tmp_path: Path):
     """Top asm → sub asm → part via vault bytes only (no Where Used index)."""
     top = tmp_path / "top.asm.1"
     sub = tmp_path / "sub.asm.1"
@@ -121,7 +121,7 @@ def test_collect_open_companions_walks_subassembly_tree(tmp_path: Path):
     def resolve(obj):
         return paths.get(obj.relative_path)
 
-    chosen = collect_open_companion_objects(
+    chosen = collect_open_dependency_objects(
         primary_relative="CAD/top.asm",
         primary_filename="top.asm",
         object_type="CREO_ASSEMBLY",

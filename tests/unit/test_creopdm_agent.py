@@ -54,7 +54,7 @@ def test_agent_health_and_materialize(tmp_path, monkeypatch):
                 "product_id": "proj1",
                 "filename": "top.asm",
                 "disk_name": "top.asm.1",
-                "companions": [
+                "dependencies": [
                     {
                         "object_id": "pin",
                         "product_id": "proj1",
@@ -68,7 +68,7 @@ def test_agent_health_and_materialize(tmp_path, monkeypatch):
         body = saved.json()
         assert body["disk_name"] == "top.asm.1"
         assert body["filename"] == "top.asm"
-        assert body["companions_written"] == 1
+        assert body["dependencies_written"] == 1
         assert Path(body["path"]).read_bytes() == b"asm-bytes"
         assert (Path(body["working_directory"]) / "pin.prt.1").read_bytes() == b"prt-bytes"
         assert abs(Path(body["path"]).stat().st_mtime - vault_mtime) < 2

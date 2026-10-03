@@ -1,6 +1,6 @@
 """Multi-pattern byte matcher for Creo filenames embedded in vault files.
 
-Used by Where Used vault indexing and companion open narrowing. Aho-Corasick
+Used by Where Used vault indexing and open-dependency narrowing. Aho-Corasick
 keeps large-product scans roughly O(file_bytes + pattern_bytes) instead of
 O(file_bytes × candidate_count).
 """

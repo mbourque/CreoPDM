@@ -563,7 +563,7 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "confirmLargeBulk" in script.text
     assert "keepBusy: true" in script.text
     assert "Refreshing…" in script.text
-    assert "include_companions: false" in script.text
+    assert "include_dependencies: false" in script.text
     assert "Downloading checked-out files…" in script.text
     assert "Checking out…" in script.text
     assert "Cancelling checkout…" in script.text
@@ -602,12 +602,12 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "isSoftNavUrl(next)" in reload_body
     assert 'softNavigate(next, "replace")' in reload_body
     assert "if (!inCreoBrowser())" in reload_body
-    assert "checkout-companions" in script.text
+    assert "checkout-dependencies" in script.text
     assert "Only skip the chooser when the Checkout column says it is already mine" in script.text
     assert "Do not trust data-owned alone" in script.text
     assert "skip a one-option dialog" in script.text
     assert "Working directory only applies inside Creo's embedded browser" in script.text
-    assert "Check out this file and its companions" in home.text
+    assert "Check out this file and its dependencies" in home.text
     assert 'id="open-checkout-dialog"' in home.text
     assert "Open without checking out" in home.text
     assert 'id="open-checkout-set-wd"' in home.text

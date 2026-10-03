@@ -239,9 +239,9 @@ class CreoOpenRequest(BaseModel):
     product_id: str | None = None
     relative_path: str | None = None
     launch: bool = True
-    # Bulk checkout→cache fills each selected file once; companions would re-download
+    # Bulk checkout→cache fills each selected file once; dependencies would re-download
     # the same parts. Real Open still defaults to True so Retrieve has neighbors.
-    include_companions: bool = True
+    include_dependencies: bool = True
 
     @model_validator(mode="after")
     def require_open_target(self) -> "CreoOpenRequest":
@@ -258,7 +258,7 @@ class CreoOpenRequest(BaseModel):
         raise ValueError("Select a file to open.")
 
 
-class CreoOpenCompanion(BaseModel):
+class CreoOpenDependency(BaseModel):
     object_id: str | None = None
     product_id: str | None = None
     relative_path: str | None = None
@@ -280,7 +280,7 @@ class CreoOpenResponse(BaseModel):
     requires_agent_cache: bool = False
     creo_release: str | None = None
     url: str | None = None
-    companions: list[CreoOpenCompanion] = Field(default_factory=list)
+    dependencies: list[CreoOpenDependency] = Field(default_factory=list)
 
 
 class CreoStatusResponse(BaseModel):

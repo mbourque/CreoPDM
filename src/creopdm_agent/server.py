@@ -178,7 +178,7 @@ class MaterializeRequest(BaseModel):
     filename: str | None = None
     disk_name: str | None = None
     token: str | None = None
-    companions: list[MaterializeItem] = Field(default_factory=list)
+    dependencies: list[MaterializeItem] = Field(default_factory=list)
     # After History revert: download vault tip and trash local higher .N siblings.
     replace_newer: bool = False
 
@@ -189,7 +189,7 @@ class MaterializeResponse(BaseModel):
     filename: str
     disk_name: str
     bytes_written: int = 0
-    companions_written: int = 0
+    dependencies_written: int = 0
     purged_newer: list[str] = Field(default_factory=list)
 
 
@@ -2060,26 +2060,26 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         if token:
             headers["Authorization"] = f"Bearer {token}"
         logger.info(
-            "Materialize start: %s (+%s companion request%s) → %s",
+            "Materialize start: %s (+%s dependency request%s) → %s",
             primary.disk_name or primary.filename or primary.object_id,
-            len(payload.companions),
-            "" if len(payload.companions) == 1 else "s",
+            len(payload.dependencies),
+            "" if len(payload.dependencies) == 1 else "s",
             target_dir,
         )
         with httpx.Client(timeout=120.0, follow_redirects=True) as client:
             target, logical, disk_name, nbytes = _download(
                 client, base, primary, target_dir, headers
             )
-            companions_written = 0
-            for item in payload.companions:
+            dependencies_written = 0
+            for item in payload.dependencies:
                 if not item.object_id and not (item.product_id and item.relative_path):
                     continue
                 logger.info(
-                    "Downloading companion %s…",
+                    "Downloading dependency %s…",
                     item.disk_name or item.filename or item.object_id,
                 )
                 _download(client, base, item, target_dir, headers)
-                companions_written += 1
+                dependencies_written += 1
         purged_newer: list[str] = []
         if payload.replace_newer:
             purged_newer = _purge_newer_local_saves(target_dir, target)
@@ -2089,12 +2089,12 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 len(purged_newer),
             )
         logger.info(
-            "Materialize done: %s ready for Creo (%s bytes, %s companion%s) in %s — "
+            "Materialize done: %s ready for Creo (%s bytes, %s dependenc%s) in %s — "
             "metadata save happens on the CreoPDM server after Creo.JS gather, not in the agent",
             disk_name,
             nbytes,
-            companions_written,
-            "" if companions_written == 1 else "s",
+            dependencies_written,
+            "y" if dependencies_written == 1 else "ies",
             target_dir,
         )
         return MaterializeResponse(
@@ -2103,7 +2103,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             filename=logical,
             disk_name=disk_name,
             bytes_written=nbytes,
-            companions_written=companions_written,
+            dependencies_written=dependencies_written,
             purged_newer=purged_newer,
         )
 

@@ -1,5 +1,5 @@
 from creopdm.utils.cad_name_matcher import CadNameMatcher
-from creopdm.utils.creo_companions import names_referenced_in_model
+from creopdm.utils.creo_dependencies import names_referenced_in_model
 
 
 def test_cad_name_matcher_finds_logical_and_stem():

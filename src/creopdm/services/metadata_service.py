@@ -29,9 +29,9 @@ from creopdm.schemas.common import (
     WhereUsedResponse,
 )
 from creopdm.services.object_service import ObjectService
-from creopdm.utils.creo_companions import (
+from creopdm.utils.creo_dependencies import (
     model_references_filename,
-    needs_open_companions,
+    needs_open_dependencies,
     read_model_scan_blob,
 )
 from creopdm.utils.creo_model_class import normalize_creo_identity
@@ -338,7 +338,7 @@ class MetadataService:
             for other in siblings
             if other.id != obj.id
             and other.uuid not in items_by_parent
-            and needs_open_companions(other.object_type, other.filename)
+            and needs_open_dependencies(other.object_type, other.filename)
         ]
         vault_scan_skipped = False
         if vault_scan and len(asm_candidates) > _VAULT_SCAN_ASM_CAP:
@@ -447,7 +447,7 @@ class MetadataService:
             )
         objects = self._objects.list_objects(session, product.id)
         parents = sorted(
-            [row for row in objects if needs_open_companions(row.object_type, row.filename)],
+            [row for row in objects if needs_open_dependencies(row.object_type, row.filename)],
             key=lambda row: (row.filename or "").lower(),
         )
         total = len(parents)

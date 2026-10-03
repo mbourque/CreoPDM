@@ -533,7 +533,7 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "Open timed out" in open_wrap
     assert "function setOpenPrepareBusyMessage(" in script
     assert "function setOpenDownloadBusyMessage(" in script
-    assert 'setBusyMessage("Finding companions…")' in script
+    assert 'setBusyMessage("Finding dependencies…")' in script
     assert "setOpenPrepareBusyMessage()" in open_fn
     assert "setOpenDownloadBusyMessage(prepared)" in open_fn
     assert "Downloading ${total} files to local workspace…" in script
