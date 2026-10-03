@@ -471,6 +471,8 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "Disk space" in page.text
     assert "Database" in page.text
     assert "Active checkouts" in page.text
+    assert "Email all users" in page.text
+    assert 'action="/admin/utilities/email-all"' in page.text
 
     api = auth_client.get("/api/admin/utilities/status")
     assert api.status_code == 200
@@ -512,6 +514,95 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert denied.status_code == 403
     denied_api = auth_client.get("/api/admin/utilities/status")
     assert denied_api.status_code == 403
+    denied_mail = auth_client.post(
+        "/admin/utilities/email-all",
+        data={
+            "subject": "Hi",
+            "message": "Body",
+            "confirm": "1",
+        },
+        follow_redirects=False,
+    )
+    assert denied_mail.status_code == 403
+
+
+def test_admin_utilities_email_all_users(auth_client, auth_ctx):
+    """Utilities broadcast emails each active user privately; confirm + fields required."""
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "email": "admin@example.com",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Eng",
+            "username": "eng",
+            "email": "eng@example.com",
+            "role": BuiltinRole.ENGINEER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "EngPass1",
+            "password_confirm": "EngPass1",
+        },
+        follow_redirects=False,
+    )
+    auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Off",
+            "username": "off",
+            "email": "off@example.com",
+            "role": BuiltinRole.VIEWER.value,
+            "status": UserStatus.DISABLED.value,
+            "password": "OffPass1",
+            "password_confirm": "OffPass1",
+        },
+        follow_redirects=False,
+    )
+
+    sent: list[tuple[str, str, str]] = []
+
+    def capture(to, subject, message):
+        sent.append((to, subject, message))
+
+    auth_ctx.email.send = capture  # type: ignore[method-assign]
+
+    no_confirm = auth_client.post(
+        "/admin/utilities/email-all",
+        data={"subject": "Notice", "message": "Please read.", "confirm": ""},
+    )
+    assert no_confirm.status_code == 400
+    assert "Confirm" in no_confirm.text
+    assert sent == []
+
+    blank = auth_client.post(
+        "/admin/utilities/email-all",
+        data={"subject": "", "message": "Please read.", "confirm": "1"},
+    )
+    assert blank.status_code == 400
+    assert "Subject is required" in blank.text
+    assert sent == []
+
+    ok = auth_client.post(
+        "/admin/utilities/email-all",
+        data={
+            "subject": "Maintenance tonight",
+            "message": "CreoPDM will be unavailable after 6pm.",
+            "confirm": "1",
+        },
+    )
+    assert ok.status_code == 200
+    assert "Email sent to 2 active users" in ok.text
+    assert {row[0] for row in sent} == {"admin@example.com", "eng@example.com"}
+    assert all(row[1] == "Maintenance tonight" for row in sent)
+    assert "unavailable after 6pm" in sent[0][2]
+    assert "off@example.com" not in {row[0] for row in sent}
 
 
 def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):

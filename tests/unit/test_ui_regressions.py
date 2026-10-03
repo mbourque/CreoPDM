@@ -1560,6 +1560,8 @@ def test_admin_hub_panel_fills_full_width():
     )
     assert "<h1>Utilities</h1>" in utilities
     assert "Disk space" in utilities
+    assert "Email all users" in utilities
+    assert 'action="/admin/utilities/email-all"' in utilities
     assert ".utilities-status-ok" in css
     settings = (ROOT / "src" / "creopdm" / "templates" / "settings.html").read_text(encoding="utf-8")
     assert "<h1>System Settings</h1>" in settings

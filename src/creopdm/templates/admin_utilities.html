@@ -15,7 +15,35 @@
     <h1>Utilities</h1>
     <a class="btn" href="/admin/utilities">Refresh</a>
   </div>
-  <p class="muted">Read-only checks for this CreoPDM server. Refresh to re-run probes.</p>
+  <p class="muted">Server health checks and admin tools. Refresh re-runs the probes below.</p>
+
+  {% if success %}
+  <p class="ok">{{ success }}</p>
+  {% endif %}
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+
+  <section class="settings-card">
+    <h2>Email all users</h2>
+    <p class="muted small">Sends one message per <strong>active</strong> user using Administration → Email delivery settings. Addresses stay private (not listed in To/Cc).</p>
+    <form method="post" action="/admin/utilities/email-all" class="settings-form" id="utilities-email-all-form">
+      <label>Subject
+        <input name="subject" type="text" value="{{ broadcast_subject }}" required maxlength="200">
+      </label>
+      <label>Message
+        <textarea name="message" rows="6" required maxlength="10000">{{ broadcast_message }}</textarea>
+      </label>
+      <p class="muted small">Recipients: {{ broadcast_recipient_count }} active user{% if broadcast_recipient_count != 1 %}s{% endif %} with email.</p>
+      <label class="choice">
+        <input type="checkbox" name="confirm" value="1" required>
+        I want to email all {{ broadcast_recipient_count }} active user{% if broadcast_recipient_count != 1 %}s{% endif %}
+      </label>
+      <p class="form-actions">
+        <button type="submit" class="btn btn-primary" {% if broadcast_recipient_count < 1 %}disabled{% endif %}>Send email to all users</button>
+      </p>
+    </form>
+  </section>
 
   <section class="settings-card">
     <h2>System health

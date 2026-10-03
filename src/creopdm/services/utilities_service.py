@@ -1,4 +1,4 @@
-"""Read-only server diagnostics for Administration → Utilities."""
+"""Server diagnostics and admin utilities for Administration → Utilities."""
 
 from __future__ import annotations
 
@@ -6,12 +6,14 @@ import platform
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from creopdm.auth_constants import UserStatus
 from creopdm.config import (
     database_url_for_display,
     path_for_settings_display,
@@ -19,14 +21,90 @@ from creopdm.config import (
 )
 from creopdm.constants import APP_NAME, APP_VERSION, CheckoutStatus
 from creopdm.context import AppContext
+from creopdm.exceptions import ValidationAppError
+from creopdm.logging_setup import get_logger
 from creopdm.models.checkout import Checkout
 from creopdm.models.product import Product
 from creopdm.models.user import User
 from creopdm.schemas.common import UtilitiesDiskUsage, UtilitiesProbe, UtilitiesStatusResponse
 from creopdm.site_availability import normalize_site_availability
 
+logger = get_logger("utilities")
+
 # Warn when free space on a volume drops below this (bytes).
 _LOW_DISK_BYTES = 1_073_741_824  # 1 GiB
+
+
+@dataclass(frozen=True, slots=True)
+class BroadcastEmailResult:
+    sent: int
+    failed: int
+    recipient_count: int
+    errors: tuple[str, ...] = ()
+
+
+def active_user_emails(db: Session) -> list[str]:
+    """Unique email addresses for ACTIVE users (order preserved)."""
+    rows = db.scalars(
+        select(User.email)
+        .where(User.status == UserStatus.ACTIVE.value)
+        .order_by(User.username)
+    ).all()
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in rows:
+        addr = (raw or "").strip()
+        if not addr:
+            continue
+        key = addr.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(addr)
+    return out
+
+
+def send_email_to_all_users(
+    ctx: AppContext,
+    db: Session,
+    *,
+    subject: str,
+    message: str,
+) -> BroadcastEmailResult:
+    """Email each active user individually (addresses stay private)."""
+    subj = (subject or "").strip()
+    body = (message or "").strip()
+    if not subj:
+        raise ValidationAppError("Subject is required.")
+    if not body:
+        raise ValidationAppError("Message is required.")
+    recipients = active_user_emails(db)
+    if not recipients:
+        raise ValidationAppError("No active users with an email address.")
+
+    sent = 0
+    errors: list[str] = []
+    for addr in recipients:
+        try:
+            ctx.email.send(addr, subj, body)
+            sent += 1
+        except Exception as exc:  # noqa: BLE001 — continue other recipients
+            logger.warning("Broadcast email failed for %s: %s", addr, exc)
+            msg = getattr(exc, "message", None) or str(exc) or "send failed"
+            errors.append(f"{addr}: {msg}")
+
+    failed = len(recipients) - sent
+    if sent == 0:
+        raise ValidationAppError(
+            "Could not send email to any user. "
+            + (errors[0] if errors else "Check Administration → Email delivery settings.")
+        )
+    return BroadcastEmailResult(
+        sent=sent,
+        failed=failed,
+        recipient_count=len(recipients),
+        errors=tuple(errors[:5]),
+    )
 
 
 def _format_storage_bytes(value: int) -> str:

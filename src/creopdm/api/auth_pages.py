@@ -2232,14 +2232,22 @@ def admin_email_submit(
     return _render(success="Email settings saved.")
 
 
-@router.get("/admin/utilities", response_class=HTMLResponse)
-def admin_utilities_page(
-    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+_DEFAULT_BROADCAST_SUBJECT = "Message from CreoPDM"
+
+
+def _utilities_page_response(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    manager: User,
+    *,
+    broadcast_subject: str = _DEFAULT_BROADCAST_SUBJECT,
+    broadcast_message: str = "",
+    error: str | None = None,
+    success: str | None = None,
+    status_code: int = 200,
 ):
-    manager = _require_utilities_access(request, ctx, db)
-    if _is_blocked(manager):
-        return manager
-    from creopdm.services.utilities_service import collect_utilities_status
+    from creopdm.services.utilities_service import active_user_emails, collect_utilities_status
 
     status = collect_utilities_status(ctx, db)
     return templates.TemplateResponse(
@@ -2248,5 +2256,85 @@ def admin_utilities_page(
         {
             **_base_ctx(request, ctx, current_user=manager),
             "status": status,
+            "broadcast_recipient_count": len(active_user_emails(db)),
+            "broadcast_subject": broadcast_subject,
+            "broadcast_message": broadcast_message,
+            "error": error,
+            "success": success,
         },
+        status_code=status_code,
+    )
+
+
+@router.get("/admin/utilities", response_class=HTMLResponse)
+def admin_utilities_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_utilities_access(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return _utilities_page_response(request, ctx, db, manager)
+
+
+@router.post("/admin/utilities/email-all", response_class=HTMLResponse)
+def admin_utilities_email_all(
+    request: Request,
+    subject: str = Form(""),
+    message: str = Form(""),
+    confirm: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_utilities_access(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    from creopdm.services.utilities_service import send_email_to_all_users
+
+    subj = (subject or "").strip()
+    body = message or ""
+    if confirm != "1":
+        return _utilities_page_response(
+            request,
+            ctx,
+            db,
+            manager,
+            broadcast_subject=subj or _DEFAULT_BROADCAST_SUBJECT,
+            broadcast_message=body,
+            error="Confirm that you want to email all active users.",
+            status_code=400,
+        )
+    try:
+        result = send_email_to_all_users(ctx, db, subject=subj, message=body)
+    except CreoPDMError as exc:
+        return _utilities_page_response(
+            request,
+            ctx,
+            db,
+            manager,
+            broadcast_subject=subj or _DEFAULT_BROADCAST_SUBJECT,
+            broadcast_message=body,
+            error=exc.message,
+            status_code=400,
+        )
+    if result.failed:
+        detail = f" Sent {result.sent} of {result.recipient_count}; {result.failed} failed."
+        if result.errors:
+            detail += " " + "; ".join(result.errors)
+        return _utilities_page_response(
+            request,
+            ctx,
+            db,
+            manager,
+            broadcast_subject=_DEFAULT_BROADCAST_SUBJECT,
+            broadcast_message="",
+            success=detail.strip(),
+        )
+    return _utilities_page_response(
+        request,
+        ctx,
+        db,
+        manager,
+        broadcast_subject=_DEFAULT_BROADCAST_SUBJECT,
+        broadcast_message="",
+        success=f"Email sent to {result.sent} active user{'s' if result.sent != 1 else ''}.",
     )
