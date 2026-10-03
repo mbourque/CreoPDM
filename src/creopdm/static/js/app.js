@@ -5203,7 +5203,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       try {
         return await materializeCheckedOutToAgentCache(ids, (done, total) => {
           if (total >= BULK_AGENT_CACHE_ZIP_THRESHOLD && done === 0) {
-            setBusyMessage(`Checking local cache for ${total} files…`);
+            setBusyMessage(`Checking local workspace for ${total} files…`);
           } else {
             setBusyMessage(`Downloading to local workspace… ${done} of ${total}`);
           }
@@ -6021,11 +6021,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       headers: agentAuthHeaders(),
     });
     if (!response.ok) {
-      throw new Error("Local CreoPDM agent could not provide a cache folder.");
+      throw new Error("Local CreoPDM agent could not provide a workspace folder.");
     }
     const body = await response.json();
     if (!body || !body.path) {
-      throw new Error("Local CreoPDM agent returned no cache path.");
+      throw new Error("Local CreoPDM agent returned no workspace path.");
     }
     return String(body.path);
   }
@@ -6063,7 +6063,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         showError($("#toolbar-error"), text.slice("CREOPDM_ERROR:".length));
         return;
       }
-      showOk("Creo working directory set to the local agent cache.");
+      showOk("Creo working directory set to the local workspace.");
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
       if (!message || message === "[object Object]" || message === "{}") {
@@ -7281,7 +7281,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       try {
         return await materializeCheckedOutToAgentCache(syncedIds, (done, total) => {
           if (total >= BULK_AGENT_CACHE_ZIP_THRESHOLD && done === 0) {
-            setBusyMessage(`Checking local cache for ${total} files…`);
+            setBusyMessage(`Checking local workspace for ${total} files…`);
           } else {
             setBusyMessage(`Downloading checked-out files… ${done} of ${total}`);
           }
@@ -7557,8 +7557,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         : "";
     const confirmMsg =
       count === 1
-        ? "Undo checkout of this file?\n\nYour lock is released. Unsaved vault changes for this file may be discarded. Local agent cache files are kept."
-        : `Undo checkout of ${count} files?\n\nYour locks are released. Unsaved vault changes for these files may be discarded. Local agent cache files are kept.${slowNote}`;
+        ? "Undo checkout of this file?\n\nYour lock is released. Unsaved vault changes for this file may be discarded. Local workspace files are kept."
+        : `Undo checkout of ${count} files?\n\nYour locks are released. Unsaved vault changes for these files may be discarded. Local workspace files are kept.${slowNote}`;
     if (!window.confirm(confirmMsg)) return;
     showError($("#toolbar-error"), "");
     if (count === 1 && !selectedRows().length) {
@@ -8856,8 +8856,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       title: paths.length === 1 ? "Remove from workspace" : `Remove ${paths.length} files from workspace`,
       lead:
         paths.length === 1
-          ? "This moves the file from the local workspace on this PC (creopdm-agent cache) to the Recycle Bin. The vault and product list are unchanged."
-          : "These files move from the local workspace on this PC (creopdm-agent cache) to the Recycle Bin. The vault and product list are unchanged.",
+          ? "This moves the file from the local workspace on this PC to the Recycle Bin. The vault and product list are unchanged."
+          : "These files move from the local workspace on this PC to the Recycle Bin. The vault and product list are unchanged.",
       note: "This cannot be undone from CreoPDM. Restore from the Recycle Bin on this PC if needed.",
       submitLabel: "Remove from Workspace",
     });
@@ -8930,7 +8930,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     const confirmed = await confirmByProductName({
       title: "Purge workspace",
-      lead: `About to move ${wouldDelete} older local Creo model save(s) from the agent cache to the Recycle Bin on this PC. The vault revision and any newer local work stay. The vault is not changed.`,
+      lead: `About to move ${wouldDelete} older local Creo model save(s) from the local workspace to the Recycle Bin on this PC. The vault revision and any newer local work stay. The vault is not changed.`,
       detailsHtml: formatPurgeConfirmDetails(preview),
       note: "This cannot be undone from CreoPDM. Restore from the Recycle Bin on this PC if needed.",
       submitLabel: `Purge ${wouldDelete} save(s)`,
@@ -9007,7 +9007,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const confirmed = await confirmByProductName({
       title: "Clear workspace",
       lead:
-        "This clears this product’s local workspace on this PC (everything inside the creopdm-agent cache folder). "
+        "This clears this product’s local workspace on this PC (everything inside the workspace folder). "
         + "Local-only new files that were never added to the product are deleted. "
         + "The empty workspace folder stays so Creo’s working directory can remain set. "
         + "Vault copies and the product file list are not changed — open or rematerialize from the vault when you need files again.",

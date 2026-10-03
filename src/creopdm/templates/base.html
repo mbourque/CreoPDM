@@ -71,7 +71,7 @@
         <span>Delete workspace files</span>
       </label>
       <p class="muted small" id="danger-confirm-workspace-hint" hidden>
-        Moves matching files from the local creopdm-agent cache on this PC to the Recycle Bin.
+        Moves matching files from the local workspace on this PC to the Recycle Bin.
       </p>
       <label id="danger-confirm-name-label">Type the product name to confirm
         <input name="confirm_name" id="danger-confirm-input" required maxlength="255" autocomplete="off">
@@ -524,7 +524,7 @@ function setWorkingDirectory(directory) {
             }
             if (!detail || detail === "[object Object]" || detail === "{}") {
                 detail = "Creo could not change to:\n" + directory
-                    + "\nUse a folder on this Creo PC (creopdm-agent cache when CreoPDM is remote).";
+                    + "\nUse a folder on this Creo PC (local workspace via creopdm-agent when CreoPDM is remote).";
             }
             return "CREOPDM_ERROR:" + detail;
         }

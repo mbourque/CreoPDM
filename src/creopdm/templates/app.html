@@ -297,7 +297,7 @@
 
     <section class="tab-panel" id="panel-changes" hidden>
       {% if product_ui.show_add and product_ui.show_checkin %}
-      <p class="muted small" id="changes-help">New files in the vault or your local workspace (creopdm-agent cache), plus vault files that differ from the last checked-in version. Use <strong>Add</strong> for new files and <strong>Check In</strong> for modified saves. Checkout locks are on the Files checked out tab.</p>
+      <p class="muted small" id="changes-help">New files in the vault or your local workspace, plus vault files that differ from the last checked-in version. Use <strong>Add</strong> for new files and <strong>Check In</strong> for modified saves. Checkout locks are on the Files checked out tab.</p>
       {% endif %}
       <div class="table-wrap">
         <table class="grid" id="changes-table">
@@ -381,7 +381,7 @@
 
 <footer class="toolbar">
   <div class="toolbar-actions">
-    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this product's local workspace (creopdm-agent cache on this PC).">
+    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this product's local workspace on this PC.">
       <button type="button" class="btn" id="set-creo-dir-btn"
               {% if workspace_path %}data-workspace="{{ workspace_path }}"{% endif %}
               disabled hidden>Set Working Directory</button>
@@ -422,7 +422,7 @@
                 title="Open the selected file in Creo or its Windows associated program.">Open selected…</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-workspace-btn"
                 {% if selected %}data-product="{{ selected.uuid }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}
-                title="Open this product’s local workspace on this PC (creopdm-agent cache). Requires creopdm-agent.">Open workspace…</button>
+                title="Open this product’s local workspace on this PC. Requires creopdm-agent.">Open workspace…</button>
       </div>
     </div>
     {% if product_ui.show_checkout or product_ui.show_undo_checkout or product_ui.show_force_undo_checkout %}
@@ -510,15 +510,15 @@
         <button type="button" class="toolbar-menu-item" role="menuitem" id="discard-local-btn"
                 {% if selected %}data-product-name="{{ selected.name }}"{% endif %}
                 disabled
-                title="Move selected files from the local workspace on this PC (creopdm-agent cache) to the Recycle Bin. Does not affect the vault or product list.">Remove from Workspace</button>
+                title="Move selected files from the local workspace on this PC to the Recycle Bin. Does not affect the vault or product list.">Remove from Workspace</button>
         <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="purge-versions-btn"
                 {% if selected %}data-product="{{ selected.uuid }}" data-product-name="{{ selected.name }}"{% endif %}
                 disabled
-                title="Move local agent-cache numbered saves older than the vault copy to the Recycle Bin (configured purgeable extensions). Keeps the vault revision and any newer local work. Does not change the vault.">Purge workspace…</button>
+                title="Move older local numbered saves (older than the vault copy) to the Recycle Bin (configured purgeable extensions). Keeps the vault revision and any newer local work. Does not change the vault.">Purge workspace…</button>
         <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="delete-workspace-btn"
                 {% if selected %}data-product="{{ selected.uuid }}" data-product-name="{{ selected.name }}"{% endif %}
                 disabled
-                title="Clear this product’s local workspace on this PC (creopdm-agent cache contents), including local-only new files. Keeps the workspace folder so Creo’s working directory can stay set. Vault copies and the product list stay.">Clear workspace…</button>
+                title="Clear this product’s local workspace on this PC, including local-only new files. Keeps the workspace folder so Creo’s working directory can stay set. Vault copies and the product list stay.">Clear workspace…</button>
         {% if product_ui.show_remove_vault %}
         <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="purge-workspace-btn"
                 {% if selected %}data-product-name="{{ selected.name }}"{% endif %}
@@ -617,7 +617,7 @@
         <label for="delete-local-workspace">Also delete local workspace on this PC</label>
       </div>
     </div>
-    <p class="muted small">Removes the creopdm-agent cache folder. This can fail if Creo still has files open or its working directory is set to that folder.</p>
+    <p class="muted small">Removes the local workspace folder. This can fail if Creo still has files open or its working directory is set to that folder.</p>
     <p class="error" id="delete-product-error" hidden></p>
     <div class="dialog-actions">
       <button type="button" class="btn" id="delete-product-cancel">Cancel</button>

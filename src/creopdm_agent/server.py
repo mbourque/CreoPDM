@@ -931,7 +931,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             except ValueError as exc:
                 raise HTTPException(
                     status_code=403,
-                    detail="Refusing to open a path outside the agent cache.",
+                    detail="Refusing to open a path outside the local workspace.",
                 ) from exc
             if candidate.is_dir():
                 return candidate
@@ -1163,7 +1163,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                         PushItemResult(
                             object_id=object_id,
                             filename=filename or object_id,
-                            message=f"No local cache file found for {filename or object_id}.",
+                            message=f"No local workspace file found for {filename or object_id}.",
                         )
                     )
                     continue
@@ -1286,7 +1286,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     HashPathResult(
                         relative_path=rel,
                         ok=False,
-                        message="Path is outside the agent cache.",
+                        message="Path is outside the local workspace.",
                     )
                 )
                 continue
@@ -1295,7 +1295,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     HashPathResult(
                         relative_path=rel,
                         ok=False,
-                        message=f"No local cache file found for {rel}.",
+                        message=f"No local workspace file found for {rel}.",
                     )
                 )
                 continue
@@ -1356,7 +1356,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                         PushItemResult(
                             object_id=product_id,
                             filename=Path(rel).name,
-                            message="Path is outside the agent cache.",
+                            message="Path is outside the local workspace.",
                         )
                     )
                     continue
@@ -1365,7 +1365,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                         PushItemResult(
                             object_id=product_id,
                             filename=Path(rel).name,
-                            message=f"No local cache file found for {rel}.",
+                            message=f"No local workspace file found for {rel}.",
                         )
                     )
                     continue
@@ -1839,7 +1839,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     PushItemResult(
                         object_id=product_id,
                         filename=Path(rel_label).name,
-                        message=f"No local cache file found for {rel_label}.",
+                        message=f"No local workspace file found for {rel_label}.",
                     )
                 )
                 return
@@ -1884,7 +1884,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     PushItemResult(
                         object_id=product_id,
                         filename=Path(rel).name,
-                        message="Path is outside the agent cache.",
+                        message="Path is outside the local workspace.",
                     )
                 )
                 continue
@@ -1904,7 +1904,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     PushItemResult(
                         object_id=product_id,
                         filename=Path(rel).name,
-                        message=f"No local cache file found for {rel}.",
+                        message=f"No local workspace file found for {rel}.",
                     )
                 )
                 continue
@@ -1930,10 +1930,10 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(
                 status_code=403,
-                detail="Refusing to clear a path outside the agent cache.",
+                detail="Refusing to clear a path outside the local workspace.",
             ) from exc
         if cache_dir.resolve() == root_resolved:
-            raise HTTPException(status_code=400, detail="Refusing to clear the agent cache root.")
+            raise HTTPException(status_code=400, detail="Refusing to clear the local workspace root.")
         if not cache_dir.exists():
             return DeleteProductCacheResponse(
                 ok=True,
@@ -1995,7 +1995,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     PushItemResult(
                         object_id=product_id,
                         filename=local.name,
-                        message="Path is outside the agent cache.",
+                        message="Path is outside the local workspace.",
                     )
                 )
                 continue
@@ -2131,7 +2131,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             except httpx.HTTPError as exc:
                 raise HTTPException(
                     status_code=502,
-                    detail=f"Could not fetch cache manifest from CreoPDM: {exc}",
+                    detail=f"Could not fetch workspace manifest from CreoPDM: {exc}",
                 ) from exc
             if manifest_response.status_code >= 400:
                 raise HTTPException(
@@ -2141,7 +2141,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             try:
                 manifest_body = manifest_response.json()
             except Exception as exc:
-                raise HTTPException(status_code=502, detail="Invalid cache manifest.") from exc
+                raise HTTPException(status_code=502, detail="Invalid workspace manifest.") from exc
             raw_items = manifest_body.get("items") if isinstance(manifest_body, dict) else None
             items = [
                 CachePlanItem(
@@ -2246,7 +2246,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(
                 status_code=403,
-                detail="Refusing to open a path outside the agent cache.",
+                detail="Refusing to open a path outside the local workspace.",
             ) from exc
         if not target.is_file():
             raise HTTPException(status_code=404, detail=f"File not found: {target}")

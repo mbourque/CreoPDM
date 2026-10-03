@@ -557,7 +557,7 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function materializeCheckedOutToAgentCache" in script.text
     assert "BULK_AGENT_CACHE_ZIP_THRESHOLD" in script.text
     assert "/materialize-zip" in script.text
-    assert "Checking local cache for ${total} files" in script.text
+    assert "Checking local workspace for ${total} files" in script.text
     assert "already local" in script.text
     assert "BULK_SLOW_WARN_THRESHOLD" in script.text
     assert "confirmLargeBulk" in script.text

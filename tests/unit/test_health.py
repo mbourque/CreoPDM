@@ -76,7 +76,7 @@ def test_home_page(client):
     assert 'type="text/creojs"' in text
     assert "function setWorkingDirectory" in text
     assert "CREOPDM_ERROR:No product is selected." in text
-    assert "creopdm-agent cache when CreoPDM is remote" in text
+    assert "local workspace via creopdm-agent when CreoPDM is remote" in text
     assert "session.OpenFile" in text
     assert "pfcModelType.MDL_MFG" in text
     assert "function creoCannotOpenNewerMessage" in text

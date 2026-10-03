@@ -550,7 +550,7 @@
 
 <footer class="toolbar" id="detail-toolbar">
   <div class="toolbar-actions">
-    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this product's local workspace (creopdm-agent cache on this PC).">
+    <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this product's local workspace on this PC.">
       <button type="button" class="btn" id="set-creo-dir-btn" data-workspace="{{ workspace_path }}" disabled hidden>Set Working Directory</button>
     </span>
     <div class="toolbar-menu" id="open-menu" hidden>
@@ -563,7 +563,7 @@
                 title="Open this file in Creo or its Windows associated program.">Open…</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-workspace-btn" hidden
                 data-product="{{ product.uuid }}" data-vault-folder="{{ product.vault_folder or product.uuid }}" data-folder="{{ workspace_folder }}"
-                title="Open this product’s local workspace on this PC (creopdm-agent cache). Requires creopdm-agent.">Open workspace…</button>
+                title="Open this product’s local workspace on this PC. Requires creopdm-agent.">Open workspace…</button>
       </div>
     </div>
     {% if product_ui.show_checkout or product_ui.show_undo_checkout or product_ui.show_force_undo_checkout %}

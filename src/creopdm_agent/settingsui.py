@@ -98,7 +98,7 @@ Add-Note 'Only if CreoPDM requires auth. Leave blank for local installs.'
 Add-Label 'Agent listen port (this Creo PC)'
 $agentPort = Add-Box ([string]$initial.agent_port)
 Add-Note 'Browser calls http://127.0.0.1:<port>. Match CreoPDM → Local Creo agent URL. Restart tray after changing.'
-Add-Label 'Local cache folder'
+Add-Label 'Local workspace folder'
 $cache = Add-Box ([string]$initial.local_root)
 Add-Note ('Default: ' + [string]$initial.local_root_default_example)
 Add-Label 'Health check interval (seconds)'
@@ -342,7 +342,7 @@ def run_settings_tk(settings: AgentConfig | None = None) -> int:
         "Restart tray after changing. Match CreoPDM Local Creo agent URL.",
     )
     row(
-        "Local cache folder",
+        "Local workspace folder",
         "local_root",
         str(payload["local_root"]),
         f"Default: {payload['local_root_default_example']}",

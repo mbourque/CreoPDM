@@ -301,7 +301,7 @@ def run_tray(settings: AgentConfig) -> int:
         Item("Show status", on_show_status),
         Item("Settings…", on_settings),
         Item("Show logs", on_show_logs),
-        Item("Open cache folder", on_open_cache),
+        Item("Open workspace folder", on_open_cache),
         pystray.Menu.SEPARATOR,
         Item("Quit", on_quit),
     )
