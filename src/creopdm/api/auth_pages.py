@@ -2244,7 +2244,19 @@ def admin_email_submit(
 _DEFAULT_BROADCAST_SUBJECT = "Message from CreoPDM"
 
 
-def _utilities_page_response(
+def _utilities_hub_response(
+    request: Request,
+    ctx: AppContext,
+    manager: User,
+):
+    return templates.TemplateResponse(
+        request,
+        "admin_utilities.html",
+        {**_base_ctx(request, ctx, current_user=manager)},
+    )
+
+
+def _utilities_email_response(
     request: Request,
     ctx: AppContext,
     db: Session,
@@ -2252,28 +2264,46 @@ def _utilities_page_response(
     *,
     broadcast_subject: str = _DEFAULT_BROADCAST_SUBJECT,
     broadcast_message: str = "",
+    error: str | None = None,
+    success: str | None = None,
+    status_code: int = 200,
+):
+    from creopdm.services.utilities_service import active_user_emails
+
+    return templates.TemplateResponse(
+        request,
+        "admin_utilities_email.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "broadcast_recipient_count": len(active_user_emails(db)),
+            "broadcast_subject": broadcast_subject,
+            "broadcast_message": broadcast_message,
+            "error": error,
+            "success": success,
+        },
+        status_code=status_code,
+    )
+
+
+def _utilities_compact_response(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    manager: User,
+    *,
     compact_product_id: str = "",
     compact_confirm_name: str = "",
     error: str | None = None,
     success: str | None = None,
     status_code: int = 200,
 ):
-    from creopdm.services.utilities_service import (
-        active_user_emails,
-        collect_utilities_status,
-        list_products_for_compact,
-    )
+    from creopdm.services.utilities_service import list_products_for_compact
 
-    status = collect_utilities_status(ctx, db)
     return templates.TemplateResponse(
         request,
-        "admin_utilities.html",
+        "admin_utilities_compact.html",
         {
             **_base_ctx(request, ctx, current_user=manager),
-            "status": status,
-            "broadcast_recipient_count": len(active_user_emails(db)),
-            "broadcast_subject": broadcast_subject,
-            "broadcast_message": broadcast_message,
             "compact_products": list_products_for_compact(db),
             "compact_product_id": compact_product_id,
             "compact_confirm_name": compact_confirm_name,
@@ -2284,6 +2314,24 @@ def _utilities_page_response(
     )
 
 
+def _utilities_health_response(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    manager: User,
+):
+    from creopdm.services.utilities_service import collect_utilities_status
+
+    return templates.TemplateResponse(
+        request,
+        "admin_utilities_health.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "status": collect_utilities_status(ctx, db),
+        },
+    )
+
+
 @router.get("/admin/utilities", response_class=HTMLResponse)
 def admin_utilities_page(
     request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
@@ -2291,7 +2339,37 @@ def admin_utilities_page(
     manager = _require_utilities_access(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    return _utilities_page_response(request, ctx, db, manager)
+    return _utilities_hub_response(request, ctx, manager)
+
+
+@router.get("/admin/utilities/email-all", response_class=HTMLResponse)
+def admin_utilities_email_all_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_utilities_access(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return _utilities_email_response(request, ctx, db, manager)
+
+
+@router.get("/admin/utilities/compact", response_class=HTMLResponse)
+def admin_utilities_compact_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_utilities_access(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return _utilities_compact_response(request, ctx, db, manager)
+
+
+@router.get("/admin/utilities/health", response_class=HTMLResponse)
+def admin_utilities_health_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_utilities_access(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return _utilities_health_response(request, ctx, db, manager)
 
 
 @router.post("/admin/utilities/email-all", response_class=HTMLResponse)
@@ -2311,7 +2389,7 @@ def admin_utilities_email_all(
     subj = (subject or "").strip()
     body = message or ""
     if confirm != "1":
-        return _utilities_page_response(
+        return _utilities_email_response(
             request,
             ctx,
             db,
@@ -2324,7 +2402,7 @@ def admin_utilities_email_all(
     try:
         result = send_email_to_all_users(ctx, db, subject=subj, message=body)
     except CreoPDMError as exc:
-        return _utilities_page_response(
+        return _utilities_email_response(
             request,
             ctx,
             db,
@@ -2338,7 +2416,7 @@ def admin_utilities_email_all(
         detail = f" Sent {result.sent} of {result.recipient_count}; {result.failed} failed."
         if result.errors:
             detail += " " + "; ".join(result.errors)
-        return _utilities_page_response(
+        return _utilities_email_response(
             request,
             ctx,
             db,
@@ -2347,7 +2425,7 @@ def admin_utilities_email_all(
             broadcast_message="",
             success=detail.strip(),
         )
-    return _utilities_page_response(
+    return _utilities_email_response(
         request,
         ctx,
         db,
@@ -2375,7 +2453,7 @@ def admin_utilities_compact_vault(
     pid = (product_id or "").strip()
     typed = confirm_name or ""
     if confirm != "1":
-        return _utilities_page_response(
+        return _utilities_compact_response(
             request,
             ctx,
             db,
@@ -2395,7 +2473,7 @@ def admin_utilities_compact_vault(
         db.commit()
     except CreoPDMError as exc:
         db.rollback()
-        return _utilities_page_response(
+        return _utilities_compact_response(
             request,
             ctx,
             db,
@@ -2411,7 +2489,7 @@ def admin_utilities_compact_vault(
         if versions
         else ""
     )
-    return _utilities_page_response(
+    return _utilities_compact_response(
         request,
         ctx,
         db,

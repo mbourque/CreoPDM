@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Utilities — {{ app_name }}{% endblock %}
 {% block content %}
-<article class="detail settings-page admin-page admin-utilities">
+<article class="detail settings-page admin-page admin-hub">
   <nav class="crumb">
     {% if can_view_products %}
     <a href="/">Products</a>
@@ -11,167 +11,22 @@
     <span>/</span>
     <span>Utilities</span>
   </nav>
-  <div class="utilities-heading">
-    <h1>Utilities</h1>
-    <a class="btn" href="/admin/utilities">Refresh</a>
+  <h1>Utilities</h1>
+  <p class="muted">Admin tools for broadcast email, vault cleanup, and server health.</p>
+
+  <div class="admin-tile-grid">
+    <section class="admin-tile">
+      <h2><a href="/admin/utilities/email-all">Email all users</a></h2>
+      <p>Send one message to every active user (addresses stay private).</p>
+    </section>
+    <section class="admin-tile">
+      <h2><a href="/admin/utilities/compact">Compact product vault history</a></h2>
+      <p>Squash one product’s Git history to the tip and free removed-file bytes.</p>
+    </section>
+    <section class="admin-tile">
+      <h2><a href="/admin/utilities/health">Health</a></h2>
+      <p>System health, database, Git, disk space, counts, and server paths.</p>
+    </section>
   </div>
-  <p class="muted">Server health checks and admin tools. Refresh re-runs the probes below.</p>
-
-  {% if success %}
-  <p class="ok">{{ success }}</p>
-  {% endif %}
-  {% if error %}
-  <p class="error">{{ error }}</p>
-  {% endif %}
-
-  <section class="settings-card">
-    <h2>Email all users</h2>
-    <p class="muted small">Sends one message per <strong>active</strong> user using Administration → Email delivery settings. Addresses stay private (not listed in To/Cc).</p>
-    <form method="post" action="/admin/utilities/email-all" class="settings-form" id="utilities-email-all-form">
-      <label>Subject
-        <input name="subject" type="text" value="{{ broadcast_subject }}" required maxlength="200">
-      </label>
-      <label>Message
-        <textarea name="message" rows="6" required maxlength="10000">{{ broadcast_message }}</textarea>
-      </label>
-      <p class="muted small">Recipients: {{ broadcast_recipient_count }} active user{% if broadcast_recipient_count != 1 %}s{% endif %} with email.</p>
-      <label class="choice">
-        <input type="checkbox" name="confirm" value="1" required>
-        I want to email all {{ broadcast_recipient_count }} active user{% if broadcast_recipient_count != 1 %}s{% endif %}
-      </label>
-      <p class="form-actions">
-        <button type="submit" class="btn btn-primary" {% if broadcast_recipient_count < 1 %}disabled{% endif %}>Send email to all users</button>
-      </p>
-    </form>
-  </section>
-
-  <section class="settings-card">
-    <h2>Compact product vault history</h2>
-    <p class="muted small">
-      Squashes one product vault to a <strong>single tip commit</strong> and runs Git cleanup so bytes from removed files leave <code>.git/objects</code>.
-      Tip files in the product stay. <strong>All older History versions for every file in that product are destroyed</strong> (Revert to those rows will not work).
-      Release every checkout first; the vault must be clean.
-    </p>
-    <form method="post" action="/admin/utilities/compact-vault" class="settings-form" id="utilities-compact-vault-form">
-      <label>Product
-        <select name="product_id" required>
-          <option value="">Select a product…</option>
-          {% for product in compact_products %}
-          <option value="{{ product.uuid }}" {% if compact_product_id == product.uuid %}selected{% endif %}>{{ product.name }}{% if product.state == 'ARCHIVED' %} (archived){% elif not product.active %} (inactive){% endif %}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>Type the product name to confirm
-        <input name="confirm_name" type="text" value="{{ compact_confirm_name }}" required autocomplete="off" maxlength="255">
-      </label>
-      <label class="choice">
-        <input type="checkbox" name="confirm" value="1" required>
-        I understand this permanently destroys older History for this product
-      </label>
-      <p class="form-actions">
-        <button type="submit" class="btn btn-danger" {% if not compact_products %}disabled{% endif %}>Compact vault history</button>
-      </p>
-    </form>
-  </section>
-
-  <section class="settings-card">
-    <h2>System health
-      <span class="utilities-status utilities-status-{{ status.status }}">{{ status.status }}</span>
-    </h2>
-    <dl class="kv">
-      <dt>Application</dt>
-      <dd>{{ status.app_name }} {{ status.app_version }}</dd>
-      <dt>Overall</dt>
-      <dd>{{ status.status }}{% if status.status == 'degraded' %} — see Git or disk warnings below{% elif status.status == 'error' %} — database probe failed{% endif %}</dd>
-      <dt>Server time</dt>
-      <dd>{{ status.server_time or "—" }}</dd>
-      <dt>Host</dt>
-      <dd>{{ status.hostname or "—" }}</dd>
-      <dt>Platform</dt>
-      <dd>{{ status.platform or "—" }}</dd>
-      <dt>Python</dt>
-      <dd>{{ status.python_version or "—" }}</dd>
-      <dt>Site availability</dt>
-      <dd>{{ status.site_availability }}</dd>
-      <dt>Auth</dt>
-      <dd>{% if status.auth_enabled %}Enabled{% else %}Disabled (test / local mode){% endif %}</dd>
-      <dt>Agent URL</dt>
-      <dd class="mono">{{ status.agent_base_url }}</dd>
-    </dl>
-  </section>
-
-  <section class="settings-card">
-    <h2>Database
-      <span class="utilities-status utilities-status-{{ status.database.status }}">{{ status.database.status }}</span>
-    </h2>
-    <dl class="kv">
-      <dt>Probe</dt>
-      <dd>{{ status.database.detail or "—" }}</dd>
-      <dt>Dialect</dt>
-      <dd>{{ status.database_dialect or "—" }}</dd>
-      <dt>URL</dt>
-      <dd class="mono">{{ status.database_url or "—" }}</dd>
-    </dl>
-  </section>
-
-  <section class="settings-card">
-    <h2>Git
-      <span class="utilities-status utilities-status-{{ status.git.status }}">{{ status.git.status }}</span>
-    </h2>
-    <dl class="kv">
-      <dt>Executable</dt>
-      <dd class="mono">{{ status.git_executable or "git" }}</dd>
-      <dt>Version</dt>
-      <dd>{{ status.git_version or status.git.detail or "—" }}</dd>
-    </dl>
-  </section>
-
-  <section class="settings-card">
-    <h2>Disk space</h2>
-    <p class="muted small"><strong>System</strong> is free/used on the volume that holds CreoPDM data (below about 1 GB free is degraded). Other rows are the size of that folder only.</p>
-    {% for row in status.disk %}
-    <h3 class="utilities-disk-label">{{ row.label }}</h3>
-    <dl class="kv">
-      <dt>Path</dt>
-      <dd class="mono">{{ row.path }}{% if not row.exists %} <span class="muted">(missing)</span>{% endif %}</dd>
-      {% if row.error %}
-      <dt>Error</dt>
-      <dd class="error">{{ row.error }}</dd>
-      {% elif row.kind == 'volume' %}
-      <dt>Free</dt>
-      <dd>{{ row.free_label }}{% if row.free_percent is not none %} ({{ row.free_percent }}%){% endif %}</dd>
-      <dt>Used</dt>
-      <dd>{{ row.used_label }} / {{ row.total_label }}</dd>
-      {% else %}
-      <dt>Used</dt>
-      <dd>{{ row.used_label }}</dd>
-      {% endif %}
-    </dl>
-    {% endfor %}
-  </section>
-
-  <section class="settings-card">
-    <h2>Counts</h2>
-    <dl class="kv">
-      <dt>Products</dt>
-      <dd>{{ status.product_count }}</dd>
-      <dt>Users</dt>
-      <dd>{{ status.user_count }}</dd>
-      <dt>Active checkouts</dt>
-      <dd>{{ status.active_checkout_count }}</dd>
-    </dl>
-  </section>
-
-  <section class="settings-card">
-    <h2>Server paths</h2>
-    <dl class="kv">
-      <dt>Data</dt>
-      <dd class="mono">{{ status.data_dir }}</dd>
-      <dt>Vaults</dt>
-      <dd class="mono">{{ status.vaults_dir }}</dd>
-      <dt>Logs</dt>
-      <dd class="mono">{{ status.logs_dir }}</dd>
-    </dl>
-  </section>
 </article>
 {% endblock %}

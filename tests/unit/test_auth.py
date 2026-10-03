@@ -446,7 +446,7 @@ def test_admin_can_open_settings(auth_client):
     assert 'href="/admin/products"' in hub.text
     assert 'href="/admin/email"' in hub.text
     assert 'href="/admin/utilities"' in hub.text
-    assert "System health, disk space" in hub.text
+    assert "Email all users, compact vault history" in hub.text
     # Help copy is plain text, not wrapped in the section link.
     assert 'href="/admin/users">Add and edit' not in hub.text
     settings_page = auth_client.get("/settings")
@@ -473,17 +473,33 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
         },
         follow_redirects=False,
     )
-    page = auth_client.get("/admin/utilities")
-    assert page.status_code == 200
-    assert "admin-page" in page.text
-    assert "System health" in page.text
-    assert "Disk space" in page.text
-    assert "Database" in page.text
-    assert "Active checkouts" in page.text
-    assert "Email all users" in page.text
-    assert 'action="/admin/utilities/email-all"' in page.text
-    assert "Compact product vault history" in page.text
-    assert 'action="/admin/utilities/compact-vault"' in page.text
+    hub = auth_client.get("/admin/utilities")
+    assert hub.status_code == 200
+    assert "admin-page" in hub.text
+    assert "admin-hub" in hub.text
+    assert 'href="/admin/utilities/email-all"' in hub.text
+    assert 'href="/admin/utilities/compact"' in hub.text
+    assert 'href="/admin/utilities/health"' in hub.text
+    assert 'action="/admin/utilities/email-all"' not in hub.text
+    assert 'action="/admin/utilities/compact-vault"' not in hub.text
+    assert "Disk space" not in hub.text
+
+    email_page = auth_client.get("/admin/utilities/email-all")
+    assert email_page.status_code == 200
+    assert "Email all users" in email_page.text
+    assert 'action="/admin/utilities/email-all"' in email_page.text
+
+    compact_page = auth_client.get("/admin/utilities/compact")
+    assert compact_page.status_code == 200
+    assert "Compact product vault history" in compact_page.text
+    assert 'action="/admin/utilities/compact-vault"' in compact_page.text
+
+    health = auth_client.get("/admin/utilities/health")
+    assert health.status_code == 200
+    assert "System health" in health.text
+    assert "Disk space" in health.text
+    assert "Database" in health.text
+    assert "Active checkouts" in health.text
 
     api = auth_client.get("/api/admin/utilities/status")
     assert api.status_code == 200
@@ -523,6 +539,12 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     )
     denied = auth_client.get("/admin/utilities", follow_redirects=False)
     assert denied.status_code == 403
+    for path in (
+        "/admin/utilities/email-all",
+        "/admin/utilities/compact",
+        "/admin/utilities/health",
+    ):
+        assert auth_client.get(path, follow_redirects=False).status_code == 403
     denied_api = auth_client.get("/api/admin/utilities/status")
     assert denied_api.status_code == 403
     denied_mail = auth_client.post(

@@ -484,10 +484,13 @@ Needs `utilities.access` (Administrator by default; CreoPDM Administration only)
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Open **Utilities** | Show **Email all users**, **Compact product vault history**, system health, database probe, Git version, disk space (**System** volume free/used once; Data / Vaults / Logs each show that folder’s used size), product/user/checkout counts, and server paths | Let PDM Manager / Engineer open it without the permission; repeat the same volume free/used under every path |
-| Click **Refresh** | Re-run the probes and show updated values | Change settings or mutate vault data |
+| Open **Utilities** | Show three hub tiles: **Email all users**, **Compact product vault history**, and **Health** (same pattern as Administration home) | Dump every tool and health section on one long page; let PDM Manager / Engineer open it without the permission |
+| Open **Email all users** | Show the broadcast form on its own page | |
 | Fill subject + message, check the confirm box, **Send email to all users** | Email each **active** user individually (using Administration → Email delivery settings); skip disabled accounts; keep addresses private | Send without confirm; put every address in one To/Cc list; email disabled users |
+| Open **Compact product vault history** | Show the compact form on its own page | |
 | Choose a product, type its **exact** name, check the danger box, **Compact vault history** | Show the busy overlay (**Compacting vault history for …**) until the server finishes; squash that product’s vault to one tip commit, prune older History versions in the DB, and Git-gc so removed-file bytes leave `.git/objects`; tip files stay; report before/after `.git` size; auto-align leftover working-tree drift after Remove-from-Product (do not fail only because purge left deleted paths uncommitted) | Leave you staring at a frozen form with no busy feedback; run without name match / danger confirm; run while any checkout is active; rewrite other products; keep old History rows that point at deleted Git commits |
+| Open **Health** | Show system health, database probe, Git version, disk space (**System** volume free/used once; Data / Vaults / Logs each show that folder’s used size), product/user/checkout counts, and server paths | Repeat the same volume free/used under every path |
+| Click **Refresh** on Health | Re-run the probes and show updated values | Change settings or mutate vault data |
 
 ### Email (Administration → Email)
 
@@ -535,7 +538,7 @@ Try the same with **Add folder…**, **Add folders…**, and **Compressed data�
 - Add user → new account has no products until Membership grants them.  
 - Role dropdown → your own role / a peer role / a higher role must not appear.  
 - Email admin: change SMTP fields then Send test without Save → blocked.
-- Utilities without `utilities.access` → 403; with it → health / disk / counts / compact vault form shown.
+- Utilities without `utilities.access` → 403; with it → hub tiles for email-all / compact / health; each opens its own page.
 - Compact vault history → tip stays; older History gone; blocked when checkouts active or vault dirty; busy overlay until the form POST returns.
 - Utilities email-all without confirm or blank subject → blocked; disabled users not emailed.
 - Cancel Watch / Stop watching confirmation → subscription unchanged.

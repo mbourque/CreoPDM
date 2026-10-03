@@ -1591,14 +1591,28 @@ def test_admin_hub_panel_fills_full_width():
         encoding="utf-8"
     )
     assert "<h1>Utilities</h1>" in utilities
-    assert "Disk space" in utilities
+    assert "admin-hub" in utilities
+    assert 'href="/admin/utilities/email-all"' in utilities
+    assert 'href="/admin/utilities/compact"' in utilities
+    assert 'href="/admin/utilities/health"' in utilities
+    assert 'action="/admin/utilities/email-all"' not in utilities
+    assert "Disk space" not in utilities
+    email_util = (
+        ROOT / "src" / "creopdm" / "templates" / "admin_utilities_email.html"
+    ).read_text(encoding="utf-8")
+    assert 'action="/admin/utilities/email-all"' in email_util
+    compact_util = (
+        ROOT / "src" / "creopdm" / "templates" / "admin_utilities_compact.html"
+    ).read_text(encoding="utf-8")
+    assert 'id="utilities-compact-vault-form"' in compact_util
+    health = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities_health.html").read_text(
+        encoding="utf-8"
+    )
+    assert "Disk space" in health
     # System volume row is {{ row.label }} from the API; template gates free/used on kind.
-    assert "row.kind == 'volume'" in utilities or 'row.kind == "volume"' in utilities
-    assert "size of that folder only" in utilities
-    assert "<strong>System</strong>" in utilities
-    assert "Email all users" in utilities
-    assert 'action="/admin/utilities/email-all"' in utilities
-    assert 'id="utilities-compact-vault-form"' in utilities
+    assert "row.kind == 'volume'" in health or 'row.kind == "volume"' in health
+    assert "size of that folder only" in health
+    assert "<strong>System</strong>" in health
     assert ".utilities-status-ok" in css
     script = _app_js()
     # Sync compact POST can take minutes — show busy until the response navigates.
@@ -1613,6 +1627,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "folder’s used size" in docs or "folder" in docs
     assert "Audit** and **AI**" in docs or "**Audit** and **AI**" in docs
     assert "Compacting vault history" in docs
+    assert "three hub tiles" in docs
 
 
 def test_workspace_poll_pauses_after_idle_setting():
