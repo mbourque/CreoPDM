@@ -2332,6 +2332,31 @@ def _utilities_health_response(
     )
 
 
+def _utilities_logs_response(
+    request: Request,
+    ctx: AppContext,
+    manager: User,
+    *,
+    name: str | None = None,
+):
+    from creopdm.services.utilities_service import load_server_log_view
+
+    view = load_server_log_view(ctx, name=name)
+    return templates.TemplateResponse(
+        request,
+        "admin_utilities_logs.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "logs_dir_display": view.logs_dir_display,
+            "files": view.files,
+            "selected_name": view.selected_name,
+            "content": view.content,
+            "truncated": view.truncated,
+            "error": view.error,
+        },
+    )
+
+
 @router.get("/admin/utilities", response_class=HTMLResponse)
 def admin_utilities_page(
     request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
@@ -2370,6 +2395,19 @@ def admin_utilities_health_page(
     if _is_blocked(manager):
         return manager
     return _utilities_health_response(request, ctx, db, manager)
+
+
+@router.get("/admin/utilities/logs", response_class=HTMLResponse)
+def admin_utilities_logs_page(
+    request: Request,
+    name: str | None = None,
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_utilities_access(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return _utilities_logs_response(request, ctx, manager, name=name)
 
 
 @router.post("/admin/utilities/email-all", response_class=HTMLResponse)

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Logs — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page admin-page admin-utilities">
+  <nav class="crumb">
+    {% if can_view_products %}
+    <a href="/">Products</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/utilities">Utilities</a>
+    <span>/</span>
+    <a href="/admin/utilities/health">Health</a>
+    <span>/</span>
+    <span>Logs</span>
+  </nav>
+  <div class="utilities-heading">
+    <h1>Logs</h1>
+    {% if selected_name %}
+    <a class="btn" href="/admin/utilities/logs?name={{ selected_name|urlencode }}">Refresh</a>
+    {% else %}
+    <a class="btn" href="/admin/utilities/logs">Refresh</a>
+    {% endif %}
+  </div>
+  <p class="muted">Server log folder <span class="mono">{{ logs_dir_display }}</span>. Showing the end of the selected file.</p>
+
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+
+  {% if files %}
+  <section class="settings-card">
+    <h2>Files</h2>
+    <ul class="utilities-log-files">
+      {% for file in files %}
+      <li {% if file.name == selected_name %}class="is-selected"{% endif %}>
+        <a href="/admin/utilities/logs?name={{ file.name|urlencode }}">{{ file.name }}</a>
+        <span class="muted small">{{ file.size_label }} · {{ file.mtime_label }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if selected_name and not error %}
+  <section class="settings-card">
+    <h2>{{ selected_name }}{% if truncated %} <span class="muted small">(end of file)</span>{% endif %}</h2>
+    <pre class="utilities-log-body mono" tabindex="0">{{ content }}</pre>
+  </section>
+  {% endif %}
+
+  <p>
+    <a class="btn" href="/admin/utilities/health">Back to Health</a>
+    <a class="btn" href="/admin/utilities">Back to Utilities</a>
+  </p>
+</article>
+{% endblock %}

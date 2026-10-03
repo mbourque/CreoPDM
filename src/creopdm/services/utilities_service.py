@@ -433,6 +433,162 @@ def compact_product_vault_history(
     )
 
 
+_LOG_TAIL_MAX_BYTES = 256_000
+_LOG_TAIL_MAX_LINES = 400
+
+
+@dataclass(frozen=True, slots=True)
+class ServerLogFileInfo:
+    name: str
+    size_label: str
+    mtime_label: str
+
+
+@dataclass(frozen=True, slots=True)
+class ServerLogView:
+    logs_dir_display: str
+    files: tuple[ServerLogFileInfo, ...]
+    selected_name: str | None
+    content: str
+    truncated: bool
+    error: str | None = None
+
+
+def _safe_log_path(logs_dir: Path, name: str) -> Path:
+    """Resolve a log filename under logs_dir; reject path traversal."""
+    raw = (name or "").strip()
+    if not raw or raw in {".", ".."} or "/" in raw or "\\" in raw or Path(raw).name != raw:
+        raise ValidationAppError("Invalid log file name.")
+    root = logs_dir.resolve()
+    candidate = (root / raw).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise ValidationAppError("Invalid log file name.") from exc
+    if not candidate.is_file():
+        raise ValidationAppError("Log file not found.", details={"name": raw})
+    return candidate
+
+
+def list_server_log_files(logs_dir: Path) -> list[ServerLogFileInfo]:
+    """Flat list of regular files in the server logs directory (newest first)."""
+    root = Path(logs_dir)
+    if not root.is_dir():
+        return []
+    rows: list[tuple[float, ServerLogFileInfo]] = []
+    try:
+        entries = list(root.iterdir())
+    except OSError:
+        return []
+    for path in entries:
+        try:
+            if not path.is_file():
+                continue
+            st = path.stat()
+        except OSError:
+            continue
+        mtime = datetime.fromtimestamp(st.st_mtime).astimezone()
+        rows.append(
+            (
+                st.st_mtime,
+                ServerLogFileInfo(
+                    name=path.name,
+                    size_label=_format_storage_bytes(int(st.st_size)),
+                    mtime_label=mtime.strftime("%Y-%m-%d %H:%M:%S"),
+                ),
+            )
+        )
+    rows.sort(key=lambda item: item[0], reverse=True)
+    return [info for _mtime, info in rows]
+
+
+def read_server_log_tail(
+    path: Path,
+    *,
+    max_bytes: int = _LOG_TAIL_MAX_BYTES,
+    max_lines: int = _LOG_TAIL_MAX_LINES,
+) -> tuple[str, bool]:
+    """Return (text, truncated) for the end of a log file."""
+    try:
+        size = int(path.stat().st_size)
+    except OSError as exc:
+        raise ValidationAppError(f"Could not read log: {exc}") from exc
+    truncated = False
+    try:
+        with path.open("rb") as handle:
+            if size > max_bytes:
+                handle.seek(-max_bytes, os.SEEK_END)
+                truncated = True
+            data = handle.read()
+    except OSError as exc:
+        raise ValidationAppError(f"Could not read log: {exc}") from exc
+    text = data.decode("utf-8", errors="replace")
+    if truncated and text:
+        # Drop a partial first line after a mid-file seek.
+        nl = text.find("\n")
+        if nl >= 0:
+            text = text[nl + 1 :]
+    lines = text.splitlines()
+    if len(lines) > max_lines:
+        lines = lines[-max_lines:]
+        truncated = True
+    return "\n".join(lines), truncated
+
+
+def load_server_log_view(ctx: AppContext, *, name: str | None = None) -> ServerLogView:
+    """Pick a log under the configured logs dir and return a safe tail view."""
+    logs_dir = ctx.config.logs_dir
+    display = path_for_settings_display(logs_dir)
+    files = list_server_log_files(logs_dir)
+    file_tuple = tuple(files)
+    if not files:
+        return ServerLogView(
+            logs_dir_display=display,
+            files=(),
+            selected_name=None,
+            content="",
+            truncated=False,
+            error="No log files found in the logs directory.",
+        )
+    requested = (name or "").strip()
+    if requested:
+        try:
+            path = _safe_log_path(logs_dir, requested)
+        except ValidationAppError as exc:
+            return ServerLogView(
+                logs_dir_display=display,
+                files=file_tuple,
+                selected_name=None,
+                content="",
+                truncated=False,
+                error=exc.message,
+            )
+        selected = path.name
+    else:
+        names = {row.name for row in files}
+        selected = "creopdm.log" if "creopdm.log" in names else files[0].name
+        path = _safe_log_path(logs_dir, selected)
+    try:
+        content, truncated = read_server_log_tail(path)
+    except ValidationAppError as exc:
+        return ServerLogView(
+            logs_dir_display=display,
+            files=file_tuple,
+            selected_name=selected,
+            content="",
+            truncated=False,
+            error=exc.message,
+        )
+    return ServerLogView(
+        logs_dir_display=display,
+        files=file_tuple,
+        selected_name=selected,
+        content=content,
+        truncated=truncated,
+        error=None,
+    )
+
+
 def collect_utilities_status(ctx: AppContext, db: Session) -> UtilitiesStatusResponse:
     """Gather a read-only snapshot of server health for admins."""
     overall = "ok"

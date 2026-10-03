@@ -500,6 +500,18 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "Disk space" in health.text
     assert "Database" in health.text
     assert "Active checkouts" in health.text
+    assert 'href="/admin/utilities/logs"' in health.text
+
+    log_path = auth_ctx.config.logs_dir / "creopdm.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text("line-one\nline-two\n", encoding="utf-8")
+    logs_page = auth_client.get("/admin/utilities/logs")
+    assert logs_page.status_code == 200
+    assert "creopdm.log" in logs_page.text
+    assert "line-two" in logs_page.text
+    traversal = auth_client.get("/admin/utilities/logs?name=../settings.json")
+    assert traversal.status_code == 200
+    assert "Invalid log file name" in traversal.text
 
     api = auth_client.get("/api/admin/utilities/status")
     assert api.status_code == 200
@@ -543,6 +555,7 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
         "/admin/utilities/email-all",
         "/admin/utilities/compact",
         "/admin/utilities/health",
+        "/admin/utilities/logs",
     ):
         assert auth_client.get(path, follow_redirects=False).status_code == 403
     denied_api = auth_client.get("/api/admin/utilities/status")

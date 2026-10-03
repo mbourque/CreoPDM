@@ -546,6 +546,38 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .admin-utilities .utilities-disk-label:first-of-type {
   margin-top: 0.35rem;
 }
+.admin-utilities .utilities-log-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.admin-utilities .utilities-log-files li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.55rem 0.85rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.admin-utilities .utilities-log-files li:last-child {
+  border-bottom: 0;
+}
+.admin-utilities .utilities-log-files li.is-selected a {
+  font-weight: 700;
+}
+.admin-utilities .utilities-log-body {
+  margin: 0;
+  max-height: min(70vh, 36rem);
+  overflow: auto;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7f9fb;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
 .utilities-status {
   display: inline-block;
   font-size: 0.72rem;

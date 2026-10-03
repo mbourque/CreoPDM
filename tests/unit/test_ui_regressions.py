@@ -1613,6 +1613,12 @@ def test_admin_hub_panel_fills_full_width():
     assert "row.kind == 'volume'" in health or 'row.kind == "volume"' in health
     assert "size of that folder only" in health
     assert "<strong>System</strong>" in health
+    assert 'href="/admin/utilities/logs"' in health
+    logs_tmpl = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities_logs.html").read_text(
+        encoding="utf-8"
+    )
+    assert "utilities-log-body" in logs_tmpl
+    assert ".utilities-log-body" in css
     assert ".utilities-status-ok" in css
     script = _app_js()
     # Sync compact POST can take minutes — show busy until the response navigates.

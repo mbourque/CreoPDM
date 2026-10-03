@@ -490,7 +490,8 @@ Needs `utilities.access` (Administrator by default; CreoPDM Administration only)
 | Open **Compact product vault history** | Show the compact form on its own page | |
 | Choose a product, type its **exact** name, check the danger box, **Compact vault history** | Show the busy overlay (**Compacting vault history for …**) until the server finishes; squash that product’s vault to one tip commit, prune older History versions in the DB, and Git-gc so removed-file bytes leave `.git/objects`; tip files stay; report before/after `.git` size; auto-align leftover working-tree drift after Remove-from-Product (do not fail only because purge left deleted paths uncommitted) | Leave you staring at a frozen form with no busy feedback; run without name match / danger confirm; run while any checkout is active; rewrite other products; keep old History rows that point at deleted Git commits |
 | Open **Health** | Show system health, database probe, Git version, disk space (**System** volume free/used once; Data / Vaults / Logs each show that folder’s used size), product/user/checkout counts, and server paths | Repeat the same volume free/used under every path |
-| Click **Refresh** on Health | Re-run the probes and show updated values | Change settings or mutate vault data |
+| Click the **Logs** path on Health | Open a Logs page listing files in the server logs folder and show the end of the selected log (default `creopdm.log`) | Expose files outside the logs directory; open a Windows Explorer window on the server path |
+| Click **Refresh** on Health or Logs | Re-run the probes / reload the log tail | Change settings or mutate vault data |
 
 ### Email (Administration → Email)
 
@@ -538,7 +539,7 @@ Try the same with **Add folder…**, **Add folders…**, and **Compressed data�
 - Add user → new account has no products until Membership grants them.  
 - Role dropdown → your own role / a peer role / a higher role must not appear.  
 - Email admin: change SMTP fields then Send test without Save → blocked.
-- Utilities without `utilities.access` → 403; with it → hub tiles for email-all / compact / health; each opens its own page.
+- Utilities without `utilities.access` → 403; with it → hub tiles for email-all / compact / health; each opens its own page; Health Logs path opens `/admin/utilities/logs`.
 - Compact vault history → tip stays; older History gone; blocked when checkouts active or vault dirty; busy overlay until the form POST returns.
 - Utilities email-all without confirm or blank subject → blocked; disabled users not emailed.
 - Cancel Watch / Stop watching confirmation → subscription unchanged.
