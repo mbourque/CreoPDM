@@ -368,10 +368,21 @@ a.brand:hover { text-decoration: none; color: inherit; }
 }
 .settings-form { max-width: 40rem; display: flex; flex-direction: column; gap: 1.1rem; }
 .settings-form-wide { max-width: 48rem; }
-/* Admin Products list: keep Created/State on one line; vault id ellipsizes. */
-.admin-products-table {
+/* Administration (+ System Settings): fill the content column — no mixed 40/48rem cards. */
+.admin-page .settings-form,
+.admin-page .settings-form-wide {
+  max-width: none;
+  width: 100%;
+}
+.admin-page .settings-card {
+  max-width: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.admin-hub .admin-tile-grid {
   max-width: none;
 }
+/* Admin Products list: keep Created/State on one line; vault id ellipsizes. */
 .admin-products-table .data-table {
   width: 100%;
 }
@@ -464,7 +475,6 @@ a.brand:hover { text-decoration: none; color: inherit; }
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
   gap: 0.85rem;
   margin: 1.1rem 0 0;
-  max-width: 48rem;
 }
 .admin-tile {
   display: flex;

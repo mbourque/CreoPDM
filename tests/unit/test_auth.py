@@ -436,6 +436,7 @@ def test_admin_can_open_settings(auth_client):
     assert 'href="/settings"' not in home.text.split("<main")[0]
     hub = auth_client.get("/admin")
     assert hub.status_code == 200
+    assert "admin-page" in hub.text
     assert "Users" in hub.text
     assert 'href="/admin/users"' in hub.text
     assert 'href="/settings"' in hub.text
@@ -448,8 +449,15 @@ def test_admin_can_open_settings(auth_client):
     assert "System health, disk space" in hub.text
     # Help copy is plain text, not wrapped in the section link.
     assert 'href="/admin/users">Add and edit' not in hub.text
-    assert auth_client.get("/settings").status_code == 200
+    settings_page = auth_client.get("/settings")
+    assert settings_page.status_code == 200
+    assert "admin-page" in settings_page.text
     assert auth_client.get("/api/settings").status_code == 200
+    css = (Path(__file__).resolve().parents[2] / "src" / "creopdm" / "static" / "css" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    assert ".admin-page .settings-form" in css
+    assert "max-width: none" in css.split(".admin-page .settings-form", 1)[1][:200]
 
 
 def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
@@ -467,6 +475,7 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     )
     page = auth_client.get("/admin/utilities")
     assert page.status_code == 200
+    assert "admin-page" in page.text
     assert "System health" in page.text
     assert "Disk space" in page.text
     assert "Database" in page.text

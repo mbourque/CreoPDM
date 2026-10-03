@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{% if mode == 'new' %}Add role{% else %}Edit role{% endif %} — {{ app_name }}{% endblock %}
 {% block content %}
-<article class="detail settings-page">
+<article class="detail settings-page admin-page">
   <nav class="crumb">
     {% if can_view_products %}
     <a href="/">Products</a>
