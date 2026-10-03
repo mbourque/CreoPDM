@@ -2243,11 +2243,17 @@ def _utilities_page_response(
     *,
     broadcast_subject: str = _DEFAULT_BROADCAST_SUBJECT,
     broadcast_message: str = "",
+    compact_product_id: str = "",
+    compact_confirm_name: str = "",
     error: str | None = None,
     success: str | None = None,
     status_code: int = 200,
 ):
-    from creopdm.services.utilities_service import active_user_emails, collect_utilities_status
+    from creopdm.services.utilities_service import (
+        active_user_emails,
+        collect_utilities_status,
+        list_products_for_compact,
+    )
 
     status = collect_utilities_status(ctx, db)
     return templates.TemplateResponse(
@@ -2259,6 +2265,9 @@ def _utilities_page_response(
             "broadcast_recipient_count": len(active_user_emails(db)),
             "broadcast_subject": broadcast_subject,
             "broadcast_message": broadcast_message,
+            "compact_products": list_products_for_compact(db),
+            "compact_product_id": compact_product_id,
+            "compact_confirm_name": compact_confirm_name,
             "error": error,
             "success": success,
         },
@@ -2337,4 +2346,69 @@ def admin_utilities_email_all(
         broadcast_subject=_DEFAULT_BROADCAST_SUBJECT,
         broadcast_message="",
         success=f"Email sent to {result.sent} active user{'s' if result.sent != 1 else ''}.",
+    )
+
+
+@router.post("/admin/utilities/compact-vault", response_class=HTMLResponse)
+def admin_utilities_compact_vault(
+    request: Request,
+    product_id: str = Form(""),
+    confirm_name: str = Form(""),
+    confirm: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_utilities_access(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    from creopdm.services.utilities_service import compact_product_vault_history
+
+    pid = (product_id or "").strip()
+    typed = confirm_name or ""
+    if confirm != "1":
+        return _utilities_page_response(
+            request,
+            ctx,
+            db,
+            manager,
+            compact_product_id=pid,
+            compact_confirm_name=typed,
+            error="Confirm that you want to permanently destroy older History for this product.",
+            status_code=400,
+        )
+    try:
+        result = compact_product_vault_history(
+            ctx,
+            db,
+            product_uuid=pid,
+            confirm_name=typed,
+        )
+        db.commit()
+    except CreoPDMError as exc:
+        db.rollback()
+        return _utilities_page_response(
+            request,
+            ctx,
+            db,
+            manager,
+            compact_product_id=pid,
+            compact_confirm_name=typed,
+            error=exc.message,
+            status_code=400,
+        )
+    versions = result.versions_removed
+    version_note = (
+        f" Removed {versions} older History version{'s' if versions != 1 else ''}."
+        if versions
+        else ""
+    )
+    return _utilities_page_response(
+        request,
+        ctx,
+        db,
+        manager,
+        success=(
+            f"Compacted vault history for {result.product_name}. "
+            f"{result.size_summary}.{version_note}"
+        ).strip(),
     )

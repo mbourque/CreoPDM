@@ -46,6 +46,35 @@
   </section>
 
   <section class="settings-card">
+    <h2>Compact product vault history</h2>
+    <p class="muted small">
+      Squashes one product vault to a <strong>single tip commit</strong> and runs Git cleanup so bytes from removed files leave <code>.git/objects</code>.
+      Tip files in the product stay. <strong>All older History versions for every file in that product are destroyed</strong> (Revert to those rows will not work).
+      Release every checkout first; the vault must be clean.
+    </p>
+    <form method="post" action="/admin/utilities/compact-vault" class="settings-form" id="utilities-compact-vault-form">
+      <label>Product
+        <select name="product_id" required>
+          <option value="">Select a product…</option>
+          {% for product in compact_products %}
+          <option value="{{ product.uuid }}" {% if compact_product_id == product.uuid %}selected{% endif %}>{{ product.name }}{% if not product.active %} (archived){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Type the product name to confirm
+        <input name="confirm_name" type="text" value="{{ compact_confirm_name }}" required autocomplete="off" maxlength="255">
+      </label>
+      <label class="choice">
+        <input type="checkbox" name="confirm" value="1" required>
+        I understand this permanently destroys older History for this product
+      </label>
+      <p class="form-actions">
+        <button type="submit" class="btn btn-danger" {% if not compact_products %}disabled{% endif %}>Compact vault history</button>
+      </p>
+    </form>
+  </section>
+
+  <section class="settings-card">
     <h2>System health
       <span class="utilities-status utilities-status-{{ status.status }}">{{ status.status }}</span>
     </h2>

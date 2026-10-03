@@ -397,3 +397,58 @@ class GitService:
         """Restore repository HEAD after a failed metadata transaction. Hard reset is reserved for recovery."""
         logger.warning("Restoring repository HEAD to %s", commit_hash)
         self._run(["reset", "--hard", commit_hash], cwd=path)
+
+    def compact_to_tip(
+        self,
+        path: Path,
+        *,
+        author: UserIdentity,
+        message: str = "Compact vault history (admin)",
+        branch: str = "main",
+    ) -> str:
+        """Replace all Git history with one commit of the current tip tree.
+
+        Drops blobs that only lived in older commits (e.g. after Remove from Product).
+        Requires a clean working tree. Returns the new HEAD hash.
+        """
+        repo = Path(path)
+        if not (repo / ".git").is_dir():
+            raise RepositoryError(
+                "Product vault has no Git history to compact.",
+                details={"path": str(repo)},
+            )
+        if self.is_dirty(repo):
+            raise RepositoryError(
+                "Vault has uncommitted changes. Finish check-in or clean the vault first.",
+                details={"path": str(repo)},
+            )
+        temp_branch = "creopdm-compact-tmp"
+        # Drop a leftover temp branch from a failed prior attempt.
+        existing = self._run(
+            ["branch", "--list", temp_branch, "--format=%(refname:short)"],
+            cwd=repo,
+            check=False,
+            quiet=True,
+        )
+        if (existing.stdout or "").strip():
+            self._run(["branch", "-D", temp_branch], cwd=repo, quiet=True)
+        logger.warning("Compacting vault history to a single tip commit at %s", repo)
+        self._run(["checkout", "--orphan", temp_branch], cwd=repo)
+        self.run_with_index_lock_retry(["add", "-A"], cwd=repo, quiet=True)
+        self.commit(repo, message, author, allow_empty=True)
+        self._run(["branch", "-M", branch], cwd=repo)
+        # Delete any other local branches that still pin old objects.
+        listed = self._run(
+            ["branch", "--format=%(refname:short)"],
+            cwd=repo,
+            quiet=True,
+        )
+        for name in (listed.stdout or "").splitlines():
+            other = name.strip()
+            if other and other != branch:
+                self._run(["branch", "-D", other], cwd=repo, quiet=True)
+        self._run(["reflog", "expire", "--expire=now", "--all"], cwd=repo, quiet=True)
+        self._run(["gc", "--prune=now"], cwd=repo, quiet=True)
+        head = self.get_head(repo)
+        logger.info("Compacted vault history → %s (%s)", head[:12], repo)
+        return head

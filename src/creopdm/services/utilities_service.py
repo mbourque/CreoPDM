@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import func, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy import delete, func, select, text, update
+from sqlalchemy.orm import Session, joinedload
 
 from creopdm.auth_constants import UserStatus
 from creopdm.config import (
@@ -20,13 +20,16 @@ from creopdm.config import (
     path_for_settings_display,
     sqlite_url_for_settings_display,
 )
-from creopdm.constants import APP_NAME, APP_VERSION, CheckoutStatus
+from creopdm.constants import APP_NAME, APP_VERSION, ActivityAction, CheckoutStatus, DEFAULT_BRANCH
 from creopdm.context import AppContext
-from creopdm.exceptions import ValidationAppError
+from creopdm.exceptions import ProductNotFoundError, RepositoryError, ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.models.checkout import Checkout
+from creopdm.models.object import EngineeringObject
+from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
 from creopdm.models.user import User
+from creopdm.models.version import ObjectVersion
 from creopdm.schemas.common import UtilitiesDiskUsage, UtilitiesProbe, UtilitiesStatusResponse
 from creopdm.site_availability import normalize_site_availability
 
@@ -42,6 +45,25 @@ class BroadcastEmailResult:
     failed: int
     recipient_count: int
     errors: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class CompactVaultResult:
+    product_uuid: str
+    product_name: str
+    new_head: str
+    versions_removed: int
+    git_bytes_before: int
+    git_bytes_after: int
+
+    @property
+    def size_summary(self) -> str:
+        before = _format_storage_bytes(self.git_bytes_before)
+        after = _format_storage_bytes(self.git_bytes_after)
+        if self.git_bytes_after < self.git_bytes_before:
+            saved = _format_storage_bytes(self.git_bytes_before - self.git_bytes_after)
+            return f".git {before} → {after} (freed {saved})"
+        return f".git {before} → {after}"
 
 
 def active_user_emails(db: Session) -> list[str]:
@@ -242,6 +264,173 @@ def _database_display(ctx: AppContext) -> str:
     if configured:
         return sqlite_url_for_settings_display(database_url_for_display(configured))
     return sqlite_url_for_settings_display(ctx.config.default_sqlite_url())
+
+
+def list_products_for_compact(db: Session) -> list[Product]:
+    """All products (including archived) for the compact-vault dropdown."""
+    return list(db.scalars(select(Product).order_by(Product.name.asc())).all())
+
+
+def compact_product_vault_history(
+    ctx: AppContext,
+    db: Session,
+    *,
+    product_uuid: str,
+    confirm_name: str,
+) -> CompactVaultResult:
+    """Squash one product vault to a single tip commit and prune old ObjectVersions.
+
+    Requires the typed product name to match exactly. Rejects dirty vaults and
+    products with active checkouts.
+    """
+    uuid = (product_uuid or "").strip()
+    typed = (confirm_name or "").strip()
+    if not uuid:
+        raise ValidationAppError("Choose a product.")
+    if not typed:
+        raise ValidationAppError("Type the product name exactly to confirm.")
+
+    product = db.scalar(select(Product).where(Product.uuid == uuid))
+    if product is None:
+        raise ProductNotFoundError("Product not found.", details={"uuid": uuid})
+    if typed != product.name:
+        raise ValidationAppError(
+            "Type the product name exactly to confirm.",
+            details={"product": product.name},
+        )
+
+    active_checkouts = int(
+        db.scalar(
+            select(func.count())
+            .select_from(Checkout)
+            .join(EngineeringObject, EngineeringObject.id == Checkout.object_id)
+            .where(
+                EngineeringObject.product_id == product.id,
+                Checkout.status == CheckoutStatus.ACTIVE.value,
+            )
+        )
+        or 0
+    )
+    if active_checkouts:
+        raise ValidationAppError(
+            f"Release all checkouts first ({active_checkouts} active).",
+            details={"active_checkouts": active_checkouts},
+        )
+
+    vault = ctx.workspaces.vault_for(product)
+    git_dir = vault / ".git"
+    if not git_dir.is_dir():
+        raise ValidationAppError(
+            "This product has no Git vault to compact.",
+            details={"vault": str(vault)},
+        )
+
+    user = ctx.users.get_current_user()
+    branch = (product.default_branch or DEFAULT_BRANCH).strip() or DEFAULT_BRANCH
+    before = _directory_size_bytes(git_dir)
+
+    with ctx.locks.acquire(product.uuid):
+        # Re-check checkouts inside the lock.
+        active_checkouts = int(
+            db.scalar(
+                select(func.count())
+                .select_from(Checkout)
+                .join(EngineeringObject, EngineeringObject.id == Checkout.object_id)
+                .where(
+                    EngineeringObject.product_id == product.id,
+                    Checkout.status == CheckoutStatus.ACTIVE.value,
+                )
+            )
+            or 0
+        )
+        if active_checkouts:
+            raise ValidationAppError(
+                f"Release all checkouts first ({active_checkouts} active).",
+                details={"active_checkouts": active_checkouts},
+            )
+        try:
+            new_head = ctx.git.compact_to_tip(
+                vault,
+                author=user,
+                message=f"Compact vault history ({product.name})",
+                branch=branch,
+            )
+        except RepositoryError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Vault compact failed for %s", product.uuid)
+            raise RepositoryError(
+                f"Could not compact vault history: {exc}",
+                details={"product": product.name},
+            ) from exc
+
+        objects = list(
+            db.scalars(
+                select(EngineeringObject)
+                .options(joinedload(EngineeringObject.current_version))
+                .where(EngineeringObject.product_id == product.id)
+            ).unique()
+        )
+        object_ids = [obj.id for obj in objects]
+        keep_version_ids = {
+            int(obj.current_version_id)
+            for obj in objects
+            if obj.current_version_id is not None
+        }
+        versions_removed = 0
+        if object_ids:
+            stale_stmt = select(ObjectVersion.id).where(ObjectVersion.object_id.in_(object_ids))
+            if keep_version_ids:
+                stale_stmt = stale_stmt.where(ObjectVersion.id.notin_(keep_version_ids))
+            stale_ids = list(db.scalars(stale_stmt).all())
+            versions_removed = len(stale_ids)
+            for start in range(0, len(stale_ids), 400):
+                chunk = stale_ids[start : start + 400]
+                if not chunk:
+                    continue
+                db.execute(delete(Parameter).where(Parameter.version_id.in_(chunk)))
+                db.execute(delete(ObjectVersion).where(ObjectVersion.id.in_(chunk)))
+            if keep_version_ids:
+                db.execute(
+                    update(ObjectVersion)
+                    .where(ObjectVersion.id.in_(list(keep_version_ids)))
+                    .values(git_commit_hash=new_head)
+                )
+            db.flush()
+
+        after = _directory_size_bytes(git_dir)
+        ctx.activities.record(
+            db,
+            ActivityAction.VAULT_HISTORY_COMPACTED,
+            user,
+            product_id=product.id,
+            object_id=None,
+            details={
+                "product": product.name,
+                "new_head": new_head,
+                "versions_removed": versions_removed,
+                "git_bytes_before": before,
+                "git_bytes_after": after,
+            },
+        )
+        db.flush()
+
+    logger.info(
+        "Compacted vault history for %s (%s); removed %s old versions; .git %s → %s",
+        product.name,
+        product.uuid,
+        versions_removed,
+        before,
+        after,
+    )
+    return CompactVaultResult(
+        product_uuid=product.uuid,
+        product_name=product.name,
+        new_head=new_head,
+        versions_removed=versions_removed,
+        git_bytes_before=before,
+        git_bytes_after=after,
+    )
 
 
 def collect_utilities_status(ctx: AppContext, db: Session) -> UtilitiesStatusResponse:

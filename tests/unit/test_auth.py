@@ -473,6 +473,8 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "Active checkouts" in page.text
     assert "Email all users" in page.text
     assert 'action="/admin/utilities/email-all"' in page.text
+    assert "Compact product vault history" in page.text
+    assert 'action="/admin/utilities/compact-vault"' in page.text
 
     api = auth_client.get("/api/admin/utilities/status")
     assert api.status_code == 200
@@ -524,6 +526,60 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
         follow_redirects=False,
     )
     assert denied_mail.status_code == 403
+    denied_compact = auth_client.post(
+        "/admin/utilities/compact-vault",
+        data={
+            "product_id": "x",
+            "confirm_name": "Nope",
+            "confirm": "1",
+        },
+        follow_redirects=False,
+    )
+    assert denied_compact.status_code == 403
+
+
+def test_admin_utilities_compact_vault_gate(auth_client, auth_ctx):
+    """Compact requires confirm + exact product name; wrong name does not mutate."""
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "email": "admin@example.com",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    created = auth_client.post(
+        "/api/products",
+        json={"name": "Gate Product"},
+    )
+    assert created.status_code == 201, created.text
+    product = created.json()
+
+    missing_confirm = auth_client.post(
+        "/admin/utilities/compact-vault",
+        data={
+            "product_id": product["uuid"],
+            "confirm_name": "Gate Product",
+        },
+        follow_redirects=False,
+    )
+    assert missing_confirm.status_code == 400
+    assert "Confirm" in missing_confirm.text or "confirm" in missing_confirm.text.lower()
+
+    wrong_name = auth_client.post(
+        "/admin/utilities/compact-vault",
+        data={
+            "product_id": product["uuid"],
+            "confirm_name": "Wrong",
+            "confirm": "1",
+        },
+        follow_redirects=False,
+    )
+    assert wrong_name.status_code == 400
+    assert "exactly" in wrong_name.text.lower()
 
 
 def test_admin_utilities_email_all_users(auth_client, auth_ctx):

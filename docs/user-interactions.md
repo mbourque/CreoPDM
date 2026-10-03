@@ -483,9 +483,10 @@ Needs `utilities.access` (Administrator by default; CreoPDM Administration only)
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Open **Utilities** | Show **Email all users**, system health, database probe, Git version, disk space (**System** volume free/used once; Data / Vaults / Logs each show that folder’s used size), product/user/checkout counts, and server paths | Let PDM Manager / Engineer open it without the permission; repeat the same volume free/used under every path |
+| Open **Utilities** | Show **Email all users**, **Compact product vault history**, system health, database probe, Git version, disk space (**System** volume free/used once; Data / Vaults / Logs each show that folder’s used size), product/user/checkout counts, and server paths | Let PDM Manager / Engineer open it without the permission; repeat the same volume free/used under every path |
 | Click **Refresh** | Re-run the probes and show updated values | Change settings or mutate vault data |
 | Fill subject + message, check the confirm box, **Send email to all users** | Email each **active** user individually (using Administration → Email delivery settings); skip disabled accounts; keep addresses private | Send without confirm; put every address in one To/Cc list; email disabled users |
+| Choose a product, type its **exact** name, check the danger box, **Compact vault history** | Squash that product’s vault to one tip commit, prune older History versions in the DB, and Git-gc so removed-file bytes leave `.git/objects`; tip files stay; report before/after `.git` size | Run without name match / danger confirm; run while any checkout is active or the vault is dirty; rewrite other products; keep old History rows that point at deleted Git commits |
 
 ### Email (Administration → Email)
 
@@ -533,7 +534,8 @@ Try the same with **Add folder…**, **Add folders…**, and **Compressed data�
 - Add user → new account has no products until Membership grants them.  
 - Role dropdown → your own role / a peer role / a higher role must not appear.  
 - Email admin: change SMTP fields then Send test without Save → blocked.
-- Utilities without `utilities.access` → 403; with it → health / disk / counts shown.
+- Utilities without `utilities.access` → 403; with it → health / disk / counts / compact vault form shown.
+- Compact vault history → tip stays; older History gone; blocked when checkouts active or vault dirty.
 - Utilities email-all without confirm or blank subject → blocked; disabled users not emailed.
 - Cancel Watch / Stop watching confirmation → subscription unchanged.
 - Notifications disabled → no product watch bell on Files.
@@ -549,7 +551,8 @@ Automated coverage lives mainly in:
 - `tests/unit/test_user_interaction_validations.py`
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
-- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `products.view` / `objects.view` / `data-can-checkout`; empty-home `products.create` hero; empty-product `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_products_view_lands_on_administration`; `test_setup_and_admin_user_require_email`; `test_username_rejects_spaces_and_email_needs_domain`; `test_admin_email_settings_save_and_gate`; `test_admin_utilities_status_and_gate`; `test_admin_utilities_email_all_users`; `test_admin_membership_product_access_filters_products`; `test_role_assign_must_be_strictly_below_actor`; new users default to no product access)
+- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `products.view` / `objects.view` / `data-can-checkout`; empty-home `products.create` hero; empty-product `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_products_view_lands_on_administration`; `test_setup_and_admin_user_require_email`; `test_username_rejects_spaces_and_email_needs_domain`; `test_admin_email_settings_save_and_gate`; `test_admin_utilities_status_and_gate`; `test_admin_utilities_email_all_users`; `test_admin_utilities_compact_vault_gate`; `test_admin_membership_product_access_filters_products`; `test_role_assign_must_be_strictly_below_actor`; new users default to no product access)
+- `tests/unit/test_vault_compact.py` (compact tip-only history; drop removed-file blobs; reject dirty vault / active checkout / wrong name)
 - `tests/unit/test_top_level_assemblies.py` (Where Used index gate; drawing parents ignored for top-level)
 - `tests/unit/test_creo_dependencies.py` (open dependencies walk sub-assemblies + parts across folders)
 - `tests/integration/test_creo_open.py` (`test_open_dependencies_prefer_where_used_db`, nested vault-scan fallback)
