@@ -6850,11 +6850,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function setOpenDownloadBusyMessage(prepared) {
     const dependencies = Array.isArray(prepared?.dependencies) ? prepared.dependencies : [];
     const total = 1 + dependencies.length;
-    // Prefer "Checking…" — agent skips tips already in the workspace (DB hash / checkout).
+    // Count is what Creo needs (DB deps), not how many files are already on disk.
+    // Empty workspace still shows this number, then downloads missing tips.
     if (total > 1) {
-      setBusyMessage(`Checking local workspace… ${total} files`);
+      setBusyMessage(`Syncing ${total} files to local workspace…`);
     } else {
-      setBusyMessage("Checking local workspace…");
+      setBusyMessage("Syncing local workspace…");
     }
   }
 
