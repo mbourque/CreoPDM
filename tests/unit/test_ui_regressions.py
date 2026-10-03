@@ -531,7 +531,7 @@ def test_soft_nav_skips_creojs_reconnect():
     assert 'withBusy("Opening…"' in open_wrap
     assert "withTimeout(" in open_wrap
     assert "Open timed out" in open_wrap
-    assert "Downloading to local cache…" in open_fn
+    assert "Downloading to local workspace…" in open_fn
     assert "Opening in Creo…" in open_fn
     # Association path must not await creoJSReady first; embedded waits briefly then warns.
     assert "Do not await creoJSReady first on the association path" in open_fn

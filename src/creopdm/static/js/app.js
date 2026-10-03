@@ -7046,18 +7046,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (!agent) {
           showError(
             $("#toolbar-error"),
-            "Start creopdm-agent on this Creo PC so the file can download into the local cache before open."
+            "Start creopdm-agent on this Creo PC so the file can download into the local workspace before open."
           );
           return null;
         }
         try {
-          setBusyMessage("Downloading to local cache…");
+          setBusyMessage("Downloading to local workspace…");
           openSpec = await materializeViaAgent(prepared);
         } catch (err) {
           const message = err && err.message ? err.message : String(err);
           showError(
             $("#toolbar-error"),
-            message || "Local CreoPDM agent could not download the file into the cache."
+            message || "Local CreoPDM agent could not download the file into the workspace."
           );
           return null;
         }
@@ -7105,7 +7105,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (!hostedCreoJS()) {
           showError(
             $("#toolbar-error"),
-            "Open SolidWorks / Multi-CAD files from Creo's built-in browser so the running session can use the local cache."
+            "Open SolidWorks / Multi-CAD files from Creo's built-in browser so the running session can use the local workspace."
           );
           return null;
         }
@@ -7152,7 +7152,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const agent = await probeCreoAgent();
           if (agent) {
             if (!needsCache) {
-              setBusyMessage("Downloading to local cache…");
+              setBusyMessage("Downloading to local workspace…");
               openSpec = await materializeViaAgent(prepared);
             }
             setBusyMessage("Opening…");
@@ -7185,10 +7185,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     try {
       const agent = await probeCreoAgent();
       if (agent) {
-        setBusyMessage("Downloading to local cache…");
+        setBusyMessage("Downloading to local workspace…");
         const openSpec = await materializeViaAgent(prepared);
         if (!openSpec?.path) {
-          showError($("#toolbar-error"), "Local agent did not return a cache path.");
+          showError($("#toolbar-error"), "Local agent did not return a workspace path.");
           return null;
         }
         setBusyMessage("Opening…");

@@ -240,7 +240,7 @@ Otherwise the app asks how you want to open it (must show the chooser in Creo’
 
 | You choose | App should |
 |------------|------------|
-| **Open without checking out** | Download what Creo needs into the local cache and open for view/reference — **no edit lock**; for an assembly this **automatically** walks **sub-assemblies and parts** by reading referenced names from the vault files (across folders) — **Rebuild Where Used is not required**; if Where Used was already rebuilt it can add members too | Do not leave nested parts/sub-asms undownloaded just because Where Used was never rebuilt |
+| **Open without checking out** | Download what Creo needs into the local workspace and open for view/reference — **no edit lock**; overlay says **Downloading to local workspace…** (not “cache”); for an assembly this **automatically** walks **sub-assemblies and parts** by reading referenced names from the vault files (across folders) — **Rebuild Where Used is not required**; if Where Used was already rebuilt it can add members too | Do not leave nested parts/sub-asms undownloaded just because Where Used was never rebuilt; show “local cache” in the open overlay |
 | **Check out this file, then open** | Lock this file, download it, then open |
 | **Check out this file and its companions, then open** | Lock this file plus the same full companion tree Creo needs (same automatic walk — no Where Used rebuild required), then open |
 
