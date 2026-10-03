@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from creopdm.constants import DependencyType
 from creopdm.creo.file_manager import CreoFileManager
@@ -40,6 +40,9 @@ from creopdm.utils.classify import display_type_label
 from creopdm.utils.cad_name_matcher import CadNameMatcher
 
 logger = logging.getLogger(__name__)
+
+_DRAWING_PARENT = "CREO_DRAWING"
+_ASSEMBLY_TYPE = "CREO_ASSEMBLY"
 
 
 def _dumps(value: Any) -> str | None:
@@ -203,6 +206,42 @@ class MetadataService:
             features=features,
             captured=captured,
         )
+
+    def where_used_index_present(self, session: Session, product_id: int) -> bool:
+        """True when at least one Dependency row exists for the product."""
+        return (
+            session.scalar(
+                select(Dependency.id).where(Dependency.product_id == product_id).limit(1)
+            )
+            is not None
+        )
+
+    def top_level_assembly_uuids(self, session: Session, product_id: int) -> list[str]:
+        """Assemblies not used by another assembly (drawing parents ignored).
+
+        Requires a Where Used index. An assembly referenced only from a drawing
+        still counts as top-level.
+        """
+        Parent = aliased(EngineeringObject)
+        referenced = (
+            select(Dependency.child_object_id)
+            .join(Parent, Parent.id == Dependency.parent_object_id)
+            .where(
+                Dependency.product_id == product_id,
+                Parent.object_type != _DRAWING_PARENT,
+                Dependency.dependency_type != DependencyType.DRAWING_MODEL.value,
+            )
+        )
+        rows = session.scalars(
+            select(EngineeringObject.uuid)
+            .where(
+                EngineeringObject.product_id == product_id,
+                EngineeringObject.object_type == _ASSEMBLY_TYPE,
+                ~EngineeringObject.id.in_(referenced),
+            )
+            .order_by(EngineeringObject.filename)
+        ).all()
+        return [str(uuid) for uuid in rows]
 
     def where_used(
         self,

@@ -118,12 +118,15 @@
     </div>
 
     {% if selected and status %}
-    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-product="{{ selected.uuid }}" data-allows-mutation="{{ '1' if product_ui.allows_mutation else '0' }}" data-product-state="{{ selected.state }}" data-read-only="{{ '1' if selected.read_only else '0' }}" data-type-icons='{{ type_icons | tojson }}'>
+    <ul class="metrics" id="metric-filters" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-product="{{ selected.uuid }}" data-allows-mutation="{{ '1' if product_ui.allows_mutation else '0' }}" data-product-state="{{ selected.state }}" data-read-only="{{ '1' if selected.read_only else '0' }}" data-type-icons='{{ type_icons | tojson }}'{% if where_used_present %} data-top-level-assemblies="{{ top_level_assembly_uuids | join(',') }}"{% endif %}>
       <li><button type="button" class="metric" data-filter="folders" data-mode="off" title="Filter to folders and select them. Click again to clear."><strong>{{ status.folders | default(0) }}</strong> Folders</button></li>
       <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Show and select all files. Clears type chips. Click again to clear."><strong>{{ status.files }}</strong> Files</button></li>
       <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Filter to Creo models and select them. Click again to clear."><strong>{{ status.cad_models }}</strong> Creo Models</button></li>
       <li><button type="button" class="metric" data-filter="creo_parts" data-mode="off" title="Filter to parts and select them. Click again to clear."><strong>{{ status.creo_parts }}</strong> Parts</button></li>
       <li><button type="button" class="metric" data-filter="assemblies" data-mode="off" title="Filter to assemblies and select them. Click again to clear."><strong>{{ status.assemblies }}</strong> Assemblies</button></li>
+      {% if where_used_present %}
+      <li><button type="button" class="metric" data-filter="top_level_assemblies" data-mode="off" title="Filter to top-level assemblies (not used by another assembly). Drawing references do not count. Click again to clear."><strong>{{ status.top_level_assemblies | default(0) }}</strong> Top level assemblies</button></li>
+      {% endif %}
       <li><button type="button" class="metric" data-filter="drawings" data-mode="off" title="Filter to drawings and select them. Click again to clear."><strong>{{ status.drawings }}</strong> Drawings</button></li>
       <li><button type="button" class="metric" data-filter="documents" data-mode="off" title="Filter to documents and select them. Click again to clear."><strong>{{ status.documents }}</strong> Documents</button></li>
       <li><button type="button" class="metric" data-filter="other" data-mode="off" title="Filter to files that are not Creo models and select them. Click again to clear."><strong>{{ status.other }}</strong> Other</button></li>
@@ -220,6 +223,7 @@
               data-checked-out="{{ '1' if obj.owned_by_me or obj.checkout_user else '0' }}"
               data-modified-locally="{{ '1' if obj.modified_locally else '0' }}"
               data-in-workspace="{{ '1' if obj.in_workspace else '0' }}"
+              data-top-level-assembly="{{ '1' if where_used_present and obj.uuid in top_level_assembly_uuids else '0' }}"
               data-tree="{{ entry.folder }}"
               data-sort-name="{{ obj.relative_path }}"
               data-sort-rev="{{ entry.folder }}/{{ obj.revision }}-{{ '%06d'|format(obj.iteration) }}"

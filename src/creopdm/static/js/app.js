@@ -709,13 +709,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     documents: ["PDF", "DOCUMENT", "SPREADSHEET", "TEXT", "IMAGE"],
     other: ["PDF", "DOCUMENT", "SPREADSHEET", "TEXT", "IMAGE", "OTHER"],
   };
-  const CAD_MODEL_CHILD_FILTERS = new Set(["creo_parts", "assemblies", "drawings"]);
+  const CAD_MODEL_CHILD_FILTERS = new Set([
+    "creo_parts",
+    "assemblies",
+    "top_level_assemblies",
+    "drawings",
+  ]);
   const METRIC_LABELS = {
     folders: "folders",
     files: "all files",
     cad_models: "Creo models",
     creo_parts: "parts",
     assemblies: "assemblies",
+    top_level_assemblies: "top-level assemblies",
     drawings: "drawings",
     documents: "documents",
     other: "files that are not Creo models",
@@ -786,6 +792,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return rowAttr(row, "data-object-type").toUpperCase();
   }
 
+  function topLevelAssemblyIds() {
+    const root = document.querySelector("#metric-filters");
+    const raw = root?.getAttribute("data-top-level-assemblies") || root?.dataset?.topLevelAssemblies || "";
+    return new Set(
+      raw.split(/[\s,;]+/).map((item) => item.trim()).filter(Boolean)
+    );
+  }
+
   function rowMatchesMetric(row, key) {
     if (key === "folders") {
       return row.classList.contains("folder-row");
@@ -804,6 +818,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return owned && dirty;
     }
     if (row.classList.contains("folder-row")) return false;
+    if (key === "top_level_assemblies") {
+      const uuid = String(row.dataset.uuid || "").trim();
+      if (!uuid) return false;
+      if (rowAttr(row, "data-top-level-assembly") === "1" || row.dataset.topLevelAssembly === "1") {
+        return true;
+      }
+      return topLevelAssemblyIds().has(uuid);
+    }
     if (key === "cad_models") return cadModelsExtensions().includes(rowExtension(row));
     if (key === "documents") return documentExtensions().includes(rowExtension(row));
     if (key === "other") return !cadModelsExtensions().includes(rowExtension(row));
@@ -982,6 +1004,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       btn.title = mode === "off"
         ? "Filter to modified files in the current group and select them. Click again to clear."
         : "Showing modified files (selected). Click to clear.";
+      return;
+    }
+    if (key === "top_level_assemblies") {
+      btn.title = mode === "off"
+        ? "Filter to top-level assemblies (not used by another assembly). Drawing references do not count. Click again to clear."
+        : "Showing top-level assemblies (selected). Click to clear.";
       return;
     }
     btn.title = mode === "off"
@@ -3739,6 +3767,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const stateDisplay = showModified ? "MODIFIED" : state;
     const stateDisplayLabel = showModified ? "Modified" : stateLabel;
     const stateSort = stateSortToken(stateDisplay);
+    const topLevel = topLevelAssemblyIds().has(String(obj.uuid || ""));
     return `<tr data-uuid="${escapeHtml(obj.uuid)}"
               data-object-type="${escapeHtml(objectType)}"
               data-extension="${escapeHtml(obj.extension || "")}"
@@ -3750,6 +3779,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               data-checked-out="${obj.owned_by_me || obj.checkout_user ? "1" : "0"}"
               data-modified-locally="${modifiedLocally ? "1" : "0"}"
               data-in-workspace="${obj.in_workspace ? "1" : "0"}"
+              data-top-level-assembly="${topLevel ? "1" : "0"}"
               data-tree="${escapeHtml(folder)}"
               data-sort-name="${escapeHtml(relative)}"
               data-sort-rev="${escapeHtml(folder)}/${escapeHtml(obj.revision || "")}-${padIteration(obj.iteration)}"

@@ -134,6 +134,8 @@ _PAGE_DEFAULTS = {
     "watching_product": False,
     "can_watch_product": False,
     "watch_unavailable_reason": None,
+    "where_used_present": False,
+    "top_level_assembly_uuids": [],
     "local_time": format_local,
     "local_time_pretty": format_local_pretty,
     "creo_label": "Session offline",
@@ -452,6 +454,18 @@ def home(
         ctx.config.document_extensions(),
     )
     status["folders"] = sum(1 for entry in list_entries if entry.get("kind") == "folder")
+    where_used_present = False
+    top_level_assembly_uuids: list[str] = []
+    if product is not None:
+        where_used_present = ctx.metadata.where_used_index_present(db, product.id)
+        if where_used_present:
+            top_level_assembly_uuids = ctx.metadata.top_level_assembly_uuids(db, product.id)
+            top_set = set(top_level_assembly_uuids)
+            status["top_level_assemblies"] = sum(
+                1 for obj in objects if getattr(obj, "uuid", None) in top_set
+            )
+        else:
+            status["top_level_assemblies"] = 0
 
     return render(
         request,
@@ -467,6 +481,8 @@ def home(
             "folder_crumbs": folder_crumbs(current_folder),
             "list_entries": list_entries,
             "status": status,
+            "where_used_present": where_used_present,
+            "top_level_assembly_uuids": top_level_assembly_uuids,
             "cad_models_extensions": ctx.config.cad_models_extensions(),
             "cad_model_extensions": ctx.config.model_cad_extensions(),
             "document_extensions": ctx.config.document_extensions(),
