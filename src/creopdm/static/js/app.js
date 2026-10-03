@@ -6847,20 +6847,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     setBusyMessage("Finding dependencies…");
   }
 
+  const BULK_AGENT_CACHE_ZIP_THRESHOLD = 50;
+
   function setOpenDownloadBusyMessage(prepared) {
     const dependencies = Array.isArray(prepared?.dependencies) ? prepared.dependencies : [];
     const total = 1 + dependencies.length;
     // Count is what Creo needs (DB deps), not how many files are already on disk.
-    // Empty workspace still shows this number, then downloads missing tips.
-    if (total > 1) {
+    // Large trees use one archive download; small ones sync tip-by-tip.
+    if (total >= BULK_AGENT_CACHE_ZIP_THRESHOLD) {
+      setBusyMessage(`Downloading ${total} files to local workspace…`);
+    } else if (total > 1) {
       setBusyMessage(`Syncing ${total} files to local workspace…`);
     } else {
       setBusyMessage("Syncing local workspace…");
     }
   }
 
-  async function materializeViaAgent(prepared) {
-    const dependencies = Array.isArray(prepared.dependencies) ? prepared.dependencies : [];
+  async function materializeViaAgentPerFile(prepared, dependencies) {
     const response = await fetch(`${agentBase()}/materialize`, {
       method: "POST",
       headers: agentAuthHeaders({ "Content-Type": "application/json" }),
@@ -6878,7 +6881,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         file_size: prepared.file_size || 0,
         prefer_local: Boolean(prepared.prefer_local),
         replace_newer: Boolean(prepared.replace_newer),
-        dependencies: dependencies.map((item) => ({
+        dependencies: (dependencies || []).map((item) => ({
           object_id: item.object_id || null,
           product_id: item.product_id || prepared.product_id || currentProductId() || null,
           relative_path: item.relative_path || null,
@@ -6897,7 +6900,28 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return response.json();
   }
 
-  const BULK_AGENT_CACHE_ZIP_THRESHOLD = 50;
+  async function materializeViaAgent(prepared) {
+    const dependencies = Array.isArray(prepared.dependencies) ? prepared.dependencies : [];
+    const ids = [];
+    if (prepared.object_id) ids.push(String(prepared.object_id));
+    dependencies.forEach((item) => {
+      if (item?.object_id) ids.push(String(item.object_id));
+    });
+    const unique = [...new Set(ids)];
+    // Empty / large trees: one zip from CreoPDM (same as bulk checkout), not 900 GETs.
+    if (unique.length >= BULK_AGENT_CACHE_ZIP_THRESHOLD) {
+      try {
+        setBusyMessage(`Downloading ${unique.length} files to local workspace…`);
+        await materializeCheckedOutToAgentCacheZip(unique);
+        // Resolve the primary open path only — deps are already on disk.
+        return await materializeViaAgentPerFile(prepared, []);
+      } catch {
+        /* fall back to per-file materialize */
+        setOpenDownloadBusyMessage(prepared);
+      }
+    }
+    return materializeViaAgentPerFile(prepared, dependencies);
+  }
 
   async function materializeCheckedOutToAgentCacheZip(objectIds) {
     const response = await fetch(`${agentBase()}/materialize-zip`, {

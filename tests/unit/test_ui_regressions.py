@@ -538,13 +538,20 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "setOpenDownloadBusyMessage(prepared)" in open_fn
     assert "prefer_local: Boolean(prepared.prefer_local)" in script
     download_busy = _between(
-        script, "function setOpenDownloadBusyMessage(", "async function materializeViaAgent("
+        script,
+        "function setOpenDownloadBusyMessage(",
+        "async function materializeViaAgentPerFile(",
     )
     assert "Syncing ${total} files to local workspace" in download_busy
+    assert "Downloading ${total} files to local workspace" in download_busy
     assert 'setBusyMessage("Syncing local workspace…")' in download_busy
     assert "Checking local workspace" not in download_busy
     assert "Downloading to local cache" not in download_busy
-    assert "Count is what Creo needs" in download_busy
+    assert "BULK_AGENT_CACHE_ZIP_THRESHOLD" in download_busy
+    mat = _between(script, "async function materializeViaAgent(", "async function materializeCheckedOutToAgentCacheZip(")
+    assert "materializeCheckedOutToAgentCacheZip(unique)" in mat
+    assert "materializeViaAgentPerFile(prepared, [])" in mat
+    assert "one zip from CreoPDM" in mat
     docs_open = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "Open a file already checked out to you" in docs_open
     assert "do **not** overwrite with vault bytes" in docs_open
