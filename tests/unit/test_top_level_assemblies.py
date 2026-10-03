@@ -139,6 +139,12 @@ def test_top_level_assemblies_pill_wired_in_ui():
     assert 'data-filter="top_level_assemblies"' in app_html
     assert "where_used_present" in app_html
     assert "Top level assemblies" in app_html
+    assert app_html.index('data-filter="drawings"') < app_html.index(
+        'data-filter="top_level_assemblies"'
+    )
+    assert app_html.index('data-filter="assemblies"') < app_html.index(
+        'data-filter="drawings"'
+    )
     assert "top_level_assemblies" in script
     assert "topLevelAssemblyIds" in script
     chip = script.split("function onMetricChip(", 1)[1].split(
