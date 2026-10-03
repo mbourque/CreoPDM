@@ -1385,17 +1385,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const productId = $("#rebuild-where-used-btn")?.dataset.product || currentProductId();
     if (!productId) return;
     showError($("#toolbar-error"), "");
-    const outcome = await withBusy("Indexing Where Used…", () =>
-      awaitWhereUsedIndex(productId, {
-        onProgress: (doneCount, total) => {
-          if (total > 0) {
-            setBusyMessage(`Indexing Where Used… ${doneCount} of ${total}`);
-          } else {
-            setBusyMessage("Indexing Where Used…");
-          }
-        },
-      })
-    );
+    const outcome = await indexWhereUsedUnderBusy(productId);
     if (!outcome.started) {
       showError($("#toolbar-error"), outcome.error || "Could not start Where Used indexing.");
       return;
@@ -1422,6 +1412,35 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function sleepMs(ms) {
     return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  async function indexWhereUsedUnderBusy(productId) {
+    if (!productId) return null;
+    return withBusy("Indexing Where Used…", () =>
+      awaitWhereUsedIndex(productId, {
+        onProgress: (doneCount, total) => {
+          if (total > 0) {
+            setBusyMessage(`Indexing Where Used… ${doneCount} of ${total}`);
+          } else {
+            setBusyMessage("Indexing Where Used…");
+          }
+        },
+      })
+    );
+  }
+
+  function whereUsedIndexNotice(indexOutcome) {
+    if (!indexOutcome) return "";
+    if (indexOutcome.state === "done") return " Where Used index updated.";
+    if (indexOutcome.started) {
+      return ` Where Used indexing ${indexOutcome.state || "did not finish"}${
+        indexOutcome.error ? `: ${indexOutcome.error}` : "."
+      }`;
+    }
+    if (indexOutcome.error) {
+      return ` Where Used indexing did not start: ${indexOutcome.error}`;
+    }
+    return "";
   }
 
   /**
@@ -3163,7 +3182,26 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       } else if (okCount) {
         showOk(`Imported ${okCount} file(s) from the zip.`);
       }
-      if (okCount) reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
+      if (okCount) {
+        // Same as Add files/folder(s): index under busy overlay, then one Files refresh.
+        const indexOutcome = await indexWhereUsedUnderBusy(productId);
+        const indexNote = whereUsedIndexNotice(indexOutcome);
+        try {
+          sessionStorage.setItem(
+            "creopdmNotice",
+            `Imported ${okCount} file(s) from the zip.${indexNote}`
+          );
+        } catch {
+          /* private mode / blocked storage */
+        }
+        if (indexOutcome?.state === "error" || indexOutcome?.state === "timeout") {
+          showError(
+            $("#toolbar-error"),
+            indexOutcome.error || "Where Used indexing failed."
+          );
+        }
+        reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
+      }
     } catch (err) {
       showError(
         $("#toolbar-error"),
@@ -3695,32 +3733,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (okCount) {
       // Where Used only after every Add chunk finished (never mid-upload —
       // that contended SQLite and made "Adding files… N of M" crawl).
-      // Keep the busy overlay up until indexing finishes, then one Files reload.
+      // Same path for Add files / folder / folders; keep overlay until index done.
       const productId = currentProductId();
-      let indexOutcome = null;
-      if (productId) {
-        indexOutcome = await withBusy("Indexing Where Used…", () =>
-          awaitWhereUsedIndex(productId, {
-            onProgress: (doneCount, total) => {
-              if (total > 0) {
-                setBusyMessage(`Indexing Where Used… ${doneCount} of ${total}`);
-              } else {
-                setBusyMessage("Indexing Where Used…");
-              }
-            },
-          })
-        );
-      }
-      const indexOk = indexOutcome?.state === "done";
-      const indexNote = indexOk
-        ? " Where Used index updated."
-        : indexOutcome?.started
-          ? ` Where Used indexing ${indexOutcome.state || "did not finish"}${
-              indexOutcome.error ? `: ${indexOutcome.error}` : "."
-            }`
-          : indexOutcome?.error
-            ? ` Where Used indexing did not start: ${indexOutcome.error}`
-            : "";
+      const indexOutcome = await indexWhereUsedUnderBusy(productId);
+      const indexNote = whereUsedIndexNotice(indexOutcome);
       if (okCount > 50) {
         rememberNotice(
           `${okCount} file(s) added. Creo metadata was skipped for this large add — open a model in Creo and Check In to capture it.${indexNote}`
@@ -8611,6 +8627,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         await withBusy("Capturing Creo metadata…", async () => {
           await pushCreoMetadataForItems(metadataTargetsFromResult(result));
         });
+      }
+      // New files via Add selected… / check-in add paths need Where Used too.
+      const addedPaths = Array.isArray(added) ? added.length : 0;
+      const addOnlyCheckin = checkinDialog?.dataset.addOnly === "1";
+      if (succeeded && (addOnlyCheckin || addedPaths > 0)) {
+        const productIdForIndex =
+          checkinDialog?.dataset.productId ||
+          checkinBtn?.dataset.product ||
+          currentProductId();
+        await indexWhereUsedUnderBusy(productIdForIndex);
       }
       if (localSync?.agentOffline) {
         showOk(
