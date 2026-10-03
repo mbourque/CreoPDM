@@ -6843,6 +6843,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     };
   }
 
+  function setOpenPrepareBusyMessage() {
+    setBusyMessage("Finding companions…");
+  }
+
+  function setOpenDownloadBusyMessage(prepared) {
+    const companions = Array.isArray(prepared?.companions) ? prepared.companions : [];
+    const total = 1 + companions.length;
+    if (total > 1) {
+      setBusyMessage(`Downloading ${total} files to local workspace…`);
+    } else {
+      setBusyMessage("Downloading to local workspace…");
+    }
+  }
+
   async function materializeViaAgent(prepared) {
     const companions = Array.isArray(prepared.companions) ? prepared.companions : [];
     const response = await fetch(`${agentBase()}/materialize`, {
@@ -6966,7 +6980,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function openPdmObject(target) {
     // Keep the busy overlay up through prepare + materialize until Creo/OS open starts.
     // Always clear on timeout/error so Session offline / hung agent cannot leave Opening… stuck.
-    return withBusy("Opening…", async () => {
+    return withBusy("Preparing…", async () => {
       try {
         return await withTimeout(
           openPdmObjectWork(target),
@@ -7029,6 +7043,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (useCreoSession) {
       await creoJSReady;
+      setOpenPrepareBusyMessage();
       const prepared = await postAction(
         "/api/creo/open",
         openRequestBody(target, false),
@@ -7037,7 +7052,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       );
       if (!prepared) return null;
 
-      // Every Creo-openable model must land in the local agent cache before open.
+      // Every Creo-openable model must land in the local workspace before open.
       let openSpec = prepared;
       const needsCache =
         prepared.requires_agent_cache || prepared.creo_object || prepared.open_with_creo;
@@ -7051,7 +7066,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           return null;
         }
         try {
-          setBusyMessage("Downloading to local workspace…");
+          setOpenDownloadBusyMessage(prepared);
           openSpec = await materializeViaAgent(prepared);
         } catch (err) {
           const message = err && err.message ? err.message : String(err);
@@ -7152,10 +7167,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const agent = await probeCreoAgent();
           if (agent) {
             if (!needsCache) {
-              setBusyMessage("Downloading to local workspace…");
+              setOpenDownloadBusyMessage(prepared);
               openSpec = await materializeViaAgent(prepared);
             }
-            setBusyMessage("Opening…");
+            setBusyMessage("Opening with Windows…");
             await openViaAgent(openSpec.path, "association");
             return prepared;
           }
@@ -7175,6 +7190,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
 
     // Not in Creo embedded browser: download via agent and open with Windows association.
+    setOpenPrepareBusyMessage();
     const prepared = await postAction(
       "/api/creo/open",
       openRequestBody(target, false),
@@ -7185,13 +7201,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     try {
       const agent = await probeCreoAgent();
       if (agent) {
-        setBusyMessage("Downloading to local workspace…");
+        setOpenDownloadBusyMessage(prepared);
         const openSpec = await materializeViaAgent(prepared);
         if (!openSpec?.path) {
           showError($("#toolbar-error"), "Local agent did not return a workspace path.");
           return null;
         }
-        setBusyMessage("Opening…");
+        setBusyMessage("Opening with Windows…");
         await openViaAgent(openSpec.path, "association");
         return prepared;
       }

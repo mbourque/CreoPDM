@@ -528,14 +528,21 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "Creo.JS is not connected yet" in open_fn
     assert "Windows file association from the embedded browser" in open_fn
     open_wrap = _between(script, "async function openPdmObject(", "async function openPdmObjectWork(")
-    assert 'withBusy("Opening…"' in open_wrap
+    assert 'withBusy("Preparing…"' in open_wrap
     assert "withTimeout(" in open_wrap
     assert "Open timed out" in open_wrap
-    assert "Downloading to local workspace…" in open_fn
-    assert "Downloading to local cache…" not in open_fn
+    assert "function setOpenPrepareBusyMessage(" in script
+    assert "function setOpenDownloadBusyMessage(" in script
+    assert 'setBusyMessage("Finding companions…")' in script
+    assert "setOpenPrepareBusyMessage()" in open_fn
+    assert "setOpenDownloadBusyMessage(prepared)" in open_fn
+    assert "Downloading ${total} files to local workspace…" in script
+    assert "Downloading to local workspace…" in script
+    assert "Downloading to local cache…" not in script
     assert "Checking local workspace for ${total} files…" in script
     assert "Checking local cache for ${total} files…" not in script
     assert "Opening in Creo…" in open_fn
+    assert "Opening with Windows…" in open_fn
     # Association path must not await creoJSReady first; embedded waits briefly then warns.
     assert "Do not await creoJSReady first on the association path" in open_fn
     assert open_fn.index("const useCreoSession") < open_fn.index("await creoJSReady;")
