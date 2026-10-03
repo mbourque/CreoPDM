@@ -130,10 +130,11 @@ class CreoService:
             relative_path=obj.relative_path,
             content_hash=(version.content_hash if version is not None else "") or "",
             file_size=int(version.file_size) if version is not None else 0,
+            prefer_local=bool(view.owned_by_me),
             dependencies=dependencies,
         )
         # Not checked out to me: align local cache to vault tip (drop higher .N leftovers).
-        # Checked out to me: keep local newer Creo saves for check-in.
+        # Checked out to me: keep local tip / newer Creo saves for check-in.
         payload["replace_newer"] = not view.owned_by_me
         return payload
 
@@ -318,6 +319,8 @@ class CreoService:
                 dep_path.name, (*models, *all_cad)
             )
             version = getattr(obj, "current_version", None)
+            dep_checkout = self._checkouts.active_for(session, obj.id)
+            dep_view = self._checkouts.describe(obj, dep_checkout)
             out.append(
                 {
                     "object_id": str(obj.uuid),
@@ -329,6 +332,7 @@ class CreoService:
                     ),
                     "content_hash": (version.content_hash if version is not None else "") or "",
                     "file_size": int(version.file_size) if version is not None else 0,
+                    "prefer_local": bool(dep_view.owned_by_me),
                 }
             )
         if out:
@@ -353,6 +357,7 @@ class CreoService:
         relative_path: str = "",
         content_hash: str = "",
         file_size: int = 0,
+        prefer_local: bool = False,
         dependencies: list[dict[str, str | None]] | None = None,
     ) -> dict:
         workdir = working_directory_for(path)
@@ -414,6 +419,7 @@ class CreoService:
             "relative_path": relative_path or None,
             "content_hash": content_hash or None,
             "file_size": int(file_size or 0) or None,
+            "prefer_local": bool(prefer_local),
             "creo_object": creo_object,
             "open_with_creo": open_with_creo,
             "requires_agent_cache": requires_agent_cache,

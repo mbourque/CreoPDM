@@ -169,6 +169,8 @@ class MaterializeItem(BaseModel):
     disk_name: str | None = None
     content_hash: str = ""
     file_size: int = 0
+    # Checked out to this user: keep any local tip; never overwrite with vault bytes.
+    prefer_local: bool = False
 
 
 class MaterializeRequest(BaseModel):
@@ -181,6 +183,7 @@ class MaterializeRequest(BaseModel):
     disk_name: str | None = None
     content_hash: str = ""
     file_size: int = 0
+    prefer_local: bool = False
     token: str | None = None
     dependencies: list[MaterializeItem] = Field(default_factory=list)
     # After History revert: download vault tip and trash local higher .N siblings.
@@ -509,38 +512,41 @@ def _try_reuse_local_materialize(
     target_dir: Path,
     item: MaterializeItem,
 ) -> tuple[Path, str, str, int] | None:
-    """Skip download when the local workspace tip already matches the vault hash."""
+    """Skip download when local tip is already good enough.
+
+    - ``prefer_local`` (checked out to me): keep any existing local tip.
+    - Else: keep higher Creo ``.N`` saves, or tips whose content hash matches vault.
+    """
     from creopdm.creo.file_manager import CreoFileManager
     from creopdm.utils.hashing import calculate_sha256
 
-    expected_hash = (item.content_hash or "").strip().lower()
-    if not expected_hash:
-        return None
     logical, disk_name = _materialize_names(item)
     plan = CachePlanItem(
         object_id=(item.object_id or "").strip() or "local",
         filename=logical,
         disk_name=disk_name,
         relative_path=str(item.relative_path or ""),
-        content_hash=expected_hash,
+        content_hash=(item.content_hash or "").strip().lower(),
         file_size=int(item.file_size or 0),
     )
     local = _find_planned_cache_file(target_dir, plan)
     if local is None or not local.is_file():
         return None
-    vault_save = CreoFileManager.save_number(disk_name, None)
-    local_save = CreoFileManager.save_number(local.name, None)
-    # Higher local .N means checked-out work — keep it; do not redownload tip.
-    if local_save > vault_save:
-        try:
-            size = local.stat().st_size
-        except OSError:
-            return None
-        return local, logical, disk_name, size
     try:
         local_size = local.stat().st_size
     except OSError:
         return None
+    if item.prefer_local:
+        logger.info("Skipping download (prefer local / checked out) %s", local.name)
+        return local, logical, disk_name, local_size
+    expected_hash = (item.content_hash or "").strip().lower()
+    if not expected_hash:
+        return None
+    vault_save = CreoFileManager.save_number(disk_name, None)
+    local_save = CreoFileManager.save_number(local.name, None)
+    # Higher local .N means checked-out work — keep it; do not redownload tip.
+    if local_save > vault_save:
+        return local, logical, disk_name, local_size
     index = _load_cache_index(target_dir)
     try:
         rel_key = local.resolve().relative_to(target_dir.resolve()).as_posix()
@@ -2143,6 +2149,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             disk_name=payload.disk_name,
             content_hash=payload.content_hash,
             file_size=payload.file_size,
+            prefer_local=bool(payload.prefer_local),
         )
         product_key = _product_cache_key(
             payload.product_id or payload.object_id or "local",

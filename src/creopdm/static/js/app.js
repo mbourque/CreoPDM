@@ -6874,6 +6874,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         disk_name: prepared.disk_name || prepared.filename || null,
         content_hash: prepared.content_hash || null,
         file_size: prepared.file_size || 0,
+        prefer_local: Boolean(prepared.prefer_local),
         replace_newer: Boolean(prepared.replace_newer),
         dependencies: dependencies.map((item) => ({
           object_id: item.object_id || null,
@@ -6883,6 +6884,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           disk_name: item.disk_name || item.filename || null,
           content_hash: item.content_hash || null,
           file_size: item.file_size || 0,
+          prefer_local: Boolean(item.prefer_local),
         })),
       }),
     });

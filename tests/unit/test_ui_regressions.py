@@ -536,9 +536,13 @@ def test_soft_nav_skips_creojs_reconnect():
     assert 'setBusyMessage("Finding dependencies…")' in script
     assert "setOpenPrepareBusyMessage()" in open_fn
     assert "setOpenDownloadBusyMessage(prepared)" in open_fn
+    assert "prefer_local: Boolean(prepared.prefer_local)" in script
     assert "Updating local workspace… ${total} files" in script
     assert "Updating local workspace…" in script
     assert "Downloading to local cache…" not in script
+    docs_open = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "Open a file already checked out to you" in docs_open
+    assert "do **not** overwrite with vault bytes" in docs_open
     assert "Checking local workspace for ${total} files…" in script
     assert "Checking local cache for ${total} files…" not in script
     assert "Opening in Creo…" in open_fn

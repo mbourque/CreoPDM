@@ -149,6 +149,63 @@ def test_agent_materialize_skips_unchanged_local_files(tmp_path, monkeypatch):
         assert Path(second.json()["path"]).read_bytes() == asm_bytes
 
 
+def test_agent_materialize_prefer_local_keeps_checked_out_edits(tmp_path, monkeypatch):
+    """Checked-out open must not overwrite a local tip that differs from vault."""
+    import hashlib
+
+    root = tmp_path / "cache"
+    product = "proj-owned"
+    cache = root / product
+    cache.mkdir(parents=True)
+    local_bytes = b"my-checked-out-edit"
+    (cache / "shaft.prt").write_bytes(local_bytes)
+    vault_bytes = b"vault-tip-different"
+    vault_hash = hashlib.sha256(vault_bytes).hexdigest()
+    seen: list[str] = []
+
+    class FakeResponse:
+        def __init__(self, body: bytes):
+            self.status_code = 200
+            self.content = body
+            self.headers = {}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers=None):
+            seen.append(url)
+            return FakeResponse(vault_bytes)
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    with TestClient(app) as client:
+        saved = client.post(
+            "/materialize",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "object_id": "shaft",
+                "product_id": product,
+                "filename": "shaft.prt",
+                "disk_name": "shaft.prt",
+                "content_hash": vault_hash,
+                "file_size": len(vault_bytes),
+                "prefer_local": True,
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["skipped_count"] == 1
+        assert seen == []
+        assert Path(saved.json()["path"]).read_bytes() == local_bytes
+
+
 def test_agent_materialize_preserves_vault_folders(tmp_path, monkeypatch):
     """Nested vault relative_path must create matching folders in the agent cache."""
     root = tmp_path / "cache"
