@@ -297,11 +297,25 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const parsed = new URL(url, window.location.href);
       if (parsed.origin !== window.location.origin) return false;
       const path = parsed.pathname || "/";
+      // Auth / API must hard-load. Every other signed-in shell page soft-navs so
+      // Creo.JS stays Connected (Files, Details/History, Admin*, Settings, …).
+      if (
+        path === "/login" ||
+        path === "/logout" ||
+        path === "/setup" ||
+        path === "/forgot-password" ||
+        path === "/reset-password" ||
+        path.startsWith("/api/") ||
+        path.startsWith("/static/") ||
+        path === "/creojs.js"
+      ) {
+        return false;
+      }
       if (path === "/" || path === "") return true;
-      if (path === "/admin" || path === "/admin/users" || path === "/admin/roles") return true;
-      if (path === "/admin/roles/new" || /^\/admin\/roles\/[^/]+\/?$/.test(path)) return true;
-      if (path === "/admin/users/new" || /^\/admin\/users\/[^/]+\/?$/.test(path)) return true;
-      if (path === "/settings" || path === "/settings/types") return true;
+      if (path.startsWith("/admin")) return true;
+      if (path.startsWith("/settings")) return true;
+      if (path.startsWith("/account")) return true;
+      if (path === "/no-access") return true;
       if (/^\/products\/[^/]+\/objects\/[^/]+\/?$/.test(path)) return true;
       return false;
     } catch {
@@ -9038,7 +9052,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (deleteWorkspaceFiles && productId && workspacePaths.length) {
         deleteLocalWorkspacePathsBackground(productId, workspacePaths);
       }
-      window.location.href = productHome();
+      leavePage(productHome());
       return;
     }
     const result = await postAction(

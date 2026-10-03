@@ -484,15 +484,17 @@ def test_soft_nav_skips_creojs_reconnect():
     assert 'can_view_products' in base
     assert 'href="/settings"' not in base.split('<main')[0]
 
-    # Soft-nav covers list home, admin hub, settings, and object detail.
+    # Soft-nav: all signed-in shell pages; hard-load only auth/API/static.
     soft_fn = _between(script, "function isSoftNavUrl(", "let softNavBusy")
-    assert 'path === "/admin"' in soft_fn
-    assert 'path === "/admin/users"' in soft_fn
-    assert 'path === "/admin/roles"' in soft_fn
-    assert 'path === "/settings"' in soft_fn
-    assert 'path === "/settings/types"' in soft_fn
+    assert 'path.startsWith("/admin")' in soft_fn
+    assert 'path.startsWith("/settings")' in soft_fn
+    assert 'path.startsWith("/account")' in soft_fn
+    assert 'path === "/logout"' in soft_fn
+    assert 'path === "/login"' in soft_fn
+    assert 'path.startsWith("/api/")' in soft_fn
     assert "/products/" in soft_fn or r"/products\/" in soft_fn
     assert "objects" in soft_fn
+    assert "Creo.JS stays Connected" in soft_fn
     assert "userCanCheckout" in script
     assert "userCanCheckin" in script
     assert "roleCanCheckout" in _between(
@@ -559,6 +561,8 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "isSoftNavUrl(url)" in leave
     assert "softNavigate" in leave
     assert "inCreoBrowser()" not in leave
+    assert "leavePage(productHome())" in script
+    assert "window.location.href = productHome()" not in script
 
     # Soft reload after remove/add — hard assign is ignored in Creo and left a stale table.
     reload = _between(script, "function reloadPage(", "function reloadPageAfterDialog(")
