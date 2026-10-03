@@ -88,17 +88,19 @@
     </section>
   </form>
 
-  <section class="settings-card" style="margin-top: 1rem;">
-    <h2>Remove product</h2>
-    <p class="muted small">Deletes the CreoPDM vault (working copies and Git history) and unregisters the product from the database. Works for Archived / locked products too. Original CAD folders you imported from are not deleted. Type the exact product name to confirm.</p>
-    {% if delete_error %}<p class="error">{{ delete_error }}</p>{% endif %}
-    <form method="post" action="/admin/products/{{ form.uuid }}/delete" class="settings-form">
+  <form method="post" action="/admin/products/{{ form.uuid }}/delete" class="settings-form settings-form-wide" style="margin-top: 1rem;">
+    <section class="settings-card">
+      <h2>Remove product</h2>
+      <p class="muted small">Deletes the CreoPDM vault (working copies and Git history) and unregisters the product from the database. Works for Archived / locked products too. Original CAD folders you imported from are not deleted. Type the exact product name to confirm.</p>
+      {% if delete_error %}<p class="error">{{ delete_error }}</p>{% endif %}
       <label>Type <strong>{{ form.name }}</strong> to confirm
         <input name="confirm_name" type="text" required maxlength="255" autocomplete="off">
       </label>
-      <button type="submit" class="btn btn-danger">Remove product</button>
-    </form>
-  </section>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-danger">Remove product</button>
+      </div>
+    </section>
+  </form>
 {% endif %}
 </article>
 {% endblock %}

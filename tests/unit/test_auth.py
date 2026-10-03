@@ -1451,6 +1451,9 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert detail.status_code == 200
     assert 'value="Admin Hub Product"' in detail.text
     assert "Remove product" in detail.text
+    assert f'action="/admin/products/{product["uuid"]}/delete"' in detail.text
+    # Remove card uses the same width constraint as the edit form above.
+    assert detail.text.count("settings-form-wide") >= 2
     assert "Lifecycle state" in detail.text
     assert 'name="state"' in detail.text
     assert 'name="read_only"' in detail.text
