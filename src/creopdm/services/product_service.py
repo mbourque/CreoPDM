@@ -108,15 +108,15 @@ class ProductService:
         *,
         exclude_uuid: str | None = None,
     ) -> None:
+        """Reject duplicate names across all products (including inactive / archived)."""
         wanted = name.strip().casefold()
-        stmt = select(Product).where(Product.active.is_(True))
-        for existing in session.scalars(stmt):
+        for existing in session.scalars(select(Product)):
             if exclude_uuid and existing.uuid == exclude_uuid:
                 continue
             if existing.name.strip().casefold() == wanted:
                 raise DuplicateProductError(
                     f'A product named "{existing.name}" already exists.',
-                    details={"name": existing.name},
+                    details={"name": existing.name, "uuid": existing.uuid},
                 )
 
     def _require_unique_vault_folder(

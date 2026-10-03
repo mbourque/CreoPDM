@@ -92,6 +92,16 @@ class GitVersionStore(VersionStore):
             relative_paths,
             keep_working_copy=keep_working_copy,
         )
-        if not self._git.is_dirty(repository_path):
-            return self._git.get_head(repository_path)
-        return self._git.commit(repository_path, message, author)
+        if self._git.is_dirty(repository_path):
+            head = self._git.commit(repository_path, message, author)
+        else:
+            head = self._git.get_head(repository_path)
+        # Purge often deletes .N siblings / emptied .gitkeep paths before unregister.
+        # Commit that drift so the vault is not left dirty for Compact / next ops.
+        aligned = self._git.align_working_tree(
+            repository_path,
+            author=author,
+            message="Align vault after unregister",
+            include_untracked=False,
+        )
+        return aligned or head

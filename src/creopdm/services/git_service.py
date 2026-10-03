@@ -398,6 +398,42 @@ class GitService:
         logger.warning("Restoring repository HEAD to %s", commit_hash)
         self._run(["reset", "--hard", commit_hash], cwd=path)
 
+    def dirty_summary(self, path: Path, *, limit: int = 8) -> str:
+        """Short human list of dirty paths for error messages."""
+        status = self.status(path)
+        names = list(
+            dict.fromkeys([*status.staged, *status.unstaged, *status.untracked])
+        )
+        if not names:
+            return ""
+        shown = names[:limit]
+        extra = len(names) - len(shown)
+        text = ", ".join(shown)
+        if extra > 0:
+            text = f"{text} (+{extra} more)"
+        return text
+
+    def align_working_tree(
+        self,
+        path: Path,
+        *,
+        author: UserIdentity,
+        message: str = "Align vault working tree",
+        include_untracked: bool = False,
+    ) -> str | None:
+        """Stage drift and commit when needed. Returns new HEAD or None if already clean.
+
+        ``include_untracked=False`` uses ``git add -u`` (updates/deletes only) so a
+        ``git rm --cached`` unregister cannot immediately re-add purged tips.
+        """
+        if not self.is_dirty(path):
+            return None
+        add_args = ["add", "-A"] if include_untracked else ["add", "-u"]
+        self.run_with_index_lock_retry(add_args, cwd=path, quiet=True)
+        if not self.is_dirty(path):
+            return self.get_head(path)
+        return self.commit(path, message, author)
+
     def compact_to_tip(
         self,
         path: Path,
@@ -409,7 +445,7 @@ class GitService:
         """Replace all Git history with one commit of the current tip tree.
 
         Drops blobs that only lived in older commits (e.g. after Remove from Product).
-        Requires a clean working tree. Returns the new HEAD hash.
+        Aligns leftover working-tree drift first (common after purge + unregister).
         """
         repo = Path(path)
         if not (repo / ".git").is_dir():
@@ -418,10 +454,24 @@ class GitService:
                 details={"path": str(repo)},
             )
         if self.is_dirty(repo):
-            raise RepositoryError(
-                "Vault has uncommitted changes. Finish check-in or clean the vault first.",
-                details={"path": str(repo)},
-            )
+            summary = self.dirty_summary(repo)
+            logger.info("Aligning dirty vault before compact (%s): %s", repo, summary)
+            try:
+                self.align_working_tree(
+                    repo,
+                    author=author,
+                    message="Align vault before compact",
+                    include_untracked=True,
+                )
+            except RepositoryError:
+                raise
+            if self.is_dirty(repo):
+                summary = self.dirty_summary(repo) or "unknown paths"
+                raise RepositoryError(
+                    "Vault has uncommitted changes that could not be aligned "
+                    f"({summary}). Finish check-in or clean the vault first.",
+                    details={"path": str(repo), "dirty": summary},
+                )
         temp_branch = "creopdm-compact-tmp"
         # Drop a leftover temp branch from a failed prior attempt.
         existing = self._run(

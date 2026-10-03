@@ -150,6 +150,25 @@ def test_create_product_rejects_duplicate_name_case_insensitive(client, repo_par
 
 
 @requires_git
+def test_create_product_rejects_name_used_by_archived_or_inactive(client, app, repo_parent):
+    """Duplicate names are blocked even when the other product is Archived / inactive."""
+    from sqlalchemy import select
+
+    from creopdm.models.product import Product
+
+    archived, _ = _create_product(client, repo_parent, name="Legacy Name")
+    with app.state.ctx.session_factory() as db:
+        row = db.scalar(select(Product).where(Product.uuid == archived["uuid"]))
+        assert row is not None
+        row.state = "ARCHIVED"
+        row.active = False
+        db.commit()
+    blocked = client.post("/api/products", json={"name": "legacy name"})
+    assert blocked.status_code == 409, blocked.text
+    assert "already exists" in blocked.json()["error"]["message"].lower()
+
+
+@requires_git
 def test_create_product_custom_vault_folder(client, repo_parent, data_dir):
     response = client.post(
         "/api/products",

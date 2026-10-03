@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import select
 
-from creopdm.exceptions import RepositoryError, ValidationAppError
+from creopdm.exceptions import ValidationAppError
 from creopdm.models.object import EngineeringObject
 from creopdm.models.version import ObjectVersion
 from creopdm.services.git_service import GitService
@@ -55,6 +55,30 @@ def test_compact_to_tip_drops_removed_file_blobs(tmp_path):
 
 
 @requires_git
+def test_compact_aligns_dirty_vault_after_purge_drift(tmp_path):
+    """Remove/purge can leave deleted tracked paths; compact must align then squash."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    git = GitService()
+    author = UserIdentity("Admin", "TEST-PC")
+    git.init_repository(vault, "main")
+    (vault / "keep.prt").write_bytes(b"keep")
+    (vault / "extra.prt.2").write_bytes(b"purge-me")
+    git.stage_files(vault, ["keep.prt", "extra.prt.2"])
+    git.commit(vault, "Add", author)
+    # Simulate purge deleting a tracked sibling without a git rm commit.
+    (vault / "extra.prt.2").unlink()
+    assert git.is_dirty(vault)
+
+    head = git.compact_to_tip(vault, author=author, message="Compact", branch="main")
+    assert not git.is_dirty(vault)
+    assert (vault / "keep.prt").read_bytes() == b"keep"
+    assert not (vault / "extra.prt.2").exists()
+    assert len(git.get_history(vault)) == 1
+    assert git.get_head(vault) == head
+
+
+@requires_git
 def test_compact_product_vault_prunes_history_and_rejects_gates(client, app, data_dir):
     ctx = app.state.ctx
     product = _create_product(client, "Robot Compact")
@@ -99,19 +123,10 @@ def test_compact_product_vault_prunes_history_and_rejects_gates(client, app, dat
             )
     assert client.post(f"/api/objects/{obj['uuid']}/undo-checkout").status_code == 200
 
-    # Dirty vault blocks
+    # Dirty vault is aligned (not blocked) — leftover untracked after purge/remove.
     vault = data_dir / "vaults" / folder
     dirty = vault / "untracked-dirt.bin"
     dirty.write_bytes(b"dirt")
-    with ctx.session_factory() as db:
-        with pytest.raises(RepositoryError, match="uncommitted"):
-            compact_product_vault_history(
-                ctx,
-                db,
-                product_uuid=product["uuid"],
-                confirm_name="Robot Compact",
-            )
-    dirty.unlink()
 
     with ctx.session_factory() as db:
         result = compact_product_vault_history(
@@ -140,7 +155,9 @@ def test_compact_product_vault_prunes_history_and_rejects_gates(client, app, dat
     assert len(tip_history) == 1
     assert tip_history[0]["comment"] == "Second version"
     assert (vault / "shaft.prt").read_bytes() == b"v2-content"
-    git_history = GitService().get_history(vault)
+    git = GitService()
+    assert not git.is_dirty(vault)
+    git_history = git.get_history(vault)
     assert len(git_history) == 1
 
 

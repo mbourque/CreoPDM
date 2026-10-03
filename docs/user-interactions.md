@@ -67,8 +67,9 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 
 **Name rules (new / rename)**
 
-- Product name is required.
+- Product name is required and must be **unique** (case-insensitive) across every product on the server — including Archived / inactive. Two products cannot share a name.
 - Custom vault/workspace name: no spaces; or use the hash option instead.
+- Administration → Products shows **Created** (date/time) so you can tell products apart when cleaning up.
 
 ---
 
@@ -486,7 +487,7 @@ Needs `utilities.access` (Administrator by default; CreoPDM Administration only)
 | Open **Utilities** | Show **Email all users**, **Compact product vault history**, system health, database probe, Git version, disk space (**System** volume free/used once; Data / Vaults / Logs each show that folder’s used size), product/user/checkout counts, and server paths | Let PDM Manager / Engineer open it without the permission; repeat the same volume free/used under every path |
 | Click **Refresh** | Re-run the probes and show updated values | Change settings or mutate vault data |
 | Fill subject + message, check the confirm box, **Send email to all users** | Email each **active** user individually (using Administration → Email delivery settings); skip disabled accounts; keep addresses private | Send without confirm; put every address in one To/Cc list; email disabled users |
-| Choose a product, type its **exact** name, check the danger box, **Compact vault history** | Squash that product’s vault to one tip commit, prune older History versions in the DB, and Git-gc so removed-file bytes leave `.git/objects`; tip files stay; report before/after `.git` size | Run without name match / danger confirm; run while any checkout is active or the vault is dirty; rewrite other products; keep old History rows that point at deleted Git commits |
+| Choose a product, type its **exact** name, check the danger box, **Compact vault history** | Squash that product’s vault to one tip commit, prune older History versions in the DB, and Git-gc so removed-file bytes leave `.git/objects`; tip files stay; report before/after `.git` size; auto-align leftover working-tree drift after Remove-from-Product (do not fail only because purge left deleted paths uncommitted) | Run without name match / danger confirm; run while any checkout is active; rewrite other products; keep old History rows that point at deleted Git commits |
 
 ### Email (Administration → Email)
 

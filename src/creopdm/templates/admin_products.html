@@ -20,6 +20,7 @@
       <thead>
         <tr>
           <th>Name</th>
+          <th>Created</th>
           <th>Number</th>
           <th>State</th>
           <th>Access</th>
@@ -32,15 +33,17 @@
         <tr>
           <td>
             <a href="/admin/products/{{ p.uuid }}">{{ p.name }}</a>
+            {% if not p.active %}<span class="muted"> (inactive)</span>{% endif %}
           </td>
+          <td>{% if p.created_at %}<span title="{{ local_time_pretty(p.created_at) }}">{{ local_time(p.created_at) }}</span>{% else %}—{% endif %}</td>
           <td>{{ p.number or "—" }}</td>
           <td>{{ product_state_labels.get(p.state, p.state) }}</td>
           <td>{% if p.read_only %}Read only{% else %}—{% endif %}</td>
-          <td>{{ p.vault_folder }}</td>
+          <td class="mono">{{ p.vault_folder }}</td>
           <td>{{ p.description or "—" }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="6" class="muted">No products yet.</td></tr>
+        <tr><td colspan="7" class="muted">No products yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>

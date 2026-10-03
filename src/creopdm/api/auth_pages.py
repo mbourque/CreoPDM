@@ -39,6 +39,7 @@ from creopdm.permissions import (
 )
 from creopdm.utils.identity import UserIdentity, set_request_identity
 from creopdm.utils.passwords import verify_password
+from creopdm.utils.timefmt import format_local, format_local_pretty
 
 # Back-compat for default form role.
 BuiltinRole = StarterRole
@@ -48,6 +49,10 @@ _template_env = Environment(
     loader=FileSystemLoader(str(PACKAGE_DIR / "templates")),
     autoescape=select_autoescape(),
 )
+_template_env.filters["local_time"] = format_local
+_template_env.filters["local_time_pretty"] = format_local_pretty
+_template_env.globals["local_time"] = format_local
+_template_env.globals["local_time_pretty"] = format_local_pretty
 templates = Jinja2Templates(env=_template_env)
 router = APIRouter()
 
