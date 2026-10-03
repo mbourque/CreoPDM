@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import shutil
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -17,8 +20,17 @@ PYTEST_LAST_LOG = "pytest-last.log"
 def pytest_configure(config):
     """Keep pytest temps in the repo. Windows often locks %TEMP%\\pytest-of-*."""
     root = Path(config.rootpath)
-    if not getattr(config.option, "basetemp", None):
-        config.option.basetemp = str(root / "pytest-tmp")
+    configured = getattr(config.option, "basetemp", None)
+    # pyproject used to force --basetemp=pytest-tmp; that shared tree gets stuck
+    # on locked creopdm.db (WinError 32) and fails every following run's setup.
+    if not configured or Path(str(configured)).name == "pytest-tmp":
+        stamp = f"{os.getpid()}-{int(time.time())}"
+        base = root / f"pytest-tmp-{stamp}"
+        config.option.basetemp = str(base)
+        for stale in root.glob("pytest-tmp*"):
+            if stale.resolve() == base.resolve():
+                continue
+            shutil.rmtree(stale, ignore_errors=True)
 
 
 @pytest.fixture(autouse=True)

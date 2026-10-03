@@ -54,7 +54,9 @@ creopdm = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-q --basetemp=pytest-tmp"
+# basetemp is set per-run in tests/conftest.py (unique folder). A fixed
+# --basetemp=pytest-tmp stays locked on Windows when SQLite handles linger.
+addopts = "-q"
 cache_dir = "pytest-cache"
 filterwarnings = [
     "ignore:Using `httpx` with `starlette.testclient` is deprecated",
