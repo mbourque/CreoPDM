@@ -1560,8 +1560,10 @@ def test_admin_hub_panel_fills_full_width():
     )
     assert "<h1>Utilities</h1>" in utilities
     assert "Disk space" in utilities
-    assert ">System</h3>" in utilities or "System</h3>" in utilities
+    # System volume row is {{ row.label }} from the API; template gates free/used on kind.
+    assert "row.kind == 'volume'" in utilities or 'row.kind == "volume"' in utilities
     assert "size of that folder only" in utilities
+    assert "<strong>System</strong>" in utilities
     assert "Email all users" in utilities
     assert 'action="/admin/utilities/email-all"' in utilities
     assert ".utilities-status-ok" in css
