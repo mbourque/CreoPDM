@@ -48,6 +48,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return `${text} MB`;
   }
 
+  function agentBase() {
+    const fromBody = (document.body?.dataset?.agentBase || "").trim();
+    return fromBody || "http://127.0.0.1:8766";
+  }
+
+  function agentPdmToken() {
+    return String(document.body?.dataset?.agentToken || "").trim();
+  }
+
+  /** Fields the local agent forwards to CreoPDM (Bearer = signed-in user). */
+  function agentPdmAuth() {
+    const token = agentPdmToken();
+    return token ? { token } : {};
+  }
+
+  /** Browser → localhost agent: Authorization required when Origin is present. */
+  function agentAuthHeaders(extra = {}) {
+    const headers = { ...extra };
+    const token = agentPdmToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return headers;
+  }
+
   function eventEl(event) {
     const node = event?.target;
     if (!node) return null;
@@ -1890,7 +1913,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             try {
               const localResponse = await fetch(`${agentBase()}/delete-product-cache`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: agentAuthHeaders({ "Content-Type": "application/json" }),
                 body: JSON.stringify({
                   product_id: productId,
                   vault_folder: vaultFolder,
@@ -2877,7 +2900,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     try {
       pickResponse = await fetch(`${agentBase()}/pick-files`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: agentAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           initial_directory: addInitialDirectory || "",
           title: "Choose a compressed zip file",
@@ -2951,7 +2974,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         async () => {
           const response = await fetch(`${agentBase()}/import-zip`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: agentAuthHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify({
               pdm_url: window.location.origin,
               product_id: productId,
@@ -3030,7 +3053,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     try {
       pickResponse = await fetch(`${agentBase()}/pick-files`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: agentAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           initial_directory: addInitialDirectory || "",
           title: "Add files to the product",
@@ -3075,7 +3098,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     try {
       pickResponse = await fetch(`${agentBase()}/pick-folder`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: agentAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           initial_directory: addInitialDirectory || "",
           title: recursive ? "Add folders to the product" : "Add a folder to the product",
@@ -3306,7 +3329,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           try {
             response = await fetch(`${agentBase()}/add-paths`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: agentAuthHeaders({ "Content-Type": "application/json" }),
               body: JSON.stringify({
                 pdm_url: window.location.origin,
                 ...agentPdmAuth(),
@@ -5898,7 +5921,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const folder = vaultFolder || currentVaultFolder();
     if (folder) params.set("vault_folder", folder);
     const query = params.toString() ? `?${params}` : "";
-    const response = await fetch(`${agentBase()}/workdir${query}`, { method: "GET" });
+    const response = await fetch(`${agentBase()}/workdir${query}`, {
+      method: "GET",
+      headers: agentAuthHeaders(),
+    });
     if (!response.ok) {
       throw new Error("Local CreoPDM agent could not provide a cache folder.");
     }
@@ -6146,21 +6172,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return openPdmObject(target);
   }
 
-  function agentBase() {
-    const fromBody = (document.body?.dataset?.agentBase || "").trim();
-    return fromBody || "http://127.0.0.1:8766";
-  }
-
-  function agentPdmToken() {
-    return String(document.body?.dataset?.agentToken || "").trim();
-  }
-
-  /** Fields the local agent forwards to CreoPDM (Bearer = signed-in user). */
-  function agentPdmAuth() {
-    const token = agentPdmToken();
-    return token ? { token } : {};
-  }
-
   async function probeCreoAgent() {
     try {
       const response = await fetch(`${agentBase()}/health`, {
@@ -6192,7 +6203,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!agent) return null;
     const response = await fetch(`${agentBase()}/push`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: agentAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         pdm_url: window.location.origin,
         ...agentPdmAuth(),
@@ -6220,7 +6231,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (vaultFolder) params.set("vault_folder", vaultFolder);
     const response = await fetch(
       `${agentBase()}/files?${params}`,
-      { method: "GET" }
+      { method: "GET", headers: agentAuthHeaders() }
     );
     if (!response.ok) return [];
     const body = await response.json().catch(() => null);
@@ -6242,7 +6253,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!agent) return byPath;
     const response = await fetch(`${agentBase()}/hash-paths`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: agentAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         product_id: productId,
         vault_folder: currentVaultFolder(),
@@ -6267,7 +6278,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!agent) return null;
     const response = await fetch(`${agentBase()}/push-paths`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: agentAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         pdm_url: window.location.origin,
         ...agentPdmAuth(),
@@ -6289,7 +6300,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!agent) return null;
     const response = await fetch(`${agentBase()}/delete-paths`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: agentAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         product_id: productId,
         vault_folder: currentVaultFolder(),
@@ -6318,7 +6329,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       try {
         fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: agentAuthHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({
             product_id: productId,
             vault_folder: currentVaultFolder(),
@@ -6352,7 +6363,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!agent) return null;
     const response = await fetch(`${agentBase()}/purge-versions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: agentAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         product_id: productId,
         vault_folder: currentVaultFolder(),
@@ -6652,7 +6663,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const companions = Array.isArray(prepared.companions) ? prepared.companions : [];
     const response = await fetch(`${agentBase()}/materialize`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: agentAuthHeaders({ "Content-Type": "application/json" }),
       signal: abortSignalAfter(180000),
       body: JSON.stringify({
         pdm_url: window.location.origin,
@@ -6685,7 +6696,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function materializeCheckedOutToAgentCacheZip(objectIds) {
     const response = await fetch(`${agentBase()}/materialize-zip`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: agentAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         pdm_url: window.location.origin,
         ...agentPdmAuth(),
@@ -6757,7 +6768,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function openViaAgent(localPath, mode) {
     const response = await fetch(`${agentBase()}/open`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: agentAuthHeaders({ "Content-Type": "application/json" }),
       signal: abortSignalAfter(60000),
       body: JSON.stringify({ path: localPath, mode: mode || "association" }),
     });
@@ -7234,7 +7245,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (agent) {
           const response = await fetch(`${agentBase()}/export-zip`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: agentAuthHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify({
               pdm_url: window.location.origin,
               ...agentPdmAuth(),
@@ -7294,7 +7305,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const opened = await withBusy("Opening local workspace…", async () => {
       const response = await fetch(`${agentBase()}/open-folder`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: agentAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           product_id: productId,
           vault_folder: openWorkspaceBtn.dataset.vaultFolder || currentVaultFolder(),
@@ -8742,7 +8753,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!agent) return null;
     const response = await fetch(`${agentBase()}/delete-product-cache`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: agentAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         product_id: productId,
         vault_folder: currentVaultFolder(),

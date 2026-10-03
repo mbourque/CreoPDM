@@ -81,7 +81,7 @@ function Add-Note([string]$text) {{
 }}
 Add-Label 'CreoPDM host / IP'
 $pdmHost = Add-Box ([string]$initial.pdm_host)
-Add-Note 'Leave blank to use the browser page URL on open. Or set creopdm.local + port (full http://… in host is OK; port below is still applied).'
+Add-Note 'Leave blank to use the browser page URL on open (recommended). When set, browser calls must come from that exact origin. Or set creopdm.local + port (full http://… in host is OK; port below is still applied).'
 Add-Label 'CreoPDM port'
 $pdmPort = Add-Box ([string]$initial.pdm_port)
 Add-Note 'Port from the CreoPDM browser URL (not 0). Leave blank if host already includes :port, or if host is blank.'
@@ -328,7 +328,8 @@ def run_settings_tk(settings: AgentConfig | None = None) -> int:
         "CreoPDM host / IP",
         "pdm_host",
         str(payload["pdm_host"]),
-        "Leave blank to use the CreoPDM URL from the browser (recommended).",
+        "Leave blank to use the CreoPDM URL from the browser (recommended). "
+        "When set, browser calls to this agent must come from that exact origin.",
     )
     row("CreoPDM port", "pdm_port", str(payload["pdm_port"]))
     https_var = tk.BooleanVar(value=bool(payload["pdm_https"]))

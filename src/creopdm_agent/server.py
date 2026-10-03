@@ -11,15 +11,54 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 import httpx
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
+from starlette.responses import JSONResponse, Response
 
 from creopdm_agent import __version__
 from creopdm_agent.config import AgentConfig
 from creopdm_agent.trash import move_to_trash
 
 logger = logging.getLogger("creopdm_agent")
+
+# Paths that stay reachable without a browser Bearer (status probe / OpenAPI).
+_AGENT_PUBLIC_PATHS = frozenset({"/health", "/docs", "/openapi.json", "/redoc"})
+
+
+def _origin_from_url(url: str) -> str:
+    parsed = urlparse((url or "").strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _allowed_browser_origins(settings: AgentConfig) -> list[str]:
+    """Explicit CreoPDM origins allowed to call this agent from a browser."""
+    origin = _origin_from_url(settings.pdm_url or "")
+    return [origin] if origin else []
+
+
+def _bearer_token(authorization: str | None) -> str:
+    raw = (authorization or "").strip()
+    if not raw.lower().startswith("bearer "):
+        return ""
+    return raw[7:].strip()
+
+
+def _browser_bearer_ok(authorization: str | None) -> bool:
+    """Page sends data-agent-token; require a non-trivial Bearer (not verified HMAC here)."""
+    token = _bearer_token(authorization)
+    return len(token) >= 16
+
+
+def _cors_headers(origin: str) -> dict[str, str]:
+    return {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Authorization, Content-Type",
+        "Access-Control-Max-Age": "600",
+        "Vary": "Origin",
+    }
 
 # Allow spaces so vault folders like "from ptc" stay "from ptc" in the agent
 # cache (older builds turned spaces into underscores → false New/Modified).
@@ -791,14 +830,55 @@ def _purge_newer_local_saves(cache_dir: Path, kept: Path) -> list[str]:
 
 def create_agent_app(settings: AgentConfig) -> FastAPI:
     app = FastAPI(title="CreoPDM Agent", version=__version__)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
     root = settings.ensure_dirs()
+    configured_origins = _allowed_browser_origins(settings)
+
+    @app.middleware("http")
+    async def agent_browser_security(request: Request, call_next):
+        """Block cross-site abuse of the localhost agent.
+
+        - No CORS ``*`` (reflect Origin only when the call is allowed).
+        - Browser calls (``Origin`` present) to non-public paths need Bearer
+          ``data-agent-token`` from the CreoPDM page.
+        - When ``pdm_url`` is set, browser Origin must match that CreoPDM origin.
+        - Non-browser clients (no Origin: tests, tray) keep working without Bearer.
+        """
+        path = request.url.path.rstrip("/") or "/"
+        # Starlette mounts health at /health (no trailing slash).
+        public = path in _AGENT_PUBLIC_PATHS or path.startswith("/docs")
+        origin = (request.headers.get("origin") or "").strip()
+
+        if request.method == "OPTIONS":
+            # Preflight omits Authorization; actual request still requires Bearer.
+            if not origin.startswith(("http://", "https://")):
+                return Response(status_code=400)
+            if configured_origins and origin not in configured_origins:
+                return JSONResponse({"detail": "Origin not allowed."}, status_code=403)
+            return Response(status_code=204, headers=_cors_headers(origin))
+
+        if origin:
+            if not origin.startswith(("http://", "https://")):
+                return JSONResponse({"detail": "Origin not allowed."}, status_code=403)
+            if configured_origins and origin not in configured_origins:
+                return JSONResponse(
+                    {"detail": "Origin not allowed."},
+                    status_code=403,
+                    headers=_cors_headers(origin),
+                )
+            if not public and not _browser_bearer_ok(request.headers.get("authorization")):
+                return JSONResponse(
+                    {"detail": "Agent authentication required."},
+                    status_code=401,
+                    headers=_cors_headers(origin),
+                )
+
+        response = await call_next(request)
+        if origin and origin.startswith(("http://", "https://")):
+            if not configured_origins or origin in configured_origins:
+                if public or _browser_bearer_ok(request.headers.get("authorization")):
+                    for key, value in _cors_headers(origin).items():
+                        response.headers[key] = value
+        return response
 
     @app.get("/health")
     def health() -> dict[str, object]:
@@ -1035,26 +1115,6 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             recursive,
         )
         return PickFilesResponse(selected=paths, cancelled=False, folder=str(chosen))
-
-    @app.get("/local-file")
-    def local_file(path: str = ""):
-        """Read a local file the user just picked (Add upload via agent)."""
-        from fastapi.responses import FileResponse
-
-        raw = (path or "").strip()
-        if not raw:
-            raise HTTPException(status_code=400, detail="path is required")
-        try:
-            target = Path(raw).resolve()
-        except OSError as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid path: {exc}") from exc
-        if not target.is_file():
-            raise HTTPException(status_code=404, detail=f"File not found: {target}")
-        return FileResponse(
-            path=target,
-            filename=target.name,
-            media_type="application/octet-stream",
-        )
 
     @app.post("/push", response_model=PushResponse)
     def push_to_vault(payload: PushRequest) -> PushResponse:

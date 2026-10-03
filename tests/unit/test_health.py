@@ -41,6 +41,8 @@ def test_app_js_is_not_cached(client):
     assert "syncCreoSessionControlsFromBridge" in response.text
     assert "Never re-probe agent or reconnect" in response.text or "Do not probe or touch the pill" in response.text
     assert "__creopdmStatusPollId" in response.text
+    assert "function agentAuthHeaders(" in response.text
+    assert "Authorization" in response.text
     assert "pushCreoMetadataForItems" in response.text
     assert "gatherCreoMetadataForFilename" in response.text
     assert "canGatherCreoMetadata" in response.text

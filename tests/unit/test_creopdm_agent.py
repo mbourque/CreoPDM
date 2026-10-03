@@ -345,7 +345,8 @@ def test_agent_open_folder_creates_cache_when_nothing_materialized(tmp_path, mon
         assert opened[-1].resolve() == (root / "brand-new").resolve()
 
 
-def test_agent_pick_files_and_local_file(tmp_path, monkeypatch):
+def test_agent_pick_files_returns_paths(tmp_path, monkeypatch):
+    """Add uses /add-paths — /local-file is removed (no arbitrary filesystem read)."""
     root = tmp_path / "cache"
     root.mkdir()
     sample = tmp_path / "outside" / "shaft.prt.3"
@@ -367,11 +368,58 @@ def test_agent_pick_files_and_local_file(tmp_path, monkeypatch):
         body = picked.json()
         assert body["cancelled"] is False
         assert body["selected"] == [str(sample)]
-        downloaded = client.get("/local-file", params={"path": str(sample)})
-        assert downloaded.status_code == 200, downloaded.text
-        assert downloaded.content == b"creo"
-        missing = client.get("/local-file", params={"path": str(tmp_path / "nope.prt.1")})
-        assert missing.status_code == 404
+        gone = client.get("/local-file", params={"path": str(sample)})
+        assert gone.status_code == 404
+
+
+def test_agent_browser_origin_requires_bearer(tmp_path, monkeypatch):
+    """Browser Origin without Bearer must not open cache paths (Astra #6)."""
+    root = tmp_path / "cache"
+    root.mkdir()
+    target = root / "proj1" / "shaft.prt.1"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"creo")
+    settings = AgentConfig(
+        host="127.0.0.1",
+        port=8766,
+        local_root=str(root),
+        pdm_url="http://pdm.example:52113",
+    )
+    app = create_agent_app(settings)
+    monkeypatch.setattr("creopdm.utils.launch.open_windows_file", lambda path, cwd=None: None)
+    origin = "http://pdm.example:52113"
+    evil = "https://evil.example"
+    token = "a" * 24
+    with TestClient(app) as client:
+        health = client.get("/health", headers={"Origin": origin})
+        assert health.status_code == 200
+        assert health.headers.get("access-control-allow-origin") == origin
+
+        denied = client.post(
+            "/open",
+            json={"path": str(target)},
+            headers={"Origin": origin},
+        )
+        assert denied.status_code == 401
+
+        evil_denied = client.post(
+            "/open",
+            json={"path": str(target)},
+            headers={"Origin": evil, "Authorization": f"Bearer {token}"},
+        )
+        assert evil_denied.status_code == 403
+
+        ok = client.post(
+            "/open",
+            json={"path": str(target)},
+            headers={"Origin": origin, "Authorization": f"Bearer {token}"},
+        )
+        assert ok.status_code == 200, ok.text
+        assert ok.headers.get("access-control-allow-origin") == origin
+
+        # Non-browser clients (no Origin) still work without Bearer — unit tests / tray.
+        no_origin = client.post("/open", json={"path": str(target)})
+        assert no_origin.status_code == 200, no_origin.text
 
 
 def test_agent_pick_files_archive_mode_skips_creo_latest_filter(tmp_path, monkeypatch):

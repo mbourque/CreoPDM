@@ -720,8 +720,9 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
         script, "async function beginExport(mode) {", "exportProductBtn?.addEventListener"
     )
     assert "canCopyToVault" in script
+    # agentBase() lives near boot top (auth headers); openPdmObjectFromUi follows promptOpenCheckout.
     assert "setWorkingDirectory" in _between(
-        script, "async function openPdmObjectFromUi(", "function agentBase("
+        script, "async function openPdmObjectFromUi(", "async function probeCreoAgent("
     )
     prompt_open = _between(
         script, "function promptOpenCheckout(", "function checkoutBeforeOpen("
@@ -1499,3 +1500,14 @@ def test_workspace_poll_only_on_files_list_page():
     assert "Keep polling for list/check-in changes while Admin" in docs
     assert "do not probe creopdm-agent `/health`" in docs or "do not probe creopdm-agent" in docs
     assert "hit agent `/health` on every Admin" in docs or "hit agent /health on every Admin" in docs
+
+
+def test_agent_auth_headers_sent_to_localhost_agent():
+    """Browser→agent calls send Authorization; /health stays unauthenticated."""
+    script = _app_js()
+    assert "function agentAuthHeaders(" in script
+    assert "headers: agentAuthHeaders(" in script or "headers: agentAuthHeaders()" in script
+    # Status probe must remain open (no auth header required on /health).
+    health = _between(script, "async function probeCreoAgent(", "async function pushLocalWorkspaceToVault(")
+    assert 'fetch(`${agentBase()}/health`' in health or 'agentBase()}/health' in health
+    assert "agentAuthHeaders" not in health
