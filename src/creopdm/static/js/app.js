@@ -1385,16 +1385,109 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const productId = $("#rebuild-where-used-btn")?.dataset.product || currentProductId();
     if (!productId) return;
     showError($("#toolbar-error"), "");
-    const response = await fetch(`/api/products/${encodeURIComponent(productId)}/rebuild-where-used`, {
-      method: "POST",
-    });
-    if (!response.ok) {
-      showError($("#toolbar-error"), await readError(response));
+    const outcome = await withBusy("Indexing Where Used…", () =>
+      awaitWhereUsedIndex(productId, {
+        onProgress: (doneCount, total) => {
+          if (total > 0) {
+            setBusyMessage(`Indexing Where Used… ${doneCount} of ${total}`);
+          } else {
+            setBusyMessage("Indexing Where Used…");
+          }
+        },
+      })
+    );
+    if (!outcome.started) {
+      showError($("#toolbar-error"), outcome.error || "Could not start Where Used indexing.");
       return;
     }
-    showOk("Where Used indexing started in the background.");
-    watchWhereUsedIndex(productId);
+    if (outcome.state === "error" || outcome.state === "timeout") {
+      showError($("#toolbar-error"), outcome.error || "Where Used indexing failed.");
+      return;
+    }
+    if (outcome.state === "done") {
+      const missMsg = outcome.parentsMissing
+        ? ` ${outcome.parentsMissing} parent file(s) missing from vault.`
+        : "";
+      try {
+        sessionStorage.setItem(
+          "creopdmNotice",
+          `Where Used index ready: ${outcome.edgesAdded} new link(s), ${outcome.edgesExisting} already stored.${missMsg}`
+        );
+      } catch {
+        /* private mode / blocked storage */
+      }
+      reloadPage();
+    }
   });
+
+  function sleepMs(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  /**
+   * Start Where Used indexing and wait until done/error/cancelled.
+   * Used under the Add (and gear Rebuild) busy overlay — not fire-and-forget.
+   */
+  async function awaitWhereUsedIndex(productId, { onProgress } = {}) {
+    if (!productId) return { started: false };
+    let startResponse;
+    try {
+      startResponse = await fetch(
+        `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`,
+        { method: "POST" }
+      );
+    } catch (exc) {
+      return { started: false, error: exc?.message || "Could not reach CreoPDM." };
+    }
+    if (!startResponse.ok) {
+      return { started: false, error: await readError(startResponse) };
+    }
+    for (let tries = 0; tries < 900; tries += 1) {
+      await sleepMs(tries === 0 ? 400 : 1000);
+      try {
+        const response = await fetch(
+          `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`
+        );
+        if (!response.ok) continue;
+        const body = await response.json();
+        const state = String(body.state || "");
+        if (state === "queued" || state === "running") {
+          const total = Number(body.parents_total) || 0;
+          const doneCount = Number(body.parents_done) || 0;
+          onProgress?.(doneCount, total);
+          continue;
+        }
+        if (state === "done") {
+          return {
+            started: true,
+            state: "done",
+            edgesAdded: Number(body.edges_added) || 0,
+            edgesExisting: Number(body.edges_existing) || 0,
+            parentsMissing: Number(body.parents_missing_vault) || 0,
+          };
+        }
+        if (state === "cancelled") {
+          return { started: true, state: "cancelled" };
+        }
+        if (state === "error") {
+          return {
+            started: true,
+            state: "error",
+            error: body.error || "Where Used indexing failed.",
+          };
+        }
+        // idle / unknown — treat as finished with nothing to do
+        return { started: true, state: state || "idle" };
+      } catch {
+        /* ignore transient poll errors */
+      }
+    }
+    return {
+      started: true,
+      state: "timeout",
+      error: "Where Used indexing timed out. Try Rebuild Where Used from the product gear.",
+    };
+  }
 
   function watchWhereUsedIndex(productId) {
     if (!productId) return;
@@ -3600,33 +3693,49 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       });
     }
     if (okCount) {
-      // Start Where Used only after every Add chunk finished (never mid-upload —
+      // Where Used only after every Add chunk finished (never mid-upload —
       // that contended SQLite and made "Adding files… N of M" crawl).
+      // Keep the busy overlay up until indexing finishes, then one Files reload.
       const productId = currentProductId();
-      let indexStarted = false;
+      let indexOutcome = null;
       if (productId) {
-        try {
-          const indexResponse = await fetch(
-            `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`,
-            { method: "POST" }
-          );
-          indexStarted = indexResponse.ok;
-        } catch {
-          /* indexing is best-effort; Files still reload */
-        }
+        indexOutcome = await withBusy("Indexing Where Used…", () =>
+          awaitWhereUsedIndex(productId, {
+            onProgress: (doneCount, total) => {
+              if (total > 0) {
+                setBusyMessage(`Indexing Where Used… ${doneCount} of ${total}`);
+              } else {
+                setBusyMessage("Indexing Where Used…");
+              }
+            },
+          })
+        );
       }
-      const indexNote = indexStarted
-        ? " Where Used indexing started in the background."
-        : "";
+      const indexOk = indexOutcome?.state === "done";
+      const indexNote = indexOk
+        ? " Where Used index updated."
+        : indexOutcome?.started
+          ? ` Where Used indexing ${indexOutcome.state || "did not finish"}${
+              indexOutcome.error ? `: ${indexOutcome.error}` : "."
+            }`
+          : indexOutcome?.error
+            ? ` Where Used indexing did not start: ${indexOutcome.error}`
+            : "";
       if (okCount > 50) {
-        showOk(
+        rememberNotice(
           `${okCount} file(s) added. Creo metadata was skipped for this large add — open a model in Creo and Check In to capture it.${indexNote}`
         );
-      } else if (indexStarted) {
-        showOk(`${okCount} file(s) added.${indexNote}`);
+      } else if (indexNote) {
+        rememberNotice(`${okCount} file(s) added.${indexNote}`);
+      } else {
+        rememberNotice(`${okCount} file(s) added.`);
       }
-      // Soft-reload Files; boot resumes Where Used poll and refreshes again when
-      // indexing finishes so Top level assemblies appears without a manual F5.
+      if (indexOutcome?.state === "error" || indexOutcome?.state === "timeout") {
+        showError(
+          $("#toolbar-error"),
+          indexOutcome.error || "Where Used indexing failed."
+        );
+      }
       reloadPage();
     }
     } finally {
