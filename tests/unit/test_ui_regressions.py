@@ -1560,6 +1560,8 @@ def test_admin_hub_panel_fills_full_width():
     )
     assert "<h1>Utilities</h1>" in utilities
     assert "Disk space" in utilities
+    assert ">System</h3>" in utilities or "System</h3>" in utilities
+    assert "size of that folder only" in utilities
     assert "Email all users" in utilities
     assert 'action="/admin/utilities/email-all"' in utilities
     assert ".utilities-status-ok" in css
@@ -1569,6 +1571,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "System Settings" in docs
     assert "Utilities" in docs
     assert "utilities.access" in docs
+    assert "folder’s used size" in docs or "folder" in docs
     assert "Audit** and **AI**" in docs or "**Audit** and **AI**" in docs
 
 

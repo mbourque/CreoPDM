@@ -99,7 +99,7 @@
 
   <section class="settings-card">
     <h2>Disk space</h2>
-    <p class="muted small">Free space is for the volume that holds each path. Below about 1 GB free is marked degraded.</p>
+    <p class="muted small"><strong>System</strong> is free/used on the volume that holds CreoPDM data (below about 1 GB free is degraded). Other rows are the size of that folder only.</p>
     {% for row in status.disk %}
     <h3 class="utilities-disk-label">{{ row.label }}</h3>
     <dl class="kv">
@@ -108,11 +108,14 @@
       {% if row.error %}
       <dt>Error</dt>
       <dd class="error">{{ row.error }}</dd>
-      {% else %}
+      {% elif row.kind == 'volume' %}
       <dt>Free</dt>
       <dd>{{ row.free_label }}{% if row.free_percent is not none %} ({{ row.free_percent }}%){% endif %}</dd>
       <dt>Used</dt>
       <dd>{{ row.used_label }} / {{ row.total_label }}</dd>
+      {% else %}
+      <dt>Used</dt>
+      <dd>{{ row.used_label }}</dd>
       {% endif %}
     </dl>
     {% endfor %}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import platform
 import shutil
 import subprocess
@@ -124,12 +125,34 @@ def _format_storage_bytes(value: int) -> str:
     return f"{size} B"
 
 
-def _disk_usage(label: str, path: Path) -> UtilitiesDiskUsage:
+def _directory_size_bytes(path: Path) -> int:
+    """Best-effort recursive size of files under path (no symlink follow)."""
+    try:
+        if not path.exists():
+            return 0
+        if path.is_file():
+            return int(path.stat().st_size)
+    except OSError:
+        return 0
+    total = 0
+    for root, _dirs, files in os.walk(path, followlinks=False):
+        for name in files:
+            try:
+                total += int((Path(root) / name).stat().st_size)
+            except OSError:
+                continue
+    return total
+
+
+def _volume_usage(label: str, path: Path) -> UtilitiesDiskUsage:
+    """Free / used for the volume that holds path (shown once as System)."""
     display = path_for_settings_display(path)
     try:
         resolved = path.expanduser().resolve()
     except OSError as exc:
-        return UtilitiesDiskUsage(label=label, path=display, exists=False, error=str(exc))
+        return UtilitiesDiskUsage(
+            label=label, path=display, kind="volume", exists=False, error=str(exc)
+        )
     exists = resolved.exists()
     try:
         probe = resolved if exists else (Path(resolved.anchor) if resolved.anchor else resolved.parent)
@@ -138,6 +161,7 @@ def _disk_usage(label: str, path: Path) -> UtilitiesDiskUsage:
         return UtilitiesDiskUsage(
             label=label,
             path=display,
+            kind="volume",
             exists=exists,
             total_bytes=int(usage.total),
             used_bytes=int(usage.used),
@@ -148,7 +172,44 @@ def _disk_usage(label: str, path: Path) -> UtilitiesDiskUsage:
             free_percent=round(free_pct, 1) if free_pct is not None else None,
         )
     except OSError as exc:
-        return UtilitiesDiskUsage(label=label, path=display, exists=exists, error=str(exc))
+        return UtilitiesDiskUsage(
+            label=label, path=display, kind="volume", exists=exists, error=str(exc)
+        )
+
+
+def _directory_usage(label: str, path: Path) -> UtilitiesDiskUsage:
+    """Size of this folder tree only (not the whole volume)."""
+    display = path_for_settings_display(path)
+    try:
+        resolved = path.expanduser().resolve()
+    except OSError as exc:
+        return UtilitiesDiskUsage(
+            label=label, path=display, kind="directory", exists=False, error=str(exc)
+        )
+    exists = resolved.exists()
+    if not exists:
+        return UtilitiesDiskUsage(
+            label=label,
+            path=display,
+            kind="directory",
+            exists=False,
+            used_bytes=0,
+            used_label=_format_storage_bytes(0),
+        )
+    try:
+        size = _directory_size_bytes(resolved)
+        return UtilitiesDiskUsage(
+            label=label,
+            path=display,
+            kind="directory",
+            exists=True,
+            used_bytes=size,
+            used_label=_format_storage_bytes(size),
+        )
+    except OSError as exc:
+        return UtilitiesDiskUsage(
+            label=label, path=display, kind="directory", exists=exists, error=str(exc)
+        )
 
 
 def _git_probe(ctx: AppContext) -> tuple[UtilitiesProbe, str, str]:
@@ -213,9 +274,10 @@ def collect_utilities_status(ctx: AppContext, db: Session) -> UtilitiesStatusRes
     vaults_dir = ctx.config.vaults_dir
     logs_dir = ctx.config.logs_dir
     disks = [
-        _disk_usage("Data directory", data_dir),
-        _disk_usage("Vaults", vaults_dir),
-        _disk_usage("Logs", logs_dir),
+        _volume_usage("System", data_dir),
+        _directory_usage("Data directory", data_dir),
+        _directory_usage("Vaults", vaults_dir),
+        _directory_usage("Logs", logs_dir),
     ]
 
     for row in disks:
@@ -223,7 +285,11 @@ def collect_utilities_status(ctx: AppContext, db: Session) -> UtilitiesStatusRes
             if overall == "ok":
                 overall = "degraded"
             continue
-        if row.free_bytes is not None and row.free_bytes < _LOW_DISK_BYTES:
+        if (
+            row.kind == "volume"
+            and row.free_bytes is not None
+            and row.free_bytes < _LOW_DISK_BYTES
+        ):
             if overall == "ok":
                 overall = "degraded"
 

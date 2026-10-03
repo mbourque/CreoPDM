@@ -480,7 +480,7 @@ Needs `utilities.access` (Administrator by default; CreoPDM Administration only)
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Open **Utilities** | Show **Email all users**, system health, database probe, Git version, disk free space for data/vaults/logs, product/user/checkout counts, and server paths | Let PDM Manager / Engineer open it without the permission |
+| Open **Utilities** | Show **Email all users**, system health, database probe, Git version, disk space (**System** volume free/used once; Data / Vaults / Logs each show that folder’s used size), product/user/checkout counts, and server paths | Let PDM Manager / Engineer open it without the permission; repeat the same volume free/used under every path |
 | Click **Refresh** | Re-run the probes and show updated values | Change settings or mutate vault data |
 | Fill subject + message, check the confirm box, **Send email to all users** | Email each **active** user individually (using Administration → Email delivery settings); skip disabled accounts; keep addresses private | Send without confirm; put every address in one To/Cc list; email disabled users |
 

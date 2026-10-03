@@ -18,8 +18,11 @@ class HealthResponse(BaseModel):
 
 
 class UtilitiesDiskUsage(BaseModel):
+    """kind=volume: free/used for the whole disk; kind=directory: size of that folder only."""
+
     label: str
     path: str
+    kind: str = "directory"  # volume | directory
     exists: bool = True
     total_bytes: int | None = None
     used_bytes: int | None = None
