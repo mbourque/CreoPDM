@@ -507,19 +507,19 @@
                 {% if selected %}data-product-name="{{ selected.name }}"{% endif %}
                 disabled
                 title="Move selected files from the local workspace on this PC (creopdm-agent cache) to the Recycle Bin. Does not affect the vault or product list.">Remove from Workspace</button>
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-versions-btn"
+        <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="purge-versions-btn"
                 {% if selected %}data-product="{{ selected.uuid }}" data-product-name="{{ selected.name }}"{% endif %}
                 disabled
-                title="Move local agent-cache numbered saves older than the vault copy to the Recycle Bin (configured purgeable extensions). Keeps the vault revision and any newer local work. Does not change the vault.">Purge workspace</button>
+                title="Move local agent-cache numbered saves older than the vault copy to the Recycle Bin (configured purgeable extensions). Keeps the vault revision and any newer local work. Does not change the vault.">Purge workspace…</button>
         <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="delete-workspace-btn"
                 {% if selected %}data-product="{{ selected.uuid }}" data-product-name="{{ selected.name }}"{% endif %}
                 disabled
                 title="Clear this product’s local workspace on this PC (creopdm-agent cache contents), including local-only new files. Keeps the workspace folder so Creo’s working directory can stay set. Vault copies and the product list stay.">Clear workspace…</button>
         {% if product_ui.show_remove_vault %}
-        <button type="button" class="toolbar-menu-item" role="menuitem" id="purge-workspace-btn"
+        <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="purge-workspace-btn"
                 {% if selected %}data-product-name="{{ selected.name }}"{% endif %}
                 disabled
-                title="Delete CreoPDM vault copies of the selected files only. Files in your original product folder are not deleted. Checkouts on those files are cancelled.">Remove from Vault</button>
+                title="Delete CreoPDM vault copies of the selected files only. Files in your original product folder are not deleted. Checkouts on those files are cancelled.">Remove from Vault…</button>
         {% endif %}
         {% if product_ui.show_remove_product %}
         <button type="button" class="toolbar-menu-item is-danger" role="menuitem" id="remove-product-btn"

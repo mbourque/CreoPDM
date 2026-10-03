@@ -136,7 +136,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 | Export ▾ | A product is open **and** you have `products.export` and/or `objects.export`. Works on locked / Released products | No product; role lacks both export permissions; always hidden on the file **Details** page |
 | Remove ▾ | Something can be removed (**Files** page). Local workspace remove/purge still work on a locked product | Nothing selected; always hidden on the file **Details** page |
 | Remove from Product… | Files **and/or folders** selected (including empty folders); product allows edits | Nothing selected; product is locked |
-| Remove from Vault | Selected vault files; product allows edits | Nothing selected; product is locked |
+| Remove from Vault… | Selected vault files; product allows edits | Nothing selected; product is locked |
 
 Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now — **except** **Export selected…** and **Check in selected…**, which stay visible and greyed with a hover title that explains why (nothing selected / no Modified work). Same rule for **permissions** and **product lock** (read-only / not In work): the server builds one `product_ui` flag set (role ∩ product state) and the page only shows those controls — if the signed-in role cannot do an action (or the PC cannot — e.g. Open workspace without creopdm-agent), **do not show the control**. **Set Working Directory**, **Collect all metadata**, and **Rebuild Where Used** follow the same rule: show only inside Creo when Creo.JS is connected (embedded browser); hide them outside Creo / when Session offline. Set Working Directory also needs a product workspace ready and stays hidden on the file **Details** page. On the file **Details** page (every tab, including History) Open, Checkout, Remove, Set Working Directory, and **Check In ▾** are all hidden — that toolbar is **Revert to selected…** only (when an older History row is selected). Check In stays on the Files page.
 
@@ -302,9 +302,9 @@ Starter roles: Administrator, PDM Manager, and Engineer get both export permissi
 ## 12. Remove ▾
 
 1. **Remove from Workspace** — trash local copies on this PC only; vault and product list unchanged  
-2. **Purge workspace** — trash older local numbered saves that are below the vault version; vault unchanged  
+2. **Purge workspace…** — trash older local numbered saves that are below the vault version; vault unchanged (warning dialog)  
 3. **Clear workspace…** — trash everything **inside** this product’s local agent-cache folder on this PC (including local-only new files); keep the empty folder so Creo’s working directory can stay set; vault and product list unchanged  
-4. **Remove from Vault** — delete CreoPDM’s vault copies; your original CAD folder stays; checkouts cancelled  
+4. **Remove from Vault…** — delete CreoPDM’s vault copies; your original CAD folder stays; checkouts cancelled (warning dialog)  
 5. **Remove from Product…** — remove from this product and delete vault copies; originals stay (warning dialog) 
 
 Destructive actions ask you to type the product name ([§13](#13-typing-the-product-name-to-confirm)).
@@ -316,10 +316,11 @@ Destructive actions ask you to type the product name ([§13](#13-typing-the-prod
 | Select local “new” files on New files and remove | Move them to the Recycle Bin on this PC | Change the vault or product file list |
 | Agent not running | Tell you to start creopdm-agent | |
 
-### Purge workspace
+### Purge workspace…
 
 | You do | App should | App must not |
 |--------|------------|--------------|
+| Open **Purge workspace…** | Show the danger-confirm warning (red menu item + ellipsis) | Omit the ellipsis or red styling when it opens a confirm |
 | Confirm purge | Remove only older local saves below the vault tip floor (logical vault tips use floor `.1`); keep vault copy and newer local work | Delete anything from the vault |
 | Nothing to purge | Say so; delete nothing | |
 
@@ -332,10 +333,11 @@ Destructive actions ask you to type the product name ([§13](#13-typing-the-prod
 | Agent not running / Creo still has files open | Show a clear error; change nothing on the vault | Silently fail or claim vault was cleared |
 | Cancel | Change nothing | |
 
-### Remove from Vault
+### Remove from Vault…
 
 | You do | App should | App must not |
 |--------|------------|--------------|
+| Open **Remove from Vault…** | Show the danger-confirm warning (red menu item + ellipsis) | Omit the ellipsis or red styling when it opens a confirm |
 | Confirm | Delete vault copies of the selection | Delete files in your original product folder on disk |
 
 ### Remove from Product…

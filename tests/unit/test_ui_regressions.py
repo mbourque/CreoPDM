@@ -443,7 +443,7 @@ def test_delete_workspace_menu_warns_new_files_vault_safe():
     assert "### Clear workspace…" in docs
     assert "local-only **new** files" in docs
     assert "does **not** require typing the product name" in docs
-    clear_section = docs.split("### Clear workspace…", 1)[1].split("### Remove from Vault", 1)[0]
+    clear_section = docs.split("### Clear workspace…", 1)[1].split("### Remove from Vault…", 1)[0]
     assert "danger-confirm warning dialog" in clear_section
     assert "Clear workspace" in clear_section
     assert "| Confirm |" in clear_section
@@ -1372,11 +1372,16 @@ def test_user_interaction_negative_client_guards():
     sync = _between(script, "function syncToolbar(", "function setCheckinQueueCounts(")
     assert "Boolean(removeBtn)" in sync
     assert "ids.length > 0 || folderPaths.length > 0" in sync
-    # Ellipsis: opens danger-confirm warning (same pattern as Clear workspace…).
+    # Ellipsis + red: items that open danger-confirm.
     assert ">Remove from Product…<" in html
-    assert "### Remove from Product…" in (
-        (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
-    )
+    assert ">Remove from Vault…<" in html
+    assert ">Purge workspace…<" in html
+    assert 'class="toolbar-menu-item is-danger" role="menuitem" id="purge-versions-btn"' in html
+    assert 'class="toolbar-menu-item is-danger" role="menuitem" id="purge-workspace-btn"' in html
+    docs_rm = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "### Remove from Product…" in docs_rm
+    assert "### Remove from Vault…" in docs_rm
+    assert "### Purge workspace…" in docs_rm
 
 
 def test_modified_metric_pill_left_of_checked_out():
