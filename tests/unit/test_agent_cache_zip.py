@@ -77,6 +77,15 @@ def test_cache_index_dotfile_migrates_legacy_and_hides(tmp_path):
     assert modern.is_file()
     assert not legacy.exists()
     assert is_hidden(modern)
+    # Second save must overwrite a Hidden index (Windows Errno 13 if we don't unhide).
+    _save_cache_index(cache, {"pin.prt.1": {"hash": "def", "size": 4}})
+    assert is_hidden(modern)
+    assert _load_cache_index(cache)["pin.prt.1"]["hash"] == "def"
+    assert "set_hidden(path, False)" in (
+        (Path(__file__).resolve().parents[2] / "src" / "creopdm_agent" / "server.py").read_text(
+            encoding="utf-8"
+        )
+    )
 
 
 def test_manifest_disk_name_uses_workspace_materialize_leaf():

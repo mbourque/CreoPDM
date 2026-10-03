@@ -617,6 +617,11 @@ def _save_cache_index(cache_dir: Path, index: dict[str, dict[str, object]]) -> N
 
     path = cache_dir / _CACHE_INDEX_NAME
     try:
+        # Windows: open(..., "w") on an already-Hidden file raises Errno 13
+        # Permission denied even when the ACL allows write. Clear Hidden, write,
+        # then hide again (first create works; every later /hash-paths failed).
+        if path.is_file():
+            set_hidden(path, False)
         path.write_text(json.dumps(index, indent=0, sort_keys=True), encoding="utf-8")
         set_hidden(path, True)
     except OSError as exc:
