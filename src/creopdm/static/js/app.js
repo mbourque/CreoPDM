@@ -1429,20 +1429,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     );
   }
 
-  function whereUsedIndexNotice(indexOutcome) {
-    if (!indexOutcome) return "";
-    if (indexOutcome.state === "done") return " Where Used index updated.";
-    if (indexOutcome.started) {
-      return ` Where Used indexing ${indexOutcome.state || "did not finish"}${
-        indexOutcome.error ? `: ${indexOutcome.error}` : "."
-      }`;
-    }
-    if (indexOutcome.error) {
-      return ` Where Used indexing did not start: ${indexOutcome.error}`;
-    }
-    return "";
-  }
-
   /**
    * Start Where Used indexing and wait until done/error/cancelled.
    * Used under the Add (and gear Rebuild) busy overlay — not fire-and-forget.
@@ -3179,26 +3165,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           $("#toolbar-error"),
           `Imported ${okCount} file(s); ${failed.length} failed (${sample}${failed.length > 3 ? ", …" : ""}).`
         );
-      } else if (okCount) {
-        showOk(`Imported ${okCount} file(s) from the zip.`);
       }
       if (okCount) {
         // Same as Add files/folder(s): index under busy overlay, then one Files refresh.
+        // No success toast — updated Files list is the confirmation.
         const indexOutcome = await indexWhereUsedUnderBusy(productId);
-        const indexNote = whereUsedIndexNotice(indexOutcome);
-        try {
-          sessionStorage.setItem(
-            "creopdmNotice",
-            `Imported ${okCount} file(s) from the zip.${indexNote}`
-          );
-        } catch {
-          /* private mode / blocked storage */
-        }
         if (indexOutcome?.state === "error" || indexOutcome?.state === "timeout") {
-          showError(
-            $("#toolbar-error"),
-            indexOutcome.error || "Where Used indexing failed."
-          );
+          try {
+            sessionStorage.setItem(
+              "creopdmNotice",
+              indexOutcome.error || "Where Used indexing failed."
+            );
+          } catch {
+            /* private mode / blocked storage */
+          }
         }
         reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
       }
@@ -3734,23 +3714,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // Where Used only after every Add chunk finished (never mid-upload —
       // that contended SQLite and made "Adding files… N of M" crawl).
       // Same path for Add files / folder / folders; keep overlay until index done.
+      // No success toast — Files refresh is enough (failures still surface above).
       const productId = currentProductId();
       const indexOutcome = await indexWhereUsedUnderBusy(productId);
-      const indexNote = whereUsedIndexNotice(indexOutcome);
-      if (okCount > 50) {
-        rememberNotice(
-          `${okCount} file(s) added. Creo metadata was skipped for this large add — open a model in Creo and Check In to capture it.${indexNote}`
-        );
-      } else if (indexNote) {
-        rememberNotice(`${okCount} file(s) added.${indexNote}`);
-      } else {
-        rememberNotice(`${okCount} file(s) added.`);
-      }
       if (indexOutcome?.state === "error" || indexOutcome?.state === "timeout") {
-        showError(
-          $("#toolbar-error"),
-          indexOutcome.error || "Where Used indexing failed."
-        );
+        rememberNotice(indexOutcome.error || "Where Used indexing failed.");
       }
       reloadPage();
     }
