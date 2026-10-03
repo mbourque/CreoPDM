@@ -21,7 +21,7 @@ _CHUNK = 20
 @dataclass
 class WhereUsedIndexStatus:
     product_id: str
-    state: str = "idle"  # idle | queued | running | done | error
+    state: str = "idle"  # idle | queued | running | done | error | cancelled
     parents_total: int = 0
     parents_done: int = 0
     edges_added: int = 0
@@ -33,7 +33,7 @@ class WhereUsedIndexStatus:
 
     @property
     def done(self) -> bool:
-        return self.state in {"done", "error", "idle"}
+        return self.state in {"done", "error", "idle", "cancelled"}
 
 
 @dataclass
@@ -88,10 +88,28 @@ class WhereUsedIndexJobs:
             return None
         return self.start(product_uuid)
 
+    def cancel(self, product_uuid: str) -> None:
+        """Request stop so Delete/Add cancel is not blocked by indexing."""
+        with self._lock:
+            status = self._status.get(product_uuid)
+            if status is None:
+                return
+            if status.state in {"queued", "running"}:
+                status.state = "cancelled"
+                status.finished_at = time.time()
+                status.error = "Cancelled."
+
+    def _cancelled(self, product_uuid: str) -> bool:
+        with self._lock:
+            status = self._status.get(product_uuid)
+            return status is not None and status.state == "cancelled"
+
     def _run(self, product_uuid: str) -> None:
         with self._lock:
             status = self._status.get(product_uuid)
             if status is None:
+                return
+            if status.state == "cancelled":
                 return
             status.state = "running"
         edges_added = 0
@@ -100,6 +118,9 @@ class WhereUsedIndexJobs:
         offset = 0
         try:
             while True:
+                if self._cancelled(product_uuid):
+                    logger.info("Where Used index cancelled for %s", product_uuid)
+                    return
                 # Short DB session: list + write only. Vault byte scans happen inside
                 # rebuild_where_used_from_vault without holding a write lock.
                 session = self.session_factory()
@@ -123,7 +144,7 @@ class WhereUsedIndexJobs:
                 offset = result.next_offset
                 with self._lock:
                     status = self._status.get(product_uuid)
-                    if status is None:
+                    if status is None or status.state == "cancelled":
                         return
                     status.parents_total = result.parents_total
                     status.parents_done = min(offset, result.parents_total)
@@ -136,7 +157,7 @@ class WhereUsedIndexJobs:
                     break
             with self._lock:
                 status = self._status.get(product_uuid)
-                if status is None:
+                if status is None or status.state == "cancelled":
                     return
                 status.state = "done"
                 status.finished_at = time.time()
@@ -151,7 +172,7 @@ class WhereUsedIndexJobs:
             logger.exception("Where Used index failed for %s", product_uuid)
             with self._lock:
                 status = self._status.get(product_uuid)
-                if status is None:
+                if status is None or status.state == "cancelled":
                     return
                 status.state = "error"
                 status.error = str(exc) or exc.__class__.__name__

@@ -253,6 +253,8 @@ def forget_product(
 ) -> ForgetProductResponse:
     require_permission(request, ctx, PERMISSION_PRODUCTS_DELETE)
     product = load_accessible_product_for_delete(request, ctx, db, product_id)
+    # Stop background Where Used so Delete is not stuck behind vault/DB scans.
+    ctx.where_used_index.cancel(product_id)
     workspace = ctx.workspaces.vault_for(product)
     result = ctx.products.forget_product(
         db,
@@ -476,7 +478,7 @@ def _where_used_job_response(status) -> WhereUsedIndexJobResponse:
         edges_existing=status.edges_existing,
         parents_missing_vault=status.parents_missing_vault,
         error=status.error,
-        done=status.state in {"done", "error"},
+        done=status.state in {"done", "error", "cancelled"},
         started_at=status.started_at,
         finished_at=status.finished_at,
     )
@@ -886,9 +888,8 @@ def import_from_disk(
                     )
                 )
     db.commit()
-    index_flag = None
-    if ctx.where_used_index.maybe_start_after_add(product.uuid, len(ok)) is not None:
-        index_flag = "started"
+    # Do not start Where Used here: Add is chunked (25/400), and indexing mid-upload
+    # contends on SQLite. The browser starts indexing once after all chunks finish.
     if ok:
         from creopdm.api.watch_notify import notify_product_watchers
 
@@ -904,7 +905,6 @@ def import_from_disk(
         ok=ok,
         failed=failed,
         workspace_root=str(ctx.workspaces.vault_for(product)),
-        where_used_index=index_flag,
     )
 
 
@@ -1070,9 +1070,7 @@ async def import_from_uploads(
     if not jobs and not failed:
         raise ValidationAppError("Drop files or a folder first.")
     db.commit()
-    index_flag = None
-    if ctx.where_used_index.maybe_start_after_add(product.uuid, len(ok)) is not None:
-        index_flag = "started"
+    # Where Used starts from the browser after all Add chunks finish (not per chunk).
     if ok:
         from creopdm.api.watch_notify import notify_product_watchers
 
@@ -1088,7 +1086,6 @@ async def import_from_uploads(
         ok=ok,
         failed=failed,
         workspace_root=str(ctx.workspaces.vault_for(product)),
-        where_used_index=index_flag,
     )
 
 
@@ -1208,9 +1205,7 @@ async def import_from_zip(
             pass
 
     db.commit()
-    index_flag = None
-    if ctx.where_used_index.maybe_start_after_add(product.uuid, len(ok)) is not None:
-        index_flag = "started"
+    # Where Used starts from the browser after all Add chunks finish (not per chunk).
     if ok:
         from creopdm.api.watch_notify import notify_product_watchers
 
@@ -1226,5 +1221,4 @@ async def import_from_zip(
         ok=ok,
         failed=failed,
         workspace_root=str(ctx.workspaces.vault_for(product)),
-        where_used_index=index_flag,
     )

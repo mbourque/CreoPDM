@@ -375,7 +375,8 @@ class ProductService:
         name = product.name
         vault = workspace_path if workspace_path is not None else self._workspaces.vault_for(product)
         warnings: list[str] = []
-        with self._locks.acquire(product.uuid):
+        # Timed wait: a cancelled Add can still hold the lock briefly; do not hang forever.
+        with self._locks.acquire(product.uuid, timeout=45.0):
             if leftover is not None:
                 self._workspaces.strip_location_git(leftover)
                 if (leftover / ".git").exists():

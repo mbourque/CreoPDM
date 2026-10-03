@@ -56,6 +56,13 @@ class WorkspaceConflictError(CreoPDMError):
     http_status = 409
 
 
+class ProductBusyError(CreoPDMError):
+    """Another mutation (Add, check-in, Where Used index) still holds the product."""
+
+    code = "PRODUCT_BUSY"
+    http_status = 409
+
+
 class RepositoryError(CreoPDMError):
     code = "REPOSITORY_ERROR"
     http_status = 500

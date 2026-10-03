@@ -1432,6 +1432,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           reloadPage();
           return;
         }
+        if (state === "cancelled") {
+          return;
+        }
         if (state === "error") {
           showError($("#toolbar-error"), body.error || "Where Used indexing failed.");
         }
@@ -1971,14 +1974,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
                   product_id: productId,
                   vault_folder: vaultFolder,
                 }),
+                signal: abortSignalAfter(60_000),
               });
               if (!localResponse.ok) {
                 notices.push(await readError(localResponse));
               }
             } catch (exc) {
               notices.push(
-                exc?.message ||
-                  "Could not reach creopdm-agent to delete the local workspace."
+                exc?.name === "AbortError"
+                  ? "Timed out clearing the local workspace (Creo may still have files open). Server delete continues."
+                  : exc?.message ||
+                      "Could not reach creopdm-agent to delete the local workspace."
               );
             }
           }
@@ -1987,6 +1993,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ confirm_name: typed }),
+          signal: abortSignalAfter(120_000),
         });
         if (!forgetResponse.ok) {
           throw new Error(await readError(forgetResponse));
@@ -1999,7 +2006,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     } catch (exc) {
       showError(
         $("#delete-product-error"),
-        exc?.message || "Could not delete the product."
+        exc?.name === "AbortError"
+          ? "Delete timed out. Cancel any still-running Add, wait a few seconds, or restart CreoPDM, then try again (uncheck local workspace if Creo has that folder open)."
+          : exc?.message || "Could not delete the product."
       );
       return;
     }
@@ -3496,9 +3505,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const body = await response.json();
           combined.ok.push(...(body.ok || []));
           combined.failed.push(...(body.failed || []));
-          if (body.where_used_index === "started") {
-            combined.where_used_index = "started";
-          }
         }
         return combined;
       }
@@ -3592,14 +3598,33 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       await withBusy("Capturing Creo metadata…", async () => {
         await pushCreoMetadataForItems(metadataTargetsFromResult(result));
       });
-    } else if (okCount > 50) {
-      showOk(
-        `${okCount} file(s) added. Creo metadata was skipped for this large add — open a model in Creo and Check In to capture it. Where Used indexing runs in the background.`
-      );
-    } else if (okCount > 0 && result.where_used_index === "started") {
-      showOk(`${okCount} file(s) added. Where Used indexing started in the background.`);
     }
     if (okCount) {
+      // Start Where Used only after every Add chunk finished (never mid-upload —
+      // that contended SQLite and made "Adding files… N of M" crawl).
+      const productId = currentProductId();
+      let indexStarted = false;
+      if (productId) {
+        try {
+          const indexResponse = await fetch(
+            `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`,
+            { method: "POST" }
+          );
+          indexStarted = indexResponse.ok;
+        } catch {
+          /* indexing is best-effort; Files still reload */
+        }
+      }
+      const indexNote = indexStarted
+        ? " Where Used indexing started in the background."
+        : "";
+      if (okCount > 50) {
+        showOk(
+          `${okCount} file(s) added. Creo metadata was skipped for this large add — open a model in Creo and Check In to capture it.${indexNote}`
+        );
+      } else if (indexStarted) {
+        showOk(`${okCount} file(s) added.${indexNote}`);
+      }
       // Soft-reload Files; boot resumes Where Used poll and refreshes again when
       // indexing finishes so Top level assemblies appears without a manual F5.
       reloadPage();

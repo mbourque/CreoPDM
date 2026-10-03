@@ -6,6 +6,8 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from creopdm.exceptions import ProductBusyError
+
 
 class ProductLockManager:
     """Lock by product UUID around checkout, check-in, Git commit, and sync."""
@@ -21,9 +23,16 @@ class ProductLockManager:
             return self._locks[product_uuid]
 
     @contextmanager
-    def acquire(self, product_uuid: str) -> Iterator[None]:
+    def acquire(self, product_uuid: str, *, timeout: float | None = None) -> Iterator[None]:
         lock = self._lock_for(product_uuid)
-        lock.acquire()
+        if timeout is None:
+            lock.acquire()
+        elif not lock.acquire(timeout=timeout):
+            raise ProductBusyError(
+                "This product is still busy (Add, check-in, or indexing). "
+                "Wait a moment and try again, or restart CreoPDM if it stays stuck.",
+                details={"product_id": product_uuid},
+            )
         try:
             yield
         finally:
