@@ -331,7 +331,7 @@ Destructive actions ask you to type the product name ([§13](#13-typing-the-prod
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Open **Clear workspace…** | Show the same danger-confirm warning dialog used elsewhere (Cancel / Clear workspace) — no product-name typing — explaining everything inside the local workspace on this PC is deleted, including local-only **new** files that were never added; say the empty folder stays (Creo WD can remain); vault copies and the product list stay (rematerialize later) | Ask you to type the product name; use a plain browser `confirm`; delete the workspace folder itself when Creo’s WD points there; delete vault files or change the product list |
-| Confirm | Move local cache **contents** to the Recycle Bin on this PC; leave the workspace folder | Leave local-only new files behind when the clear succeeded; fail just because Creo’s working directory is still the workspace folder |
+| Confirm | Move local cache **contents** to the Recycle Bin on this PC in **one** operation (not file-by-file); leave the workspace folder | Walk/recycle each file one at a time; leave local-only new files behind when the clear succeeded; fail just because Creo’s working directory is still the workspace folder |
 | Agent not running / Creo still has files open | Show a clear error; change nothing on the vault | Silently fail or claim vault was cleared |
 | Cancel | Change nothing | |
 

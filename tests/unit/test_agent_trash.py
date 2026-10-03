@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from creopdm_agent.trash import move_to_trash
+from creopdm_agent.trash import clear_directory_contents, move_to_trash
 
 
 def test_move_to_trash_removes_file(tmp_path, monkeypatch):
@@ -36,3 +36,38 @@ def test_move_to_trash_uses_windows_recycle_outside_pytest(tmp_path, monkeypatch
     move_to_trash(target)
     assert calls == [target]
     assert not target.exists()
+
+
+def test_clear_directory_contents_one_shot_recycle(tmp_path, monkeypatch):
+    """Clear workspace must recycle all top-level children in one Shell call."""
+    root = tmp_path / "cache"
+    root.mkdir()
+    (root / "a.prt").write_bytes(b"a")
+    nested = root / "docs"
+    nested.mkdir()
+    (nested / "notes.txt").write_text("hi", encoding="utf-8")
+    (root / "b.asm").write_bytes(b"b")
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setattr("creopdm_agent.trash.sys.platform", "win32")
+
+    batches: list[list[Path]] = []
+
+    def fake_many(paths: list[Path]) -> None:
+        batches.append(list(paths))
+        for path in paths:
+            if path.is_dir():
+                import shutil
+
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+
+    monkeypatch.setattr("creopdm_agent.trash._windows_recycle_bin_many", fake_many)
+    removed, failed = clear_directory_contents(root)
+    assert failed == []
+    assert removed == 3
+    assert len(batches) == 1
+    assert {p.name for p in batches[0]} == {"a.prt", "b.asm", "docs"}
+    assert root.is_dir()
+    assert list(root.iterdir()) == []
