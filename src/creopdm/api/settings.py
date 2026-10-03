@@ -25,6 +25,10 @@ from creopdm.context import AppContext
 from creopdm.creo.connector_factory import create_creo_connector
 from creopdm.exceptions import PathValidationError, PermissionDeniedError
 from creopdm.schemas.common import SettingsResponse, SettingsUpdateRequest
+from creopdm.site_availability import (
+    DEFAULT_SITE_UNAVAILABLE_MESSAGE,
+    site_unavailable_message,
+)
 from creopdm.utils.classify import exclude_extensions, unique_type_labels
 from creopdm.utils.paths import validate_product_location
 
@@ -88,6 +92,9 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         agent_base_url=settings.ui.agent_base_url,
         workspace_poll_interval_ms=settings.ui.workspace_poll_interval_ms,
         workspace_poll_idle_minutes=settings.ui.workspace_poll_idle_minutes,
+        site_availability=settings.ui.site_availability,
+        site_unavailable_message=site_unavailable_message(settings),
+        default_site_unavailable_message=DEFAULT_SITE_UNAVAILABLE_MESSAGE,
     )
 
 
@@ -225,5 +232,9 @@ def update_settings(
         current.ui.workspace_poll_interval_ms = payload.workspace_poll_interval_ms
     if payload.workspace_poll_idle_minutes is not None:
         current.ui.workspace_poll_idle_minutes = payload.workspace_poll_idle_minutes
+    if payload.site_availability is not None:
+        current.ui.site_availability = payload.site_availability
+    if payload.site_unavailable_message is not None:
+        current.ui.site_unavailable_message = payload.site_unavailable_message
     apply_settings(ctx, current)
     return settings_to_response(ctx)

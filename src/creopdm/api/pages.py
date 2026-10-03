@@ -144,6 +144,8 @@ _PAGE_DEFAULTS = {
     "agent_base_url": "http://127.0.0.1:8766",
     "workspace_poll_interval_ms": "5000",
     "workspace_poll_idle_minutes": "10",
+    "site_unavailable": False,
+    "site_unavailable_message": "",
 }
 
 _CREO_OPEN_NAMES = {
@@ -153,6 +155,8 @@ _CREO_OPEN_NAMES = {
 
 
 def render(request: Request, name: str, context: dict) -> HTMLResponse:
+    from creopdm.site_availability import site_is_unavailable, site_unavailable_message
+
     templates.env.filters["local_time"] = format_local
     templates.env.filters["local_time_pretty"] = format_local_pretty
     templates.env.filters["byte_size"] = format_byte_size
@@ -161,12 +165,19 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
     templates.env.globals["byte_size"] = format_byte_size
     auth_user = getattr(request.state, "auth_user", None)
     caps = caps_dict(request)
+    ctx = getattr(request.app.state, "ctx", None)
+    settings = getattr(ctx, "settings", None) if ctx is not None else None
+    unavailable = bool(settings and site_is_unavailable(settings))
     payload = {
         "request": request,
         **_PAGE_DEFAULTS,
         "auth_user": auth_user,
         "agent_token": getattr(request.state, "agent_token", "") or "",
         **caps,
+        "site_unavailable": unavailable,
+        "site_unavailable_message": (
+            site_unavailable_message(settings) if settings is not None else ""
+        ),
         **context,
     }
     # Role + product lock → one toolbar/gear flag set (see product_state.product_ui_capabilities).

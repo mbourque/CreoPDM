@@ -437,6 +437,9 @@ class SettingsResponse(BaseModel):
     agent_base_url: str = "http://127.0.0.1:8766"
     workspace_poll_interval_ms: int = 5000
     workspace_poll_idle_minutes: int = 10
+    site_availability: str = "available"
+    site_unavailable_message: str = ""
+    default_site_unavailable_message: str = ""
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -460,6 +463,8 @@ class SettingsUpdateRequest(BaseModel):
     agent_base_url: str | None = None
     workspace_poll_interval_ms: int | None = None
     workspace_poll_idle_minutes: int | None = None
+    site_availability: str | None = None
+    site_unavailable_message: str | None = None
 
     @field_validator("creo_open_mode")
     @classmethod
@@ -468,6 +473,31 @@ class SettingsUpdateRequest(BaseModel):
         if key not in CREO_OPEN_MODES:
             raise ValueError("Open mode must be 'association' or 'embedded'.")
         return key
+
+    @field_validator("site_availability")
+    @classmethod
+    def valid_site_availability(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        from creopdm.site_availability import (
+            SITE_AVAILABLE,
+            SITE_UNAVAILABLE,
+            normalize_site_availability,
+        )
+
+        key = normalize_site_availability(value)
+        if key not in {SITE_AVAILABLE, SITE_UNAVAILABLE}:
+            raise ValueError("Availability must be 'available' or 'unavailable'.")
+        return key
+
+    @field_validator("site_unavailable_message")
+    @classmethod
+    def valid_site_unavailable_message(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        from creopdm.site_availability import normalize_site_unavailable_message
+
+        return normalize_site_unavailable_message(value)
 
     @field_validator("creo_view_open_mode")
     @classmethod

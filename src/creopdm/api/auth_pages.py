@@ -68,6 +68,8 @@ def _base_ctx(
         caps["can_manage_roles"] = can_manage_roles
     if can_manage_settings is not None:
         caps["can_manage_settings"] = can_manage_settings
+    from creopdm.site_availability import site_is_unavailable, site_unavailable_message
+
     return {
         "request": request,
         "app_name": APP_NAME,
@@ -82,6 +84,8 @@ def _base_ctx(
         "agent_base_url": ctx.settings.ui.agent_base_url,
         "workspace_poll_interval_ms": ctx.settings.ui.workspace_poll_interval_ms,
         "workspace_poll_idle_minutes": ctx.settings.ui.workspace_poll_idle_minutes,
+        "site_unavailable": site_is_unavailable(ctx.settings),
+        "site_unavailable_message": site_unavailable_message(ctx.settings),
     }
 
 

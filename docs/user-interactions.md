@@ -420,7 +420,9 @@ Use a normal browser for these checks. You need the matching Administration perm
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Open **Administration** | Show permission-gated tiles (Users, Roles, Membership, Products, Email, **System Settings**) plus greyed **Audit** and **AI** placeholders with short “coming soon” descriptions | Link Audit/AI anywhere; label the settings tile only **Settings** |
-| Open **System Settings** | Open `/settings` (Creo open mode, vault, file types, Local Creo agent refresh / idle pause, …) | |
+| Open **System Settings** | Open `/settings` with **Availability** first (CreoPDM available / unavailable + message), then Creo open mode, vault, file types, Local Creo agent refresh / idle pause, … | |
+| Set **CreoPDM unavailable** and save | Non-administrators see the maintenance message on their **next page open or navigation** (including soft-nav); administrators keep using the app and see an **Unavailable** warning pill (links to System Settings); uploads / check-ins / API calls already in progress are **not** cancelled | Block or roll back in-flight API / Git / DB work; hide the app from administrators; forget to show a reminder pill while unavailable is on |
+| Set **CreoPDM available** again | Everyone sees normal pages again; Unavailable pill goes away | |
 | Leave a product Files page open with no mouse/keyboard/touch for longer than **Pause refresh after idle** | Stop file-list / agent workspace polling until the user interacts again (or the tab becomes visible again); default 10 minutes; **0** = never pause for idle | Keep polling overnight while the tab sits idle with a non-zero idle pause |
 | Open **Administration**, **System Settings**, or a file **Details** page (or soft-nav away from the product Files list) | Stop workspace-watch / file-list change polling while that page is open; do not probe creopdm-agent `/health` for the status pill on those pages (Files list only); resume when you return to a product Files list | Keep polling for list/check-in changes while Admin, Settings, or Details is open; hit agent `/health` on every Admin/login load |
 
@@ -537,6 +539,7 @@ Automated coverage lives mainly in:
 - `tests/unit/test_product_watch.py` (bell when email enabled; per-user watch; subscribe/unsubscribe; one email per bulk action; actor excluded; notifications off skips mail; Force Undo Checkout emails former owner)
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
+- `tests/unit/test_site_availability.py` (unavailable is display-only HTML for non-admins; API stays up; admin pill + Settings Availability panel)
 - `tests/integration/test_creo_metadata.py` (Collect / Rebuild Where Used gear items are `creo-session-only`, hidden until Creo.JS is connected; Details **Where Used** only for Settings → Creo Models extensions)
 - `tests/integration/test_checkout.py` (product lock UI: ON_HOLD / read-only hide Add & Check In; Checkout stays for Undo)
 - `tests/integration/test_product_lifecycle_lock.py` (locked product rejects add/checkout/check-in/remove/rename/metadata/delete/forget; undo still allowed)

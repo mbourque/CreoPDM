@@ -179,12 +179,29 @@ class UiConfig(BaseModel):
     # Pause file-list polling after this many minutes with no pointer/keyboard/touch activity.
     # 0 = never pause for idle (tab-hidden still pauses).
     workspace_poll_idle_minutes: int = 10
+    # Display-only: HTML for non-admins shows a message when "unavailable".
+    site_availability: str = "available"
+    site_unavailable_message: str = ""
 
     @field_validator("agent_base_url")
     @classmethod
     def normalize_agent_base_url(cls, value: object) -> str:
         text = str(value or "").strip().rstrip("/")
         return text or "http://127.0.0.1:8766"
+
+    @field_validator("site_availability")
+    @classmethod
+    def normalize_site_availability(cls, value: object) -> str:
+        from creopdm.site_availability import normalize_site_availability
+
+        return normalize_site_availability(value)
+
+    @field_validator("site_unavailable_message")
+    @classmethod
+    def normalize_site_unavailable_message(cls, value: object) -> str:
+        from creopdm.site_availability import normalize_site_unavailable_message
+
+        return normalize_site_unavailable_message(value)
 
     @field_validator("workspace_poll_interval_ms")
     @classmethod

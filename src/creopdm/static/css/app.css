@@ -69,6 +69,17 @@ a.brand:hover { text-decoration: none; color: inherit; }
 }
 .status-pill[data-state="ok"] { color: #8ee0b0; }
 .status-pill[data-state="idle"] { color: #f0d48a; }
+.status-pill[data-state="warn"] { color: #ffb4a8; border-color: #c45c4a; }
+.site-unavailable-page {
+  max-width: 36rem;
+  margin: 2.5rem auto;
+  padding: 0 1rem;
+}
+.site-unavailable-message {
+  font-size: 1.05rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
 
 .shell { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .workspace { flex: 1; display: grid; grid-template-columns: 240px 1fr; min-height: 0; overflow: hidden; }

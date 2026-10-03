@@ -282,6 +282,45 @@ def create_app(context: AppContext | None = None) -> FastAPI:
             ):
                 return RedirectResponse("/account/password", status_code=303)
 
+            # Display-only maintenance: swap HTML for non-admins. Never touch /api/
+            # (in-flight check-in, upload, Git must keep running).
+            if (
+                user is not None
+                and request.method in {"GET", "HEAD"}
+                and not path.startswith("/api/")
+                and not path.startswith("/static")
+                and not path.startswith("/client/")
+                and path
+                not in {
+                    "/login",
+                    "/logout",
+                    "/setup",
+                    "/forgot-password",
+                    "/reset-password",
+                    "/favicon.ico",
+                }
+                and not path.startswith("/account/password")
+                and not path.startswith("/creojs")
+            ):
+                from creopdm.site_availability import (
+                    site_is_unavailable,
+                    user_bypasses_site_unavailable,
+                )
+
+                if site_is_unavailable(ctx.settings) and not user_bypasses_site_unavailable(
+                    request
+                ):
+                    from creopdm.api.pages import render
+
+                    return render(
+                        request,
+                        "site_unavailable.html",
+                        {
+                            "app_name": APP_NAME,
+                            "app_version": APP_VERSION,
+                        },
+                    )
+
             return await call_next(request)
         finally:
             db.close()

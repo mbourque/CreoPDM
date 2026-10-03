@@ -9671,6 +9671,25 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
   syncEmbeddedOpenOptions();
 
+  function syncSiteAvailabilityOptions() {
+    if (!settingsForm) return;
+    const unavailableOn = Boolean(
+      settingsForm.querySelector('input[name="site_availability"][value="unavailable"]')?.checked
+    );
+    const wrap = settingsForm.querySelector("#site-unavailable-message-wrap");
+    const message = settingsForm.querySelector('[name="site_unavailable_message"]');
+    if (wrap) {
+      wrap.classList.toggle("is-disabled", !unavailableOn);
+      if (unavailableOn) wrap.removeAttribute("aria-disabled");
+      else wrap.setAttribute("aria-disabled", "true");
+    }
+    if (message) message.disabled = !unavailableOn;
+  }
+  settingsForm?.querySelectorAll('input[name="site_availability"]').forEach((radio) => {
+    radio.addEventListener("change", syncSiteAvailabilityOptions);
+  });
+  syncSiteAvailabilityOptions();
+
   settingsForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     showError($("#settings-error"), "");
@@ -9681,7 +9700,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       ? String(jsLibraryInput.value || "").trim() || null
       : null;
     const data = new FormData(settingsForm);
+    const unavailableMessageEl = settingsForm.querySelector('[name="site_unavailable_message"]');
     const body = {
+      site_availability: String(data.get("site_availability") || "available"),
+      // Read even when the message field is disabled for “available”.
+      site_unavailable_message: String(unavailableMessageEl?.value || "").trim(),
       creo_open_mode: String(data.get("creo_open_mode") || "association"),
       creo_executable: null,
       creo_view_executable: null,

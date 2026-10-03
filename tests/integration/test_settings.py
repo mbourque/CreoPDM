@@ -34,6 +34,9 @@ def test_get_and_update_settings(client, tmp_path):
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["creo_open_mode"] == "association"
+    assert payload["site_availability"] == "available"
+    assert payload["site_unavailable_message"]
+    assert "maintenance" in payload["default_site_unavailable_message"].lower()
     assert payload["creo_view_open_mode"] == "association"
     assert payload["workspace_root"]
     assert payload["default_workspace_root"]

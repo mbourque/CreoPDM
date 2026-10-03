@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Unavailable — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail site-unavailable-page">
+  <h1>CreoPDM is unavailable</h1>
+  <p class="site-unavailable-message">{{ site_unavailable_message }}</p>
+  <p class="muted small">You can sign out and try again later. If you need help, contact your administrator.</p>
+  {% if auth_user %}
+  <p><a class="btn" href="/logout">Sign out</a></p>
+  {% endif %}
+</article>
+{% endblock %}
