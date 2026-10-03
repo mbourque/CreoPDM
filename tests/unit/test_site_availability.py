@@ -9,7 +9,7 @@ from sqlalchemy import select
 from creopdm.app import build_context, create_app
 from creopdm.auth_constants import BuiltinRole, UserStatus
 from creopdm.config import ConfigManager
-from creopdm.database.models import User
+from creopdm.models.user import User
 from creopdm.site_availability import (
     DEFAULT_SITE_UNAVAILABLE_MESSAGE,
     SITE_UNAVAILABLE,
