@@ -1420,7 +1420,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const existing = Number(body.edges_existing) || 0;
           const miss = Number(body.parents_missing_vault) || 0;
           const missMsg = miss ? ` ${miss} parent file(s) missing from vault.` : "";
-          showOk(`Where Used index ready: ${added} new link(s), ${existing} already stored.${missMsg}`);
+          try {
+            sessionStorage.setItem(
+              "creopdmNotice",
+              `Where Used index ready: ${added} new link(s), ${existing} already stored.${missMsg}`
+            );
+          } catch {
+            /* private mode / blocked storage */
+          }
+          // Refresh Files so Top level assemblies / Where Used gates appear.
+          reloadPage();
           return;
         }
         if (state === "error") {
@@ -3487,6 +3496,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const body = await response.json();
           combined.ok.push(...(body.ok || []));
           combined.failed.push(...(body.failed || []));
+          if (body.where_used_index === "started") {
+            combined.where_used_index = "started";
+          }
         }
         return combined;
       }
@@ -3581,15 +3593,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         await pushCreoMetadataForItems(metadataTargetsFromResult(result));
       });
     } else if (okCount > 50) {
-      const indexNote =
-        result.where_used_index === "started"
-          ? " Where Used indexing started in the background."
-          : "";
       showOk(
-        `${okCount} file(s) added. Creo metadata was skipped for this large add — open a model in Creo and Check In to capture it.${indexNote}`
+        `${okCount} file(s) added. Creo metadata was skipped for this large add — open a model in Creo and Check In to capture it. Where Used indexing runs in the background.`
       );
+    } else if (okCount > 0 && result.where_used_index === "started") {
+      showOk(`${okCount} file(s) added. Where Used indexing started in the background.`);
     }
-    if (okCount) reloadPage();
+    if (okCount) {
+      // Soft-reload Files; boot resumes Where Used poll and refreshes again when
+      // indexing finishes so Top level assemblies appears without a manual F5.
+      reloadPage();
+    }
     } finally {
       addInFlight = false;
     }

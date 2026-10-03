@@ -13,8 +13,8 @@ from creopdm.services.metadata_service import MetadataService
 
 logger = get_logger("where_used_index")
 
-# Match the UI threshold that skips Creo.JS metadata on large Add.
-WHERE_USED_AUTO_INDEX_MIN_FILES = 50
+# Start background Where Used after any successful Add (1+ files).
+WHERE_USED_AUTO_INDEX_MIN_FILES = 1
 _CHUNK = 20
 
 
