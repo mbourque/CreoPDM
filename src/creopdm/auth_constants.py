@@ -30,6 +30,7 @@ PERMISSION_PRODUCTS_ASSIGN = "products.assign"
 PERMISSION_PRODUCTS_MANAGE = "products.manage"
 PERMISSION_SETTINGS_MANAGE = "settings.manage"
 PERMISSION_EMAIL_MANAGE = "email.manage"
+PERMISSION_UTILITIES_ACCESS = "utilities.access"
 PERMISSION_PRODUCTS_VIEW = "products.view"
 PERMISSION_PRODUCTS_CREATE = "products.create"
 PERMISSION_PRODUCTS_EDIT = "products.edit"
@@ -65,6 +66,7 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_PRODUCTS_MANAGE, "Create, edit, and delete products in Administration"),
     (PERMISSION_SETTINGS_MANAGE, "Change global CreoPDM settings"),
     (PERMISSION_EMAIL_MANAGE, "Configure email and notifications in Administration"),
+    (PERMISSION_UTILITIES_ACCESS, "Open Administration → Utilities (health, disk, diagnostics)"),
     (PERMISSION_PRODUCTS_VIEW, "View products"),
     (PERMISSION_PRODUCTS_CREATE, "Create products"),
     (PERMISSION_PRODUCTS_EDIT, "Edit product properties"),
@@ -96,6 +98,7 @@ ADMINISTRATION_PERMISSION_KEYS: frozenset[str] = frozenset(
         PERMISSION_PRODUCTS_MANAGE,
         PERMISSION_SETTINGS_MANAGE,
         PERMISSION_EMAIL_MANAGE,
+        PERMISSION_UTILITIES_ACCESS,
     )
 )
 
@@ -112,6 +115,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             PERMISSION_PRODUCTS_MANAGE,
             PERMISSION_SETTINGS_MANAGE,
             PERMISSION_EMAIL_MANAGE,
+            PERMISSION_UTILITIES_ACCESS,
         ),
     ),
     (

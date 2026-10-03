@@ -1547,16 +1547,26 @@ def test_admin_hub_panel_fills_full_width():
     assert 'class="detail settings-page admin-hub"' in admin
     assert ">System Settings</a>" in admin
     assert ">Settings</a>" not in admin
+    assert ">Utilities</a>" in admin
+    assert 'href="/admin/utilities"' in admin
     assert 'class="admin-tile is-disabled"' in admin
     assert ">Audit</span>" in admin
     assert ">AI</span>" in admin
     assert "Coming soon: review sign-ins" in admin
     assert "Coming soon: configure AI help" in admin
     assert ".admin-tile.is-disabled" in css
+    utilities = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities.html").read_text(
+        encoding="utf-8"
+    )
+    assert "<h1>Utilities</h1>" in utilities
+    assert "Disk space" in utilities
+    assert ".utilities-status-ok" in css
     settings = (ROOT / "src" / "creopdm" / "templates" / "settings.html").read_text(encoding="utf-8")
     assert "<h1>System Settings</h1>" in settings
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "System Settings" in docs
+    assert "Utilities" in docs
+    assert "utilities.access" in docs
     assert "Audit** and **AI**" in docs or "**Audit** and **AI**" in docs
 
 

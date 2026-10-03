@@ -24,7 +24,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 12. [Remove ▾](#12-remove-)
 13. [Typing the product name to confirm](#13-typing-the-product-name-to-confirm)
 14. [Mobile browse](#14-mobile-browse)
-15. [Administration (users, roles, membership, email, system settings)](#15-administration-users-roles-membership-email-system-settings)
+15. [Administration (users, roles, membership, email, utilities, system settings)](#15-administration-users-roles-membership-email-utilities-system-settings)
 16. [Quick walkthroughs](#16-quick-walkthroughs)
 17. [For developers (tests)](#17-for-developers-tests)
 
@@ -34,7 +34,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Click around the signed-in app (product, folder breadcrumb, **Details** / History tab, double-click a file, Administration including Products/Membership/Email, System Settings, account password) | Soft-nav the shell so Creo **stays Connected**; if Creo.JS is live, the pill shows **Connected** (not a stale Session offline) when **Set Working Directory** is shown | Hard-reload shell pages (SSR Session offline / drop Creo.JS); flash Session offline while Set Working Directory is visible; treat Logout / Login / setup as soft-nav |
+| Click around the signed-in app (product, folder breadcrumb, **Details** / History tab, double-click a file, Administration including Products/Membership/Email/Utilities, System Settings, account password) | Soft-nav the shell so Creo **stays Connected**; if Creo.JS is live, the pill shows **Connected** (not a stale Session offline) when **Set Working Directory** is shown | Hard-reload shell pages (SSR Session offline / drop Creo.JS); flash Session offline while Set Working Directory is visible; treat Logout / Login / setup as soft-nav |
 | Sign in as **Viewer** | View products (`products.view`); open/download files and use **Details** (Overview/History) via the bottom toolbar or double-click (`objects.view`); Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove / Export ▾ (including an empty **Checkout ▾** fly-up), New product, Copy to Vault, or “Check out … then open” in the Open dialog |
 | Sign in with Administration only (no `products.view`) | Land on **Administration**; breadcrumb has no **Products** link; visiting `/` redirects to `/admin` | See a JSON error; see a Products crumb that opens Files |
 | Sign in with a role that has **no permissions** | Land on a clear **No Files access** page (not JSON); product APIs stay **403** | Use the app as if signed in with Viewer |
@@ -411,7 +411,7 @@ Phone-only **browse** mode (portrait or landscape). No Add / Checkout / Check In
 
 ---
 
-## 15. Administration (users, roles, membership, email, system settings)
+## 15. Administration (users, roles, membership, email, utilities, system settings)
 
 Use a normal browser for these checks. You need the matching Administration permission for each live tile. **Audit** and **AI** tiles are always shown as disabled placeholders (coming soon) with a short description under the title.
 
@@ -419,7 +419,7 @@ Use a normal browser for these checks. You need the matching Administration perm
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Open **Administration** | Show permission-gated tiles (Users, Roles, Membership, Products, Email, **System Settings**) plus greyed **Audit** and **AI** placeholders with short “coming soon” descriptions | Link Audit/AI anywhere; label the settings tile only **Settings** |
+| Open **Administration** | Show permission-gated tiles (Users, Roles, Membership, Products, Email, **Utilities**, **System Settings**) plus greyed **Audit** and **AI** placeholders with short “coming soon” descriptions | Link Audit/AI anywhere; label the settings tile only **Settings** |
 | Open **System Settings** | Open `/settings` with **Availability** first (CreoPDM available / unavailable + message), then Creo open mode, vault, file types, Local Creo agent refresh / idle pause, … | |
 | Set **CreoPDM unavailable** and save | Non-administrators see the maintenance message on their **next page open or navigation** (including soft-nav); the default message gets a pretty **Since …** date automatically; administrators keep using the app and the **Unavailable** warning pill appears **immediately** after Save (no need to leave Settings); uploads / check-ins / API calls already in progress are **not** cancelled | Block or roll back in-flight API / Git / DB work; hide the app from administrators; wait until you leave Settings to show the reminder pill; omit when the outage started from the default message |
 | Set **CreoPDM available** again and save | Everyone sees normal pages again; Unavailable pill hides right away after Save | |
@@ -471,8 +471,17 @@ Use a normal browser for these checks. You need the matching Administration perm
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Edit permissions on a role | Save when at least one ACTIVE user still has full CreoPDM Administration (including `email.manage`) | Strip the last full admin’s Administration set |
+| Edit permissions on a role | Save when at least one ACTIVE user still has full CreoPDM Administration (including `email.manage` and `utilities.access`) | Strip the last full admin’s Administration set |
 | Change name / description / Administration checkboxes on **your own** role | Reject the change | Let you lock yourself out of Administration |
+
+### Utilities (Administration → Utilities)
+
+Needs `utilities.access` (Administrator by default; CreoPDM Administration only).
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Open **Utilities** | Show system health, database probe, Git version, disk free space for data/vaults/logs, product/user/checkout counts, and server paths | Let PDM Manager / Engineer open it without the permission |
+| Click **Refresh** | Re-run the probes and show updated values | Change settings or mutate vault data |
 
 ### Email (Administration → Email)
 
@@ -520,6 +529,7 @@ Try the same with **Add folder…**, **Add folders…**, and **Compressed data�
 - Add user → new account has no products until Membership grants them.  
 - Role dropdown → your own role / a peer role / a higher role must not appear.  
 - Email admin: change SMTP fields then Send test without Save → blocked.
+- Utilities without `utilities.access` → 403; with it → health / disk / counts shown.
 - Cancel Watch / Stop watching confirmation → subscription unchanged.
 - Notifications disabled → no product watch bell on Files.
 - User A watches; user B opens the same product → B is not watching; B’s Stop does not clear A.
@@ -534,7 +544,7 @@ Automated coverage lives mainly in:
 - `tests/unit/test_user_interaction_validations.py`
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
-- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `products.view` / `objects.view` / `data-can-checkout`; empty-home `products.create` hero; empty-product `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_products_view_lands_on_administration`; `test_setup_and_admin_user_require_email`; `test_username_rejects_spaces_and_email_needs_domain`; `test_admin_email_settings_save_and_gate`; `test_admin_membership_product_access_filters_products`; `test_role_assign_must_be_strictly_below_actor`; new users default to no product access)
+- `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `products.view` / `objects.view` / `data-can-checkout`; empty-home `products.create` hero; empty-product `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_products_view_lands_on_administration`; `test_setup_and_admin_user_require_email`; `test_username_rejects_spaces_and_email_needs_domain`; `test_admin_email_settings_save_and_gate`; `test_admin_utilities_status_and_gate`; `test_admin_membership_product_access_filters_products`; `test_role_assign_must_be_strictly_below_actor`; new users default to no product access)
 - `tests/unit/test_password_reset.py` (forgot link only after wrong password; GET blocked; wrong email same confirmation / one try; spam disable)
 - `tests/unit/test_product_watch.py` (bell when email enabled; per-user watch; subscribe/unsubscribe; one email per bulk action; actor excluded; notifications off skips mail; Force Undo Checkout emails former owner)
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)

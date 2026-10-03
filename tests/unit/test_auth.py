@@ -444,10 +444,74 @@ def test_admin_can_open_settings(auth_client):
     assert "Click a user’s name" not in hub.text and "Click a user's name" not in hub.text
     assert 'href="/admin/products"' in hub.text
     assert 'href="/admin/email"' in hub.text
+    assert 'href="/admin/utilities"' in hub.text
+    assert "System health, disk space" in hub.text
     # Help copy is plain text, not wrapped in the section link.
     assert 'href="/admin/users">Add and edit' not in hub.text
     assert auth_client.get("/settings").status_code == 200
     assert auth_client.get("/api/settings").status_code == 200
+
+
+def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
+    """utilities.access opens Utilities; status API works; others get 403."""
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "email": "admin@example.com",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    page = auth_client.get("/admin/utilities")
+    assert page.status_code == 200
+    assert "System health" in page.text
+    assert "Disk space" in page.text
+    assert "Database" in page.text
+    assert "Active checkouts" in page.text
+
+    api = auth_client.get("/api/admin/utilities/status")
+    assert api.status_code == 200
+    body = api.json()
+    assert body["status"] in {"ok", "degraded", "error"}
+    assert body["app_name"]
+    assert "disk" in body and isinstance(body["disk"], list)
+    assert body["database"]["status"] == "ok"
+    assert isinstance(body["product_count"], int)
+    assert isinstance(body["user_count"], int)
+    assert isinstance(body["active_checkout_count"], int)
+
+    # PDM Manager lacks utilities.access.
+    auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "PDM",
+            "username": "pdm",
+            "email": "user@example.com",
+            "role": BuiltinRole.PDM_MANAGER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "PdmPass1",
+            "password_confirm": "PdmPass1",
+        },
+        follow_redirects=False,
+    )
+    with auth_ctx.session_factory() as db:
+        pdm = db.scalar(select(User).where(User.username == "pdm"))
+        assert pdm is not None
+        pdm.must_change_password = False
+        db.commit()
+    auth_client.get("/logout")
+    auth_client.post(
+        "/login",
+        data={"username": "pdm", "password": "PdmPass1"},
+        follow_redirects=False,
+    )
+    denied = auth_client.get("/admin/utilities", follow_redirects=False)
+    assert denied.status_code == 403
+    denied_api = auth_client.get("/api/admin/utilities/status")
+    assert denied_api.status_code == 403
 
 
 def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
@@ -1383,6 +1447,7 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
         PERMISSION_PRODUCTS_VIEW,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_USERS_MANAGE,
+        PERMISSION_UTILITIES_ACCESS,
         STARTER_ROLE_PERMISSION_KEYS,
     )
     from creopdm.models.user import Permission, RolePermission
@@ -1425,9 +1490,11 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
     assert PERMISSION_PRODUCTS_DELETE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_PRODUCTS_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_EMAIL_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
+    assert PERMISSION_UTILITIES_ACCESS not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_USERS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_PRODUCTS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_EMAIL_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
+    assert PERMISSION_UTILITIES_ACCESS in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_ROLES_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_OBJECTS_COPY_TO_VAULT in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
@@ -1719,6 +1786,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
     assert "CreoPDM Administration" in role_form.text
     assert "products.manage" in role_form.text
     assert "email.manage" in role_form.text
+    assert "utilities.access" in role_form.text
     assert "your</strong> role" in role_form.text.lower() or "your role" in role_form.text.lower()
     assert "cannot lock themselves out" in role_form.text.lower()
     assert 'name="name"' in role_form.text and "disabled" in role_form.text
@@ -2420,6 +2488,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_SETTINGS_MANAGE,
         PERMISSION_USERS_MANAGE,
         PERMISSION_USERS_PASSWORD,
+        PERMISSION_UTILITIES_ACCESS,
         STARTER_ROLE_PERMISSION_KEYS,
     )
 
@@ -2568,6 +2637,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 or PERMISSION_SETTINGS_MANAGE in allowed
                 or PERMISSION_PRODUCTS_MANAGE in allowed
                 or PERMISSION_EMAIL_MANAGE in allowed
+                or PERMISSION_UTILITIES_ACCESS in allowed
                 or PERMISSION_PRODUCTS_ASSIGN in allowed
                 or PERMISSION_USERS_PASSWORD in allowed
                 or PERMISSION_ROLES_ASSIGN in allowed
@@ -2592,6 +2662,9 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             PERMISSION_SETTINGS_MANAGE: auth_client.get("/api/settings", follow_redirects=False),
             PERMISSION_PRODUCTS_MANAGE: auth_client.get("/admin/products", follow_redirects=False),
             PERMISSION_EMAIL_MANAGE: auth_client.get("/admin/email", follow_redirects=False),
+            PERMISSION_UTILITIES_ACCESS: auth_client.get(
+                "/admin/utilities", follow_redirects=False
+            ),
             PERMISSION_PRODUCTS_VIEW: auth_client.get(f"/api/products/{product_id}"),
             PERMISSION_OBJECTS_VIEW: auth_client.get(f"/api/objects/{object_id}"),
             PERMISSION_PRODUCTS_CREATE: auth_client.post(

@@ -30,6 +30,7 @@ from creopdm.auth_constants import (
     PERMISSION_SETTINGS_MANAGE,
     PERMISSION_USERS_MANAGE,
     PERMISSION_USERS_PASSWORD,
+    PERMISSION_UTILITIES_ACCESS,
     TEST_AUTH_PERMISSIONS,
 )
 from creopdm.models.user import User
@@ -47,6 +48,7 @@ class CapabilityFlags:
     can_manage_settings: bool
     can_manage_products: bool
     can_manage_email: bool
+    can_access_utilities: bool
     can_create_product: bool
     can_edit_product: bool
     can_delete_product: bool
@@ -75,6 +77,7 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_manage_settings=PERMISSION_SETTINGS_MANAGE in keys,
         can_manage_products=PERMISSION_PRODUCTS_MANAGE in keys,
         can_manage_email=PERMISSION_EMAIL_MANAGE in keys,
+        can_access_utilities=PERMISSION_UTILITIES_ACCESS in keys,
         can_create_product=PERMISSION_PRODUCTS_CREATE in keys,
         can_edit_product=PERMISSION_PRODUCTS_EDIT in keys,
         can_delete_product=PERMISSION_PRODUCTS_DELETE in keys,
@@ -115,6 +118,7 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_manage_settings = caps.can_manage_settings
     request.state.can_manage_products = caps.can_manage_products
     request.state.can_manage_email = caps.can_manage_email
+    request.state.can_access_utilities = caps.can_access_utilities
     request.state.can_create_product = caps.can_create_product
     request.state.can_edit_product = caps.can_edit_product
     request.state.can_delete_product = caps.can_delete_product
@@ -142,6 +146,7 @@ def caps_dict(request: Request) -> dict:
         "can_manage_settings": bool(getattr(request.state, "can_manage_settings", False)),
         "can_manage_products": bool(getattr(request.state, "can_manage_products", False)),
         "can_manage_email": bool(getattr(request.state, "can_manage_email", False)),
+        "can_access_utilities": bool(getattr(request.state, "can_access_utilities", False)),
         "can_create_product": bool(getattr(request.state, "can_create_product", False)),
         "can_edit_product": bool(getattr(request.state, "can_edit_product", False)),
         "can_delete_product": bool(getattr(request.state, "can_delete_product", False)),
@@ -167,6 +172,7 @@ def caps_dict(request: Request) -> dict:
         or flags["can_manage_settings"]
         or flags["can_manage_products"]
         or flags["can_manage_email"]
+        or flags["can_access_utilities"]
     )
     return flags
 
@@ -181,6 +187,7 @@ def can_open_administration(caps: CapabilityFlags) -> bool:
         or caps.can_manage_settings
         or caps.can_manage_products
         or caps.can_manage_email
+        or caps.can_access_utilities
     )
 
 def default_app_path(caps: CapabilityFlags) -> str:

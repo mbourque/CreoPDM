@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from creopdm.api import auth_pages, checkout, creo, health, objects, pages, products, settings
+from creopdm.api import auth_pages, checkout, creo, health, objects, pages, products, settings, utilities
 from creopdm.api.errors import register_error_handlers
 from creopdm.auth_constants import UserStatus
 from creopdm.auth_session import (
@@ -154,6 +154,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
     register_error_handlers(app)
     app.include_router(auth_pages.router)
     app.include_router(health.router)
+    app.include_router(utilities.router)
     app.include_router(settings.router)
     app.include_router(products.router)
     app.include_router(objects.router)

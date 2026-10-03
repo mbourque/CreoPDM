@@ -17,6 +17,53 @@ class HealthResponse(BaseModel):
     version: str = APP_VERSION
 
 
+class UtilitiesDiskUsage(BaseModel):
+    label: str
+    path: str
+    exists: bool = True
+    total_bytes: int | None = None
+    used_bytes: int | None = None
+    free_bytes: int | None = None
+    total_label: str = "—"
+    used_label: str = "—"
+    free_label: str = "—"
+    free_percent: float | None = None
+    error: str | None = None
+
+
+class UtilitiesProbe(BaseModel):
+    status: str = "ok"
+    detail: str = ""
+
+
+class UtilitiesStatusResponse(BaseModel):
+    """Administration → Utilities snapshot (health, disk, counts)."""
+
+    status: str = "ok"
+    app_name: str = APP_NAME
+    app_version: str = APP_VERSION
+    server_time: str = ""
+    hostname: str = ""
+    platform: str = ""
+    python_version: str = ""
+    auth_enabled: bool = True
+    site_availability: str = "available"
+    database: UtilitiesProbe = Field(default_factory=UtilitiesProbe)
+    database_dialect: str = ""
+    database_url: str = ""
+    git: UtilitiesProbe = Field(default_factory=UtilitiesProbe)
+    git_executable: str = "git"
+    git_version: str = ""
+    disk: list[UtilitiesDiskUsage] = Field(default_factory=list)
+    product_count: int = 0
+    user_count: int = 0
+    active_checkout_count: int = 0
+    data_dir: str = ""
+    vaults_dir: str = ""
+    logs_dir: str = ""
+    agent_base_url: str = "http://127.0.0.1:8766"
+
+
 class ErrorBody(BaseModel):
     code: str
     message: str

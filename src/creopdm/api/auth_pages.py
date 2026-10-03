@@ -1941,6 +1941,21 @@ def _require_email_manager(
     return user
 
 
+def _require_utilities_access(
+    request: Request, ctx: AppContext, db: Session
+) -> User | HTMLResponse | RedirectResponse:
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not ctx.user_accounts.can_access_utilities(user):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>Utilities access required (utilities.access).</p>",
+            status_code=403,
+        )
+    return user
+
+
 _DEFAULT_TEST_SUBJECT = "CreoPDM test email"
 _DEFAULT_TEST_MESSAGE = (
     "This is a test message from CreoPDM Administration → Email.\n"
@@ -2215,3 +2230,23 @@ def admin_email_submit(
         test_message=form["test_message"],
     )
     return _render(success="Email settings saved.")
+
+
+@router.get("/admin/utilities", response_class=HTMLResponse)
+def admin_utilities_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_utilities_access(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    from creopdm.services.utilities_service import collect_utilities_status
+
+    status = collect_utilities_status(ctx, db)
+    return templates.TemplateResponse(
+        request,
+        "admin_utilities.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "status": status,
+        },
+    )

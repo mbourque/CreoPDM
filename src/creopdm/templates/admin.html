@@ -10,7 +10,7 @@
     <span>Administration</span>
   </nav>
   <h1>Administration</h1>
-  <p class="muted">Server tools for users, roles, products, membership, email, and system settings.</p>
+  <p class="muted">Server tools for users, roles, products, membership, email, utilities, and system settings.</p>
 
   <div class="admin-tile-grid">
     {% if can_manage_users %}
@@ -41,6 +41,12 @@
     <section class="admin-tile">
       <h2><a href="/admin/email">Email</a></h2>
       <p>SMTP setup, From address, and test email for notifications.</p>
+    </section>
+    {% endif %}
+    {% if can_access_utilities %}
+    <section class="admin-tile">
+      <h2><a href="/admin/utilities">Utilities</a></h2>
+      <p>System health, disk space, Git, database, and server diagnostics.</p>
     </section>
     {% endif %}
     {% if can_manage_settings %}

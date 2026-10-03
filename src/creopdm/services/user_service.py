@@ -36,6 +36,7 @@ from creopdm.auth_constants import (
     PERMISSION_EMAIL_MANAGE,
     PERMISSION_USERS_MANAGE,
     PERMISSION_USERS_PASSWORD,
+    PERMISSION_UTILITIES_ACCESS,
     UserStatus,
 )
 from creopdm.exceptions import NotFoundError, PermissionDeniedError, ValidationAppError
@@ -254,6 +255,9 @@ class UserService:
 
     def can_manage_email(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_EMAIL_MANAGE)
+
+    def can_access_utilities(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_UTILITIES_ACCESS)
 
     def is_full_administrator(self, user: User) -> bool:
         """True when the user has all CreoPDM Administration caps on one account."""
@@ -531,7 +535,8 @@ class UserService:
                     "Cannot leave the system with no active user who has full "
                     "CreoPDM Administration "
                     "(users.manage, users.password, roles.assign, roles.manage, "
-                    "products.assign, products.manage, settings.manage, and email.manage)."
+                    "products.assign, products.manage, settings.manage, email.manage, "
+                    "and utilities.access)."
                 )
             db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
             for perm_id in self._permission_ids_for_keys(db, keys):
@@ -838,7 +843,8 @@ class UserService:
                     "Cannot leave the system with no active user who has full "
                     "CreoPDM Administration "
                     "(users.manage, users.password, roles.assign, roles.manage, "
-                    "products.assign, products.manage, settings.manage, and email.manage)."
+                    "products.assign, products.manage, settings.manage, email.manage, "
+                    "and utilities.access)."
                 )
         if new_status is not None:
             user.status = new_status
