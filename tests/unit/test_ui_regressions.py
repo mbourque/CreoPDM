@@ -513,18 +513,24 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "agentPdmAuth" in script
     assert "...agentPdmAuth()" in script or "agentPdmAuth()" in script
     open_fn = _between(script, "async function openPdmObjectWork(", "function openPdmLaunchResult(")
-    assert 'hostedCreoJS() && creoOpenMode() === "embedded"' in open_fn
+    assert "hostedCreoJS() && embeddedMode" in open_fn or 'hostedCreoJS() && creoOpenMode() === "embedded"' in open_fn
     assert 'openViaAgent(openSpec.path, "association")' in open_fn
+    assert "function likelyStandaloneBrowser(" in script
+    assert "Waiting for Creo.JS…" in open_fn
+    assert "Creo.JS is not connected yet" in open_fn
+    assert "Windows file association from the embedded browser" in open_fn
     open_wrap = _between(script, "async function openPdmObject(", "async function openPdmObjectWork(")
     assert 'withBusy("Opening…"' in open_wrap
     assert "withTimeout(" in open_wrap
     assert "Open timed out" in open_wrap
     assert "Downloading to local cache…" in open_fn
     assert "Opening in Creo…" in open_fn
-    # Session offline must not block Opening… on creoJSReady before the path choice.
-    # Match the real await (trailing ;) — the comment also contains "await creoJSReady".
-    assert "Do not await creoJSReady first" in open_fn
+    # Association path must not await creoJSReady first; embedded waits briefly then warns.
+    assert "Do not await creoJSReady first on the association path" in open_fn
     assert open_fn.index("const useCreoSession") < open_fn.index("await creoJSReady;")
+    docs_open_wait = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "Creo.JS is not Connected yet" in docs_open_wait or "Creo.JS is not connected yet" in docs_open_wait
+    assert "Windows file association from Creo" in docs_open_wait or "open via Windows file association from Creo" in docs_open_wait
     ready = _between(script, "function whenCreoJSReady(", "async function refreshCreoStatusPill(")
     assert "session may be offline" in ready
     assert 'data-can-checkout=' in (

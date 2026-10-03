@@ -6883,12 +6883,52 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   }
 
+  function likelyStandaloneBrowser() {
+    // True for Chrome/Edge/Firefox outside Creo — Embedded setting may still fall
+    // back to OS association. False when we look like Creo's embedded browser.
+    if (hostedCreoJS() || inCreoBrowser() || creoExternalBridge()) return false;
+    if (window.CreoJS) return false;
+    try {
+      if (typeof pfcGetCurrentSession === "function") return false;
+    } catch {
+      /* ignore */
+    }
+    const ua = String(navigator.userAgent || "");
+    if (/creo|ptc|parametric/i.test(ua)) return false;
+    return /Chrome|Edg|Firefox|Safari/i.test(ua);
+  }
+
   async function openPdmObjectWork(target) {
     // Only use Creo.JS when we are actually in Creo's embedded browser.
     // Outside Creo (Chrome/Edge), always materialize + Windows association.
-    // Do not await creoJSReady first — Session offline can stall that load forever
-    // while the Opening… overlay stays up.
-    const useCreoSession = hostedCreoJS() && creoOpenMode() === "embedded";
+    // Do not await creoJSReady first on the association path — Session offline
+    // can stall that load forever while the Opening… overlay stays up.
+    const embeddedMode = creoOpenMode() === "embedded";
+    // Only wait inside Creo (or unknown hosts). Plain Chrome/Edge must not stall.
+    if (embeddedMode && !hostedCreoJS() && !likelyStandaloneBrowser()) {
+      // Brief wait — clicking Open before the bridge attaches used to fall through
+      // to Windows file association and launch a second Creo.
+      setBusyMessage("Waiting for Creo.JS…");
+      try {
+        await Promise.race([
+          creoJSReady,
+          new Promise((resolve) => window.setTimeout(resolve, 8000)),
+        ]);
+      } catch {
+        /* ignore */
+      }
+      for (let i = 0; i < 12 && !hostedCreoJS(); i += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+      }
+    }
+    const useCreoSession = hostedCreoJS() && embeddedMode;
+    if (embeddedMode && !useCreoSession && !likelyStandaloneBrowser()) {
+      showError(
+        $("#toolbar-error"),
+        "Creo.JS is not connected yet. Wait until the status shows Creo: Connected, then open the file again — do not open via Windows file association from the embedded browser."
+      );
+      return null;
+    }
     if (useCreoSession) {
       await creoJSReady;
       const prepared = await postAction(
