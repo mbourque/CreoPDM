@@ -156,9 +156,10 @@ def test_agent_materialize_prefer_local_keeps_checked_out_edits(tmp_path, monkey
     root = tmp_path / "cache"
     product = "proj-owned"
     cache = root / product
-    cache.mkdir(parents=True)
+    nested = cache / "CAD" / "lib"
+    nested.mkdir(parents=True)
     local_bytes = b"my-checked-out-edit"
-    (cache / "shaft.prt").write_bytes(local_bytes)
+    (nested / "shaft.prt").write_bytes(local_bytes)
     vault_bytes = b"vault-tip-different"
     vault_hash = hashlib.sha256(vault_bytes).hexdigest()
     seen: list[str] = []
@@ -193,6 +194,7 @@ def test_agent_materialize_prefer_local_keeps_checked_out_edits(tmp_path, monkey
                 "pdm_url": "http://pdm.example:52113",
                 "object_id": "shaft",
                 "product_id": product,
+                "relative_path": "CAD/lib/shaft.prt",
                 "filename": "shaft.prt",
                 "disk_name": "shaft.prt",
                 "content_hash": vault_hash,
@@ -204,6 +206,7 @@ def test_agent_materialize_prefer_local_keeps_checked_out_edits(tmp_path, monkey
         assert saved.json()["skipped_count"] == 1
         assert seen == []
         assert Path(saved.json()["path"]).read_bytes() == local_bytes
+        assert Path(saved.json()["path"]) == nested / "shaft.prt"
 
 
 def test_agent_materialize_preserves_vault_folders(tmp_path, monkeypatch):

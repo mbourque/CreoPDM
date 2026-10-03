@@ -300,39 +300,40 @@ class CreoService:
                 skip_object_id=root_id if root_id is not None else skip_object_id,
             )
 
+        # Metadata only — do not locate/materialize each vault tip here (that made
+        # "Finding dependencies…" crawl on large assemblies). The agent fetches
+        # only what the local workspace is missing.
+        exts = (*models, *all_cad)
+        owned_ids: set[int] = set()
+        if chosen:
+            checkout_map = self._checkouts.active_map(session, [int(obj.id) for obj in chosen])
+            me = self._checkouts._users.get_current_user().user_name
+            owned_ids = {
+                object_id
+                for object_id, row in checkout_map.items()
+                if row.user_name == me
+            }
         out: list[dict[str, str | None]] = []
         for obj in chosen:
             if skip_object_id is not None and obj.id == skip_object_id:
                 continue
-            try:
-                dep_path = self._workspaces.locate_content(product, obj)
-            except PathValidationError:
-                dep_path = self._workspaces.materialize(
-                    product,
-                    obj,
-                    writable=False,
-                    overwrite_modified=True,
-                )
-            if not dep_path.is_file():
-                continue
-            logical = CreoFileManager.normalize_creo_filename(
-                dep_path.name, (*models, *all_cad)
-            )
             version = getattr(obj, "current_version", None)
-            dep_checkout = self._checkouts.active_for(session, obj.id)
-            dep_view = self._checkouts.describe(obj, dep_checkout)
+            tip_name = str(
+                (version.filename if version is not None and version.filename else None)
+                or obj.filename
+                or Path(str(obj.relative_path)).name
+            )
+            logical = CreoFileManager.normalize_creo_filename(tip_name, exts)
             out.append(
                 {
                     "object_id": str(obj.uuid),
                     "product_id": str(product.uuid),
                     "relative_path": str(obj.relative_path).replace("\\", "/"),
                     "filename": logical,
-                    "disk_name": CreoFileManager.workspace_materialize_name(
-                        dep_path.name, (*models, *all_cad)
-                    ),
+                    "disk_name": CreoFileManager.workspace_materialize_name(tip_name, exts),
                     "content_hash": (version.content_hash if version is not None else "") or "",
                     "file_size": int(version.file_size) if version is not None else 0,
-                    "prefer_local": bool(dep_view.owned_by_me),
+                    "prefer_local": int(obj.id) in owned_ids,
                 }
             )
         if out:

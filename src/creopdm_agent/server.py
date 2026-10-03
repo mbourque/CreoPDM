@@ -508,28 +508,47 @@ def _materialize_names(item: MaterializeItem, suggested_name: str = "") -> tuple
     return logical, disk_name
 
 
+def _direct_materialize_path(target_dir: Path, item: MaterializeItem) -> Path | None:
+    """Expected nested workspace path from vault relative_path — no tree walk."""
+    logical, disk_name = _materialize_names(item)
+    dest = target_dir / _cache_dest_relative(item.relative_path, disk_name)
+    if dest.is_file():
+        return dest
+    # Logical tip leaf in the same folder (vault tip may be numbered).
+    if dest.parent.is_dir() and logical and logical != disk_name:
+        alt = dest.parent / Path(logical).name
+        if alt.is_file():
+            return alt
+    return None
+
+
 def _try_reuse_local_materialize(
     target_dir: Path,
     item: MaterializeItem,
+    *,
+    index: dict[str, dict[str, object]] | None = None,
 ) -> tuple[Path, str, str, int] | None:
     """Skip download when local tip is already good enough.
 
-    - ``prefer_local`` (checked out to me): keep any existing local tip.
-    - Else: keep higher Creo ``.N`` saves, or tips whose content hash matches vault.
+    Prefers the direct vault-relative path + cache index (O(1) per file). Avoids
+    walking the whole workspace for every dependency on large opens.
     """
     from creopdm.creo.file_manager import CreoFileManager
     from creopdm.utils.hashing import calculate_sha256
 
     logical, disk_name = _materialize_names(item)
-    plan = CachePlanItem(
-        object_id=(item.object_id or "").strip() or "local",
-        filename=logical,
-        disk_name=disk_name,
-        relative_path=str(item.relative_path or ""),
-        content_hash=(item.content_hash or "").strip().lower(),
-        file_size=int(item.file_size or 0),
-    )
-    local = _find_planned_cache_file(target_dir, plan)
+    local = _direct_materialize_path(target_dir, item)
+    if local is None:
+        # Fallback only when the nested tip is missing (legacy flat layouts).
+        plan = CachePlanItem(
+            object_id=(item.object_id or "").strip() or "local",
+            filename=logical,
+            disk_name=disk_name,
+            relative_path=str(item.relative_path or ""),
+            content_hash=(item.content_hash or "").strip().lower(),
+            file_size=int(item.file_size or 0),
+        )
+        local = _find_planned_cache_file(target_dir, plan)
     if local is None or not local.is_file():
         return None
     try:
@@ -537,7 +556,7 @@ def _try_reuse_local_materialize(
     except OSError:
         return None
     if item.prefer_local:
-        logger.info("Skipping download (prefer local / checked out) %s", local.name)
+        logger.debug("Skipping download (prefer local / checked out) %s", local.name)
         return local, logical, disk_name, local_size
     expected_hash = (item.content_hash or "").strip().lower()
     if not expected_hash:
@@ -547,19 +566,20 @@ def _try_reuse_local_materialize(
     # Higher local .N means checked-out work — keep it; do not redownload tip.
     if local_save > vault_save:
         return local, logical, disk_name, local_size
-    index = _load_cache_index(target_dir)
+    cache_index = index if index is not None else _load_cache_index(target_dir)
     try:
         rel_key = local.resolve().relative_to(target_dir.resolve()).as_posix()
     except ValueError:
         rel_key = local.name
-    cached = index.get(rel_key) or index.get(local.name) or index.get(disk_name)
+    cached = cache_index.get(rel_key) or cache_index.get(local.name) or cache_index.get(disk_name)
     if (
         isinstance(cached, dict)
         and str(cached.get("hash") or "").lower() == expected_hash
         and int(cached.get("size") or -1) == local_size
     ):
-        logger.info("Skipping download (cache hit) %s", rel_key)
+        logger.debug("Skipping download (cache hit) %s", rel_key)
         return local, logical, disk_name, local_size
+    # Index miss: one hash verify, then remember — do not walk again next open.
     try:
         digest = calculate_sha256(local).lower()
     except Exception:
@@ -568,7 +588,7 @@ def _try_reuse_local_materialize(
         return None
     _remember_cache_file(target_dir, rel_key, digest, local_size)
     _remember_cache_file(target_dir, local.name, digest, local_size)
-    logger.info("Skipping download (hash match) %s", rel_key)
+    logger.debug("Skipping download (hash match) %s", rel_key)
     return local, logical, disk_name, local_size
 
 
@@ -627,9 +647,11 @@ def _ensure_materialized(
     item: MaterializeItem,
     target_dir: Path,
     headers: dict[str, str],
+    *,
+    index: dict[str, dict[str, object]] | None = None,
 ) -> tuple[Path, str, str, int, bool]:
     """Return (path, logical, disk_name, bytes, downloaded)."""
-    reused = _try_reuse_local_materialize(target_dir, item)
+    reused = _try_reuse_local_materialize(target_dir, item, index=index)
     if reused is not None:
         return (*reused, False)
     path, logical, disk_name, nbytes = _download(client, base, item, target_dir, headers)
@@ -2169,21 +2191,26 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             target_dir,
         )
         skipped = 0
+        # One index load for the whole open — compare DB hashes to workspace tips.
+        cache_index = _load_cache_index(target_dir)
         with httpx.Client(timeout=120.0, follow_redirects=True) as client:
             target, logical, disk_name, nbytes, downloaded = _ensure_materialized(
-                client, base, primary, target_dir, headers
+                client, base, primary, target_dir, headers, index=cache_index
             )
             if not downloaded:
                 skipped += 1
+            else:
+                cache_index = _load_cache_index(target_dir)
             dependencies_written = 0
             for item in payload.dependencies:
                 if not item.object_id and not (item.product_id and item.relative_path):
                     continue
                 _path, _logical, _disk, _n, dep_downloaded = _ensure_materialized(
-                    client, base, item, target_dir, headers
+                    client, base, item, target_dir, headers, index=cache_index
                 )
                 if dep_downloaded:
                     dependencies_written += 1
+                    cache_index = _load_cache_index(target_dir)
                 else:
                     skipped += 1
         purged_newer: list[str] = []

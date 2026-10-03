@@ -6850,10 +6850,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function setOpenDownloadBusyMessage(prepared) {
     const dependencies = Array.isArray(prepared?.dependencies) ? prepared.dependencies : [];
     const total = 1 + dependencies.length;
+    // Prefer "Checking…" — agent skips tips already in the workspace (DB hash / checkout).
     if (total > 1) {
-      setBusyMessage(`Updating local workspace… ${total} files`);
+      setBusyMessage(`Checking local workspace… ${total} files`);
     } else {
-      setBusyMessage("Updating local workspace…");
+      setBusyMessage("Checking local workspace…");
     }
   }
 
