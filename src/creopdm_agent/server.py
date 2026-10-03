@@ -167,6 +167,8 @@ class MaterializeItem(BaseModel):
     relative_path: str | None = None
     filename: str | None = None
     disk_name: str | None = None
+    content_hash: str = ""
+    file_size: int = 0
 
 
 class MaterializeRequest(BaseModel):
@@ -177,6 +179,8 @@ class MaterializeRequest(BaseModel):
     relative_path: str | None = None
     filename: str | None = None
     disk_name: str | None = None
+    content_hash: str = ""
+    file_size: int = 0
     token: str | None = None
     dependencies: list[MaterializeItem] = Field(default_factory=list)
     # After History revert: download vault tip and trash local higher .N siblings.
@@ -190,6 +194,7 @@ class MaterializeResponse(BaseModel):
     disk_name: str
     bytes_written: int = 0
     dependencies_written: int = 0
+    skipped_count: int = 0
     purged_newer: list[str] = Field(default_factory=list)
 
 
@@ -491,6 +496,76 @@ def _content_url(base: str, item: MaterializeItem) -> tuple[str, str]:
     )
 
 
+def _materialize_names(item: MaterializeItem, suggested_name: str = "") -> tuple[str, str]:
+    disk_name = _safe_segment(item.disk_name or suggested_name or "model.bin", "model.bin")
+    logical = _safe_segment(
+        item.filename or Path(disk_name).stem + Path(disk_name).suffix,
+        disk_name,
+    )
+    return logical, disk_name
+
+
+def _try_reuse_local_materialize(
+    target_dir: Path,
+    item: MaterializeItem,
+) -> tuple[Path, str, str, int] | None:
+    """Skip download when the local workspace tip already matches the vault hash."""
+    from creopdm.creo.file_manager import CreoFileManager
+    from creopdm.utils.hashing import calculate_sha256
+
+    expected_hash = (item.content_hash or "").strip().lower()
+    if not expected_hash:
+        return None
+    logical, disk_name = _materialize_names(item)
+    plan = CachePlanItem(
+        object_id=(item.object_id or "").strip() or "local",
+        filename=logical,
+        disk_name=disk_name,
+        relative_path=str(item.relative_path or ""),
+        content_hash=expected_hash,
+        file_size=int(item.file_size or 0),
+    )
+    local = _find_planned_cache_file(target_dir, plan)
+    if local is None or not local.is_file():
+        return None
+    vault_save = CreoFileManager.save_number(disk_name, None)
+    local_save = CreoFileManager.save_number(local.name, None)
+    # Higher local .N means checked-out work — keep it; do not redownload tip.
+    if local_save > vault_save:
+        try:
+            size = local.stat().st_size
+        except OSError:
+            return None
+        return local, logical, disk_name, size
+    try:
+        local_size = local.stat().st_size
+    except OSError:
+        return None
+    index = _load_cache_index(target_dir)
+    try:
+        rel_key = local.resolve().relative_to(target_dir.resolve()).as_posix()
+    except ValueError:
+        rel_key = local.name
+    cached = index.get(rel_key) or index.get(local.name) or index.get(disk_name)
+    if (
+        isinstance(cached, dict)
+        and str(cached.get("hash") or "").lower() == expected_hash
+        and int(cached.get("size") or -1) == local_size
+    ):
+        logger.info("Skipping download (cache hit) %s", rel_key)
+        return local, logical, disk_name, local_size
+    try:
+        digest = calculate_sha256(local).lower()
+    except Exception:
+        return None
+    if digest != expected_hash:
+        return None
+    _remember_cache_file(target_dir, rel_key, digest, local_size)
+    _remember_cache_file(target_dir, local.name, digest, local_size)
+    logger.info("Skipping download (hash match) %s", rel_key)
+    return local, logical, disk_name, local_size
+
+
 def _download(
     client: httpx.Client,
     base: str,
@@ -499,11 +574,7 @@ def _download(
     headers: dict[str, str],
 ) -> tuple[Path, str, str, int]:
     url, suggested_name = _content_url(base, item)
-    disk_name = _safe_segment(item.disk_name or suggested_name, "model.bin")
-    logical = _safe_segment(
-        item.filename or Path(disk_name).stem + Path(disk_name).suffix,
-        disk_name,
-    )
+    logical, disk_name = _materialize_names(item, suggested_name)
     dest_rel = _cache_dest_relative(item.relative_path, disk_name)
     target = target_dir / dest_rel
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -533,8 +604,30 @@ def _download(
                 logger.info("Trashed legacy sanitized cache path %s", legacy_rel.as_posix())
             except OSError as exc:
                 logger.debug("Could not trash legacy cache path %s: %s", legacy, exc)
+    digest = (item.content_hash or "").strip().lower()
+    if digest:
+        try:
+            _remember_cache_file(target_dir, dest_rel.as_posix(), digest, len(response.content))
+            _remember_cache_file(target_dir, target.name, digest, len(response.content))
+        except Exception:  # noqa: BLE001
+            pass
     logger.info("Wrote %s (%s bytes) → %s", dest_rel.as_posix(), len(response.content), target)
     return target, logical, disk_name, len(response.content)
+
+
+def _ensure_materialized(
+    client: httpx.Client,
+    base: str,
+    item: MaterializeItem,
+    target_dir: Path,
+    headers: dict[str, str],
+) -> tuple[Path, str, str, int, bool]:
+    """Return (path, logical, disk_name, bytes, downloaded)."""
+    reused = _try_reuse_local_materialize(target_dir, item)
+    if reused is not None:
+        return (*reused, False)
+    path, logical, disk_name, nbytes = _download(client, base, item, target_dir, headers)
+    return path, logical, disk_name, nbytes, True
 
 
 def _extract_cache_zip(
@@ -2048,6 +2141,8 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             relative_path=payload.relative_path,
             filename=payload.filename,
             disk_name=payload.disk_name,
+            content_hash=payload.content_hash,
+            file_size=payload.file_size,
         )
         product_key = _product_cache_key(
             payload.product_id or payload.object_id or "local",
@@ -2066,20 +2161,24 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             "" if len(payload.dependencies) == 1 else "s",
             target_dir,
         )
+        skipped = 0
         with httpx.Client(timeout=120.0, follow_redirects=True) as client:
-            target, logical, disk_name, nbytes = _download(
+            target, logical, disk_name, nbytes, downloaded = _ensure_materialized(
                 client, base, primary, target_dir, headers
             )
+            if not downloaded:
+                skipped += 1
             dependencies_written = 0
             for item in payload.dependencies:
                 if not item.object_id and not (item.product_id and item.relative_path):
                     continue
-                logger.info(
-                    "Downloading dependency %s…",
-                    item.disk_name or item.filename or item.object_id,
+                _path, _logical, _disk, _n, dep_downloaded = _ensure_materialized(
+                    client, base, item, target_dir, headers
                 )
-                _download(client, base, item, target_dir, headers)
-                dependencies_written += 1
+                if dep_downloaded:
+                    dependencies_written += 1
+                else:
+                    skipped += 1
         purged_newer: list[str] = []
         if payload.replace_newer:
             purged_newer = _purge_newer_local_saves(target_dir, target)
@@ -2089,12 +2188,14 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 len(purged_newer),
             )
         logger.info(
-            "Materialize done: %s ready for Creo (%s bytes, %s dependenc%s) in %s — "
-            "metadata save happens on the CreoPDM server after Creo.JS gather, not in the agent",
+            "Materialize done: %s ready for Creo (%s bytes, %s dependenc%s downloaded, "
+            "%s skipped) in %s — metadata save happens on the CreoPDM server after "
+            "Creo.JS gather, not in the agent",
             disk_name,
             nbytes,
             dependencies_written,
             "y" if dependencies_written == 1 else "ies",
+            skipped,
             target_dir,
         )
         return MaterializeResponse(
@@ -2104,6 +2205,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             disk_name=disk_name,
             bytes_written=nbytes,
             dependencies_written=dependencies_written,
+            skipped_count=skipped,
             purged_newer=purged_newer,
         )
 

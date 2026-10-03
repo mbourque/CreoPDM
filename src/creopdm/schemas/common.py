@@ -264,6 +264,8 @@ class CreoOpenDependency(BaseModel):
     relative_path: str | None = None
     filename: str | None = None
     disk_name: str | None = None
+    content_hash: str | None = None
+    file_size: int | None = None
 
 
 class CreoOpenResponse(BaseModel):
@@ -275,6 +277,8 @@ class CreoOpenResponse(BaseModel):
     object_id: str | None = None
     product_id: str | None = None
     relative_path: str | None = None
+    content_hash: str | None = None
+    file_size: int | None = None
     creo_object: bool = False
     open_with_creo: bool = False
     requires_agent_cache: bool = False

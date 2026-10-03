@@ -699,3 +699,73 @@ def test_open_dependencies_nested_tree_without_where_used(
         names = {item["filename"] for item in opened.json()["dependencies"]}
         assert "sub.asm" in names
         assert "pin.prt" in names
+
+
+@requires_git
+def test_open_dependencies_prefer_where_used_db(
+    data_dir, repo_parent, identity: StaticUserProvider
+):
+    """When Where Used edges exist, open must use them (no vault-name scan needed)."""
+    from creopdm.constants import DependencyType
+    from creopdm.models.dependency import Dependency
+
+    recorder = RecordingConnector()
+    ctx = build_context(ConfigManager(), users=identity)
+    ctx.creo = recorder
+    ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
+    with TestClient(create_app(ctx)) as client:
+        product = client.post("/api/products", json={"name": "DbDependencies"}).json()
+        # Bytes intentionally omit member names so a vault scan would find nothing.
+        part = client.post(
+            f"/api/products/{product['uuid']}/objects",
+            files={"file": ("pin.prt", b"part-only", "application/octet-stream")},
+            data={"comment": "Part", "relative_path": "Parts/pin.prt"},
+        )
+        sub = client.post(
+            f"/api/products/{product['uuid']}/objects",
+            files={"file": ("sub.asm", b"opaque-sub", "application/octet-stream")},
+            data={"comment": "Sub", "relative_path": "CAD/sub.asm"},
+        )
+        top = client.post(
+            f"/api/products/{product['uuid']}/objects",
+            files={"file": ("top.asm", b"opaque-top", "application/octet-stream")},
+            data={"comment": "Top", "relative_path": "CAD/top.asm"},
+        )
+        assert part.status_code == 201, part.text
+        assert sub.status_code == 201, sub.text
+        assert top.status_code == 201, top.text
+
+        with ctx.session_factory() as db:
+            product_row = ctx.products.get_product(db, product["uuid"])
+            objs = {
+                row.filename: row
+                for row in ctx.objects.list_objects(db, product_row.id)
+            }
+            db.add_all(
+                [
+                    Dependency(
+                        product_id=objs["top.asm"].product_id,
+                        parent_object_id=objs["top.asm"].id,
+                        child_object_id=objs["sub.asm"].id,
+                        dependency_type=DependencyType.ASSEMBLY_MEMBER.value,
+                        quantity=1.0,
+                    ),
+                    Dependency(
+                        product_id=objs["top.asm"].product_id,
+                        parent_object_id=objs["sub.asm"].id,
+                        child_object_id=objs["pin.prt"].id,
+                        dependency_type=DependencyType.ASSEMBLY_MEMBER.value,
+                        quantity=1.0,
+                    ),
+                ]
+            )
+            db.commit()
+
+        opened = client.post(
+            "/api/creo/open",
+            json={"object_id": top.json()["uuid"], "launch": False},
+        )
+        assert opened.status_code == 200, opened.text
+        names = {item["filename"] for item in opened.json()["dependencies"]}
+        assert names == {"sub.asm", "pin.prt"}
+        assert opened.json().get("content_hash")

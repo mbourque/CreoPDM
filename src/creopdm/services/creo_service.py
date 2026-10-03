@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from creopdm.constants import DependencyType
 from creopdm.creo.base import CreoConnector
@@ -118,6 +118,7 @@ class CreoService:
                 filename=obj.filename,
                 skip_object_id=obj.id,
             )
+        version = obj.current_version
         payload = self._open_resolved(
             path,
             launch=launch,
@@ -127,6 +128,8 @@ class CreoService:
             object_id=object_uuid,
             product_id=str(product.uuid),
             relative_path=obj.relative_path,
+            content_hash=(version.content_hash if version is not None else "") or "",
+            file_size=int(version.file_size) if version is not None else 0,
             dependencies=dependencies,
         )
         # Not checked out to me: align local cache to vault tip (drop higher .N leftovers).
@@ -220,8 +223,10 @@ class CreoService:
             if not child_ids:
                 continue
             children = session.scalars(
-                select(EngineeringObject).where(EngineeringObject.id.in_(child_ids))
-            ).all()
+                select(EngineeringObject)
+                .options(joinedload(EngineeringObject.current_version))
+                .where(EngineeringObject.id.in_(child_ids))
+            ).unique().all()
             for child in children:
                 if child.id in found:
                     continue
@@ -257,44 +262,42 @@ class CreoService:
                     root_id = int(row.id)
                     break
 
-        # Automatic: walk vault file bytes for referenced names (no Rebuild Where
-        # Used required). Optional Where Used edges are unioned when present.
-        by_id: dict[int, EngineeringObject] = {}
-
-        def _resolve(obj: object) -> Path | None:
-            try:
-                return self._workspaces.locate_content(product, obj)  # type: ignore[arg-type]
-            except PathValidationError:
-                try:
-                    return self._workspaces.materialize(
-                        product,
-                        obj,  # type: ignore[arg-type]
-                        writable=False,
-                        overwrite_modified=True,
-                    )
-                except Exception:  # noqa: BLE001
-                    return None
-
-        for obj in collect_open_dependency_objects(
-            primary_relative=relative_path,
-            primary_filename=filename,
-            object_type=object_type,
-            siblings=siblings,
-            model_path=path,
-            model_extensions=models,
-            all_cad_extensions=all_cad,
-            resolve_path=_resolve,
-            skip_object_id=root_id if root_id is not None else skip_object_id,
-        ):
-            obj_id = getattr(obj, "id", None)
-            if obj_id is None:
-                continue
-            by_id[int(obj_id)] = obj  # type: ignore[arg-type]
-
+        # Prefer the Where Used dependency table when this model already has
+        # edges (fast reopen). Fall back to a vault byte-scan walk only when
+        # nothing is indexed yet — do not rescan every open when DB knows it.
+        source = "where-used"
+        chosen: list[EngineeringObject] = []
         if root_id is not None:
-            for obj in self._where_used_dependency_objects(session, product.id, root_id):
-                by_id.setdefault(int(obj.id), obj)
-        chosen = list(by_id.values())
+            chosen = self._where_used_dependency_objects(session, product.id, root_id)
+
+        if not chosen:
+            source = "vault-scan"
+
+            def _resolve(obj: object) -> Path | None:
+                try:
+                    return self._workspaces.locate_content(product, obj)  # type: ignore[arg-type]
+                except PathValidationError:
+                    try:
+                        return self._workspaces.materialize(
+                            product,
+                            obj,  # type: ignore[arg-type]
+                            writable=False,
+                            overwrite_modified=True,
+                        )
+                    except Exception:  # noqa: BLE001
+                        return None
+
+            chosen = collect_open_dependency_objects(
+                primary_relative=relative_path,
+                primary_filename=filename,
+                object_type=object_type,
+                siblings=siblings,
+                model_path=path,
+                model_extensions=models,
+                all_cad_extensions=all_cad,
+                resolve_path=_resolve,
+                skip_object_id=root_id if root_id is not None else skip_object_id,
+            )
 
         out: list[dict[str, str | None]] = []
         for obj in chosen:
@@ -314,6 +317,7 @@ class CreoService:
             logical = CreoFileManager.normalize_creo_filename(
                 dep_path.name, (*models, *all_cad)
             )
+            version = getattr(obj, "current_version", None)
             out.append(
                 {
                     "object_id": str(obj.uuid),
@@ -323,13 +327,16 @@ class CreoService:
                     "disk_name": CreoFileManager.workspace_materialize_name(
                         dep_path.name, (*models, *all_cad)
                     ),
+                    "content_hash": (version.content_hash if version is not None else "") or "",
+                    "file_size": int(version.file_size) if version is not None else 0,
                 }
             )
         if out:
             logger.info(
-                "Prepared %s open dependencies for %s",
+                "Prepared %s open dependencies for %s (%s)",
                 len(out),
                 Path(filename).name,
+                source,
             )
         return out
 
@@ -344,6 +351,8 @@ class CreoService:
         object_id: str = "",
         product_id: str = "",
         relative_path: str = "",
+        content_hash: str = "",
+        file_size: int = 0,
         dependencies: list[dict[str, str | None]] | None = None,
     ) -> dict:
         workdir = working_directory_for(path)
@@ -403,6 +412,8 @@ class CreoService:
             "object_id": object_id or None,
             "product_id": product_id or None,
             "relative_path": relative_path or None,
+            "content_hash": content_hash or None,
+            "file_size": int(file_size or 0) or None,
             "creo_object": creo_object,
             "open_with_creo": open_with_creo,
             "requires_agent_cache": requires_agent_cache,

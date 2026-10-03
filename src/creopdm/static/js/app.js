@@ -6851,9 +6851,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const dependencies = Array.isArray(prepared?.dependencies) ? prepared.dependencies : [];
     const total = 1 + dependencies.length;
     if (total > 1) {
-      setBusyMessage(`Downloading ${total} files to local workspace…`);
+      setBusyMessage(`Updating local workspace… ${total} files`);
     } else {
-      setBusyMessage("Downloading to local workspace…");
+      setBusyMessage("Updating local workspace…");
     }
   }
 
@@ -6872,6 +6872,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         relative_path: prepared.relative_path || null,
         filename: prepared.filename || null,
         disk_name: prepared.disk_name || prepared.filename || null,
+        content_hash: prepared.content_hash || null,
+        file_size: prepared.file_size || 0,
         replace_newer: Boolean(prepared.replace_newer),
         dependencies: dependencies.map((item) => ({
           object_id: item.object_id || null,
@@ -6879,6 +6881,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           relative_path: item.relative_path || null,
           filename: item.filename || null,
           disk_name: item.disk_name || item.filename || null,
+          content_hash: item.content_hash || null,
+          file_size: item.file_size || 0,
         })),
       }),
     });

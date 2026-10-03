@@ -79,6 +79,76 @@ def test_agent_health_and_materialize(tmp_path, monkeypatch):
         assert workdir.json()["path"].endswith("proj1")
 
 
+def test_agent_materialize_skips_unchanged_local_files(tmp_path, monkeypatch):
+    """Re-open must not redownload tips that already match the vault content hash."""
+    import hashlib
+
+    root = tmp_path / "cache"
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    asm_bytes = b"asm-bytes-v1"
+    pin_bytes = b"prt-bytes-v1"
+    asm_hash = hashlib.sha256(asm_bytes).hexdigest()
+    pin_hash = hashlib.sha256(pin_bytes).hexdigest()
+    seen: list[str] = []
+
+    class FakeResponse:
+        def __init__(self, body: bytes):
+            self.status_code = 200
+            self.content = body
+            self.headers = {}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers=None):
+            seen.append(url)
+            if "/api/objects/abc/content" in url:
+                return FakeResponse(asm_bytes)
+            if "/api/objects/pin/content" in url:
+                return FakeResponse(pin_bytes)
+            return FakeResponse(b"other")
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    payload = {
+        "pdm_url": "http://pdm.example:52113",
+        "object_id": "abc",
+        "product_id": "proj-skip",
+        "filename": "top.asm",
+        "disk_name": "top.asm",
+        "content_hash": asm_hash,
+        "file_size": len(asm_bytes),
+        "dependencies": [
+            {
+                "object_id": "pin",
+                "product_id": "proj-skip",
+                "filename": "pin.prt",
+                "disk_name": "pin.prt",
+                "content_hash": pin_hash,
+                "file_size": len(pin_bytes),
+            }
+        ],
+    }
+    with TestClient(app) as client:
+        first = client.post("/materialize", json=payload)
+        assert first.status_code == 200, first.text
+        assert first.json()["skipped_count"] == 0
+        assert len(seen) == 2
+        seen.clear()
+        second = client.post("/materialize", json=payload)
+        assert second.status_code == 200, second.text
+        assert second.json()["skipped_count"] == 2
+        assert seen == []
+        assert Path(second.json()["path"]).read_bytes() == asm_bytes
+
+
 def test_agent_materialize_preserves_vault_folders(tmp_path, monkeypatch):
     """Nested vault relative_path must create matching folders in the agent cache."""
     root = tmp_path / "cache"

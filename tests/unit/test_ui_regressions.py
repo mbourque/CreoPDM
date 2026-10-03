@@ -536,8 +536,8 @@ def test_soft_nav_skips_creojs_reconnect():
     assert 'setBusyMessage("Finding dependencies…")' in script
     assert "setOpenPrepareBusyMessage()" in open_fn
     assert "setOpenDownloadBusyMessage(prepared)" in open_fn
-    assert "Downloading ${total} files to local workspace…" in script
-    assert "Downloading to local workspace…" in script
+    assert "Updating local workspace… ${total} files" in script
+    assert "Updating local workspace…" in script
     assert "Downloading to local cache…" not in script
     assert "Checking local workspace for ${total} files…" in script
     assert "Checking local cache for ${total} files…" not in script
