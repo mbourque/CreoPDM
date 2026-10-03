@@ -146,6 +146,48 @@ def test_plan_skips_root_level_tips_without_workspace_walk(tmp_path, monkeypatch
     assert kept == 0
 
 
+def test_plan_index_hit_skips_directory_listing(tmp_path, monkeypatch):
+    """Warm index must not call latest_in_directory for every tip (935× iterdir)."""
+    cache = tmp_path / "proj"
+    nested = cache / "CAD"
+    nested.mkdir(parents=True)
+    body = b"indexed-nested"
+    digest = hashlib.sha256(body).hexdigest()
+    (nested / "pin.prt").write_bytes(body)
+    _save_cache_index(
+        cache,
+        {
+            "CAD/pin.prt": {"hash": digest, "size": len(body)},
+            "pin.prt": {"hash": digest, "size": len(body)},
+        },
+    )
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("index hit must not list the directory")
+
+    monkeypatch.setattr(
+        "creopdm.creo.file_manager.CreoFileManager.latest_in_directory",
+        _boom,
+    )
+    monkeypatch.setattr("creopdm_agent.server._find_planned_cache_file", _boom)
+    download_ids, skipped, kept = _plan_cache_downloads(
+        cache,
+        [
+            CachePlanItem(
+                object_id="nested-tip",
+                filename="pin.prt",
+                disk_name="pin.prt",
+                relative_path="CAD/pin.prt",
+                content_hash=digest,
+                file_size=len(body),
+            )
+        ],
+    )
+    assert download_ids == []
+    assert skipped == 1
+    assert kept == 0
+
+
 def test_plan_skips_matching_hash_keeps_newer_save(tmp_path):
     cache = tmp_path / "proj"
     cache.mkdir()

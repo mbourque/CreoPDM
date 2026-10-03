@@ -856,8 +856,9 @@ def _plan_cache_downloads(
 ) -> tuple[list[str], int, int]:
     """Decide which object ids need a vault download.
 
-    Equal content_hash → skip. Local Creo save newer than vault disk_name → keep.
-    Index hits are O(1). Index misses hash in parallel (warm workspace without index).
+    Warm path: ``.creopdm_cache_index.json`` hit → one ``is_file`` + ``stat`` (no
+    directory listing, no SHA256, no ``Path.resolve``). Misses fall back to find
+    + parallel hash.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -883,6 +884,35 @@ def _plan_cache_downloads(
         filename = (item.filename or item.disk_name or "").strip()
         disk_name = (item.disk_name or filename).strip()
         expected_hash = (item.content_hash or "").strip().lower()
+        expected_size = int(item.file_size or 0)
+        dest_rel = _cache_dest_relative(item.relative_path, disk_name or filename)
+        rel_key = dest_rel.as_posix()
+        leaf = Path(disk_name or filename).name
+        cached = index.get(rel_key) or index.get(disk_name) or index.get(leaf)
+
+        # Fast path: index remembers this tip — only confirm the file is still there.
+        if (
+            expected_hash
+            and isinstance(cached, dict)
+            and str(cached.get("hash") or "").lower() == expected_hash
+        ):
+            tip = cache_dir / dest_rel
+            if not tip.is_file() and leaf and leaf != dest_rel.name:
+                alt = (cache_dir / dest_rel.parent / leaf) if dest_rel.parent != Path(".") else (
+                    cache_dir / leaf
+                )
+                if alt.is_file():
+                    tip = alt
+            if tip.is_file():
+                try:
+                    local_size = tip.stat().st_size
+                except OSError:
+                    local_size = -1
+                cached_size = int(cached.get("size") or -1)
+                if local_size == cached_size or (expected_size > 0 and local_size == expected_size):
+                    skipped += 1
+                    continue
+
         local = _find_planned_cache_file(cache_dir, item)
         if local is None or not local.is_file():
             download_ids.append(object_id)
@@ -901,26 +931,23 @@ def _plan_cache_downloads(
             continue
 
         try:
-            rel_key = local.resolve().relative_to(cache_resolved).as_posix()
+            found_key = local.resolve().relative_to(cache_resolved).as_posix()
         except ValueError:
-            rel_key = local.name
-        cached = index.get(rel_key) or index.get(local.name) or index.get(disk_name)
+            found_key = local.name
+        cached = index.get(found_key) or index.get(local.name) or index.get(disk_name)
         if (
             expected_hash
             and isinstance(cached, dict)
             and str(cached.get("hash") or "").lower() == expected_hash
             and int(cached.get("size") or -1) == local_size
         ):
-            # Size+remembered hash match: safe skip (content change without size change
-            # still invalidates when hash was updated after a prior verify).
             skipped += 1
             continue
 
-        # Always hash when we need a content check. Never treat "size matches"
-        # alone as proof the file is unchanged (edits can preserve size).
+        # Index miss: hash in parallel. Never treat size alone as proof.
         if expected_hash:
             pending_hash.append(
-                (object_id, local, expected_hash, rel_key, local_size, local.name)
+                (object_id, local, expected_hash, found_key, local_size, local.name)
             )
             continue
 
@@ -975,15 +1002,15 @@ def _find_planned_cache_file(cache_dir: Path, item: CachePlanItem) -> Path | Non
 
     dest_rel = _cache_dest_relative(item.relative_path, disk_name or filename)
     dest = cache_dir / dest_rel
+    # Exact tip first (warm logical names) — avoid listing the folder.
+    if dest.is_file():
+        return dest
     logical = CreoFileManager.logical_filename(filename or disk_name, None)
-    # Prefer the highest .ext.N sibling even when the planned tip path exists
-    # (e.g. plan says op10.tph.1 but local has op10.tph.10).
+    # Highest .ext.N sibling when plan tip is missing or an older save number.
     if dest.parent.is_dir() and logical:
         found = CreoFileManager.latest_in_directory(dest.parent, logical, None)
         if found is not None and found.is_file():
             return found
-    if dest.is_file():
-        return dest
 
     rel = (item.relative_path or "").replace("\\", "/").lstrip("/")
     if rel and "/" in rel:
