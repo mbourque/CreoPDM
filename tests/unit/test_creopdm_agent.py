@@ -149,6 +149,108 @@ def test_agent_materialize_skips_unchanged_local_files(tmp_path, monkeypatch):
         assert Path(second.json()["path"]).read_bytes() == asm_bytes
 
 
+def test_agent_materialize_warm_workspace_uses_index_without_rehash(tmp_path, monkeypatch):
+    """Files already on disk + cache index → skip with no SHA256 storm / no download."""
+    import hashlib
+
+    from creopdm_agent import server as agent_server
+
+    root = tmp_path / "cache"
+    product = "proj-warm"
+    cache = root / product
+    nested = cache / "CAD"
+    nested.mkdir(parents=True)
+    asm_bytes = b"warm-asm"
+    pin_bytes = b"warm-pin"
+    asm_hash = hashlib.sha256(asm_bytes).hexdigest()
+    pin_hash = hashlib.sha256(pin_bytes).hexdigest()
+    (cache / "top.asm").write_bytes(asm_bytes)
+    (nested / "pin.prt").write_bytes(pin_bytes)
+    # Pre-seed index the way a prior open / zip extract would.
+    agent_server._save_cache_index(
+        cache,
+        {
+            "top.asm": {"hash": asm_hash, "size": len(asm_bytes)},
+            "CAD/pin.prt": {"hash": pin_hash, "size": len(pin_bytes)},
+            "pin.prt": {"hash": pin_hash, "size": len(pin_bytes)},
+        },
+    )
+    hash_calls: list[str] = []
+    from creopdm.utils import hashing as hashing_mod
+
+    real_hash = hashing_mod.calculate_sha256
+
+    def _count_hash(path):
+        hash_calls.append(str(path))
+        return real_hash(path)
+
+    monkeypatch.setattr(hashing_mod, "calculate_sha256", _count_hash)
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers=None):
+            raise AssertionError(f"warm workspace must not download: {url}")
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    payload = {
+        "pdm_url": "http://pdm.example:52113",
+        "object_id": "abc",
+        "product_id": product,
+        "filename": "top.asm",
+        "disk_name": "top.asm",
+        "content_hash": asm_hash,
+        "file_size": len(asm_bytes),
+        "dependencies": [
+            {
+                "object_id": "pin",
+                "product_id": product,
+                "relative_path": "CAD/pin.prt",
+                "filename": "pin.prt",
+                "disk_name": "pin.prt",
+                "content_hash": pin_hash,
+                "file_size": len(pin_bytes),
+            }
+        ],
+    }
+    with TestClient(app) as client:
+        response = client.post("/materialize", json=payload)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["skipped_count"] == 2
+        assert body["dependencies_written"] == 0
+        assert hash_calls == []
+
+
+def test_agent_find_planned_cache_skips_tree_walk_when_nested_folder_exists(tmp_path):
+    """Missing nested tip must not os.walk the whole warm workspace."""
+    from creopdm_agent.server import CachePlanItem, _find_planned_cache_file
+
+    cache = tmp_path / "ws"
+    (cache / "CAD").mkdir(parents=True)
+    # Lots of unrelated files — a full walk would be expensive if we regressed.
+    for i in range(50):
+        (cache / f"other{i}.prt").write_bytes(b"x")
+    item = CachePlanItem(
+        object_id="missing",
+        filename="pin.prt",
+        disk_name="pin.prt",
+        relative_path="CAD/pin.prt",
+        content_hash="abc",
+        file_size=1,
+    )
+    assert _find_planned_cache_file(cache, item) is None
+
+
 def test_agent_materialize_prefer_local_keeps_checked_out_edits(tmp_path, monkeypatch):
     """Checked-out open must not overwrite a local tip that differs from vault."""
     import hashlib
@@ -1487,6 +1589,36 @@ def test_agent_delete_product_cache_clears_contents_keeps_folder(tmp_path):
     # Helper unit: empty dir is a no-op success path for callers.
     removed, failed = clear_directory_contents(cache)
     assert removed == 0 and failed == []
+
+
+def test_agent_delete_product_cache_remove_folder_trashes_workspace(tmp_path):
+    """Product Delete must remove the workspace folder, not only its contents."""
+    root = tmp_path / "cache"
+    vault = "robot-arm"
+    product_id = "uuid-twin"
+    cache = root / vault
+    legacy = root / product_id
+    cache.mkdir(parents=True)
+    legacy.mkdir(parents=True)
+    (cache / "shaft.prt").write_bytes(b"prt")
+    (legacy / "old.prt").write_bytes(b"old")
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    with TestClient(app) as client:
+        response = client.post(
+            "/delete-product-cache",
+            json={
+                "product_id": product_id,
+                "vault_folder": vault,
+                "remove_folder": True,
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["ok"] is True
+        assert body["deleted"] is True
+        assert not cache.exists()
+        assert not legacy.exists()
 
 
 def test_agent_delete_paths_trashes_creo_numbered_siblings(tmp_path):

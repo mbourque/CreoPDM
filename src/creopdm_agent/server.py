@@ -444,6 +444,8 @@ class DeletePathsResponse(BaseModel):
 class DeleteProductCacheRequest(BaseModel):
     product_id: str = ""
     vault_folder: str = ""
+    # Product Delete: also trash the workspace folder itself (Clear workspace keeps it).
+    remove_folder: bool = False
 
 
 class DeleteProductCacheResponse(BaseModel):
@@ -451,6 +453,7 @@ class DeleteProductCacheResponse(BaseModel):
     deleted: bool = False
     path: str = ""
     message: str = ""
+    paths: list[str] = Field(default_factory=list)
 
 
 class PurgeFloor(BaseModel):
@@ -579,15 +582,21 @@ def _try_reuse_local_materialize(
     ):
         logger.debug("Skipping download (cache hit) %s", rel_key)
         return local, logical, disk_name, local_size
-    # Index miss: one hash verify, then remember — do not walk again next open.
+    # Index miss: one hash verify, then remember in the shared in-memory index
+    # (caller saves once — do not load/save JSON per dependency).
     try:
         digest = calculate_sha256(local).lower()
     except Exception:
         return None
     if digest != expected_hash:
         return None
-    _remember_cache_file(target_dir, rel_key, digest, local_size)
-    _remember_cache_file(target_dir, local.name, digest, local_size)
+    entry = {"hash": digest, "size": local_size}
+    cache_index[rel_key] = entry
+    cache_index[local.name] = entry
+    if disk_name and disk_name != local.name:
+        cache_index[disk_name] = entry
+    if index is None:
+        _save_cache_index(target_dir, cache_index)
     logger.debug("Skipping download (hash match) %s", rel_key)
     return local, logical, disk_name, local_size
 
@@ -655,6 +664,18 @@ def _ensure_materialized(
     if reused is not None:
         return (*reused, False)
     path, logical, disk_name, nbytes = _download(client, base, item, target_dir, headers)
+    if index is not None:
+        digest = (item.content_hash or "").strip().lower()
+        if digest:
+            try:
+                rel_key = path.resolve().relative_to(target_dir.resolve()).as_posix()
+            except ValueError:
+                rel_key = path.name
+            entry = {"hash": digest, "size": int(nbytes)}
+            index[rel_key] = entry
+            index[path.name] = entry
+            if disk_name and disk_name != path.name:
+                index[disk_name] = entry
     return path, logical, disk_name, nbytes, True
 
 
@@ -879,9 +900,14 @@ def _find_planned_cache_file(cache_dir: Path, item: CachePlanItem) -> Path | Non
             exact = folder / Path(disk_name).name
             if exact.is_file():
                 return exact
+            # Nested layout present but tip missing — download; do not walk the
+            # whole workspace (O(deps × files) on large opens).
+            return None
+        # Parent folder missing: one legacy flat search is OK.
+        return _find_cache_file(cache_dir, filename or disk_name)
 
-    # Legacy flat / misplaced copies only — avoid this on warm nested workspaces.
-    return _find_cache_file(cache_dir, filename or disk_name)
+    # Root tip already checked above via dest/latest_in_directory — no tree walk.
+    return None
 
 
 def _find_cache_file(cache_dir: Path, filename: str) -> Path | None:
@@ -2056,53 +2082,109 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
 
     @app.post("/delete-product-cache", response_model=DeleteProductCacheResponse)
     def delete_product_cache(payload: DeleteProductCacheRequest) -> DeleteProductCacheResponse:
-        """Clear local agent-cache contents for a product (Recycle Bin when possible).
+        """Clear local agent-cache for a product (Recycle Bin when possible).
 
-        Keeps the workspace folder itself so Creo's working directory can stay pointed
-        here (removing the folder fails with WinError 32 while WD is set).
+        By default keeps the workspace folder (Clear workspace — Creo WD may lock it).
+        With ``remove_folder`` (product Delete), also trash the folder when unlocked,
+        and clear both the vault_folder key and product UUID key when they differ
+        (older layouts may have used either name).
         """
         product_id = (payload.product_id or "").strip()
         vault_folder = (payload.vault_folder or "").strip()
         if not product_id and not vault_folder:
             raise HTTPException(status_code=400, detail="product_id or vault_folder is required.")
-        cache_dir = _product_cache_dir(product_id, vault_folder=vault_folder, create=False)
         root_resolved = settings.ensure_dirs().resolve()
-        try:
-            cache_dir.resolve().relative_to(root_resolved)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=403,
-                detail="Refusing to clear a path outside the local workspace.",
-            ) from exc
-        if cache_dir.resolve() == root_resolved:
-            raise HTTPException(status_code=400, detail="Refusing to clear the local workspace root.")
-        if not cache_dir.exists():
-            return DeleteProductCacheResponse(
-                ok=True,
-                deleted=False,
-                path=str(cache_dir),
-                message="Local workspace folder was already gone.",
-            )
-        removed, failed = clear_directory_contents(cache_dir)
-        if failed:
+        keys: list[str] = []
+        if vault_folder:
+            keys.append(_product_cache_key("", vault_folder))
+        if product_id:
+            uuid_key = _product_cache_key(product_id, "")
+            if uuid_key not in keys:
+                keys.append(uuid_key)
+
+        cache_dirs: list[Path] = []
+        for key in keys:
+            cache_dir = (root_resolved / key).resolve()
+            try:
+                cache_dir.relative_to(root_resolved)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Refusing to clear a path outside the local workspace.",
+                ) from exc
+            if cache_dir == root_resolved:
+                raise HTTPException(
+                    status_code=400, detail="Refusing to clear the local workspace root."
+                )
+            cache_dirs.append(cache_dir)
+
+        total_removed = 0
+        content_failed: list[str] = []
+        touched_paths: list[str] = []
+        folder_removed = 0
+        folder_kept_notes: list[str] = []
+
+        for cache_dir in cache_dirs:
+            touched_paths.append(str(cache_dir))
+            if not cache_dir.exists():
+                continue
+            removed, failed = clear_directory_contents(cache_dir)
+            total_removed += removed
+            if failed:
+                content_failed.extend(f"{cache_dir.name}/{item}" for item in failed)
+                continue
+            if payload.remove_folder and cache_dir.is_dir():
+                try:
+                    move_to_trash(cache_dir)
+                except OSError as exc:
+                    folder_kept_notes.append(f"{cache_dir.name}: {exc}")
+                else:
+                    if cache_dir.exists():
+                        folder_kept_notes.append(
+                            f"{cache_dir.name}: still present "
+                            "(Creo may still use this as working directory)"
+                        )
+                    else:
+                        folder_removed += 1
+                        total_removed += 1
+
+        if content_failed:
             detail = (
-                f"Cleared {removed} item(s), but could not remove: {'; '.join(failed)}. "
-                "Close open models in Creo (File → Erase), then try Clear workspace again."
+                f"Could not clear local workspace: {'; '.join(content_failed)}. "
+                "Close open models in Creo (File → Erase), then try again."
             )
             raise HTTPException(status_code=409, detail=detail)
-        if removed == 0:
+
+        primary = str(cache_dirs[0]) if cache_dirs else ""
+        if total_removed == 0 and folder_removed == 0 and not folder_kept_notes:
             return DeleteProductCacheResponse(
                 ok=True,
                 deleted=False,
-                path=str(cache_dir),
-                message="Local workspace was already empty.",
+                path=primary,
+                paths=touched_paths,
+                message="Local workspace folder was already gone or empty.",
             )
-        logger.info("Cleared local product cache contents under %s (%s items)", cache_dir, removed)
+        if payload.remove_folder and folder_removed and not folder_kept_notes:
+            msg = "Local workspace moved to the Recycle Bin."
+        elif payload.remove_folder and folder_kept_notes:
+            msg = (
+                "Local workspace contents cleared, but the folder could not be removed: "
+                + "; ".join(folder_kept_notes)
+            )
+        else:
+            msg = "Local workspace contents moved to the Recycle Bin."
+        logger.info(
+            "Cleared local product cache under %s (removed=%s remove_folder=%s)",
+            touched_paths,
+            total_removed,
+            payload.remove_folder,
+        )
         return DeleteProductCacheResponse(
             ok=True,
             deleted=True,
-            path=str(cache_dir),
-            message="Local workspace contents moved to the Recycle Bin.",
+            path=primary,
+            paths=touched_paths,
+            message=msg,
         )
 
     @app.post("/purge-versions", response_model=PurgeVersionsResponse)
@@ -2212,28 +2294,28 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             target_dir,
         )
         skipped = 0
-        # One index load for the whole open — compare DB hashes to workspace tips.
+        # One index load / one save for the whole open — never rewrite JSON per tip.
         cache_index = _load_cache_index(target_dir)
-        with httpx.Client(timeout=120.0, follow_redirects=True) as client:
-            target, logical, disk_name, nbytes, downloaded = _ensure_materialized(
-                client, base, primary, target_dir, headers, index=cache_index
-            )
-            if not downloaded:
-                skipped += 1
-            else:
-                cache_index = _load_cache_index(target_dir)
-            dependencies_written = 0
-            for item in payload.dependencies:
-                if not item.object_id and not (item.product_id and item.relative_path):
-                    continue
-                _path, _logical, _disk, _n, dep_downloaded = _ensure_materialized(
-                    client, base, item, target_dir, headers, index=cache_index
+        dependencies_written = 0
+        try:
+            with httpx.Client(timeout=120.0, follow_redirects=True) as client:
+                target, logical, disk_name, nbytes, downloaded = _ensure_materialized(
+                    client, base, primary, target_dir, headers, index=cache_index
                 )
-                if dep_downloaded:
-                    dependencies_written += 1
-                    cache_index = _load_cache_index(target_dir)
-                else:
+                if not downloaded:
                     skipped += 1
+                for item in payload.dependencies:
+                    if not item.object_id and not (item.product_id and item.relative_path):
+                        continue
+                    _path, _logical, _disk, _n, dep_downloaded = _ensure_materialized(
+                        client, base, item, target_dir, headers, index=cache_index
+                    )
+                    if dep_downloaded:
+                        dependencies_written += 1
+                    else:
+                        skipped += 1
+        finally:
+            _save_cache_index(target_dir, cache_index)
         purged_newer: list[str] = []
         if payload.replace_newer:
             purged_newer = _purge_newer_local_saves(target_dir, target)

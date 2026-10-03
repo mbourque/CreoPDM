@@ -416,6 +416,7 @@ def test_delete_product_dialog_offers_local_workspace_checkbox():
     assert "Also delete local workspace on this PC" in html
     script = _app_js()
     assert "/delete-product-cache" in script
+    assert "remove_folder: true" in script
     assert "delete-local-workspace" in script
 
 

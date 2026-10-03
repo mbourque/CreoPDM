@@ -2071,11 +2071,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
                 body: JSON.stringify({
                   product_id: productId,
                   vault_folder: vaultFolder,
+                  // Product Delete: trash the folder too (Clear workspace keeps it).
+                  remove_folder: true,
                 }),
                 signal: abortSignalAfter(60_000),
               });
               if (!localResponse.ok) {
                 notices.push(await readError(localResponse));
+              } else {
+                try {
+                  const localBody = await localResponse.json();
+                  if (localBody?.message && localBody.deleted === false) {
+                    notices.push(String(localBody.message));
+                  } else if (
+                    typeof localBody?.message === "string" &&
+                    /could not be removed|still locked|still present/i.test(localBody.message)
+                  ) {
+                    notices.push(String(localBody.message));
+                  }
+                } catch {
+                  /* ignore */
+                }
               }
             } catch (exc) {
               notices.push(
@@ -7028,7 +7044,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const message = await readError(response);
       throw new Error(message || "Local CreoPDM agent could not fetch the file.");
     }
-    return response.json();
+    const body = await response.json();
+    const skipped = Number(body.skipped_count) || 0;
+    const downloaded = Number(body.dependencies_written) || 0;
+    if (downloaded > 0) {
+      setBusyMessage(
+        `Updated local workspace (${downloaded} downloaded, ${skipped} already local)…`
+      );
+    } else if (skipped > 0) {
+      setBusyMessage("Local workspace already up to date…");
+    }
+    return body;
   }
 
   async function materializeViaAgent(prepared) {
