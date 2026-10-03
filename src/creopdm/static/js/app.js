@@ -4274,18 +4274,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const canCheckout =
       roleCanCheckout &&
       selected.length > 0 &&
-      selected.every((row) => row.dataset.canCheckout === "1");
+      selected.every((row) => rowOffersCheckout(row));
     const canCheckin = roleCanCheckin && selectionCanCheckin(selected);
     const canUndo =
       roleCanCheckout &&
       selected.length > 0 &&
-      selected.every((row) => row.dataset.owned === "1");
+      selected.every((row) => rowCheckoutKind(row) === "mine" || dataFlag(row, "owned"));
     const canForceUndo =
-      document.body?.dataset?.canForceUndoCheckout === "1" &&
+      dataFlag(document.body, "can-force-undo-checkout") &&
       selected.length > 0 &&
-      selected.every(
-        (row) => row.dataset.checkedOut === "1" && row.dataset.owned !== "1"
-      );
+      selected.every((row) => {
+        const kind = rowCheckoutKind(row);
+        if (kind === "other") return true;
+        if (kind === "mine" || kind === "available" || kind === "locked") return false;
+        return dataFlag(row, "checked-out") && !dataFlag(row, "owned");
+      });
     const addOnly = selectionIsAddOnly(selected);
     const productId =
       checkinBtn?.dataset.product ||
@@ -4319,7 +4322,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       roleCanCheckin &&
       Boolean(productId) &&
       (pendingProductSaves > 0 || pendingProductNew > 0 || productCheckoutCount > 0);
-    const canCheckoutMenu = canCheckout || canCheckoutProduct || canUndo || canForceUndo;
+    // Require a matching DOM item so Force-Undo-only / no-checkout roles never
+    // get a hollow Checkout ▾ (menu open, every item omitted by product_ui).
+    const canCheckoutMenu = Boolean(
+      (canCheckout && checkoutBtn) ||
+        (canCheckoutProduct && checkoutProductBtn) ||
+        (canUndo && undoBtn) ||
+        (canForceUndo && forceUndoBtn)
+    );
     setToolbarActionVisible(checkoutBtn, canCheckout);
     setToolbarActionVisible(checkoutProductBtn, canCheckoutProduct);
     if (checkoutProductBtn) {
@@ -6033,10 +6043,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function userCanCheckout() {
     if (dataFlag(document.body, "can-checkout")) return true;
-    // Recover when body data-can-checkout was lost (Creo CEF / soft-nav) but the
-    // Files toolbar still has Checkout controls from product_ui SSR.
+    // Explicit "0" (or other non-1) means no objects.checkout — do not invent
+    // permission from the toolbar. #checkout-menu can exist for Force Undo alone;
+    // that used to make Checkout ▾ open empty for Viewer / no-checkout roles.
+    const raw = document.body?.getAttribute("data-can-checkout");
+    if (raw != null && String(raw).trim() !== "") return false;
+    // Attribute missing (Creo CEF / soft-nav wipe) — recover only from real
+    // checkout/undo items, never from #checkout-menu or Force Undo alone.
     return Boolean(
-      document.querySelector("#checkout-menu, #checkout-btn, #checkout-product-btn")
+      document.querySelector("#checkout-btn, #checkout-product-btn, #undo-btn")
     );
   }
 

@@ -35,7 +35,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Click a product, folder breadcrumb, or Administration / System Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Session offline” or drop the Creo link just because you changed folders; hard-reload the page during a folder/product switch |
-| Sign in as **Viewer** | View products (`products.view`); open/download files and use **Details** (Overview/History) via the bottom toolbar or double-click (`objects.view`); Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove / Export ▾, New product, Copy to Vault, or “Check out … then open” in the Open dialog |
+| Sign in as **Viewer** | View products (`products.view`); open/download files and use **Details** (Overview/History) via the bottom toolbar or double-click (`objects.view`); Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove / Export ▾ (including an empty **Checkout ▾** fly-up), New product, Copy to Vault, or “Check out … then open” in the Open dialog |
 | Sign in with Administration only (no `products.view`) | Land on **Administration**; breadcrumb has no **Products** link; visiting `/` redirects to `/admin` | See a JSON error; see a Products crumb that opens Files |
 | Sign in with a role that has **no permissions** | Land on a clear **No Files access** page (not JSON); product APIs stay **403** | Use the app as if signed in with Viewer |
 | Add or remove files/folders | Update the list so it matches reality | Leave old rows on screen until you press F5 |
@@ -129,7 +129,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 | Open ▾ | A product is open (workspace) and/or a file can be opened (**Files** page) | No product and nothing to open; always hidden on the file **Details** page |
 | Open selected… | A file you can open is selected | Nothing useful selected |
 | Open workspace… | A product is open **and** creopdm-agent is running on this PC | No product; agent offline (do not offer a host-vault fallback) |
-| Checkout ▾ | Something can be checked out, undone, or force-undone (**Files** page). On a locked product, **Undo Checkout** / **Force Undo Checkout** may still appear | Nothing to do; always hidden on the file **Details** page |
+| Checkout ▾ | Something can be checked out, undone, or force-undone (**Files** page) **and** your role has the matching permission. On a locked product, **Undo Checkout** / **Force Undo Checkout** may still appear | Nothing to do; role lacks checkout/undo/force-undo; empty fly-up (no items); always hidden on the file **Details** page |
 | Check In ▾ | Something can be checked in or added **and** the product allows edits | Nothing pending; product is locked (read-only / not In work) |
 | Details | One file selected | No file |
 | Copy to Vault | You have **Copy to Vault** permission and selected files are not already in the vault | Nothing to copy; role lacks `objects.copy_to_vault` (hidden for Viewer / Engineer by default) |
@@ -264,7 +264,8 @@ If open seems to do nothing, check the error line under the toolbar, and that cr
 | Checkout selected | Lock those files and download them for editing under logical tip names, keeping vault folder paths in the local workspace | Steal a file someone else has checked out; flatten nested files to the workspace root; invent Creo `.N` on download; appear without `objects.checkout` |
 | Checkout product | Check out everything that’s free under logical tip names, keeping vault folder paths locally | Offer checkout when nothing is left; flatten nested files to the workspace root; invent Creo `.N` on download; appear without `objects.checkout` |
 | Undo Checkout | Release **your** locks only | Undo someone else’s checkout; delete the vault file; create a new version; appear without `objects.checkout` |
-| Force Undo Checkout | Release **another user’s** checkout lock (abandoned checkout); no new version; confirm first; email the former owner when Email notifications are enabled | Appear without `objects.force_undo_checkout`; commit a new version; delete the vault file; unlock Checkout selected/product without `objects.checkout` |
+| Force Undo Checkout | Release **another user’s** checkout lock (abandoned checkout); no new version; confirm first; email the former owner when Email notifications are enabled | Appear without `objects.force_undo_checkout`; commit a new version; delete the vault file; unlock Checkout selected/product without `objects.checkout`; leave **Checkout ▾** open with an empty panel when the role has no checkout/undo items |
+| Role lacks `objects.checkout` (e.g. Viewer) | Hide Checkout selected / Checkout product / Undo; open files without an Open checkout dialog | Show an empty **Checkout ▾** fly-up; treat `#checkout-menu` alone as checkout permission |
 
 ---
 

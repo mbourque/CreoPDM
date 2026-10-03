@@ -749,7 +749,15 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     open_ui = _between(script, "async function openPdmObjectFromUi(", "async function probeCreoAgent(")
     assert 'kind === "mine"' in open_ui
     assert "Do not trust data-owned alone" in open_ui
-    assert "#checkout-menu" in _between(script, "function userCanCheckout(", "function userCanCheckin(")
+    # Recover from real checkout/undo items only — not #checkout-menu (Force Undo alone).
+    user_can_co = _between(script, "function userCanCheckout(", "function userCanCheckin(")
+    assert "#checkout-btn" in user_can_co
+    assert "#undo-btn" in user_can_co
+    assert "#checkout-menu" not in user_can_co
+    assert 'getAttribute("data-can-checkout")' in user_can_co
+    sync_tb = _between(script, "function syncToolbar(", "function setCheckinQueueCounts(")
+    assert "rowOffersCheckout(row)" in sync_tb
+    assert "canCheckout && checkoutBtn" in sync_tb or "(canCheckout && checkoutBtn)" in sync_tb
     base_open = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
     open_form = _between(base_open, 'id="open-checkout-dialog"', 'id="busy-overlay"')
     assert 'method="dialog"' not in open_form
