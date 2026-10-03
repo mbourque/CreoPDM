@@ -1598,7 +1598,12 @@ def test_admin_hub_panel_fills_full_width():
     assert "<strong>System</strong>" in utilities
     assert "Email all users" in utilities
     assert 'action="/admin/utilities/email-all"' in utilities
+    assert 'id="utilities-compact-vault-form"' in utilities
     assert ".utilities-status-ok" in css
+    script = _app_js()
+    # Sync compact POST can take minutes — show busy until the response navigates.
+    assert 'form.id !== "utilities-compact-vault-form"' in script
+    assert "Compacting vault history for ${label}" in script
     settings = (ROOT / "src" / "creopdm" / "templates" / "settings.html").read_text(encoding="utf-8")
     assert "<h1>System Settings</h1>" in settings
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
@@ -1607,6 +1612,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "utilities.access" in docs
     assert "folder’s used size" in docs or "folder" in docs
     assert "Audit** and **AI**" in docs or "**Audit** and **AI**" in docs
+    assert "Compacting vault history" in docs
 
 
 def test_workspace_poll_pauses_after_idle_setting():

@@ -10236,6 +10236,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     softNavigate,
     isSoftNavUrl,
     withBusy,
+    setBusy,
     eventEl,
     syncProductAccessUi,
     isMetadataCollectRunning: () => Boolean(metadataCollectJob.running),
@@ -10296,6 +10297,35 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     };
     origAddEventListener.call(document, "change", onProductAccessToggle, true);
     origAddEventListener.call(document, "input", onProductAccessToggle, true);
+  }
+  // Compact is a sync form POST (can take minutes). Show busy until the response navigates.
+  if (!window.__creopdmUtilitiesBusyBound) {
+    window.__creopdmUtilitiesBusyBound = true;
+    origAddEventListener.call(
+      document,
+      "submit",
+      (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        if (form.id !== "utilities-compact-vault-form") return;
+        const select = form.querySelector('select[name="product_id"]');
+        const label = select?.selectedOptions?.[0]?.textContent?.trim() || "product";
+        const message = `Compacting vault history for ${label}…`;
+        const api = window.__creopdmSoftNavApi;
+        if (api && typeof api.setBusy === "function") api.setBusy(message);
+        else {
+          const text = document.getElementById("busy-message");
+          if (text) text.textContent = message;
+          const overlay = document.getElementById("busy-overlay");
+          if (overlay instanceof HTMLDialogElement && !overlay.open) overlay.showModal();
+          document.body.classList.add("is-busy");
+          document.body.setAttribute("aria-busy", "true");
+        }
+        const btn = form.querySelector('button[type="submit"]');
+        if (btn instanceof HTMLButtonElement) btn.disabled = true;
+      },
+      true
+    );
   }
 
   restoreStoredFilters();
