@@ -1372,6 +1372,11 @@ def test_user_interaction_negative_client_guards():
     sync = _between(script, "function syncToolbar(", "function setCheckinQueueCounts(")
     assert "Boolean(removeBtn)" in sync
     assert "ids.length > 0 || folderPaths.length > 0" in sync
+    # Ellipsis: opens danger-confirm warning (same pattern as Clear workspace…).
+    assert ">Remove from Product…<" in html
+    assert "### Remove from Product…" in (
+        (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    )
 
 
 def test_modified_metric_pill_left_of_checked_out():

@@ -135,7 +135,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 | Copy to Vault | You have **Copy to Vault** permission and selected files are not already in the vault | Nothing to copy; role lacks `objects.copy_to_vault` (hidden for Viewer / Engineer by default) |
 | Export ▾ | A product is open **and** you have `products.export` and/or `objects.export`. Works on locked / Released products | No product; role lacks both export permissions; always hidden on the file **Details** page |
 | Remove ▾ | Something can be removed (**Files** page). Local workspace remove/purge still work on a locked product | Nothing selected; always hidden on the file **Details** page |
-| Remove from Product | Files **and/or folders** selected (including empty folders); product allows edits | Nothing selected; product is locked |
+| Remove from Product… | Files **and/or folders** selected (including empty folders); product allows edits | Nothing selected; product is locked |
 | Remove from Vault | Selected vault files; product allows edits | Nothing selected; product is locked |
 
 Inactive top-level buttons and inactive items inside ▾ menus are **hidden** (not greyed out), so the toolbar only shows what you can use right now — **except** **Export selected…** and **Check in selected…**, which stay visible and greyed with a hover title that explains why (nothing selected / no Modified work). Same rule for **permissions** and **product lock** (read-only / not In work): the server builds one `product_ui` flag set (role ∩ product state) and the page only shows those controls — if the signed-in role cannot do an action (or the PC cannot — e.g. Open workspace without creopdm-agent), **do not show the control**. **Set Working Directory**, **Collect all metadata**, and **Rebuild Where Used** follow the same rule: show only inside Creo when Creo.JS is connected (embedded browser); hide them outside Creo / when Session offline. Set Working Directory also needs a product workspace ready and stays hidden on the file **Details** page. On the file **Details** page (every tab, including History) Open, Checkout, Remove, Set Working Directory, and **Check In ▾** are all hidden — that toolbar is **Revert to selected…** only (when an older History row is selected). Check In stays on the Files page.
@@ -305,7 +305,7 @@ Starter roles: Administrator, PDM Manager, and Engineer get both export permissi
 2. **Purge workspace** — trash older local numbered saves that are below the vault version; vault unchanged  
 3. **Clear workspace…** — trash everything **inside** this product’s local agent-cache folder on this PC (including local-only new files); keep the empty folder so Creo’s working directory can stay set; vault and product list unchanged  
 4. **Remove from Vault** — delete CreoPDM’s vault copies; your original CAD folder stays; checkouts cancelled  
-5. **Remove from Product** — remove from this product and delete vault copies; originals stay  
+5. **Remove from Product…** — remove from this product and delete vault copies; originals stay (warning dialog) 
 
 Destructive actions ask you to type the product name ([§13](#13-typing-the-product-name-to-confirm)).
 
@@ -338,11 +338,11 @@ Destructive actions ask you to type the product name ([§13](#13-typing-the-prod
 |--------|------------|--------------|
 | Confirm | Delete vault copies of the selection | Delete files in your original product folder on disk |
 
-### Remove from Product
+### Remove from Product…
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Select files and/or folders (including empty folders) | Enable Remove from Product | Stay disabled just because a folder is empty |
+| Select files and/or folders (including empty folders) | Enable **Remove from Product…** (ellipsis — opens the warning dialog) | Stay disabled just because a folder is empty; omit the ellipsis when it opens a confirm |
 | Confirm with the correct product name | Remove from the product; delete vault copies; **rows disappear right away** | Leave the folder/file visible until F5 |
 | Optionally also delete local workspace | Clean local copies if you checked that box | Delete your original CAD source folder unless you asked for workspace cleanup |
 | Type the wrong product name | Show an error; change nothing | Remove anything |
