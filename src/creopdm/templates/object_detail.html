@@ -85,7 +85,7 @@
                 data-owned="{% if object.owned_by_me %}1{% else %}0{% endif %}"
                 title="Open this file in Creo or its Windows associated program.">Open…</button>
       </div>
-      <p class="muted">{{ object.type_label }} · {{ object.relative_path }}</p>
+      <p class="muted">{{ object.type_label }} · {{ object.relative_path }}{% if is_top_level_assembly %} (Top Level){% endif %}</p>
     </div>
     <div class="detail-meta">
       <span class="state" data-state="{{ object.lifecycle_state }}">{{ object.lifecycle_state.replace('_', ' ').title() }}</span>
@@ -162,7 +162,9 @@
           <dt>Generic</dt><dd>{{ id_generic }}</dd>
           {% endif %}
           {% if identity.model_type %}
-          <dt>Model type</dt><dd>{{ identity.model_type }}</dd>
+          <dt>Model type</dt><dd>{{ identity.model_type }}{% if is_top_level_assembly %} (Top Level){% endif %}</dd>
+          {% elif is_top_level_assembly %}
+          <dt>Model type</dt><dd>ASSEMBLY (Top Level)</dd>
           {% endif %}
           {% if identity.model_role %}
           <dt>Model role</dt><dd>{{ identity.model_role }}</dd>

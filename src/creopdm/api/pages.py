@@ -136,6 +136,7 @@ _PAGE_DEFAULTS = {
     "watch_unavailable_reason": None,
     "where_used_present": False,
     "top_level_assembly_uuids": [],
+    "is_top_level_assembly": False,
     "local_time": format_local,
     "local_time_pretty": format_local_pretty,
     "creo_label": "Session offline",
@@ -535,6 +536,11 @@ def object_detail(
         if show_where_used
         else None
     )
+    is_top_level_assembly = False
+    if is_assembly and ctx.metadata.where_used_index_present(db, product.id):
+        is_top_level_assembly = str(obj.uuid) in set(
+            ctx.metadata.top_level_assembly_uuids(db, product.id)
+        )
     identity = metadata.identity or {}
     materials = metadata.materials or {}
     units = metadata.units or {}
@@ -575,6 +581,7 @@ def object_detail(
             "history": history,
             "workspace_pending": pending,
             "is_assembly": is_assembly,
+            "is_top_level_assembly": is_top_level_assembly,
             "is_part": is_part,
             "is_creo": is_creo,
             "metadata": metadata,

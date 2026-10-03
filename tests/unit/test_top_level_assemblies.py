@@ -134,6 +134,8 @@ def test_where_used_index_absent_without_dependencies(data_dir, identity: Static
 
 def test_top_level_assemblies_pill_wired_in_ui():
     app_html = Path("src/creopdm/templates/app.html").read_text(encoding="utf-8")
+    detail = Path("src/creopdm/templates/object_detail.html").read_text(encoding="utf-8")
+    pages = Path("src/creopdm/api/pages.py").read_text(encoding="utf-8")
     script = Path("src/creopdm/static/js/app.js").read_text(encoding="utf-8")
     docs = Path("docs/user-interactions.md").read_text(encoding="utf-8")
     assert 'data-filter="top_level_assemblies"' in app_html
@@ -145,6 +147,9 @@ def test_top_level_assemblies_pill_wired_in_ui():
     assert app_html.index('data-filter="assemblies"') < app_html.index(
         'data-filter="drawings"'
     )
+    assert "is_top_level_assembly" in pages
+    assert "(Top Level)" in detail
+    assert "ASSEMBLY (Top Level)" in detail
     assert "top_level_assemblies" in script
     assert "topLevelAssemblyIds" in script
     chip = script.split("function onMetricChip(", 1)[1].split(

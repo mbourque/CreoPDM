@@ -945,6 +945,10 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert "<dt>Model type</dt>" in overview
     assert "<dt>Model role</dt>" in overview
     assert "identity.model_type" in overview
+    assert "is_top_level_assembly" in overview
+    assert "ASSEMBLY (Top Level)" in overview
+    assert "(Top Level)" in detail
+    assert "Top Level" in docs
     assert "identity.model_role" in overview
     assert "Model type" in docs and "Model role" in docs
     assert "label the model **Name**" in docs or "model **Name**" in docs
