@@ -257,12 +257,9 @@ class CreoService:
                     root_id = int(row.id)
                     break
 
-        # Prefer Where Used edges, then always union with a recursive byte-scan
-        # so a partial BOM (top members only) still pulls nested sub-asms/parts.
+        # Automatic: walk vault file bytes for referenced names (no Rebuild Where
+        # Used required). Optional Where Used edges are unioned when present.
         by_id: dict[int, EngineeringObject] = {}
-        if root_id is not None:
-            for obj in self._dependency_companion_objects(session, product.id, root_id):
-                by_id[int(obj.id)] = obj
 
         def _resolve(obj: object) -> Path | None:
             try:
@@ -292,7 +289,11 @@ class CreoService:
             obj_id = getattr(obj, "id", None)
             if obj_id is None:
                 continue
-            by_id.setdefault(int(obj_id), obj)  # type: ignore[arg-type]
+            by_id[int(obj_id)] = obj  # type: ignore[arg-type]
+
+        if root_id is not None:
+            for obj in self._dependency_companion_objects(session, product.id, root_id):
+                by_id.setdefault(int(obj.id), obj)
         chosen = list(by_id.values())
 
         out: list[dict[str, str | None]] = []

@@ -100,7 +100,7 @@ def test_select_companion_objects_skips_huge_unreferenced_pool(tmp_path: Path):
 
 
 def test_collect_open_companions_walks_subassembly_tree(tmp_path: Path):
-    """Top asm → sub asm → part in another folder must all materialize."""
+    """Top asm → sub asm → part via vault bytes only (no Where Used index)."""
     top = tmp_path / "top.asm.1"
     sub = tmp_path / "sub.asm.1"
     top.write_bytes(b"uses SUB.ASM")

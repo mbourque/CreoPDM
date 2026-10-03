@@ -1,7 +1,8 @@
 """Resolve CAD files that must sit beside a model for Creo to open it.
 
-Prefer the Where Used dependency graph when present (full tree, any folder).
-Otherwise scan model bytes for referenced names and walk sub-assemblies.
+Walks assembly trees automatically by scanning vault model bytes for referenced
+names (no Rebuild Where Used required). Where Used edges are an optional extra
+source when the product has already been indexed.
 """
 
 from __future__ import annotations

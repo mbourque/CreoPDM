@@ -659,3 +659,43 @@ def test_open_include_companions_false_skips_neighbors(
         )
         assert skipped.status_code == 200, skipped.text
         assert skipped.json()["companions"] == []
+
+
+@requires_git
+def test_open_companions_nested_tree_without_where_used(
+    data_dir, repo_parent, identity: StaticUserProvider
+):
+    """Open must pull sub-asms + parts from vault bytes — no Dependency / Rebuild."""
+    recorder = RecordingConnector()
+    ctx = build_context(ConfigManager(), users=identity)
+    ctx.creo = recorder
+    ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
+    with TestClient(create_app(ctx)) as client:
+        product = client.post("/api/products", json={"name": "AutoCompanions"}).json()
+        part = client.post(
+            f"/api/products/{product['uuid']}/objects",
+            files={"file": ("pin.prt", b"part-bytes", "application/octet-stream")},
+            data={"comment": "Part", "relative_path": "Parts/pin.prt"},
+        )
+        sub = client.post(
+            f"/api/products/{product['uuid']}/objects",
+            files={"file": ("sub.asm", b"uses PIN.PRT", "application/octet-stream")},
+            data={"comment": "Sub", "relative_path": "CAD/sub.asm"},
+        )
+        top = client.post(
+            f"/api/products/{product['uuid']}/objects",
+            files={"file": ("top.asm", b"uses SUB.ASM", "application/octet-stream")},
+            data={"comment": "Top", "relative_path": "CAD/top.asm"},
+        )
+        assert part.status_code == 201, part.text
+        assert sub.status_code == 201, sub.text
+        assert top.status_code == 201, top.text
+
+        opened = client.post(
+            "/api/creo/open",
+            json={"object_id": top.json()["uuid"], "launch": False},
+        )
+        assert opened.status_code == 200, opened.text
+        names = {item["filename"] for item in opened.json()["companions"]}
+        assert "sub.asm" in names
+        assert "pin.prt" in names
