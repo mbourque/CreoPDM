@@ -859,16 +859,15 @@ def _find_planned_cache_file(cache_dir: Path, item: CachePlanItem) -> Path | Non
 
     dest_rel = _cache_dest_relative(item.relative_path, disk_name or filename)
     dest = cache_dir / dest_rel
-    if dest.is_file():
-        return dest
     logical = CreoFileManager.logical_filename(filename or disk_name, None)
+    # Prefer the highest .ext.N sibling even when the planned tip path exists
+    # (e.g. plan says op10.tph.1 but local has op10.tph.10).
     if dest.parent.is_dir() and logical:
-        alt = dest.parent / Path(logical).name
-        if alt.is_file():
-            return alt
         found = CreoFileManager.latest_in_directory(dest.parent, logical, None)
         if found is not None and found.is_file():
             return found
+    if dest.is_file():
+        return dest
 
     rel = (item.relative_path or "").replace("\\", "/").lstrip("/")
     if rel and "/" in rel:
