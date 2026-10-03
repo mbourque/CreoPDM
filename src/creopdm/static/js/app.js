@@ -6022,6 +6022,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return document.body?.dataset?.canCheckin === "1";
   }
 
+  function isModalDialog(el) {
+    // Prefer duck-typing: Creo's embedded browser has historically failed
+    // `instanceof HTMLDialogElement` even when <dialog>.showModal works — that
+    // skipped the Open/checkout chooser and opened immediately.
+    return Boolean(el && typeof el.showModal === "function");
+  }
+
   function promptOpenCheckout({ filename, canCheckout }) {
     const dialog = $("#open-checkout-dialog");
     const form = $("#open-checkout-form");
@@ -6034,9 +6041,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const openRadio = $("#open-action-open");
     const cancelBtn = $("#open-checkout-cancel");
     const err = $("#open-checkout-error");
-    if (!(dialog instanceof HTMLDialogElement) || !form || !openRadio) {
-      return Promise.resolve({ action: "open", setWorkingDirectory: false });
-    }
     // Object availability AND signed-in user objects.checkout capability.
     const allowCheckout = Boolean(canCheckout) && userCanCheckout();
     // Working directory only applies inside Creo's embedded browser.
@@ -6044,6 +6048,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Viewer (or any case with no checkout choice): skip a one-option dialog.
     if (!allowCheckout) {
       return Promise.resolve({ action: "open", setWorkingDirectory: false });
+    }
+    if (!isModalDialog(dialog) || !form || !openRadio) {
+      // Do not silently open when checkout was an option — that hid the chooser.
+      showError(
+        $("#toolbar-error"),
+        "Could not show the Open dialog. Hard-refresh (F5) and try again."
+      );
+      return Promise.resolve({ action: "cancel", setWorkingDirectory: false });
     }
     if (lead) {
       lead.textContent = `How do you want to open ${filename}?`;

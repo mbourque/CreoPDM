@@ -730,6 +730,14 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "Working directory only applies inside Creo's embedded browser" in prompt_open
     assert "skip a one-option dialog" in prompt_open
     assert "showWd && Boolean(wdBox?.checked)" in prompt_open or "showWd && Boolean(wdBox" in prompt_open
+    # Creo.JS / CEF: instanceof HTMLDialogElement can fail while showModal works.
+    assert "function isModalDialog(" in script
+    assert 'typeof el.showModal === "function"' in script
+    assert "Could not show the Open dialog" in prompt_open
+    assert "instanceof HTMLDialogElement" not in prompt_open
+    assert "Do not silently open when checkout was an option" in prompt_open
+    docs_open = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "do not skip straight to Open because" in docs_open
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "only inside Creo’s embedded browser" in docs or "only inside Creo's embedded browser" in docs
     assert "opens immediately" in docs.lower() or "Open dialog" in docs

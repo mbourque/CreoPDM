@@ -234,7 +234,7 @@ On a normal office network (`http://…`), the app should try the CreoPDM agent�
 
 If you **cannot** check out (Viewer role, no `objects.checkout`, or the file is not free to check out), the app **opens immediately** — no dialog. There is only “open without checking out,” so asking is pointless.
 
-Otherwise the app asks how you want to open it:
+Otherwise the app asks how you want to open it (must show the chooser in Creo’s embedded browser too — do not skip straight to Open because `<dialog>` detection failed):
 
 | You choose | App should |
 |------------|------------|
