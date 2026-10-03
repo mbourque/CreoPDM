@@ -7069,11 +7069,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Agent plans first — matching local tips are skipped (no re-download).
     if (unique.length >= BULK_AGENT_CACHE_ZIP_THRESHOLD) {
       try {
-        setBusyMessage(`Checking local workspace for ${unique.length} files…`);
+        setBusyMessage(`Verifying ${unique.length} local files…`);
         const zipResult = await materializeCheckedOutToAgentCacheZip(unique);
         const downloaded = Number(zipResult?.download_count || 0);
+        const skipped = Number(zipResult?.skipped_count || 0);
         if (downloaded > 0) {
           setBusyMessage(`Downloaded ${downloaded} missing file${downloaded === 1 ? "" : "s"}…`);
+        } else if (skipped > 0) {
+          setBusyMessage(`Local workspace up to date (${skipped} files)…`);
         } else {
           setBusyMessage("Local workspace already up to date…");
         }

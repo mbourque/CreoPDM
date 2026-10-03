@@ -161,6 +161,63 @@ def _product_cache_key(product_id: str = "", vault_folder: str = "") -> str:
     return _safe_segment((product_id or "").strip() or "local", "local")
 
 
+def _product_cache_keys(product_id: str = "", vault_folder: str = "") -> list[str]:
+    """Possible local folder names for one product (vault name and/or UUID)."""
+    keys: list[str] = []
+    vault = (vault_folder or "").strip()
+    pid = (product_id or "").strip()
+    if vault:
+        keys.append(_product_cache_key("", vault))
+    if pid:
+        uuid_key = _product_cache_key(pid, "")
+        if uuid_key not in keys:
+            keys.append(uuid_key)
+    if not keys:
+        keys.append("local")
+    return keys
+
+
+def _choose_product_cache_dir(
+    root: Path,
+    product_id: str = "",
+    vault_folder: str = "",
+    *,
+    create: bool = True,
+) -> Path:
+    """Pick the local workspace folder that already has files when keys differ.
+
+    Older agents stored under product UUID; newer calls prefer vault_folder. If the
+    warm tree lives under the other name, Open must reuse it — not re-download.
+    """
+    keys = _product_cache_keys(product_id, vault_folder)
+    preferred = root / keys[0]
+
+    def _score(path: Path) -> tuple[int, int, int]:
+        if not path.is_dir():
+            return (0, 0, 0)
+        has_index = 1 if (path / _CACHE_INDEX_NAME).is_file() else 0
+        try:
+            # Cheap presence signal — do not walk the whole tree.
+            n = sum(1 for _ in path.iterdir())
+        except OSError:
+            n = 0
+        # Prefer a folder that already has tips over an empty vault-named twin
+        # that only exists because workdir() created it.
+        return (1 if n > 0 else 0, has_index, n)
+
+    best_path = preferred
+    best_score = _score(preferred)
+    for key in keys[1:]:
+        candidate = root / key
+        score = _score(candidate)
+        if score > best_score:
+            best_path = candidate
+            best_score = score
+    if create:
+        best_path.mkdir(parents=True, exist_ok=True)
+    return best_path
+
+
 class MaterializeItem(BaseModel):
     object_id: str | None = None
     product_id: str | None = None
@@ -513,15 +570,21 @@ def _materialize_names(item: MaterializeItem, suggested_name: str = "") -> tuple
 
 def _direct_materialize_path(target_dir: Path, item: MaterializeItem) -> Path | None:
     """Expected nested workspace path from vault relative_path — no tree walk."""
+    from creopdm.creo.file_manager import CreoFileManager
+
     logical, disk_name = _materialize_names(item)
     dest = target_dir / _cache_dest_relative(item.relative_path, disk_name)
     if dest.is_file():
         return dest
-    # Logical tip leaf in the same folder (vault tip may be numbered).
-    if dest.parent.is_dir() and logical and logical != disk_name:
-        alt = dest.parent / Path(logical).name
-        if alt.is_file():
-            return alt
+    # Same folder: logical tip or highest .N (Creo save) without walking the tree.
+    if dest.parent.is_dir() and logical:
+        found = CreoFileManager.latest_in_directory(dest.parent, logical, None)
+        if found is not None and found.is_file():
+            return found
+        if logical != disk_name:
+            alt = dest.parent / Path(logical).name
+            if alt.is_file():
+                return alt
     return None
 
 
@@ -792,7 +855,10 @@ def _plan_cache_downloads(
     """Decide which object ids need a vault download.
 
     Equal content_hash → skip. Local Creo save newer than vault disk_name → keep.
+    Index hits are O(1). Index misses hash in parallel (warm workspace without index).
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     from creopdm.creo.file_manager import CreoFileManager
     from creopdm.utils.hashing import calculate_sha256
 
@@ -801,6 +867,12 @@ def _plan_cache_downloads(
     skipped = 0
     kept_newer = 0
     index_dirty = False
+    try:
+        cache_resolved = cache_dir.resolve()
+    except OSError:
+        cache_resolved = cache_dir
+
+    pending_hash: list[tuple[str, Path, str, str, int, str]] = []
 
     for item in items:
         object_id = (item.object_id or "").strip()
@@ -809,7 +881,6 @@ def _plan_cache_downloads(
         filename = (item.filename or item.disk_name or "").strip()
         disk_name = (item.disk_name or filename).strip()
         expected_hash = (item.content_hash or "").strip().lower()
-        expected_size = int(item.file_size or 0)
         local = _find_planned_cache_file(cache_dir, item)
         if local is None or not local.is_file():
             download_ids.append(object_id)
@@ -828,7 +899,7 @@ def _plan_cache_downloads(
             continue
 
         try:
-            rel_key = local.resolve().relative_to(cache_dir.resolve()).as_posix()
+            rel_key = local.resolve().relative_to(cache_resolved).as_posix()
         except ValueError:
             rel_key = local.name
         cached = index.get(rel_key) or index.get(local.name) or index.get(disk_name)
@@ -846,19 +917,41 @@ def _plan_cache_downloads(
         # Always hash when we need a content check. Never treat "size matches"
         # alone as proof the file is unchanged (edits can preserve size).
         if expected_hash:
-            try:
-                digest = calculate_sha256(local).lower()
-            except Exception:
-                download_ids.append(object_id)
-                continue
-            if digest == expected_hash:
-                index[rel_key] = {"hash": digest, "size": local_size}
-                index[local.name] = {"hash": digest, "size": local_size}
-                index_dirty = True
-                skipped += 1
-                continue
+            pending_hash.append(
+                (object_id, local, expected_hash, rel_key, local_size, local.name)
+            )
+            continue
 
         download_ids.append(object_id)
+
+    if pending_hash:
+        workers = min(8, len(pending_hash))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(calculate_sha256, local): (
+                    object_id,
+                    expected_hash,
+                    rel_key,
+                    local_size,
+                    local_name,
+                )
+                for object_id, local, expected_hash, rel_key, local_size, local_name in pending_hash
+            }
+            for future in as_completed(futures):
+                object_id, expected_hash, rel_key, local_size, local_name = futures[future]
+                try:
+                    digest = str(future.result() or "").lower()
+                except Exception:
+                    download_ids.append(object_id)
+                    continue
+                if digest == expected_hash:
+                    entry = {"hash": digest, "size": local_size}
+                    index[rel_key] = entry
+                    index[local_name] = entry
+                    index_dirty = True
+                    skipped += 1
+                else:
+                    download_ids.append(object_id)
 
     if index_dirty:
         _save_cache_index(cache_dir, index)
@@ -2276,12 +2369,12 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             file_size=payload.file_size,
             prefer_local=bool(payload.prefer_local),
         )
-        product_key = _product_cache_key(
+        target_dir = _choose_product_cache_dir(
+            root,
             payload.product_id or payload.object_id or "local",
             payload.vault_folder,
+            create=True,
         )
-        target_dir = root / product_key
-        target_dir.mkdir(parents=True, exist_ok=True)
         headers: dict[str, str] = {}
         token = (payload.token or settings.token or "").strip()
         if token:
@@ -2349,9 +2442,12 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
     @app.post("/materialize-zip", response_model=MaterializeZipResponse)
     def materialize_zip(payload: MaterializeZipRequest) -> MaterializeZipResponse:
         base = _normalize_base(payload.pdm_url or settings.pdm_url)
-        product_key = _product_cache_key(payload.product_id, payload.vault_folder)
-        target_dir = root / product_key
-        target_dir.mkdir(parents=True, exist_ok=True)
+        target_dir = _choose_product_cache_dir(
+            root,
+            payload.product_id,
+            payload.vault_folder,
+            create=True,
+        )
         headers: dict[str, str] = {}
         token = (payload.token or settings.token or "").strip()
         if token:

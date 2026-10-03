@@ -231,6 +231,65 @@ def test_agent_materialize_warm_workspace_uses_index_without_rehash(tmp_path, mo
         assert hash_calls == []
 
 
+def test_agent_materialize_uses_uuid_folder_when_vault_folder_empty_twin(tmp_path, monkeypatch):
+    """Warm files under product UUID must be reused when Open sends vault_folder."""
+    import hashlib
+
+    from creopdm_agent import server as agent_server
+
+    root = tmp_path / "cache"
+    product_id = "uuid-warm-1111"
+    vault_folder = "pretty-vault-name"
+    # Legacy layout: cache lived under UUID, not vault name.
+    cache = root / product_id
+    cache.mkdir(parents=True)
+    asm_bytes = b"legacy-warm-asm"
+    asm_hash = hashlib.sha256(asm_bytes).hexdigest()
+    (cache / "top.asm").write_bytes(asm_bytes)
+    agent_server._save_cache_index(
+        cache,
+        {"top.asm": {"hash": asm_hash, "size": len(asm_bytes)}},
+    )
+    # Empty vault-named folder would be preferred incorrectly without scoring.
+    (root / vault_folder).mkdir(parents=True)
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers=None):
+            raise AssertionError(f"must reuse UUID workspace, not download: {url}")
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    with TestClient(app) as client:
+        response = client.post(
+            "/materialize",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "object_id": "abc",
+                "product_id": product_id,
+                "vault_folder": vault_folder,
+                "filename": "top.asm",
+                "disk_name": "top.asm",
+                "content_hash": asm_hash,
+                "file_size": len(asm_bytes),
+                "dependencies": [],
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["skipped_count"] == 1
+        assert Path(body["working_directory"]).resolve() == cache.resolve()
+
+
 def test_agent_find_planned_cache_skips_tree_walk_when_nested_folder_exists(tmp_path):
     """Missing nested tip must not os.walk the whole warm workspace."""
     from creopdm_agent.server import CachePlanItem, _find_planned_cache_file
