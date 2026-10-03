@@ -694,7 +694,8 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "product_ui.show_checkout or product_ui.show_undo_checkout or product_ui.show_force_undo_checkout" in html
     assert "product_ui.show_undo_checkout" in html
     assert "product_ui.show_checkin" in html
-    assert "canForceUndoCheckout" in script
+    assert "can-force-undo-checkout" in script
+    assert "canForceUndo" in script
     assert "roleCanCheckout" in script
     assert "roleCanCheckin" in script
     assert "/api/objects/batch/force-undo-checkout" in script
@@ -774,11 +775,12 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     open_ui = _between(script, "async function openPdmObjectFromUi(", "async function probeCreoAgent(")
     assert 'kind === "mine"' in open_ui
     assert "Do not trust data-owned alone" in open_ui
-    # Recover from real checkout/undo items only — not #checkout-menu (Force Undo alone).
+    # Recover from real checkout/undo items only — not the Checkout fly-up shell.
     user_can_co = _between(script, "function userCanCheckout(", "function userCanCheckin(")
     assert "#checkout-btn" in user_can_co
     assert "#undo-btn" in user_can_co
     assert "#checkout-menu" not in user_can_co
+    assert 'querySelector("#checkout-btn, #checkout-product-btn, #undo-btn")' in user_can_co
     assert 'getAttribute("data-can-checkout")' in user_can_co
     sync_tb = _between(script, "function syncToolbar(", "function setCheckinQueueCounts(")
     assert "rowOffersCheckout(row)" in sync_tb
@@ -1119,7 +1121,8 @@ def test_history_revert_only_for_older_versions():
     assert "allowUndisplayed: false" in script
     assert "bottom toolbar" in docs.lower() or "at the bottom" in docs.lower()
     assert "Open the file **Details** page on the **Overview** tab" in docs
-    assert "Open the History tab by default" in docs
+    assert "open the history tab by default" in docs.lower()
+    assert "Creo stays Connected" in docs or "stays Connected" in docs
     html = APP_HTML.read_text(encoding="utf-8")
     assert 'id="history-btn"' in html
     assert "Overview and History" in html

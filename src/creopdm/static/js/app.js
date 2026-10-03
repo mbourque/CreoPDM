@@ -6089,12 +6089,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function userCanCheckout() {
     if (dataFlag(document.body, "can-checkout")) return true;
     // Explicit "0" (or other non-1) means no objects.checkout — do not invent
-    // permission from the toolbar. #checkout-menu can exist for Force Undo alone;
-    // that used to make Checkout ▾ open empty for Viewer / no-checkout roles.
+    // permission from the toolbar. The Checkout fly-up can exist for Force Undo
+    // alone; that used to make Checkout ▾ open empty for Viewer / no-checkout roles.
     const raw = document.body?.getAttribute("data-can-checkout");
     if (raw != null && String(raw).trim() !== "") return false;
     // Attribute missing (Creo CEF / soft-nav wipe) — recover only from real
-    // checkout/undo items, never from #checkout-menu or Force Undo alone.
+    // checkout/undo items, never from the Checkout fly-up shell or Force Undo alone.
     return Boolean(
       document.querySelector("#checkout-btn, #checkout-product-btn, #undo-btn")
     );

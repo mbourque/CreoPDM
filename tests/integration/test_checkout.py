@@ -581,6 +581,7 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "toolbar-menu-panel" in home.text
     assert "roleCanCheckout" in script.text
     assert "roleCanCheckin" in script.text
+    assert "rowOffersCheckout(row)" in script.text
     assert 'selected.every((row) => row.dataset.canCheckout === "1")' in script.text
     assert "function selectionCanCheckin" in script.text
     assert 'row.dataset.canCheckin === "1"' in script.text
@@ -601,7 +602,8 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert 'softNavigate(next, "replace")' in reload_body
     assert "if (!inCreoBrowser())" in reload_body
     assert "checkout-companions" in script.text
-    assert "Already mine — no checkout choice needed" in script.text
+    assert "Only skip the chooser when the Checkout column says it is already mine" in script.text
+    assert "Do not trust data-owned alone" in script.text
     assert "skip a one-option dialog" in script.text
     assert "Working directory only applies inside Creo's embedded browser" in script.text
     assert "Check out this file and its companions" in home.text
