@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from creopdm.utils.creo_companions import (
+    collect_open_companion_objects,
     names_referenced_in_model,
     needs_open_companions,
     select_companion_objects,
@@ -8,9 +9,18 @@ from creopdm.utils.creo_companions import (
 
 
 class _Obj:
-    def __init__(self, relative_path: str, filename: str):
+    def __init__(
+        self,
+        relative_path: str,
+        filename: str,
+        *,
+        object_type: str = "CREO_PART",
+        obj_id: int | None = None,
+    ):
         self.relative_path = relative_path
         self.filename = filename
+        self.object_type = object_type
+        self.id = obj_id if obj_id is not None else hash(relative_path) % 10_000_000
 
 
 def test_needs_companions_for_asm_and_drw_only():
@@ -56,12 +66,25 @@ def test_select_companion_objects_prefers_referenced(tmp_path: Path):
     )
     names = {obj.filename for obj in chosen}
     assert names == {"pin.prt"}
+    # Product scope still finds a part in another folder when the asm bytes name it.
+    cross = select_companion_objects(
+        primary_relative="CAD/top.asm",
+        primary_filename="top.asm",
+        object_type="CREO_ASSEMBLY",
+        siblings=siblings
+        + [_Obj("Other/pin.prt", "pin.prt"), _Obj("Other/spare.prt", "spare.prt")],
+        model_path=asm,
+        model_extensions=[".prt", ".asm", ".drw"],
+        all_cad_extensions=[],
+        scope="product",
+    )
+    assert {obj.filename for obj in cross} == {"pin.prt"}
 
 
 def test_select_companion_objects_skips_huge_unreferenced_pool(tmp_path: Path):
     asm = tmp_path / "top.asm.1"
     asm.write_bytes(b"no matching names here")
-    siblings = [_Obj("CAD/top.asm", "top.asm")] + [
+    siblings = [_Obj("CAD/top.asm", "top.asm", object_type="CREO_ASSEMBLY")] + [
         _Obj(f"CAD/part{i}.prt", f"part{i}.prt") for i in range(80)
     ]
     chosen = select_companion_objects(
@@ -74,3 +97,40 @@ def test_select_companion_objects_skips_huge_unreferenced_pool(tmp_path: Path):
         all_cad_extensions=[],
     )
     assert chosen == []
+
+
+def test_collect_open_companions_walks_subassembly_tree(tmp_path: Path):
+    """Top asm → sub asm → part in another folder must all materialize."""
+    top = tmp_path / "top.asm.1"
+    sub = tmp_path / "sub.asm.1"
+    top.write_bytes(b"uses SUB.ASM")
+    sub.write_bytes(b"uses PIN.PRT")
+    paths = {
+        "CAD/top.asm": top,
+        "CAD/sub.asm": sub,
+        "Parts/pin.prt": tmp_path / "pin.prt.1",
+    }
+    paths["Parts/pin.prt"].write_bytes(b"part")
+    siblings = [
+        _Obj("CAD/top.asm", "top.asm", object_type="CREO_ASSEMBLY", obj_id=1),
+        _Obj("CAD/sub.asm", "sub.asm", object_type="CREO_ASSEMBLY", obj_id=2),
+        _Obj("Parts/pin.prt", "pin.prt", object_type="CREO_PART", obj_id=3),
+        _Obj("Parts/other.prt", "other.prt", object_type="CREO_PART", obj_id=4),
+    ]
+
+    def resolve(obj):
+        return paths.get(obj.relative_path)
+
+    chosen = collect_open_companion_objects(
+        primary_relative="CAD/top.asm",
+        primary_filename="top.asm",
+        object_type="CREO_ASSEMBLY",
+        siblings=siblings,
+        model_path=top,
+        model_extensions=[".prt", ".asm", ".drw"],
+        all_cad_extensions=[],
+        resolve_path=resolve,
+        skip_object_id=1,
+    )
+    names = {obj.filename for obj in chosen}
+    assert names == {"sub.asm", "pin.prt"}

@@ -5,22 +5,43 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import quote
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from creopdm.constants import DependencyType
 from creopdm.creo.base import CreoConnector
 from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import CreoUnavailableError, PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
+from creopdm.models.dependency import Dependency
+from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
 from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.utils.classify import classify_filename, is_creo_js_openable, is_creo_openable, is_creo_view
-from creopdm.utils.creo_companions import needs_open_companions, select_companion_objects
+from creopdm.utils.creo_companions import (
+    collect_open_companion_objects,
+    needs_open_companions,
+)
 from creopdm.utils.creo_header import creo_release_for, is_creo_native_model
 from creopdm.utils.launch import working_directory_for
 
 logger = get_logger("creo-service")
+
+# Edges that mean "parent needs this child on disk to Retrieve".
+_OPEN_DEPENDENCY_TYPES = frozenset(
+    {
+        DependencyType.ASSEMBLY_MEMBER.value,
+        DependencyType.DRAWING_MODEL.value,
+        DependencyType.REFERENCE.value,
+        DependencyType.SKELETON.value,
+        DependencyType.MERGE.value,
+        DependencyType.UNKNOWN.value,
+    }
+)
+_MAX_DEP_COMPANION_DEPTH = 12
+_MAX_DEP_COMPANIONS = 2500
 
 
 class CreoService:
@@ -159,6 +180,59 @@ class CreoService:
             companions=companions,
         )
 
+    def _dependency_companion_objects(
+        self,
+        session: Session,
+        product_id: int,
+        root_object_id: int,
+    ) -> list[EngineeringObject]:
+        """Full member tree from Where Used edges (any folder)."""
+        has_edge = session.scalar(
+            select(Dependency.id)
+            .where(
+                Dependency.product_id == product_id,
+                Dependency.parent_object_id == root_object_id,
+                Dependency.dependency_type.in_(_OPEN_DEPENDENCY_TYPES),
+            )
+            .limit(1)
+        )
+        if has_edge is None:
+            return []
+        queue: list[tuple[int, int]] = [(root_object_id, 0)]
+        seen_parents = {root_object_id}
+        found: dict[int, EngineeringObject] = {}
+        while queue and len(found) < _MAX_DEP_COMPANIONS:
+            parent_id, depth = queue.pop(0)
+            if depth >= _MAX_DEP_COMPANION_DEPTH:
+                continue
+            edges = session.scalars(
+                select(Dependency).where(
+                    Dependency.product_id == product_id,
+                    Dependency.parent_object_id == parent_id,
+                    Dependency.dependency_type.in_(_OPEN_DEPENDENCY_TYPES),
+                )
+            ).all()
+            child_ids = [
+                edge.child_object_id
+                for edge in edges
+                if edge.child_object_id not in found and edge.child_object_id != root_object_id
+            ]
+            if not child_ids:
+                continue
+            children = session.scalars(
+                select(EngineeringObject).where(EngineeringObject.id.in_(child_ids))
+            ).all()
+            for child in children:
+                if child.id in found:
+                    continue
+                found[child.id] = child
+                if len(found) >= _MAX_DEP_COMPANIONS:
+                    break
+                if needs_open_companions(child.object_type, child.filename) and child.id not in seen_parents:
+                    seen_parents.add(child.id)
+                    queue.append((child.id, depth + 1))
+        return list(found.values())
+
     def _companions_for(
         self,
         session: Session,
@@ -175,7 +249,36 @@ class CreoService:
         models = self._workspaces._config.model_cad_extensions()
         all_cad = self._workspaces._cad_extensions()
         siblings = self._objects.list_objects(session, product.id)
-        chosen = select_companion_objects(
+        root_id = skip_object_id
+        if root_id is None:
+            rel_key = str(relative_path or "").replace("\\", "/").lower()
+            for row in siblings:
+                if str(getattr(row, "relative_path", "") or "").replace("\\", "/").lower() == rel_key:
+                    root_id = int(row.id)
+                    break
+
+        # Prefer Where Used edges, then always union with a recursive byte-scan
+        # so a partial BOM (top members only) still pulls nested sub-asms/parts.
+        by_id: dict[int, EngineeringObject] = {}
+        if root_id is not None:
+            for obj in self._dependency_companion_objects(session, product.id, root_id):
+                by_id[int(obj.id)] = obj
+
+        def _resolve(obj: object) -> Path | None:
+            try:
+                return self._workspaces.locate_content(product, obj)  # type: ignore[arg-type]
+            except PathValidationError:
+                try:
+                    return self._workspaces.materialize(
+                        product,
+                        obj,  # type: ignore[arg-type]
+                        writable=False,
+                        overwrite_modified=True,
+                    )
+                except Exception:  # noqa: BLE001
+                    return None
+
+        for obj in collect_open_companion_objects(
             primary_relative=relative_path,
             primary_filename=filename,
             object_type=object_type,
@@ -183,7 +286,15 @@ class CreoService:
             model_path=path,
             model_extensions=models,
             all_cad_extensions=all_cad,
-        )
+            resolve_path=_resolve,
+            skip_object_id=root_id if root_id is not None else skip_object_id,
+        ):
+            obj_id = getattr(obj, "id", None)
+            if obj_id is None:
+                continue
+            by_id.setdefault(int(obj_id), obj)  # type: ignore[arg-type]
+        chosen = list(by_id.values())
+
         out: list[dict[str, str | None]] = []
         for obj in chosen:
             if skip_object_id is not None and obj.id == skip_object_id:

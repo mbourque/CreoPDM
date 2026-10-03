@@ -240,9 +240,9 @@ Otherwise the app asks how you want to open it (must show the chooser in Creo’
 
 | You choose | App should |
 |------------|------------|
-| **Open without checking out** | Download what Creo needs into the local cache and open for view/reference — **no edit lock** |
+| **Open without checking out** | Download what Creo needs into the local cache and open for view/reference — **no edit lock**; for an assembly this walks **sub-assemblies and parts** (Where Used tree when indexed, otherwise referenced names across folders) so Retrieve can resolve the full model | 
 | **Check out this file, then open** | Lock this file, download it, then open |
-| **Check out this file and its companions, then open** | Lock this file plus related models Creo needs, then open |
+| **Check out this file and its companions, then open** | Lock this file plus the same full companion tree Creo needs, then open |
 
 **Set Creo working directory…** appears on that dialog **only inside Creo’s embedded browser** (on by default). Outside Creo (Chrome/Edge/etc.) it is hidden and is never applied — working directory only exists in Creo. Use the toolbar **Set Working Directory** the same way (Creo only).
 
@@ -550,6 +550,7 @@ Automated coverage lives mainly in:
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
 - `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `products.view` / `objects.view` / `data-can-checkout`; empty-home `products.create` hero; empty-product `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_products_view_lands_on_administration`; `test_setup_and_admin_user_require_email`; `test_username_rejects_spaces_and_email_needs_domain`; `test_admin_email_settings_save_and_gate`; `test_admin_utilities_status_and_gate`; `test_admin_utilities_email_all_users`; `test_admin_membership_product_access_filters_products`; `test_role_assign_must_be_strictly_below_actor`; new users default to no product access)
 - `tests/unit/test_top_level_assemblies.py` (Where Used index gate; drawing parents ignored for top-level)
+- `tests/unit/test_creo_companions.py` (open companions walk sub-assemblies + parts across folders)
 - `tests/unit/test_password_reset.py` (forgot link only after wrong password; GET blocked; wrong email same confirmation / one try; spam disable)
 - `tests/unit/test_product_watch.py` (bell when email enabled; per-user watch; subscribe/unsubscribe; one email per bulk action; actor excluded; notifications off skips mail; Force Undo Checkout emails former owner)
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)

@@ -1,12 +1,12 @@
 """Resolve CAD files that must sit beside a model for Creo to open it.
 
-Creo.JS cannot list assembly members before Retrieve. The dependency table is
-not populated yet, so we use same-folder CAD siblings and optionally narrow
-by names referenced inside the parent file.
+Prefer the Where Used dependency graph when present (full tree, any folder).
+Otherwise scan model bytes for referenced names and walk sub-assemblies.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from creopdm.creo.file_manager import CreoFileManager
@@ -23,6 +23,9 @@ _NEEDS_COMPANION_SUFFIXES = frozenset({".asm", ".drw"})
 _SCAN_LIMIT = 8 * 1024 * 1024
 # Below this, plain ``in`` checks are cheaper than building an automaton.
 _MATCHER_THRESHOLD = 48
+# Safety caps for deep assembly trees.
+_MAX_OPEN_COMPANION_DEPTH = 12
+_MAX_OPEN_COMPANIONS_TOTAL = 2500
 
 
 def needs_open_companions(object_type: str, filename: str) -> bool:
@@ -115,8 +118,14 @@ def select_companion_objects(
     model_path: Path,
     model_extensions: list[str] | tuple[str, ...],
     all_cad_extensions: list[str] | tuple[str, ...],
+    scope: str = "folder",
 ) -> list:
-    """Pick same-folder CAD objects that should download with an assembly/drawing."""
+    """Pick CAD objects that should download with an assembly/drawing.
+
+    ``scope="folder"``: same-folder siblings (legacy / huge flat folders).
+    ``scope="product"``: whole product, but only names referenced in the model
+    bytes (needed for parts living in other folders).
+    """
     if not needs_open_companions(object_type, primary_filename):
         return []
     folder = folder_of(primary_relative)
@@ -124,7 +133,8 @@ def select_companion_objects(
     primary_logical = CreoFileManager.normalize_creo_filename(primary_filename).lower()
     pool = []
     candidate_names: list[str] = []
-    for obj in objects_in_folder_view(siblings, folder):
+    source = siblings if scope == "product" else objects_in_folder_view(siblings, folder)
+    for obj in source:
         rel = str(getattr(obj, "relative_path", "") or "").replace("\\", "/")
         if rel.lower() == primary_rel:
             continue
@@ -148,8 +158,95 @@ def select_companion_objects(
                 narrowed.append(obj)
         if narrowed:
             return narrowed
+    # Product-wide without byte hits would pull the whole vault — refuse.
+    if scope == "product":
+        return []
     # No byte matches (or empty scan): never drag an entire flat product folder
     # into Creo — that hangs Open on multi-thousand-file products.
     if len(pool) > _MAX_OPEN_COMPANION_POOL:
         return []
     return pool
+
+
+def collect_open_companion_objects(
+    *,
+    primary_relative: str,
+    primary_filename: str,
+    object_type: str,
+    siblings: list,
+    model_path: Path,
+    model_extensions: list[str] | tuple[str, ...],
+    all_cad_extensions: list[str] | tuple[str, ...],
+    resolve_path: Callable[[object], Path | None],
+    skip_object_id: int | None = None,
+) -> list:
+    """Walk sub-assemblies and collect every part/asm Creo needs to open primary.
+
+    Each assembly level uses product-wide name matching against vault file bytes,
+    then recurses into any companion that is itself an assembly/drawing.
+    """
+    if not needs_open_companions(object_type, primary_filename):
+        return []
+    queue: list[tuple[str, str, str, Path, int]] = [
+        (
+            str(primary_relative or "").replace("\\", "/"),
+            str(primary_filename or ""),
+            str(object_type or ""),
+            model_path,
+            0,
+        )
+    ]
+    seen_keys: set[str] = set()
+    primary_key = str(primary_relative or "").replace("\\", "/").lower()
+    if primary_key:
+        seen_keys.add(primary_key)
+    if skip_object_id is not None:
+        seen_keys.add(f"id:{skip_object_id}")
+    out: list = []
+    while queue and len(out) < _MAX_OPEN_COMPANIONS_TOTAL:
+        rel, filename, otype, path, depth = queue.pop(0)
+        if depth > _MAX_OPEN_COMPANION_DEPTH:
+            continue
+        if not path.is_file():
+            continue
+        immediate = select_companion_objects(
+            primary_relative=rel,
+            primary_filename=filename,
+            object_type=otype,
+            siblings=siblings,
+            model_path=path,
+            model_extensions=model_extensions,
+            all_cad_extensions=all_cad_extensions,
+            scope="product",
+        )
+        if not immediate and depth == 0:
+            # First level: also try same-folder fallback (empty/unreadable scan).
+            immediate = select_companion_objects(
+                primary_relative=rel,
+                primary_filename=filename,
+                object_type=otype,
+                siblings=siblings,
+                model_path=path,
+                model_extensions=model_extensions,
+                all_cad_extensions=all_cad_extensions,
+                scope="folder",
+            )
+        for obj in immediate:
+            obj_id = getattr(obj, "id", None)
+            obj_rel = str(getattr(obj, "relative_path", "") or "").replace("\\", "/")
+            key = f"id:{obj_id}" if obj_id is not None else obj_rel.lower()
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            out.append(obj)
+            if len(out) >= _MAX_OPEN_COMPANIONS_TOTAL:
+                break
+            child_type = str(getattr(obj, "object_type", "") or "")
+            child_name = str(getattr(obj, "filename", "") or Path(obj_rel).name)
+            if not needs_open_companions(child_type, child_name):
+                continue
+            child_path = resolve_path(obj)
+            if child_path is None or not child_path.is_file():
+                continue
+            queue.append((obj_rel, child_name, child_type, child_path, depth + 1))
+    return out
