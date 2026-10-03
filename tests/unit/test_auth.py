@@ -446,7 +446,7 @@ def test_admin_can_open_settings(auth_client):
     assert 'href="/admin/products"' in hub.text
     assert 'href="/admin/email"' in hub.text
     assert 'href="/admin/utilities"' in hub.text
-    assert "Email all users, compact vault history" in hub.text
+    assert "Email all users, compact vault history, Delete products, and server health checks." in hub.text
     # Help copy is plain text, not wrapped in the section link.
     assert 'href="/admin/users">Add and edit' not in hub.text
     settings_page = auth_client.get("/settings")
@@ -479,7 +479,9 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "admin-hub" in hub.text
     assert 'href="/admin/utilities/email-all"' in hub.text
     assert 'href="/admin/utilities/compact"' in hub.text
+    assert 'href="/admin/utilities/delete-products"' in hub.text
     assert 'href="/admin/utilities/health"' in hub.text
+    assert "Email all users, compact vault history, Delete products, and server health checks." in hub.text
     assert 'action="/admin/utilities/email-all"' not in hub.text
     assert 'action="/admin/utilities/compact-vault"' not in hub.text
     assert "Disk space" not in hub.text
@@ -493,6 +495,12 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert compact_page.status_code == 200
     assert "Compact product vault history" in compact_page.text
     assert 'action="/admin/utilities/compact-vault"' in compact_page.text
+
+    delete_page = auth_client.get("/admin/utilities/delete-products")
+    assert delete_page.status_code == 200
+    assert "Delete products" in delete_page.text
+    assert 'action="/admin/utilities/delete-products"' in delete_page.text
+    assert 'id="utilities-delete-products-form"' in delete_page.text
 
     health = auth_client.get("/admin/utilities/health")
     assert health.status_code == 200
@@ -554,6 +562,7 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     for path in (
         "/admin/utilities/email-all",
         "/admin/utilities/compact",
+        "/admin/utilities/delete-products",
         "/admin/utilities/health",
         "/admin/utilities/logs",
     ):
@@ -580,6 +589,16 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
         follow_redirects=False,
     )
     assert denied_compact.status_code == 403
+    denied_delete = auth_client.post(
+        "/admin/utilities/delete-products",
+        data={
+            "product_id": "x",
+            "confirm_name": "Nope",
+            "confirm": "1",
+        },
+        follow_redirects=False,
+    )
+    assert denied_delete.status_code == 403
 
 
 def test_admin_utilities_compact_vault_gate(auth_client, auth_ctx):
@@ -1496,10 +1515,10 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     detail = auth_client.get(f"/admin/products/{product['uuid']}")
     assert detail.status_code == 200
     assert 'value="Admin Hub Product"' in detail.text
-    assert "Remove product" in detail.text
-    assert f'action="/admin/products/{product["uuid"]}/delete"' in detail.text
-    # Remove card uses the same width constraint as the edit form above.
-    assert detail.text.count("settings-form-wide") >= 2
+    assert "Remove product" not in detail.text
+    assert f'action="/admin/products/{product["uuid"]}/delete"' not in detail.text
+    assert 'href="/admin/utilities/delete-products"' in detail.text
+    assert detail.text.count("settings-form-wide") == 1
     assert "Lifecycle state" in detail.text
     assert 'name="state"' in detail.text
     assert 'name="read_only"' in detail.text
@@ -1587,20 +1606,28 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert restored.status_code == 303, restored.text
 
     bad_delete = auth_client.post(
-        f"/admin/products/{product['uuid']}/delete",
-        data={"confirm_name": "wrong"},
+        "/admin/utilities/delete-products",
+        data={
+            "product_id": product["uuid"],
+            "confirm_name": "wrong",
+            "confirm": "1",
+        },
         follow_redirects=False,
     )
     assert bad_delete.status_code == 400
     assert "exact product name" in bad_delete.text
 
     deleted = auth_client.post(
-        f"/admin/products/{product['uuid']}/delete",
-        data={"confirm_name": "Admin Hub Renamed"},
+        "/admin/utilities/delete-products",
+        data={
+            "product_id": product["uuid"],
+            "confirm_name": "Admin Hub Renamed",
+            "confirm": "1",
+        },
         follow_redirects=False,
     )
-    assert deleted.status_code == 303, deleted.text
-    assert deleted.headers["location"] == "/admin/products"
+    assert deleted.status_code == 200, deleted.text
+    assert "Deleted product Admin Hub Renamed" in deleted.text
     assert auth_client.get(f"/api/products/{product['uuid']}").status_code == 404
     assert not vault.exists()
 

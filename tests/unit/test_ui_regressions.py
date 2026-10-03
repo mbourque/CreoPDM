@@ -1571,12 +1571,16 @@ def test_admin_hub_panel_fills_full_width():
     hub = _between(css, ".admin-hub {", ".admin-tile-grid {")
     assert "max-width: none" in hub
     assert "max-width: 48rem" not in hub
-    grid = _between(css, ".admin-tile-grid {", ".admin-tile {")
-    assert "max-width: 48rem" in grid
+    # Hub pages (Admin + Utilities) stretch full width; do not re-cap the tile grid.
+    assert ".admin-hub .admin-tile-grid" in css
+    hub_grid = _between(css, ".admin-hub .admin-tile-grid {", "}")
+    assert "max-width: none" in hub_grid
+    grid = _between(css, "\n.admin-tile-grid {", ".admin-tile {")
     assert "display: grid" in grid
+    assert "max-width: 48rem" not in grid
     admin = (ROOT / "src" / "creopdm" / "templates" / "admin.html").read_text(encoding="utf-8")
     assert "admin-hub" in admin
-    assert 'class="detail settings-page admin-hub"' in admin
+    assert 'class="detail settings-page admin-page admin-hub"' in admin or "admin-hub" in admin
     assert ">System Settings</a>" in admin
     assert ">Settings</a>" not in admin
     assert ">Utilities</a>" in admin
@@ -1594,7 +1598,9 @@ def test_admin_hub_panel_fills_full_width():
     assert "admin-hub" in utilities
     assert 'href="/admin/utilities/email-all"' in utilities
     assert 'href="/admin/utilities/compact"' in utilities
+    assert 'href="/admin/utilities/delete-products"' in utilities
     assert 'href="/admin/utilities/health"' in utilities
+    assert "Email all users, compact vault history, Delete products, and server health checks." in utilities
     assert 'action="/admin/utilities/email-all"' not in utilities
     assert "Disk space" not in utilities
     email_util = (
@@ -1605,6 +1611,16 @@ def test_admin_hub_panel_fills_full_width():
         ROOT / "src" / "creopdm" / "templates" / "admin_utilities_compact.html"
     ).read_text(encoding="utf-8")
     assert 'id="utilities-compact-vault-form"' in compact_util
+    delete_util = (
+        ROOT / "src" / "creopdm" / "templates" / "admin_utilities_delete_products.html"
+    ).read_text(encoding="utf-8")
+    assert 'id="utilities-delete-products-form"' in delete_util
+    product_form = (ROOT / "src" / "creopdm" / "templates" / "admin_product_form.html").read_text(
+        encoding="utf-8"
+    )
+    assert "Remove product" not in product_form
+    assert '}/delete"' not in product_form
+    assert 'href="/admin/utilities/delete-products"' in product_form
     health = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities_health.html").read_text(
         encoding="utf-8"
     )
@@ -1622,9 +1638,11 @@ def test_admin_hub_panel_fills_full_width():
     assert ".utilities-log-body" in css
     assert ".utilities-status-ok" in css
     script = _app_js()
-    # Sync compact POST can take minutes — show busy until the response navigates.
-    assert 'form.id !== "utilities-compact-vault-form"' in script
+    # Sync compact / delete POSTs can take a while — show busy until the response navigates.
+    assert 'form.id === "utilities-compact-vault-form"' in script
+    assert 'form.id === "utilities-delete-products-form"' in script
     assert "Compacting vault history for ${label}" in script
+    assert "Deleting product ${label}" in script
     settings = (ROOT / "src" / "creopdm" / "templates" / "settings.html").read_text(encoding="utf-8")
     assert "<h1>System Settings</h1>" in settings
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
@@ -1634,7 +1652,8 @@ def test_admin_hub_panel_fills_full_width():
     assert "folder’s used size" in docs or "folder" in docs
     assert "Audit** and **AI**" in docs or "**Audit** and **AI**" in docs
     assert "Compacting vault history" in docs
-    assert "three hub tiles" in docs
+    assert "four hub tiles" in docs
+    assert "Delete products" in docs
 
 
 def test_workspace_poll_pauses_after_idle_setting():

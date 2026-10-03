@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Delete products — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page admin-page admin-utilities">
+  <nav class="crumb">
+    {% if can_view_products %}
+    <a href="/">Products</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/utilities">Utilities</a>
+    <span>/</span>
+    <span>Delete products</span>
+  </nav>
+  <h1>Delete products</h1>
+  <p class="muted">
+    Deletes the CreoPDM vault (working copies and Git history) and unregisters the product from the database.
+    Works for Archived / locked products too. Original CAD folders you imported from are not deleted.
+  </p>
+
+  {% if success %}
+  <p class="ok">{{ success }}</p>
+  {% endif %}
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+
+  <section class="settings-card">
+    <form method="post" action="/admin/utilities/delete-products" class="settings-form" id="utilities-delete-products-form">
+      <label>Product
+        <select name="product_id" required>
+          <option value="">Select a product…</option>
+          {% for product in delete_products %}
+          <option value="{{ product.uuid }}" {% if delete_product_id == product.uuid %}selected{% endif %}>{{ product.name }}{% if product.state == 'ARCHIVED' %} (archived){% elif not product.active %} (inactive){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Type the product name to confirm
+        <input name="confirm_name" type="text" value="{{ delete_confirm_name }}" required autocomplete="off" maxlength="255">
+      </label>
+      <label class="choice">
+        <input type="checkbox" name="confirm" value="1" required>
+        I understand this permanently deletes the CreoPDM vault for this product
+      </label>
+      <p class="form-actions">
+        <button type="submit" class="btn btn-danger" {% if not delete_products %}disabled{% endif %}>Delete product</button>
+        <a class="btn" href="/admin/utilities">Back to Utilities</a>
+      </p>
+    </form>
+  </section>
+</article>
+{% endblock %}

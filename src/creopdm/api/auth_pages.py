@@ -1867,72 +1867,17 @@ def admin_product_update(
 
 
 @router.post("/admin/products/{product_uuid}/delete", response_class=HTMLResponse)
-def admin_product_delete(
+def admin_product_delete_moved(
     product_uuid: str,
     request: Request,
-    confirm_name: str = Form(...),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
+    """Legacy edit-product delete URL → Utilities → Delete products."""
     manager = _require_products_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    try:
-        product = ctx.products.load_product_for_delete(db, product_uuid)
-    except CreoPDMError:
-        return RedirectResponse("/admin/products", status_code=303)
-    payload = product_to_response(product)
-    form = _product_form(
-        name=payload.name,
-        number=payload.number or "",
-        description=payload.description or "",
-        vault_folder=payload.vault_folder,
-        state=payload.state,
-        read_only=payload.read_only,
-        uuid=payload.uuid,
-    )
-    form_extras = {
-        "product_states": list(ProductState),
-        "product_state_labels": PRODUCT_STATE_LABELS,
-    }
-    if (confirm_name or "").strip() != product.name:
-        return templates.TemplateResponse(
-            request,
-            "admin_product_form.html",
-            {
-                **_base_ctx(request, ctx, current_user=manager),
-                "error": None,
-                "mode": "edit",
-                "form": form,
-                "delete_error": "Type the exact product name to confirm removal.",
-                **form_extras,
-            },
-            status_code=400,
-        )
-    try:
-        workspace = ctx.workspaces.vault_for(product)
-        ctx.products.forget_product(
-            db,
-            product_uuid,
-            confirm_name=confirm_name,
-            workspace_path=workspace,
-        )
-        return RedirectResponse("/admin/products", status_code=303)
-    except CreoPDMError as exc:
-        db.rollback()
-        return templates.TemplateResponse(
-            request,
-            "admin_product_form.html",
-            {
-                **_base_ctx(request, ctx, current_user=manager),
-                "error": None,
-                "mode": "edit",
-                "form": form,
-                "delete_error": exc.message,
-                **form_extras,
-            },
-            status_code=400,
-        )
+    return RedirectResponse("/admin/utilities/delete-products", status_code=303)
 
 
 def _require_email_manager(
@@ -2332,6 +2277,35 @@ def _utilities_health_response(
     )
 
 
+def _utilities_delete_products_response(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    manager: User,
+    *,
+    delete_product_id: str = "",
+    delete_confirm_name: str = "",
+    error: str | None = None,
+    success: str | None = None,
+    status_code: int = 200,
+):
+    from creopdm.services.utilities_service import list_products_for_compact
+
+    return templates.TemplateResponse(
+        request,
+        "admin_utilities_delete_products.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "delete_products": list_products_for_compact(db),
+            "delete_product_id": delete_product_id,
+            "delete_confirm_name": delete_confirm_name,
+            "error": error,
+            "success": success,
+        },
+        status_code=status_code,
+    )
+
+
 def _utilities_logs_response(
     request: Request,
     ctx: AppContext,
@@ -2395,6 +2369,97 @@ def admin_utilities_health_page(
     if _is_blocked(manager):
         return manager
     return _utilities_health_response(request, ctx, db, manager)
+
+
+@router.get("/admin/utilities/delete-products", response_class=HTMLResponse)
+def admin_utilities_delete_products_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_utilities_access(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return _utilities_delete_products_response(request, ctx, db, manager)
+
+
+@router.post("/admin/utilities/delete-products", response_class=HTMLResponse)
+def admin_utilities_delete_products(
+    request: Request,
+    product_id: str = Form(""),
+    confirm_name: str = Form(""),
+    confirm: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_utilities_access(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    pid = (product_id or "").strip()
+    typed = confirm_name or ""
+    if confirm != "1":
+        return _utilities_delete_products_response(
+            request,
+            ctx,
+            db,
+            manager,
+            delete_product_id=pid,
+            delete_confirm_name=typed,
+            error="Confirm that you want to permanently delete this product’s vault.",
+            status_code=400,
+        )
+    try:
+        product = ctx.products.load_product_for_delete(db, pid)
+    except CreoPDMError as exc:
+        return _utilities_delete_products_response(
+            request,
+            ctx,
+            db,
+            manager,
+            delete_product_id=pid,
+            delete_confirm_name=typed,
+            error=exc.message,
+            status_code=400,
+        )
+    if (typed or "").strip() != product.name:
+        return _utilities_delete_products_response(
+            request,
+            ctx,
+            db,
+            manager,
+            delete_product_id=pid,
+            delete_confirm_name=typed,
+            error="Type the exact product name to confirm removal.",
+            status_code=400,
+        )
+    try:
+        workspace = ctx.workspaces.vault_for(product)
+        result = ctx.products.forget_product(
+            db,
+            pid,
+            confirm_name=typed,
+            workspace_path=workspace,
+        )
+    except CreoPDMError as exc:
+        db.rollback()
+        return _utilities_delete_products_response(
+            request,
+            ctx,
+            db,
+            manager,
+            delete_product_id=pid,
+            delete_confirm_name=typed,
+            error=exc.message,
+            status_code=400,
+        )
+    note = f"Deleted product {result['name']} and its CreoPDM vault."
+    if result.get("warning"):
+        note = f"{note} {result['warning']}"
+    return _utilities_delete_products_response(
+        request,
+        ctx,
+        db,
+        manager,
+        success=note,
+    )
 
 
 @router.get("/admin/utilities/logs", response_class=HTMLResponse)

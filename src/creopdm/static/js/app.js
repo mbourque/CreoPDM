@@ -10298,7 +10298,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     origAddEventListener.call(document, "change", onProductAccessToggle, true);
     origAddEventListener.call(document, "input", onProductAccessToggle, true);
   }
-  // Compact is a sync form POST (can take minutes). Show busy until the response navigates.
+  // Compact / Delete products are sync form POSTs (can take a while). Busy until navigate.
   if (!window.__creopdmUtilitiesBusyBound) {
     window.__creopdmUtilitiesBusyBound = true;
     origAddEventListener.call(
@@ -10307,10 +10307,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       (event) => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement)) return;
-        if (form.id !== "utilities-compact-vault-form") return;
         const select = form.querySelector('select[name="product_id"]');
         const label = select?.selectedOptions?.[0]?.textContent?.trim() || "product";
-        const message = `Compacting vault history for ${label}…`;
+        let message = "";
+        if (form.id === "utilities-compact-vault-form") {
+          message = `Compacting vault history for ${label}…`;
+        } else if (form.id === "utilities-delete-products-form") {
+          message = `Deleting product ${label}…`;
+        } else {
+          return;
+        }
         const api = window.__creopdmSoftNavApi;
         if (api && typeof api.setBusy === "function") api.setBusy(message);
         else {
