@@ -360,6 +360,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           [
             "data-agent-token",
             "data-can-checkout",
+            "data-can-checkin",
+            "data-can-force-undo-checkout",
             "data-can-view",
             "data-can-copy-to-vault",
             "data-agent-base",
@@ -6014,12 +6016,35 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return "file";
   }
 
+  function dataFlag(el, name) {
+    // name like "can-checkout". Prefer getAttribute — Creo CEF dataset on <body>/<tr>
+    // is unreliable and was skipping the Open chooser (allowCheckout always false).
+    if (!el) return false;
+    const attr = `data-${name}`;
+    if (typeof el.getAttribute === "function") {
+      const raw = el.getAttribute(attr);
+      if (raw != null && String(raw).trim() !== "") {
+        return String(raw).trim() === "1";
+      }
+    }
+    const camel = name.replace(/-([a-z])/g, (_, ch) => ch.toUpperCase());
+    return String(el.dataset?.[camel] || "").trim() === "1";
+  }
+
   function userCanCheckout() {
-    return document.body?.dataset?.canCheckout === "1";
+    return dataFlag(document.body, "can-checkout");
   }
 
   function userCanCheckin() {
-    return document.body?.dataset?.canCheckin === "1";
+    return dataFlag(document.body, "can-checkin");
+  }
+
+  function rowOffersCheckout(row) {
+    if (dataFlag(row, "can-checkout")) return true;
+    // Recover when data-can-checkout was lost but Checkout column still says Available.
+    if (!row || typeof row.querySelector !== "function") return false;
+    const kind = row.querySelector(".checkout-state")?.getAttribute("data-state") || "";
+    return kind === "available";
   }
 
   function isModalDialog(el) {
@@ -6049,7 +6074,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!allowCheckout) {
       return Promise.resolve({ action: "open", setWorkingDirectory: false });
     }
-    if (!isModalDialog(dialog) || !form || !openRadio) {
+    if (!dialog || !form || !openRadio) {
       // Do not silently open when checkout was an option — that hid the chooser.
       showError(
         $("#toolbar-error"),
@@ -6082,8 +6107,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         dialog.removeEventListener("cancel", onCancel);
         try {
           if (dialog.open) dialog.close();
+          else dialog.removeAttribute("open");
         } catch {
-          /* ignore */
+          try {
+            dialog.removeAttribute("open");
+          } catch {
+            /* ignore */
+          }
         }
         resolve({
           action,
@@ -6096,13 +6126,30 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       };
       const onSubmit = (event) => {
         event.preventDefault();
+        event.stopPropagation?.();
         const selected = form.querySelector('input[name="open_action"]:checked');
         finish(selected?.value || "open");
       };
       form.addEventListener("submit", onSubmit);
       cancelBtn?.addEventListener("click", onCancel);
       dialog.addEventListener("cancel", onCancel);
-      if (!dialog.open) dialog.showModal();
+      try {
+        if (isModalDialog(dialog)) {
+          if (!dialog.open) dialog.showModal();
+        } else {
+          // Last resort when showModal is missing — still block behind a visible panel.
+          dialog.setAttribute("open", "");
+        }
+      } catch {
+        dialog.setAttribute("open", "");
+      }
+      if (!dialog.open && !dialog.hasAttribute("open")) {
+        showError(
+          $("#toolbar-error"),
+          "Could not show the Open dialog. Hard-refresh (F5) and try again."
+        );
+        finish("cancel");
+      }
     });
   }
 
@@ -6155,15 +6202,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function openPdmObjectFromUi(target, row) {
     const objectId = openTargetObjectId(target);
     const filename = openTargetFilename(target, row);
-    const canCheckout = row ? row.dataset.canCheckout === "1" : false;
-    const owned = row ? row.dataset.owned === "1" : false;
+    const canCheckout = Boolean(objectId) && rowOffersCheckout(row) && userCanCheckout();
+    const owned = dataFlag(row, "owned");
     // Already mine — no checkout choice needed; open immediately.
     if (objectId && owned) {
       return openPdmObject(target);
     }
     const choice = await promptOpenCheckout({
       filename,
-      canCheckout: Boolean(objectId) && canCheckout && userCanCheckout(),
+      canCheckout,
       owned: false,
     });
     const action = typeof choice === "string" ? choice : choice?.action;
@@ -9835,9 +9882,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!id) return;
     await openPdmObjectFromUi(id, {
       dataset: {
-        filename: btn.dataset.filename || id,
-        canCheckout: btn.dataset.canCheckout === "1" ? "1" : "0",
-        owned: btn.dataset.owned === "1" ? "1" : "0",
+        filename: btn.getAttribute("data-filename") || btn.dataset.filename || id,
+        canCheckout: dataFlag(btn, "can-checkout") ? "1" : "0",
+        owned: dataFlag(btn, "owned") ? "1" : "0",
+      },
+      getAttribute: (name) => {
+        if (name === "data-can-checkout") return dataFlag(btn, "can-checkout") ? "1" : "0";
+        if (name === "data-owned") return dataFlag(btn, "owned") ? "1" : "0";
+        if (name === "data-filename") {
+          return btn.getAttribute("data-filename") || btn.dataset.filename || id;
+        }
+        return null;
       },
     });
   });

@@ -89,7 +89,8 @@
     </form>
   </dialog>
   <dialog id="open-checkout-dialog" class="dialog">
-    <form method="dialog" id="open-checkout-form">
+    <!-- No method=dialog — Creo CEF has auto-closed/submitted that form and skipped the chooser. -->
+    <form id="open-checkout-form" action="#" method="post">
       <h2 id="open-checkout-title">Open file</h2>
       <p id="open-checkout-lead"></p>
       <p class="muted small" id="open-checkout-explain">

@@ -1016,6 +1016,16 @@ button.forgot-password-btn,
 .dialog h2 { margin: 0; }
 [hidden] { display: none !important; }
 dialog:not([open]) { display: none !important; }
+/* Creo CEF fallback when only the open attribute is set (no top-layer showModal). */
+dialog#open-checkout-dialog[open] {
+  display: block;
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10050;
+  margin: 0;
+}
 .dialog label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.88rem; font-weight: 600; }
 .dialog .muted.small {
   margin: 0.15rem 0 0;
