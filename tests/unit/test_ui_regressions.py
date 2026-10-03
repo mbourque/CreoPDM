@@ -1614,6 +1614,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "size of that folder only" in health
     assert "<strong>System</strong>" in health
     assert 'href="/admin/utilities/logs"' in health
+    assert "row.label == 'Logs'" in health or 'row.label == "Logs"' in health
     logs_tmpl = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities_logs.html").read_text(
         encoding="utf-8"
     )

@@ -78,7 +78,7 @@
     <h3 class="utilities-disk-label">{{ row.label }}</h3>
     <dl class="kv">
       <dt>Path</dt>
-      <dd class="mono">{{ row.path }}{% if not row.exists %} <span class="muted">(missing)</span>{% endif %}</dd>
+      <dd class="mono">{% if row.label == 'Logs' %}<a href="/admin/utilities/logs">{{ row.path }}</a>{% else %}{{ row.path }}{% endif %}{% if not row.exists %} <span class="muted">(missing)</span>{% endif %}</dd>
       {% if row.error %}
       <dt>Error</dt>
       <dd class="error">{{ row.error }}</dd>
