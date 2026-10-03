@@ -27,6 +27,8 @@ from creopdm.exceptions import PathValidationError, PermissionDeniedError
 from creopdm.schemas.common import SettingsResponse, SettingsUpdateRequest
 from creopdm.site_availability import (
     DEFAULT_SITE_UNAVAILABLE_MESSAGE,
+    SITE_UNAVAILABLE,
+    message_for_unavailable_save,
     site_unavailable_message,
 )
 from creopdm.utils.classify import exclude_extensions, unique_type_labels
@@ -232,9 +234,16 @@ def update_settings(
         current.ui.workspace_poll_interval_ms = payload.workspace_poll_interval_ms
     if payload.workspace_poll_idle_minutes is not None:
         current.ui.workspace_poll_idle_minutes = payload.workspace_poll_idle_minutes
+    was_unavailable = current.ui.site_availability == SITE_UNAVAILABLE
     if payload.site_availability is not None:
         current.ui.site_availability = payload.site_availability
     if payload.site_unavailable_message is not None:
         current.ui.site_unavailable_message = payload.site_unavailable_message
+    # Turning unavailable on with the stock message → append pretty “Since …” date.
+    if current.ui.site_availability == SITE_UNAVAILABLE:
+        current.ui.site_unavailable_message = message_for_unavailable_save(
+            was_unavailable=was_unavailable,
+            message=current.ui.site_unavailable_message,
+        )
     apply_settings(ctx, current)
     return settings_to_response(ctx)

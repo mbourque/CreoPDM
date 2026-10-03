@@ -43,8 +43,9 @@
       {% if can_manage_users or can_manage_settings or can_manage_roles or can_assign_products or can_manage_products or can_manage_email %}
       <a class="status-pill" href="/admin">Administration</a>
       {% endif %}
-      {% if site_unavailable and can_manage_settings %}
-      <a class="status-pill" data-state="warn" href="/settings#site-availability"
+      {% if can_manage_settings %}
+      <a class="status-pill" id="site-unavailable-pill" data-state="warn" href="/settings#site-availability"
+         {% if not site_unavailable %}hidden{% endif %}
          title="CreoPDM is marked unavailable. Non-administrators see a maintenance message. Open System Settings to turn this off when you are done.">Unavailable</a>
       {% endif %}
       <span id="creo-status" class="status-pill" data-state="{% if creo_label == 'Connected' %}ok{% else %}idle{% endif %}" data-creo-open-mode="{{ creo_open_mode }}" title="{{ creo_open_title }}">

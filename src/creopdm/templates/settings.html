@@ -38,10 +38,10 @@
         <label>Message for users
           <textarea name="site_unavailable_message" id="site-unavailable-message" rows="4"
                     maxlength="2000"
+                    data-default-base="{{ settings.default_site_unavailable_message }}"
                     placeholder="{{ settings.default_site_unavailable_message }}"
                     {% if settings.site_availability != 'unavailable' %}disabled{% endif %}>{{ settings.site_unavailable_message }}</textarea>
         </label>
-        <p class="muted small">Shown to non-administrators while unavailable. Default: {{ settings.default_site_unavailable_message }}</p>
       </div>
     </section>
 

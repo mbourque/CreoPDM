@@ -9671,6 +9671,49 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
   syncEmbeddedOpenOptions();
 
+  function prettyUnavailableSince(date = new Date()) {
+    // Match format_local_pretty: Monday, July 23, 2026 at 5:30pm
+    const days = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+    const months = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
+    const hour = date.getHours();
+    const minute = date.getMinutes();
+    const hour12 = hour % 12 || 12;
+    const ampm = hour < 12 ? "am" : "pm";
+    return (
+      `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()} `
+      + `at ${hour12}:${String(minute).padStart(2, "0")}${ampm}`
+    );
+  }
+
+  function isStockUnavailableMessage(text, base) {
+    const value = String(text || "").trim();
+    const stock = String(base || "").trim();
+    if (!value || !stock) return !value;
+    if (value === stock) return true;
+    return value.startsWith(`${stock}\n\nSince `);
+  }
+
   function syncSiteAvailabilityOptions() {
     if (!settingsForm) return;
     const unavailableOn = Boolean(
@@ -9683,8 +9726,25 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (unavailableOn) wrap.removeAttribute("aria-disabled");
       else wrap.setAttribute("aria-disabled", "true");
     }
-    if (message) message.disabled = !unavailableOn;
+    if (message) {
+      message.disabled = !unavailableOn;
+      // Fill the stock message with a pretty Since stamp when turning unavailable on.
+      if (unavailableOn) {
+        const base = message.getAttribute("data-default-base") || "";
+        if (isStockUnavailableMessage(message.value, base)) {
+          message.value = `${base}\n\nSince ${prettyUnavailableSince()}.`;
+        }
+      }
+    }
   }
+
+  function syncUnavailableAdminPill(unavailable) {
+    // Settings save stays on this page — show/hide the top-bar pill without navigating.
+    const pill = $("#site-unavailable-pill");
+    if (!pill) return;
+    pill.hidden = !unavailable;
+  }
+
   settingsForm?.querySelectorAll('input[name="site_availability"]').forEach((radio) => {
     radio.addEventListener("change", syncSiteAvailabilityOptions);
   });
@@ -9775,6 +9835,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (workspaceInput && saved?.workspace_root) {
       workspaceInput.value = saved.workspace_root;
     }
+    const messageInput = settingsForm.querySelector('[name="site_unavailable_message"]');
+    if (messageInput && saved?.site_unavailable_message) {
+      messageInput.value = saved.site_unavailable_message;
+    }
+    syncUnavailableAdminPill(
+      String(saved?.site_availability || body.site_availability || "") === "unavailable"
+    );
     syncCreoStatusPill(
       body.creo_open_mode,
       body.creo_executable,
