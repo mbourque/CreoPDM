@@ -1002,15 +1002,16 @@ def _find_planned_cache_file(cache_dir: Path, item: CachePlanItem) -> Path | Non
 
     dest_rel = _cache_dest_relative(item.relative_path, disk_name or filename)
     dest = cache_dir / dest_rel
-    # Exact tip first (warm logical names) — avoid listing the folder.
-    if dest.is_file():
-        return dest
     logical = CreoFileManager.logical_filename(filename or disk_name, None)
-    # Highest .ext.N sibling when plan tip is missing or an older save number.
+    # Prefer the highest .ext.N sibling even when the planned tip path exists
+    # (e.g. plan/push says op10.tph.1 but local has op10.tph.10). Warm Open
+    # skips this helper entirely on `.creopdm_cache_index.json` hits.
     if dest.parent.is_dir() and logical:
         found = CreoFileManager.latest_in_directory(dest.parent, logical, None)
         if found is not None and found.is_file():
             return found
+    if dest.is_file():
+        return dest
 
     rel = (item.relative_path or "").replace("\\", "/").lstrip("/")
     if rel and "/" in rel:
@@ -1028,8 +1029,9 @@ def _find_planned_cache_file(cache_dir: Path, item: CachePlanItem) -> Path | Non
         # Parent folder missing: one legacy flat search is OK.
         return _find_cache_file(cache_dir, filename or disk_name)
 
-    # Root tip already checked above via dest/latest_in_directory — no tree walk.
-    return None
+    # Basename-only plans (push) may still need a tree search for nested tips.
+    # Warm Open never reaches here on `.creopdm_cache_index.json` hits.
+    return _find_cache_file(cache_dir, filename or disk_name)
 
 
 def _find_cache_file(cache_dir: Path, filename: str) -> Path | None:
@@ -1436,7 +1438,12 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                         )
                     )
                     continue
+                raw_name = str(item.filename or "").replace("\\", "/").strip()
                 rel = (item.relative_path or "").replace("\\", "/").lstrip("/")
+                if not rel and "/" in raw_name:
+                    # Clients often send "Documents/shaft.prt.1" in filename only.
+                    rel = raw_name
+                filename = Path(raw_name).name or Path(rel).name
                 local = None
                 if filename or rel:
                     local = _find_planned_cache_file(
