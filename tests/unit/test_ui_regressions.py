@@ -573,7 +573,8 @@ def test_soft_nav_skips_creojs_reconnect():
 
     # Soft boot: toolbar sync only — no agent probe, no bridge reconnect poll.
     assert "syncCreoSessionControlsFromBridge" in script
-    assert "Do not probe or touch the pill" in script
+    assert "function promoteCreoPillWhenSessionLive(" in script
+    assert "function applyCreoSessionOnlyVisibility(" in script
     assert "Never re-probe agent or reconnect" in script
     block = script.split("function showCreoSessionControls(")[1].split("async function agentWorkdir(")[0]
     assert "if (soft)" in block
@@ -588,6 +589,19 @@ def test_soft_nav_skips_creojs_reconnect():
     non_list = block.split("else if (!isListPage)")[1].split("} else {")[0]
     assert "syncCreoSessionControlsFromBridge()" in non_list
     assert "probeCreoAgent" not in non_list
+    # Soft sync must promote a stale Session offline pill when Creo.JS is live.
+    soft_sync = _between(
+        script, "function syncCreoSessionControlsFromBridge(", "if (soft)"
+    )
+    assert "promoteCreoPillWhenSessionLive()" in soft_sync
+    assert "Do not probe" in soft_sync
+    assert "probeCreoAgent" not in soft_sync
+    promote_fn = _between(
+        script, "function promoteCreoPillWhenSessionLive(", "async function refreshCreoStatusPill("
+    )
+    assert 'pill.textContent = "Creo: Connected"' in promote_fn
+    assert "Agent offline" in promote_fn
+    assert "hostedCreoJS()" in promote_fn
 
     # Status poll must survive soft boots and skip updates while soft-nav busy.
     assert "__creopdmStatusPollId" in block
@@ -603,6 +617,9 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "wasConnected" in pill_fn
     assert "Do not require a healthy agent probe" in pill_fn
     assert "Session offline" in pill_fn
+    # Visibility must follow the same inSession used for the pill (after agent await).
+    assert "applyCreoSessionOnlyVisibility(inSession)" in pill_fn
+    assert "first-pass visibility used to disagree" in pill_fn
     # Association open mode must reuse a prefetched /health (not probe twice).
     assert "association mode used to /health twice" in pill_fn
     assert "prefetchedAgent !== undefined ? prefetchedAgent : await probeCreoAgent()" in pill_fn
@@ -1136,18 +1153,21 @@ def test_toolbar_hides_inactive_actions():
     assert "content matches the vault tip" in script
     assert "keep **Check in selected…** visible but **greyed**" in docs
     # Set Working Directory: hide outside Creo / when disconnected; Details always hides it.
-    creo = _between(script, "async function refreshCreoStatusPill(", "function showCreoSessionControls(")
-    assert "Set Working Directory: only when inside Creo" in creo
-    assert "el.hidden = !inSession" in creo
-    assert 'btn.id === "set-creo-dir-btn"' in creo
-    assert 'Boolean($("article.detail"))' in creo
+    apply_creo = _between(
+        script, "function applyCreoSessionOnlyVisibility(", "function promoteCreoPillWhenSessionLive("
+    )
+    assert "Set Working Directory: only when inside Creo" in apply_creo
+    assert "el.hidden = !inSession" in apply_creo
+    assert 'btn.id === "set-creo-dir-btn"' in apply_creo
+    assert 'Boolean($("article.detail"))' in apply_creo
     soft = _between(script, "function syncCreoSessionControlsFromBridge(", "if (soft)")
-    assert "el.hidden = !inSession" in soft
-    assert 'btn.id === "set-creo-dir-btn"' in soft
+    assert "applyCreoSessionOnlyVisibility(inSession)" in soft
+    assert 'btn.id === "set-creo-dir-btn"' in apply_creo
     assert "On the file **Details** page" in docs
     assert "every tab, including History" in docs
     assert "Check In stays on the Files page" in docs
     assert "show only inside creo" in docs.lower()
+    assert "Set Working Directory must not disagree" in docs or "disagree with the status pill" in soft
 
 
 def test_files_context_menu_download_to_workspace():

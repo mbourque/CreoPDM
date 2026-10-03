@@ -34,7 +34,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Click a product, folder breadcrumb, or Administration / System Settings | Show the new page quickly; if Creo was connected, it **stays** connected | Flash “Creo: Session offline” or drop the Creo link just because you changed folders; hard-reload the page during a folder/product switch |
+| Click a product, folder breadcrumb, or Administration / System Settings | Show the new page quickly; if Creo was connected, it **stays** connected; if Creo.JS is live, the pill shows **Connected** (not a stale Session offline) when **Set Working Directory** is shown | Flash “Creo: Session offline” while Set Working Directory is visible; drop the Creo link just because you changed folders; hard-reload the page during a folder/product switch |
 | Sign in as **Viewer** | View products (`products.view`); open/download files and use **Details** (Overview/History) via the bottom toolbar or double-click (`objects.view`); Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove / Export ▾ (including an empty **Checkout ▾** fly-up), New product, Copy to Vault, or “Check out … then open” in the Open dialog |
 | Sign in with Administration only (no `products.view`) | Land on **Administration**; breadcrumb has no **Products** link; visiting `/` redirects to `/admin` | See a JSON error; see a Products crumb that opens Files |
 | Sign in with a role that has **no permissions** | Land on a clear **No Files access** page (not JSON); product APIs stay **403** | Use the app as if signed in with Viewer |
@@ -124,7 +124,7 @@ Typical order: **Set Working Directory** → **Add ▾** → **Open ▾** → **
 
 | Button | Available when | Hidden when |
 |--------|----------------|-------------|
-| Set Working Directory | Inside Creo’s browser **and** Creo.JS connected, with a product workspace (Files page) | Hidden outside Creo, when Creo is not connected, and on the file **Details** page |
+| Set Working Directory | Inside Creo’s browser **and** Creo.JS connected, with a product workspace (Files page); pill shows **Connected** (same bridge signal) | Hidden outside Creo, when Creo is not connected, and on the file **Details** page; shown while the pill still says Session offline |
 | Add ▾ | A product is open **and** the product allows edits (In work, not read-only) | No product; product is read-only / On hold / Released / Closed / Archived |
 | Open ▾ | A product is open (workspace) and/or a file can be opened (**Files** page) | No product and nothing to open; always hidden on the file **Details** page |
 | Open selected… | A file you can open is selected | Nothing useful selected |

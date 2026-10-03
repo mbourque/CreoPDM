@@ -5752,14 +5752,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   }
 
-  async function refreshCreoStatusPill(prefetchedAgent) {
-    // Soft folder/product swap — never flash Session offline while Connected.
-    if (window.__creopdmSoftNavBusy || softNavBusy) return null;
-    let inSession = hostedCreoJS();
+  function applyCreoSessionOnlyVisibility(inSession) {
+    // Set Working Directory: only when inside Creo with a live session (Files page).
+    // Hidden outside Creo / when disconnected; always hidden on File Details.
+    // Collect / Rebuild Where Used use the same rule (product gear).
     document.querySelectorAll(".creo-session-only").forEach((el) => {
-      // Set Working Directory: only when inside Creo with a live session (Files page).
-      // Hidden outside Creo / when disconnected; always hidden on File Details.
-      // Collect / Rebuild Where Used use the same rule (product gear).
       const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
       const onDetail = Boolean($("article.detail"));
       if (onDetail && btn?.id === "set-creo-dir-btn") {
@@ -5780,13 +5777,36 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         btn.disabled = false;
       }
     });
-    syncProductSettingsVisibility();
+  }
+
+  function promoteCreoPillWhenSessionLive() {
+    // Soft-nav / late bridge: Set WD can appear from hostedCreoJS while the SSR
+    // pill still says Session offline — promote without probing agent.
     const pill = $("#creo-status");
-    if (!pill) return null;
+    if (!pill || !hostedCreoJS()) return;
+    if (pill.dataset.state === "ok") return;
+    const text = String(pill.textContent || "");
+    if (text.includes("Agent offline")) return;
+    pill.textContent = "Creo: Connected";
+    pill.dataset.state = "ok";
+    pill.title = "Creo.JS session linked.";
+  }
+
+  async function refreshCreoStatusPill(prefetchedAgent) {
+    // Soft folder/product swap — never flash Session offline while Connected.
+    if (window.__creopdmSoftNavBusy || softNavBusy) return null;
+    const pill = $("#creo-status");
+    if (!pill) {
+      applyCreoSessionOnlyVisibility(hostedCreoJS());
+      syncProductSettingsVisibility();
+      return null;
+    }
     const modeKey = creoOpenMode() || "association";
     const wasConnected = pill.dataset.state === "ok";
+    let inSession = hostedCreoJS();
+    let agent = null;
     if (modeKey === "embedded") {
-      const agent =
+      agent =
         prefetchedAgent !== undefined ? prefetchedAgent : await probeCreoAgent();
       // Agent probe can finish after a soft-nav started — don't paint over Connected.
       if (window.__creopdmSoftNavBusy || softNavBusy) return agent;
@@ -5794,6 +5814,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // Transient bridge / agent flake — keep Connected while CreoJS is still present.
       // Do not require a healthy agent probe (that used to flash Not Connected).
       if (!inSession && wasConnected && window.CreoJS) {
+        applyCreoSessionOnlyVisibility(true);
+        syncProductSettingsVisibility();
         return agent;
       }
       if (inSession && agent) {
@@ -5817,18 +5839,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         pill.title =
           "No Creo.JS bridge and creopdm-agent is offline. Open CreoPDM in Creo's embedded browser and start the agent tray.";
       }
+      // Re-apply after agent await — first-pass visibility used to disagree with the pill.
+      applyCreoSessionOnlyVisibility(inSession);
+      syncProductSettingsVisibility();
       return agent;
     }
     if (window.__creopdmSoftNavBusy || softNavBusy) return null;
     inSession = hostedCreoJS();
     if (!inSession && wasConnected && window.CreoJS) {
+      applyCreoSessionOnlyVisibility(true);
+      syncProductSettingsVisibility();
       return null;
     }
     // Keep agent online flag fresh so Open workspace… can hide when offline.
     // Prefer the caller's probe — association mode used to /health twice on every load.
-    const agent =
+    agent =
       prefetchedAgent !== undefined ? prefetchedAgent : await probeCreoAgent();
     if (window.__creopdmSoftNavBusy || softNavBusy) return agent;
+    inSession = hostedCreoJS();
     if (inSession) {
       pill.textContent = "Creo: Connected";
       pill.dataset.state = "ok";
@@ -5838,6 +5866,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       pill.dataset.state = "idle";
       pill.title = "Opens Creo models as a browser download for the OS association";
     }
+    applyCreoSessionOnlyVisibility(inSession);
+    syncProductSettingsVisibility();
     return agent;
   }
 
@@ -5855,29 +5885,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function syncCreoSessionControlsFromBridge() {
-    /** Soft nav only: re-enable toolbar Creo buttons. Do not probe or touch the pill. */
+    // Soft nav: re-enable toolbar Creo buttons from the live bridge. Do not probe
+    // agent — but do promote a stale Session offline pill when Creo.JS is linked
+    // (Set Working Directory must not disagree with the status pill).
     const inSession = hostedCreoJS();
-    document.querySelectorAll(".creo-session-only").forEach((el) => {
-      const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
-      const onDetail = Boolean($("article.detail"));
-      if (onDetail && btn?.id === "set-creo-dir-btn") {
-        el.hidden = true;
-        if (btn) btn.hidden = true;
-        return;
-      }
-      el.hidden = !inSession;
-      if (!btn) return;
-      btn.hidden = !inSession;
-      if (!inSession) {
-        btn.disabled = true;
-        return;
-      }
-      if (btn.id === "set-creo-dir-btn") {
-        btn.disabled = !btn.dataset.workspace;
-      } else {
-        btn.disabled = false;
-      }
-    });
+    applyCreoSessionOnlyVisibility(inSession);
+    if (inSession) promoteCreoPillWhenSessionLive();
     syncProductSettingsVisibility();
   }
 

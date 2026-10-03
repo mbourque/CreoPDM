@@ -39,7 +39,10 @@ def test_app_js_is_not_cached(client):
     assert "CREOPDM_STATUS_POLL_V2" in response.text
     assert "status_poll_interval_seconds" in response.text
     assert "syncCreoSessionControlsFromBridge" in response.text
-    assert "Never re-probe agent or reconnect" in response.text or "Do not probe or touch the pill" in response.text
+    assert (
+        "Never re-probe agent or reconnect" in response.text
+        or "promoteCreoPillWhenSessionLive" in response.text
+    )
     assert "__creopdmStatusPollId" in response.text
     assert "function agentAuthHeaders(" in response.text
     assert "Authorization" in response.text
