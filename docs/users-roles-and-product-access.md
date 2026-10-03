@@ -33,7 +33,7 @@ Users with any CreoPDM Administration capability (`users.manage`, `users.passwor
 - **Membership** — decide who can open which products (`products.assign`): hub with **By product** and **By user** list pages, then edit members / All-products for one row
 - **Products** — list every active product on the server; create, edit, and soft-delete (`products.manage`). Not limited by the signed-in user’s product membership list. (Files-page New/Delete still use `products.create` / `products.delete`.)
 - **Email** — choose Local Postfix (`127.0.0.1:25`) or Authenticated SMTP; From address, administrator email, Test Email (`email.manage`). When notifications are **enabled**, signed-in users with product access and a valid email can **Watch** a product (bell next to the gear on Files) and receive activity summaries; the bell is hidden when notifications are disabled.
-- **System Settings** — server options (Creo open mode, vault, file types, …) (`settings.manage`)
+- **System Settings** — server options (Availability, Creo open mode, vault, file types, …) (`settings.manage`)
 - **Audit** / **AI** — disabled placeholder tiles on the hub (coming soon); always visible, not linked
 - After a successful **Add user** / **Save** / role save / product save / membership save, you return to the list
 - New users must change their password on first sign-in
