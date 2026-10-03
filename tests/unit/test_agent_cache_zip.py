@@ -112,6 +112,40 @@ def test_manifest_disk_name_uses_workspace_materialize_leaf():
     assert items[1]["disk_name"] == "legacy.prt"
 
 
+def test_plan_skips_root_level_tips_without_workspace_walk(tmp_path, monkeypatch):
+    """Warm root-level workspace must O(1)-skip — not os.walk once per tip."""
+    cache = tmp_path / "proj"
+    cache.mkdir()
+    body = b"already-local-root-tip"
+    digest = hashlib.sha256(body).hexdigest()
+    (cache / "pin.prt").write_bytes(body)
+    _save_cache_index(
+        cache,
+        {"pin.prt": {"hash": digest, "size": len(body)}},
+    )
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("root-level plan must not fall back to workspace walk")
+
+    monkeypatch.setattr("creopdm_agent.server._find_cache_file", _boom)
+    download_ids, skipped, kept = _plan_cache_downloads(
+        cache,
+        [
+            CachePlanItem(
+                object_id="root-tip",
+                filename="pin.prt",
+                disk_name="pin.prt",
+                relative_path="pin.prt",
+                content_hash=digest,
+                file_size=len(body),
+            )
+        ],
+    )
+    assert download_ids == []
+    assert skipped == 1
+    assert kept == 0
+
+
 def test_plan_skips_matching_hash_keeps_newer_save(tmp_path):
     cache = tmp_path / "proj"
     cache.mkdir()

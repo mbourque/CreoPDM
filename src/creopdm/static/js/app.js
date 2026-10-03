@@ -6852,14 +6852,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function setOpenDownloadBusyMessage(prepared) {
     const dependencies = Array.isArray(prepared?.dependencies) ? prepared.dependencies : [];
     const total = 1 + dependencies.length;
-    // Count is what Creo needs (DB deps), not how many files are already on disk.
-    // Large trees use one archive download; small ones sync tip-by-tip.
+    // N is the product dependency count — agent skips tips already on disk.
     if (total >= BULK_AGENT_CACHE_ZIP_THRESHOLD) {
-      setBusyMessage(`Downloading ${total} files to local workspace…`);
+      setBusyMessage(`Checking local workspace for ${total} files…`);
     } else if (total > 1) {
-      setBusyMessage(`Syncing ${total} files to local workspace…`);
+      setBusyMessage(`Updating local workspace… (${total} tips)`);
     } else {
-      setBusyMessage("Syncing local workspace…");
+      setBusyMessage("Updating local workspace…");
     }
   }
 
@@ -6909,10 +6908,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
     const unique = [...new Set(ids)];
     // Empty / large trees: one zip from CreoPDM (same as bulk checkout), not 900 GETs.
+    // Agent plans first — matching local tips are skipped (no re-download).
     if (unique.length >= BULK_AGENT_CACHE_ZIP_THRESHOLD) {
       try {
-        setBusyMessage(`Downloading ${unique.length} files to local workspace…`);
-        await materializeCheckedOutToAgentCacheZip(unique);
+        setBusyMessage(`Checking local workspace for ${unique.length} files…`);
+        const zipResult = await materializeCheckedOutToAgentCacheZip(unique);
+        const downloaded = Number(zipResult?.download_count || 0);
+        if (downloaded > 0) {
+          setBusyMessage(`Downloaded ${downloaded} missing file${downloaded === 1 ? "" : "s"}…`);
+        } else {
+          setBusyMessage("Local workspace already up to date…");
+        }
         // Resolve the primary open path only — deps are already on disk.
         return await materializeViaAgentPerFile(prepared, []);
       } catch {

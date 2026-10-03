@@ -845,11 +845,31 @@ def _plan_cache_downloads(
 
 
 def _find_planned_cache_file(cache_dir: Path, item: CachePlanItem) -> Path | None:
-    """Prefer the vault-relative folder; fall back to flat / walk search."""
+    """Prefer the expected vault-relative tip path; walk only as a legacy fallback.
+
+    Root-level tips (``pin.prt`` with no parent folder) must hit O(1) path checks —
+    never a full workspace walk per dependency on large opens.
+    """
     from creopdm.creo.file_manager import CreoFileManager
 
     filename = (item.filename or item.disk_name or "").strip()
     disk_name = (item.disk_name or filename).strip()
+    if not disk_name and not filename:
+        return None
+
+    dest_rel = _cache_dest_relative(item.relative_path, disk_name or filename)
+    dest = cache_dir / dest_rel
+    if dest.is_file():
+        return dest
+    logical = CreoFileManager.logical_filename(filename or disk_name, None)
+    if dest.parent.is_dir() and logical:
+        alt = dest.parent / Path(logical).name
+        if alt.is_file():
+            return alt
+        found = CreoFileManager.latest_in_directory(dest.parent, logical, None)
+        if found is not None and found.is_file():
+            return found
+
     rel = (item.relative_path or "").replace("\\", "/").lstrip("/")
     if rel and "/" in rel:
         folder = cache_dir / Path(rel).parent
@@ -860,6 +880,8 @@ def _find_planned_cache_file(cache_dir: Path, item: CachePlanItem) -> Path | Non
             exact = folder / Path(disk_name).name
             if exact.is_file():
                 return exact
+
+    # Legacy flat / misplaced copies only — avoid this on warm nested workspaces.
     return _find_cache_file(cache_dir, filename or disk_name)
 
 

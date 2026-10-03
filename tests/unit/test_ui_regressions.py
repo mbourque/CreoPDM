@@ -542,19 +542,21 @@ def test_soft_nav_skips_creojs_reconnect():
         "function setOpenDownloadBusyMessage(",
         "async function materializeViaAgentPerFile(",
     )
-    assert "Syncing ${total} files to local workspace" in download_busy
-    assert "Downloading ${total} files to local workspace" in download_busy
-    assert 'setBusyMessage("Syncing local workspace…")' in download_busy
-    assert "Checking local workspace" not in download_busy
+    assert "Checking local workspace for ${total} files" in download_busy
+    assert "Updating local workspace… (${total} tips)" in download_busy
+    assert 'setBusyMessage("Updating local workspace…")' in download_busy
+    assert "Syncing ${total} files to local workspace" not in download_busy
     assert "Downloading to local cache" not in download_busy
     assert "BULK_AGENT_CACHE_ZIP_THRESHOLD" in download_busy
     mat = _between(script, "async function materializeViaAgent(", "async function materializeCheckedOutToAgentCacheZip(")
     assert "materializeCheckedOutToAgentCacheZip(unique)" in mat
     assert "materializeViaAgentPerFile(prepared, [])" in mat
     assert "one zip from CreoPDM" in mat
+    assert "Local workspace already up to date" in mat
     docs_open = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "Open a file already checked out to you" in docs_open
     assert "do **not** overwrite with vault bytes" in docs_open
+    assert "already match by path + content hash" in docs_open
     assert "Checking local workspace for ${total} files…" in script
     assert "Checking local cache for ${total} files…" not in script
     assert "Opening in Creo…" in open_fn
