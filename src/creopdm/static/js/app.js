@@ -9706,7 +9706,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return isWatchIdle();
   }
 
-  const watchProductId = openWorkspaceBtn?.dataset.product || addForm?.dataset.product;
+  // Files list only — Details / Admin / Settings may still expose a product id on the toolbar.
+  const watchProductId = isListPage
+    ? (openWorkspaceBtn?.dataset.product || addForm?.dataset.product || "")
+    : "";
   let watchStamp = null;
   let watchReloadTimer = 0;
   let lastPendingCheckinCount = null;
@@ -9722,7 +9725,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function pollWorkspaceWatch() {
-    if (!watchProductId || watchPaused()) return;
+    // Soft-nav can leave this closure briefly; never poll without the Files table.
+    if (!watchProductId || !document.querySelector("#object-table") || watchPaused()) return;
     try {
       const [response, localPending] = await Promise.all([
         fetch(`/api/products/${watchProductId}/workspace-watch`),
@@ -9901,7 +9905,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   syncToolbar();
   syncProductAccessUi();
   const pendingProductId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
-  if (pendingProductId) void refreshPendingCheckinIds(pendingProductId);
+  if (isListPage && pendingProductId) void refreshPendingCheckinIds(pendingProductId);
 
   } finally {
     EventTarget.prototype.addEventListener = origAddEventListener;

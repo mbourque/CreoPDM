@@ -1474,3 +1474,17 @@ def test_workspace_poll_pauses_after_idle_setting():
     assert "Stop file-list / agent workspace polling" in docs
     cfg = (ROOT / "src" / "creopdm" / "config.py").read_text(encoding="utf-8")
     assert "workspace_poll_idle_minutes: int = 10" in cfg
+
+
+def test_workspace_poll_only_on_files_list_page():
+    """Regression: Details/Admin still expose product toolbar ids — do not poll there."""
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    watch_setup = _between(script, "function watchPaused(", "async function pollWorkspaceWatch(")
+    assert "isListPage" in watch_setup
+    assert 'Files list only' in watch_setup or "Files list only" in watch_setup
+    poll_fn = _between(script, "async function pollWorkspaceWatch(", "if (watchProductId)")
+    assert 'document.querySelector("#object-table")' in poll_fn
+    assert "isListPage && pendingProductId" in script
+    assert "Stop workspace-watch / file-list change polling" in docs
+    assert "Keep polling for list/check-in changes while Admin" in docs
