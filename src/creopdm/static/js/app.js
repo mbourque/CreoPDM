@@ -6032,19 +6032,39 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function userCanCheckout() {
-    return dataFlag(document.body, "can-checkout");
+    if (dataFlag(document.body, "can-checkout")) return true;
+    // Recover when body data-can-checkout was lost (Creo CEF / soft-nav) but the
+    // Files toolbar still has Checkout controls from product_ui SSR.
+    return Boolean(
+      document.querySelector("#checkout-menu, #checkout-btn, #checkout-product-btn")
+    );
   }
 
   function userCanCheckin() {
     return dataFlag(document.body, "can-checkin");
   }
 
+  function rowCheckoutKind(row) {
+    // Prefer the Checkout column chrome — it stays correct when data-* attrs drift.
+    if (row && typeof row.querySelector === "function") {
+      const kind = String(
+        row.querySelector(".checkout-state")?.getAttribute("data-state") || ""
+      ).trim();
+      if (kind) return kind;
+    }
+    if (dataFlag(row, "owned")) return "mine";
+    if (dataFlag(row, "can-checkout")) return "available";
+    if (String(row?.dataset?.owned || "").trim() === "1") return "mine";
+    if (String(row?.dataset?.canCheckout || "").trim() === "1") return "available";
+    return "";
+  }
+
   function rowOffersCheckout(row) {
-    if (dataFlag(row, "can-checkout")) return true;
-    // Recover when data-can-checkout was lost but Checkout column still says Available.
-    if (!row || typeof row.querySelector !== "function") return false;
-    const kind = row.querySelector(".checkout-state")?.getAttribute("data-state") || "";
-    return kind === "available";
+    const kind = rowCheckoutKind(row);
+    if (kind === "available") return true;
+    if (kind === "mine" || kind === "other" || kind === "locked") return false;
+    // Unknown chrome — fall back to data-can-checkout.
+    return dataFlag(row, "can-checkout");
   }
 
   function isModalDialog(el) {
@@ -6202,12 +6222,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function openPdmObjectFromUi(target, row) {
     const objectId = openTargetObjectId(target);
     const filename = openTargetFilename(target, row);
-    const canCheckout = Boolean(objectId) && rowOffersCheckout(row) && userCanCheckout();
-    const owned = dataFlag(row, "owned");
-    // Already mine — no checkout choice needed; open immediately.
-    if (objectId && owned) {
+    const kind = rowCheckoutKind(row);
+    // Only skip the chooser when the Checkout column says it is already mine.
+    // Do not trust data-owned alone — a stale "1" was opening Available files
+    // with no modal.
+    if (objectId && kind === "mine") {
       return openPdmObject(target);
     }
+    const canCheckout =
+      Boolean(objectId) &&
+      userCanCheckout() &&
+      kind !== "other" &&
+      kind !== "locked" &&
+      (kind === "available" || kind === "" || rowOffersCheckout(row));
     const choice = await promptOpenCheckout({
       filename,
       canCheckout,

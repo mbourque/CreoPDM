@@ -733,13 +733,17 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     # Creo.JS / CEF: instanceof HTMLDialogElement / dataset can fail; use showModal + getAttribute.
     assert "function isModalDialog(" in script
     assert "function dataFlag(" in script
+    assert "function rowCheckoutKind(" in script
     assert "function rowOffersCheckout(" in script
     assert 'typeof el.showModal === "function"' in script
     assert "getAttribute" in _between(script, "function dataFlag(", "function userCanCheckout(")
     assert "Could not show the Open dialog" in prompt_open
     assert "instanceof HTMLDialogElement" not in prompt_open
     assert "Do not silently open when checkout was an option" in prompt_open
-    assert 'rowOffersCheckout(row)' in script
+    open_ui = _between(script, "async function openPdmObjectFromUi(", "async function probeCreoAgent(")
+    assert 'kind === "mine"' in open_ui
+    assert "Do not trust data-owned alone" in open_ui
+    assert "#checkout-menu" in _between(script, "function userCanCheckout(", "function userCanCheckin(")
     base_open = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
     open_form = _between(base_open, 'id="open-checkout-dialog"', 'id="busy-overlay"')
     assert 'method="dialog"' not in open_form
