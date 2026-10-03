@@ -7002,7 +7002,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const total = 1 + dependencies.length;
     // N is the product dependency count — agent skips tips already on disk.
     if (total >= BULK_AGENT_CACHE_ZIP_THRESHOLD) {
-      setBusyMessage(`Checking local workspace for ${total} files…`);
+      setBusyMessage(`Checking local index (${total} files)…`);
     } else if (total > 1) {
       setBusyMessage(`Updating local workspace… (${total} tips)`);
     } else {
@@ -7069,8 +7069,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Agent plans first — matching local tips are skipped (no re-download).
     if (unique.length >= BULK_AGENT_CACHE_ZIP_THRESHOLD) {
       try {
-        setBusyMessage(`Verifying ${unique.length} local files…`);
-        const zipResult = await materializeCheckedOutToAgentCacheZip(unique);
+        setBusyMessage(`Checking local index (${unique.length} files)…`);
+        // Pass prepare identities so the agent skips a second 935-id manifest fetch
+        // and only looks up `.creopdm_cache_index.json` + file size.
+        const zipResult = await materializeCheckedOutToAgentCacheZip(unique, prepared);
         const downloaded = Number(zipResult?.download_count || 0);
         const skipped = Number(zipResult?.skipped_count || 0);
         if (downloaded > 0) {
@@ -7090,7 +7092,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return materializeViaAgentPerFile(prepared, dependencies);
   }
 
-  async function materializeCheckedOutToAgentCacheZip(objectIds) {
+  function cachePlanItemsFromPrepared(prepared) {
+    const items = [];
+    const push = (item) => {
+      const objectId = String(item?.object_id || "").trim();
+      const contentHash = String(item?.content_hash || "").trim();
+      if (!objectId || !contentHash) return;
+      items.push({
+        object_id: objectId,
+        product_id: item?.product_id || prepared?.product_id || currentProductId() || "",
+        relative_path: item?.relative_path || "",
+        filename: item?.filename || item?.disk_name || "",
+        disk_name: item?.disk_name || item?.filename || "",
+        content_hash: contentHash,
+        file_size: Number(item?.file_size) || 0,
+      });
+    };
+    if (prepared) push(prepared);
+    (Array.isArray(prepared?.dependencies) ? prepared.dependencies : []).forEach(push);
+    return items;
+  }
+
+  async function materializeCheckedOutToAgentCacheZip(objectIds, prepared) {
+    const planItems = cachePlanItemsFromPrepared(prepared);
     const response = await fetch(`${agentBase()}/materialize-zip`, {
       method: "POST",
       headers: agentAuthHeaders({ "Content-Type": "application/json" }),
@@ -7100,6 +7124,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         product_id: currentProductId() || null,
         vault_folder: currentVaultFolder(),
         object_ids: objectIds,
+        items: planItems,
       }),
     });
     if (!response.ok) {

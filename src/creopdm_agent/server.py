@@ -258,12 +258,23 @@ class MaterializeResponse(BaseModel):
     purged_newer: list[str] = Field(default_factory=list)
 
 
+class CachePlanItem(BaseModel):
+    object_id: str
+    filename: str = ""
+    disk_name: str = ""
+    relative_path: str = ""
+    content_hash: str = ""
+    file_size: int = 0
+
+
 class MaterializeZipRequest(BaseModel):
     pdm_url: str = ""
     product_id: str = ""
     vault_folder: str = ""
     object_ids: list[str] = Field(min_length=1)
     token: str | None = None
+    # When Open/prepare already sent identities, skip a second manifest round-trip.
+    items: list[CachePlanItem] = Field(default_factory=list)
 
 
 class MaterializeZipResponse(BaseModel):
@@ -273,15 +284,6 @@ class MaterializeZipResponse(BaseModel):
     skipped_count: int = 0
     kept_newer_count: int = 0
     download_count: int = 0
-
-
-class CachePlanItem(BaseModel):
-    object_id: str
-    filename: str = ""
-    disk_name: str = ""
-    relative_path: str = ""
-    content_hash: str = ""
-    file_size: int = 0
 
 
 class CachePlanRequest(BaseModel):
@@ -2456,40 +2458,58 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         manifest_url = f"{base}/api/objects/batch/agent-cache-manifest"
         archive_url = f"{base}/api/objects/batch/agent-cache-archive"
 
+        # Prefer identities from Open/prepare — local index lookup only, no manifest.
+        prepared_items = [
+            item
+            for item in (payload.items or [])
+            if (item.object_id or "").strip() and (item.content_hash or "").strip()
+        ]
+        use_prepared = len(prepared_items) >= max(1, len(payload.object_ids) // 2)
+
         with httpx.Client(timeout=zip_timeout, follow_redirects=True) as client:
-            try:
-                manifest_response = client.post(
-                    manifest_url,
-                    json={"object_ids": payload.object_ids},
-                    headers=headers,
+            if use_prepared:
+                items = prepared_items
+                logger.info(
+                    "Materialize-zip using %s prepare identities (skip manifest) → %s",
+                    len(items),
+                    target_dir,
                 )
-            except httpx.HTTPError as exc:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Could not fetch workspace manifest from CreoPDM: {exc}",
-                ) from exc
-            if manifest_response.status_code >= 400:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"CreoPDM manifest returned {manifest_response.status_code}",
-                )
-            try:
-                manifest_body = manifest_response.json()
-            except Exception as exc:
-                raise HTTPException(status_code=502, detail="Invalid workspace manifest.") from exc
-            raw_items = manifest_body.get("items") if isinstance(manifest_body, dict) else None
-            items = [
-                CachePlanItem(
-                    object_id=str(item.get("object_id") or ""),
-                    filename=str(item.get("filename") or ""),
-                    disk_name=str(item.get("disk_name") or ""),
-                    relative_path=str(item.get("relative_path") or ""),
-                    content_hash=str(item.get("content_hash") or ""),
-                    file_size=int(item.get("file_size") or 0),
-                )
-                for item in (raw_items or [])
-                if isinstance(item, dict)
-            ]
+            else:
+                try:
+                    manifest_response = client.post(
+                        manifest_url,
+                        json={"object_ids": payload.object_ids},
+                        headers=headers,
+                    )
+                except httpx.HTTPError as exc:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"Could not fetch workspace manifest from CreoPDM: {exc}",
+                    ) from exc
+                if manifest_response.status_code >= 400:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"CreoPDM manifest returned {manifest_response.status_code}",
+                    )
+                try:
+                    manifest_body = manifest_response.json()
+                except Exception as exc:
+                    raise HTTPException(
+                        status_code=502, detail="Invalid workspace manifest."
+                    ) from exc
+                raw_items = manifest_body.get("items") if isinstance(manifest_body, dict) else None
+                items = [
+                    CachePlanItem(
+                        object_id=str(item.get("object_id") or ""),
+                        filename=str(item.get("filename") or ""),
+                        disk_name=str(item.get("disk_name") or ""),
+                        relative_path=str(item.get("relative_path") or ""),
+                        content_hash=str(item.get("content_hash") or ""),
+                        file_size=int(item.get("file_size") or 0),
+                    )
+                    for item in (raw_items or [])
+                    if isinstance(item, dict)
+                ]
             download_ids, skipped, kept_newer = _plan_cache_downloads(target_dir, items)
             if not download_ids:
                 logger.info(

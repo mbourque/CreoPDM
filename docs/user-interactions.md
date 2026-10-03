@@ -239,12 +239,12 @@ If you **cannot** check out (Viewer role, no `objects.checkout`, or the file is 
 
 Otherwise the app asks how you want to open it (must show the chooser in Creo’s embedded browser too — do not skip straight to Open because `<dialog>` / `dataset` detection failed, do not treat a stale owned flag as “already mine” when the Checkout column still says Available, and do not auto-submit the chooser):
 
-| You choose | App should |
-|------------|------------|
-| **Open without checking out** | Bring what Creo needs into the local workspace and open for view/reference — **no edit lock**; overlay: **Finding dependencies…** (Where Used DB list when present; otherwise vault byte-scan and **persist** those edges) then **Verifying / Updating local workspace…** (agent reuses the warm folder whether it was named by vault folder or product UUID; skips tips that match the cache index / content hash — does **not** re-download a warm workspace; cache index is updated in memory and saved once per open; index misses hash in parallel); for large trees (**≥ 50** tips) use **one zip archive** only for **missing** tips (same as bulk checkout), not one HTTP GET per file; smaller trees sync tip-by-tip and skip matches; when everything is already local, show that the workspace is up to date | Walk the whole workspace once per tip on every open; re-hash and rewrite the cache index once per dependency; re-download hundreds of tips because Open looked in an empty vault-named folder while files lived under the product UUID folder; leave nested parts/sub-asms undownloaded when nothing is indexed yet; discard vault-scan edges without storing them; show “local cache” in the open overlay; say “Syncing 935 files” when those tips are already local |
-| **Open a file already checked out to you** | Keep your local tip (including modified / higher `.N` saves); do **not** overwrite with vault bytes; still bring **missing** dependencies only | Redownload / wipe your checked-out local work just because you opened again; re-verify hundreds of already-present tips slowly on every open |
-| **Check out this file, then open** | Lock this file, download it, then open |
-| **Check out this file and its dependencies, then open** | Lock this file plus the same full dependency tree Creo needs (same automatic walk — no Where Used rebuild required), then open |
+| You choose | App should | App must not |
+|------------|------------|--------------|
+| **Open without checking out** | Bring what Creo needs into the local workspace and open for view/reference — **no edit lock**; overlay: **Finding dependencies…** then **Checking local index…** using prepare hashes against `.creopdm_cache_index.json` in `CreoPDM-agent\workspaces\<product>\` (no second 900-id manifest); download only missing tips | Re-fetch agent-cache-manifest when prepare already had identities; spend ~20s “verifying” a warm index |
+| **Open a file already checked out to you** | Keep your local tip (including modified / higher `.N` saves); do **not** overwrite with vault bytes; still bring **missing** dependencies only | Redownload / wipe your checked-out local work just because you opened again |
+| **Check out this file, then open** | Lock this file, download it, then open | |
+| **Check out this file and its dependencies, then open** | Lock this file plus the same full dependency tree Creo needs (same automatic walk — no Where Used rebuild required), then open | |
 
 **Set Creo working directory…** appears on that dialog **only inside Creo’s embedded browser** (on by default). Outside Creo (Chrome/Edge/etc.) it is hidden and is never applied — working directory only exists in Creo. Use the toolbar **Set Working Directory** the same way (Creo only).
 

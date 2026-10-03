@@ -255,6 +255,65 @@ def test_agent_materialize_zip_skips_when_cache_matches(tmp_path, monkeypatch):
         assert any("agent-cache-manifest" in url for url in seen)
 
 
+def test_agent_materialize_zip_uses_prepare_items_skips_manifest(tmp_path, monkeypatch):
+    """Open already has hashes — do not re-fetch agent-cache-manifest for 900 ids."""
+    from creopdm_agent.server import _save_cache_index
+
+    root = tmp_path / "cache"
+    product_id = "proj-prepare"
+    cache = root / product_id
+    cache.mkdir(parents=True)
+    body = b"from-prepare"
+    digest = hashlib.sha256(body).hexdigest()
+    (cache / "shaft.prt").write_bytes(body)
+    _save_cache_index(
+        cache,
+        {"shaft.prt": {"hash": digest, "size": len(body)}},
+    )
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, json=None, headers=None):
+            raise AssertionError(f"manifest must be skipped when items provided: {url}")
+
+        def stream(self, *args, **kwargs):
+            raise AssertionError("archive should not be fetched when cache matches")
+
+    monkeypatch.setattr("creopdm_agent.server.httpx.Client", FakeClient)
+    with TestClient(app) as client:
+        response = client.post(
+            "/materialize-zip",
+            json={
+                "pdm_url": "http://pdm.example:52113",
+                "product_id": product_id,
+                "object_ids": ["a"],
+                "items": [
+                    {
+                        "object_id": "a",
+                        "filename": "shaft.prt",
+                        "disk_name": "shaft.prt",
+                        "content_hash": digest,
+                        "file_size": len(body),
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["skipped_count"] == 1
+        assert payload["download_count"] == 0
+
+
 def test_agent_materialize_zip_downloads_and_extracts(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     product_id = "proj-zip"
