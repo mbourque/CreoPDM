@@ -4925,7 +4925,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!href) return;
     event.preventDefault();
     if (target?.closest(".object-open")) event.preventDefault();
-    window.location.href = href;
+    // Soft-nav Details — hard location.href SSR-paints Session offline and drops Creo.JS.
+    leavePage(href);
   }
 
   function rowHistoryHref(row) {
@@ -5894,13 +5895,37 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     syncProductSettingsVisibility();
   }
 
+  function pollCreoBridgeUntilLive(onLive) {
+    // Creo.JS often appears after first paint (Details / soft-nav / hard refresh).
+    if (hostedCreoJS()) {
+      onLive();
+      return;
+    }
+    let bridgeTries = 0;
+    const bridgePoll = trackedInterval(() => {
+      bridgeTries += 1;
+      if (hostedCreoJS() || bridgeTries >= 40) {
+        window.clearInterval(bridgePoll);
+        onLive();
+      }
+    }, 250);
+  }
+
   // Soft folder/product switches keep the live Creo.JS bridge and header status
   // pill (both live outside main.shell). Never re-probe agent or reconnect.
   if (soft) {
     syncCreoSessionControlsFromBridge();
+    // Soft boot into Details/Admin can land before the bridge is readable again.
+    void creoJSReady.then(() => {
+      pollCreoBridgeUntilLive(() => syncCreoSessionControlsFromBridge());
+    });
   } else if (!isListPage) {
     // Admin / Settings / Details / login: no Open workspace toolbar — skip agent /health.
+    // Still wait for Creo.JS so Details does not stay Session offline after hard refresh.
     syncCreoSessionControlsFromBridge();
+    void creoJSReady.then(() => {
+      pollCreoBridgeUntilLive(() => syncCreoSessionControlsFromBridge());
+    });
   } else {
   void creoJSReady.then(() => {
     void (async () => {
@@ -5910,16 +5935,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       await refreshCreoStatusPill(agent);
       syncToolbar();
       // First load: Creo.JS bridge can appear after first paint — re-check a few times.
-      if (!hostedCreoJS()) {
-        let bridgeTries = 0;
-        const bridgePoll = trackedInterval(() => {
-          bridgeTries += 1;
-          if (hostedCreoJS() || bridgeTries >= 40) {
-            window.clearInterval(bridgePoll);
-            void refreshCreoStatusPill(agent).then(() => syncToolbar());
-          }
-        }, 250);
-      }
+      pollCreoBridgeUntilLive(() => {
+        void refreshCreoStatusPill(agent).then(() => syncToolbar());
+      });
       let seconds = 0;
       if (agent && Object.prototype.hasOwnProperty.call(agent, "status_poll_interval_seconds")) {
         const parsed = Number(agent.status_poll_interval_seconds);
@@ -8360,7 +8378,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   historyBtn?.addEventListener("click", () => {
     const href = rowHistoryHref(selectedRows()[0]);
-    if (href) window.location.href = href;
+    // Soft-nav like folders — hard reload kills Creo.JS / paints Session offline.
+    if (href) leavePage(href);
   });
 
   function expectedProductName() {

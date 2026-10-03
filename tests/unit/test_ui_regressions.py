@@ -583,12 +583,16 @@ def test_soft_nav_skips_creojs_reconnect():
     soft_branch = block.split("if (soft)")[1].split("} else if (!isListPage)")[0]
     assert "syncCreoSessionControlsFromBridge()" in soft_branch
     assert "probeCreoAgent" not in soft_branch
-    assert "bridgePoll" not in soft_branch
     assert "refreshCreoStatusPill" not in soft_branch
-    assert "creoJSReady.then" not in soft_branch
+    # Soft/Details boots may poll for a late Creo.JS bridge — never agent /health.
+    assert "pollCreoBridgeUntilLive" in soft_branch
+    assert "creoJSReady.then" in soft_branch
     non_list = block.split("else if (!isListPage)")[1].split("} else {")[0]
     assert "syncCreoSessionControlsFromBridge()" in non_list
     assert "probeCreoAgent" not in non_list
+    assert "pollCreoBridgeUntilLive" in non_list
+    assert "function pollCreoBridgeUntilLive(" in script
+    assert "Details does not stay Session offline" in non_list
     # Soft sync must promote a stale Session offline pill when Creo.JS is live.
     soft_sync = _between(
         script, "function syncCreoSessionControlsFromBridge(", "if (soft)"
@@ -1123,6 +1127,18 @@ def test_history_revert_only_for_older_versions():
     href_fn = _between(script, "function rowHistoryHref(", "document.querySelector(\"#object-table\")")
     assert "return `/products/${productId}/objects/${uuid}`;" in href_fn
     assert "objects/${uuid}#history" not in href_fn
+    # Details / double-click must soft-nav (leavePage) — hard location.href killed Creo.JS.
+    dbl = _between(script, "function onFileTableDblclick(", "function rowHistoryHref(")
+    assert "leavePage(href)" in dbl
+    assert "window.location.href = href" not in dbl
+    hist_click = _between(
+        script,
+        'historyBtn?.addEventListener("click"',
+        "function expectedProductName(",
+    )
+    assert "leavePage(href)" in hist_click
+    assert "window.location.href = href" not in hist_click
+    assert "Soft-nav like folders" in hist_click or "hard reload kills Creo" in hist_click.lower()
 
 
 def test_toolbar_hides_inactive_actions():
