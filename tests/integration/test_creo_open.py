@@ -669,7 +669,9 @@ def test_open_dependencies_nested_tree_without_where_used(
     recorder = RecordingConnector()
     ctx = build_context(ConfigManager(), users=identity)
     ctx.creo = recorder
-    ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
+    ctx.creo_service = CreoService(
+        recorder, ctx.objects, ctx.checkouts, ctx.workspaces, metadata=ctx.metadata
+    )
     with TestClient(create_app(ctx)) as client:
         product = client.post("/api/products", json={"name": "AutoDependencies"}).json()
         part = client.post(
@@ -699,6 +701,14 @@ def test_open_dependencies_nested_tree_without_where_used(
         names = {item["filename"] for item in opened.json()["dependencies"]}
         assert "sub.asm" in names
         assert "pin.prt" in names
+
+        # Open vault-scan must persist the same edges Rebuild Where Used would write.
+        with ctx.session_factory() as db:
+            product_row = ctx.products.get_product(db, product["uuid"])
+            assert ctx.metadata.where_used_index_present(db, product_row.id) is True
+            top_levels = ctx.metadata.top_level_assembly_uuids(db, product_row.id)
+            assert top.json()["uuid"] in top_levels
+            assert sub.json()["uuid"] not in top_levels
 
 
 @requires_git

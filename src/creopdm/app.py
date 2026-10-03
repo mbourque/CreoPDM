@@ -119,7 +119,9 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         workspaces=workspaces,
         checkouts=checkouts,
         checkins=checkins,
-        creo_service=CreoService(creo_connector, objects, checkouts, workspaces),
+        creo_service=CreoService(
+            creo_connector, objects, checkouts, workspaces, metadata=metadata
+        ),
         metadata=metadata,
         where_used_index=WhereUsedIndexJobs(session_factory, metadata),
         email=email,

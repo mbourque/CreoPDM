@@ -20,8 +20,9 @@ from creopdm.services.checkout_service import CheckoutService
 from creopdm.services.object_service import ObjectService
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.utils.classify import classify_filename, is_creo_js_openable, is_creo_openable, is_creo_view
+from creopdm.services.metadata_service import MetadataService
 from creopdm.utils.creo_dependencies import (
-    collect_open_dependency_objects,
+    collect_open_dependency_walk,
     needs_open_dependencies,
 )
 from creopdm.utils.creo_header import creo_release_for, is_creo_native_model
@@ -51,11 +52,13 @@ class CreoService:
         objects: ObjectService,
         checkouts: CheckoutService,
         workspaces: WorkspaceService,
+        metadata: MetadataService | None = None,
     ) -> None:
         self._objects = objects
         self._checkouts = checkouts
         self._workspaces = workspaces
         self._connector = connector
+        self._metadata = metadata
 
     def set_connector(self, connector: CreoConnector) -> None:
         self._connector = connector
@@ -288,7 +291,7 @@ class CreoService:
                     except Exception:  # noqa: BLE001
                         return None
 
-            chosen = collect_open_dependency_objects(
+            chosen, edges = collect_open_dependency_walk(
                 primary_relative=relative_path,
                 primary_filename=filename,
                 object_type=object_type,
@@ -299,6 +302,18 @@ class CreoService:
                 resolve_path=_resolve,
                 skip_object_id=root_id if root_id is not None else skip_object_id,
             )
+            # Same scan Rebuild Where Used uses — persist so Top Level / reopen use DB.
+            if edges and self._metadata is not None:
+                added, existing = self._metadata.upsert_dependency_edges(
+                    session, product.id, edges
+                )
+                if added:
+                    logger.info(
+                        "Stored %s Where Used edge(s) from open scan for %s (%s existing)",
+                        added,
+                        Path(filename).name,
+                        existing,
+                    )
 
         # Metadata only — do not locate/materialize each vault tip here (that made
         # "Finding dependencies…" crawl on large assemblies). The agent fetches

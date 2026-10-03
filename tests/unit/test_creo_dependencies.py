@@ -121,6 +121,9 @@ def test_collect_open_dependencies_walks_subassembly_tree(tmp_path: Path):
     def resolve(obj):
         return paths.get(obj.relative_path)
 
+    from creopdm.constants import DependencyType
+    from creopdm.utils.creo_dependencies import collect_open_dependency_walk
+
     chosen = collect_open_dependency_objects(
         primary_relative="CAD/top.asm",
         primary_filename="top.asm",
@@ -134,3 +137,19 @@ def test_collect_open_dependencies_walks_subassembly_tree(tmp_path: Path):
     )
     names = {obj.filename for obj in chosen}
     assert names == {"sub.asm", "pin.prt"}
+
+    _objs, edges = collect_open_dependency_walk(
+        primary_relative="CAD/top.asm",
+        primary_filename="top.asm",
+        object_type="CREO_ASSEMBLY",
+        siblings=siblings,
+        model_path=top,
+        model_extensions=[".prt", ".asm", ".drw"],
+        all_cad_extensions=[],
+        resolve_path=resolve,
+        skip_object_id=1,
+    )
+    edge_set = set(edges)
+    member = DependencyType.ASSEMBLY_MEMBER.value
+    assert (1, 2, member) in edge_set  # top → sub
+    assert (2, 3, member) in edge_set  # sub → pin

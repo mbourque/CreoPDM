@@ -169,7 +169,17 @@ def select_dependency_objects(
     return pool
 
 
-def collect_open_dependency_objects(
+def _open_dependency_type(parent_filename: str) -> str:
+    """ASSEMBLY_MEMBER for asms; DRAWING_MODEL for drawings (matches vault rebuild)."""
+    from creopdm.constants import DependencyType
+
+    logical = CreoFileManager.normalize_creo_filename(parent_filename)
+    if Path(logical).suffix.lower() == ".drw":
+        return DependencyType.DRAWING_MODEL.value
+    return DependencyType.ASSEMBLY_MEMBER.value
+
+
+def collect_open_dependency_walk(
     *,
     primary_relative: str,
     primary_filename: str,
@@ -180,32 +190,36 @@ def collect_open_dependency_objects(
     all_cad_extensions: list[str] | tuple[str, ...],
     resolve_path: Callable[[object], Path | None],
     skip_object_id: int | None = None,
-) -> list:
-    """Walk sub-assemblies and collect every part/asm Creo needs to open primary.
+) -> tuple[list, list[tuple[int, int, str]]]:
+    """Walk open deps and return (objects, edges).
 
-    Each assembly level uses product-wide name matching against vault file bytes,
-    then recurses into any dependency that is itself an assembly/drawing.
+    Each edge is ``(parent_object_id, child_object_id, dependency_type)`` for
+    parents/children that have DB ids — same links Rebuild Where Used would store.
     """
     if not needs_open_dependencies(object_type, primary_filename):
-        return []
-    queue: list[tuple[str, str, str, Path, int]] = [
+        return [], []
+    root_id = skip_object_id
+    queue: list[tuple[str, str, str, Path, int, int | None]] = [
         (
             str(primary_relative or "").replace("\\", "/"),
             str(primary_filename or ""),
             str(object_type or ""),
             model_path,
             0,
+            root_id,
         )
     ]
     seen_keys: set[str] = set()
     primary_key = str(primary_relative or "").replace("\\", "/").lower()
     if primary_key:
         seen_keys.add(primary_key)
-    if skip_object_id is not None:
-        seen_keys.add(f"id:{skip_object_id}")
+    if root_id is not None:
+        seen_keys.add(f"id:{root_id}")
     out: list = []
+    edges: list[tuple[int, int, str]] = []
+    edge_seen: set[tuple[int, int, str]] = set()
     while queue and len(out) < _MAX_OPEN_DEPENDENCIES_TOTAL:
-        rel, filename, otype, path, depth = queue.pop(0)
+        rel, filename, otype, path, depth, parent_id = queue.pop(0)
         if depth > _MAX_OPEN_DEPENDENCY_DEPTH:
             continue
         if not path.is_file():
@@ -232,10 +246,20 @@ def collect_open_dependency_objects(
                 all_cad_extensions=all_cad_extensions,
                 scope="folder",
             )
+        dep_type = _open_dependency_type(filename)
         for obj in immediate:
             obj_id = getattr(obj, "id", None)
             obj_rel = str(getattr(obj, "relative_path", "") or "").replace("\\", "/")
             key = f"id:{obj_id}" if obj_id is not None else obj_rel.lower()
+            if (
+                parent_id is not None
+                and obj_id is not None
+                and int(obj_id) != int(parent_id)
+            ):
+                edge = (int(parent_id), int(obj_id), dep_type)
+                if edge not in edge_seen:
+                    edge_seen.add(edge)
+                    edges.append(edge)
             if key in seen_keys:
                 continue
             seen_keys.add(key)
@@ -249,5 +273,35 @@ def collect_open_dependency_objects(
             child_path = resolve_path(obj)
             if child_path is None or not child_path.is_file():
                 continue
-            queue.append((obj_rel, child_name, child_type, child_path, depth + 1))
-    return out
+            child_parent_id = int(obj_id) if obj_id is not None else None
+            queue.append(
+                (obj_rel, child_name, child_type, child_path, depth + 1, child_parent_id)
+            )
+    return out, edges
+
+
+def collect_open_dependency_objects(
+    *,
+    primary_relative: str,
+    primary_filename: str,
+    object_type: str,
+    siblings: list,
+    model_path: Path,
+    model_extensions: list[str] | tuple[str, ...],
+    all_cad_extensions: list[str] | tuple[str, ...],
+    resolve_path: Callable[[object], Path | None],
+    skip_object_id: int | None = None,
+) -> list:
+    """Walk sub-assemblies and collect every part/asm Creo needs to open primary."""
+    objects, _edges = collect_open_dependency_walk(
+        primary_relative=primary_relative,
+        primary_filename=primary_filename,
+        object_type=object_type,
+        siblings=siblings,
+        model_path=model_path,
+        model_extensions=model_extensions,
+        all_cad_extensions=all_cad_extensions,
+        resolve_path=resolve_path,
+        skip_object_id=skip_object_id,
+    )
+    return objects

@@ -216,6 +216,43 @@ class MetadataService:
             is not None
         )
 
+    def upsert_dependency_edges(
+        self,
+        session: Session,
+        product_id: int,
+        edges: list[tuple[int, int, str]],
+    ) -> tuple[int, int]:
+        """Insert missing Dependency rows. Returns (added, already_existing)."""
+        added = 0
+        existing = 0
+        for parent_id, child_id, dep_type in edges:
+            if parent_id == child_id:
+                continue
+            found = session.scalar(
+                select(Dependency).where(
+                    Dependency.product_id == product_id,
+                    Dependency.parent_object_id == parent_id,
+                    Dependency.child_object_id == child_id,
+                    Dependency.dependency_type == dep_type,
+                )
+            )
+            if found is not None:
+                existing += 1
+                continue
+            session.add(
+                Dependency(
+                    product_id=product_id,
+                    parent_object_id=parent_id,
+                    child_object_id=child_id,
+                    dependency_type=dep_type,
+                    quantity=1.0,
+                )
+            )
+            added += 1
+        if added:
+            session.flush()
+        return added, existing
+
     def top_level_assembly_uuids(self, session: Session, product_id: int) -> list[str]:
         """Assemblies not used by another assembly (drawing parents ignored).
 
@@ -530,30 +567,10 @@ class MetadataService:
             for child_id in child_ids:
                 pending.append((parent.id, child_id, dep_type))
 
-        for parent_id, child_id, dep_type in pending:
-            existing = session.scalar(
-                select(Dependency).where(
-                    Dependency.product_id == product.id,
-                    Dependency.parent_object_id == parent_id,
-                    Dependency.child_object_id == child_id,
-                    Dependency.dependency_type == dep_type,
-                )
-            )
-            if existing is not None:
-                edges_existing += 1
-                continue
-            session.add(
-                Dependency(
-                    product_id=product.id,
-                    parent_object_id=parent_id,
-                    child_object_id=child_id,
-                    dependency_type=dep_type,
-                    quantity=1.0,
-                )
-            )
-            edges_added += 1
+        edges_added, edges_existing = self.upsert_dependency_edges(
+            session, product.id, pending
+        )
 
-        session.flush()
         next_offset = start + len(chunk)
         return RebuildWhereUsedResponse(
             parents_total=total,
