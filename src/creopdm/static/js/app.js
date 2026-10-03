@@ -5360,6 +5360,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (next !== "off" && CAD_MODEL_CHILD_FILTERS.has(key)) {
       clearMetricFilters(new Set(["cad_models"]));
     }
+    // Top level assemblies is exclusive — no other pills stay on with it.
+    if (key === "top_level_assemblies" && next !== "off") {
+      metricButtons().forEach((item) => {
+        if (item !== btn) setMetricMode(item, "off");
+      });
+    } else if (key !== "top_level_assemblies" && next !== "off") {
+      clearMetricFilters(new Set(["top_level_assemblies"]));
+    }
     if (next === "off") {
       rows().forEach((row) => markRowSelected(row, false));
       lastSelectRow = null;

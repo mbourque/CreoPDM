@@ -141,5 +141,11 @@ def test_top_level_assemblies_pill_wired_in_ui():
     assert "Top level assemblies" in app_html
     assert "top_level_assemblies" in script
     assert "topLevelAssemblyIds" in script
+    chip = script.split("function onMetricChip(", 1)[1].split(
+        'document.querySelector("#metric-filters")', 1
+    )[0]
+    assert 'key === "top_level_assemblies" && next !== "off"' in chip
+    assert 'clearMetricFilters(new Set(["top_level_assemblies"]))' in chip
     assert "Top level assemblies" in docs
+    assert "turn **off** every other pill" in docs
     assert "Where Used" in docs
