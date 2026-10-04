@@ -4543,7 +4543,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       roleCanCheckout &&
       selected.length > 0 &&
       selected.every((row) => rowOffersCheckout(row));
-    const canCheckin = roleCanCheckin && selectionCanCheckin(selected);
+    const addOnly = selectionIsAddOnly(selected);
+    // Modified / owned check-in work only — New files use Add ▾ → Add selected…
+    const canCheckin = roleCanCheckin && selectionCanCheckin(selected) && !addOnly;
     const canUndo =
       roleCanCheckout &&
       selected.length > 0 &&
@@ -4557,18 +4559,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (kind === "mine" || kind === "available" || kind === "locked") return false;
         return dataFlag(row, "checked-out") && !dataFlag(row, "owned");
       });
-    const addOnly = selectionIsAddOnly(selected);
     const productId =
       checkinBtn?.dataset.product ||
       checkinMenuBtn?.dataset.product ||
       openWorkspaceBtn?.dataset.product ||
+      addForm?.dataset.product ||
       currentProductId() ||
       "";
     // Add menu is omitted from the DOM when the product is locked (Jinja product_ui).
-    const canAdd = Boolean(productId);
+    const canAdd = Boolean(productId) && Boolean($("#add-menu"));
+    // Add selected… only for New files rows (vault or local) — never Modified / Files.
+    const canAddSelected = canAdd && Boolean($("#add-selected-btn")) && addOnly;
     setToolbarActionVisible(addMenuBtn, canAdd);
     for (const id of ["create-folder-btn", "add-files-btn", "add-folder-btn", "add-folders-btn", "add-compressed-btn"]) {
       setToolbarActionVisible($("#" + id), canAdd);
+    }
+    // Stay visible in Add ▾ but greyed until a New files selection (hover title explains).
+    const addSelectedBtn = $("#add-selected-btn");
+    if (addSelectedBtn) {
+      addSelectedBtn.hidden = false;
+      addSelectedBtn.disabled = !canAddSelected;
+      addSelectedBtn.title = canAddSelected
+        ? "Add selected new files to the product (uploads local workspace files first)."
+        : "Select New files (vault or local workspace), then add them to the product.";
     }
     if (!canAdd) closeAddMenu();
     const canCheckoutProduct =
@@ -4609,13 +4622,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     setToolbarActionVisible(forceUndoBtn, canForceUndo);
     setToolbarActionVisible(checkoutMenuBtn, canCheckoutMenu);
     if (!canCheckoutMenu) closeCheckoutMenu();
+    // Check In ▾ keeps "Check in selected…" for Modified work. New-files-only
+    // selection uses Add ▾ → Add selected… (objects.add), not a Check In relabel.
     if (checkinBtn) {
-      checkinBtn.textContent = addOnly ? "Add selected…" : "Check in selected…";
-      checkinBtn.title = checkinSelectedHoverTitle(selected, canCheckin, addOnly);
-    }
-    // Check in selected stays visible in the menu but greyed when the selection
-    // has no pending work (clean checkout / rematerialized match) — hover title explains why.
-    if (checkinBtn) {
+      checkinBtn.textContent = "Check in selected…";
+      checkinBtn.title = addOnly
+        ? "Use Add ▾ → Add selected… for New files."
+        : checkinSelectedHoverTitle(selected, canCheckin, false);
       checkinBtn.hidden = false;
       checkinBtn.disabled = !canCheckin;
     }
@@ -5267,12 +5280,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       selected.length > 0 &&
       selected.every((row) => row.dataset.owned === "1");
     const addOnly = selectionIsAddOnly(selected);
-    // Match toolbar: Check in selected stays in the DOM when the menu exists; enable only when work is pending.
-    // Context menu hides when not possible (no greyed items).
+    // New files only + objects.add (Add menu present). Never for Modified / Files.
+    const canAddSelected = canOfferAdd() && addOnly;
+    // Check in selected for Modified/checkout work — not New-files-only (Add selected).
     const canCheckin =
       Boolean(checkinBtn) &&
       roleCanCheckin &&
-      selectionCanCheckin(selected);
+      selectionCanCheckin(selected) &&
+      !addOnly;
     const canDownload = canViewObjects() && selectedDownloadIds().length > 0;
     const canExportObjects = document.body?.dataset?.canExportObjects === "1";
     const exportHasSelection =
@@ -5286,10 +5301,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       canDetails,
       canCheckout,
       canUndo,
+      canAddSelected,
       canCheckin,
       canDownload,
       canExport,
-      checkinLabel: addOnly ? "Add selected…" : "Check in selected…",
     };
   }
 
@@ -5319,6 +5334,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         action: "undo",
         label: "Undo Checkout",
         title: "Release your checkout lock. Does not delete the vault file or record a new version. A Creo save still on disk can be checked in afterward.",
+      },
+      {
+        id: "files-context-add-selected",
+        action: "add-selected",
+        label: "Add selected…",
+        title: "Add selected new files to the product (uploads local workspace files first).",
       },
       {
         id: "files-context-checkin",
@@ -5405,6 +5426,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       && !caps.canDetails
       && !caps.canCheckout
       && !caps.canUndo
+      && !caps.canAddSelected
       && !caps.canCheckin
       && !caps.canDownload
       && !caps.canExport
@@ -5417,6 +5439,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const detailsItem = menu.querySelector("#files-context-details");
     const checkoutItem = menu.querySelector("#files-context-checkout");
     const undoItem = menu.querySelector("#files-context-undo");
+    const addSelectedItem = menu.querySelector("#files-context-add-selected");
     const checkinItem = menu.querySelector("#files-context-checkin");
     const downloadItem = menu.querySelector("#files-context-download");
     const exportItem = menu.querySelector("#files-context-export");
@@ -5424,12 +5447,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (detailsItem) detailsItem.hidden = !caps.canDetails;
     if (checkoutItem) checkoutItem.hidden = !caps.canCheckout;
     if (undoItem) undoItem.hidden = !caps.canUndo;
+    if (addSelectedItem) addSelectedItem.hidden = !caps.canAddSelected;
     if (checkinItem) {
       checkinItem.hidden = !caps.canCheckin;
-      checkinItem.textContent = caps.checkinLabel;
-      checkinItem.title = caps.checkinLabel === "Add selected…"
-        ? "Add selected new files to the product (uploads local workspace files first)."
-        : "Check in selected files.";
+      checkinItem.textContent = "Check in selected…";
+      checkinItem.title = "Check in selected files.";
     }
     if (downloadItem) downloadItem.hidden = !caps.canDownload;
     if (exportItem) exportItem.hidden = !caps.canExport;
@@ -5505,6 +5527,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (action === "undo") {
       undoBtn?.click();
+      return;
+    }
+    if (action === "add-selected") {
+      $("#add-selected-btn")?.click();
       return;
     }
     if (action === "checkin") {
@@ -8095,13 +8121,38 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   });
 
+  async function beginAddSelected() {
+    const selected = selectedRows();
+    if (!canOfferAdd() || !selectionIsAddOnly(selected)) {
+      showError(
+        $("#toolbar-error"),
+        "Select New files (vault or local workspace) to add them to the product."
+      );
+      return;
+    }
+    await beginCheckin("selected");
+  }
+
   async function beginCheckin(scope = "selected") {
     const productScope = scope === "product";
     const selected = productScope ? [] : selectedRows();
-    if (!productScope && !selectionCanCheckin(selected) && !checkinBtn?.dataset.uuid) {
+    const addOnlySelection = !productScope && selectionIsAddOnly(selected);
+    if (
+      !productScope
+      && !selectionCanCheckin(selected)
+      && !checkinBtn?.dataset.uuid
+      && !addOnlySelection
+    ) {
       showError(
         $("#toolbar-error"),
         "Nothing to check in for this selection. Save changes in Creo first, or use Undo Checkout."
+      );
+      return;
+    }
+    if (addOnlySelection && !canOfferAdd() && !userCanCheckin()) {
+      showError(
+        $("#toolbar-error"),
+        "You do not have permission to add files."
       );
       return;
     }
@@ -8130,7 +8181,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       checkinBtn?.dataset.product ||
       checkinMenuBtn?.dataset.product ||
       checkinProductBtn?.dataset.product ||
-      openWorkspaceBtn?.dataset.product;
+      openWorkspaceBtn?.dataset.product ||
+      addForm?.dataset.product ||
+      currentProductId();
     if (!checkinDialog) return;
     const fallbackId = checkinBtn?.dataset.uuid || "";
     let objectId = "";
@@ -8749,7 +8802,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
     }
     if (checkinDialog?.dataset.queue === "1") {
-      const productId = checkinBtn?.dataset.product || checkinDialog?.dataset.productId;
+      const productId =
+        checkinBtn?.dataset.product ||
+        checkinDialog?.dataset.productId ||
+        addForm?.dataset.product ||
+        openWorkspaceBtn?.dataset.product ||
+        currentProductId();
       if (!productId) return;
       let objectIds = [];
       try {
@@ -9187,6 +9245,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   $("#create-folder-btn")?.addEventListener("click", () => {
     closeAddMenu();
     openCreateFolderDialog();
+  });
+  $("#add-selected-btn")?.addEventListener("click", () => {
+    closeAddMenu();
+    void beginAddSelected();
   });
   $("#create-folder-cancel")?.addEventListener("click", () => createFolderDialog?.close());
   createFolderForm?.addEventListener("submit", async (event) => {
@@ -9890,8 +9952,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           ? "Local workspace."
           : "Not in the product yet."
         : item.local_cache
-          ? "Local workspace — select and Add."
-          : "Not in the product yet. Select and click Add.";
+          ? "Local workspace — select and use Add ▾ → Add selected…."
+          : "Not in the product yet. Select and use Add ▾ → Add selected….";
       appendQueueRow(
         body,
         productId,

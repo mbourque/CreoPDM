@@ -119,7 +119,7 @@ Empty folders (no files inside yet) must still be selectable and removable.
 | Click the row (not the name) | Select the file | |
 | Click the **file name** | Select, then open in Creo or Windows | Jump straight to Details |
 | Double-click the row | Open **Details** (Overview tab) | Also fire a second “Open” |
-| **Right-click** a file or folder row (or a multi-selection) | Show CreoPDM’s menu (not the browser menu) with the same labels as the toolbar where possible: **Open selected…**, **Details**, **Checkout selected**, **Undo Checkout**, **Check in selected…** / **Add selected…**, **Download selected to workspace**, **Export selected…**; if the row was not selected, select it first; **hide** each item when that action is not possible (same rules as the toolbar — do not grey items here); Open when one openable file is selected; Details when one file with a Details page is selected; Download needs `objects.view` and file ids; Checkout / Undo / Check In / Export follow role ∩ selection like the bottom buttons | Show actions the toolbar would not allow; check files out via Download; fail silently when the agent is offline on Download (say to start creopdm-agent); show the browser menu when at least one action is available |
+| **Right-click** a file or folder row (or a multi-selection) | Show CreoPDM’s menu (not the browser menu) with the same labels as the toolbar where possible: **Open selected…**, **Details**, **Checkout selected**, **Undo Checkout**, **Add selected…** (New files only, needs `objects.add`), **Check in selected…**, **Download selected to workspace**, **Export selected…**; if the row was not selected, select it first; **hide** each item when that action is not possible (same rules as the toolbar — do not grey items here); Open when one openable file is selected; Details when one file with a Details page is selected; Download needs `objects.view` and file ids; Add selected only when every selected row is a **New files** queue row; Checkout / Undo / Check In / Export follow role ∩ selection like the bottom buttons | Show **Add selected…** for Modified / Files / Checked out rows; show actions the toolbar would not allow; check files out via Download; fail silently when the agent is offline on Download (say to start creopdm-agent); show the browser menu when at least one action is available |
 | See **Modified** | Means the local tip’s **content hash** differs from the vault tip (a higher Creo `.N` usually does; size/date alone never counts). Local workspace tips use `.creopdm_cache_index.json` (via the agent file list) when the on-disk size still matches the index — that proves the file is real before comparing to the vault tip; missing/stale index entries fall back to hashing. After refresh, clear Modified when vault/local no longer report that file as pending | Treat a rematerialized copy with the same hash as changed (including when only `.N`, size, or date differs); leave Modified stuck after a later refresh proves the tip matches; invent Modified rows that are not on disk / not in the local index |
 
 ---
@@ -152,13 +152,14 @@ Only one ▾ menu open at a time. Click outside or press Escape to close.
 
 ## 7. Add ▾
 
-Menu order:
+Needs `objects.add` and a product that allows edits (In work, not read-only). Menu order:
 
 1. **Create folder…**
 2. **Add files…**
 3. **Add folder…**
 4. **Add folders…**
 5. **Compressed data…**
+6. **Add selected…** (enabled only when the selection is **New files** rows — vault or local workspace; greyed otherwise)
 
 ### Create folder…
 
@@ -182,6 +183,13 @@ Menu order:
 | Click Add twice quickly | Say an add is already running | Run two imports at once |
 
 For thousands of Creo models, prefer **Add folders…** (picks a folder and lists files on the agent) over multi-select in **Add files…**.
+
+### Add selected…
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| Select one or more rows on the **New files** tab (vault **New file** or **New file (local)**), then **Add ▾ → Add selected…** (or right-click **Add selected…**) | Ask for a comment; upload local workspace files via creopdm-agent when needed; add those paths to the product; run Where Used; refresh so the rows leave New files | Offer **Add selected…** for Modified, Files, or Checked out rows; run when the menu item is greyed; require `objects.checkin` instead of `objects.add`; appear when Add ▾ is hidden |
+| Open **Add ▾** with no New files selection | Keep **Add selected…** visible but **greyed**, with a hover title that says to select New files | Hide the item with no explanation; enable it for a mixed selection that includes non–New-files rows |
 
 ### Add folder… (one folder, top level only)
 
@@ -279,12 +287,12 @@ If open seems to do nothing, check the error line under the toolbar, and that cr
 ## 10. Check In ▾
 
 1. **Check in product…**  
-2. **Check in selected…** (may say **Add selected…** if you’re only adding new files)
+2. **Check in selected…** (Modified / owned pending work — not New files; those use **Add ▾ → Add selected…**)
 
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Check in product… | Record pending saves and new files (including same-name workspace replaces with no new Creo `.N`); show each pending tip’s local name in the dialog (e.g. `shaft.prt.2`) and note the vault tip will be logical (`shaft.prt`); write the vault tip as the **logical** name and drop numbered siblings so Git history stays on one path; release unchanged checkouts so the product looks checked in | Treat a rematerialized tip with the same content hash as changed; treat a replaced workspace file as unchanged when its content hash differs from the vault tip; strip the Creo `.N` in the Check In dialog (show only the vault logical name); store `shaft.prt.4` as the vault tip; run when there’s nothing to do (button should stay disabled); appear without `objects.checkin` |
-| Check in selected… | Check in / add what you selected (vault tip stays logical); show the **local Creo tip** as Object (`shaft.prt.2`) plus a short note that the vault tip will be `shaft.prt`; when the Check In menu is open, keep **Check in selected…** visible but **greyed** if the selection has no pending work (clean checkout / rematerialized tip matches vault), and put the reason on the hover title | Hide the item with no explanation when clean checkouts are selected; strip the Creo `.N` in the Check In dialog so you cannot tell which local save is being recorded; appear without `objects.checkin` (Add new files still uses Add ▾ / `objects.add`); run while greyed |
+| Check in selected… | Check in what you selected (vault tip stays logical); show the **local Creo tip** as Object (`shaft.prt.2`) plus a short note that the vault tip will be `shaft.prt`; when the Check In menu is open, keep **Check in selected…** visible but **greyed** if the selection has no pending Modified work (clean checkout / rematerialized tip matches vault / New-files-only selection), and put the reason on the hover title (New files → use Add selected…) | Relabel to **Add selected…** (that lives under Add ▾); hide the item with no explanation when clean checkouts are selected; strip the Creo `.N` in the Check In dialog so you cannot tell which local save is being recorded; appear without `objects.checkin`; run while greyed |
 | Leave the comment blank | Block check-in until you write a comment | Save a version with no comment |
 | Finish successfully | List and status update to match the vault; when creopdm-agent is online, rematerialize each **checked-in** file as the **logical** local tip (`shaft.prt`) and **trash higher local `.N` leftovers** (e.g. drop `shaft.prt.2`); **keep Creo windows open** (do not Erase the session on check-in — History Revert may still erase); if a higher `.N` stays because the model is still open/locked, tell you to close that window or use **File → Erase**, then Open again; Creo saves afterward may create higher `.N` siblings for the next edit | Leave the vault tip renamed to a Creo `.N`; invent `.prt.1` on materialize when the vault tip is logical; leave `shaft.prt.2` (or higher) in the local workspace after a clean check-in of that file when nothing holds the lock; Erase unrelated open models or every product checkout released by **Check in product…** |
 

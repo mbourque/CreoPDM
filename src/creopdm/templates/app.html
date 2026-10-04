@@ -372,7 +372,7 @@
                 <div class="muted small">{{ item.relative_path }}</div>
                 {% endif %}
               </td>
-              <td>{% if product_ui.show_add %}Not in the product yet. Select and click Add.{% else %}Not in the product yet.{% endif %}</td>
+              <td>{% if product_ui.show_add %}Not in the product yet. Select and use Add ▾ → Add selected….{% else %}Not in the product yet.{% endif %}</td>
               <td title="{{ item.size }} bytes">{{ item.size | byte_size }}</td>
               <td{% if item.saved_at %} title="{{ local_time_pretty(item.saved_at) }}"{% endif %}>{{ item.saved_at or "—" }}</td>
             </tr>
@@ -429,6 +429,9 @@
         <button type="button" class="toolbar-menu-item" role="menuitem" id="add-compressed-btn"
                 {% if not selected %}disabled{% endif %}
                 title="Upload a .zip via creopdm-agent; the server extracts and imports it.">Compressed data…</button>
+        <button type="button" class="toolbar-menu-item" role="menuitem" id="add-selected-btn"
+                disabled
+                title="Select New files (vault or local workspace), then add them to the product.">Add selected…</button>
       </div>
     </div>
     {% endif %}

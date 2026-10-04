@@ -40,6 +40,16 @@ def require_permission(request: Request, ctx: AppContext, key: str) -> None:
     raise PermissionDeniedError("You do not have permission to perform this action.")
 
 
+def require_any_permission(request: Request, ctx: AppContext, *keys: str) -> None:
+    """Enforce that the session has at least one of the given permissions."""
+    if not ctx.auth_enabled:
+        return
+    perms = getattr(request.state, "permissions", None) or frozenset()
+    if any(key in perms for key in keys if key):
+        return
+    raise PermissionDeniedError("You do not have permission to perform this action.")
+
+
 def require_product_access(request: Request, ctx: AppContext, product: Product) -> None:
     """Deny when the signed-in user is restricted away from this product."""
     if not ctx.auth_enabled:

@@ -111,7 +111,9 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     assert "function applyNewFilePick" in script.text
     assert "function syncNewFilePick" in script.text
     assert "function selectionIsAddOnly" in script.text
-    assert 'checkinBtn.textContent = addOnly ? "Add selected…" : "Check in selected…";' in script.text
+    assert "function beginAddSelected" in script.text
+    assert 'id="add-selected-btn"' in home.text
+    assert 'checkinBtn.textContent = "Check in selected…";' in script.text
     assert 'title.textContent = addOnly ? "Add files" : productScope ? "Check in product" : "Check In";' in script.text
     assert "dataset.addPaths" in script.text
     assert "function pushLocalWorkspaceToVault" in script.text

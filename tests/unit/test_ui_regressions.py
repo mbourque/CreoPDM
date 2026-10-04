@@ -54,7 +54,7 @@ def test_resolve_type_icon_if_conditions_use_parens():
 
 
 def test_add_toolbar_is_menu_with_modes():
-    """Add ▾: Create folder…, Add files…, Add folder…, Add folders…"""
+    """Add ▾: Create folder…, Add files…, Add folder…, Add folders…, Add selected…"""
     html = APP_HTML.read_text(encoding="utf-8")
     assert 'id="add-menu"' in html
     assert "Add ▾" in html
@@ -62,13 +62,16 @@ def test_add_toolbar_is_menu_with_modes():
     assert 'id="add-files-btn"' in html
     assert 'id="add-folder-btn"' in html
     assert 'id="add-folders-btn"' in html
+    assert 'id="add-selected-btn"' in html
     assert html.index('id="create-folder-btn"') < html.index('id="add-files-btn"')
     assert html.index('id="add-files-btn"') < html.index('id="add-folder-btn"')
     assert html.index('id="add-folder-btn"') < html.index('id="add-folders-btn"')
+    assert html.index('id="add-compressed-btn"') < html.index('id="add-selected-btn"')
     assert ">Create folder…<" in html
     assert ">Add files…<" in html
     assert ">Add folder…<" in html
     assert ">Add folders…<" in html
+    assert ">Add selected…<" in html
     assert 'id="create-folder-dialog"' in html
     script = _app_js()
     assert 'openAddDialog("files")' in script
@@ -76,6 +79,16 @@ def test_add_toolbar_is_menu_with_modes():
     assert 'openAddDialog("folder")' in script
     assert "recursive" in script
     assert "/api/products/${productId}/folders" in script or '/api/products/${productId}/folders' in script
+    # Add selected… only for New files queue rows (never Modified / Files).
+    assert "function beginAddSelected" in script
+    assert "selectionIsAddOnly(selected)" in script
+    assert 'id: "files-context-add-selected"' in script or 'action: "add-selected"' in script
+    sync = _between(script, "function syncToolbar(", "function setCheckinQueueCounts(")
+    assert "canAddSelected" in sync
+    assert "addOnly" in sync
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "### Add selected…" in docs
+    assert "enabled only when the selection is **New files**" in docs or "New files** rows" in docs
 
 
 def test_remove_from_product_sends_folder_paths():
@@ -1349,6 +1362,9 @@ def test_files_context_menu_download_to_workspace():
     assert "selectedOpenSpec()" in caps
     assert "rowHistoryHref(one)" in caps
     assert "selectionCanCheckin(selected)" in caps
+    assert "canAddSelected" in caps
+    assert "selectionIsAddOnly(selected)" in caps
+    assert "!addOnly" in caps
     assert 'dataset.canCheckout === "1"' in caps
     assert 'dataset.owned === "1"' in caps
     assert "canUndo" in caps
@@ -1358,6 +1374,7 @@ def test_files_context_menu_download_to_workspace():
     assert "detailsItem.hidden = !caps.canDetails" in open_menu
     assert "checkoutItem.hidden = !caps.canCheckout" in open_menu
     assert "undoItem.hidden = !caps.canUndo" in open_menu
+    assert "addSelectedItem.hidden = !caps.canAddSelected" in open_menu
     assert "checkinItem.hidden = !caps.canCheckin" in open_menu
     assert "downloadItem.hidden = !caps.canDownload" in open_menu
     assert "exportItem.hidden = !caps.canExport" in open_menu
@@ -1366,6 +1383,7 @@ def test_files_context_menu_download_to_workspace():
     assert "historyBtn?.click()" in run
     assert "checkoutBtn?.click()" in run
     assert "undoBtn?.click()" in run
+    assert 'action === "add-selected"' in run
     assert "checkinBtn?.click()" in run
     assert "exportSelectedBtn?.click()" in run
     download = _between(
@@ -1381,6 +1399,7 @@ def test_files_context_menu_download_to_workspace():
     assert "**Details**" in docs
     assert "**Checkout selected**" in docs
     assert "**Undo Checkout**" in docs
+    assert "**Add selected…**" in docs
     assert "**Export selected…**" in docs
     assert "**hide** each item when that action is not possible" in docs
     assert "without `objects.view`" in docs or "`objects.view`" in docs

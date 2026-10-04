@@ -17,6 +17,7 @@ from creopdm.api.deps import (
     get_db,
     load_accessible_product,
     load_accessible_product_for_delete,
+    require_any_permission,
     require_permission,
 )
 from creopdm.api.serializers import product_to_response
@@ -422,14 +423,28 @@ def product_checkin_queue(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
-    require_permission(request, ctx, PERMISSION_OBJECTS_CHECKIN)
+    object_ids = [item for item in (payload.object_ids or []) if str(item or "").strip()]
+    add_paths = [
+        str(item).replace("\\", "/").strip()
+        for item in (payload.add_relative_paths or [])
+        if str(item or "").strip()
+    ]
+    # Check-in dirty tips needs objects.checkin. Add-only New files may use objects.add.
+    if object_ids:
+        require_permission(request, ctx, PERMISSION_OBJECTS_CHECKIN)
+    elif add_paths:
+        require_any_permission(
+            request, ctx, PERMISSION_OBJECTS_ADD, PERMISSION_OBJECTS_CHECKIN
+        )
+    else:
+        require_permission(request, ctx, PERMISSION_OBJECTS_CHECKIN)
     product = load_accessible_product(request, ctx, db, product_id)
     result = ctx.checkins.checkin_queue(
         db,
         product,
         payload.comment,
-        payload.object_ids,
-        payload.add_relative_paths,
+        object_ids,
+        add_paths,
     )
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.workspaces.vault_for(product))}
