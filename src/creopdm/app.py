@@ -45,6 +45,7 @@ from creopdm.services.product_service import ProductService
 from creopdm.services.product_watch_service import ProductWatchService
 from creopdm.services.user_service import UserService
 from creopdm.services.where_used_index_jobs import WhereUsedIndexJobs
+from creopdm.services.zip_import_jobs import ZipImportJobs
 from creopdm.services.workspace_service import WorkspaceService
 from creopdm.storage.git_store import GitVersionStore
 from creopdm.utils.identity import (
@@ -124,6 +125,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         ),
         metadata=metadata,
         where_used_index=WhereUsedIndexJobs(session_factory, metadata),
+        zip_imports=ZipImportJobs(),
         email=email,
         notifications=notifications,
         product_watches=product_watches,

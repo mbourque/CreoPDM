@@ -60,6 +60,7 @@ from creopdm.schemas.common import (
     PurgeWorkspacePathsRequest,
     QueueCheckinRequest,
     WhereUsedIndexJobResponse,
+    ZipImportJobResponse,
     WorkspaceContentResponse,
     WorkspacePickerResponse,
     WorkspaceWatchResponse,
@@ -1104,6 +1105,63 @@ async def import_from_uploads(
     )
 
 
+def _zip_import_job_response(status) -> ZipImportJobResponse:
+    return ZipImportJobResponse(
+        job_id=status.job_id,
+        product_id=status.product_id,
+        state=status.state,
+        phase=status.phase,
+        message=status.message,
+        bytes_total=status.bytes_total,
+        bytes_done=status.bytes_done,
+        files_total=status.files_total,
+        files_done=status.files_done,
+        error=status.error,
+        done=status.done,
+        started_at=status.started_at,
+        finished_at=status.finished_at,
+    )
+
+
+@router.post(
+    "/api/products/{product_id}/zip-import/jobs",
+    response_model=ZipImportJobResponse,
+)
+def start_zip_import_job(
+    product_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ZipImportJobResponse:
+    """Create a progress job for Compressed data… (browser polls while agent uploads)."""
+    from creopdm.product_state import ensure_product_mutable
+
+    require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
+    product = load_accessible_product(request, ctx, db, product_id)
+    ensure_product_mutable(product, action="add files")
+    return _zip_import_job_response(ctx.zip_imports.create(product_id))
+
+
+@router.get(
+    "/api/products/{product_id}/zip-import/jobs/{job_id}",
+    response_model=ZipImportJobResponse,
+)
+def zip_import_job_status(
+    product_id: str,
+    job_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> ZipImportJobResponse:
+    """Poll zip import phase / counts for the busy overlay."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    load_accessible_product(request, ctx, db, product_id)
+    status = ctx.zip_imports.get(job_id)
+    if status is None or status.product_id != product_id:
+        raise ValidationAppError("Zip import job not found.")
+    return _zip_import_job_response(status)
+
+
 @router.post("/api/products/{product_id}/objects/from-zip", response_model=BatchOperationResponse)
 async def import_from_zip(
     product_id: str,
@@ -1135,10 +1193,24 @@ async def import_from_zip(
     note = str(comment_raw).strip() if comment_raw not in (None, "") else None
     parent_raw = form.get("parent_folder")
     parent_folder = str(parent_raw or "").strip().replace("\\", "/").strip("/")
+    job_raw = form.get("job_id")
+    job_id = str(job_raw or "").strip()
+    zip_bytes_raw = form.get("zip_bytes")
+    try:
+        zip_bytes_hint = int(str(zip_bytes_raw or "0").strip() or "0")
+    except ValueError:
+        zip_bytes_hint = 0
     product = load_accessible_product(request, ctx, db, product_id)
     ensure_product_mutable(product, action="add files")
 
+    if job_id:
+        status = ctx.zip_imports.get(job_id)
+        if status is None or status.product_id != product_id:
+            raise ValidationAppError("Zip import job not found.")
+
     if uploaded is None or not hasattr(uploaded, "read"):
+        if job_id:
+            ctx.zip_imports.set_error(job_id, "Choose a .zip file first.")
         raise ValidationAppError("Choose a .zip file first.")
     filename = assert_zip_filename(getattr(uploaded, "filename", None) or "archive.zip")
 
@@ -1150,6 +1222,9 @@ async def import_from_zip(
         handle = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}")
         zip_tmp = Path(handle.name)
         total = 0
+        bytes_total_hint = max(0, zip_bytes_hint)
+        if job_id:
+            ctx.zip_imports.set_uploading(job_id, bytes_done=0, bytes_total=bytes_total_hint)
         try:
             while True:
                 try:
@@ -1168,10 +1243,19 @@ async def import_from_zip(
                         "That zip is larger than the 2 GB limit."
                     )
                 handle.write(chunk)
+                if job_id and (total == len(chunk) or total % (8 * 1024 * 1024) < len(chunk)):
+                    ctx.zip_imports.set_uploading(
+                        job_id,
+                        bytes_done=total,
+                        bytes_total=max(bytes_total_hint, total),
+                    )
         finally:
             handle.close()
         if total <= 0:
             raise ValidationAppError("The uploaded zip is empty.")
+        if job_id:
+            ctx.zip_imports.set_uploading(job_id, bytes_done=total, bytes_total=total)
+            ctx.zip_imports.set_extracting(job_id)
 
         extract_parent, extract_dir = extract_zip_to_temp(zip_tmp)
         jobs = plan_zip_import_jobs(
@@ -1182,7 +1266,24 @@ async def import_from_zip(
         )
         if not jobs:
             raise ValidationAppError("No files to add were found in that zip.")
-        for outcome in ctx.objects.import_files(db, product, jobs, note):
+
+        def _on_import_progress(phase: str, done: int, files_total: int) -> None:
+            if not job_id:
+                return
+            if phase == "importing":
+                ctx.zip_imports.set_importing(job_id, files_done=done, files_total=files_total)
+            elif phase == "committing":
+                ctx.zip_imports.set_committing(job_id, files_total=files_total)
+            elif phase == "recording":
+                ctx.zip_imports.set_recording(
+                    job_id, files_done=done, files_total=files_total
+                )
+
+        if job_id:
+            ctx.zip_imports.set_importing(job_id, files_done=0, files_total=len(jobs))
+        for outcome in ctx.objects.import_files(
+            db, product, jobs, note, on_progress=_on_import_progress
+        ):
             if outcome.error is not None:
                 failed.append(
                     BatchItemResult(
@@ -1209,6 +1310,13 @@ async def import_from_zip(
                         message="The file was not added.",
                     )
                 )
+        if job_id:
+            ctx.zip_imports.set_done(job_id, files_total=len(ok))
+    except Exception as exc:
+        if job_id:
+            message = getattr(exc, "message", None) or str(exc) or "Compressed import failed."
+            ctx.zip_imports.set_error(job_id, str(message))
+        raise
     finally:
         if zip_tmp is not None:
             zip_tmp.unlink(missing_ok=True)

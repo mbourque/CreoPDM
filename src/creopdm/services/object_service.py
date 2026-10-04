@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -489,6 +490,7 @@ class ObjectService:
         jobs: list[tuple[Path, str | None, str | None]],
         comment: str | None = None,
         batch_total: int | None = None,
+        on_progress: Callable[[str, int, int], None] | None = None,
     ) -> list[ImportJobResult]:
         """Copy accepted files, then one Git add and one commit.
 
@@ -498,7 +500,17 @@ class ObjectService:
         ``batch_total`` is the full picker count when this call is one chunk of a
         larger Add — used for the auto History comment so chunk size (e.g. 5)
         is not mistaken for the batch size.
+
+        ``on_progress(phase, done, total)`` is optional (zip import busy overlay).
         """
+        def _progress(phase: str, done: int = 0, total: int = 0) -> None:
+            if on_progress is None:
+                return
+            try:
+                on_progress(phase, int(done), int(total))
+            except Exception:
+                logger.debug("import_files on_progress failed", exc_info=True)
+
         if not jobs:
             return []
         ensure_product_mutable(product, action="add files")
@@ -582,6 +594,7 @@ class ObjectService:
             captured_head = self._store.capture_checkpoint(repo) if git_plans else None
             try:
                 total = len(git_plans)
+                _progress("importing", 0, total)
                 for index, plan in enumerate(git_plans, start=1):
                     destination = ensure_within(repo, repo / Path(plan.relative))
                     created_copy, digest, size = copy_file_hashed(plan.source, destination)
@@ -596,7 +609,9 @@ class ObjectService:
                         pass
                     if index == 1 or index == total or index % 25 == 0:
                         logger.info("Copied %s/%s from source", index, total)
+                        _progress("importing", index, total)
                 if git_plans:
+                    _progress("committing", total, total)
                     add_paths = [plan.relative for plan in git_plans]
                     remove_paths = list(
                         dict.fromkeys(
@@ -614,6 +629,7 @@ class ObjectService:
                         user,
                         remove_relative_paths=remove_paths,
                     )
+                    _progress("recording", 0, total)
                     self._record_batch_versions(
                         session,
                         product,
@@ -624,13 +640,15 @@ class ObjectService:
                         now,
                     )
                     self._record_import_activity(session, product, git_plans, user)
-                    for plan in git_plans:
+                    for index, plan in enumerate(git_plans, start=1):
                         destination = ensure_within(repo, repo / Path(plan.relative))
                         self._purge_numbered_siblings(destination)
                         try:
                             set_file_readonly(destination)
                         except Exception:
                             logger.warning("Could not mark %s read-only after import", destination)
+                        if index == 1 or index == total or index % 25 == 0:
+                            _progress("recording", index, total)
             except Exception as exc:
                 logger.exception("Batch import failed for %s files", len(git_plans))
                 if captured_head:

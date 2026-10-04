@@ -451,12 +451,14 @@ class ImportZipRequest(BaseModel):
     zip_path: str = ""
     parent_folder: str = ""
     comment: str | None = None
+    job_id: str = ""
 
 
 class ImportZipResponse(BaseModel):
     ok: list[BatchAddItem] = Field(default_factory=list)
     failed: list[BatchAddItem] = Field(default_factory=list)
     message: str = ""
+    job_id: str = ""
 
 
 class CacheFileInfo(BaseModel):
@@ -2065,12 +2067,15 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             headers["Authorization"] = f"Bearer {token}"
         url = f"{base}/api/products/{quote(product_id)}/objects/from-zip"
         parent = (payload.parent_folder or "").strip().replace("\\", "/").strip("/")
-        data: dict[str, str] = {}
+        data: dict[str, str] = {"zip_bytes": str(size)}
         if parent:
             data["parent_folder"] = parent
         comment = (payload.comment or "").strip()
         if comment:
             data["comment"] = comment
+        job_id = (payload.job_id or "").strip()
+        if job_id:
+            data["job_id"] = job_id
         zip_timeout = httpx.Timeout(connect=30.0, read=3600.0, write=3600.0, pool=30.0)
         try:
             with path.open("rb") as handle:
@@ -2136,7 +2141,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             len(failed),
             path.name,
         )
-        return ImportZipResponse(ok=ok, failed=failed)
+        return ImportZipResponse(ok=ok, failed=failed, job_id=job_id)
 
     @app.post("/delete-paths", response_model=DeletePathsResponse)
     def delete_cache_paths(payload: DeletePathsRequest) -> DeletePathsResponse:

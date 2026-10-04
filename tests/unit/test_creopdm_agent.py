@@ -2059,6 +2059,7 @@ def test_agent_import_zip_streams_to_from_zip(tmp_path, monkeypatch):
         assert uploaded[0]["url"].endswith("/api/products/proj-zip/objects/from-zip")
         assert uploaded[0]["data"]["parent_folder"] == "Drawings"
         assert uploaded[0]["data"]["comment"] == "zip add"
+        assert uploaded[0]["data"]["zip_bytes"] == str(zip_path.stat().st_size)
 
 
 def test_agent_import_zip_rejects_oversize(tmp_path, monkeypatch):

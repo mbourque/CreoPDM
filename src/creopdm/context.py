@@ -25,6 +25,7 @@ from creopdm.services.product_watch_service import ProductWatchService
 from creopdm.services.user_service import UserService
 from creopdm.services.where_used_index_jobs import WhereUsedIndexJobs
 from creopdm.services.workspace_service import WorkspaceService
+from creopdm.services.zip_import_jobs import ZipImportJobs
 from creopdm.storage.base import VersionStore
 from creopdm.utils.identity import CurrentUserProvider
 
@@ -49,6 +50,7 @@ class AppContext:
     creo_service: CreoService
     metadata: MetadataService
     where_used_index: WhereUsedIndexJobs
+    zip_imports: ZipImportJobs
     email: EmailService
     notifications: NotificationService
     product_watches: ProductWatchService

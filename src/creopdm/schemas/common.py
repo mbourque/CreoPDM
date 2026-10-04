@@ -813,3 +813,21 @@ class WhereUsedIndexJobResponse(BaseModel):
     done: bool = False
     started_at: float | None = None
     finished_at: float | None = None
+
+
+class ZipImportJobResponse(BaseModel):
+    """Progress for Add ▾ → Compressed data… (zip upload / extract / import)."""
+
+    job_id: str
+    product_id: str
+    state: str = "queued"
+    phase: str = "queued"
+    message: str = ""
+    bytes_total: int = 0
+    bytes_done: int = 0
+    files_total: int = 0
+    files_done: int = 0
+    error: str | None = None
+    done: bool = False
+    started_at: float | None = None
+    finished_at: float | None = None

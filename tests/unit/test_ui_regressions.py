@@ -401,11 +401,16 @@ def test_compressed_data_add_requires_agent_and_busy_overlay():
     assert 'filter_mode: "archive"' in script
     assert "/pick-files" in script
     assert "/import-zip" in script
-    assert "Uploading and importing compressed data…" in script
+    assert "Starting compressed import…" in script
+    assert "pollZipImportJob" in script
+    assert "zip-import/jobs" in script
+    assert "job_id: jobId" in script
     assert "Start creopdm-agent on this Creo PC to add compressed data." in script
+    assert "phase text" in docs
     assert "Zip archives" in docs or "*.zip" in docs
     products = (ROOT / "src" / "creopdm" / "api" / "products.py").read_text(encoding="utf-8")
     assert "/objects/from-zip" in products
+    assert "/zip-import/jobs" in products
     assert "ensure_product_mutable" in products
     dialog = (ROOT / "src" / "creopdm" / "utils" / "native_dialog.py").read_text(encoding="utf-8")
     assert "def archive_dialog_filter_pairs(" in dialog

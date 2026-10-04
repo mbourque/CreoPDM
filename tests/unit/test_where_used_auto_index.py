@@ -36,6 +36,9 @@ def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
     )[0]
     assert "indexWhereUsedUnderBusy(productId)" in zip_submit
     assert "import-zip" in zip_submit
+    assert "pollZipImportJob" in zip_submit
+    assert "zip-import/jobs" in zip_submit
     docs = (root / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "keep the busy overlay and run **Where Used** indexing there" in docs
     assert "Same Where Used overlay step for **Add folder…**" in docs
+    assert "phase text" in docs

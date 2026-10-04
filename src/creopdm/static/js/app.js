@@ -3245,6 +3245,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     void chooseCompressedZip();
   });
   $("#compressed-cancel")?.addEventListener("click", () => compressedDialog?.close());
+  async function pollZipImportJob(productId, jobId, { signal } = {}) {
+    // Busy overlay text while agent streams the zip and the server imports.
+    while (!signal?.aborted) {
+      try {
+        const response = await fetch(
+          `/api/products/${encodeURIComponent(productId)}/zip-import/jobs/${encodeURIComponent(jobId)}`,
+          { signal }
+        );
+        if (response.ok) {
+          const body = await response.json();
+          const message = String(body.message || "").trim();
+          if (message) setBusyMessage(message);
+          if (body.done) return body;
+        }
+      } catch (err) {
+        if (signal?.aborted) return null;
+        /* keep polling through transient errors */
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+    }
+    return null;
+  }
+
   compressedForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (addInFlight) {
@@ -3270,25 +3293,52 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     addInFlight = true;
     compressedDialog?.close();
+    const pollAbort = new AbortController();
     try {
       const result = await withBusy(
-        "Uploading and importing compressed data…",
+        "Starting compressed import…",
         async () => {
-          const response = await fetch(`${agentBase()}/import-zip`, {
-            method: "POST",
-            headers: agentAuthHeaders({ "Content-Type": "application/json" }),
-            body: JSON.stringify({
-              pdm_url: window.location.origin,
-              product_id: productId,
-              zip_path: chosenZipPath,
-              parent_folder: currentFolder() || "",
-              ...agentPdmAuth(),
-            }),
-          });
-          if (!response.ok) {
-            throw new Error(await readError(response));
+          const jobResponse = await fetch(
+            `/api/products/${encodeURIComponent(productId)}/zip-import/jobs`,
+            { method: "POST" }
+          );
+          if (!jobResponse.ok) {
+            throw new Error(await readError(jobResponse));
           }
-          return response.json();
+          const job = await jobResponse.json();
+          const jobId = String(job.job_id || "").trim();
+          if (!jobId) {
+            throw new Error("Could not start zip import progress.");
+          }
+          if (job.message) setBusyMessage(job.message);
+          const pollPromise = pollZipImportJob(productId, jobId, {
+            signal: pollAbort.signal,
+          });
+          try {
+            const response = await fetch(`${agentBase()}/import-zip`, {
+              method: "POST",
+              headers: agentAuthHeaders({ "Content-Type": "application/json" }),
+              body: JSON.stringify({
+                pdm_url: window.location.origin,
+                product_id: productId,
+                zip_path: chosenZipPath,
+                parent_folder: currentFolder() || "",
+                job_id: jobId,
+                ...agentPdmAuth(),
+              }),
+            });
+            if (!response.ok) {
+              throw new Error(await readError(response));
+            }
+            return response.json();
+          } finally {
+            pollAbort.abort();
+            try {
+              await pollPromise;
+            } catch {
+              /* aborted */
+            }
+          }
         }
       );
       const failed = result?.failed || [];
@@ -3325,6 +3375,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
       }
     } catch (err) {
+      pollAbort.abort();
       showError(
         $("#toolbar-error"),
         err?.message || "Could not import the compressed zip."

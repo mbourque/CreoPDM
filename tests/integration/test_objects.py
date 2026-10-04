@@ -567,6 +567,47 @@ def test_from_zip_rejects_non_zip_name(client, repo_parent):
 
 
 @requires_git
+def test_from_zip_job_reports_done_progress(client, repo_parent):
+    """Compressed import job reaches done with phase messages for the busy overlay."""
+    import io
+    import zipfile
+
+    product, _location = _create_product(client, repo_parent)
+    pid = product["uuid"]
+    started = client.post(f"/api/products/{pid}/zip-import/jobs")
+    assert started.status_code == 200, started.text
+    job = started.json()
+    job_id = job["job_id"]
+    assert job["phase"] == "queued"
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("kit/a.prt.1", b"a-bytes")
+        zf.writestr("kit/b.prt.1", b"b-bytes")
+    payload = buf.getvalue()
+    added = client.post(
+        f"/api/products/{pid}/objects/from-zip",
+        files={"file": ("kit.zip", payload, "application/zip")},
+        data={
+            "parent_folder": "",
+            "comment": "Zip progress",
+            "job_id": job_id,
+            "zip_bytes": str(len(payload)),
+        },
+    )
+    assert added.status_code == 200, added.text
+    assert len(added.json()["ok"]) == 2
+
+    status = client.get(f"/api/products/{pid}/zip-import/jobs/{job_id}")
+    assert status.status_code == 200, status.text
+    body = status.json()
+    assert body["done"] is True
+    assert body["state"] == "done"
+    assert body["phase"] == "done"
+    assert body["files_total"] == 2
+
+
+@requires_git
 def test_export_product_and_selection_zip(client, repo_parent, tmp_path):
     """Export ▾ — whole product and selection download vault tip as zip."""
     import io
