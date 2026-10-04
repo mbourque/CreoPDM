@@ -1333,6 +1333,26 @@ def test_search_form_only_on_files_tab():
     assert "leave Search visible on Checked out / Modified / New files" in docs
 
 
+def test_soft_nav_reloads_app_js_when_cache_bust_changes():
+    """After deploy, soft-nav must not keep a stale in-memory app.js open path."""
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    soft = _between(script, "function softNavigate(", "function leavePage(")
+    assert "function loadUpdatedAppJs(" in script
+    assert "loadUpdatedAppJs(nextAppJs)" in soft
+    assert 'script[src*="/client/app.js"]' in soft
+    assert 'getAttribute("data-creo-open-mode")' in soft
+    assert "__creopdmSkipAutoBoot" in script
+    assert 'getAttribute("data-creo-open-mode")' in _between(
+        script, "function creoOpenMode(", "function creoExternalBridge("
+    )
+    local_open = _between(script, "async function openLocalCacheRelative(", "async function openPdmObject(")
+    assert "Waiting for Creo.JS…" in local_open
+    assert "do not open via Windows file association from the embedded browser" in local_open
+    assert "pick up the new `app.js`" in docs
+    assert "stale Windows-association path" in docs
+
+
 def test_list_tab_survives_details_and_back():
     """Files / Checked out / Modified / New files must restore after Details → Back."""
     script = _app_js()

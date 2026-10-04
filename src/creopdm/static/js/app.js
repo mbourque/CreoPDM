@@ -390,6 +390,30 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  function loadUpdatedAppJs(src) {
+    // Soft-nav cannot replace <script> via innerHTML; fetch the new cache-bust URL
+    // so __creopdmBoot updates without a hard reload that drops Creo.JS.
+    // Keep __creopdmSkipAutoBoot true until the new file's bottom guard runs (it
+    // clears the flag) — clearing here in onload races the sync script body.
+    return new Promise((resolve, reject) => {
+      window.__creopdmSkipAutoBoot = true;
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = () => {
+        window.__creopdmAppJsSrc = src;
+        [...document.querySelectorAll('script[src*="/client/app.js"]')]
+          .filter((el) => el !== script)
+          .forEach((el) => el.remove());
+        resolve();
+      };
+      script.onerror = () => {
+        window.__creopdmSkipAutoBoot = false;
+        reject(new Error("Could not load updated CreoPDM client script."));
+      };
+      (document.head || document.documentElement).appendChild(script);
+    });
+  }
+
   function softNavigate(url, historyMode = "push") {
     if (metadataCollectJob.running) {
       showOk("Finish Collect metadata (or wait for it) before leaving this page.");
@@ -458,13 +482,36 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const creo = curCluster.querySelector("#creo-status");
           curCluster.innerHTML = nextCluster.innerHTML;
           const placeholder = curCluster.querySelector("#creo-status");
-          if (creo && placeholder) placeholder.replaceWith(creo);
+          if (creo && placeholder) {
+            // Keep the live Connected pill, but refresh open-mode from the new HTML
+            // so Settings → Embedded is not stuck on a stale association attr.
+            const openMode = placeholder.getAttribute("data-creo-open-mode");
+            if (openMode != null) creo.setAttribute("data-creo-open-mode", openMode);
+            placeholder.replaceWith(creo);
+          }
         }
         const nextUrl = response.url || href;
         if (mode === "push") {
           history.pushState({ creopdmSoft: 1 }, "", nextUrl);
         } else if (mode === "replace") {
           history.replaceState({ creopdmSoft: 1 }, "", nextUrl);
+        }
+        // Soft-nav only swaps main.shell — <script app.js> stays in memory. After
+        // deploy/pull-restart the HTML cache-bust changes; load that script so Open
+        // (Modified/New local) is not stuck on the previous association path.
+        const nextAppJs =
+          doc.querySelector('script[src*="/client/app.js"]')?.getAttribute("src") || "";
+        const curAppJs =
+          window.__creopdmAppJsSrc
+          || document.querySelector('script[src*="/client/app.js"]')?.getAttribute("src")
+          || "";
+        if (nextAppJs && curAppJs && nextAppJs !== curAppJs) {
+          try {
+            await loadUpdatedAppJs(nextAppJs);
+          } catch {
+            window.location.href = href;
+            return;
+          }
         }
         // Keep the live Creo.JS bridge — rebind UI only.
         EventTarget.prototype.addEventListener = origAddEventListener;
@@ -5738,8 +5785,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function creoOpenMode() {
+    // Prefer getAttribute — Creo CEF dataset on the status pill is unreliable and
+    // used to read as "" → association, so Modified/New local open went via Windows.
     const el = $("#creo-status");
-    return String(el?.dataset?.creoOpenMode || "").trim().toLowerCase();
+    if (!el) return "";
+    if (typeof el.getAttribute === "function") {
+      return String(el.getAttribute("data-creo-open-mode") || "").trim().toLowerCase();
+    }
+    return String(el.dataset?.creoOpenMode || "").trim().toLowerCase();
   }
 
   function creoExternalBridge() {
@@ -7490,6 +7543,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const diskName = PathBasename(relativePath) || "file";
     const logicalName = logicalUploadName(diskName) || diskName;
     const embeddedMode = creoOpenMode() === "embedded";
+    // Same brief Creo.JS wait as vault Open — do not fall through to Windows
+    // association from the embedded browser while the bridge is still linking.
+    if (embeddedMode && !hostedCreoJS() && !likelyStandaloneBrowser()) {
+      setBusyMessage("Waiting for Creo.JS…");
+      try {
+        await Promise.race([
+          creoJSReady,
+          new Promise((resolve) => window.setTimeout(resolve, 8000)),
+        ]);
+      } catch {
+        /* ignore */
+      }
+      for (let i = 0; i < 12 && !hostedCreoJS(); i += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+      }
+    }
     const useCreoSession = hostedCreoJS() && embeddedMode;
     if (useCreoSession) {
       setBusyMessage("Opening in Creo…");
@@ -7507,7 +7576,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (embeddedMode && !useCreoSession && !likelyStandaloneBrowser()) {
       throw new Error(
-        "Creo.JS is not connected yet. Wait until the status shows Creo: Connected, then open the file again."
+        "Creo.JS is not connected yet. Wait until the status shows Creo: Connected, then open the file again — do not open via Windows file association from the embedded browser."
       );
     }
     setBusyMessage("Opening with Windows…");
@@ -11103,4 +11172,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 };
 
-window.__creopdmBoot({ soft: false });
+// Soft-nav may inject a newer /client/app.js after deploy — skip the auto hard
+// boot so the caller can soft-boot and keep Creo.JS Connected.
+if (!window.__creopdmSkipAutoBoot) {
+  const tag = document.querySelector('script[src*="/client/app.js"]');
+  if (tag?.getAttribute("src")) window.__creopdmAppJsSrc = tag.getAttribute("src");
+  window.__creopdmBoot({ soft: false });
+} else {
+  window.__creopdmSkipAutoBoot = false;
+}
