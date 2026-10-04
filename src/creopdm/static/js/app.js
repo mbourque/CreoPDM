@@ -4319,7 +4319,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (!row.classList.contains("folder-row")) {
         if (row.dataset.uuid) return { objectId: row.dataset.uuid };
         if (row.dataset.relativePath) {
-          return { relativePath: row.dataset.relativePath, productId: currentProductId() };
+          return {
+            relativePath: row.dataset.relativePath,
+            productId: currentProductId(),
+            localCache: row.dataset.localCache === "1",
+          };
         }
       }
     }
@@ -4849,7 +4853,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const uuid = openLink?.dataset?.uuid || row.dataset.uuid || "";
     if (uuid) return { objectId: uuid };
     const relativePath = openLink?.dataset?.relativePath || row.dataset.relativePath || "";
-    if (relativePath) return { relativePath, productId: currentProductId() };
+    if (relativePath) {
+      return {
+        relativePath,
+        productId: currentProductId(),
+        // New file (local) lives only in the agent workspace — not the vault yet.
+        localCache: row.dataset.localCache === "1",
+      };
+    }
     return null;
   }
 
@@ -7303,6 +7314,54 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return response.json();
   }
 
+  function joinLocalWorkspacePath(directory, relativePath) {
+    const root = String(directory || "").replace(/[\\/]+$/, "");
+    const rel = String(relativePath || "").replace(/\\/g, "/").replace(/^\/+/, "");
+    if (!root || !rel) return "";
+    const sep = root.includes("\\") ? "\\" : "/";
+    return `${root}${sep}${rel.replace(/\//g, sep)}`;
+  }
+
+  async function openLocalCacheRelative(productId, relativePath) {
+    // New file (local) — open from agent workspace; there is no vault tip yet.
+    const agent = await probeCreoAgent();
+    if (!agent) {
+      throw new Error(
+        "Start creopdm-agent on this Creo PC to open new files that exist only in the local workspace."
+      );
+    }
+    const directory = await agentWorkdir(productId, currentVaultFolder());
+    const fullPath = joinLocalWorkspacePath(directory, relativePath);
+    if (!fullPath) {
+      throw new Error("Could not resolve the local workspace path for that file.");
+    }
+    const filename = String(relativePath || "").replace(/\\/g, "/").split("/").pop() || "file";
+    const embeddedMode = creoOpenMode() === "embedded";
+    const useCreoSession = hostedCreoJS() && embeddedMode;
+    if (useCreoSession) {
+      setBusyMessage("Opening in Creo…");
+      await whenCreoJSReady();
+      const opened = await withTimeout(
+        window.CreoJS.openModel(directory, filename, "", filename, fullPath),
+        90000,
+        "Creo did not finish opening the model (session may be offline)."
+      );
+      const openedText = opened == null ? "" : String(opened);
+      if (openedText.indexOf("CREOPDM_ERROR:") === 0) {
+        throw new Error(openedText.slice("CREOPDM_ERROR:".length));
+      }
+      return { path: fullPath, filename, working_directory: directory };
+    }
+    if (embeddedMode && !useCreoSession && !likelyStandaloneBrowser()) {
+      throw new Error(
+        "Creo.JS is not connected yet. Wait until the status shows Creo: Connected, then open the file again."
+      );
+    }
+    setBusyMessage("Opening with Windows…");
+    await openViaAgent(fullPath, "association");
+    return { path: fullPath, filename, working_directory: directory };
+  }
+
   async function openPdmObject(target) {
     // Keep the busy overlay up through prepare + materialize until Creo/OS open starts.
     // Always clear on timeout/error so Session offline / hung agent cannot leave Opening… stuck.
@@ -7337,6 +7396,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function openPdmObjectWork(target) {
+    const spec = typeof target === "string" ? { objectId: target } : target || {};
+    // New files that exist only in the local workspace must not hit /api/creo/open
+    // (that looks in the vault and returns "Vault file not found").
+    if (spec.localCache && spec.relativePath && !spec.objectId) {
+      const productId = spec.productId || currentProductId();
+      if (!productId) {
+        showError($("#toolbar-error"), "No product is selected.");
+        return null;
+      }
+      return openLocalCacheRelative(productId, spec.relativePath);
+    }
     // Only use Creo.JS when we are actually in Creo's embedded browser.
     // Outside Creo (Chrome/Edge), always materialize + Windows association.
     // Do not await creoJSReady first on the association path — Session offline
@@ -9518,16 +9588,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return checkinQueueCache;
   }
 
-  function invalidateCheckinQueueCache() {
-    checkinQueueCache = {
-      productId: "",
-      at: 0,
-      saves: [],
-      created: [],
-      newerLocal: [],
-    };
-  }
-
   async function loadCheckinQueueParts(productId) {
     const [queueResponse, cacheFiles, objectsResponse] = await Promise.all([
       fetch(`/api/products/${productId}/checkin-queue`),
@@ -9697,18 +9757,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     body.appendChild(row);
   }
 
-  function showQueueLoading(body, message) {
-    body.replaceChildren();
-    const loading = document.createElement("tr");
-    loading.className = "empty-row";
-    const loadingCell = document.createElement("td");
-    loadingCell.colSpan = 5;
-    loadingCell.textContent = message;
-    loading.appendChild(loadingCell);
-    body.appendChild(loading);
-    refreshTabMetrics();
-  }
-
   function showQueueEmpty(body, message) {
     body.replaceChildren();
     const row = document.createElement("tr");
@@ -9815,28 +9863,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const productId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
     const body = $("#modified-table tbody");
     if (!productId || !body) return 0;
-    const cached = !forceNetwork ? cachedCheckinQueueParts(productId) : null;
-    if (cached) {
-      const count = await applyCheckinQueueParts(productId, cached, "modified");
-      // Keep the list honest without wiping to a loading row.
-      if (!quiet) void loadModifiedTab({ quiet: true, forceNetwork: true });
-      return count;
-    }
-    if (checkinQueuePrefetch && !forceNetwork) {
-      if (!quiet) {
-        showQueueLoading(body, "Looking for modified vault and local workspace files…");
-      }
-      const parts = await checkinQueuePrefetch;
-      if (parts) return applyCheckinQueueParts(productId, parts, "modified");
-    }
-    if (!quiet) {
-      showQueueLoading(body, "Looking for modified vault and local workspace files…");
-    }
+    // Never flash “Looking for…” — badge/count already moved; keep prior rows until ready.
     try {
+      if (!forceNetwork && checkinQueuePrefetch) {
+        const parts = await checkinQueuePrefetch;
+        if (parts) return applyCheckinQueueParts(productId, parts, "modified");
+      }
+      const cached = !forceNetwork ? cachedCheckinQueueParts(productId) : null;
+      if (cached) {
+        const count = await applyCheckinQueueParts(productId, cached, "modified");
+        if (!quiet) void loadModifiedTab({ quiet: true, forceNetwork: true });
+        return count;
+      }
       const parts = await loadCheckinQueueParts(productId);
       return await applyCheckinQueueParts(productId, parts, "modified");
     } catch {
-      if (!quiet) {
+      if (!quiet && !body.querySelector(".queue-row")) {
         showQueueEmpty(body, "Could not load modified files.");
       }
       return lastModifiedPending || 0;
@@ -9849,27 +9891,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const productId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
     const body = $("#changes-table tbody");
     if (!productId || !body) return 0;
-    const cached = !forceNetwork ? cachedCheckinQueueParts(productId) : null;
-    if (cached) {
-      const count = await applyCheckinQueueParts(productId, cached, "changes");
-      if (!quiet) void loadChangesTab({ quiet: true, forceNetwork: true });
-      return count;
-    }
-    if (checkinQueuePrefetch && !forceNetwork) {
-      if (!quiet) {
-        showQueueLoading(body, "Looking for new vault and local workspace files…");
-      }
-      const parts = await checkinQueuePrefetch;
-      if (parts) return applyCheckinQueueParts(productId, parts, "changes");
-    }
-    if (!quiet) {
-      showQueueLoading(body, "Looking for new vault and local workspace files…");
-    }
+    // Never flash “Looking for…” — badge/count already moved; keep prior rows until ready.
     try {
+      if (!forceNetwork && checkinQueuePrefetch) {
+        const parts = await checkinQueuePrefetch;
+        if (parts) return applyCheckinQueueParts(productId, parts, "changes");
+      }
+      const cached = !forceNetwork ? cachedCheckinQueueParts(productId) : null;
+      if (cached) {
+        const count = await applyCheckinQueueParts(productId, cached, "changes");
+        if (!quiet) void loadChangesTab({ quiet: true, forceNetwork: true });
+        return count;
+      }
       const parts = await loadCheckinQueueParts(productId);
       return await applyCheckinQueueParts(productId, parts, "changes");
     } catch {
-      if (!quiet) {
+      if (!quiet && !body.querySelector(".queue-row")) {
         showQueueEmpty(body, "Could not load new files.");
       }
       return lastChangesPending || 0;
@@ -10621,11 +10658,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           lastChangesPending !== newCount || lastModifiedPending !== modCount;
         lastChangesPending = newCount;
         lastModifiedPending = modCount;
-        // Badge already moved — prefetch row lists so tab open skips the scan flash.
+        // Badge already moved — prefetch row lists so tab open paints without a scan flash.
+        // Keep the previous cache until the prefetch finishes (do not invalidate first).
         if (countsMoved) {
           knownWorkspacePaths.at = 0;
           cachedProductObjects.at = 0;
-          invalidateCheckinQueueCache();
           void prefetchCheckinQueueParts(watchProductId);
         }
       }
@@ -10663,6 +10700,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       document.addEventListener(eventName, noteUserActivity, { passive: true, capture: true });
     });
     pollWorkspaceWatch();
+    // SSR may already show Modified · N / New files · N — warm lists before first click.
+    const ssrMod = Number(checkinBtn?.dataset?.pendingSaves || 0);
+    const ssrNew = Number(checkinBtn?.dataset?.newFiles || 0);
+    if (ssrMod || ssrNew) void prefetchCheckinQueueParts(watchProductId);
   }
 
   document.querySelector("#detail-open-btn")?.addEventListener("click", async (event) => {

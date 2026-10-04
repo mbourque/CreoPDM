@@ -286,9 +286,15 @@ def test_modified_tab_between_checked_out_and_new_files():
     assert "await loadModifiedTab({ quiet: true })" in script
     assert "function prefetchCheckinQueueParts(" in script
     assert "function cachedCheckinQueueParts(" in script
-    assert "invalidateCheckinQueueCache()" in script
     assert "forceNetwork: true" in script
+    changes_loader = _between(script, "async function loadChangesTab(", "async function loadCheckedOutTab(")
+    modified_loader = _between(script, "async function loadModifiedTab(", "async function loadChangesTab(")
+    assert "showQueueLoading" not in changes_loader
+    assert "showQueueLoading" not in modified_loader
+    assert "Looking for new vault and local workspace files" not in changes_loader
+    assert "Looking for modified vault and local workspace files" not in modified_loader
     assert "warm the row list" in docs
+    assert "Looking for…" in docs or "Looking for" in docs
     assert "**Modified** tab" in docs or "**Modified tab**" in docs
     assert "not modified vault tips" in docs
     assert "live counts for Modified and New files" in docs
@@ -571,6 +577,13 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "Waiting for Creo.JS…" in open_fn
     assert "Creo.JS is not connected yet" in open_fn
     assert "Windows file association from the embedded browser" in open_fn
+    assert "spec.localCache && spec.relativePath" in open_fn
+    assert "openLocalCacheRelative(" in open_fn
+    assert "function openLocalCacheRelative(" in script
+    assert "function joinLocalWorkspacePath(" in script
+    assert "localCache: row.dataset.localCache === \"1\"" in script
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "New file (local)" in docs and "Vault file not found" in docs
     open_wrap = _between(script, "async function openPdmObject(", "async function openPdmObjectWork(")
     assert 'withBusy("Preparing…"' in open_wrap
     assert "withTimeout(" in open_wrap

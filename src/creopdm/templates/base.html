@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-queue-prefetch">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ app_version }}-queue-no-scan-flash">
   <script>
     /* Suppress PTC creojs.js noise outside Creo's browser (and when Creo injects its own copy). */
     (function () {
@@ -2276,6 +2276,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-queue-prefetch"></script>
+  <script src="/client/app.js?v={{ app_version }}-open-local-new"></script>
 </body>
 </html>
