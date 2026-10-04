@@ -271,14 +271,27 @@ def test_modified_tab_between_checked_out_and_new_files():
     assert "`Modified · ${n}`" in counts
     assert "`New files · ${n}`" in counts
     assert "Number(pendingSaves || 0) + Number(newFiles || 0)" not in counts
+    apply = _between(script, "async function applyCheckinQueueParts(", "function appendQueueRow(")
+    assert 'focus === "modified"' in apply
+    assert "renderModifiedQueueRows" in apply
+    assert "renderNewFilesQueueRows" in apply
+    assert 'applyCheckinQueueParts(productId, parts, "changes")' in script
+    assert 'applyCheckinQueueParts(productId, cached, "changes")' in script
+    assert 'applyCheckinQueueParts(productId, parts, "modified")' in script
+    assert 'applyCheckinQueueParts(productId, cached, "modified")' in script
     changes = _between(script, "async function loadChangesTab(", "async function loadCheckedOutTab(")
-    assert "renderNewFilesQueueRows" in changes
-    assert "renderModifiedQueueRows" not in changes
+    assert 'focus === "modified"' not in changes
+    assert 'applyCheckinQueueParts(productId' in changes
     modified = _between(script, "async function loadModifiedTab(", "async function loadChangesTab(")
-    assert "renderModifiedQueueRows" in modified
-    assert "renderNewFilesQueueRows" not in modified
+    assert 'applyCheckinQueueParts(productId' in modified
+    assert 'forceNetwork' in modified
     assert 'activeTab === "modified"' in script
     assert "await loadModifiedTab({ quiet: true })" in script
+    assert "function prefetchCheckinQueueParts(" in script
+    assert "function cachedCheckinQueueParts(" in script
+    assert "invalidateCheckinQueueCache()" in script
+    assert "forceNetwork: true" in script
+    assert "warm the row list" in docs
     assert "**Modified** tab" in docs or "**Modified tab**" in docs
     assert "not modified vault tips" in docs
     assert "live counts for Modified and New files" in docs

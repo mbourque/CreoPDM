@@ -6845,6 +6845,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   let lastModifiedPending = null;
   let changesReloadBusy = false;
   let modifiedReloadBusy = false;
+  // Warm row lists when the tab badge changes so opening Modified / New files
+  // does not flash “Looking for…” after the count already moved.
+  let checkinQueueCache = {
+    productId: "",
+    at: 0,
+    saves: [],
+    created: [],
+    newerLocal: [],
+  };
+  let checkinQueuePrefetch = null;
 
   function markKnownPath(rel, exact, logical, basenames) {
     const path = String(rel || "").replace(/\\/g, "/");
@@ -9492,6 +9502,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return Boolean($("#checkin-menu"));
   }
 
+  function rememberCheckinQueueParts(productId, parts) {
+    checkinQueueCache = {
+      productId: String(productId || ""),
+      at: Date.now(),
+      saves: Array.isArray(parts?.saves) ? parts.saves : [],
+      created: Array.isArray(parts?.created) ? parts.created : [],
+      newerLocal: Array.isArray(parts?.newerLocal) ? parts.newerLocal : [],
+    };
+  }
+
+  function cachedCheckinQueueParts(productId) {
+    if (!productId || checkinQueueCache.productId !== String(productId)) return null;
+    if (!checkinQueueCache.at) return null;
+    return checkinQueueCache;
+  }
+
+  function invalidateCheckinQueueCache() {
+    checkinQueueCache = {
+      productId: "",
+      at: 0,
+      saves: [],
+      created: [],
+      newerLocal: [],
+    };
+  }
+
   async function loadCheckinQueueParts(productId) {
     const [queueResponse, cacheFiles, objectsResponse] = await Promise.all([
       fetch(`/api/products/${productId}/checkin-queue`),
@@ -9521,7 +9557,65 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const newerLocal = (
       await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)
     ).filter((item) => !vaultSaveIds.has(String(item.uuid || "")));
-    return { saves, created, newerLocal };
+    const parts = { saves, created, newerLocal };
+    rememberCheckinQueueParts(productId, parts);
+    return parts;
+  }
+
+  function prefetchCheckinQueueParts(productId) {
+    if (!productId) return Promise.resolve(null);
+    if (checkinQueuePrefetch) return checkinQueuePrefetch;
+    checkinQueuePrefetch = loadCheckinQueueParts(productId)
+      .then((parts) => {
+        const modifiedCount = parts.saves.length + parts.newerLocal.length;
+        setCheckinQueueCounts(modifiedCount, parts.created.length);
+        lastModifiedPending = modifiedCount;
+        lastChangesPending = parts.created.length;
+        return parts;
+      })
+      .catch(() => null)
+      .finally(() => {
+        checkinQueuePrefetch = null;
+      });
+    return checkinQueuePrefetch;
+  }
+
+  async function applyCheckinQueueParts(productId, parts, focus) {
+    const saves = parts.saves || [];
+    const created = parts.created || [];
+    const newerLocal = parts.newerLocal || [];
+    const modifiedCount = saves.length + newerLocal.length;
+    setCheckinQueueCounts(modifiedCount, created.length);
+    lastModifiedPending = modifiedCount;
+    lastChangesPending = created.length;
+    rememberPendingCheckinIds([
+      ...saves.map((item) => item.uuid),
+      ...newerLocal
+        .filter((item) => item.can_checkin === "1")
+        .map((item) => item.uuid),
+    ]);
+    if (focus === "modified") {
+      const body = $("#modified-table tbody");
+      if (!body) return modifiedCount;
+      if (!modifiedCount) {
+        showQueueEmpty(body, "No modified vault or local workspace files.");
+        void refreshPendingCheckinIds(productId);
+        return 0;
+      }
+      renderModifiedQueueRows(body, productId, saves, newerLocal);
+      refreshTabMetrics();
+      return modifiedCount;
+    }
+    const body = $("#changes-table tbody");
+    if (!body) return created.length;
+    if (!created.length) {
+      showQueueEmpty(body, "No new vault or local workspace files.");
+      void refreshPendingCheckinIds(productId);
+      return 0;
+    }
+    renderNewFilesQueueRows(body, productId, created);
+    refreshTabMetrics();
+    return created.length;
   }
 
   function appendQueueRow(body, productId, values, className, meta = {}) {
@@ -9717,32 +9811,30 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function loadModifiedTab(options = {}) {
     const quiet = Boolean(options.quiet);
+    const forceNetwork = Boolean(options.forceNetwork);
     const productId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
     const body = $("#modified-table tbody");
     if (!productId || !body) return 0;
+    const cached = !forceNetwork ? cachedCheckinQueueParts(productId) : null;
+    if (cached) {
+      const count = await applyCheckinQueueParts(productId, cached, "modified");
+      // Keep the list honest without wiping to a loading row.
+      if (!quiet) void loadModifiedTab({ quiet: true, forceNetwork: true });
+      return count;
+    }
+    if (checkinQueuePrefetch && !forceNetwork) {
+      if (!quiet) {
+        showQueueLoading(body, "Looking for modified vault and local workspace files…");
+      }
+      const parts = await checkinQueuePrefetch;
+      if (parts) return applyCheckinQueueParts(productId, parts, "modified");
+    }
     if (!quiet) {
       showQueueLoading(body, "Looking for modified vault and local workspace files…");
     }
     try {
-      const { saves, created, newerLocal } = await loadCheckinQueueParts(productId);
-      const modifiedCount = saves.length + newerLocal.length;
-      setCheckinQueueCounts(modifiedCount, created.length);
-      lastModifiedPending = modifiedCount;
-      lastChangesPending = created.length;
-      if (!modifiedCount) {
-        showQueueEmpty(body, "No modified vault or local workspace files.");
-        void refreshPendingCheckinIds(productId);
-        return modifiedCount;
-      }
-      renderModifiedQueueRows(body, productId, saves, newerLocal);
-      rememberPendingCheckinIds([
-        ...saves.map((item) => item.uuid),
-        ...newerLocal
-          .filter((item) => item.can_checkin === "1")
-          .map((item) => item.uuid),
-      ]);
-      refreshTabMetrics();
-      return modifiedCount;
+      const parts = await loadCheckinQueueParts(productId);
+      return await applyCheckinQueueParts(productId, parts, "modified");
     } catch {
       if (!quiet) {
         showQueueEmpty(body, "Could not load modified files.");
@@ -9753,33 +9845,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function loadChangesTab(options = {}) {
     const quiet = Boolean(options.quiet);
+    const forceNetwork = Boolean(options.forceNetwork);
     const productId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
     const body = $("#changes-table tbody");
     if (!productId || !body) return 0;
+    const cached = !forceNetwork ? cachedCheckinQueueParts(productId) : null;
+    if (cached) {
+      const count = await applyCheckinQueueParts(productId, cached, "changes");
+      if (!quiet) void loadChangesTab({ quiet: true, forceNetwork: true });
+      return count;
+    }
+    if (checkinQueuePrefetch && !forceNetwork) {
+      if (!quiet) {
+        showQueueLoading(body, "Looking for new vault and local workspace files…");
+      }
+      const parts = await checkinQueuePrefetch;
+      if (parts) return applyCheckinQueueParts(productId, parts, "changes");
+    }
     if (!quiet) {
       showQueueLoading(body, "Looking for new vault and local workspace files…");
     }
     try {
-      const { saves, created, newerLocal } = await loadCheckinQueueParts(productId);
-      const modifiedCount = saves.length + newerLocal.length;
-      setCheckinQueueCounts(modifiedCount, created.length);
-      lastModifiedPending = modifiedCount;
-      lastChangesPending = created.length;
-      if (!created.length) {
-        showQueueEmpty(body, "No new vault or local workspace files.");
-        // Still merge vault/agent pending so list State stays accurate without this tab.
-        void refreshPendingCheckinIds(productId);
-        return 0;
-      }
-      renderNewFilesQueueRows(body, productId, created);
-      rememberPendingCheckinIds([
-        ...saves.map((item) => item.uuid),
-        ...newerLocal
-          .filter((item) => item.can_checkin === "1")
-          .map((item) => item.uuid),
-      ]);
-      refreshTabMetrics();
-      return created.length;
+      const parts = await loadCheckinQueueParts(productId);
+      return await applyCheckinQueueParts(productId, parts, "changes");
     } catch {
       if (!quiet) {
         showQueueEmpty(body, "Could not load new files.");
@@ -10529,8 +10617,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           }
         }
       } else {
+        const countsMoved =
+          lastChangesPending !== newCount || lastModifiedPending !== modCount;
         lastChangesPending = newCount;
         lastModifiedPending = modCount;
+        // Badge already moved — prefetch row lists so tab open skips the scan flash.
+        if (countsMoved) {
+          knownWorkspacePaths.at = 0;
+          cachedProductObjects.at = 0;
+          invalidateCheckinQueueCache();
+          void prefetchCheckinQueueParts(watchProductId);
+        }
       }
       const next = data.stamp || "";
       if (watchStamp === null) {
