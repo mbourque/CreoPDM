@@ -5462,7 +5462,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       {
         id: "files-context-discard-local",
         action: "discard-local",
-        label: "Remove from Workspace",
+        label: "Remove from Workspace…",
         title:
           "Move selected files from the local workspace on this PC to the Recycle Bin. Does not affect the vault or product list.",
       },

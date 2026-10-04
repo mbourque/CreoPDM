@@ -1464,7 +1464,10 @@ def test_files_context_menu_download_to_workspace():
     ensure = _between(script, "function ensureFilesContextMenu(", "function closeFilesContextMenu(")
     assert 'id: "files-context-discard-local"' in ensure
     assert 'action: "discard-local"' in ensure
-    assert "Remove from Workspace" in ensure
+    assert "Remove from Workspace…" in ensure
+    html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
+    assert 'id="discard-local-btn"' in html
+    assert ">Remove from Workspace…</button>" in html
     open_menu = _between(script, "function openFilesContextMenu(", "async function downloadSelectedToWorkspace(")
     assert "openItem.hidden = !caps.canOpen" in open_menu
     assert "detailsItem.hidden = !caps.canDetails" in open_menu
@@ -1500,7 +1503,7 @@ def test_files_context_menu_download_to_workspace():
     assert "**Undo Checkout**" in docs
     assert "**Add selected…**" in docs
     assert "**Export selected…**" in docs
-    assert "**Remove from Workspace**" in docs
+    assert "**Remove from Workspace…**" in docs
     assert "**hide** each item when that action is not possible" in docs
     assert "without `objects.view`" in docs or "`objects.view`" in docs
 

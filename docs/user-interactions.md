@@ -120,7 +120,7 @@ Empty folders (no files inside yet) must still be selectable and removable.
 | Click the row (not the name) | Select the file | |
 | Click the **file name** | Select, then open in Creo or Windows | Jump straight to Details |
 | Double-click the row | Open **Details** (Overview tab) | Also fire a second “Open” |
-| **Right-click** a file or folder row (or a multi-selection) | Show CreoPDM’s menu (not the browser menu) with the same labels as the toolbar where possible: **Open selected…**, **Details**, **Checkout selected**, **Undo Checkout**, **Add selected…** (New files only, needs `objects.add`), **Check in selected…**, **Download selected to workspace**, **Export selected…**, **Remove from Workspace** (local **New file (local)** rows only — same as Remove ▾ when that item is shown); if the row was not selected, select it first; **hide** each item when that action is not possible (same rules as the toolbar — do not grey items here); Open when one openable file is selected; Details when one file with a Details page is selected; Download needs `objects.view` and file ids, and is hidden when the selection is already local-workspace tips (**Newer local save** / **New file (local)**); Add selected only when every selected row is a **New files** queue row; Checkout / Undo / Check In / Export / Remove from Workspace follow role ∩ selection like the bottom buttons | Show **Download selected to workspace** for rows that are already in the local workspace; show **Add selected…** for Modified / Files / Checked out rows; show **Remove from Workspace** when Remove ▾ hides that item or the selection has no local New files; show actions the toolbar would not allow; check files out via Download; fail silently when the agent is offline on Download (say to start creopdm-agent); show the browser menu when at least one action is available |
+| **Right-click** a file or folder row (or a multi-selection) | Show CreoPDM’s menu (not the browser menu) with the same labels as the toolbar where possible: **Open selected…**, **Details**, **Checkout selected**, **Undo Checkout**, **Add selected…** (New files only, needs `objects.add`), **Check in selected…**, **Download selected to workspace**, **Export selected…**, **Remove from Workspace…** (local **New file (local)** rows only — same as Remove ▾ when that item is shown; ellipsis because it opens a confirm); if the row was not selected, select it first; **hide** each item when that action is not possible (same rules as the toolbar — do not grey items here); Open when one openable file is selected; Details when one file with a Details page is selected; Download needs `objects.view` and file ids, and is hidden when the selection is already local-workspace tips (**Newer local save** / **New file (local)**); Add selected only when every selected row is a **New files** queue row; Checkout / Undo / Check In / Export / Remove from Workspace follow role ∩ selection like the bottom buttons | Show **Download selected to workspace** for rows that are already in the local workspace; show **Add selected…** for Modified / Files / Checked out rows; show **Remove from Workspace…** when Remove ▾ hides that item or the selection has no local New files; omit the ellipsis on a confirm action; show actions the toolbar would not allow; check files out via Download; fail silently when the agent is offline on Download (say to start creopdm-agent); show the browser menu when at least one action is available |
 | See **Modified** | Means the local tip’s **content hash** differs from the vault tip (a higher Creo `.N` usually does; size/date alone never counts). Local workspace tips use `.creopdm_cache_index.json` (via the agent file list) when the on-disk size still matches the index — that proves the file is real before comparing to the vault tip; missing/stale index entries fall back to hashing. After refresh, clear Modified when vault/local no longer report that file as pending | Treat a rematerialized copy with the same hash as changed (including when only `.N`, size, or date differs); leave Modified stuck after a later refresh proves the tip matches; invent Modified rows that are not on disk / not in the local index |
 
 ---
@@ -317,7 +317,7 @@ Starter roles: Administrator, PDM Manager, and Engineer get both export permissi
 
 ## 12. Remove ▾
 
-1. **Remove from Workspace** — trash local copies on this PC only; vault and product list unchanged  
+1. **Remove from Workspace…** — trash local copies on this PC only; vault and product list unchanged (ellipsis — opens a confirm)  
 2. **Purge workspace…** — trash older local numbered saves that are below the vault version; vault unchanged (warning dialog)  
 3. **Clear workspace…** — trash everything **inside** this product’s local workspace folder on this PC (including local-only new files); keep the empty folder so Creo’s working directory can stay set; vault and product list unchanged  
 4. **Remove from Vault…** — delete CreoPDM’s vault copies; your original CAD folder stays; checkouts cancelled (warning dialog)  
@@ -325,11 +325,11 @@ Starter roles: Administrator, PDM Manager, and Engineer get both export permissi
 
 Destructive actions ask you to type the product name ([§13](#13-typing-the-product-name-to-confirm)).
 
-### Remove from Workspace
+### Remove from Workspace…
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Select local “new” files on New files and remove (Remove ▾ or right-click **Remove from Workspace**) | Move them to the Recycle Bin on this PC; right-click shows the item only when the toolbar button would be available | Change the vault or product file list; show the right-click item when Remove ▾ / Remove from Workspace is hidden |
+| Open **Remove from Workspace…** (Remove ▾ or right-click) | Show the ellipsis (opens a confirm); move selected local “new” files to the Recycle Bin on this PC; right-click shows the item only when the toolbar button would be available | Omit the ellipsis when it opens a confirm; change the vault or product file list; show the right-click item when Remove ▾ / Remove from Workspace… is hidden |
 | Agent not running | Tell you to start creopdm-agent | |
 
 ### Purge workspace…
