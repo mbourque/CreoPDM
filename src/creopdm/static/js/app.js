@@ -333,6 +333,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   // Files search lives only in the DOM — soft-nav to Details / Back replaces the
   // shell and would wipe it. Persist across leave + restore on the next Files boot.
   const LIST_SEARCH_KEY = "creopdmListSearch";
+  // Files list tab (Files / Checked out / Modified / New files) — same lifetime.
+  // Must be declared early: tab clicks / leavePage run before the late boot block.
+  const WATCH_KEY = "creopdmWatchRestore";
+  const LIST_RESTORE_TABS = new Set(["files", "checked-out", "modified", "changes"]);
 
   function persistListSearchState() {
     try {
@@ -353,6 +357,33 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       sessionStorage.setItem(
         LIST_SEARCH_KEY,
         JSON.stringify({ productId, q, ids })
+      );
+    } catch {
+      /* private mode / blocked storage */
+    }
+  }
+
+  function persistListTabState(tabName, ids) {
+    try {
+      if (!document.querySelector("#object-table")) return;
+      const rawTab =
+        tabName
+        ?? document.querySelector(".tabs .tab.is-active")?.dataset.tab
+        ?? "";
+      const activeTab = LIST_RESTORE_TABS.has(String(rawTab)) ? String(rawTab) : "";
+      if (!activeTab) return;
+      const selected =
+        ids
+        ?? (typeof selectedIds === "function"
+          ? selectedIds()
+          : [...document.querySelectorAll(
+              "#object-table tr.object-row.is-selected, #modified-table tr.is-selected, #changes-table tr.is-selected, #checked-out-table tr.is-selected"
+            )]
+              .map((row) => row.dataset.uuid)
+              .filter(Boolean));
+      sessionStorage.setItem(
+        WATCH_KEY,
+        JSON.stringify({ ids: selected, tab: activeTab })
       );
     } catch {
       /* private mode / blocked storage */
@@ -380,9 +411,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         // Only while #object-table exists — leaving Details must not overwrite
         // a New files / Modified restore with Overview/History.
         persistListSearchState();
-        if (document.querySelector("#object-table")) {
-          rememberWatchView();
-        }
+        persistListTabState();
         const response = await fetch(href, {
           headers: { Accept: "text/html", "X-CreoPDM-Soft": "1" },
           credentials: "same-origin",
@@ -459,9 +488,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     closeOpenDialogs();
     persistListSearchState();
-    if (document.querySelector("#object-table")) {
-      rememberWatchView();
-    }
+    persistListTabState();
     // Always soft-nav shell pages — hard reload SSR-paints Not Connected and kills Creo.JS.
     if (isSoftNavUrl(url)) {
       void withBusy("Loading…", () => softNavigate(url, "push"));
@@ -10276,6 +10303,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       else if (name === "where-used") void loadWhereUsedTab();
       else refreshTabMetrics();
       syncDetailToolbar();
+      // Keep list tab ready for Details → Back (Details boot must not consume it).
+      if (LIST_RESTORE_TABS.has(String(name || "")) && document.querySelector("#object-table")) {
+        persistListTabState(name);
+      }
     });
   });
 
@@ -10637,35 +10668,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }, 60000);
   }
 
-  const WATCH_KEY = "creopdmWatchRestore";
-  const LIST_RESTORE_TABS = new Set(["files", "checked-out", "modified", "changes"]);
   function rememberWatchView(overrides = {}) {
-    try {
-      const rawTab =
-        overrides.tab ??
-        document.querySelector(".tabs .tab.is-active")?.dataset.tab ??
-        "";
-      // Only Files-page tabs — never Overview/History from the Details page.
-      const activeTab = LIST_RESTORE_TABS.has(String(rawTab)) ? String(rawTab) : "";
-      if (!activeTab && overrides.tab == null) {
-        // Leaving a non-list page — keep any pending Files tab restore intact.
-        return;
-      }
-      const ids = overrides.ids ?? selectedIds();
-      sessionStorage.setItem(
-        WATCH_KEY,
-        JSON.stringify({
-          ids,
-          tab: activeTab || "files",
-        })
-      );
-      // Soft reload must not drop an active product-wide search either.
-      persistListSearchState();
-    } catch {
-      /* private mode / blocked storage */
+    // Soft reload / undo paths — only Files-page tabs; never overwrite from Details.
+    if (overrides.tab != null) {
+      persistListTabState(overrides.tab, overrides.ids);
+    } else {
+      persistListTabState(undefined, overrides.ids);
     }
+    persistListSearchState();
   }
   function restoreWatchView() {
+    // Details / Admin also boot after soft-nav — do not consume WATCH_KEY there
+    // or Back to Files loses the Modified / New files tab.
+    if (!document.querySelector("#object-table") || !isListPage) return;
     let raw = null;
     try {
       raw = sessionStorage.getItem(WATCH_KEY);
@@ -10681,7 +10696,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     const tab = LIST_RESTORE_TABS.has(String(saved.tab || "")) ? String(saved.tab) : "";
-    if (tab) {
+    if (tab && tab !== "files") {
       document.querySelector(`.tabs .tab[data-tab="${tab}"]`)?.click();
     }
     // Search restore rewrites the Files tbody — skip folder-row selection when

@@ -1309,19 +1309,21 @@ def test_list_tab_survives_details_and_back():
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert 'const WATCH_KEY = "creopdmWatchRestore"' in script
     assert "LIST_RESTORE_TABS" in script
+    assert "function persistListTabState(" in script
     assert '"modified"' in script and '"changes"' in script
     soft = _between(script, "function softNavigate(", "function leavePage(")
-    assert 'querySelector("#object-table")' in soft
-    assert "rememberWatchView()" in soft
+    assert "persistListTabState()" in soft
     leave = _between(script, "function leavePage(", "function reloadPage(")
-    assert 'querySelector("#object-table")' in leave
-    assert "rememberWatchView()" in leave
-    remember = _between(script, "function rememberWatchView(", "function restoreWatchView(")
-    assert "LIST_RESTORE_TABS.has" in remember
-    assert "keep any pending Files tab restore intact" in remember
+    assert "persistListTabState()" in leave
+    persist = _between(script, "function persistListTabState(", "function softNavigate(")
+    assert "LIST_RESTORE_TABS.has" in persist
+    assert 'querySelector("#object-table")' in persist
     restore = _between(script, "function restoreWatchView(", "function watchIdleMinutes(")
     assert "LIST_RESTORE_TABS.has" in restore
+    assert "do not consume WATCH_KEY there" in restore
+    assert "!isListPage" in restore
     assert "restoreWatchView()" in script
+    assert "persistListTabState(name)" in script
     assert "keep the Files list tab you were on" in docs
     assert "reset to the **Files** tab when you left from **Modified**" in docs
 
