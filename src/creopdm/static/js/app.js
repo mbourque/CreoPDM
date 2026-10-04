@@ -10674,76 +10674,87 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
   syncSiteAvailabilityOptions();
 
+  function splitExtensionList(raw) {
+    return String(raw || "")
+      .split(/[\s,;]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  function parseOptionalInt(raw, fallback) {
+    const text = String(raw || "").trim();
+    if (!text) return fallback;
+    const parsed = Number.parseInt(text, 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
   settingsForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     showError($("#settings-error"), "");
     const ok = $("#settings-ok");
     if (ok) ok.hidden = true;
-    const jsLibraryInput = settingsForm.querySelector('[name="creo_js_library"]');
-    const jsLibraryValue = jsLibraryInput
-      ? String(jsLibraryInput.value || "").trim() || null
-      : null;
+    // Hub section pages only send fields present on this form (partial PUT).
     const data = new FormData(settingsForm);
-    const unavailableMessageEl = settingsForm.querySelector('[name="site_unavailable_message"]');
-    const body = {
-      site_availability: String(data.get("site_availability") || "available"),
+    const body = {};
+    if (settingsForm.querySelector('[name="site_availability"]')) {
+      body.site_availability = String(data.get("site_availability") || "available");
+      const unavailableMessageEl = settingsForm.querySelector('[name="site_unavailable_message"]');
       // Read even when the message field is disabled for “available”.
-      site_unavailable_message: String(unavailableMessageEl?.value || "").trim(),
-      creo_open_mode: String(data.get("creo_open_mode") || "association"),
-      creo_executable: null,
-      creo_view_executable: null,
+      body.site_unavailable_message = String(unavailableMessageEl?.value || "").trim();
+    }
+    if (settingsForm.querySelector('[name="creo_open_mode"]')) {
+      body.creo_open_mode = String(data.get("creo_open_mode") || "association");
+      const jsLibraryInput = settingsForm.querySelector('[name="creo_js_library"]');
       // Read even when the nested Embedded fields are disabled for association mode.
-      creo_js_library: jsLibraryValue,
-      workspace_root: String(data.get("workspace_root") || "").trim() || null,
-      cad_model_extensions: String(data.get("cad_model_extensions") || "")
-        .split(/[\s,;]+/)
-        .map((item) => item.trim())
-        .filter(Boolean),
-      cad_models_extensions: String(data.get("cad_models_extensions") || "")
-        .split(/[\s,;]+/)
-        .map((item) => item.trim())
-        .filter(Boolean),
-      document_extensions: String(data.get("document_extensions") || "")
-        .split(/[\s,;]+/)
-        .map((item) => item.trim())
-        .filter(Boolean),
-      cad_openable_extensions: String(data.get("cad_openable_extensions") || "")
-        .split(/[\s,;]+/)
-        .map((item) => item.trim())
-        .filter(Boolean),
-      cad_extensions: String(data.get("cad_extensions") || "")
-        .split(/[\s,;]+/)
-        .map((item) => item.trim())
-        .filter(Boolean),
-      purgeable_extensions: String(data.get("purgeable_extensions") || "")
-        .split(/[\s,;]+/)
-        .map((item) => item.trim())
-        .filter(Boolean),
-      ignore_patterns: String(data.get("ignore_patterns") || "")
-        .split(/[\s,;]+/)
-        .map((item) => item.trim())
-        .filter(Boolean),
-      database_url: String(data.get("database_url") || "").trim(),
-      port: (() => {
-        const raw = String(data.get("port") || "").trim();
-        if (!raw) return 0;
-        const parsed = Number.parseInt(raw, 10);
-        return Number.isFinite(parsed) ? parsed : 0;
-      })(),
-      agent_base_url: String(data.get("agent_base_url") || "").trim(),
-      workspace_poll_interval_ms: (() => {
-        const raw = String(data.get("workspace_poll_interval_ms") || "").trim();
-        if (!raw) return 2000;
-        const parsed = Number.parseInt(raw, 10);
-        return Number.isFinite(parsed) ? parsed : 2000;
-      })(),
-      workspace_poll_idle_minutes: (() => {
-        const raw = String(data.get("workspace_poll_idle_minutes") || "").trim();
-        if (!raw) return 10;
-        const parsed = Number.parseInt(raw, 10);
-        return Number.isFinite(parsed) ? parsed : 10;
-      })(),
-    };
+      body.creo_js_library = jsLibraryInput
+        ? String(jsLibraryInput.value || "").trim() || null
+        : null;
+    }
+    if (settingsForm.querySelector('[name="workspace_root"]')) {
+      body.workspace_root = String(data.get("workspace_root") || "").trim() || null;
+    }
+    if (settingsForm.querySelector('[name="cad_model_extensions"]')) {
+      body.cad_model_extensions = splitExtensionList(data.get("cad_model_extensions"));
+    }
+    if (settingsForm.querySelector('[name="cad_models_extensions"]')) {
+      body.cad_models_extensions = splitExtensionList(data.get("cad_models_extensions"));
+    }
+    if (settingsForm.querySelector('[name="document_extensions"]')) {
+      body.document_extensions = splitExtensionList(data.get("document_extensions"));
+    }
+    if (settingsForm.querySelector('[name="cad_openable_extensions"]')) {
+      body.cad_openable_extensions = splitExtensionList(data.get("cad_openable_extensions"));
+    }
+    if (settingsForm.querySelector('[name="cad_extensions"]')) {
+      body.cad_extensions = splitExtensionList(data.get("cad_extensions"));
+    }
+    if (settingsForm.querySelector('[name="purgeable_extensions"]')) {
+      body.purgeable_extensions = splitExtensionList(data.get("purgeable_extensions"));
+    }
+    if (settingsForm.querySelector('[name="ignore_patterns"]')) {
+      body.ignore_patterns = splitExtensionList(data.get("ignore_patterns"));
+    }
+    if (settingsForm.querySelector('[name="database_url"]')) {
+      body.database_url = String(data.get("database_url") || "").trim();
+    }
+    if (settingsForm.querySelector('[name="port"]')) {
+      body.port = parseOptionalInt(data.get("port"), 0);
+    }
+    if (settingsForm.querySelector('[name="agent_base_url"]')) {
+      body.agent_base_url = String(data.get("agent_base_url") || "").trim();
+    }
+    if (settingsForm.querySelector('[name="workspace_poll_interval_ms"]')) {
+      body.workspace_poll_interval_ms = parseOptionalInt(
+        data.get("workspace_poll_interval_ms"),
+        5000
+      );
+    }
+    if (settingsForm.querySelector('[name="workspace_poll_idle_minutes"]')) {
+      body.workspace_poll_idle_minutes = parseOptionalInt(
+        data.get("workspace_poll_idle_minutes"),
+        10
+      );
+    }
     const response = await fetch("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -10763,14 +10774,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (messageInput && saved?.site_unavailable_message) {
       messageInput.value = saved.site_unavailable_message;
     }
-    syncUnavailableAdminPill(
-      String(saved?.site_availability || body.site_availability || "") === "unavailable"
-    );
-    syncCreoStatusPill(
-      body.creo_open_mode,
-      body.creo_executable,
-      body.creo_view_executable
-    );
+    if (Object.prototype.hasOwnProperty.call(body, "site_availability")) {
+      syncUnavailableAdminPill(
+        String(saved?.site_availability || body.site_availability || "") === "unavailable"
+      );
+    }
+    if (body.creo_open_mode) {
+      syncCreoStatusPill(body.creo_open_mode);
+    }
   });
 
   const typeLabelsForm = $("#type-labels-form");
@@ -10824,10 +10835,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         label: String(row.querySelector("[name=label]")?.value || "").trim(),
       }))
       .filter((item) => item.extension || item.label);
-    const body = {
-      creo_open_mode: String(new FormData(typeLabelsForm).get("creo_open_mode") || "association"),
-      type_labels,
-    };
+    const body = { type_labels };
     const response = await fetch("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -10838,7 +10846,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     if (ok) ok.hidden = false;
-    syncCreoStatusPill(body.creo_open_mode);
   });
 
   heartbeat.ids = rows()

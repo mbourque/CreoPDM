@@ -73,7 +73,7 @@ def test_settings_creo_js_library_serves_route(tmp_path, data_dir, identity: Sta
         response = client.get("/creojs.js")
         assert response.status_code == 200
         assert response.content == library.read_bytes()
-        page = client.get("/settings")
+        page = client.get("/settings/open")
         assert page.status_code == 200
         assert 'name="creo_js_library"' in page.text
 

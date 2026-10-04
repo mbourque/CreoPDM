@@ -132,18 +132,20 @@ def update_settings(
     _require_settings_manage(request, ctx)
     current = ctx.settings.model_copy(deep=True)
     current.creo.connector = "auto"
-    current.creo.open_mode = payload.creo_open_mode
-    executable = (payload.creo_executable or "").strip() or None
-    if executable:
-        path = Path(executable).expanduser()
-        if not path.exists():
-            raise PathValidationError(
-                "The Creo application path does not exist.",
-                details={"path": str(path)},
-            )
-        current.creo.executable = str(path)
-    else:
-        current.creo.executable = None
+    if "creo_open_mode" in payload.model_fields_set and payload.creo_open_mode is not None:
+        current.creo.open_mode = payload.creo_open_mode
+    if "creo_executable" in payload.model_fields_set:
+        executable = (payload.creo_executable or "").strip() or None
+        if executable:
+            path = Path(executable).expanduser()
+            if not path.exists():
+                raise PathValidationError(
+                    "The Creo application path does not exist.",
+                    details={"path": str(path)},
+                )
+            current.creo.executable = str(path)
+        else:
+            current.creo.executable = None
     if "creo_js_library" in payload.model_fields_set:
         js_library = (payload.creo_js_library or "").strip() or None
         if js_library:

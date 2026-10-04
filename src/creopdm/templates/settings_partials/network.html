@@ -1,0 +1,7 @@
+<section class="settings-card">
+  <p class="muted small">TCP port for this PC and phones on the LAN. 0 picks a free port each start. A specific port such as 8765 stays the same until it is already in use. Takes effect the next time CreoPDM starts.</p>
+  <label>Port
+    <input name="port" type="number" min="0" max="65535" step="1" value="{{ settings.port }}" placeholder="0">
+  </label>
+  <p class="muted small">0 = automatic. The agent tray calls this CreoPDM server over HTTP — CreoPDM does not open a special inbound port for the tray.</p>
+</section>

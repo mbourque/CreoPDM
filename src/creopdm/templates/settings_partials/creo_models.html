@@ -1,0 +1,7 @@
+<section class="settings-card">
+  <p class="muted small">Extensions counted and filtered by the Creo Models chip. The Other chip is everything else on the file list. Numbered saves such as <code>shaft.prt.3</code> count as <code>.prt</code>.</p>
+  <label>Creo Models extensions
+    <textarea name="cad_models_extensions" rows="2" placeholder=".prt, .asm, .drw">{{ settings.cad_models_extensions | join(', ') }}</textarea>
+  </label>
+  <p class="muted small">Comma-separated, with or without the dot. Default: {{ settings.default_cad_models_extensions | join(', ') }}</p>
+</section>

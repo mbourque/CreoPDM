@@ -608,18 +608,25 @@ def object_detail(
     )
 
 
-@router.get("/settings", response_class=HTMLResponse)
-def settings_page(
-    request: Request,
-    ctx: AppContext = Depends(get_context),
-) -> HTMLResponse:
-    from creopdm.api.settings import settings_to_response
-
+def _require_settings_page(request: Request, ctx: AppContext) -> HTMLResponse | None:
     if ctx.auth_enabled and not getattr(request.state, "can_manage_settings", False):
         return HTMLResponse(
             "<h1>403 Forbidden</h1><p>Only administrators can open Settings.</p>",
             status_code=403,
         )
+    return None
+
+
+@router.get("/settings", response_class=HTMLResponse)
+def settings_page(
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+) -> HTMLResponse:
+    from creopdm.settings_hub import SETTINGS_HUB_TILES
+
+    blocked = _require_settings_page(request, ctx)
+    if blocked is not None:
+        return blocked
     return render(
         request,
         "settings.html",
@@ -627,30 +634,46 @@ def settings_page(
             "app_name": APP_NAME,
             "app_version": APP_VERSION,
             **_creo_page(ctx),
-            "settings": settings_to_response(ctx),
+            "settings_tiles": SETTINGS_HUB_TILES,
         },
     )
 
 
-@router.get("/settings/types", response_class=HTMLResponse)
-def settings_types_page(
+@router.get("/settings/{section}", response_class=HTMLResponse)
+def settings_section_page(
+    section: str,
     request: Request,
     ctx: AppContext = Depends(get_context),
 ) -> HTMLResponse:
     from creopdm.api.settings import settings_to_response
+    from creopdm.settings_hub import settings_tile
 
-    if ctx.auth_enabled and not getattr(request.state, "can_manage_settings", False):
-        return HTMLResponse(
-            "<h1>403 Forbidden</h1><p>Only administrators can open Settings.</p>",
-            status_code=403,
+    blocked = _require_settings_page(request, ctx)
+    if blocked is not None:
+        return blocked
+    tile = settings_tile(section)
+    if tile is None:
+        return HTMLResponse("<h1>404 Not Found</h1><p>Unknown System Settings page.</p>", status_code=404)
+    if tile.page_template:
+        return render(
+            request,
+            tile.page_template,
+            {
+                "app_name": APP_NAME,
+                "app_version": APP_VERSION,
+                **_creo_page(ctx),
+                "settings": settings_to_response(ctx),
+                "section": tile,
+            },
         )
     return render(
         request,
-        "settings_types.html",
+        "settings_section.html",
         {
             "app_name": APP_NAME,
             "app_version": APP_VERSION,
             **_creo_page(ctx),
             "settings": settings_to_response(ctx),
+            "section": tile,
         },
     )

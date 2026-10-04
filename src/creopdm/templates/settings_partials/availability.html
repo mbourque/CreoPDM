@@ -1,0 +1,28 @@
+<section class="settings-card" id="site-availability">
+  <p class="muted small">
+    When CreoPDM is unavailable, people who are not administrators see a message instead of the usual pages
+    (on their next page open or navigation). Administrators can still use the app and these settings.
+    This is display-only: it does not cancel uploads, check-ins, or other work already in progress.
+  </p>
+  <label class="choice">
+    <input type="radio" name="site_availability" value="available"
+           {% if settings.site_availability != 'unavailable' %}checked{% endif %}>
+    CreoPDM available
+  </label>
+  <label class="choice">
+    <input type="radio" name="site_availability" value="unavailable"
+           {% if settings.site_availability == 'unavailable' %}checked{% endif %}>
+    CreoPDM unavailable
+  </label>
+  <div class="settings-nested{% if settings.site_availability != 'unavailable' %} is-disabled{% endif %}"
+       id="site-unavailable-message-wrap"
+       {% if settings.site_availability != 'unavailable' %}aria-disabled="true"{% endif %}>
+    <label>Message for users
+      <textarea name="site_unavailable_message" id="site-unavailable-message" rows="4"
+                maxlength="2000"
+                data-default-base="{{ settings.default_site_unavailable_message }}"
+                placeholder="{{ settings.default_site_unavailable_message }}"
+                {% if settings.site_availability != 'unavailable' %}disabled{% endif %}>{{ settings.site_unavailable_message }}</textarea>
+    </label>
+  </div>
+</section>

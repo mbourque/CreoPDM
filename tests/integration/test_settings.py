@@ -225,33 +225,19 @@ def test_get_and_update_settings(client, tmp_path):
     assert rejected.status_code == 422, rejected.text
     assert client.get("/api/settings").json()["port"] == 8765
 
-    page = client.get("/settings")
-    assert page.status_code == 200
-    assert "Embedded Creo Browser" in page.text
-    assert "OS file association" in page.text
-    assert "only inside Creo" in page.text or "only inside Creo’s" in page.text
-    assert 'id="embedded-open-options"' in page.text
-    assert "Multi-CAD" in page.text
-    assert "Creo Parametric" not in page.text
-    assert "Creo View" not in page.text
-    assert "~/.local/share/CreoPDM/vaults" in page.text
-    assert "Vault folder" in page.text
-    assert "Master repository for each product" in page.text
-    assert "CreoPDM/workspaces" not in page.text
-    assert "Specific application" not in page.text
-    assert "Open Creo View with" not in page.text
-    assert 'value="embedded"' in page.text
-    assert 'value="association"' in page.text
-    assert 'value="view"' not in page.text
-    assert 'value="executable"' not in page.text
-    headings = [
-        "Open Creo models with",
+    hub = client.get("/settings")
+    assert hub.status_code == 200
+    assert "admin-hub" in hub.text
+    assert "Server options for this CreoPDM install" in hub.text
+    tile_titles = [
+        "Availability",
+        "Open Creo models",
         "Vault",
         "Creo Models",
         "Documents",
         "Creo-openable models",
         "Text files",
-        "Non openable CAD data",
+        "Non openable CAD",
         "Numbered saves",
         "File type names",
         "Ignored files",
@@ -259,37 +245,90 @@ def test_get_and_update_settings(client, tmp_path):
         "Local Creo agent",
         "Database",
     ]
-    # Match <h2> only — bare titles can appear earlier in help copy.
-    positions = [page.text.find(f"<h2>{title}</h2>") for title in headings]
+    tile_slugs = [
+        "availability",
+        "open",
+        "vault",
+        "creo-models",
+        "documents",
+        "creo-openable",
+        "text-files",
+        "non-openable-cad",
+        "numbered-saves",
+        "types",
+        "ignored-files",
+        "network",
+        "agent",
+        "database",
+    ]
+    # Hub tile order matches the former monolithic settings page.
+    positions = [hub.text.find(f'href="/settings/{slug}"') for slug in tile_slugs]
     assert all(index >= 0 for index in positions)
     assert positions == sorted(positions)
-    assert 'name="cad_models_extensions"' in page.text
-    assert 'name="document_extensions"' in page.text
-    assert 'name="purgeable_extensions"' in page.text
-    assert "Comma-separated, with or without the dot." in page.text
-    assert "notes.pdf.2" not in page.text
-    assert "Default: .pdf, .xps" not in page.text
-    assert 'name="port"' in page.text
-    assert 'name="agent_base_url"' in page.text
-    assert 'name="workspace_poll_interval_ms"' in page.text
-    assert 'name="workspace_poll_idle_minutes"' in page.text
-    assert "Pause refresh after idle" in page.text
-    assert 'value="8765"' in page.text
+    for title in tile_titles:
+        assert f">{title}</a>" in hub.text or f">{title}</h2>" in hub.text or title in hub.text
+
+    open_page = client.get("/settings/open")
+    assert open_page.status_code == 200
+    assert "Embedded Creo Browser" in open_page.text
+    assert "OS file association" in open_page.text
+    assert "only inside Creo" in open_page.text or "only inside Creo’s" in open_page.text
+    assert 'id="embedded-open-options"' in open_page.text
+    assert "Multi-CAD" in open_page.text
+    assert "Creo Parametric" not in open_page.text
+    assert "Creo View" not in open_page.text
+    assert "Open Creo View with" not in open_page.text
+    assert 'value="embedded"' in open_page.text
+    assert 'value="association"' in open_page.text
+    assert 'value="view"' not in open_page.text
+    assert 'value="executable"' not in open_page.text
+    assert 'name="creo_view_executable"' not in open_page.text
+    assert 'name="creo_executable"' not in open_page.text
+
+    vault_page = client.get("/settings/vault")
+    assert vault_page.status_code == 200
+    assert "~/.local/share/CreoPDM/vaults" in vault_page.text
+    assert "Vault folder" in vault_page.text
+    assert "Master repository for each product" in vault_page.text
+    assert "CreoPDM/workspaces" not in vault_page.text
+
+    models_page = client.get("/settings/creo-models")
+    assert models_page.status_code == 200
+    assert 'name="cad_models_extensions"' in models_page.text
+    docs_page = client.get("/settings/documents")
+    assert docs_page.status_code == 200
+    assert 'name="document_extensions"' in docs_page.text
+    assert "Comma-separated, with or without the dot." in docs_page.text
+    assert "notes.pdf.2" not in docs_page.text
+    assert "Default: .pdf, .xps" not in docs_page.text
+    saves_page = client.get("/settings/numbered-saves")
+    assert saves_page.status_code == 200
+    assert 'name="purgeable_extensions"' in saves_page.text
+    network_page = client.get("/settings/network")
+    assert network_page.status_code == 200
+    assert 'name="port"' in network_page.text
+    assert 'value="8765"' in network_page.text
+    agent_page = client.get("/settings/agent")
+    assert agent_page.status_code == 200
+    assert 'name="agent_base_url"' in agent_page.text
+    assert 'name="workspace_poll_interval_ms"' in agent_page.text
+    assert 'name="workspace_poll_idle_minutes"' in agent_page.text
+    assert "Pause refresh after idle" in agent_page.text
     idle = client.put(
         "/api/settings",
-        json={"creo_open_mode": "association", "workspace_poll_idle_minutes": 30},
+        json={"workspace_poll_idle_minutes": 30},
     )
     assert idle.status_code == 200, idle.text
     assert idle.json()["workspace_poll_idle_minutes"] == 30
+    # Partial PUT must not reset Open mode.
+    assert idle.json()["creo_open_mode"] == "association"
     idle_off = client.put(
         "/api/settings",
-        json={"creo_open_mode": "association", "workspace_poll_idle_minutes": 0},
+        json={"workspace_poll_idle_minutes": 0},
     )
     assert idle_off.status_code == 200, idle_off.text
     assert idle_off.json()["workspace_poll_idle_minutes"] == 0
-    assert 'name="creo_view_executable"' not in page.text
-    assert 'name="creo_executable"' not in page.text
-    assert 'href="/settings/types"' in page.text
+    assert 'href="/settings/types"' in hub.text
     assert payload["type_labels"] == unique_type_labels(DEFAULT_TYPE_LABELS)
 
     types_page = client.get("/settings/types")

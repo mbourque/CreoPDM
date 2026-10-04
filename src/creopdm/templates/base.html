@@ -44,9 +44,9 @@
       <a class="status-pill" href="/admin">Administration</a>
       {% endif %}
       {% if can_manage_settings %}
-      <a class="status-pill" id="site-unavailable-pill" data-state="warn" href="/settings#site-availability"
+      <a class="status-pill" id="site-unavailable-pill" data-state="warn" href="/settings/availability"
          {% if not site_unavailable %}hidden{% endif %}
-         title="CreoPDM is marked unavailable. Non-administrators see a maintenance message. Open System Settings to turn this off when you are done.">Unavailable</a>
+         title="CreoPDM is marked unavailable. Non-administrators see a maintenance message. Open System Settings → Availability to turn this off when you are done.">Unavailable</a>
       {% endif %}
       <span id="creo-status" class="status-pill" data-state="{% if creo_label == 'Connected' %}ok{% else %}idle{% endif %}" data-creo-open-mode="{{ creo_open_mode }}" title="{{ creo_open_title }}">
         Creo: {{ creo_label }}
@@ -2309,6 +2309,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-open-no-ellipsis"></script>
+  <script src="/client/app.js?v={{ app_version }}-settings-hub"></script>
 </body>
 </html>

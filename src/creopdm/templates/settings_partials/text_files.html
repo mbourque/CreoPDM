@@ -1,0 +1,7 @@
+<section class="settings-card">
+  <p class="muted small">CAD-like files that open with the Windows text editor, not Creo. They still count as CAD in the product.</p>
+  <label>Text file extensions
+    <textarea name="cad_openable_extensions" rows="3" placeholder=".ncl, .tap, .xml, .lst">{{ settings.cad_openable_extensions | join(', ') }}</textarea>
+  </label>
+  <p class="muted small">Comma-separated, with or without the dot.</p>
+</section>

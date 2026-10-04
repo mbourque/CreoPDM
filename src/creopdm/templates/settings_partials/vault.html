@@ -1,0 +1,7 @@
+<section class="settings-card">
+  <p class="muted small">Master repository for each product (Git history and vault copies), one folder per product. On Linux the default is <code>~/.local/share/CreoPDM/vaults</code>. Point this at the vault folder, not <code>~/.local/share/CreoPDM</code> itself (that is the application data directory). Creo working files on the client PC live in the local agent workspace, not in this vault.</p>
+  <label>Vault folder
+    <input name="workspace_root" type="text" value="{{ settings.workspace_root }}" placeholder="{{ settings.default_workspace_root }}">
+  </label>
+  <p class="muted small">Default: {{ settings.default_workspace_root }}</p>
+</section>

@@ -1,0 +1,7 @@
+<section class="settings-card">
+  <p class="muted small">Extensions counted and filtered by the Documents chip.</p>
+  <label>Document extensions
+    <textarea name="document_extensions" rows="4" placeholder=".pdf, .docx, .xlsx">{{ settings.document_extensions | join(', ') }}</textarea>
+  </label>
+  <p class="muted small">Comma-separated, with or without the dot.</p>
+</section>

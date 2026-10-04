@@ -147,11 +147,14 @@ def test_unavailable_hides_pages_from_viewer_keeps_api_and_admin(auth_client, au
     assert admin_home.status_code == 200
     assert 'id="site-unavailable-pill"' in admin_home.text
     assert "Unavailable" in admin_home.text
-    assert 'href="/settings#site-availability"' in admin_home.text
+    assert 'href="/settings/availability"' in admin_home.text
     # Pill is in the DOM when settings.manage; hidden only when available.
     assert "hidden" not in admin_home.text.split('id="site-unavailable-pill"', 1)[1].split(">", 1)[0]
     assert 'id="object-table"' in admin_home.text
-    settings_page = auth_client.get("/settings")
+    settings_hub = auth_client.get("/settings")
+    assert settings_hub.status_code == 200
+    assert 'href="/settings/availability"' in settings_hub.text
+    settings_page = auth_client.get("/settings/availability")
     assert settings_page.status_code == 200
     assert 'id="site-availability"' in settings_page.text
     assert 'id="site-unavailable-pill"' in settings_page.text
@@ -183,7 +186,10 @@ def test_unavailable_hides_pages_from_viewer_keeps_api_and_admin(auth_client, au
 def test_settings_html_and_js_wire_availability(auth_client, auth_ctx):
     _setup_admin_and_viewer(auth_client, auth_ctx)
     _login(auth_client, "admin", "AdminPass1")
-    page = auth_client.get("/settings")
+    hub = auth_client.get("/settings")
+    assert hub.status_code == 200
+    assert 'href="/settings/availability"' in hub.text
+    page = auth_client.get("/settings/availability")
     assert page.status_code == 200
     assert 'name="site_availability"' in page.text
     assert 'id="site-unavailable-message"' in page.text

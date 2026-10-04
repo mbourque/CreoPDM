@@ -1889,8 +1889,24 @@ def test_admin_hub_panel_fills_full_width():
     assert "Deleting product ${label}" in script
     settings = (ROOT / "src" / "creopdm" / "templates" / "settings.html").read_text(encoding="utf-8")
     assert "<h1>System Settings</h1>" in settings
+    assert "admin-hub" in settings
+    assert 'href="/settings/{{ tile.slug }}"' in settings or 'href="/settings/' in settings
+    assert "settings_tiles" in settings
+    hub = (ROOT / "src" / "creopdm" / "settings_hub.py").read_text(encoding="utf-8")
+    assert 'slug="availability"' in hub
+    assert 'slug="database"' in hub
+    assert hub.index('slug="availability"') < hub.index('slug="open"')
+    assert hub.index('slug="open"') < hub.index('slug="vault"')
+    assert hub.index('slug="types"') < hub.index('slug="ignored-files"')
+    section = (ROOT / "src" / "creopdm" / "templates" / "settings_section.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'id="settings-form"' in section
+    assert "settings_partials/" in section
+    assert "Back to System Settings" in section
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "System Settings" in docs
+    assert "hub of short tiles" in docs
     assert "Utilities" in docs
     assert "utilities.access" in docs
     assert "folder’s used size" in docs or "folder" in docs
@@ -1898,6 +1914,9 @@ def test_admin_hub_panel_fills_full_width():
     assert "Compacting vault history" in docs
     assert "four hub tiles" in docs
     assert "Delete products" in docs
+    script = _app_js()
+    assert "Hub section pages only send fields present" in script
+    assert 'settingsForm.querySelector(\'[name="site_availability"]\')' in script
 
 
 def test_workspace_poll_pauses_after_idle_setting():
@@ -1907,7 +1926,9 @@ def test_workspace_poll_pauses_after_idle_setting():
     assert "function isWatchIdle(" in body
     assert "function noteUserActivity(" in body
     assert "return isWatchIdle()" in body
-    settings = (ROOT / "src" / "creopdm" / "templates" / "settings.html").read_text(encoding="utf-8")
+    settings = (
+        ROOT / "src" / "creopdm" / "templates" / "settings_partials" / "agent.html"
+    ).read_text(encoding="utf-8")
     assert 'name="workspace_poll_idle_minutes"' in settings
     assert "Pause refresh after idle" in settings
     base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")

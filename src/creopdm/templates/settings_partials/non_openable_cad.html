@@ -1,0 +1,7 @@
+<section class="settings-card">
+  <p class="muted small">CAD-like files Creo does not open. They still count as CAD in the product but will not open.</p>
+  <label>Non openable CAD extensions
+    <textarea name="cad_extensions" rows="3" placeholder=".inf, .xpr, .mtl">{{ settings.cad_extensions | join(', ') }}</textarea>
+  </label>
+  <p class="muted small">Comma-separated, with or without the dot.</p>
+</section>

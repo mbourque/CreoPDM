@@ -500,7 +500,8 @@ class SettingsResponse(BaseModel):
 
 
 class SettingsUpdateRequest(BaseModel):
-    creo_open_mode: str = "association"
+    # Partial updates: omit a field (or leave None) to keep the saved value.
+    creo_open_mode: str | None = None
     creo_executable: str | None = None
     creo_view_open_mode: str | None = None
     creo_view_executable: str | None = None
@@ -525,7 +526,9 @@ class SettingsUpdateRequest(BaseModel):
 
     @field_validator("creo_open_mode")
     @classmethod
-    def valid_open_mode(cls, value: str) -> str:
+    def valid_open_mode(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         key = (value or "association").strip().lower()
         if key not in CREO_OPEN_MODES:
             raise ValueError("Open mode must be 'association' or 'embedded'.")
