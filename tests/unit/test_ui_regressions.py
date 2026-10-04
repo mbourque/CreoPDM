@@ -234,24 +234,23 @@ def test_locked_product_changes_help_does_not_offer_add_checkin():
     html = APP_HTML.read_text(encoding="utf-8")
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
-    # New files tab: no tip blurb (removed — count + list are enough).
+    # Modified / New files: no tip blurb (count + list are enough).
     changes_panel = _between(html, 'id="panel-changes"', 'id="checkin-dialog"')
     assert 'id="changes-help"' not in changes_panel
     assert "muted small" not in changes_panel.split('id="changes-table"', 1)[0]
-    assert 'id="modified-help"' in html
-    assert 'id="checked-out-help"' in html
     mod_panel = _between(html, 'id="panel-modified"', 'id="panel-changes"')
-    assert "{% if product_ui.show_checkin %}" in mod_panel
-    assert 'id="modified-help"' in mod_panel
+    assert 'id="modified-help"' not in mod_panel
+    assert "muted small" not in mod_panel.split('id="modified-table"', 1)[0]
+    assert 'id="checked-out-help"' in html
     assert "Use <strong>Add</strong> to bring them in" not in html
-    assert "Use <strong>Check In</strong> to record them" in html
+    assert "Use <strong>Check In</strong> to record them" not in html
     assert "Open, Check In, and Undo Checkout still apply" in html
     assert "are blocked while this product is" not in html
     assert "function canOfferAdd" in script
     assert "function canOfferCheckin" in script
     assert '"Local workspace."' in script
     assert '"Not in the product yet."' in script
-    assert "no tip blurb on **New files**" in docs
+    assert "no tip blurb on **Modified** or **New files**" in docs
 
 
 def test_modified_tab_between_checked_out_and_new_files():

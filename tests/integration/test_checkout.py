@@ -65,9 +65,7 @@ def test_checkout_blocked_when_product_on_hold(client, repo_parent):
     # Role body flag may still be 1; list rows must not advertise checkout.
     assert page.text.count('data-can-checkout="1"') == 1
     assert 'data-can-checkout="0"' in page.text
-    assert 'id="modified-help"' not in page.text
     assert 'id="checked-out-help"' not in page.text
-    assert "Use <strong>Check In</strong> to record them" not in page.text
     assert "Open, Check In, and Undo Checkout still apply" not in page.text
 
     detail = client.get(f"/api/objects/{obj['uuid']}")
