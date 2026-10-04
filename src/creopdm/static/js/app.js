@@ -330,6 +330,35 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   // Declared early so softNavigate / leavePage / reloadPage can block mid-Collect.
   const metadataCollectJob = { running: false, cancel: false };
 
+  // Files search lives only in the DOM — soft-nav to Details / Back replaces the
+  // shell and would wipe it. Persist across leave + restore on the next Files boot.
+  const LIST_SEARCH_KEY = "creopdmListSearch";
+
+  function persistListSearchState() {
+    try {
+      const input = document.querySelector("#search-input");
+      if (!input || !document.querySelector("#object-table")) return;
+      const q = (input.value || "").trim();
+      const productId = currentProductId();
+      if (!productId || !q) {
+        sessionStorage.removeItem(LIST_SEARCH_KEY);
+        return;
+      }
+      const ids =
+        typeof selectedIds === "function"
+          ? selectedIds()
+          : [...document.querySelectorAll("#object-table tr.object-row.is-selected")]
+              .map((row) => row.dataset.uuid)
+              .filter(Boolean);
+      sessionStorage.setItem(
+        LIST_SEARCH_KEY,
+        JSON.stringify({ productId, q, ids })
+      );
+    } catch {
+      /* private mode / blocked storage */
+    }
+  }
+
   function softNavigate(url, historyMode = "push") {
     if (metadataCollectJob.running) {
       showOk("Finish Collect metadata (or wait for it) before leaving this page.");
@@ -337,6 +366,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     const absolute = new URL(url, window.location.href);
     if (!isSoftNavUrl(absolute.href)) {
+      persistListSearchState();
       window.location.href = absolute.href;
       return Promise.resolve();
     }
@@ -346,6 +376,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       softNavBusy = true;
       window.__creopdmSoftNavBusy = true;
       try {
+        // Capture search (+ selection) before the shell swap — Back must restore it.
+        persistListSearchState();
         const response = await fetch(href, {
           headers: { Accept: "text/html", "X-CreoPDM-Soft": "1" },
           credentials: "same-origin",
@@ -421,6 +453,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     closeOpenDialogs();
+    persistListSearchState();
     // Always soft-nav shell pages — hard reload SSR-paints Not Connected and kills Creo.JS.
     if (isSoftNavUrl(url)) {
       void withBusy("Loading…", () => softNavigate(url, "push"));
@@ -4011,6 +4044,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     window.clearTimeout(searchTimer);
     if (!query) {
       searchSeq += 1;
+      persistListSearchState();
       showFolderView();
       applyMetricVisibility();
       applyMetricSelection();
@@ -4018,6 +4052,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     searchTimer = window.setTimeout(() => {
+      persistListSearchState();
       void searchAllFolders(query);
     }, 200);
   }
@@ -4029,14 +4064,46 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const query = searchInput?.value.trim() || "";
     if (!query) {
       searchSeq += 1;
+      persistListSearchState();
       showFolderView();
       applyMetricVisibility();
       applyMetricSelection();
       syncToolbar();
       return;
     }
+    persistListSearchState();
     void searchAllFolders(query);
   });
+
+  async function restoreListSearchState() {
+    if (!searchInput || !objectTable || !isListPage) return;
+    let raw = null;
+    try {
+      raw = sessionStorage.getItem(LIST_SEARCH_KEY);
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    let saved;
+    try {
+      saved = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    const productId = currentProductId();
+    const query = String(saved?.q || "").trim();
+    if (!query || !productId || saved.productId !== productId) return;
+    searchInput.value = query;
+    await searchAllFolders(query);
+    const wanted = new Set(
+      Array.isArray(saved.ids) ? saved.ids.map(String).filter(Boolean) : []
+    );
+    if (wanted.size) {
+      rows().forEach((row) => markRowSelected(row, wanted.has(String(row.dataset.uuid || ""))));
+      syncToolbar();
+    }
+    // Keep storage so Details → Back (or History again) can re-apply the same search.
+  }
 
   const historyBtn = $("#history-btn");
   const openBtn = $("#open-btn");
@@ -10234,6 +10301,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           tab: activeTab,
         })
       );
+      // Soft reload must not drop an active product-wide search either.
+      persistListSearchState();
     } catch {
       /* private mode / blocked storage */
     }
@@ -10259,6 +10328,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         window.history.replaceState(null, "", "#history");
       }
     }
+    // Search restore rewrites the Files tbody — skip folder-row selection when
+    // a saved search will re-select after results load.
+    let pendingSearch = null;
+    try {
+      pendingSearch = sessionStorage.getItem(LIST_SEARCH_KEY);
+    } catch {
+      pendingSearch = null;
+    }
+    if (pendingSearch) return;
     const wanted = new Set(saved.ids || []);
     if (wanted.size) {
       rows().forEach((row) => markRowSelected(row, wanted.has(row.dataset.uuid)));
@@ -10266,6 +10344,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
   restoreWatchView();
+  void restoreListSearchState();
 
   function watchIdleMinutes() {
     const idleMinutesRaw = Number.parseInt(

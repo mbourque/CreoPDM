@@ -1189,6 +1189,25 @@ def test_history_revert_only_for_older_versions():
     assert "Soft-nav like folders" in hist_click or "hard reload kills Creo" in hist_click.lower()
 
 
+def test_files_search_survives_details_and_back():
+    """Search + Details / History / Back must not wipe the product-wide query."""
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert 'const LIST_SEARCH_KEY = "creopdmListSearch"' in script
+    assert "function persistListSearchState(" in script
+    assert "function restoreListSearchState(" in script
+    soft = _between(script, "function softNavigate(", "function leavePage(")
+    assert "persistListSearchState()" in soft
+    leave = _between(script, "function leavePage(", "function reloadPage(")
+    assert "persistListSearchState()" in leave
+    assert "void restoreListSearchState()" in script
+    assert "searchInput.value = query" in script
+    assert "await searchAllFolders(query)" in script
+    assert "Keep the search text" in docs
+    assert "browser **Back** button" in docs
+    assert "Clear search or show the empty folder list just because you opened Details" in docs
+
+
 def test_toolbar_hides_inactive_actions():
     """Inactive toolbar buttons and fly-up items are hidden, not left greyed out."""
     script = _app_js()

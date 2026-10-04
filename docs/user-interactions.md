@@ -79,6 +79,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 |--------|------------|--------------|
 | Click a breadcrumb (Home / folder path) | Take you to that folder; Creo stays connected | |
 | Type in Search | Show matching files across the product. Plain text is a substring match on name, path, revision, lifecycle, parameters, and the **Type** column (including collected Creo labels like SHEETMETAL, SKELETON, MFG, PART). `*` / `?` wildcards and `^` / `$` anchors work (`*.prt`, `^CAD/`, `.prt$`). Hover the search box for short examples | Treat `*.prt` as literal characters to find; run full regex; ignore Type column values |
+| Open **Details** / History from a search (toolbar or double-click), then use the browser **Back** button (or return to Files) | Keep the search text, re-run the product-wide matches, and re-select the file you had selected when you left | Clear search or show the empty folder list just because you opened Details / History or pressed Back |
 | Clear Search | Show the normal folder view again | Bring back folders/files you already removed |
 | Click a metric (Parts, Assemblies, …) | Filter and select those files; click again to clear | Jump into a folder or leave the page |
 | Click **Folders** | Filter to folder rows and select them; show the pill count of folders in the current list (including **0**); stays **on** together with **Files** if both were turned on (clicking Files does not turn Folders off, and does not force Folders back on); turning **Folders** or **Files** off **stays off** after folder/product navigation (latest pill state wins — not an older folder’s saved filters); turning **Folders** off **unselects** folder rows even if **Files** stays on; clicking another type pill (Creo Models, Parts, …) with Folders off **hides and unselects** folders | Hide the **Folders** pill when the count is 0; select files when only Folders is on; look “off” while Files is on and folders are still in the filtered selection; leave folders selected after Folders is turned off; re-activate Folders or Files after navigation just because an older folder still had them on; keep folders selected/visible under Creo Models when Folders is off |
@@ -554,7 +555,7 @@ Try the same with **Add folder…**, **Add folders…**, and **Compressed data�
 
 Automated coverage lives mainly in:
 
-- `tests/unit/test_ui_regressions.py` (includes `test_mobile_browse_css_is_minimal`, `test_details_where_used_tab_gated_on_creo_models`)
+- `tests/unit/test_ui_regressions.py` (includes `test_mobile_browse_css_is_minimal`, `test_details_where_used_tab_gated_on_creo_models`, `test_files_search_survives_details_and_back`)
 - `tests/unit/test_user_interaction_validations.py`
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
