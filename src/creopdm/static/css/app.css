@@ -605,6 +605,48 @@ a.brand:hover { text-decoration: none; color: inherit; }
   border-color: #e0a0a0;
   color: #9b1c1c;
 }
+.utilities-status-cpu-ok {
+  background: #e8f6ec;
+  border-color: #9dceb0;
+  color: #1f6b3a;
+}
+.utilities-status-cpu-busy {
+  background: #fff6e5;
+  border-color: #e0c48a;
+  color: #8a5a00;
+}
+.utilities-status-cpu-hot {
+  background: #fdecec;
+  border-color: #e0a0a0;
+  color: #9b1c1c;
+}
+.admin-utilities .utilities-cpu-meter {
+  display: inline-block;
+  vertical-align: middle;
+  width: min(16rem, 70%);
+  height: 0.7rem;
+  margin-right: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #eef2f5;
+  overflow: hidden;
+}
+.admin-utilities .utilities-cpu-meter-fill {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  background: #3d8b5a;
+}
+.admin-utilities .utilities-cpu-meter-busy {
+  background: #c9972a;
+}
+.admin-utilities .utilities-cpu-meter-hot {
+  background: #c23b3b;
+}
+.admin-utilities .utilities-cpu-meter-text {
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
 .plain-list {
   margin: 0.5rem 0 0;
   padding-left: 1.1rem;

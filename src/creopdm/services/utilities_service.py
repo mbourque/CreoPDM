@@ -7,6 +7,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,13 +31,22 @@ from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
 from creopdm.models.user import User
 from creopdm.models.version import ObjectVersion
-from creopdm.schemas.common import UtilitiesDiskUsage, UtilitiesProbe, UtilitiesStatusResponse
+from creopdm.schemas.common import (
+    UtilitiesCpuUsage,
+    UtilitiesDiskUsage,
+    UtilitiesProbe,
+    UtilitiesStatusResponse,
+)
 from creopdm.site_availability import normalize_site_availability
 
 logger = get_logger("utilities")
 
 # Warn when free space on a volume drops below this (bytes).
 _LOW_DISK_BYTES = 1_073_741_824  # 1 GiB
+# CPU section badge only (does not change overall health status).
+_CPU_BUSY_PERCENT = 70.0
+_CPU_HOT_PERCENT = 90.0
+_CPU_SAMPLE_SECONDS = 0.2
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +155,124 @@ def _format_storage_bytes(value: int) -> str:
             text = f"{amount:.0f}" if amount >= 10 else f"{amount:.1f}".rstrip("0").rstrip(".")
             return f"{text} {unit}"
     return f"{size} B"
+
+
+def _read_cpu_times() -> tuple[float, float] | None:
+    """Return ``(idle, total)`` CPU time counters, or None if unavailable."""
+    if sys.platform.startswith("linux"):
+        try:
+            with open("/proc/stat", encoding="utf-8") as handle:
+                line = handle.readline()
+        except OSError:
+            return None
+        if not line.startswith("cpu "):
+            return None
+        parts = line.split()
+        try:
+            values = [float(part) for part in parts[1:8]]
+        except (TypeError, ValueError):
+            return None
+        if len(values) < 4:
+            return None
+        idle = values[3] + (values[4] if len(values) > 4 else 0.0)  # idle + iowait
+        total = sum(values)
+        return idle, total
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class FileTime(ctypes.Structure):
+                _fields_ = [
+                    ("dwLowDateTime", wintypes.DWORD),
+                    ("dwHighDateTime", wintypes.DWORD),
+                ]
+
+            idle = FileTime()
+            kernel = FileTime()
+            user = FileTime()
+            if not ctypes.windll.kernel32.GetSystemTimes(
+                ctypes.byref(idle),
+                ctypes.byref(kernel),
+                ctypes.byref(user),
+            ):
+                return None
+
+            def _filetime_to_int(value: FileTime) -> int:
+                return (int(value.dwHighDateTime) << 32) | int(value.dwLowDateTime)
+
+            idle_i = _filetime_to_int(idle)
+            # Kernel time includes idle on Windows.
+            kernel_i = _filetime_to_int(kernel)
+            user_i = _filetime_to_int(user)
+            total = kernel_i + user_i
+            return float(idle_i), float(total)
+        except Exception:  # noqa: BLE001 — best-effort host probe
+            return None
+    return None
+
+
+def _sample_cpu_percent(sample_seconds: float = _CPU_SAMPLE_SECONDS) -> float | None:
+    """Instantaneous host CPU busy percent over a short sample window."""
+    first = _read_cpu_times()
+    if first is None:
+        return None
+    time.sleep(max(0.05, float(sample_seconds)))
+    second = _read_cpu_times()
+    if second is None:
+        return None
+    idle_delta = second[0] - first[0]
+    total_delta = second[1] - first[1]
+    if total_delta <= 0:
+        return None
+    busy = 100.0 * (1.0 - (idle_delta / total_delta))
+    return max(0.0, min(100.0, busy))
+
+
+def _cpu_status_for_percent(percent: float | None) -> str:
+    if percent is None:
+        return "ok"
+    if percent >= _CPU_HOT_PERCENT:
+        return "hot"
+    if percent >= _CPU_BUSY_PERCENT:
+        return "busy"
+    return "ok"
+
+
+def collect_cpu_usage() -> UtilitiesCpuUsage:
+    """Read host CPU load for Utilities → Health (does not affect overall status)."""
+    logical = os.cpu_count()
+    percent: float | None = None
+    error: str | None = None
+    try:
+        percent = _sample_cpu_percent()
+    except Exception as exc:  # noqa: BLE001
+        error = str(exc) or "CPU sample failed"
+        percent = None
+
+    load_1 = load_5 = load_15 = None
+    load_label = "—"
+    try:
+        load_1, load_5, load_15 = os.getloadavg()
+        load_label = f"{load_1:.2f} / {load_5:.2f} / {load_15:.2f} (1 / 5 / 15 min)"
+    except (AttributeError, OSError):
+        load_label = "—"
+
+    if percent is None and error is None and load_1 is None:
+        error = "CPU load is not available on this host."
+
+    percent_label = "—" if percent is None else f"{percent:.0f}%"
+    return UtilitiesCpuUsage(
+        percent=None if percent is None else round(percent, 1),
+        percent_label=percent_label,
+        status=_cpu_status_for_percent(percent),
+        logical_cpus=logical,
+        load_1=None if load_1 is None else round(float(load_1), 2),
+        load_5=None if load_5 is None else round(float(load_5), 2),
+        load_15=None if load_15 is None else round(float(load_15), 2),
+        load_label=load_label,
+        error=error,
+    )
 
 
 def _directory_size_bytes(path: Path) -> int:
@@ -651,6 +779,7 @@ def collect_utilities_status(ctx: AppContext, db: Session) -> UtilitiesStatusRes
 
     site = normalize_site_availability(ctx.settings.ui.site_availability)
     now = datetime.now(timezone.utc).astimezone()
+    cpu = collect_cpu_usage()
 
     return UtilitiesStatusResponse(
         status=overall,
@@ -668,6 +797,7 @@ def collect_utilities_status(ctx: AppContext, db: Session) -> UtilitiesStatusRes
         git=git_probe,
         git_executable=git_exe,
         git_version=git_version,
+        cpu=cpu,
         disk=disks,
         product_count=product_count,
         user_count=user_count,

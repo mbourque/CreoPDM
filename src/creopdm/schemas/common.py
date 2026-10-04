@@ -39,6 +39,20 @@ class UtilitiesProbe(BaseModel):
     detail: str = ""
 
 
+class UtilitiesCpuUsage(BaseModel):
+    """Host CPU load for Administration → Utilities → Health."""
+
+    percent: float | None = None
+    percent_label: str = "—"
+    status: str = "ok"  # ok | busy | hot (display only; does not degrade overall health)
+    logical_cpus: int | None = None
+    load_1: float | None = None
+    load_5: float | None = None
+    load_15: float | None = None
+    load_label: str = "—"
+    error: str | None = None
+
+
 class UtilitiesStatusResponse(BaseModel):
     """Administration → Utilities snapshot (health, disk, counts)."""
 
@@ -57,6 +71,7 @@ class UtilitiesStatusResponse(BaseModel):
     git: UtilitiesProbe = Field(default_factory=UtilitiesProbe)
     git_executable: str = "git"
     git_version: str = ""
+    cpu: UtilitiesCpuUsage = Field(default_factory=UtilitiesCpuUsage)
     disk: list[UtilitiesDiskUsage] = Field(default_factory=list)
     product_count: int = 0
     user_count: int = 0

@@ -506,6 +506,8 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert health.status_code == 200
     assert "System health" in health.text
     assert "Disk space" in health.text
+    assert "<h2>CPU" in health.text
+    assert "utilities-cpu-meter" in health.text
     assert "Database" in health.text
     assert "Active checkouts" in health.text
     assert 'href="/admin/utilities/logs"' in health.text
@@ -527,6 +529,9 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert body["status"] in {"ok", "degraded", "error"}
     assert body["app_name"]
     assert "disk" in body and isinstance(body["disk"], list)
+    assert "cpu" in body and isinstance(body["cpu"], dict)
+    assert "percent_label" in body["cpu"]
+    assert body["cpu"]["status"] in {"ok", "busy", "hot"}
     assert body["database"]["status"] == "ok"
     assert isinstance(body["product_count"], int)
     assert isinstance(body["user_count"], int)

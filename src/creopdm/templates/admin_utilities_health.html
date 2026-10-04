@@ -72,6 +72,36 @@
   </section>
 
   <section class="settings-card">
+    <h2>CPU
+      <span class="utilities-status utilities-status-cpu-{{ status.cpu.status }}">{{ status.cpu.percent_label }}</span>
+    </h2>
+    <p class="muted small">Host CPU load at refresh (short sample). Does not change overall health status.</p>
+    <dl class="kv">
+      <dt>Load</dt>
+      <dd>
+        {% if status.cpu.percent is not none %}
+        <div class="utilities-cpu-meter" role="meter" aria-valuemin="0" aria-valuemax="100"
+             aria-valuenow="{{ status.cpu.percent|int }}" aria-label="CPU load {{ status.cpu.percent_label }}">
+          <span class="utilities-cpu-meter-fill utilities-cpu-meter-{{ status.cpu.status }}"
+                style="width: {{ status.cpu.percent }}%"></span>
+        </div>
+        <span class="utilities-cpu-meter-text">{{ status.cpu.percent_label }}</span>
+        {% else %}
+        —
+        {% endif %}
+      </dd>
+      <dt>Logical CPUs</dt>
+      <dd>{{ status.cpu.logical_cpus if status.cpu.logical_cpus is not none else "—" }}</dd>
+      <dt>Load average</dt>
+      <dd>{{ status.cpu.load_label }}</dd>
+      {% if status.cpu.error %}
+      <dt>Note</dt>
+      <dd class="muted">{{ status.cpu.error }}</dd>
+      {% endif %}
+    </dl>
+  </section>
+
+  <section class="settings-card">
     <h2>Disk space</h2>
     <p class="muted small"><strong>System</strong> is free/used on the volume that holds CreoPDM data (below about 1 GB free is degraded). Other rows are the size of that folder only.</p>
     {% for row in status.disk %}

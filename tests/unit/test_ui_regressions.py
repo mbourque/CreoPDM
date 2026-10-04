@@ -1884,6 +1884,9 @@ def test_admin_hub_panel_fills_full_width():
         encoding="utf-8"
     )
     assert "Disk space" in health
+    assert ">CPU<" in health or "<h2>CPU" in health
+    assert "utilities-cpu-meter" in health
+    assert "status.cpu.percent_label" in health
     # System volume row is {{ row.label }} from the API; template gates free/used on kind.
     assert "row.kind == 'volume'" in health or 'row.kind == "volume"' in health
     assert "size of that folder only" in health
@@ -1896,6 +1899,8 @@ def test_admin_hub_panel_fills_full_width():
     assert "utilities-log-body" in logs_tmpl
     assert ".utilities-log-body" in css
     assert ".utilities-status-ok" in css
+    assert ".utilities-cpu-meter" in css
+    assert ".utilities-status-cpu-hot" in css
     script = _app_js()
     # Sync compact / delete POSTs can take a while — show busy until the response navigates.
     assert 'form.id === "utilities-compact-vault-form"' in script
