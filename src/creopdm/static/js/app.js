@@ -5414,7 +5414,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       {
         id: "files-context-open",
         action: "open",
-        label: "Open selected…",
+        label: "Open selected",
         title: "Open the selected file in Creo or its Windows associated program.",
       },
       {
@@ -6357,7 +6357,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       syncProductSettingsVisibility();
       return null;
     }
-    // Keep agent online flag fresh so Open workspace… can hide when offline.
+    // Keep agent online flag fresh so Open workspace can hide when offline.
     // Prefer the caller's probe — association mode used to /health twice on every load.
     agent =
       prefetchedAgent !== undefined ? prefetchedAgent : await probeCreoAgent();
@@ -6436,7 +6436,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   void creoJSReady.then(() => {
     void (async () => {
       // CREOPDM_STATUS_POLL_V2: at most one /health on load; repeat only if agent says > 0.
-      // Files list only — Open workspace… visibility depends on agent online.
+      // Files list only — Open workspace visibility depends on agent online.
       const agent = await probeCreoAgent();
       await refreshCreoStatusPill(agent);
       syncToolbar();

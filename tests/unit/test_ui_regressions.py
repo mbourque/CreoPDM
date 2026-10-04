@@ -787,8 +787,10 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert 'id="open-btn"' in html
     assert 'id="open-workspace-btn"' in html
     assert html.index('id="open-btn"') < html.index('id="open-workspace-btn"')
-    assert ">Open selected…<" in html
-    assert ">Open workspace…<" in html
+    assert ">Open selected<" in html
+    assert ">Open workspace<" in html
+    assert ">Open selected…<" not in html
+    assert ">Open workspace…<" not in html
     assert "Requires creopdm-agent" in html
     assert "Falls back to the vault folder" not in html
     assert "agentIsOnline" in script
@@ -1435,7 +1437,8 @@ def test_files_context_menu_download_to_workspace():
     assert "function downloadSelectedToWorkspace(" in script
     assert "function runFilesContextMenuAction(" in script
     assert "Download selected to workspace" in script
-    assert "Open selected…" in script
+    assert 'label: "Open selected"' in script
+    assert "Open selected…" not in script
     assert ">Details<" in script or '"Details"' in script
     assert "Checkout selected" in script
     assert "Undo Checkout" in script
@@ -1497,7 +1500,9 @@ def test_files_context_menu_download_to_workspace():
     assert "Start creopdm-agent" in download
     assert ".files-context-menu" in css
     assert "**Right-click** a file or folder row" in docs
-    assert "**Open selected…**" in docs
+    assert "**Open selected**" in docs
+    assert "**Open workspace**" in docs
+    assert "not on **Open selected** / **Open workspace**" in docs
     assert "**Details**" in docs
     assert "**Checkout selected**" in docs
     assert "**Undo Checkout**" in docs

@@ -443,10 +443,10 @@
       <div class="toolbar-menu-panel" role="menu" hidden>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-btn"
                 disabled
-                title="Open the selected file in Creo or its Windows associated program.">Open selected…</button>
+                title="Open the selected file in Creo or its Windows associated program.">Open selected</button>
         <button type="button" class="toolbar-menu-item" role="menuitem" id="open-workspace-btn"
                 {% if selected %}data-product="{{ selected.uuid }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-folder="{{ current_folder }}"{% else %}disabled{% endif %}
-                title="Open this product’s local workspace on this PC. Requires creopdm-agent.">Open workspace…</button>
+                title="Open this product’s local workspace on this PC. Requires creopdm-agent.">Open workspace</button>
       </div>
     </div>
     {% if product_ui.show_checkout or product_ui.show_undo_checkout or product_ui.show_force_undo_checkout %}
