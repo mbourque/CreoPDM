@@ -9989,8 +9989,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           ? "Local workspace."
           : "Not in the product yet."
         : item.local_cache
-          ? "Local workspace — select and use Add ▾ → Add selected…."
-          : "Not in the product yet. Select and use Add ▾ → Add selected….";
+          ? "Local workspace — select and Add."
+          : "Not in the product yet. Select and click Add.";
       appendQueueRow(
         body,
         productId,

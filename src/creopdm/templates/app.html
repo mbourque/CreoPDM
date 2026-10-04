@@ -372,7 +372,7 @@
                 <div class="muted small">{{ item.relative_path }}</div>
                 {% endif %}
               </td>
-              <td>{% if product_ui.show_add %}Not in the product yet. Select and use Add ▾ → Add selected….{% else %}Not in the product yet.{% endif %}</td>
+              <td>{% if product_ui.show_add %}Not in the product yet. Select and click Add.{% else %}Not in the product yet.{% endif %}</td>
               <td title="{{ item.size }} bytes">{{ item.size | byte_size }}</td>
               <td{% if item.saved_at %} title="{{ local_time_pretty(item.saved_at) }}"{% endif %}>{{ item.saved_at or "—" }}</td>
             </tr>
