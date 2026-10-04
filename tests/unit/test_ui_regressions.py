@@ -1456,8 +1456,15 @@ def test_files_context_menu_download_to_workspace():
     assert 'dataset.owned === "1"' in caps
     assert "canUndo" in caps
     assert "canExportObjects" in caps
+    assert "canDiscardLocal" in caps
+    assert "discardLocalBtn" in caps
+    assert "isNewFileQueueRow(row) && row.dataset.localCache === \"1\"" in caps
     docs_ctx = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "already local-workspace tips" in docs_ctx or "already in the local workspace" in docs_ctx
+    ensure = _between(script, "function ensureFilesContextMenu(", "function closeFilesContextMenu(")
+    assert 'id: "files-context-discard-local"' in ensure
+    assert 'action: "discard-local"' in ensure
+    assert "Remove from Workspace" in ensure
     open_menu = _between(script, "function openFilesContextMenu(", "async function downloadSelectedToWorkspace(")
     assert "openItem.hidden = !caps.canOpen" in open_menu
     assert "detailsItem.hidden = !caps.canDetails" in open_menu
@@ -1467,6 +1474,7 @@ def test_files_context_menu_download_to_workspace():
     assert "checkinItem.hidden = !caps.canCheckin" in open_menu
     assert "downloadItem.hidden = !caps.canDownload" in open_menu
     assert "exportItem.hidden = !caps.canExport" in open_menu
+    assert "discardLocalItem.hidden = !caps.canDiscardLocal" in open_menu
     run = _between(script, "function runFilesContextMenuAction(", "function onFileTableContextMenu(")
     assert "openBtn?.click()" in run
     assert "historyBtn?.click()" in run
@@ -1475,6 +1483,8 @@ def test_files_context_menu_download_to_workspace():
     assert 'action === "add-selected"' in run
     assert "checkinBtn?.click()" in run
     assert "exportSelectedBtn?.click()" in run
+    assert 'action === "discard-local"' in run
+    assert "discardLocalBtn?.click()" in run
     download = _between(
         script,
         "async function downloadSelectedToWorkspace(",
@@ -1490,6 +1500,7 @@ def test_files_context_menu_download_to_workspace():
     assert "**Undo Checkout**" in docs
     assert "**Add selected…**" in docs
     assert "**Export selected…**" in docs
+    assert "**Remove from Workspace**" in docs
     assert "**hide** each item when that action is not possible" in docs
     assert "without `objects.view`" in docs or "`objects.view`" in docs
 

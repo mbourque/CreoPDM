@@ -5391,6 +5391,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       Boolean(exportSelectedBtn) &&
       canExportObjects &&
       exportHasSelection;
+    // Same rule as Remove ▾ → Remove from Workspace (local New files only).
+    const canDiscardLocal =
+      Boolean(discardLocalBtn) &&
+      selected.some((row) => isNewFileQueueRow(row) && row.dataset.localCache === "1");
     return {
       canOpen,
       canDetails,
@@ -5400,6 +5404,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       canCheckin,
       canDownload,
       canExport,
+      canDiscardLocal,
     };
   }
 
@@ -5453,6 +5458,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         action: "export",
         label: "Export selected…",
         title: "Download the selected vault files or folders as a zip.",
+      },
+      {
+        id: "files-context-discard-local",
+        action: "discard-local",
+        label: "Remove from Workspace",
+        title:
+          "Move selected files from the local workspace on this PC to the Recycle Bin. Does not affect the vault or product list.",
       },
     ];
     if (!menu) {
@@ -5525,6 +5537,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       && !caps.canCheckin
       && !caps.canDownload
       && !caps.canExport
+      && !caps.canDiscardLocal
     ) {
       return false;
     }
@@ -5538,6 +5551,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const checkinItem = menu.querySelector("#files-context-checkin");
     const downloadItem = menu.querySelector("#files-context-download");
     const exportItem = menu.querySelector("#files-context-export");
+    const discardLocalItem = menu.querySelector("#files-context-discard-local");
     if (openItem) openItem.hidden = !caps.canOpen;
     if (detailsItem) detailsItem.hidden = !caps.canDetails;
     if (checkoutItem) checkoutItem.hidden = !caps.canCheckout;
@@ -5550,6 +5564,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (downloadItem) downloadItem.hidden = !caps.canDownload;
     if (exportItem) exportItem.hidden = !caps.canExport;
+    if (discardLocalItem) discardLocalItem.hidden = !caps.canDiscardLocal;
     positionFilesContextMenu(menu, clientX, clientY);
     return true;
   }
@@ -5634,6 +5649,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (action === "export") {
       exportSelectedBtn?.click();
+      return;
+    }
+    if (action === "discard-local") {
+      discardLocalBtn?.click();
     }
   }
 
