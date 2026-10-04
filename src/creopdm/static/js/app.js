@@ -5763,6 +5763,63 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  function looksLikeCreoEmbeddedBrowser() {
+    // Strong signals we are inside Creo's CEF — never plain Chrome/Edge.
+    if (creoExternalBridge()) return true;
+    try {
+      if (typeof pfcGetCurrentSession === "function") return true;
+    } catch {
+      /* ignore */
+    }
+    const ua = String(navigator.userAgent || "");
+    return /creo|ptc|parametric/i.test(ua);
+  }
+
+  function showCreoConnectingOverlay() {
+    const el = $("#creo-connecting-overlay");
+    if (!el) return;
+    el.hidden = false;
+    document.body.classList.add("creo-connecting");
+  }
+
+  function hideCreoConnectingOverlay() {
+    const el = $("#creo-connecting-overlay");
+    if (el) el.hidden = true;
+    document.body.classList.remove("creo-connecting");
+    if (window.__creopdmCreoConnectingPoll) {
+      window.clearInterval(window.__creopdmCreoConnectingPoll);
+      window.__creopdmCreoConnectingPoll = 0;
+    }
+  }
+
+  function startCreoConnectingOverlayGuard() {
+    // Only in Creo's embedded browser while Creo.JS is still linking.
+    // Soft boots keep the live bridge — never block after Soft-nav.
+    if (soft || hostedCreoJS()) {
+      hideCreoConnectingOverlay();
+      return;
+    }
+    if (!looksLikeCreoEmbeddedBrowser()) {
+      hideCreoConnectingOverlay();
+      return;
+    }
+    showCreoConnectingOverlay();
+    let tries = 0;
+    if (window.__creopdmCreoConnectingPoll) {
+      window.clearInterval(window.__creopdmCreoConnectingPoll);
+    }
+    window.__creopdmCreoConnectingPoll = trackedInterval(() => {
+      tries += 1;
+      if (hostedCreoJS()) {
+        hideCreoConnectingOverlay();
+        syncCreoSessionControlsFromBridge();
+        return;
+      }
+      // ~15s — leave Session offline; do not trap clicks forever.
+      if (tries >= 60) hideCreoConnectingOverlay();
+    }, 250);
+  }
+
   function canGatherCreoMetadata() {
     try {
       if (!window.CreoJS) return false;
@@ -6151,6 +6208,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // pill still says Session offline — promote without probing agent.
     const pill = $("#creo-status");
     if (!pill || !hostedCreoJS()) return;
+    hideCreoConnectingOverlay();
     if (pill.dataset.state === "ok") return;
     const text = String(pill.textContent || "");
     if (text.includes("Agent offline")) return;
@@ -6279,6 +6337,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   // Soft folder/product switches keep the live Creo.JS bridge and header status
   // pill (both live outside main.shell). Never re-probe agent or reconnect.
+  startCreoConnectingOverlayGuard();
   if (soft) {
     syncCreoSessionControlsFromBridge();
     // Soft boot into Details/Admin can land before the bridge is readable again.

@@ -719,6 +719,18 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "pollCreoBridgeUntilLive" in non_list
     assert "function pollCreoBridgeUntilLive(" in script
     assert "Details does not stay Session offline" in non_list
+    # Embedded browser only: block clicks while Creo.JS is still linking.
+    assert "function startCreoConnectingOverlayGuard(" in script
+    assert "function looksLikeCreoEmbeddedBrowser(" in script
+    assert "Connecting to Creo…" in (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(
+        encoding="utf-8"
+    )
+    assert "startCreoConnectingOverlayGuard()" in block
+    assert "soft || hostedCreoJS()" in script
+    assert "never plain Chrome/Edge" in script or "Never plain Chrome" in script
+    docs_creo = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "Connecting to Creo…" in docs_creo
+    assert "never in Chrome/Edge" in docs_creo
     # Soft sync must promote a stale Session offline pill when Creo.JS is live.
     soft_sync = _between(
         script, "function syncCreoSessionControlsFromBridge(", "if (soft)"
