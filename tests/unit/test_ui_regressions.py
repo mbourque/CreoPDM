@@ -580,12 +580,15 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "Creo.JS is not connected yet" in open_fn
     assert "Windows file association from the embedded browser" in open_fn
     assert "spec.localCache && spec.relativePath" in open_fn
+    assert "!spec.objectId" not in open_fn.split("spec.localCache && spec.relativePath", 1)[1].split("\n", 1)[0]
     assert "openLocalCacheRelative(" in open_fn
     assert "function openLocalCacheRelative(" in script
     assert "function joinLocalWorkspacePath(" in script
-    assert "localCache: row.dataset.localCache === \"1\"" in script
+    open_spec = _between(script, "function openSpecFromRow(", "function stateSortToken(")
+    assert "localCache && relativePath" in open_spec
+    assert "Newer local save" in open_spec or "agent-workspace tip" in open_spec
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
-    assert "New file (local)" in docs and "Vault file not found" in docs
+    assert "Newer local save" in docs and "Vault file not found" in docs
     open_wrap = _between(script, "async function openPdmObject(", "async function openPdmObjectWork(")
     assert 'withBusy("Preparing…"' in open_wrap
     assert "withTimeout(" in open_wrap

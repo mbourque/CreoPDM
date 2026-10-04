@@ -4315,17 +4315,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function selectedOpenSpec() {
     const selected = selectedRows();
     if (selected.length === 1) {
-      const row = selected[0];
-      if (!row.classList.contains("folder-row")) {
-        if (row.dataset.uuid) return { objectId: row.dataset.uuid };
-        if (row.dataset.relativePath) {
-          return {
-            relativePath: row.dataset.relativePath,
-            productId: currentProductId(),
-            localCache: row.dataset.localCache === "1",
-          };
-        }
-      }
+      return openSpecFromRow(selected[0], selected[0].querySelector(".object-open"));
     }
     const ids = selectedIds();
     if (ids.length === 1) return { objectId: ids[0] };
@@ -4851,14 +4841,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function openSpecFromRow(row, openLink) {
     if (!row || row.classList.contains("folder-row")) return null;
     const uuid = openLink?.dataset?.uuid || row.dataset.uuid || "";
-    if (uuid) return { objectId: uuid };
     const relativePath = openLink?.dataset?.relativePath || row.dataset.relativePath || "";
+    const localCache = row.dataset.localCache === "1";
+    // Newer local save / New file (local): open the agent-workspace tip first
+    // (even when a product uuid exists — vault prepare is the wrong source).
+    if (localCache && relativePath) {
+      return {
+        relativePath,
+        productId: currentProductId(),
+        localCache: true,
+        objectId: uuid || undefined,
+      };
+    }
+    if (uuid) return { objectId: uuid };
     if (relativePath) {
       return {
         relativePath,
         productId: currentProductId(),
-        // New file (local) lives only in the agent workspace — not the vault yet.
-        localCache: row.dataset.localCache === "1",
+        localCache: false,
       };
     }
     return null;
@@ -7397,9 +7397,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function openPdmObjectWork(target) {
     const spec = typeof target === "string" ? { objectId: target } : target || {};
-    // New files that exist only in the local workspace must not hit /api/creo/open
-    // (that looks in the vault and returns "Vault file not found").
-    if (spec.localCache && spec.relativePath && !spec.objectId) {
+    // Local-workspace tips (New file local / Newer local save on Modified) must
+    // open from the agent cache — not /api/creo/open (vault tip / missing file).
+    if (spec.localCache && spec.relativePath) {
       const productId = spec.productId || currentProductId();
       if (!productId) {
         showError($("#toolbar-error"), "No product is selected.");
