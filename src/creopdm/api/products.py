@@ -8,7 +8,9 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from creopdm.api.checkout import present_object, present_objects
 from creopdm.api.deps import (
@@ -1123,6 +1125,90 @@ def _zip_import_job_response(status) -> ZipImportJobResponse:
     )
 
 
+def _zip_extract_and_import(
+    ctx: AppContext,
+    product_uuid: str,
+    zip_tmp: Path,
+    parent_folder: str,
+    note: str | None,
+    job_id: str,
+) -> tuple[list[BatchItemResult], list[BatchItemResult], Path | None]:
+    """Extract + import on a worker thread so progress polls are not blocked."""
+    from creopdm.models.product import Product
+    from creopdm.utils.zip_import import extract_zip_to_temp, plan_zip_import_jobs
+
+    if job_id:
+        ctx.zip_imports.set_extracting(job_id)
+    extract_parent, extract_dir = extract_zip_to_temp(zip_tmp)
+    jobs = plan_zip_import_jobs(
+        extract_dir,
+        parent_folder=parent_folder,
+        purgeable_extensions=ctx.config.purgeable_cad_extensions(),
+        ignore_patterns=ctx.config.ignore_patterns(),
+    )
+    if not jobs:
+        raise ValidationAppError("No files to add were found in that zip.")
+
+    def _on_import_progress(phase: str, done: int, files_total: int) -> None:
+        if not job_id:
+            return
+        if phase == "importing":
+            ctx.zip_imports.set_importing(job_id, files_done=done, files_total=files_total)
+        elif phase == "committing":
+            ctx.zip_imports.set_committing(job_id, files_total=files_total)
+        elif phase == "recording":
+            ctx.zip_imports.set_recording(job_id, files_done=done, files_total=files_total)
+
+    if job_id:
+        ctx.zip_imports.set_importing(job_id, files_done=0, files_total=len(jobs))
+
+    ok: list[BatchItemResult] = []
+    failed: list[BatchItemResult] = []
+    session = ctx.session_factory()
+    try:
+        product = session.scalar(select(Product).where(Product.uuid == product_uuid))
+        if product is None:
+            raise ValidationAppError("Product not found.")
+        for outcome in ctx.objects.import_files(
+            session, product, jobs, note, on_progress=_on_import_progress
+        ):
+            if outcome.error is not None:
+                failed.append(
+                    BatchItemResult(
+                        uuid="",
+                        filename=outcome.filename,
+                        code=outcome.error.code,
+                        message=outcome.error.message,
+                    )
+                )
+            elif outcome.obj is not None:
+                ok.append(
+                    BatchItemResult(
+                        uuid=outcome.obj.uuid,
+                        filename=outcome.filename,
+                        status="added",
+                    )
+                )
+            else:
+                failed.append(
+                    BatchItemResult(
+                        uuid="",
+                        filename=outcome.filename,
+                        code="APPLICATION_ERROR",
+                        message="The file was not added.",
+                    )
+                )
+        session.commit()
+        if job_id:
+            ctx.zip_imports.set_done(job_id, files_total=len(ok))
+        return ok, failed, extract_parent
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 @router.post(
     "/api/products/{product_id}/zip-import/jobs",
     response_model=ZipImportJobResponse,
@@ -1171,12 +1257,7 @@ async def import_from_zip(
 ) -> BatchOperationResponse:
     """Upload one .zip, extract on the host, import like Add folders… (strip single root)."""
     from creopdm.product_state import ensure_product_mutable
-    from creopdm.utils.zip_import import (
-        MAX_ZIP_IMPORT_BYTES,
-        assert_zip_filename,
-        extract_zip_to_temp,
-        plan_zip_import_jobs,
-    )
+    from creopdm.utils.zip_import import MAX_ZIP_IMPORT_BYTES, assert_zip_filename
 
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
     try:
@@ -1243,7 +1324,8 @@ async def import_from_zip(
                         "That zip is larger than the 2 GB limit."
                     )
                 handle.write(chunk)
-                if job_id and (total == len(chunk) or total % (8 * 1024 * 1024) < len(chunk)):
+                # Every chunk (~1 MB) so the busy overlay keeps moving.
+                if job_id:
                     ctx.zip_imports.set_uploading(
                         job_id,
                         bytes_done=total,
@@ -1257,61 +1339,17 @@ async def import_from_zip(
             ctx.zip_imports.set_uploading(job_id, bytes_done=total, bytes_total=total)
             ctx.zip_imports.set_extracting(job_id)
 
-        extract_parent, extract_dir = extract_zip_to_temp(zip_tmp)
-        jobs = plan_zip_import_jobs(
-            extract_dir,
-            parent_folder=parent_folder,
-            purgeable_extensions=ctx.config.purgeable_cad_extensions(),
-            ignore_patterns=ctx.config.ignore_patterns(),
+        # Extract/import are sync and long — run off the event loop so GET
+        # zip-import/jobs polls (busy overlay) are not frozen at the last upload %.
+        ok, failed, extract_parent = await run_in_threadpool(
+            _zip_extract_and_import,
+            ctx,
+            product_id,
+            zip_tmp,
+            parent_folder,
+            note,
+            job_id,
         )
-        if not jobs:
-            raise ValidationAppError("No files to add were found in that zip.")
-
-        def _on_import_progress(phase: str, done: int, files_total: int) -> None:
-            if not job_id:
-                return
-            if phase == "importing":
-                ctx.zip_imports.set_importing(job_id, files_done=done, files_total=files_total)
-            elif phase == "committing":
-                ctx.zip_imports.set_committing(job_id, files_total=files_total)
-            elif phase == "recording":
-                ctx.zip_imports.set_recording(
-                    job_id, files_done=done, files_total=files_total
-                )
-
-        if job_id:
-            ctx.zip_imports.set_importing(job_id, files_done=0, files_total=len(jobs))
-        for outcome in ctx.objects.import_files(
-            db, product, jobs, note, on_progress=_on_import_progress
-        ):
-            if outcome.error is not None:
-                failed.append(
-                    BatchItemResult(
-                        uuid="",
-                        filename=outcome.filename,
-                        code=outcome.error.code,
-                        message=outcome.error.message,
-                    )
-                )
-            elif outcome.obj is not None:
-                ok.append(
-                    BatchItemResult(
-                        uuid=outcome.obj.uuid,
-                        filename=outcome.filename,
-                        status="added",
-                    )
-                )
-            else:
-                failed.append(
-                    BatchItemResult(
-                        uuid="",
-                        filename=outcome.filename,
-                        code="APPLICATION_ERROR",
-                        message="The file was not added.",
-                    )
-                )
-        if job_id:
-            ctx.zip_imports.set_done(job_id, files_total=len(ok))
     except Exception as exc:
         if job_id:
             message = getattr(exc, "message", None) or str(exc) or "Compressed import failed."
@@ -1327,7 +1365,6 @@ async def import_from_zip(
         except Exception:
             pass
 
-    db.commit()
     # Where Used starts from the browser after all Add chunks finish (not per chunk).
     if ok:
         from creopdm.api.watch_notify import notify_product_watchers
