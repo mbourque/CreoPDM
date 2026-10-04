@@ -958,30 +958,34 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert "show_full" in overview
     assert "show_instance" in overview
     assert 'class="mono"' not in overview
-    assert "detail-path" in overview
+    assert "<dt>Origin</dt>" not in overview
+    assert "identity.origin" not in overview
     assert "Content hash" not in overview
     assert "h[:12]" not in overview
     assert "<dt>Date created</dt>" in overview
     assert "local_time_pretty(object.created_at)" in overview
     assert "local_time(object.updated_at) != local_time(object.created_at)" in overview
     assert "omits content hash" in docs
+    assert "omits content hash and **Origin**" in docs
     assert "Date created" in docs and "Date modified" in docs
     assert "hide Date modified when it matches Date created" in docs or "same as Date created" in docs
     assert "show content hash on Overview" in docs
+    assert "show **Origin**" in docs
     assert ".detail .filename-cell" in css
     assert "font-family: inherit" in css
     assert "text-transform: uppercase" in css
     assert "<dt>Number</dt>" not in overview
     assert "<dt>Name</dt>" in overview
     assert "<dt>Model type</dt>" in overview
-    assert "<dt>Model role</dt>" in overview
+    assert "<dt>Subtype</dt>" in overview
+    assert "<dt>Model role</dt>" not in overview
     assert "identity.model_type" in overview
     assert "is_top_level_assembly" in overview
     assert "ASSEMBLY (Top Level)" in overview
     assert "(Top Level)" in detail
     assert "Top Level" in docs
     assert "identity.model_role" in overview
-    assert "Model type" in docs and "Model role" in docs
+    assert "Model type" in docs and "**Subtype**" in docs
     assert "label the model **Name**" in docs or "model **Name**" in docs
     assert "label the model identity as Number" in docs
     assert "skips duplicate identity fields" in docs

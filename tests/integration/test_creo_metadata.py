@@ -187,7 +187,8 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert shaft_detail.status_code == 200
     assert "Model type" in shaft_detail.text
     assert "PART" in shaft_detail.text
-    assert "Model role" in shaft_detail.text
+    assert "Subtype" in shaft_detail.text
+    assert "Model role" not in shaft_detail.text
     assert "SHEETMETAL" in shaft_detail.text
 
     where = client.get(f"/api/objects/{shaft['uuid']}/where-used")
@@ -206,7 +207,8 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert "Main Frame" in text
     assert "Model type" in text
     assert "MFG" in text
-    assert "Model role" in text
+    assert "Subtype" in text
+    assert "Model role" not in text
     assert "DESCRIPTION" in text
     assert 'data-tab="structure"' in text
     assert 'data-tab="bom"' in text

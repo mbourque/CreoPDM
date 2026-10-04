@@ -98,7 +98,7 @@ def test_home_page(client):
     assert "push169" not in text
     assert "export3" not in text
     assert "compact-busy" not in text
-    assert "warm-open-index" in text
+    assert "preserve-list-search" in text
     assert "toolbar52" in text
     assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

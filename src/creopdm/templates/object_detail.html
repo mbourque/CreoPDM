@@ -167,13 +167,10 @@
           <dt>Model type</dt><dd>ASSEMBLY (Top Level)</dd>
           {% endif %}
           {% if identity.model_role %}
-          <dt>Model role</dt><dd>{{ identity.model_role }}</dd>
+          <dt>Subtype</dt><dd>{{ identity.model_role }}</dd>
           {% endif %}
           {% if object.creo_release %}
           <dt>Creo</dt><dd>{{ object.creo_release }}</dd>
-          {% endif %}
-          {% if identity.origin %}
-          <dt>Origin</dt><dd class="detail-path">{{ identity.origin }}</dd>
           {% endif %}
           <dt>Date created</dt>
           <dd>{% if object.created_at %}<span title="{{ local_time_pretty(object.created_at) }}">{{ local_time(object.created_at) }}</span>{% else %}—{% endif %}</dd>
@@ -474,9 +471,6 @@
     <p class="muted" id="where-used-empty">Looking up assemblies and drawings that reference this file…</p>
     {% endif %}
     </div>
-    <p class="muted small" style="margin-top:0.75rem">
-      After a bulk Add, use product settings → <strong>Rebuild Where Used</strong> once so links are stored in the database (fast SQL). Creo Check In still refreshes BOM when you capture metadata.
-    </p>
   </section>
   {% endif %}
 
