@@ -376,8 +376,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       softNavBusy = true;
       window.__creopdmSoftNavBusy = true;
       try {
-        // Capture search (+ selection) before the shell swap — Back must restore it.
+        // Capture search (+ selection) and Files list tab before the shell swap.
+        // Only while #object-table exists — leaving Details must not overwrite
+        // a New files / Modified restore with Overview/History.
         persistListSearchState();
+        if (document.querySelector("#object-table")) {
+          rememberWatchView();
+        }
         const response = await fetch(href, {
           headers: { Accept: "text/html", "X-CreoPDM-Soft": "1" },
           credentials: "same-origin",
@@ -454,6 +459,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     closeOpenDialogs();
     persistListSearchState();
+    if (document.querySelector("#object-table")) {
+      rememberWatchView();
+    }
     // Always soft-nav shell pages — hard reload SSR-paints Not Connected and kills Creo.JS.
     if (isSoftNavUrl(url)) {
       void withBusy("Loading…", () => softNavigate(url, "push"));
@@ -10628,18 +10636,25 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   const WATCH_KEY = "creopdmWatchRestore";
+  const LIST_RESTORE_TABS = new Set(["files", "checked-out", "modified", "changes"]);
   function rememberWatchView(overrides = {}) {
     try {
-      const activeTab =
+      const rawTab =
         overrides.tab ??
         document.querySelector(".tabs .tab.is-active")?.dataset.tab ??
         "";
+      // Only Files-page tabs — never Overview/History from the Details page.
+      const activeTab = LIST_RESTORE_TABS.has(String(rawTab)) ? String(rawTab) : "";
+      if (!activeTab && overrides.tab == null) {
+        // Leaving a non-list page — keep any pending Files tab restore intact.
+        return;
+      }
       const ids = overrides.ids ?? selectedIds();
       sessionStorage.setItem(
         WATCH_KEY,
         JSON.stringify({
           ids,
-          tab: activeTab,
+          tab: activeTab || "files",
         })
       );
       // Soft reload must not drop an active product-wide search either.
@@ -10663,11 +10678,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     } catch {
       return;
     }
-    if (saved.tab) {
-      document.querySelector(`.tabs .tab[data-tab="${saved.tab}"]`)?.click();
-      if (saved.tab === "history") {
-        window.history.replaceState(null, "", "#history");
-      }
+    const tab = LIST_RESTORE_TABS.has(String(saved.tab || "")) ? String(saved.tab) : "";
+    if (tab) {
+      document.querySelector(`.tabs .tab[data-tab="${tab}"]`)?.click();
     }
     // Search restore rewrites the Files tbody — skip folder-row selection when
     // a saved search will re-select after results load.

@@ -1294,6 +1294,29 @@ def test_files_search_survives_details_and_back():
     assert "Clear search or show the empty folder list just because you opened Details" in docs
 
 
+def test_list_tab_survives_details_and_back():
+    """Files / Checked out / Modified / New files must restore after Details → Back."""
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert 'const WATCH_KEY = "creopdmWatchRestore"' in script
+    assert "LIST_RESTORE_TABS" in script
+    assert '"modified"' in script and '"changes"' in script
+    soft = _between(script, "function softNavigate(", "function leavePage(")
+    assert 'querySelector("#object-table")' in soft
+    assert "rememberWatchView()" in soft
+    leave = _between(script, "function leavePage(", "function reloadPage(")
+    assert 'querySelector("#object-table")' in leave
+    assert "rememberWatchView()" in leave
+    remember = _between(script, "function rememberWatchView(", "function restoreWatchView(")
+    assert "LIST_RESTORE_TABS.has" in remember
+    assert "keep any pending Files tab restore intact" in remember
+    restore = _between(script, "function restoreWatchView(", "function watchIdleMinutes(")
+    assert "LIST_RESTORE_TABS.has" in restore
+    assert "restoreWatchView()" in script
+    assert "keep the Files list tab you were on" in docs
+    assert "reset to the **Files** tab when you left from **Modified**" in docs
+
+
 def test_toolbar_hides_inactive_actions():
     """Inactive toolbar buttons and fly-up items are hidden, not left greyed out."""
     script = _app_js()
