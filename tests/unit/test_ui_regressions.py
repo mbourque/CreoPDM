@@ -1315,6 +1315,24 @@ def test_files_search_survives_details_and_back():
     assert "Clear search or show the empty folder list just because you opened Details" in docs
 
 
+def test_search_form_only_on_files_tab():
+    """Search box is for the Files list — hide it on other product list tabs."""
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    sync = _between(script, "function syncSearchFormVisibility(", "searchInput?.addEventListener")
+    assert 'form.hidden = activeListTab() !== "files"' in sync
+    assert "syncSearchFormVisibility()" in script
+    tab_click = _between(
+        script,
+        'document.querySelectorAll(".tabs .tab").forEach((tab) => {',
+        "let whereUsedLoaded = false;",
+    )
+    assert "syncSearchFormVisibility()" in tab_click
+    assert "Type in Search (Files tab only)" in docs
+    assert "show Search only on **Files**" in docs
+    assert "leave Search visible on Checked out / Modified / New files" in docs
+
+
 def test_list_tab_survives_details_and_back():
     """Files / Checked out / Modified / New files must restore after Details → Back."""
     script = _app_js()

@@ -4103,6 +4103,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }, 200);
   }
 
+  function syncSearchFormVisibility() {
+    // Product search only applies to the Files list — hide on Checked out /
+    // Modified / New files so the box is not left looking broken.
+    const form = $("#search-form");
+    if (!form) return;
+    form.hidden = activeListTab() !== "files";
+  }
+
   searchInput?.addEventListener("input", onSearchInput);
   $("#search-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -4120,6 +4128,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     persistListSearchState();
     void searchAllFolders(query);
   });
+  syncSearchFormVisibility();
 
   async function restoreListSearchState() {
     if (!searchInput || !objectTable || !isListPage) return;
@@ -10365,6 +10374,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       else if (name === "checked-out") void loadCheckedOutTab();
       else if (name === "where-used") void loadWhereUsedTab();
       else refreshTabMetrics();
+      syncSearchFormVisibility();
       syncDetailToolbar();
       // Keep list tab ready for Details → Back (Details boot must not consume it).
       if (LIST_RESTORE_TABS.has(String(name || "")) && document.querySelector("#object-table")) {
