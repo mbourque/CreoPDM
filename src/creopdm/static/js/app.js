@@ -6951,7 +6951,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return created;
   }
 
-    function newerLocalCacheSaves(cacheFiles, objects) {
+  function newerLocalCacheSaves(cacheFiles, objects) {
     // Prefer full vault-relative path. Older flat agent caches (basename only)
     // still match when that basename is unique in the product.
     const bestByLogical = new Map();
@@ -7033,7 +7033,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         can_checkin: obj.can_checkin ? "1" : "0",
         can_checkout: obj.can_checkout ? "1" : "0",
       };
-      needsHash.push({ row, vaultHash, rel: local.rel });
+      // Prefer .creopdm_cache_index.json hash from GET /files (size-verified).
+      const indexHash = String(local.item.content_hash || "").trim().toLowerCase();
+      needsHash.push({ row, vaultHash, rel: local.rel, indexHash });
     });
     return { rows, needsHash };
   }
@@ -7042,13 +7044,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const planned = newerLocalCacheSaves(cacheFiles, objects);
     const rows = [...(planned.rows || [])];
     const pending = planned.needsHash || [];
-    if (!pending.length || !productId) return rows;
+    if (!pending.length) return rows;
+    const needHashPaths = [];
+    pending.forEach((item) => {
+      const indexHash = String(item.indexHash || "").trim().toLowerCase();
+      if (indexHash && indexHash !== item.vaultHash) {
+        // .creopdm_cache_index.json + on-disk size match — file is real and differs.
+        rows.push(item.row);
+        return;
+      }
+      if (indexHash && indexHash === item.vaultHash && !item.row?.newer_save) {
+        // Index agrees with vault tip; skip rehash.
+        return;
+      }
+      // Missing index, size-stale index, or newer .N — verify via /hash-paths.
+      needHashPaths.push(item);
+    });
+    if (!needHashPaths.length || !productId) return rows;
     try {
       const hashes = await hashAgentCachePaths(
         productId,
-        pending.map((item) => item.rel)
+        needHashPaths.map((item) => item.rel)
       );
-      pending.forEach((item) => {
+      needHashPaths.forEach((item) => {
         const localHash = hashes.get(String(item.rel || "").toLowerCase()) || "";
         if (localHash && localHash !== item.vaultHash) {
           rows.push(item.row);

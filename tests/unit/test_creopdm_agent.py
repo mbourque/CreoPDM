@@ -1519,6 +1519,41 @@ def test_agent_hash_paths_detects_same_size_different_content(tmp_path):
         assert by_path["nested/same.prt"]["size"] == 4
 
 
+def test_agent_files_includes_index_content_hash_when_size_matches(tmp_path):
+    """GET /files exposes .creopdm_cache_index.json hashes only when size still matches."""
+    import hashlib
+    import json
+
+    root = tmp_path / "cache"
+    product_id = "proj-index-files"
+    cache = root / product_id
+    cache.mkdir(parents=True)
+    payload = b"local-tip-bytes"
+    digest = hashlib.sha256(payload).hexdigest()
+    (cache / "shaft.prt.2").write_bytes(payload)
+    (cache / "stale.prt").write_bytes(b"xx")
+    (cache / ".creopdm_cache_index.json").write_text(
+        json.dumps(
+            {
+                "shaft.prt.2": {"hash": digest, "size": len(payload)},
+                "stale.prt": {"hash": "deadbeef", "size": 99},
+            }
+        ),
+        encoding="utf-8",
+    )
+    settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
+    app = create_agent_app(settings)
+    with TestClient(app) as client:
+        listed = client.get(f"/files?product_id={product_id}")
+        assert listed.status_code == 200, listed.text
+        by_path = {item["relative_path"]: item for item in listed.json()["files"]}
+        assert by_path["shaft.prt.2"]["content_hash"] == digest
+        assert by_path["shaft.prt.2"]["size"] == len(payload)
+        # Size mismatch → do not trust stale index (UI will /hash-paths).
+        assert by_path["stale.prt"]["content_hash"] == ""
+        assert by_path["stale.prt"]["size"] == 2
+
+
 def test_agent_lists_and_pushes_new_cache_paths(tmp_path, monkeypatch):
     root = tmp_path / "cache"
     product_id = "proj-new"

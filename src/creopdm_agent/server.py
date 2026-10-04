@@ -464,6 +464,8 @@ class CacheFileInfo(BaseModel):
     filename: str
     size: int = 0
     saved_at: str = ""
+    # From .creopdm_cache_index.json when size matches (Modified tab ground truth).
+    content_hash: str = ""
 
 
 class CacheFilesResponse(BaseModel):
@@ -815,6 +817,29 @@ def _load_cache_index(cache_dir: Path) -> dict[str, dict[str, object]]:
         if isinstance(key, str) and isinstance(value, dict):
             out[key] = value
     return out
+
+
+def _index_hash_for_file(
+    index: dict[str, dict[str, object]],
+    relative_path: str,
+    filename: str,
+    size: int,
+) -> str:
+    """Return index SHA-256 when the on-disk size still matches (file is real + known)."""
+    rel = str(relative_path or "").replace("\\", "/").lstrip("/")
+    name = str(filename or Path(rel).name or "").strip()
+    for key in (rel, name, Path(rel).name if rel else ""):
+        if not key:
+            continue
+        cached = index.get(key)
+        if not isinstance(cached, dict):
+            continue
+        if int(cached.get("size") or -1) != int(size):
+            continue
+        digest = str(cached.get("hash") or "").strip().lower()
+        if digest:
+            return digest
+    return ""
 
 
 def _save_cache_index(cache_dir: Path, index: dict[str, dict[str, object]]) -> None:
@@ -1515,12 +1540,17 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
 
     @app.get("/files", response_model=CacheFilesResponse)
     def list_cache_files(product_id: str = "", vault_folder: str = "") -> CacheFilesResponse:
-        """List files under the product agent-cache folder (local workspace)."""
+        """List files under the product agent-cache folder (local workspace).
+
+        When `.creopdm_cache_index.json` has a size-matching entry, include that
+        content_hash so the UI Modified tab can trust the index without rehashing.
+        """
         from datetime import datetime
 
         from creopdm.creo.file_manager import CreoFileManager
 
         target = _product_cache_dir(product_id, vault_folder=vault_folder)
+        index = _load_cache_index(target)
         files: list[CacheFileInfo] = []
         skip_dirs = {".git", ".creopdm", "__pycache__"}
         for dirpath, dirnames, filenames in os.walk(target):
@@ -1550,6 +1580,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                         filename=path.name,
                         size=size,
                         saved_at=stamp,
+                        content_hash=_index_hash_for_file(index, rel, path.name, size),
                     )
                 )
         files.sort(key=lambda item: item.relative_path.lower())

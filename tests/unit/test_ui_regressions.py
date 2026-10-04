@@ -1575,6 +1575,14 @@ def test_newer_local_cache_detects_same_save_content_replace_by_hash():
     assert "Math.max(" in body
     assert "current_version?.filename" in body
     assert "local.saveNumber < vaultNumber" in body
+    # Prefer .creopdm_cache_index.json hash from GET /files (size-verified).
+    assert "indexHash" in body
+    assert "local.item.content_hash" in body
+    assert ".creopdm_cache_index.json" in body
+    assert "needHashPaths" in body
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert ".creopdm_cache_index.json" in docs
+    assert "proves the file is real" in docs
 
 
 def test_refresh_pending_clears_sticky_modified_locally():
