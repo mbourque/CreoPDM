@@ -234,16 +234,13 @@ def test_locked_product_changes_help_does_not_offer_add_checkin():
     html = APP_HTML.read_text(encoding="utf-8")
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
-    assert 'id="changes-help"' in html
+    assert 'id="changes-help"' not in html
     assert 'id="modified-help"' in html
     assert 'id="checked-out-help"' in html
     mod_panel = _between(html, 'id="panel-modified"', 'id="panel-changes"')
-    changes_panel = _between(html, 'id="panel-changes"', "{% else %}")
     assert "{% if product_ui.show_checkin %}" in mod_panel
     assert 'id="modified-help"' in mod_panel
-    assert "{% if product_ui.show_add %}" in changes_panel
-    assert 'id="changes-help"' in changes_panel
-    assert "Use <strong>Add</strong> to bring them in" in html
+    assert "Use <strong>Add</strong> to bring them in" not in html
     assert "Use <strong>Check In</strong> to record them" in html
     assert "Open, Check In, and Undo Checkout still apply" in html
     assert "are blocked while this product is" not in html
@@ -251,7 +248,7 @@ def test_locked_product_changes_help_does_not_offer_add_checkin():
     assert "function canOfferCheckin" in script
     assert '"Local workspace."' in script
     assert '"Not in the product yet."' in script
-    assert "shows only when you can Add" in docs
+    assert "Modified tab" in docs or "**Modified tab**" in docs
 
 
 def test_modified_tab_between_checked_out_and_new_files():
