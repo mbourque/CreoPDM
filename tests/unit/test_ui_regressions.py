@@ -288,7 +288,13 @@ def test_modified_tab_between_checked_out_and_new_files():
     assert "await loadModifiedTab({ quiet: true })" in script
     assert "function prefetchCheckinQueueParts(" in script
     assert "function cachedCheckinQueueParts(" in script
+    assert "function invalidateCheckinQueueCache(" in script
+    assert "function tabBadgeCount(" in script
     assert "forceNetwork: true" in script
+    assert 'loadChangesTab({ quiet: true, forceNetwork: true })' in script
+    assert 'loadModifiedTab({ quiet: true, forceNetwork: true })' in script
+    assert "counts.created !== tabBadgeCount" in script
+    assert "counts.modified !== tabBadgeCount" in script
     changes_loader = _between(script, "async function loadChangesTab(", "async function loadCheckedOutTab(")
     modified_loader = _between(script, "async function loadModifiedTab(", "async function loadChangesTab(")
     assert "showQueueLoading" not in changes_loader

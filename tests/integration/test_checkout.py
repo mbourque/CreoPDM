@@ -498,8 +498,8 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function countLocalNewWorkspaceFiles" in script.text
     assert "function countLocalWorkspacePending" in script.text
     assert "newerLocal" in script.text
-    assert "loadChangesTab({ quiet: true })" in script.text
-    assert "loadModifiedTab({ quiet: true })" in script.text
+    assert "loadChangesTab({ quiet: true, forceNetwork: true })" in script.text
+    assert "loadModifiedTab({ quiet: true, forceNetwork: true })" in script.text
     assert "lastChangesPending" in script.text
     assert "lastModifiedPending" in script.text
     assert "New file (local)" in script.text

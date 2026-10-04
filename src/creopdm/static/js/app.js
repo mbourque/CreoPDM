@@ -9582,9 +9582,47 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     };
   }
 
-  function cachedCheckinQueueParts(productId) {
+  function invalidateCheckinQueueCache() {
+    checkinQueueCache = {
+      productId: "",
+      at: 0,
+      saves: [],
+      created: [],
+      newerLocal: [],
+    };
+  }
+
+  function checkinQueueCacheCounts(parts) {
+    const saves = parts?.saves || [];
+    const created = parts?.created || [];
+    const newerLocal = parts?.newerLocal || [];
+    return {
+      modified: saves.length + newerLocal.length,
+      created: created.length,
+    };
+  }
+
+  function tabBadgeCount(tabName) {
+    const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
+    const match = String(tab?.textContent || "").match(/·\s*(\d+)\s*$/);
+    return match ? Number(match[1]) : 0;
+  }
+
+  function cachedCheckinQueueParts(productId, { focus } = {}) {
     if (!productId || checkinQueueCache.productId !== String(productId)) return null;
     if (!checkinQueueCache.at) return null;
+    // Reject stale empty/partial caches when the tab badge already moved.
+    const counts = checkinQueueCacheCounts(checkinQueueCache);
+    if (focus === "changes" && counts.created !== tabBadgeCount("changes")) return null;
+    if (focus === "modified" && counts.modified !== tabBadgeCount("modified")) return null;
+    if (
+      focus !== "changes"
+      && focus !== "modified"
+      && (counts.created !== tabBadgeCount("changes")
+        || counts.modified !== tabBadgeCount("modified"))
+    ) {
+      return null;
+    }
     return checkinQueueCache;
   }
 
@@ -9867,9 +9905,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     try {
       if (!forceNetwork && checkinQueuePrefetch) {
         const parts = await checkinQueuePrefetch;
-        if (parts) return applyCheckinQueueParts(productId, parts, "modified");
+        const counts = checkinQueueCacheCounts(parts || {});
+        // In-flight prefetch can still be the pre-count snapshot — ignore if badge disagrees.
+        if (parts && counts.modified === tabBadgeCount("modified")) {
+          return applyCheckinQueueParts(productId, parts, "modified");
+        }
       }
-      const cached = !forceNetwork ? cachedCheckinQueueParts(productId) : null;
+      const cached = !forceNetwork
+        ? cachedCheckinQueueParts(productId, { focus: "modified" })
+        : null;
       if (cached) {
         const count = await applyCheckinQueueParts(productId, cached, "modified");
         if (!quiet) void loadModifiedTab({ quiet: true, forceNetwork: true });
@@ -9895,9 +9939,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     try {
       if (!forceNetwork && checkinQueuePrefetch) {
         const parts = await checkinQueuePrefetch;
-        if (parts) return applyCheckinQueueParts(productId, parts, "changes");
+        const counts = checkinQueueCacheCounts(parts || {});
+        if (parts && counts.created === tabBadgeCount("changes")) {
+          return applyCheckinQueueParts(productId, parts, "changes");
+        }
       }
-      const cached = !forceNetwork ? cachedCheckinQueueParts(productId) : null;
+      const cached = !forceNetwork
+        ? cachedCheckinQueueParts(productId, { focus: "changes" })
+        : null;
       if (cached) {
         const count = await applyCheckinQueueParts(productId, cached, "changes");
         if (!quiet) void loadChangesTab({ quiet: true, forceNetwork: true });
@@ -10628,27 +10677,34 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         Number(data.new_files || 0) + Number(localPending.localNew || 0);
       const activeTab = activeListTab();
       if (activeTab === "changes") {
-        if (lastChangesPending === null) {
-          lastChangesPending = newCount;
-        } else if (newCount !== lastChangesPending && !changesReloadBusy) {
+        const changesNeedsLoad =
+          (lastChangesPending === null && newCount > 0)
+          || (lastChangesPending !== null && newCount !== lastChangesPending);
+        lastChangesPending = newCount;
+        if (changesNeedsLoad && !changesReloadBusy) {
           changesReloadBusy = true;
           knownWorkspacePaths.at = 0;
           cachedProductObjects.at = 0;
+          invalidateCheckinQueueCache();
           try {
-            await loadChangesTab({ quiet: true });
+            // Must hit the network — quiet cache reuse left "· 1" with an empty table.
+            await loadChangesTab({ quiet: true, forceNetwork: true });
           } finally {
             changesReloadBusy = false;
           }
         }
       } else if (activeTab === "modified") {
-        if (lastModifiedPending === null) {
-          lastModifiedPending = modCount;
-        } else if (modCount !== lastModifiedPending && !modifiedReloadBusy) {
+        const modifiedNeedsLoad =
+          (lastModifiedPending === null && modCount > 0)
+          || (lastModifiedPending !== null && modCount !== lastModifiedPending);
+        lastModifiedPending = modCount;
+        if (modifiedNeedsLoad && !modifiedReloadBusy) {
           modifiedReloadBusy = true;
           knownWorkspacePaths.at = 0;
           cachedProductObjects.at = 0;
+          invalidateCheckinQueueCache();
           try {
-            await loadModifiedTab({ quiet: true });
+            await loadModifiedTab({ quiet: true, forceNetwork: true });
           } finally {
             modifiedReloadBusy = false;
           }
@@ -10658,11 +10714,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           lastChangesPending !== newCount || lastModifiedPending !== modCount;
         lastChangesPending = newCount;
         lastModifiedPending = modCount;
-        // Badge already moved — prefetch row lists so tab open paints without a scan flash.
-        // Keep the previous cache until the prefetch finishes (do not invalidate first).
+        // Badge already moved — drop stale lists, then prefetch the current rows.
         if (countsMoved) {
           knownWorkspacePaths.at = 0;
           cachedProductObjects.at = 0;
+          invalidateCheckinQueueCache();
           void prefetchCheckinQueueParts(watchProductId);
         }
       }
