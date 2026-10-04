@@ -234,7 +234,10 @@ def test_locked_product_changes_help_does_not_offer_add_checkin():
     html = APP_HTML.read_text(encoding="utf-8")
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
-    assert 'id="changes-help"' not in html
+    # New files tab: no tip blurb (removed — count + list are enough).
+    changes_panel = _between(html, 'id="panel-changes"', 'id="checkin-dialog"')
+    assert 'id="changes-help"' not in changes_panel
+    assert "muted small" not in changes_panel.split('id="changes-table"', 1)[0]
     assert 'id="modified-help"' in html
     assert 'id="checked-out-help"' in html
     mod_panel = _between(html, 'id="panel-modified"', 'id="panel-changes"')
@@ -248,7 +251,7 @@ def test_locked_product_changes_help_does_not_offer_add_checkin():
     assert "function canOfferCheckin" in script
     assert '"Local workspace."' in script
     assert '"Not in the product yet."' in script
-    assert "Modified tab" in docs or "**Modified tab**" in docs
+    assert "no tip blurb on **New files**" in docs
 
 
 def test_modified_tab_between_checked_out_and_new_files():
