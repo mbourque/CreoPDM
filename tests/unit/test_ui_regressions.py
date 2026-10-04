@@ -603,11 +603,16 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "openLocalCacheRelative(" in open_fn
     assert "function openLocalCacheRelative(" in script
     assert "function joinLocalWorkspacePath(" in script
+    local_open = _between(script, "async function openLocalCacheRelative(", "async function openPdmObject(")
+    assert "logicalUploadName(diskName)" in local_open
+    assert 'CreoJS.openModel(directory, logicalName, "", diskName, fullPath)' in local_open
     open_spec = _between(script, "function openSpecFromRow(", "function stateSortToken(")
     assert "localCache && relativePath" in open_spec
     assert "Newer local save" in open_spec or "agent-workspace tip" in open_spec
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "Newer local save" in docs and "Vault file not found" in docs
+    assert "**logical** tip" in docs
+    assert "test-part.prt.1" in docs
     open_wrap = _between(script, "async function openPdmObject(", "async function openPdmObjectWork(")
     assert 'withBusy("Preparing…"' in open_wrap
     assert "withTimeout(" in open_wrap
@@ -974,6 +979,10 @@ def test_open_model_uses_nested_cache_folder():
     assert "Nested agent-cache layout" in open_fn
     assert "var openWd = fileDir || directory" in open_fn or "openWd = fileDir || directory" in open_fn
     assert "ChangeDirectory(cacheDir)" in open_fn
+    # New file / Modified local: try logical tip after numbered .prt.1 fails.
+    assert "creoLogicalFileName(shortDisk" in open_fn
+    assert "logicalName !== shortDisk" in open_fn
+    assert "numbered names alone often fail" in open_fn
     script = _app_js()
     meta = _between(script, "async function prepareLocalPathForMetadata(", "async function gatherCreoMetadataForFilename(")
     assert "openSpec.path" in meta

@@ -446,16 +446,34 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
             }
         } catch (errMfg) {}
         var model = null;
+        // Creo RetrieveModel wants the logical tip (shaft.prt) when the WD has
+        // shaft.prt.1 — numbered names alone often fail for New file / Modified local.
+        var logicalName = creoLogicalFileName(shortDisk || diskName || filename || "");
         // Prefer basename in the file's folder (nested materialize).
         if (!model && openWd && shortDisk) {
             model = creoTryOpenName(session, openWd, shortDisk);
         }
+        if (!model && openWd && logicalName && logicalName !== shortDisk) {
+            model = creoTryOpenName(session, openWd, logicalName);
+        }
         if (!model && shortDisk) {
             model = creoTryOpenName(session, "", shortDisk);
+        }
+        if (!model && logicalName && logicalName !== shortDisk) {
+            model = creoTryOpenName(session, "", logicalName);
         }
         // Product-root-relative path (model-templates/start_assy.asm.1).
         if (!model && relativeName && directory) {
             model = creoTryOpenName(session, directory, relativeName);
+            if (!model) {
+                var logicalRel = creoLogicalFileName(relativeName);
+                if (logicalRel && logicalRel !== relativeName) {
+                    var relParent = relativeName.indexOf("/") >= 0
+                        ? relativeName.substring(0, relativeName.lastIndexOf("/") + 1)
+                        : "";
+                    model = creoTryOpenName(session, directory, relParent + logicalRel);
+                }
+            }
         }
         if (fullPath) {
             model = model || creoTryOpenName(session, "", fullPath);
@@ -466,9 +484,18 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
         if (!model) {
             model = creoTryOpenName(session, directory, filename);
         }
+        if (!model && logicalName) {
+            model = creoTryOpenName(session, directory, logicalName);
+        }
         if (!model) {
             var preparedPath = fullPath || creoJoinPath(openWd || directory, shortDisk || diskName || filename);
+            // Native tips: trail with logical name as last resort (File > Open All Files).
+            var trailName = logicalName || shortDisk || diskName || filename;
+            if (creoTryOpenViaTrail(session, openWd || directory, trailName, preparedPath)) {
+                return filename;
+            }
             if (!creoIsNativeVersioned(versionName)
+                && trailName !== (shortDisk || diskName || filename)
                 && creoTryOpenViaTrail(session, openWd || directory, shortDisk || diskName || filename, preparedPath)) {
                 return filename;
             }
@@ -2276,6 +2303,6 @@ function gatherModelMetadata(filename, filePath) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-restore-list-tab"></script>
+  <script src="/client/app.js?v={{ app_version }}-open-local-logical"></script>
 </body>
 </html>

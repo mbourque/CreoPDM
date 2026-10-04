@@ -7375,11 +7375,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function openLocalCacheRelative(productId, relativePath) {
-    // New file (local) — open from agent workspace; there is no vault tip yet.
+    // New file (local) / Modified newer local — open agent workspace tip.
+    // Creo.JS needs the logical tip name (shaft.prt); disk may still be shaft.prt.1.
     const agent = await probeCreoAgent();
     if (!agent) {
       throw new Error(
-        "Start creopdm-agent on this Creo PC to open new files that exist only in the local workspace."
+        "Start creopdm-agent on this Creo PC to open files that exist only in the local workspace."
       );
     }
     const directory = await agentWorkdir(productId, currentVaultFolder());
@@ -7387,14 +7388,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!fullPath) {
       throw new Error("Could not resolve the local workspace path for that file.");
     }
-    const filename = String(relativePath || "").replace(/\\/g, "/").split("/").pop() || "file";
+    const diskName = PathBasename(relativePath) || "file";
+    const logicalName = logicalUploadName(diskName) || diskName;
     const embeddedMode = creoOpenMode() === "embedded";
     const useCreoSession = hostedCreoJS() && embeddedMode;
     if (useCreoSession) {
       setBusyMessage("Opening in Creo…");
       await whenCreoJSReady();
       const opened = await withTimeout(
-        window.CreoJS.openModel(directory, filename, "", filename, fullPath),
+        window.CreoJS.openModel(directory, logicalName, "", diskName, fullPath),
         90000,
         "Creo did not finish opening the model (session may be offline)."
       );
@@ -7402,7 +7404,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (openedText.indexOf("CREOPDM_ERROR:") === 0) {
         throw new Error(openedText.slice("CREOPDM_ERROR:".length));
       }
-      return { path: fullPath, filename, working_directory: directory };
+      return { path: fullPath, filename: logicalName, working_directory: directory };
     }
     if (embeddedMode && !useCreoSession && !likelyStandaloneBrowser()) {
       throw new Error(
@@ -7411,7 +7413,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     setBusyMessage("Opening with Windows…");
     await openViaAgent(fullPath, "association");
-    return { path: fullPath, filename, working_directory: directory };
+    return { path: fullPath, filename: logicalName, working_directory: directory };
   }
 
   async function openPdmObject(target) {
