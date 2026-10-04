@@ -887,6 +887,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         || document.getElementById("panel-changes")
         || document;
     }
+    if (tab === "modified") {
+      return document.getElementById("modified-table")
+        || document.getElementById("panel-modified")
+        || document;
+    }
     if (tab === "checked-out") {
       return document.getElementById("checked-out-table")
         || document.getElementById("panel-checked-out")
@@ -934,7 +939,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function listedMetricRows() {
     const root = fileListRoot();
     if (!root) return [];
-    if (root.id === "panel-changes" || root.id === "changes-table") {
+    if (
+      root.id === "panel-changes"
+      || root.id === "changes-table"
+      || root.id === "panel-modified"
+      || root.id === "modified-table"
+    ) {
       return [...root.querySelectorAll(".queue-row")];
     }
     return [...root.querySelectorAll(".object-row")];
@@ -944,6 +954,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const root = fileListRoot();
     if (!root) return [];
     if (root.id === "panel-changes" || root.id === "changes-table") return [];
+    if (root.id === "panel-modified" || root.id === "modified-table") return [];
     if (root.id === "panel-checked-out" || root.id === "checked-out-table") return [];
     return [...root.querySelectorAll(".folder-row")];
   }
@@ -4436,10 +4447,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       } catch {
         /* agent offline — vault/preview ids still apply */
       }
-      document.querySelectorAll("#changes-table .queue-row.is-pending[data-uuid]").forEach((row) => {
-        if (row.dataset.canCheckin === "0") return;
-        ids.push(row.dataset.uuid);
-      });
+      document
+        .querySelectorAll(
+          "#modified-table .queue-row.is-pending[data-uuid], #changes-table .queue-row.is-pending[data-uuid]"
+        )
+        .forEach((row) => {
+          if (row.dataset.canCheckin === "0") return;
+          ids.push(row.dataset.uuid);
+        });
       if (seq !== pendingCheckinFetch) return;
       rememberPendingCheckinIds(ids);
       document.querySelectorAll(".object-row[data-uuid]").forEach((row) => {
@@ -4700,10 +4715,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       el.dataset.pendingSaves = String(pendingSaves || 0);
       el.dataset.newFiles = String(newFiles || 0);
     }
+    const modifiedTab = document.querySelector('.tab[data-tab="modified"]');
+    if (modifiedTab) {
+      const n = Number(pendingSaves || 0);
+      modifiedTab.textContent = n ? `Modified · ${n}` : "Modified";
+    }
     const tab = document.querySelector('.tab[data-tab="changes"]');
     if (tab) {
-      const pending = Number(pendingSaves || 0) + Number(newFiles || 0);
-      tab.textContent = pending ? `New files · ${pending}` : "New files";
+      const n = Number(newFiles || 0);
+      tab.textContent = n ? `New files · ${n}` : "New files";
     }
     syncToolbar();
   }
@@ -5203,6 +5223,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   document.querySelector("#object-table")?.addEventListener("dblclick", onFileTableDblclick);
   document.querySelector("#checked-out-table")?.addEventListener("click", onFileTableClick);
   document.querySelector("#checked-out-table")?.addEventListener("dblclick", onFileTableDblclick);
+  document.querySelector("#modified-table")?.addEventListener("click", onFileTableClick);
+  document.querySelector("#modified-table")?.addEventListener("dblclick", onFileTableDblclick);
   document.querySelector("#changes-table")?.addEventListener("click", onFileTableClick);
   document.querySelector("#changes-table")?.addEventListener("dblclick", onFileTableDblclick);
 
@@ -5497,6 +5519,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   document.querySelector("#object-table")?.addEventListener("contextmenu", onFileTableContextMenu);
   document.querySelector("#checked-out-table")?.addEventListener("contextmenu", onFileTableContextMenu);
+  document.querySelector("#modified-table")?.addEventListener("contextmenu", onFileTableContextMenu);
   document.querySelector("#changes-table")?.addEventListener("contextmenu", onFileTableContextMenu);
 
   // Menu lives on document.body (survives soft-nav). Rebind actions each boot;
@@ -6819,7 +6842,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   let knownWorkspacePaths = { exact: new Set(), logical: new Set(), basenames: new Set(), at: 0 };
   let lastChangesPending = null;
+  let lastModifiedPending = null;
   let changesReloadBusy = false;
+  let modifiedReloadBusy = false;
 
   function markKnownPath(rel, exact, logical, basenames) {
     const path = String(rel || "").replace(/\\/g, "/");
@@ -9207,6 +9232,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const removed = result.ok?.length || 0;
     if (removed) showOk(`${removed} file(s) removed from the local workspace.`);
     if (activeListTab() === "changes") await loadChangesTab();
+    else if (activeListTab() === "modified") await loadModifiedTab();
     else reloadPage();
     pollWorkspaceWatch();
   });
@@ -9286,6 +9312,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (removed) showOk(`${removed} older local save(s) purged.`);
     else showOk("No older local saves to purge.");
     if (activeListTab() === "changes") await loadChangesTab();
+    else if (activeListTab() === "modified") await loadModifiedTab();
     else pollWorkspaceWatch();
   });
 
@@ -9360,6 +9387,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       showOk(result.message || "Local workspace was already empty.");
     }
     if (activeListTab() === "changes") await loadChangesTab();
+    else if (activeListTab() === "modified") await loadModifiedTab();
     else pollWorkspaceWatch();
   });
 
@@ -9464,222 +9492,249 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return Boolean($("#checkin-menu"));
   }
 
-  async function loadChangesTab(options = {}) {
+  async function loadCheckinQueueParts(productId) {
+    const [queueResponse, cacheFiles, objectsResponse] = await Promise.all([
+      fetch(`/api/products/${productId}/checkin-queue`),
+      listAgentCacheFiles(productId),
+      fetch(`/api/products/${encodeURIComponent(productId)}/objects`),
+    ]);
+    if (!queueResponse.ok) throw new Error("queue");
+    const data = await queueResponse.json();
+    const objects = objectsResponse.ok
+      ? await objectsResponse.json().catch(() => [])
+      : [];
+    cachedProductObjects = {
+      id: productId,
+      at: Date.now(),
+      rows: Array.isArray(objects) ? objects : [],
+    };
+    const saves = data.saves || [];
+    const vaultNew = data.new_files || [];
+    const known = await loadKnownWorkspacePaths(
+      productId,
+      vaultNew.map((item) => item.relative_path || "")
+    );
+    const created = [...vaultNew, ...localOnlyCacheFiles(cacheFiles, known)];
+    const vaultSaveIds = new Set(
+      saves.map((item) => String(item.uuid || "")).filter(Boolean)
+    );
+    const newerLocal = (
+      await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)
+    ).filter((item) => !vaultSaveIds.has(String(item.uuid || "")));
+    return { saves, created, newerLocal };
+  }
+
+  function appendQueueRow(body, productId, values, className, meta = {}) {
+    const row = document.createElement("tr");
+    if (className) row.className = className;
+    row.classList.add("queue-row");
+    const filename = meta.filename || values[1] || "";
+    const ext = filenameExtension(filename);
+    row.dataset.filename = filename;
+    row.dataset.extension = ext;
+    row.dataset.objectType = meta.objectType || typeFromExtension(ext);
+    row.dataset.checkedOut = meta.checkedOut || "0";
+    row.dataset.canCheckin = meta.canCheckin || "1";
+    row.dataset.canCheckout = meta.canCheckout || "0";
+    row.dataset.inWorkspace = "1";
+    if (meta.uuid) row.dataset.uuid = meta.uuid;
+    if (meta.relativePath) row.dataset.relativePath = meta.relativePath;
+    if (meta.localCache) row.dataset.localCache = "1";
+    if (meta.uuid && productId) {
+      row.dataset.detail = `/products/${productId}/objects/${meta.uuid}`;
+    }
+    values.forEach((text, index) => {
+      const cell = document.createElement("td");
+      if (index === 1) {
+        cell.className = "filename-cell";
+        const wrap = document.createElement("span");
+        wrap.className = "name-with-icon";
+        const objectType = row.dataset.objectType || "";
+        const typeLabel = meta.typeLabel || "";
+        const iconInfo = resolveTypeIcon({
+          objectType,
+          typeLabel,
+          extension: ext,
+          filename,
+        });
+        if (iconInfo.file) {
+          const icon = document.createElement("img");
+          icon.className = "type-icon";
+          icon.src = `/static/icons/${iconInfo.file}`;
+          icon.alt = iconInfo.label || "File";
+          icon.title = iconInfo.label || "File";
+          icon.width = 14;
+          icon.height = 14;
+          icon.decoding = "async";
+          wrap.appendChild(icon);
+        }
+        // Use a span — Creo/CEF paints an opaque fill on <button> that shows as a white band.
+        const link = document.createElement("span");
+        link.className = "object-open";
+        link.setAttribute("role", "link");
+        link.tabIndex = 0;
+        link.textContent = filename;
+        link.title = "Open this file";
+        if (meta.uuid) link.dataset.uuid = meta.uuid;
+        if (meta.relativePath) link.dataset.relativePath = meta.relativePath;
+        wrap.appendChild(link);
+        cell.appendChild(wrap);
+        const noteText = meta.recordedFilename
+          ? `from ${meta.recordedFilename}`
+          : meta.relativePath && meta.relativePath !== filename
+            ? meta.relativePath
+            : "";
+        if (noteText) {
+          const note = document.createElement("div");
+          note.className = "muted small";
+          note.textContent = noteText;
+          cell.appendChild(note);
+        }
+      } else {
+        cell.textContent = text;
+        // Date column (last) — pretty hover when the stamp is parseable.
+        if (index === values.length - 1 && text) {
+          const pretty = formatStampPretty(text);
+          if (pretty) cell.title = pretty;
+        }
+      }
+      row.appendChild(cell);
+    });
+    body.appendChild(row);
+  }
+
+  function showQueueLoading(body, message) {
+    body.replaceChildren();
+    const loading = document.createElement("tr");
+    loading.className = "empty-row";
+    const loadingCell = document.createElement("td");
+    loadingCell.colSpan = 5;
+    loadingCell.textContent = message;
+    loading.appendChild(loadingCell);
+    body.appendChild(loading);
+    refreshTabMetrics();
+  }
+
+  function showQueueEmpty(body, message) {
+    body.replaceChildren();
+    const row = document.createElement("tr");
+    row.className = "empty-row";
+    const cell = document.createElement("td");
+    cell.colSpan = 5;
+    cell.textContent = message;
+    row.appendChild(cell);
+    body.appendChild(row);
+    refreshTabMetrics();
+  }
+
+  function renderModifiedQueueRows(body, productId, saves, newerLocal) {
+    body.replaceChildren();
+    saves.forEach((item) => {
+      appendQueueRow(
+        body,
+        productId,
+        [
+          item.newer_save ? "Newer Creo save" : "Modified",
+          item.filename || "",
+          `${item.next_display || "—"} · not checked in`,
+          item.file_size != null ? formatByteSize(item.file_size) : "",
+          item.saved_at || "",
+        ],
+        "is-pending",
+        {
+          filename: item.filename,
+          uuid: item.uuid,
+          objectType: item.object_type,
+          checkedOut: "1",
+          recordedFilename: item.newer_save ? item.recorded_filename : "",
+        }
+      );
+    });
+    newerLocal.forEach((item) => {
+      const offerCheckin = canOfferCheckin();
+      const localDetail = !offerCheckin
+        ? "Local workspace."
+        : item.can_checkin === "1"
+          ? "Local workspace — select and Check In."
+          : "Local workspace — check out to Check In.";
+      appendQueueRow(
+        body,
+        productId,
+        [
+          "Newer local save",
+          item.filename || "",
+          localDetail,
+          item.size != null ? formatByteSize(item.size) : "",
+          item.saved_at || "—",
+        ],
+        "is-pending",
+        {
+          filename: item.filename,
+          uuid: item.uuid,
+          objectType: item.object_type,
+          relativePath: item.relative_path,
+          localCache: true,
+          checkedOut: item.checked_out || "0",
+          canCheckin: offerCheckin ? item.can_checkin || "0" : "0",
+          canCheckout: offerCheckin ? item.can_checkout || "0" : "0",
+          recordedFilename: item.recorded_filename || "",
+        }
+      );
+    });
+  }
+
+  function renderNewFilesQueueRows(body, productId, created) {
+    body.replaceChildren();
+    created.forEach((item) => {
+      const offerAdd = canOfferAdd();
+      const newDetail = !offerAdd
+        ? item.local_cache
+          ? "Local workspace."
+          : "Not in the product yet."
+        : item.local_cache
+          ? "Local workspace — select and Add."
+          : "Not in the product yet. Select and click Add.";
+      appendQueueRow(
+        body,
+        productId,
+        [
+          item.local_cache ? "New file (local)" : "New file",
+          item.filename || "",
+          newDetail,
+          item.size != null ? formatByteSize(item.size) : "",
+          item.saved_at || "—",
+        ],
+        "",
+        {
+          filename: item.filename,
+          objectType: item.object_type,
+          relativePath: item.relative_path,
+          localCache: Boolean(item.local_cache),
+        }
+      );
+    });
+  }
+
+  async function loadModifiedTab(options = {}) {
     const quiet = Boolean(options.quiet);
     const productId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
-    const body = $("#changes-table tbody");
-    const tab = document.querySelector('.tab[data-tab="changes"]');
+    const body = $("#modified-table tbody");
     if (!productId || !body) return 0;
     if (!quiet) {
-      body.replaceChildren();
-      const loading = document.createElement("tr");
-      loading.className = "empty-row";
-      const loadingCell = document.createElement("td");
-      loadingCell.colSpan = 5;
-      loadingCell.textContent = "Looking for vault and local workspace changes…";
-      loading.appendChild(loadingCell);
-      body.appendChild(loading);
-      refreshTabMetrics();
+      showQueueLoading(body, "Looking for modified vault and local workspace files…");
     }
     try {
-      const [queueResponse, cacheFiles, objectsResponse] = await Promise.all([
-        fetch(`/api/products/${productId}/checkin-queue`),
-        listAgentCacheFiles(productId),
-        fetch(`/api/products/${encodeURIComponent(productId)}/objects`),
-      ]);
-      if (!queueResponse.ok) throw new Error("queue");
-      const data = await queueResponse.json();
-      const objects = objectsResponse.ok
-        ? await objectsResponse.json().catch(() => [])
-        : [];
-      cachedProductObjects = {
-        id: productId,
-        at: Date.now(),
-        rows: Array.isArray(objects) ? objects : [],
-      };
-      const saves = data.saves || [];
-      const vaultNew = data.new_files || [];
-      const known = await loadKnownWorkspacePaths(
-        productId,
-        vaultNew.map((item) => item.relative_path || "")
-      );
-      const created = [...vaultNew, ...localOnlyCacheFiles(cacheFiles, known)];
-      const vaultSaveIds = new Set(
-        saves.map((item) => String(item.uuid || "")).filter(Boolean)
-      );
-      const newerLocal = (
-        await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)
-      ).filter((item) => !vaultSaveIds.has(String(item.uuid || "")));
-      const pending = saves.length + created.length + newerLocal.length;
-      if (tab) tab.textContent = pending ? `New files · ${pending}` : "New files";
-      setCheckinQueueCounts(saves.length + newerLocal.length, created.length);
-      lastChangesPending = pending;
-      body.replaceChildren();
-      if (!pending) {
-        const row = document.createElement("tr");
-        row.className = "empty-row";
-        const cell = document.createElement("td");
-        cell.colSpan = 5;
-        cell.textContent = "No new or changed vault or local workspace files.";
-        row.appendChild(cell);
-        body.appendChild(row);
-        refreshTabMetrics();
-        // Still merge vault/agent pending so list State stays accurate without this tab.
+      const { saves, created, newerLocal } = await loadCheckinQueueParts(productId);
+      const modifiedCount = saves.length + newerLocal.length;
+      setCheckinQueueCounts(modifiedCount, created.length);
+      lastModifiedPending = modifiedCount;
+      lastChangesPending = created.length;
+      if (!modifiedCount) {
+        showQueueEmpty(body, "No modified vault or local workspace files.");
         void refreshPendingCheckinIds(productId);
-        return pending;
+        return modifiedCount;
       }
-      const addRow = (values, className, meta = {}) => {
-        const row = document.createElement("tr");
-        if (className) row.className = className;
-        row.classList.add("queue-row");
-        const filename = meta.filename || values[1] || "";
-        const ext = filenameExtension(filename);
-        row.dataset.filename = filename;
-        row.dataset.extension = ext;
-        row.dataset.objectType = meta.objectType || typeFromExtension(ext);
-        row.dataset.checkedOut = meta.checkedOut || "0";
-        row.dataset.canCheckin = meta.canCheckin || "1";
-        row.dataset.canCheckout = meta.canCheckout || "0";
-        row.dataset.inWorkspace = "1";
-        if (meta.uuid) row.dataset.uuid = meta.uuid;
-        if (meta.relativePath) row.dataset.relativePath = meta.relativePath;
-        if (meta.localCache) row.dataset.localCache = "1";
-        if (meta.uuid && productId) {
-          row.dataset.detail = `/products/${productId}/objects/${meta.uuid}`;
-        }
-        values.forEach((text, index) => {
-          const cell = document.createElement("td");
-          if (index === 1) {
-            cell.className = "filename-cell";
-            const wrap = document.createElement("span");
-            wrap.className = "name-with-icon";
-            const objectType = row.dataset.objectType || "";
-            const typeLabel = meta.typeLabel || "";
-            const iconInfo = resolveTypeIcon({
-              objectType,
-              typeLabel,
-              extension: ext,
-              filename,
-            });
-            if (iconInfo.file) {
-              const icon = document.createElement("img");
-              icon.className = "type-icon";
-              icon.src = `/static/icons/${iconInfo.file}`;
-              icon.alt = iconInfo.label || "File";
-              icon.title = iconInfo.label || "File";
-              icon.width = 14;
-              icon.height = 14;
-              icon.decoding = "async";
-              wrap.appendChild(icon);
-            }
-            // Use a span — Creo/CEF paints an opaque fill on <button> that shows as a white band.
-            const link = document.createElement("span");
-            link.className = "object-open";
-            link.setAttribute("role", "link");
-            link.tabIndex = 0;
-            link.textContent = filename;
-            link.title = "Open this file";
-            if (meta.uuid) link.dataset.uuid = meta.uuid;
-            if (meta.relativePath) link.dataset.relativePath = meta.relativePath;
-            wrap.appendChild(link);
-            cell.appendChild(wrap);
-            const noteText = meta.recordedFilename
-              ? `from ${meta.recordedFilename}`
-              : meta.relativePath && meta.relativePath !== filename
-                ? meta.relativePath
-                : "";
-            if (noteText) {
-              const note = document.createElement("div");
-              note.className = "muted small";
-              note.textContent = noteText;
-              cell.appendChild(note);
-            }
-          } else {
-            cell.textContent = text;
-            // Date column (last) — pretty hover when the stamp is parseable.
-            if (index === values.length - 1 && text) {
-              const pretty = formatStampPretty(text);
-              if (pretty) cell.title = pretty;
-            }
-          }
-          row.appendChild(cell);
-        });
-        body.appendChild(row);
-      };
-      saves.forEach((item) => {
-        addRow(
-          [
-            item.newer_save ? "Newer Creo save" : "Modified",
-            item.filename || "",
-            `${item.next_display || "—"} · not checked in`,
-            item.file_size != null ? formatByteSize(item.file_size) : "",
-            item.saved_at || "",
-          ],
-          "is-pending",
-          {
-            filename: item.filename,
-            uuid: item.uuid,
-            objectType: item.object_type,
-            checkedOut: "1",
-            recordedFilename: item.newer_save ? item.recorded_filename : "",
-          }
-        );
-      });
-      newerLocal.forEach((item) => {
-        const offerCheckin = canOfferCheckin();
-        const localDetail = !offerCheckin
-          ? "Local workspace."
-          : item.can_checkin === "1"
-            ? "Local workspace — select and Check In."
-            : "Local workspace — check out to Check In.";
-        addRow(
-          [
-            "Newer local save",
-            item.filename || "",
-            localDetail,
-            item.size != null ? formatByteSize(item.size) : "",
-            item.saved_at || "—",
-          ],
-          "is-pending",
-          {
-            filename: item.filename,
-            uuid: item.uuid,
-            objectType: item.object_type,
-            relativePath: item.relative_path,
-            localCache: true,
-            checkedOut: item.checked_out || "0",
-            canCheckin: offerCheckin ? item.can_checkin || "0" : "0",
-            canCheckout: offerCheckin ? item.can_checkout || "0" : "0",
-            recordedFilename: item.recorded_filename || "",
-          }
-        );
-      });
-      created.forEach((item) => {
-        const offerAdd = canOfferAdd();
-        const newDetail = !offerAdd
-          ? item.local_cache
-            ? "Local workspace."
-            : "Not in the product yet."
-          : item.local_cache
-            ? "Local workspace — select and Add."
-            : "Not in the product yet. Select and click Add.";
-        addRow(
-          [
-            item.local_cache ? "New file (local)" : "New file",
-            item.filename || "",
-            newDetail,
-            item.size != null ? formatByteSize(item.size) : "",
-            item.saved_at || "—",
-          ],
-          "",
-          {
-            filename: item.filename,
-            objectType: item.object_type,
-            relativePath: item.relative_path,
-            localCache: Boolean(item.local_cache),
-          }
-        );
-      });
+      renderModifiedQueueRows(body, productId, saves, newerLocal);
       rememberPendingCheckinIds([
         ...saves.map((item) => item.uuid),
         ...newerLocal
@@ -9687,18 +9742,47 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           .map((item) => item.uuid),
       ]);
       refreshTabMetrics();
-      return pending;
+      return modifiedCount;
     } catch {
       if (!quiet) {
-        body.replaceChildren();
-        const row = document.createElement("tr");
-        row.className = "empty-row";
-        const cell = document.createElement("td");
-        cell.colSpan = 5;
-        cell.textContent = "Could not load vault changes.";
-        row.appendChild(cell);
-        body.appendChild(row);
-        refreshTabMetrics();
+        showQueueEmpty(body, "Could not load modified files.");
+      }
+      return lastModifiedPending || 0;
+    }
+  }
+
+  async function loadChangesTab(options = {}) {
+    const quiet = Boolean(options.quiet);
+    const productId = checkinBtn?.dataset.product || openWorkspaceBtn?.dataset.product;
+    const body = $("#changes-table tbody");
+    if (!productId || !body) return 0;
+    if (!quiet) {
+      showQueueLoading(body, "Looking for new vault and local workspace files…");
+    }
+    try {
+      const { saves, created, newerLocal } = await loadCheckinQueueParts(productId);
+      const modifiedCount = saves.length + newerLocal.length;
+      setCheckinQueueCounts(modifiedCount, created.length);
+      lastModifiedPending = modifiedCount;
+      lastChangesPending = created.length;
+      if (!created.length) {
+        showQueueEmpty(body, "No new vault or local workspace files.");
+        // Still merge vault/agent pending so list State stays accurate without this tab.
+        void refreshPendingCheckinIds(productId);
+        return 0;
+      }
+      renderNewFilesQueueRows(body, productId, created);
+      rememberPendingCheckinIds([
+        ...saves.map((item) => item.uuid),
+        ...newerLocal
+          .filter((item) => item.can_checkin === "1")
+          .map((item) => item.uuid),
+      ]);
+      refreshTabMetrics();
+      return created.length;
+    } catch {
+      if (!quiet) {
+        showQueueEmpty(body, "Could not load new files.");
       }
       return lastChangesPending || 0;
     }
@@ -9923,6 +10007,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         panel.hidden = panel.id !== `panel-${name}`;
       });
       if (name === "changes") loadChangesTab();
+      else if (name === "modified") void loadModifiedTab();
       else if (name === "checked-out") void loadCheckedOutTab();
       else if (name === "where-used") void loadWhereUsedTab();
       else refreshTabMetrics();
@@ -9994,6 +10079,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     document.querySelector('.tab[data-tab="overview"]')?.click();
   } else if (window.location.hash === "#changes") {
     document.querySelector('.tab[data-tab="changes"]')?.click();
+  } else if (window.location.hash === "#modified") {
+    document.querySelector('.tab[data-tab="modified"]')?.click();
   } else if (window.location.hash === "#checked-out") {
     document.querySelector('.tab[data-tab="checked-out"]')?.click();
   }
@@ -10410,10 +10497,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         void refreshPendingCheckinIds(watchProductId);
       }
       // Local agent-cache saves do not change the vault stamp — refresh the open tab in place.
-      if (activeListTab() === "changes") {
+      const modCount =
+        Number(data.pending_saves || 0) + Number(localPending.newerLocal || 0);
+      const newCount =
+        Number(data.new_files || 0) + Number(localPending.localNew || 0);
+      const activeTab = activeListTab();
+      if (activeTab === "changes") {
         if (lastChangesPending === null) {
-          lastChangesPending = pending;
-        } else if (pending !== lastChangesPending && !changesReloadBusy) {
+          lastChangesPending = newCount;
+        } else if (newCount !== lastChangesPending && !changesReloadBusy) {
           changesReloadBusy = true;
           knownWorkspacePaths.at = 0;
           cachedProductObjects.at = 0;
@@ -10423,8 +10515,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             changesReloadBusy = false;
           }
         }
+      } else if (activeTab === "modified") {
+        if (lastModifiedPending === null) {
+          lastModifiedPending = modCount;
+        } else if (modCount !== lastModifiedPending && !modifiedReloadBusy) {
+          modifiedReloadBusy = true;
+          knownWorkspacePaths.at = 0;
+          cachedProductObjects.at = 0;
+          try {
+            await loadModifiedTab({ quiet: true });
+          } finally {
+            modifiedReloadBusy = false;
+          }
+        }
       } else {
-        lastChangesPending = pending;
+        lastChangesPending = newCount;
+        lastModifiedPending = modCount;
       }
       const next = data.stamp || "";
       if (watchStamp === null) {

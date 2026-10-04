@@ -98,8 +98,8 @@ def test_home_page(client):
     assert "push169" not in text
     assert "export3" not in text
     assert "compact-busy" not in text
-    assert "preserve-list-search" in text
-    assert "toolbar52" in text
+    assert 'app.js?v=' in text and "modified-tab" in text
+    assert 'app.css?v=' in text and text.count("modified-tab") >= 2
     assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "folder | urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

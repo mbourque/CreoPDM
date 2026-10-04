@@ -66,8 +66,10 @@ def test_checkout_blocked_when_product_on_hold(client, repo_parent):
     assert page.text.count('data-can-checkout="1"') == 1
     assert 'data-can-checkout="0"' in page.text
     assert 'id="changes-help"' not in page.text
+    assert 'id="modified-help"' not in page.text
     assert 'id="checked-out-help"' not in page.text
-    assert "Use <strong>Add</strong> for new files and <strong>Check In</strong>" not in page.text
+    assert "Use <strong>Add</strong> to bring them in" not in page.text
+    assert "Use <strong>Check In</strong> to record them" not in page.text
     assert "Open, Check In, and Undo Checkout still apply" not in page.text
 
     detail = client.get(f"/api/objects/{obj['uuid']}")
@@ -501,9 +503,12 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert "function countLocalWorkspacePending" in script.text
     assert "newerLocal" in script.text
     assert "loadChangesTab({ quiet: true })" in script.text
+    assert "loadModifiedTab({ quiet: true })" in script.text
     assert "lastChangesPending" in script.text
+    assert "lastModifiedPending" in script.text
     assert "New file (local)" in script.text
     assert "function setCheckedOutTabCount" in script.text
+    assert "function loadModifiedTab" in script.text
     assert "function listedMetricRows" in script.text
     assert "function refreshTabMetrics" in script.text
     assert "function metricKey" in script.text

@@ -87,11 +87,13 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Click **Top level assemblies** | Filter and select those top-level assemblies; turn **off** every other pill (Folders, Files, Parts, Assemblies, Modified, …); click again to clear | Leave Assemblies / Modified / other pills on with Top level |
 | Click **Modified** | Filter and select files with local changes you can check in; click again to clear. **Modified** pill count matches rows shown as Modified (including after local/agent detection) | Select unmodified checkouts or someone else’s files; leave the pill at 0 while a row shows Modified |
 | Click **Checked out** | Filter and select checked out files in the current group; click again to clear | |
-| Switch tabs: **Files** / **Checked out** / **New files** | Show that list; show Add/Check In help blurbs only when those actions are available (role ∩ product state) | Tell you to Add or Check In when you cannot do those actions |
+| Switch tabs: **Files** / **Files checked out** / **Modified** / **New files** | Show that list; tab labels show live counts for Modified and New files (same detection as Check In); show Add/Check In help blurbs only when those actions are available (role ∩ product state) | Mix modified product files into **New files**; leave Modified / New files counts stale while workspace-watch can see changes; tell you to Add or Check In when you cannot do those actions |
 | Click a column header | Sort; click again to reverse | |
 | Collect Creo metadata | When metadata includes **Model type** / **Subtype**, the Files **Type** column prefers a distinctive subtype (SHEETMETAL, SKELETON, MFG, …) else the model type (PART, ASSEMBLY, …) instead of the extension-based label. Skeleton uses Creo’s IsSkeleton flag when available, else whether a session assembly lists it as its GetSkeleton, else common names (`*_skel`, `*_skeleton`, `skel_*`). After **Collect all metadata** saves at least one model, refresh the list so those Type labels appear without F5 | Keep showing “Creo Assembly” for a manufacturing assembly after metadata says MFG; keep showing PART for a sheet-metal part after subtype is SHEETMETAL; leave the Files list stale until a hard refresh after Collect |
 
-**New files tab** shows files waiting in the **vault** (and sometimes local workspace) that aren’t fully in the product yet. Deleting only from your PC workspace does **not** clear vault “new” files — those live on the CreoPDM vault until you remove them from there. The Add/Check In help blurb shows only when you can Add **and** Check In; otherwise it is hidden (files can still list; local workspace remove may still work). Local workspace copies of vault files (including folders with spaces like `from ptc`) must not appear here just because an older agent rewrote the folder as `from_ptc`.
+**Modified tab** (between **Files checked out** and **New files**) lists product files that already exist in the vault with a newer save in the vault or your local workspace — the same pending-save detection that drives Check In and the Modified count on the tab. Use **Check In** here.
+
+**New files tab** shows only files waiting in the **vault** (and sometimes local workspace) that aren’t in the product yet — not modified vault tips. Deleting only from your PC workspace does **not** clear vault “new” files — those live on the CreoPDM vault until you remove them from there. The Add help blurb shows only when you can Add; otherwise it is hidden (files can still list; local workspace remove may still work). Local workspace copies of vault files (including folders with spaces like `from ptc`) must not appear here just because an older agent rewrote the folder as `from_ptc`.
 
 ---
 
@@ -396,7 +398,7 @@ Phone-only **browse** mode (portrait or landscape). No Add / Checkout / Check In
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Open **Files** or **Files checked out** | Show **Name** and **Rev** only | Force sideways scrolling for State / Type / Creo / Modified / Checkout |
-| Open **New files** | Show **Filename** only | Crush headers into vertical “CHANGE” / “FILENAME ()” text |
+| Open **Modified** or **New files** | Show **Filename** only | Crush headers into vertical “CHANGE” / “FILENAME ()” text |
 | See an empty list | Full-width message; hide the useless column header row | Leave broken header cells beside the empty message |
 
 ### Opening things
@@ -555,7 +557,7 @@ Try the same with **Add folder…**, **Add folders…**, and **Compressed data�
 
 Automated coverage lives mainly in:
 
-- `tests/unit/test_ui_regressions.py` (includes `test_mobile_browse_css_is_minimal`, `test_details_where_used_tab_gated_on_creo_models`, `test_files_search_survives_details_and_back`)
+- `tests/unit/test_ui_regressions.py` (includes `test_mobile_browse_css_is_minimal`, `test_details_where_used_tab_gated_on_creo_models`, `test_files_search_survives_details_and_back`, `test_modified_tab_between_checked_out_and_new_files`)
 - `tests/unit/test_user_interaction_validations.py`
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)

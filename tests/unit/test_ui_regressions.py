@@ -235,13 +235,16 @@ def test_locked_product_changes_help_does_not_offer_add_checkin():
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert 'id="changes-help"' in html
+    assert 'id="modified-help"' in html
     assert 'id="checked-out-help"' in html
-    assert "{% if product_ui.show_add and product_ui.show_checkin %}" in html
-    assert "{% if product_ui.show_checkin %}" in html
-    assert html.index("{% if product_ui.show_add and product_ui.show_checkin %}") < html.index(
-        'id="changes-help"'
-    )
-    assert "Use <strong>Add</strong> for new files and <strong>Check In</strong>" in html
+    mod_panel = _between(html, 'id="panel-modified"', 'id="panel-changes"')
+    changes_panel = _between(html, 'id="panel-changes"', "{% else %}")
+    assert "{% if product_ui.show_checkin %}" in mod_panel
+    assert 'id="modified-help"' in mod_panel
+    assert "{% if product_ui.show_add %}" in changes_panel
+    assert 'id="changes-help"' in changes_panel
+    assert "Use <strong>Add</strong> to bring them in" in html
+    assert "Use <strong>Check In</strong> to record them" in html
     assert "Open, Check In, and Undo Checkout still apply" in html
     assert "are blocked while this product is" not in html
     assert "function canOfferAdd" in script
@@ -249,6 +252,36 @@ def test_locked_product_changes_help_does_not_offer_add_checkin():
     assert '"Local workspace."' in script
     assert '"Not in the product yet."' in script
     assert "shows only when you can Add" in docs
+
+
+def test_modified_tab_between_checked_out_and_new_files():
+    """Modified tab lists vault/local newer saves; New files stays new-only with its own count."""
+    html = APP_HTML.read_text(encoding="utf-8")
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert 'data-tab="modified"' in html
+    assert 'id="modified-table"' in html
+    assert 'id="panel-modified"' in html
+    assert html.index('data-tab="checked-out"') < html.index('data-tab="modified"')
+    assert html.index('data-tab="modified"') < html.index('data-tab="changes"')
+    assert "function loadModifiedTab(" in script
+    assert "function loadCheckinQueueParts(" in script
+    counts = _between(script, "function setCheckinQueueCounts(", "function setCheckedOutTabCount(")
+    assert 'data-tab="modified"' in counts
+    assert "`Modified · ${n}`" in counts
+    assert "`New files · ${n}`" in counts
+    assert "Number(pendingSaves || 0) + Number(newFiles || 0)" not in counts
+    changes = _between(script, "async function loadChangesTab(", "async function loadCheckedOutTab(")
+    assert "renderNewFilesQueueRows" in changes
+    assert "renderModifiedQueueRows" not in changes
+    modified = _between(script, "async function loadModifiedTab(", "async function loadChangesTab(")
+    assert "renderModifiedQueueRows" in modified
+    assert "renderNewFilesQueueRows" not in modified
+    assert 'activeTab === "modified"' in script
+    assert "await loadModifiedTab({ quiet: true })" in script
+    assert "**Modified** tab" in docs or "**Modified tab**" in docs
+    assert "not modified vault tips" in docs
+    assert "live counts for Modified and New files" in docs
 
 
 def test_product_state_badge_in_files_header():
@@ -923,7 +956,9 @@ def test_mobile_browse_css_is_minimal():
     assert "#detail-toolbar" in mobile
     assert "#object-table th:nth-child(n + 3)" in mobile
     assert "#checked-out-table th:nth-child(n + 3)" in mobile
+    assert "#modified-table th:nth-child(1)" in mobile
     assert "#changes-table th:nth-child(1)" in mobile
+    assert "#modified-table:has(.empty-row) thead" in mobile
     assert "#changes-table:has(.empty-row) thead" in mobile
     assert "table-layout: fixed" in mobile
     assert ".object-open" in mobile
