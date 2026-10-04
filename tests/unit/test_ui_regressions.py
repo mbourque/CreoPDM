@@ -298,7 +298,7 @@ def test_modified_tab_between_checked_out_and_new_files():
     assert 'applyCheckinQueueParts(productId' in modified
     assert 'forceNetwork' in modified
     assert 'activeTab === "modified"' in script
-    assert "await loadModifiedTab({ quiet: true })" in script
+    assert "await loadModifiedTab({ quiet: true, forceNetwork: true })" in script
     assert "function prefetchCheckinQueueParts(" in script
     assert "function cachedCheckinQueueParts(" in script
     assert "function invalidateCheckinQueueCache(" in script
