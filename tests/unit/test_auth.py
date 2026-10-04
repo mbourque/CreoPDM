@@ -1633,6 +1633,67 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
 
 
 @requires_git
+def test_admin_products_hides_delete_tip_without_delete_permission(
+    auth_client, auth_ctx, repo_parent
+):
+    """Utilities → Delete products tip stays hidden without products.delete."""
+    from creopdm.auth_constants import (
+        PERMISSION_PRODUCTS_MANAGE,
+        PERMISSION_PRODUCTS_VIEW,
+        PERMISSION_UTILITIES_ACCESS,
+    )
+
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+    role = auth_client.post(
+        "/admin/roles/new",
+        data={
+            "name": "Product Editor",
+            "description": "Manage products; no delete",
+            "permission": [
+                PERMISSION_PRODUCTS_VIEW,
+                PERMISSION_PRODUCTS_MANAGE,
+                PERMISSION_UTILITIES_ACCESS,
+            ],
+        },
+        follow_redirects=False,
+    )
+    assert role.status_code == 303, role.text
+    user = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Editor",
+            "username": "editor",
+            "email": "editor@example.com",
+            "role": "Product Editor",
+            "status": UserStatus.ACTIVE.value,
+            "password": "EditorPass1",
+            "password_confirm": "EditorPass1",
+        },
+        follow_redirects=False,
+    )
+    assert user.status_code == 303, user.text
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(User).where(User.username == "editor"))
+        assert row is not None
+        row.must_change_password = False
+        db.commit()
+    product = auth_client.post("/api/products", json={"name": "Tip Gate"}).json()
+
+    _login(auth_client, "editor", "EditorPass1")
+    listed = auth_client.get("/admin/products")
+    assert listed.status_code == 200
+    assert "Tip Gate" in listed.text
+    assert "To delete a product and its vault" not in listed.text
+    assert 'href="/admin/utilities/delete-products"' not in listed.text
+
+    detail = auth_client.get(f"/admin/products/{product['uuid']}")
+    assert detail.status_code == 200
+    assert "To delete a product and its vault" not in detail.text
+    assert 'href="/admin/utilities/delete-products"' not in detail.text
+
+
+@requires_git
 def test_admin_can_create_and_delete_product(auth_client, auth_ctx, repo_parent):
     """Administrator retains full product create/delete."""
     auth_client.post(

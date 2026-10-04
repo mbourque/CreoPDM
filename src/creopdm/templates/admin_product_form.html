@@ -87,7 +87,9 @@
       </div>
     </section>
   </form>
+  {% if can_delete_product and can_access_utilities %}
   <p class="muted small" style="margin-top: 1rem;">To delete a product and its vault, use <a href="/admin/utilities/delete-products">Administration → Utilities → Delete products</a>.</p>
+  {% endif %}
 {% endif %}
 </article>
 {% endblock %}

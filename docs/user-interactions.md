@@ -63,13 +63,14 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 | Log in as a different user after someone else watched | Show **not** watching unless **you** subscribed; keep the other user’s subscription | Steal or clear another user’s watch when you open the product or click Stop on your own bell |
 | Open a product when your account email is invalid | Show the bell disabled with a clear reason | Let you subscribe until email is fixed |
 | **Force Undo Checkout** (role permission) | Release another user’s checkout without a new version; email that user when notifications are enabled (they need a valid account email; watching is not required) | Show without `objects.force_undo_checkout`; commit a version |
-| Delete product (product gear, or **Utilities → Delete products**) | Ask you to type the **exact** product name; remove CreoPDM’s vault (working copies + Git) and unregister the product from the database (works when the product is locked or **Archived** too) | Delete your original CAD folders on disk just because you deleted the product; delete if you typed the wrong name; leave an orphan vault folder under the vaults root; leave a DB row / Utilities compact entry after a successful remove; keep a Remove form on Administration → Products → Edit |
+| Delete product (product gear, or **Utilities → Delete products**) | Ask you to type the **exact** product name; remove CreoPDM’s vault (working copies + Git) and unregister the product from the database (works when the product is locked or **Archived** too) | Delete your original CAD folders on disk just because you deleted the product; delete if you typed the wrong name; leave an orphan vault folder under the vaults root; leave a DB row / Utilities compact entry after a successful remove; keep a Remove form on Administration → Products → Edit; show the **Utilities → Delete products** tip on Administration → Products when the role lacks delete (or Utilities) permission |
 
 **Name rules (new / rename)**
 
 - Product name is required and must be **unique** (case-insensitive) across every product on the server — including Archived / inactive. Two products cannot share a name.
 - Custom vault/workspace name: no spaces; or use the hash option instead.
 - Administration → Products shows **Created** (date/time) so you can tell products apart when cleaning up.
+- The **Utilities → Delete products** tip on Administration → Products (list and Edit) appears only when the role can delete products and open Utilities.
 
 ---
 
