@@ -478,7 +478,7 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert body[0]["checkout_user"] == "Alice"
     home_out = client.get(f"/?product={product['uuid']}")
     assert home_out.status_code == 200
-    assert "Files checked out · 1" in home_out.text
+    assert "Checked out · 1" in home_out.text
     identity.become("Bob", "ENG-PC-18")
     as_bob = client.get(f"/api/products/{product['uuid']}/checkouts")
     assert as_bob.status_code == 200, as_bob.text
@@ -490,7 +490,7 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     home = client.get(f"/?product={product['uuid']}")
     assert home.status_code == 200
     assert 'id="checked-out-table"' in home.text
-    assert "Files checked out ·" not in home.text
+    assert "Checked out ·" not in home.text
     script = client.get("/static/js/app.js")
     assert "function loadCheckedOutTab" in script.text
     assert "function listAgentCacheFiles" in script.text

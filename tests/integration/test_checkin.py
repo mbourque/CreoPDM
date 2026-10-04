@@ -372,11 +372,11 @@ def test_product_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     (workspace / "bushing.prt").write_bytes(b"new-bushing")
     page = client.get(f"/?product={product['uuid']}")
     assert page.status_code == 200, page.text
-    assert "Files checked out · 1" in page.text
+    assert "Checked out · 1" in page.text
     assert "Modified" in page.text
     assert "New files" in page.text
-    assert "Files checked out" in page.text
-    assert page.text.index("Files checked out") < page.text.index('data-tab="modified"')
+    assert "Checked out" in page.text
+    assert page.text.index('data-tab="checked-out"') < page.text.index('data-tab="modified"')
     assert page.text.index('data-tab="modified"') < page.text.index('data-tab="changes"')
     assert 'data-tab="checked-out"' in page.text
     assert 'id="checked-out-table"' in page.text
