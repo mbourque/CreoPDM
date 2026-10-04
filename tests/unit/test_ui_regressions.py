@@ -1643,6 +1643,20 @@ def test_modified_metric_pill_left_of_checked_out():
     assert "Click **Modified**" in docs
     assert "pill count matches rows shown as Modified" in docs
 
+def test_local_only_new_files_prefer_highest_creo_save():
+    """New files (local) must show test-part.prt.2, not a leftover .prt.1."""
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    body = _between(script, "function localOnlyCacheFiles(", "function newerLocalCacheSaves(")
+    assert "bestByFamily" in body
+    assert "creoSaveNumber(filename)" in body
+    assert "saveNumber > prev.saveNumber" in body
+    assert "Collapse Creo siblings to the highest" in body
+    assert "**highest** save" in docs
+    assert "test-part.prt.2" in docs
+    assert "leftover `test-part.prt.1`" in docs
+
+
 def test_newer_local_cache_matches_flat_save_for_nested_vault_path():
     """Regression: older flat agent caches + nested vault paths still detect Modified."""
     script = _app_js()

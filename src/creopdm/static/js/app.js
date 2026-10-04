@@ -7109,10 +7109,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function localOnlyCacheFiles(cacheFiles, known) {
-    const exact = new Set(known.exact || []);
-    const logical = new Set(known.logical || []);
-    const basenames = new Set(known.basenames || []);
-    const created = [];
+    // Collapse Creo siblings to the highest .N (test-part.prt.2 over .prt.1).
+    // First-wins used to leave a stale tip after Save created a newer version.
+    const knownExact = new Set(known.exact || []);
+    const knownLogical = new Set(known.logical || []);
+    const knownBasenames = new Set(known.basenames || []);
+    const bestByFamily = new Map();
     (cacheFiles || []).forEach((item) => {
       const rel = String(item.relative_path || "").replace(/\\/g, "/");
       if (!rel) return;
@@ -7120,17 +7122,41 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const logicalKey = logicalRelativePath(rel).toLowerCase();
       const base = logicalUploadName(PathBasename(rel)).toLowerCase();
       const atRoot = !rel.includes("/");
-      if (exact.has(exactKey) || logical.has(logicalKey)) return;
-      if (atRoot && basenames.has(base)) return;
-      exact.add(exactKey);
-      logical.add(logicalKey);
-      basenames.add(base);
+      if (knownExact.has(exactKey) || knownLogical.has(logicalKey)) return;
+      if (atRoot && knownBasenames.has(base)) return;
+      const filename = item.filename || PathBasename(rel);
+      const saveNumber = creoSaveNumber(filename);
+      const familyKey = logicalKey || exactKey;
+      const prev = bestByFamily.get(familyKey);
+      if (!prev || saveNumber > prev.saveNumber) {
+        bestByFamily.set(familyKey, {
+          item,
+          rel,
+          filename,
+          saveNumber,
+          exactKey,
+          logicalKey,
+          base,
+          atRoot,
+        });
+      }
+    });
+    const created = [];
+    const seenExact = new Set();
+    const seenLogical = new Set();
+    const seenBasenames = new Set();
+    bestByFamily.forEach((entry) => {
+      if (seenExact.has(entry.exactKey) || seenLogical.has(entry.logicalKey)) return;
+      if (entry.atRoot && seenBasenames.has(entry.base)) return;
+      seenExact.add(entry.exactKey);
+      seenLogical.add(entry.logicalKey);
+      seenBasenames.add(entry.base);
       created.push({
-        filename: item.filename || PathBasename(rel),
-        relative_path: rel,
-        size: item.size,
-        saved_at: item.saved_at || "",
-        object_type: typeFromExtension(filenameExtension(item.filename || rel)),
+        filename: entry.filename,
+        relative_path: entry.rel,
+        size: entry.item.size,
+        saved_at: entry.item.saved_at || "",
+        object_type: typeFromExtension(filenameExtension(entry.filename || entry.rel)),
         local_cache: true,
       });
     });
