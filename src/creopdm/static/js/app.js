@@ -4774,7 +4774,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const tab = document.querySelector('.tab[data-tab="checked-out"]');
     if (!tab) return;
     const n = Number(count) || 0;
-    tab.textContent = n ? `Files checked out · ${n}` : "Files checked out";
+    tab.textContent = n ? `Checked out · ${n}` : "Checked out";
     if (checkinProductBtn) checkinProductBtn.dataset.checkoutCount = String(n);
     if (checkinMenuBtn) checkinMenuBtn.dataset.checkoutCount = String(n);
   }
@@ -5323,7 +5323,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       roleCanCheckin &&
       selectionCanCheckin(selected) &&
       !addOnly;
-    const canDownload = canViewObjects() && selectedDownloadIds().length > 0;
+    // Modified "Newer local save" / New file (local) are already in the agent workspace.
+    const alreadyLocal =
+      selected.length > 0 && selected.every((row) => row.dataset.localCache === "1");
+    const canDownload =
+      canViewObjects() && selectedDownloadIds().length > 0 && !alreadyLocal;
     const canExportObjects = document.body?.dataset?.canExportObjects === "1";
     const exportHasSelection =
       selected.flatMap(rowObjectIds).length > 0 || selectedFolderPaths().length > 0;

@@ -1399,10 +1399,15 @@ def test_files_context_menu_download_to_workspace():
     assert "canAddSelected" in caps
     assert "selectionIsAddOnly(selected)" in caps
     assert "!addOnly" in caps
+    assert "alreadyLocal" in caps
+    assert 'dataset.localCache === "1"' in caps
+    assert "!alreadyLocal" in caps
     assert 'dataset.canCheckout === "1"' in caps
     assert 'dataset.owned === "1"' in caps
     assert "canUndo" in caps
     assert "canExportObjects" in caps
+    docs_ctx = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "already local-workspace tips" in docs_ctx or "already in the local workspace" in docs_ctx
     open_menu = _between(script, "function openFilesContextMenu(", "async function downloadSelectedToWorkspace(")
     assert "openItem.hidden = !caps.canOpen" in open_menu
     assert "detailsItem.hidden = !caps.canDetails" in open_menu

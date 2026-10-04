@@ -138,7 +138,7 @@
 
     <div class="tabs" role="tablist">
       <button type="button" class="tab is-active" data-tab="files">Files</button>
-      <button type="button" class="tab" data-tab="checked-out">{% if checkout_count|default(0) %}Files checked out · {{ checkout_count }}{% else %}Files checked out{% endif %}</button>
+      <button type="button" class="tab" data-tab="checked-out">{% if checkout_count|default(0) %}Checked out · {{ checkout_count }}{% else %}Checked out{% endif %}</button>
       <button type="button" class="tab" data-tab="modified">{% if pending_saves|default(0) %}Modified · {{ pending_saves }}{% else %}Modified{% endif %}</button>
       <button type="button" class="tab" data-tab="changes">{% if new_workspace_files|default(0) %}New files · {{ new_workspace_files }}{% else %}New files{% endif %}</button>
     </div>
