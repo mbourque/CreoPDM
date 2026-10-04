@@ -37,7 +37,7 @@
       <span class="bom-branch" aria-hidden="true">{% if depth %}└{% else %}●{% endif %}</span>
       {{ bom_name_link(node) }}
       {% if node.quantity and node.quantity != 1 %}
-      <span class="muted small bom-qty">× {{ node.quantity }}</span>
+      <span class="muted small bom-qty">× {{ node.quantity|bom_qty }}</span>
       {% endif %}
     </div>
     {% if node.children %}
@@ -54,7 +54,7 @@
         {{ bom_name_link(node) }}
       </span>
     </td>
-    <td>{% if node.dependency_type == 'ASSEMBLY_ROOT' %}—{% else %}{{ node.quantity }}{% endif %}</td>
+    <td>{% if node.dependency_type == 'ASSEMBLY_ROOT' %}—{% else %}{{ node.quantity|bom_qty }}{% endif %}</td>
     <td>{% if node.dependency_type == 'ASSEMBLY_ROOT' %}Assembly{% else %}{{ node.dependency_type }}{% endif %}</td>
   </tr>
   {% if node.children %}
@@ -420,7 +420,7 @@
         {% for row in metadata.dependencies %}
         <tr>
           <td class="filename-cell">{{ row.filename }}</td>
-          <td>{{ row.quantity }}</td>
+          <td>{{ row.quantity|bom_qty }}</td>
           <td>{{ row.dependency_type }}</td>
         </tr>
         {% endfor %}
@@ -460,7 +460,7 @@
           </td>
           <td>{{ row.type_label }}</td>
           <td>{{ row.display_revision }}</td>
-          <td>{{ row.quantity }}</td>
+          <td>{{ row.quantity|bom_qty }}</td>
           <td>{{ row.dependency_type }}</td>
         </tr>
         {% endfor %}

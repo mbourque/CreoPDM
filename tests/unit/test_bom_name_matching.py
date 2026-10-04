@@ -6,6 +6,7 @@ from creopdm.utils.bom_match import (
     bom_lookup_keys,
     bom_where_used_keys,
     filenames_refer_to_same_model,
+    format_bom_qty,
 )
 
 
@@ -41,6 +42,14 @@ def test_bom_lookup_keys_mirror_aliases_source_part():
     assert "clasp.prt" in keys
     assert filenames_refer_to_same_model("clasp-clasp_mir.prt.1", "CLASP.PRT")
     assert filenames_refer_to_same_model("clasp-clasp_mir.prt.1", "CLASP-CLASP_MIR")
+
+
+def test_format_bom_qty_whole_numbers_not_floats():
+    """BOM Qty must show 1 / 3, not 1.0 / 3.0 from float storage."""
+    assert format_bom_qty(1.0) == "1"
+    assert format_bom_qty(3) == "3"
+    assert format_bom_qty("2.0") == "2"
+    assert format_bom_qty(None) == "—"
 
 
 def test_enrich_bom_links_instance_to_generic_uuid():

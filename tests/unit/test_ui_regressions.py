@@ -1135,6 +1135,21 @@ def test_details_where_used_tab_gated_on_creo_models():
     assert "Show Where Used for Documents" in docs
 
 
+def test_details_bom_qty_renders_whole_numbers():
+    """BOM / Where Used Qty must use bom_qty so floats do not show as 1.0."""
+    detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(
+        encoding="utf-8"
+    )
+    pages = (ROOT / "src" / "creopdm" / "api" / "pages.py").read_text(encoding="utf-8")
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "|bom_qty" in detail
+    assert 'filters["bom_qty"]' in pages or "filters['bom_qty']" in pages
+    assert "function formatBomQty" in script
+    assert "formatBomQty(row.quantity" in script
+    assert "whole numbers" in docs and "1.0" in docs
+
+
 def test_history_revert_only_for_older_versions():
     """Revert control appears only with older history; current row is not reversible."""
     detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(

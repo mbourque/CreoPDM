@@ -107,3 +107,14 @@ def filenames_refer_to_same_model(left: str, right: str) -> bool:
     left_keys = set(bom_where_used_keys(left))
     right_keys = set(bom_where_used_keys(right))
     return bool(left_keys and right_keys and (left_keys & right_keys))
+
+
+def format_bom_qty(value: object) -> str:
+    """BOM quantities are whole counts — show ``1`` not ``1.0``."""
+    if value is None or value == "":
+        return "—"
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return str(int(round(number)))

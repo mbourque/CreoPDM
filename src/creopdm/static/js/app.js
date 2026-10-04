@@ -3879,6 +3879,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   let searchTimer = 0;
   let searchSeq = 0;
 
+  function formatBomQty(value) {
+    // BOM counts are whole numbers — show 1 not 1.0.
+    const n = Number(value);
+    if (!Number.isFinite(n)) return String(value ?? 1);
+    return String(Math.round(n));
+  }
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -10539,7 +10546,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             <td class="filename-cell"><a href="${href}">${escapeHtml(row.filename || "")}</a>${sub}</td>
             <td>${escapeHtml(row.type_label || "")}</td>
             <td>${escapeHtml(row.display_revision || "")}</td>
-            <td>${escapeHtml(String(row.quantity ?? 1))}</td>
+            <td>${escapeHtml(formatBomQty(row.quantity ?? 1))}</td>
             <td>${escapeHtml(row.dependency_type || "")}</td>
           </tr>`;
         })

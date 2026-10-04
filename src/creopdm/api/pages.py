@@ -29,7 +29,7 @@ from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPS
 from creopdm.context import AppContext
 from creopdm.exceptions import PermissionDeniedError, ProductNotFoundError
 from creopdm.permissions import caps_dict
-from creopdm.utils.bom_match import bom_generic_label, bom_lookup_keys
+from creopdm.utils.bom_match import bom_generic_label, bom_lookup_keys, format_bom_qty
 from creopdm.utils.classify import (
     display_type_label,
     matches_cad_models,
@@ -49,10 +49,12 @@ _template_env = Environment(
 _template_env.filters["local_time"] = format_local
 _template_env.filters["local_time_pretty"] = format_local_pretty
 _template_env.filters["byte_size"] = format_byte_size
+_template_env.filters["bom_qty"] = format_bom_qty
 _template_env.filters["tojson"] = lambda value: json.dumps(value, separators=(",", ":"))
 _template_env.globals["local_time"] = format_local
 _template_env.globals["local_time_pretty"] = format_local_pretty
 _template_env.globals["byte_size"] = format_byte_size
+_template_env.globals["bom_qty"] = format_bom_qty
 _template_env.globals["type_icon"] = resolve_type_icon
 _template_env.globals["type_label"] = display_type_label
 templates = Jinja2Templates(env=_template_env)
@@ -163,9 +165,11 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
     templates.env.filters["local_time"] = format_local
     templates.env.filters["local_time_pretty"] = format_local_pretty
     templates.env.filters["byte_size"] = format_byte_size
+    templates.env.filters["bom_qty"] = format_bom_qty
     templates.env.globals["local_time"] = format_local
     templates.env.globals["local_time_pretty"] = format_local_pretty
     templates.env.globals["byte_size"] = format_byte_size
+    templates.env.globals["bom_qty"] = format_bom_qty
     auth_user = getattr(request.state, "auth_user", None)
     caps = caps_dict(request)
     ctx = getattr(request.app.state, "ctx", None)
