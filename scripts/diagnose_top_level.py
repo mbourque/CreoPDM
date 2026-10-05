@@ -36,6 +36,7 @@ from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
 from creopdm.utils.cad_name_matcher import CadNameMatcher, find_bounded_token
 from creopdm.utils.creo_dependencies import (
+    _MAX_WHERE_USED_ASM_PARENTS,
     _SCAN_LIMIT,
     _WHERE_USED_SCAN_LIMIT,
     _utf16le_ascii_runs,
@@ -252,19 +253,26 @@ def main() -> int:
             children_of[parent.id] = kids
             children_ext_of[parent.id] = kids_ext
 
+        # Stem indegree per assembly child (how many parents claim it).
+        stem_parents_of: dict[int, set[int]] = defaultdict(set)
+        for parent_id, kids in children_of.items():
+            for child_id in kids:
+                stem_parents_of[child_id].add(parent_id)
+        # Magnet prune: drop incoming stem edges to asms with too many parents.
+        magnet_ids = {
+            child_id
+            for child_id, parents_set in stem_parents_of.items()
+            if len(parents_set) > _MAX_WHERE_USED_ASM_PARENTS
+        }
         referenced: set[int] = set()
         for kids in children_of.values():
             referenced.update(kids)
         referenced_ext: set[int] = set()
         for kids in children_ext_of.values():
             referenced_ext.update(kids)
-        # Trusted graph: stem matches only when parent fan-out is modest.
-        trusted: set[int] = set()
-        for parent_id, kids in children_of.items():
-            if len(kids) <= 80:
-                trusted.update(kids)
-            else:
-                trusted.update(children_ext_of.get(parent_id) or set())
+        # After magnet prune: magnets are no longer "used" (all incoming asm edges drop).
+        after_magnet = set(referenced) - magnet_ids
+
         mem_tops = sorted(
             CreoFileManager.normalize_creo_filename(row.filename).lower()
             for row in asms
@@ -275,40 +283,54 @@ def main() -> int:
             for row in asms
             if row.id not in referenced_ext
         )
-        mem_tops_trusted = sorted(
+        mem_tops_magnet = sorted(
             CreoFileManager.normalize_creo_filename(row.filename).lower()
             for row in asms
-            if row.id not in trusted
+            if row.id not in after_magnet
         )
         fanout_sorted = sorted(fanout)
         p50 = fanout_sorted[len(fanout_sorted) // 2] if fanout_sorted else 0
         p90 = fanout_sorted[int(len(fanout_sorted) * 0.9)] if fanout_sorted else 0
         pmax = fanout_sorted[-1] if fanout_sorted else 0
+        root_row = next(
+            (
+                row
+                for row in asms
+                if CreoFileManager.normalize_creo_filename(row.filename).lower()
+                == expected_root
+            ),
+            None,
+        )
+        root_indegree = (
+            len(stem_parents_of.get(root_row.id, set())) if root_row is not None else 0
+        )
         print(
             f"In-memory rebuild top-level (stems): {len(mem_tops)} "
             f"(missing_vault={missing_vault}, parents_over_8MiB={oversized})"
         )
         print(f"In-memory rebuild top-level (name.ext only): {len(mem_tops_ext)}")
         print(
-            f"In-memory rebuild top-level (trusted fan-out<=80 else ext): {len(mem_tops_trusted)}"
+            f"In-memory rebuild top-level (after magnet prune>{_MAX_WHERE_USED_ASM_PARENTS}): "
+            f"{len(mem_tops_magnet)} (magnets={len(magnet_ids)})"
         )
         print(
             f"Parent match fan-out: n={len(fanout)} p50={p50} p90={p90} max={pmax} "
             f"noisy(>80)={noisy_parents}"
         )
-        if expected_root in mem_tops_trusted:
-            print(f"OK: {expected_root} would be top-level under trusted graph")
+        print(f"Stem indegree of {expected_root}: {root_indegree}")
+        if expected_root in mem_tops_magnet:
+            print(f"OK: {expected_root} would be top-level after magnet prune")
         else:
-            print(f"WARN: {expected_root} still not top-level under trusted graph")
-        print("Trusted top-level names (first 60):")
-        for name in mem_tops_trusted[:60]:
+            print(f"WARN: {expected_root} still not top-level after magnet prune")
+        print("Magnet-pruned top-level names (first 60):")
+        for name in mem_tops_magnet[:60]:
             mark = " <-- expected" if name == expected_root else ""
             print(f"  {name}{mark}")
-        if len(mem_tops_trusted) > 60:
-            print(f"  ... +{len(mem_tops_trusted) - 60} more")
+        if len(mem_tops_magnet) > 60:
+            print(f"  ... +{len(mem_tops_magnet) - 60} more")
         print()
 
-        orphans = [row for row in asms if row.id not in trusted]
+        orphans = [row for row in asms if row.id not in after_magnet]
         orphans.sort(key=lambda row: (row.filename or "").lower())
         # Prefer explaining non-root orphans first.
         orphans_focus = [

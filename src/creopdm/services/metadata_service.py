@@ -32,7 +32,7 @@ from creopdm.services.object_service import ObjectService
 from creopdm.utils.creo_dependencies import (
     model_references_filename,
     needs_open_dependencies,
-    _MAX_WHERE_USED_CHILDREN_PER_PARENT,
+    _MAX_WHERE_USED_ASM_PARENTS,
     _WHERE_USED_SCAN_LIMIT,
     read_model_scan_blob,
 )
@@ -254,6 +254,54 @@ class MetadataService:
         if added:
             session.flush()
         return added, existing
+
+    def prune_assembly_name_magnets(
+        self,
+        session: Session,
+        product_id: int,
+        *,
+        max_parents: int = _MAX_WHERE_USED_ASM_PARENTS,
+    ) -> int:
+        """Drop assembly membership edges into name-table magnets.
+
+        Creo tips often mention the project root (e.g. ``844j``) in hundreds of
+        files. Those stem hits create hundreds of false parents and hide the
+        true Top Level root. Assemblies with more than ``max_parents`` distinct
+        ASSEMBLY_MEMBER parents are treated as magnets: all such incoming edges
+        are removed so the root can surface, while real sub-asms (few parents)
+        keep their links.
+        """
+        from sqlalchemy import func
+
+        Child = aliased(EngineeringObject)
+        crowded = (
+            select(Dependency.child_object_id)
+            .join(Child, Child.id == Dependency.child_object_id)
+            .where(
+                Dependency.product_id == product_id,
+                Dependency.dependency_type == DependencyType.ASSEMBLY_MEMBER.value,
+                Child.object_type == _ASSEMBLY_TYPE,
+            )
+            .group_by(Dependency.child_object_id)
+            .having(func.count(Dependency.parent_object_id) > int(max_parents))
+        )
+        result = session.execute(
+            delete(Dependency).where(
+                Dependency.product_id == product_id,
+                Dependency.dependency_type == DependencyType.ASSEMBLY_MEMBER.value,
+                Dependency.child_object_id.in_(crowded),
+            )
+        )
+        removed = int(result.rowcount or 0)
+        if removed:
+            session.flush()
+            logger.info(
+                "Where Used pruned %s magnet edges (asm parents > %s) for product %s",
+                removed,
+                max_parents,
+                product_id,
+            )
+        return removed
 
     def top_level_assembly_uuids(self, session: Session, product_id: int) -> list[str]:
         """Assemblies not used by another assembly (drawing parents ignored).
@@ -536,19 +584,15 @@ class MetadataService:
                 stem_to_rows.setdefault(stem, []).append(row)
 
         # Creo component tables use bare names; require token boundaries so glued
-        # substrings (false Top Level parents) still do not match. Huge hit sets
-        # are treated as name-table noise — fall back to name.ext only.
+        # substrings (false Top Level parents) still do not match. Assemblies
+        # claimed by dozens/hundreds of parents are pruned after the full scan
+        # (name-table magnets such as the project root).
         matcher = CadNameMatcher(
             candidate_names,
             include_stems=True,
             require_boundaries=True,
             min_stem_len=4,
             unique_stems_only=True,
-        )
-        matcher_ext = CadNameMatcher(
-            candidate_names,
-            include_stems=False,
-            require_boundaries=True,
         )
         edges_added = 0
         edges_existing = 0
@@ -561,7 +605,24 @@ class MetadataService:
         # End the list_objects read transaction before vault I/O.
         session.commit()
 
-        def _resolve_names(found: set[str], *, parent_id: int) -> set[int]:
+        for parent in chunk:
+            scanned.append(parent.filename)
+            try:
+                path = self._workspaces.locate_content(product, parent)
+            except PathValidationError:
+                missing += 1
+                continue
+            except Exception:
+                logger.debug(
+                    "Rebuild where-used locate failed for %s",
+                    parent.filename,
+                    exc_info=True,
+                )
+                missing += 1
+                continue
+            # Full tip — component tables are often past the 8 MiB Open window.
+            blob = read_model_scan_blob(path, max_bytes=_WHERE_USED_SCAN_LIMIT)
+            found = matcher.find(blob) if blob else set()
             child_ids: set[int] = set()
             for name in found:
                 logical = CreoFileManager.normalize_creo_filename(name).lower()
@@ -583,43 +644,9 @@ class MetadataService:
                         ]
                         if len(asms) == 1:
                             child = asms[0]
-                if child is None or child.id == parent_id:
+                if child is None or child.id == parent.id:
                     continue
                 child_ids.add(child.id)
-            return child_ids
-
-        for parent in chunk:
-            scanned.append(parent.filename)
-            try:
-                path = self._workspaces.locate_content(product, parent)
-            except PathValidationError:
-                missing += 1
-                continue
-            except Exception:
-                logger.debug(
-                    "Rebuild where-used locate failed for %s",
-                    parent.filename,
-                    exc_info=True,
-                )
-                missing += 1
-                continue
-            # Full tip — component tables are often past the 8 MiB Open window.
-            blob = read_model_scan_blob(path, max_bytes=_WHERE_USED_SCAN_LIMIT)
-            found = matcher.find(blob) if blob else set()
-            child_ids = _resolve_names(found, parent_id=parent.id)
-            if len(child_ids) > _MAX_WHERE_USED_CHILDREN_PER_PARENT:
-                # Product-wide string tables look like hundreds of "members".
-                child_ids = _resolve_names(
-                    matcher_ext.find(blob) if blob else set(),
-                    parent_id=parent.id,
-                )
-                if len(child_ids) > _MAX_WHERE_USED_CHILDREN_PER_PARENT:
-                    logger.info(
-                        "Where Used skip noisy parent %s (%s name hits)",
-                        parent.filename,
-                        len(child_ids),
-                    )
-                    child_ids = set()
 
             dep_type = (
                 DependencyType.DRAWING_MODEL.value
@@ -637,11 +664,15 @@ class MetadataService:
         )
 
         next_offset = start + len(chunk)
+        done = next_offset >= total
+        if done:
+            # Strip false parents of project-root magnets after the full graph exists.
+            self.prune_assembly_name_magnets(session, product.id)
         return RebuildWhereUsedResponse(
             parents_total=total,
             parents_processed=len(chunk),
             next_offset=next_offset,
-            done=next_offset >= total,
+            done=done,
             edges_added=edges_added,
             edges_existing=edges_existing,
             parents_missing_vault=missing,

@@ -117,14 +117,13 @@ def test_open_dependency_walk_prefers_folder_scope_before_product():
 def test_rebuild_reads_full_tip_for_where_used():
     text = Path("src/creopdm/services/metadata_service.py").read_text(encoding="utf-8")
     assert "max_bytes=_WHERE_USED_SCAN_LIMIT" in text
-    assert "_MAX_WHERE_USED_CHILDREN_PER_PARENT" in text
-    assert "matcher_ext" in text
+    assert "prune_assembly_name_magnets" in text
 
 
-def test_where_used_fanout_cap_constant():
-    from creopdm.utils.creo_dependencies import _MAX_WHERE_USED_CHILDREN_PER_PARENT
+def test_where_used_magnet_parent_cap_constant():
+    from creopdm.utils.creo_dependencies import _MAX_WHERE_USED_ASM_PARENTS
 
-    assert _MAX_WHERE_USED_CHILDREN_PER_PARENT == 80
+    assert _MAX_WHERE_USED_ASM_PARENTS == 40
 
 
 def test_open_deps_do_not_materialize_during_find():

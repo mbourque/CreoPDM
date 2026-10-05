@@ -27,8 +27,9 @@ _SCAN_LIMIT = 8 * 1024 * 1024
 _WHERE_USED_SCAN_LIMIT: int | None = None
 # Creo tips often embed a product-wide name table. Stem matching then links almost
 # every assembly as a "child" (Top Level → 0) and falsely parents the true root.
-# When a parent resolves more than this many members, keep only bounded name.ext.
-_MAX_WHERE_USED_CHILDREN_PER_PARENT = 80
+# After indexing, drop ASSEMBLY_MEMBER edges into assemblies claimed by more than
+# this many parents (e.g. project root name appearing in ~every tip).
+_MAX_WHERE_USED_ASM_PARENTS = 40
 # Below this, plain ``in`` checks are cheaper than building an automaton.
 _MATCHER_THRESHOLD = 48
 # Safety caps for deep assembly trees.

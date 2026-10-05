@@ -243,6 +243,83 @@ def test_rebuild_indexes_bounded_bare_creo_names_for_top_level(
         assert tops == {"asm-root"}
 
 
+def test_prune_magnet_clears_false_parents_of_project_root(
+    data_dir, identity: StaticUserProvider
+):
+    """Name-table hits make every asm claim the root — prune restores Top Level."""
+    from creopdm.utils.creo_dependencies import _MAX_WHERE_USED_ASM_PARENTS
+
+    ctx = build_context(ConfigManager(), users=identity)
+    vault = ctx.config.workspace_for_product("magnet-wu")
+    vault.mkdir(parents=True, exist_ok=True)
+    # Stem must be >= 4 chars (Where Used min_stem_len).
+    (vault / "844j.asm").write_bytes(b"\x00at311912\x00")
+    (vault / "at311912.asm").write_bytes(b"\x0014m7303\x00")
+    (vault / "14m7303.prt").write_bytes(b"prt")
+    noise_names = [f"noise{i:03d}.asm" for i in range(_MAX_WHERE_USED_ASM_PARENTS + 5)]
+    for name in noise_names:
+        # Each noise asm mentions the project root stem (Creo name table).
+        (vault / name).write_bytes(b"\x00844j\x00")
+
+    with ctx.session_factory() as db:
+        product = Product(
+            uuid="prod-magnet-wu",
+            name="MagnetWU",
+            vault_folder="magnet-wu",
+            repository_path=str(vault),
+            default_branch="main",
+        )
+        db.add(product)
+        db.flush()
+        rows = [
+            _obj(
+                product.id,
+                filename="844j.asm",
+                object_type="CREO_ASSEMBLY",
+                uuid="asm-root",
+            ),
+            _obj(
+                product.id,
+                filename="at311912.asm",
+                object_type="CREO_ASSEMBLY",
+                uuid="asm-sub",
+            ),
+            _obj(
+                product.id,
+                filename="14m7303.prt",
+                object_type="CREO_PART",
+                uuid="prt-pin",
+            ),
+        ]
+        for index, name in enumerate(noise_names):
+            rows.append(
+                _obj(
+                    product.id,
+                    filename=name,
+                    object_type="CREO_ASSEMBLY",
+                    uuid=f"asm-noise-{index}",
+                )
+            )
+        db.add_all(rows)
+        db.commit()
+        product_uuid = product.uuid
+        product_id = product.id
+
+        # Chunks are capped at 40 parents; magnet prune runs only on the final chunk.
+        offset = 0
+        while True:
+            result = ctx.metadata.rebuild_where_used_from_vault(
+                db, product_uuid, offset=offset, limit=40
+            )
+            db.commit()
+            offset = result.next_offset
+            if result.done:
+                break
+        tops = set(ctx.metadata.top_level_assembly_uuids(db, product_id))
+        assert "asm-root" in tops
+        assert "asm-sub" not in tops
+
+
 def test_where_used_index_absent_without_dependencies(data_dir, identity: StaticUserProvider):
     ctx = build_context(ConfigManager(), users=identity)
     with ctx.session_factory() as db:
