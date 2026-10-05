@@ -1,0 +1,27 @@
+---
+description: Do not use rg/ripgrep in the shell — it is not installed
+alwaysApply: true
+---
+
+# No `rg` in the shell
+
+This machine does **not** have `rg` / ripgrep on PATH. Do not run `rg` (or `ripgrep`) via the Shell tool or in copy-paste commands for the user.
+
+## What to use instead
+
+1. **Agent search** — Cursor `Grep` / `Glob` tools (these are fine; they are not the shell `rg` binary).
+2. **User-facing PowerShell** — `Select-String` / `Get-ChildItem -Recurse` when a pasteable search command is needed.
+3. **User-facing bash (Linux host)** — `grep -R` / `find` when that is where they are working.
+
+## Examples
+
+```text
+# ❌ BAD — shell or paste block
+rg -n "where_used" src
+rg --files -g "*.py"
+
+# ✅ GOOD — agent uses Grep/Glob tools
+# ✅ GOOD — PowerShell for the user
+Select-String -Path src\creopdm\**\*.py -Pattern "where_used"
+Get-ChildItem -Path src -Recurse -Filter *.py
+```
