@@ -70,6 +70,25 @@ class UtilitiesIoUsage(BaseModel):
     error: str | None = None
 
 
+class UtilitiesProductIssue(BaseModel):
+    """One lightweight product/vault problem found by Utilities → Health."""
+
+    code: str
+    product_name: str = ""
+    product_uuid: str = ""
+    detail: str = ""
+
+
+class UtilitiesProductHealth(BaseModel):
+    """Read-only product vault / tip consistency for Utilities → Health."""
+
+    status: str = "ok"  # ok | degraded
+    checked: int = 0
+    issue_count: int = 0
+    issues: list[UtilitiesProductIssue] = Field(default_factory=list)
+    summary: str = "No products to check."
+
+
 class UtilitiesStatusResponse(BaseModel):
     """Administration → Utilities snapshot (health, disk, counts)."""
 
@@ -90,6 +109,7 @@ class UtilitiesStatusResponse(BaseModel):
     git_version: str = ""
     cpu: UtilitiesCpuUsage = Field(default_factory=UtilitiesCpuUsage)
     io: UtilitiesIoUsage = Field(default_factory=UtilitiesIoUsage)
+    products: UtilitiesProductHealth = Field(default_factory=UtilitiesProductHealth)
     disk: list[UtilitiesDiskUsage] = Field(default_factory=list)
     product_count: int = 0
     user_count: int = 0

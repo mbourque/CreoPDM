@@ -1971,8 +1971,13 @@ def test_admin_hub_panel_fills_full_width():
     assert "status.io.net_rx_label" in health
     assert "status.io.net_tx_label" in health
     assert "Network receive" in health
-    assert "loopback excluded" in health
+    assert "exclude loopback" in health
     assert "I/O wait is a Linux kernel metric" in health
+    assert "<h2>Products" in health
+    assert "status.products.summary" in health
+    assert "status.products.issues" in health
+    assert "orphan vault folders" in health
+    assert "git fsck" in health
     # System volume row is {{ row.label }} from the API; template gates free/used on kind.
     assert "row.kind == 'volume'" in health or 'row.kind == "volume"' in health
     assert "size of that folder only" in health

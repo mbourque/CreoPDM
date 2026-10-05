@@ -27,7 +27,7 @@
       <dt>Application</dt>
       <dd>{{ status.app_name }} {{ status.app_version }}</dd>
       <dt>Overall</dt>
-      <dd>{{ status.status }}{% if status.status == 'degraded' %} — see Git or disk warnings below{% elif status.status == 'error' %} — database probe failed{% endif %}</dd>
+      <dd>{{ status.status }}{% if status.status == 'degraded' %} — see Git, disk, or Products warnings below{% elif status.status == 'error' %} — database probe failed{% endif %}</dd>
       <dt>Server time</dt>
       <dd>{{ status.server_time or "—" }}</dd>
       <dt>Host</dt>
@@ -133,6 +133,32 @@
       <dd class="muted">{{ status.io.error }}</dd>
       {% endif %}
     </dl>
+  </section>
+
+  <section class="settings-card">
+    <h2>Products
+      <span class="utilities-status utilities-status-{{ status.products.status }}">{{ status.products.status }}</span>
+    </h2>
+    <p class="muted small">Lightweight vault / tip checks (missing vault or `.git`, broken git HEAD, tip commit missing from repo, orphan vault folders, files with history but no current version). Does not walk file contents or run `git fsck`. Issues mark overall health as degraded.</p>
+    <dl class="kv">
+      <dt>Summary</dt>
+      <dd>{{ status.products.summary }}</dd>
+      <dt>Checked</dt>
+      <dd>{{ status.products.checked }}</dd>
+      <dt>Issues</dt>
+      <dd>{{ status.products.issue_count }}</dd>
+    </dl>
+    {% if status.products.issues %}
+    <ul class="plain-list utilities-product-issues">
+      {% for issue in status.products.issues %}
+      <li>
+        <span class="mono">{{ issue.code }}</span>
+        {% if issue.product_name %} — <strong>{{ issue.product_name }}</strong>{% endif %}
+        {% if issue.detail %} — {{ issue.detail }}{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
   </section>
 
   <section class="settings-card">

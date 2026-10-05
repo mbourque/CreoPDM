@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import delete, exists, func, select, text, update
 from sqlalchemy.orm import Session, joinedload
 
 from creopdm.auth_constants import UserStatus
@@ -24,7 +24,12 @@ from creopdm.config import (
 )
 from creopdm.constants import APP_NAME, APP_VERSION, ActivityAction, CheckoutStatus, DEFAULT_BRANCH
 from creopdm.context import AppContext
-from creopdm.exceptions import ProductNotFoundError, RepositoryError, ValidationAppError
+from creopdm.exceptions import (
+    PathValidationError,
+    ProductNotFoundError,
+    RepositoryError,
+    ValidationAppError,
+)
 from creopdm.logging_setup import get_logger
 from creopdm.models.checkout import Checkout
 from creopdm.models.object import EngineeringObject
@@ -37,9 +42,12 @@ from creopdm.schemas.common import (
     UtilitiesDiskUsage,
     UtilitiesIoUsage,
     UtilitiesProbe,
+    UtilitiesProductHealth,
+    UtilitiesProductIssue,
     UtilitiesStatusResponse,
 )
 from creopdm.site_availability import normalize_site_availability
+from creopdm.utils.vault_folder import validate_vault_folder
 
 logger = get_logger("utilities")
 
@@ -58,6 +66,10 @@ _DISKSTATS_SECTOR_BYTES = 512
 _WHOLE_DISK_NAME = re.compile(
     r"^(?:sd[a-z]+|hd[a-z]+|vd[a-z]+|xvd[a-z]+|nvme\d+n\d+|mmcblk\d+)$"
 )
+# Lightweight product vault probes (Utilities → Health → Products).
+_PRODUCT_GIT_TIMEOUT_SEC = 5.0
+_MAX_TIP_HASHES_PER_PRODUCT = 5
+_MAX_PRODUCT_ISSUES_SHOWN = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -1012,6 +1024,245 @@ def load_server_log_view(ctx: AppContext, *, name: str | None = None) -> ServerL
     )
 
 
+def _product_vault_folder_name(product: Product) -> str:
+    return (product.vault_folder or "").strip() or product.uuid
+
+
+def _vault_path_without_mkdir(vaults_dir: Path, folder_name: str) -> Path | None:
+    """Resolve vaults/<folder> without creating directories (Health must stay read-only)."""
+    try:
+        folder = validate_vault_folder(folder_name)
+    except (ValidationAppError, PathValidationError):
+        return None
+    return Path(vaults_dir) / folder
+
+
+def _run_git_readonly(
+    executable: str,
+    args: list[str],
+    *,
+    cwd: Path,
+    timeout: float = _PRODUCT_GIT_TIMEOUT_SEC,
+) -> subprocess.CompletedProcess[str] | None:
+    try:
+        return subprocess.run(
+            [executable, *args],
+            cwd=str(cwd),
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            shell=False,
+            timeout=timeout,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def _issue(
+    code: str,
+    *,
+    product_name: str = "",
+    product_uuid: str = "",
+    detail: str = "",
+) -> UtilitiesProductIssue:
+    return UtilitiesProductIssue(
+        code=code,
+        product_name=product_name,
+        product_uuid=product_uuid,
+        detail=detail,
+    )
+
+
+def collect_product_health(ctx: AppContext, db: Session) -> UtilitiesProductHealth:
+    """Lightweight product vault / tip checks (no walks, no ensure_vault, no mutations)."""
+    issues: list[UtilitiesProductIssue] = []
+    products = list(db.scalars(select(Product).order_by(Product.name.asc())).all())
+    vaults_dir = ctx.config.vaults_dir
+    git_exe = (ctx.git.executable or "git").strip() or "git"
+    known_folders: set[str] = set()
+
+    for product in products:
+        name = product.name or product.uuid
+        uuid_value = product.uuid or ""
+        raw_folder = _product_vault_folder_name(product)
+        vault_path = _vault_path_without_mkdir(vaults_dir, raw_folder)
+        if vault_path is None:
+            issues.append(
+                _issue(
+                    "invalid_vault_folder",
+                    product_name=name,
+                    product_uuid=uuid_value,
+                    detail=f"Invalid vault folder name: {raw_folder!r}",
+                )
+            )
+            continue
+        known_folders.add(vault_path.name.lower())
+
+        if not vault_path.is_dir():
+            issues.append(
+                _issue(
+                    "missing_vault",
+                    product_name=name,
+                    product_uuid=uuid_value,
+                    detail=f"Vault folder missing: {path_for_settings_display(vault_path)}",
+                )
+            )
+            continue
+
+        git_dir = vault_path / ".git"
+        if not git_dir.exists():
+            issues.append(
+                _issue(
+                    "missing_git",
+                    product_name=name,
+                    product_uuid=uuid_value,
+                    detail="Vault has no .git directory",
+                )
+            )
+            continue
+
+        head = _run_git_readonly(git_exe, ["rev-parse", "HEAD"], cwd=vault_path)
+        if head is None or head.returncode != 0:
+            detail = ""
+            if head is not None:
+                detail = (head.stderr or head.stdout or "").strip()
+            issues.append(
+                _issue(
+                    "bad_git",
+                    product_name=name,
+                    product_uuid=uuid_value,
+                    detail=detail or "git rev-parse HEAD failed",
+                )
+            )
+            continue
+
+        tip_hashes = list(
+            db.scalars(
+                select(ObjectVersion.git_commit_hash)
+                .join(EngineeringObject, EngineeringObject.id == ObjectVersion.object_id)
+                .where(
+                    EngineeringObject.product_id == product.id,
+                    EngineeringObject.current_version_id == ObjectVersion.id,
+                    ObjectVersion.git_commit_hash.is_not(None),
+                    ObjectVersion.git_commit_hash != "",
+                )
+                .distinct()
+                .limit(_MAX_TIP_HASHES_PER_PRODUCT)
+            ).all()
+        )
+        for tip_hash in tip_hashes:
+            commit = str(tip_hash or "").strip()
+            if not commit:
+                continue
+            probe = _run_git_readonly(
+                git_exe, ["cat-file", "-e", f"{commit}^{{commit}}"], cwd=vault_path
+            )
+            if probe is None or probe.returncode != 0:
+                issues.append(
+                    _issue(
+                        "missing_tip",
+                        product_name=name,
+                        product_uuid=uuid_value,
+                        detail=f"Tip commit not in vault git: {commit[:12]}",
+                    )
+                )
+                break
+
+        versioned_without_tip = int(
+            db.scalar(
+                select(func.count())
+                .select_from(EngineeringObject)
+                .where(
+                    EngineeringObject.product_id == product.id,
+                    EngineeringObject.current_version_id.is_(None),
+                    exists(
+                        select(ObjectVersion.id).where(
+                            ObjectVersion.object_id == EngineeringObject.id
+                        )
+                    ),
+                )
+            )
+            or 0
+        )
+        if versioned_without_tip > 0:
+            issues.append(
+                _issue(
+                    "missing_current_version",
+                    product_name=name,
+                    product_uuid=uuid_value,
+                    detail=f"{versioned_without_tip} file(s) have history but no current version",
+                )
+            )
+
+    # Orphan vault directories under vaults/ (no matching product folder).
+    try:
+        if vaults_dir.is_dir():
+            for entry in vaults_dir.iterdir():
+                try:
+                    if not entry.is_dir():
+                        continue
+                    if entry.name.startswith("."):
+                        continue
+                    if entry.name.lower() in known_folders:
+                        continue
+                    issues.append(
+                        _issue(
+                            "orphan_vault",
+                            product_name=entry.name,
+                            detail=f"Vault folder has no product: {path_for_settings_display(entry)}",
+                        )
+                    )
+                except OSError:
+                    continue
+    except OSError:
+        pass
+
+    # Active checkouts whose object row is gone (should be rare with FKs).
+    dangling_checkouts = int(
+        db.scalar(
+            select(func.count())
+            .select_from(Checkout)
+            .outerjoin(EngineeringObject, EngineeringObject.id == Checkout.object_id)
+            .where(
+                Checkout.status == CheckoutStatus.ACTIVE.value,
+                EngineeringObject.id.is_(None),
+            )
+        )
+        or 0
+    )
+    if dangling_checkouts > 0:
+        issues.append(
+            _issue(
+                "dangling_checkout",
+                detail=f"{dangling_checkouts} active checkout(s) point at missing files",
+            )
+        )
+
+    shown = issues[:_MAX_PRODUCT_ISSUES_SHOWN]
+    issue_count = len(issues)
+    checked = len(products)
+    if checked == 0 and issue_count == 0:
+        summary = "No products to check."
+        status = "ok"
+    elif issue_count == 0:
+        summary = f"Checked {checked} product(s); no issues found."
+        status = "ok"
+    else:
+        summary = f"Checked {checked} product(s); {issue_count} issue(s)."
+        if issue_count > len(shown):
+            summary += f" Showing first {len(shown)}."
+        status = "degraded"
+
+    return UtilitiesProductHealth(
+        status=status,
+        checked=checked,
+        issue_count=issue_count,
+        issues=shown,
+        summary=summary,
+    )
+
+
 def collect_utilities_status(ctx: AppContext, db: Session) -> UtilitiesStatusResponse:
     """Gather a read-only snapshot of server health for admins."""
     overall = "ok"
@@ -1076,6 +1327,9 @@ def collect_utilities_status(ctx: AppContext, db: Session) -> UtilitiesStatusRes
     now = datetime.now(timezone.utc).astimezone()
     cpu = collect_cpu_usage()
     io = collect_io_usage()
+    products = collect_product_health(ctx, db)
+    if products.status != "ok" and overall == "ok":
+        overall = "degraded"
 
     return UtilitiesStatusResponse(
         status=overall,
@@ -1095,6 +1349,7 @@ def collect_utilities_status(ctx: AppContext, db: Session) -> UtilitiesStatusRes
         git_version=git_version,
         cpu=cpu,
         io=io,
+        products=products,
         disk=disks,
         product_count=product_count,
         user_count=user_count,

@@ -514,6 +514,8 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "Disk write" in health.text
     assert "Network receive" in health.text
     assert "Network send" in health.text
+    assert "<h2>Products" in health.text
+    assert "status.products.summary" in health.text or "Checked" in health.text
     assert "Database" in health.text
     assert "Active checkouts" in health.text
     assert 'href="/admin/utilities/logs"' in health.text
@@ -545,6 +547,10 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "net_rx_label" in body["io"]
     assert "net_tx_label" in body["io"]
     assert body["io"]["status"] in {"ok", "busy", "hot"}
+    assert "products" in body and isinstance(body["products"], dict)
+    assert body["products"]["status"] in {"ok", "degraded"}
+    assert "summary" in body["products"]
+    assert isinstance(body["products"].get("issues"), list)
     assert body["database"]["status"] == "ok"
     assert isinstance(body["product_count"], int)
     assert isinstance(body["user_count"], int)
