@@ -8258,6 +8258,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       let openSpec = prepared;
       const needsCache =
         prepared.requires_agent_cache || prepared.creo_object || prepared.open_with_creo;
+      // TEMP quick test (red CAB): skip rematerialize; trail-open from existing
+      // agent workspace only. Set false / remove after the combine-state check.
+      const SKIP_MATERIALIZE_OPEN = true;
       if (needsCache) {
         const agent = await probeCreoAgent();
         if (!agent) {
@@ -8267,16 +8270,34 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           );
           return null;
         }
-        try {
-          setOpenDownloadBusyMessage(prepared);
-          openSpec = await materializeViaAgent(prepared);
-        } catch (err) {
-          const message = err && err.message ? err.message : String(err);
-          showError(
-            $("#toolbar-error"),
-            message || "Local CreoPDM agent could not download the file into the workspace."
-          );
-          return null;
+        if (SKIP_MATERIALIZE_OPEN) {
+          setBusyMessage("Opening in Creo… (skip materialize)");
+          const directory = await agentWorkdir(currentProductId(), currentVaultFolder());
+          const rel =
+            String(prepared.relative_path || "").replace(/\\/g, "/").replace(/^\/+/, "")
+            || String(prepared.disk_name || prepared.filename || "").replace(/\\/g, "/");
+          const fullPath = joinLocalWorkspacePath(directory, rel);
+          const diskName =
+            PathBasename(rel) || prepared.disk_name || prepared.filename || "";
+          openSpec = {
+            ...prepared,
+            working_directory: directory,
+            path: fullPath,
+            disk_name: diskName,
+            filename: prepared.filename || logicalUploadName(diskName) || diskName,
+          };
+        } else {
+          try {
+            setOpenDownloadBusyMessage(prepared);
+            openSpec = await materializeViaAgent(prepared);
+          } catch (err) {
+            const message = err && err.message ? err.message : String(err);
+            showError(
+              $("#toolbar-error"),
+              message || "Local CreoPDM agent could not download the file into the workspace."
+            );
+            return null;
+          }
         }
       }
 
