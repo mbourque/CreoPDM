@@ -85,9 +85,9 @@
                     data-description="{{ selected.description or '' }}">Rename</button>
             {% endif %}
             {% if product_ui.show_metadata_tools %}
-            <button type="button" class="product-settings-item creo-session-only" role="menuitem" id="rebuild-where-used-btn"
-                    data-product="{{ selected.uuid }}" hidden
-                    title="Index vault assemblies/drawings into Where Used links in the background.">Rebuild Where Used</button>
+            <button type="button" class="product-settings-item" role="menuitem" id="rebuild-where-used-btn"
+                    data-product="{{ selected.uuid }}"
+                    title="Index vault assemblies/drawings into Where Used links on the server (no Creo session required).">Rebuild Where Used</button>
             <button type="button" class="product-settings-item creo-session-only" role="menuitem" id="collect-metadata-btn"
                     data-product="{{ selected.uuid }}" hidden
                     title="Open each Creo model in session and capture parameters, materials, BOM, and related metadata.">Collect all metadata</button>

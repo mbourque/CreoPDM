@@ -6316,9 +6316,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function applyCreoSessionOnlyVisibility(inSession) {
-    // Set Working Directory: only when inside Creo with a live session (Files page).
-    // Hidden outside Creo / when disconnected; always hidden on File Details.
-    // Collect / Rebuild Where Used use the same rule (product gear).
+    // Set Working Directory + Collect metadata: only inside Creo with a live session.
+    // Rebuild Where Used is server-side vault indexing — not creo-session-only.
+    // Hidden outside Creo / when disconnected; Set WD always hidden on File Details.
     document.querySelectorAll(".creo-session-only").forEach((el) => {
       const btn = el.tagName === "BUTTON" ? el : el.querySelector("button");
       const onDetail = Boolean($("article.detail"));
@@ -6440,7 +6440,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function syncProductSettingsVisibility() {
-    // Hide the gear when every menu item is session-only and Creo is offline.
+    // Hide the gear when every menu item is hidden (e.g. only Collect left and
+    // Session offline). Rebuild Where Used stays visible without Creo.JS.
     const gear = $("#product-settings");
     const menu = $("#product-settings-menu");
     if (!gear || !menu) return;

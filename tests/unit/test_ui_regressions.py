@@ -346,7 +346,7 @@ def test_product_state_badge_in_files_header():
 
 
 def test_metadata_gear_items_require_creo_session():
-    """Collect / Rebuild Where Used use creo-session-only like Set Working Directory."""
+    """Collect is creo-session-only; Rebuild Where Used is always on the gear (server)."""
     app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     script = _app_js()
@@ -357,10 +357,15 @@ def test_metadata_gear_items_require_creo_session():
     assert "product_ui.show_remove_product" in app_html
     assert 'data-requires-mutation=' not in app_html
     assert "creo-session-only" in app_html
+    rebuild_btn = app_html.split('id="rebuild-where-used-btn"', 1)[0].rsplit("<button", 1)[-1]
+    collect_btn = app_html.split('id="collect-metadata-btn"', 1)[0].rsplit("<button", 1)[-1]
+    assert "creo-session-only" not in rebuild_btn
+    assert "creo-session-only" in collect_btn
     assert "productAllowsMutation" not in script
     assert "mutationActionAllowed" not in script
     assert "data-allows-mutation" in app_html
     assert "Rebuild Where Used" in docs and "Collect all metadata" in docs
+    assert "no Creo.JS" in docs or "server vault scan" in docs or "Chrome/Edge too" in docs
     assert "read only" in docs.lower() or "read-only" in docs.lower()
     # Collect blocks the UI like Add — progress on busy overlay, no mid-run soft-nav.
     loop = _between(script, "async function runMetadataCollectLoop(", "async function runCollectAllMetadata(")

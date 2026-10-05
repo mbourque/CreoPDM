@@ -484,7 +484,7 @@ def test_rebuild_where_used_writes_dependency_edges(client, repo_parent, data_di
 
 @requires_git
 def test_metadata_menu_items_are_creo_session_only(client, repo_parent):
-    """Collect / Rebuild render hidden with creo-session-only when product allows mutation."""
+    """Collect needs Creo.JS; Rebuild Where Used is server-side (visible without Creo)."""
     import re
 
     product = _create_product(client, repo_parent)
@@ -496,9 +496,9 @@ def test_metadata_menu_items_are_creo_session_only(client, repo_parent):
     assert collect, page.text
     assert rebuild, page.text
     assert "creo-session-only" in collect.group(0)
-    assert "creo-session-only" in rebuild.group(0)
     assert "hidden" in collect.group(0)
-    assert "hidden" in rebuild.group(0)
+    assert "creo-session-only" not in rebuild.group(0)
+    assert " hidden" not in rebuild.group(0) and not rebuild.group(0).endswith(" hidden>")
     assert 'id="set-creo-dir-btn"' in page.text
 
 
