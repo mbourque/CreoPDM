@@ -2267,9 +2267,7 @@ def _utilities_rebuild_response(
     *,
     rebuild_product_id: str = "",
     rebuild_confirm_name: str = "",
-    rebuild_do_rebuild: bool = False,
-    rebuild_clear_metadata: bool = False,
-    rebuild_rebuild_where_used: bool = False,
+    rebuild_action: str = "",
     error: str | None = None,
     success: str | None = None,
     status_code: int = 200,
@@ -2284,9 +2282,7 @@ def _utilities_rebuild_response(
             "rebuild_products": list_products_for_compact(db),
             "rebuild_product_id": rebuild_product_id,
             "rebuild_confirm_name": rebuild_confirm_name,
-            "rebuild_do_rebuild": rebuild_do_rebuild,
-            "rebuild_clear_metadata": rebuild_clear_metadata,
-            "rebuild_rebuild_where_used": rebuild_rebuild_where_used,
+            "rebuild_action": rebuild_action,
             "error": error,
             "success": success,
         },
@@ -2685,9 +2681,7 @@ def admin_utilities_rebuild_product_db(
     product_id: str = Form(""),
     confirm_name: str = Form(""),
     confirm: str = Form(""),
-    do_rebuild: str = Form(""),
-    clear_metadata: str = Form(""),
-    rebuild_where_used: str = Form(""),
+    repair_action: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -2698,15 +2692,14 @@ def admin_utilities_rebuild_product_db(
 
     pid = (product_id or "").strip()
     typed = confirm_name or ""
-    want_rebuild = do_rebuild == "1"
-    want_metadata = clear_metadata == "1"
-    want_where_used = rebuild_where_used == "1"
+    action = (repair_action or "").strip()
+    want_rebuild = action == "rebuild"
+    want_metadata = action == "clear_metadata"
+    want_where_used = action == "rebuild_where_used"
     form_state = dict(
         rebuild_product_id=pid,
         rebuild_confirm_name=typed,
-        rebuild_do_rebuild=want_rebuild,
-        rebuild_clear_metadata=want_metadata,
-        rebuild_rebuild_where_used=want_where_used,
+        rebuild_action=action if action in {"rebuild", "clear_metadata", "rebuild_where_used"} else "",
     )
     if confirm != "1":
         return _utilities_rebuild_response(
@@ -2725,7 +2718,7 @@ def admin_utilities_rebuild_product_db(
             db,
             manager,
             error=(
-                "Choose at least one action: rebuild from vault, delete Creo metadata, "
+                "Choose one action: rebuild from vault, delete Creo metadata, "
                 "or delete and rebuild Where Used."
             ),
             status_code=400,

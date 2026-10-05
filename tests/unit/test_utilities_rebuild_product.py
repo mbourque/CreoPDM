@@ -176,7 +176,7 @@ def test_rebuild_requires_exact_name(data_dir, identity: StaticUserProvider):
             )
 
 
-def test_repair_requires_at_least_one_action(data_dir, identity: StaticUserProvider):
+def test_repair_requires_exactly_one_action(data_dir, identity: StaticUserProvider):
     ctx = build_context(ConfigManager(), users=identity)
     with ctx.session_factory() as db:
         product = Product(
@@ -188,12 +188,21 @@ def test_repair_requires_at_least_one_action(data_dir, identity: StaticUserProvi
         )
         db.add(product)
         db.commit()
-        with pytest.raises(ValidationAppError, match="at least one action"):
+        with pytest.raises(ValidationAppError, match="Choose one action"):
             repair_product_database(
                 ctx,
                 db,
                 product_uuid=product.uuid,
                 confirm_name="No Action",
+            )
+        with pytest.raises(ValidationAppError, match="Choose one action"):
+            repair_product_database(
+                ctx,
+                db,
+                product_uuid=product.uuid,
+                confirm_name="No Action",
+                clear_metadata=True,
+                rebuild_where_used=True,
             )
 
 
@@ -395,97 +404,3 @@ def test_rebuild_where_used_replaces_stale_edges(
         assert tip.identity_json == '{"keep":true}'
 
 
-def test_repair_clear_metadata_and_rebuild_where_used_together(
-    data_dir, identity: StaticUserProvider
-):
-    ctx = build_context(ConfigManager(), users=identity)
-    vault = ctx.config.workspace_for_product("both-repair")
-    vault.mkdir(parents=True, exist_ok=True)
-    (vault / "assy.asm").write_bytes(b"\x00".join([b"part.prt"]))
-    (vault / "part.prt").write_bytes(b"part")
-
-    with ctx.session_factory() as db:
-        product = Product(
-            uuid=str(uuid.uuid4()),
-            name="Both Repair",
-            vault_folder="both-repair",
-            repository_path=str(vault),
-            default_branch="main",
-        )
-        db.add(product)
-        db.flush()
-        parent = EngineeringObject(
-            uuid=str(uuid.uuid4()),
-            product_id=product.id,
-            name="assy",
-            filename="assy.asm",
-            extension="asm",
-            object_type="CREO_ASSEMBLY",
-            relative_path="assy.asm",
-        )
-        child = EngineeringObject(
-            uuid=str(uuid.uuid4()),
-            product_id=product.id,
-            name="part",
-            filename="part.prt",
-            extension="prt",
-            object_type="CREO_PART",
-            relative_path="part.prt",
-        )
-        db.add_all([parent, child])
-        db.flush()
-        ver = ObjectVersion(
-            uuid=str(uuid.uuid4()),
-            object_id=child.id,
-            revision="A",
-            iteration=1,
-            filename="part.prt",
-            relative_path="part.prt",
-            bom_json="[]",
-            git_commit_hash="e" * 40,
-            content_hash="f" * 64,
-            file_size=4,
-            created_by="tester",
-            comment="tip",
-        )
-        db.add(ver)
-        db.flush()
-        child.current_version_id = ver.id
-        db.add(
-            Dependency(
-                product_id=product.id,
-                parent_object_id=parent.id,
-                child_object_id=child.id,
-                dependency_type=DependencyType.ASSEMBLY_MEMBER.value,
-            )
-        )
-        db.commit()
-
-        result = repair_product_database(
-            ctx,
-            db,
-            product_uuid=product.uuid,
-            confirm_name="Both Repair",
-            clear_metadata=True,
-            rebuild_where_used=True,
-        )
-        db.commit()
-        ctx.where_used_index.start(product.uuid)
-        status = _wait_where_used_job(ctx, product.uuid)
-        assert status is not None
-        assert status.state == "done", status.error
-        db.expire_all()
-
-        assert result.metadata_cleared is True
-        assert result.where_used_rebuilt is True
-        assert result.rebuilt is False
-        assert db.get(ObjectVersion, ver.id).bom_json is None
-        edges = list(
-            db.scalars(
-                select(Dependency).where(Dependency.product_id == product.id)
-            ).all()
-        )
-        assert any(
-            edge.parent_object_id == parent.id and edge.child_object_id == child.id
-            for edge in edges
-        )

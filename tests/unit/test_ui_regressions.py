@@ -2007,9 +2007,9 @@ def test_admin_hub_panel_fills_full_width():
     assert "Compacting vault history for ${label}" in script
     assert "Deleting Creo metadata for ${label}" in script
     assert "Rebuilding product database for ${label}" in script
-    assert 'fd.get("do_rebuild")' in script
-    assert 'fd.get("clear_metadata")' in script
-    assert 'fd.get("rebuild_where_used")' in script
+    assert 'fd.get("repair_action")' in script
+    assert 'action === "rebuild_where_used"' in script
+    assert 'action === "clear_metadata"' in script
     # Where Used on this form uses the same overlay/progress as the product gear.
     assert "runUtilitiesRebuildWithWhereUsed" in script
     assert "whereUsedBusyText" in script
@@ -2053,11 +2053,14 @@ def test_admin_hub_panel_fills_full_width():
     ).read_text(encoding="utf-8")
     assert 'id="utilities-rebuild-product-form"' in rebuild_tmpl
     assert 'action="/admin/utilities/rebuild-product-db"' in rebuild_tmpl
-    assert 'name="do_rebuild"' in rebuild_tmpl
-    assert 'name="clear_metadata"' in rebuild_tmpl
-    assert 'name="rebuild_where_used"' in rebuild_tmpl
+    assert 'name="repair_action"' in rebuild_tmpl
+    assert 'type="radio"' in rebuild_tmpl
+    assert 'value="rebuild"' in rebuild_tmpl
+    assert 'value="clear_metadata"' in rebuild_tmpl
+    assert 'value="rebuild_where_used"' in rebuild_tmpl
     assert "Delete and rebuild Where Used" in rebuild_tmpl
-    assert "Run selected actions" in rebuild_tmpl
+    assert "Run selected action" in rebuild_tmpl
+    assert "Action (choose one)" in rebuild_tmpl
     settings = (ROOT / "src" / "creopdm" / "templates" / "settings.html").read_text(encoding="utf-8")
     assert "<h1>System Settings</h1>" in settings
     assert "admin-hub" in settings

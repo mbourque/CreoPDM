@@ -1070,9 +1070,10 @@ def repair_product_database(
     rebuild_where_used: bool = False,
 ) -> ProductDbRepairResult:
     """Run selected product DB repair actions (rebuild / clear metadata / rebuild WU)."""
-    if not (rebuild or clear_metadata or rebuild_where_used):
+    chosen = sum(bool(flag) for flag in (rebuild, clear_metadata, rebuild_where_used))
+    if chosen != 1:
         raise ValidationAppError(
-            "Choose at least one action: rebuild from vault, delete Creo metadata, "
+            "Choose one action: rebuild from vault, delete Creo metadata, "
             "or delete and rebuild Where Used."
         )
     product = _load_product_for_repair(

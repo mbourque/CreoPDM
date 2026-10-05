@@ -16,7 +16,7 @@
   <h1>Rebuild product database</h1>
   <p class="muted">
     Repair one product’s <strong>database rows</strong> without rewriting vault Git history.
-    Choose one or more actions below. <strong>Rebuild from vault tip</strong> replaces the file list
+    Choose <strong>one</strong> action below. <strong>Rebuild from vault tip</strong> replaces the file list
     (and clears checkouts, Where Used, and Creo metadata with those old rows).
     <strong>Delete collected Creo metadata</strong> clears identity/BOM/parameters only.
     <strong>Delete and rebuild Where Used</strong> clears dependency links then re-indexes from the vault
@@ -42,17 +42,17 @@
         </select>
       </label>
       <fieldset class="product-access-fieldset">
-        <legend>Actions (choose at least one)</legend>
+        <legend>Action (choose one)</legend>
         <label class="choice">
-          <input type="checkbox" name="do_rebuild" value="1" {% if rebuild_do_rebuild %}checked{% endif %}>
+          <input type="radio" name="repair_action" value="rebuild" {% if rebuild_action == 'rebuild' %}checked{% endif %} required>
           Rebuild file list from vault Git tip
         </label>
         <label class="choice">
-          <input type="checkbox" name="clear_metadata" value="1" {% if rebuild_clear_metadata %}checked{% endif %}>
+          <input type="radio" name="repair_action" value="clear_metadata" {% if rebuild_action == 'clear_metadata' %}checked{% endif %}>
           Delete collected Creo metadata
         </label>
         <label class="choice">
-          <input type="checkbox" name="rebuild_where_used" value="1" {% if rebuild_rebuild_where_used %}checked{% endif %}>
+          <input type="radio" name="repair_action" value="rebuild_where_used" {% if rebuild_action == 'rebuild_where_used' %}checked{% endif %}>
           Delete and rebuild Where Used
         </label>
       </fieldset>
@@ -64,7 +64,7 @@
         I understand this changes the product’s database as selected above
       </label>
       <p class="form-actions">
-        <button type="submit" class="btn btn-danger" {% if not rebuild_products %}disabled{% endif %}>Run selected actions</button>
+        <button type="submit" class="btn btn-danger" {% if not rebuild_products %}disabled{% endif %}>Run selected action</button>
         <a class="btn" href="/admin/utilities">Back to Utilities</a>
       </p>
     </form>

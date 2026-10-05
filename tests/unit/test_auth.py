@@ -505,14 +505,17 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "Rebuild product database" in rebuild_page.text
     assert 'action="/admin/utilities/rebuild-product-db"' in rebuild_page.text
     assert 'id="utilities-rebuild-product-form"' in rebuild_page.text
-    assert 'name="do_rebuild"' in rebuild_page.text
-    assert 'name="clear_metadata"' in rebuild_page.text
-    assert 'name="rebuild_where_used"' in rebuild_page.text
+    assert 'name="repair_action"' in rebuild_page.text
+    assert 'type="radio"' in rebuild_page.text
+    assert 'value="rebuild"' in rebuild_page.text
+    assert 'value="clear_metadata"' in rebuild_page.text
+    assert 'value="rebuild_where_used"' in rebuild_page.text
     assert "Delete and rebuild Where Used" in rebuild_page.text
-    # Action checkboxes start unchecked — only the danger confirm is required at submit.
-    assert 'name="do_rebuild" value="1" checked' not in rebuild_page.text
-    assert 'name="clear_metadata" value="1" checked' not in rebuild_page.text
-    assert 'name="rebuild_where_used" value="1" checked' not in rebuild_page.text
+    assert "Run selected action" in rebuild_page.text
+    # Action radios start unselected — only the danger confirm is checked at submit time by the user.
+    assert 'name="repair_action" value="rebuild" checked' not in rebuild_page.text
+    assert 'name="repair_action" value="clear_metadata" checked' not in rebuild_page.text
+    assert 'name="repair_action" value="rebuild_where_used" checked' not in rebuild_page.text
 
     delete_page = auth_client.get("/admin/utilities/delete-products")
     assert delete_page.status_code == 200

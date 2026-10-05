@@ -1702,11 +1702,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const productId = (select?.value || "").trim();
     const label = select?.selectedOptions?.[0]?.textContent?.trim() || "product";
     const fd = new FormData(form);
-    const doRebuild = fd.get("do_rebuild") === "1";
-    const clearMeta = fd.get("clear_metadata") === "1";
+    const action = String(fd.get("repair_action") || "");
     let initial = "Indexing Where Used… preparing…";
-    if (doRebuild) initial = `Rebuilding product database for ${label}…`;
-    else if (clearMeta) initial = `Deleting Creo metadata for ${label}…`;
+    if (action === "rebuild") initial = `Rebuilding product database for ${label}…`;
+    else if (action === "clear_metadata") {
+      initial = `Deleting Creo metadata for ${label}…`;
+    }
     const btn = form.querySelector('button[type="submit"]');
     if (btn instanceof HTMLButtonElement) btn.disabled = true;
     try {
@@ -1721,7 +1722,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           utilitiesRepairNotice(form, {
             error:
               parsed.querySelector("p.error")?.textContent?.trim()
-              || "Could not start the selected actions.",
+              || "Could not start the selected action.",
           });
           return;
         }
@@ -11570,12 +11571,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (form.id === "utilities-compact-vault-form") {
           message = `Compacting vault history for ${label}…`;
         } else if (form.id === "utilities-rebuild-product-form") {
-          // FormData reflects checked boxes at submit (querySelector can miss after soft-nav).
+          // FormData reflects the selected radio at submit.
           const fd = new FormData(form);
-          const doRebuild = fd.get("do_rebuild") === "1";
-          const clearMeta = fd.get("clear_metadata") === "1";
-          const rebuildWu = fd.get("rebuild_where_used") === "1";
-          if (rebuildWu) {
+          const action = String(fd.get("repair_action") || "");
+          if (action === "rebuild_where_used") {
             // Never preventDefault without a runner — that made Run look like a no-op.
             const api = window.__creopdmSoftNavApi;
             const runner = api?.runUtilitiesRebuildWithWhereUsed;
@@ -11586,17 +11585,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             }
             // Fallback: let the normal POST run (server starts Where Used; no N of M overlay).
           }
-          if (doRebuild && !clearMeta) {
+          if (action === "rebuild") {
             message = `Rebuilding product database for ${label}…`;
-          } else if (!doRebuild && clearMeta) {
+          } else if (action === "clear_metadata") {
             message = `Deleting Creo metadata for ${label}…`;
           } else {
-            const parts = [];
-            if (doRebuild) parts.push("rebuild file list");
-            if (clearMeta) parts.push("delete metadata");
-            message = parts.length
-              ? `${parts.join(", ")} for ${label}…`
-              : `Repairing product database for ${label}…`;
+            message = `Repairing product database for ${label}…`;
           }
         } else if (form.id === "utilities-delete-products-form") {
           message = `Deleting product ${label}…`;
