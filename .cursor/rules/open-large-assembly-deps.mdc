@@ -18,23 +18,27 @@ Opening a Top Level / large Creo assembly must materialize **all Creo-openable c
 | Magnet prune asm parents `> 40` | Wiped real shared JD sub-asms |
 | Fixed `90_000` ms `CreoJS.openModel` / short outer Open budget | “session may be offline” while Retrieve still running after materialize |
 | Materialize vault tips during **Finding dependencies…** | Wedged QueuePool / hung the site |
+| Toolkit `OpenFile`/`RetrieveModel` before File > Open trail | JD workspace File → Open was quiet; Toolkit path flooded retrieval/regen messages |
+| Disk-Retrieve for metadata right after Embedded Open | Re-ran the noisy Toolkit path after trail already opened the model |
 
 ## Required behavior
 
 1. **`CreoService._dependencies_for`** — Prefer Where Used DB BFS (`_MAX_DEP_DEPENDENCIES` ≥ 4000, depth ≥ 32). Vault-scan when empty/sparse (`_SPARSE_OPEN_WHERE_USED`). When a large WU tree is still short of product siblings, **product-fill every remaining vault tip** (`len(chosen) < len(companion_siblings)` — all objects except the primary, same set zip/Add stored; never filter fill through `is_creo_openable` alone). Never `_MAX_OPEN_FROM_WHERE_USED` discard.
 2. **Magnet prune** — `_MAX_WHERE_USED_ASM_PARENTS` stays high enough for shared sub-asms (200+); only drop true name-table magnets.
-3. **`app.js`** — `creoOpenModelTimeoutMs(preparedDependencyCount(…))` and a generous `openWorkTimeoutMs` for prepare + zip + open. No fixed 90s on vault Open.
-4. **Agent** — Materialize only the prepare list; Finding deps must **locate** only (no server `materialize(` in `_dependencies_for`).
+3. **`app.js`** — `creoOpenModelTimeoutMs(preparedDependencyCount(…))` and a generous `openWorkTimeoutMs` for prepare + zip + open. No fixed 90s on vault Open. After Open, metadata is **session-only** (wait for model; no disk-Retrieve).
+4. **`base.html` `openModel`** — Prefer File > Open trail (`creoTryOpenViaTrail`) for native Creo tips before `OpenFile`/`RetrieveModel`; ChangeDirectory only on Toolkit fallback.
+5. **Agent** — Materialize only the prepare list; Finding deps must **locate** only (no server `materialize(` in `_dependencies_for`).
 
 ## Tests (keep green)
 
 - `tests/unit/test_open_large_assembly_contract.py` — single contract for the anti-patterns above
 - `tests/integration/test_creo_open.py` — `test_open_dependencies_trust_large_where_used_tree`, `test_open_dependencies_sparse_where_used_falls_back_to_vault_scan`
-- Docs: Open row in `docs/user-interactions.md` (fill companions + long Creo wait)
+- Docs: Open row in `docs/user-interactions.md` (fill companions + long Creo wait + File > Open trail)
 
 ```text
 # ❌ BAD — if len(chosen) > 120: chosen = []
 # ❌ BAD — openModel(..., 90000, "session may be offline")
 # ❌ BAD — _MAX_WHERE_USED_ASM_PARENTS = 40
-# ✅ GOOD — trust large WU + product-fill + creoOpenModelTimeoutMs(deps)
+# ❌ BAD — OpenFile/Retrieve before trail for native Embedded Open
+# ✅ GOOD — trust large WU + product-fill + File > Open trail + creoOpenModelTimeoutMs(deps)
 ```

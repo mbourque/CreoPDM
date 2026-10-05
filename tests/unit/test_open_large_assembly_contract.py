@@ -84,3 +84,21 @@ def test_contract_docs_mention_fill_and_long_creo_wait():
     docs = DOCS.read_text(encoding="utf-8")
     assert "fill the rest" in docs
     assert "do not fail at 90s" in docs or "session may be offline" in docs
+
+
+def test_contract_embedded_open_prefers_file_open_trail():
+    """JD Open: Toolkit Retrieve flooded messages; File > Open from workspace was fine."""
+    base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
+    open_fn = base.split("function openModel(", 1)[1].split("function setWorkingDirectory(", 1)[0]
+    trail_fn = base.split("function creoTryOpenViaTrail(", 1)[1].split("function openModel(", 1)[0]
+    assert "Prefer File > Open trail" in open_fn
+    assert "flood retrieval/regen" in trail_fn
+    assert open_fn.index("creoTryOpenViaTrail(") < open_fn.index("creoTryOpenName(")
+    script = APP_JS.read_text(encoding="utf-8")
+    after_open = script.split("async function captureCreoMetadataAfterOpen(", 1)[1].split(
+        "function metadataTargetsFromResult(", 1
+    )[0]
+    assert "sessionOnly: true" in after_open
+    docs = DOCS.read_text(encoding="utf-8")
+    assert "File > Open" in docs
+    assert "prefer Toolkit Retrieve over File > Open" in docs

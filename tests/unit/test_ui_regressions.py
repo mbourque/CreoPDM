@@ -398,6 +398,12 @@ def test_metadata_gear_items_require_creo_session():
     )
     assert 'gatherCreoMetadataForFilename(target.filename, "")' in push_items
     assert "Session first" in push_items
+    assert "sessionOnly" in push_items
+    after_open = _between(
+        script, "async function captureCreoMetadataAfterOpen(", "function metadataTargetsFromResult("
+    )
+    assert "sessionOnly: true" in after_open
+    assert "do not disk-Retrieve again after Open" in docs
     assert "after **Open** into the Creo session" in docs
     assert "Capturing Creo metadata…" in docs
     assert "erase the model you just opened" in docs
@@ -1120,6 +1126,10 @@ def test_open_model_uses_nested_cache_folder():
     assert "Nested agent-cache layout" in open_fn
     assert "var openWd = fileDir || directory" in open_fn or "openWd = fileDir || directory" in open_fn
     assert "ChangeDirectory(cacheDir)" in open_fn
+    # Embedded Open prefers File > Open trail (manual workspace open) before Toolkit.
+    assert "Prefer File > Open trail" in open_fn
+    assert open_fn.index("creoTryOpenViaTrail(") < open_fn.index("ChangeDirectory(cacheDir)")
+    assert open_fn.index("creoTryOpenViaTrail(") < open_fn.index("creoTryOpenName(")
     # New file / Modified local: try logical tip after numbered .prt.1 fails.
     assert "creoLogicalFileName(shortDisk" in open_fn
     assert "logicalName !== shortDisk" in open_fn

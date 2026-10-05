@@ -363,6 +363,9 @@ function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
      * Drive File > Open without changing Creo's session working directory.
      * Navigates the dialog address bar to the agent cache folder, sets Type to
      * All Files (db_-1), then opens the short file name.
+     * Preferred for native Creo tips too — matches opening from the agent
+     * workspace in Creo; OpenFile/RetrieveModel can flood retrieval/regen
+     * messages on large assemblies that File > Open handles quietly.
      */
     if (!session || typeof session.RunMacro !== "function") {
         return false;
@@ -419,10 +422,35 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
         var relativeName = (fullPath && directory)
             ? creoRelativeToDir(fullPath, directory)
             : "";
+        // Creo RetrieveModel wants the logical tip (shaft.prt) when the WD has
+        // shaft.prt.1 — numbered names alone often fail for New file / Modified local.
+        var logicalName = creoLogicalFileName(shortDisk || diskName || filename || "");
+        var preparedPath = fullPath || creoJoinPath(openWd || directory, shortDisk || diskName || filename);
+        var trailName = logicalName || shortDisk || diskName || filename;
+        var sessionRelease = creoSessionRelease(session);
+        if (creoIsNativeVersioned(versionName)
+            && creoNewerThanSession(fileRelease, sessionRelease)) {
+            return creoOpenFailed(creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease));
+        }
+        try {
+            if (openAsmAsMfg(session, shortDisk || diskName || filename)) {
+                return filename;
+            }
+        } catch (errMfg) {}
+        // Prefer File > Open trail for native Creo tips (and Multi-CAD). Do not
+        // ChangeDirectory first — the trail navigates the dialog like a manual
+        // open from the agent workspace.
+        if (creoTryOpenViaTrail(session, openWd || directory, trailName, preparedPath)) {
+            return filename;
+        }
+        if (trailName !== (shortDisk || diskName || filename)
+            && creoTryOpenViaTrail(session, openWd || directory, shortDisk || diskName || filename, preparedPath)) {
+            return filename;
+        }
+        // Fallback: OpenFile / RetrieveModel when RunMacro trail is unavailable.
         // Native assemblies need the session WD on the cache folder so Creo can
         // resolve dependencies. Restore the prior WD after the open so the
         // user's session directory is not left on the agent cache.
-        // Multi-CAD trails navigate the File Open dialog and must not ChangeDirectory.
         if (openWd && creoIsNativeVersioned(versionName)) {
             try {
                 if (typeof session.GetCurrentDirectory === "function") {
@@ -441,20 +469,7 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
                 openDetail = "ChangeDirectory failed for " + openWd + ".";
             }
         }
-        var sessionRelease = creoSessionRelease(session);
-        if (creoIsNativeVersioned(versionName)
-            && creoNewerThanSession(fileRelease, sessionRelease)) {
-            return creoOpenFailed(creoCannotOpenNewerMessage(filename, fileRelease, sessionRelease));
-        }
-        try {
-            if (openAsmAsMfg(session, shortDisk || diskName || filename)) {
-                return filename;
-            }
-        } catch (errMfg) {}
         var model = null;
-        // Creo RetrieveModel wants the logical tip (shaft.prt) when the WD has
-        // shaft.prt.1 — numbered names alone often fail for New file / Modified local.
-        var logicalName = creoLogicalFileName(shortDisk || diskName || filename || "");
         // Prefer basename in the file's folder (nested materialize).
         if (!model && openWd && shortDisk) {
             model = creoTryOpenName(session, openWd, shortDisk);
@@ -494,17 +509,6 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
             model = creoTryOpenName(session, directory, logicalName);
         }
         if (!model) {
-            var preparedPath = fullPath || creoJoinPath(openWd || directory, shortDisk || diskName || filename);
-            // Native tips: trail with logical name as last resort (File > Open All Files).
-            var trailName = logicalName || shortDisk || diskName || filename;
-            if (creoTryOpenViaTrail(session, openWd || directory, trailName, preparedPath)) {
-                return filename;
-            }
-            if (!creoIsNativeVersioned(versionName)
-                && trailName !== (shortDisk || diskName || filename)
-                && creoTryOpenViaTrail(session, openWd || directory, shortDisk || diskName || filename, preparedPath)) {
-                return filename;
-            }
             if (!openDetail) {
                 openDetail = "CreoPDM prepared " + preparedPath
                     + ". Creo must read that path on the machine running Creo "

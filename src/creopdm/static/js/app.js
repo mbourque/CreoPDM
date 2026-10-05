@@ -6486,7 +6486,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  async function pushCreoMetadataForItems(items) {
+  async function pushCreoMetadataForItems(items, options) {
+    const opts = options && typeof options === "object" ? options : {};
+    const sessionOnly = Boolean(opts.sessionOnly);
+    const sessionWaitRounds = Math.max(0, Number(opts.sessionWaitRounds) || 0);
+    const sessionWaitMs = Math.max(50, Number(opts.sessionWaitMs) || 500);
     const targets = (items || [])
       .map((item) => ({
         uuid: String(item?.uuid || item?.object_id || "").trim(),
@@ -6499,9 +6503,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     for (const target of targets) {
       // Session first (Open / Check In often already have the model) — avoids
       // re-Retrieve + erase of a model the user just opened.
-      let snapshot = await gatherCreoMetadataForFilename(target.filename, "");
-      if (snapshot && snapshot.__error) snapshot = null;
-      if (!snapshot) {
+      let snapshot = null;
+      for (let round = 0; round <= sessionWaitRounds; round += 1) {
+        snapshot = await gatherCreoMetadataForFilename(target.filename, "");
+        if (snapshot && snapshot.__error) snapshot = null;
+        if (snapshot) break;
+        if (round < sessionWaitRounds) {
+          await new Promise((resolve) => window.setTimeout(resolve, sessionWaitMs));
+        }
+      }
+      // After File > Open trail, do not Retrieve from disk — that re-floods the
+      // Creo message log on large assemblies the trail already opened quietly.
+      if (!snapshot && !sessionOnly) {
         let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
         if (!filePath) {
           filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
@@ -6563,7 +6576,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const items = metadataItemsFromOpenResult(result);
     if (!items.length) return;
     await withBusy("Capturing Creo metadata…", async () => {
-      await pushCreoMetadataForItems(items);
+      // Embedded Open prefers File > Open trail (returns before retrieve finishes).
+      // Wait for the model in session; never disk-Retrieve after Open.
+      await pushCreoMetadataForItems(items, {
+        sessionOnly: true,
+        sessionWaitRounds: 60,
+        sessionWaitMs: 500,
+      });
     });
   }
 
