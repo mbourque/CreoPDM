@@ -17,6 +17,12 @@ def test_cad_name_matcher_extension_only_skips_bare_stem():
     assert "bracket.asm" not in found
 
 
+def test_cad_name_matcher_extension_only_requires_boundaries():
+    matcher = CadNameMatcher(["844j.asm"], include_stems=False)
+    assert "844j.asm" not in matcher.find(b"xx844j.asm yy")
+    assert "844j.asm" in matcher.find(b"xx 844j.asm yy")
+
+
 def test_names_referenced_uses_matcher_for_large_candidate_sets(tmp_path):
     asm = tmp_path / "top.asm.1"
     asm.write_bytes(b"header PIN.PRT footer")

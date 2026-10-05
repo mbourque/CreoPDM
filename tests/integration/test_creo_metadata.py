@@ -478,8 +478,11 @@ def test_rebuild_where_used_writes_dependency_edges(client, repo_parent, data_di
         time.sleep(0.05)
     assert body2 is not None
     assert body2["state"] == "done"
-    assert body2["edges_added"] == 0
-    assert body2["edges_existing"] >= 1
+    # Rebuild clears asm/drw edges at start, then re-adds from vault bytes.
+    assert body2["edges_added"] >= 1
+    where2 = client.get(f"/api/objects/{pin['uuid']}/where-used?vault_scan=false")
+    assert where2.status_code == 200, where2.text
+    assert where2.json()["items"][0]["object_id"] == frame["uuid"]
 
 
 @requires_git

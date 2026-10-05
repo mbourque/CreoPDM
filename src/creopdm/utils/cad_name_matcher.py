@@ -13,23 +13,63 @@ from pathlib import Path
 from creopdm.creo.file_manager import CreoFileManager
 
 
+def is_creo_name_char(byte: int) -> bool:
+    """Alphanumeric or underscore — characters that glue Creo names together."""
+    return (
+        48 <= byte <= 57  # 0-9
+        or 97 <= byte <= 122  # a-z (blob is lowercased)
+        or byte == 95  # _
+    )
+
+
+def token_has_name_boundaries(blob: bytes, start: int, end: int) -> bool:
+    """True when ``blob[start:end]`` is not glued to a longer Creo name token."""
+    if start < 0 or end > len(blob) or start >= end:
+        return False
+    if start > 0 and is_creo_name_char(blob[start - 1]):
+        return False
+    if end < len(blob) and is_creo_name_char(blob[end]):
+        return False
+    return True
+
+
+def find_bounded_token(blob: bytes, token: bytes) -> bool:
+    """True when ``token`` appears in ``blob`` with Creo name boundaries."""
+    if not token or not blob:
+        return False
+    start = 0
+    while True:
+        index = blob.find(token, start)
+        if index < 0:
+            return False
+        end = index + len(token)
+        if token_has_name_boundaries(blob, index, end):
+            return True
+        start = index + 1
+
+
 class CadNameMatcher:
     """Match logical Creo filenames inside a lowercased byte blob.
 
     ``include_stems`` also matches the bare stem (``shaft`` for ``shaft.prt``).
     That helps Open find neighbors when Creo omits the extension, but it causes
-    false Where Used parents (part numbers / short names appearing anywhere in
-    unrelated assemblies). Where Used indexing should pass ``include_stems=False``.
+    false Where Used parents. Where Used indexing should pass
+    ``include_stems=False`` (extension + name boundaries only).
     """
 
-    __slots__ = ("_goto", "_fail", "_out", "_logicals")
+    __slots__ = ("_goto", "_fail", "_out", "_logicals", "_lengths", "_require_boundaries")
 
     def __init__(
         self,
         filenames: list[str] | tuple[str, ...],
         *,
         include_stems: bool = True,
+        require_boundaries: bool | None = None,
     ) -> None:
+        # Where Used (no stems) always requires boundaries; Open stem mode does not.
+        self._require_boundaries = (
+            (not include_stems) if require_boundaries is None else bool(require_boundaries)
+        )
         token_to_logicals: dict[bytes, list[str]] = {}
         for name in filenames:
             logical = CreoFileManager.normalize_creo_filename(name).lower()
@@ -51,6 +91,7 @@ class CadNameMatcher:
 
         patterns = list(token_to_logicals.keys())
         self._logicals = [token_to_logicals[pat] for pat in patterns]
+        self._lengths = [len(pat) for pat in patterns]
         self._goto, self._fail, self._out = _build_aho(patterns)
 
     def find(self, lower_blob: bytes) -> set[str]:
@@ -63,11 +104,18 @@ class CadNameMatcher:
         fail = self._fail
         out = self._out
         logicals = self._logicals
-        for byte in lower_blob:
+        lengths = self._lengths
+        require_boundaries = self._require_boundaries
+        for index, byte in enumerate(lower_blob):
             while state and byte not in goto[state]:
                 state = fail[state]
             state = goto[state].get(byte, 0)
             for pattern_index in out[state]:
+                if require_boundaries:
+                    end = index + 1
+                    start = end - lengths[pattern_index]
+                    if not token_has_name_boundaries(lower_blob, start, end):
+                        continue
                 found.update(logicals[pattern_index])
         return found
 
@@ -107,4 +155,9 @@ def _build_aho(
     return goto, fail, out
 
 
-__all__ = ["CadNameMatcher"]
+__all__ = [
+    "CadNameMatcher",
+    "find_bounded_token",
+    "is_creo_name_char",
+    "token_has_name_boundaries",
+]

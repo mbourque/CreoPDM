@@ -466,11 +466,12 @@ class MetadataService:
         offset: int = 0,
         limit: int = 8,
     ) -> RebuildWhereUsedResponse:
-        """Scan vault asm/drw bytes and upsert Dependency rows (chunked).
+        """Scan vault asm/drw bytes and rewrite Dependency rows (chunked).
 
-        Safe to re-run: existing edges are left alone; only missing parent→child
-        ASSEMBLY_MEMBER / DRAWING_MODEL links are added. After this, Where Used
-        is a SQL lookup on ``dependencies`` — no per-page vault scan required.
+        At offset 0, clears existing ASSEMBLY_MEMBER / DRAWING_MODEL edges so
+        stale false parents (stem hits / removed components) cannot stick.
+        Then only adds bounded ``name.ext`` hits from vault bytes. After this,
+        Where Used is a SQL lookup on ``dependencies``.
         """
         if self._workspaces is None:
             raise ValidationAppError(
@@ -482,13 +483,32 @@ class MetadataService:
                 "Product not found.",
                 details={"product_id": product_uuid},
             )
+        # Full rebuild: vault scan is source of truth for asm/drw membership.
+        # Upsert-only left false Top Level / Where Used parents forever.
+        start = max(0, int(offset))
+        if start == 0:
+            session.execute(
+                delete(Dependency).where(
+                    Dependency.product_id == product.id,
+                    Dependency.dependency_type.in_(
+                        (
+                            DependencyType.ASSEMBLY_MEMBER.value,
+                            DependencyType.DRAWING_MODEL.value,
+                        )
+                    ),
+                )
+            )
+            session.flush()
+            logger.info(
+                "Cleared ASSEMBLY_MEMBER/DRAWING_MODEL edges before Where Used rebuild (%s)",
+                product_uuid,
+            )
         objects = self._objects.list_objects(session, product.id)
         parents = sorted(
             [row for row in objects if needs_open_dependencies(row.object_type, row.filename)],
             key=lambda row: (row.filename or "").lower(),
         )
         total = len(parents)
-        start = max(0, int(offset))
         take = max(1, min(int(limit), 40))
         chunk = parents[start : start + take]
         if not chunk:
@@ -499,19 +519,16 @@ class MetadataService:
                 done=True,
             )
 
-        # Map logical / lookup keys → object for matching names found in file bytes.
+        # Map logical name.ext → object (no bare-stem keys for Where Used resolve).
         by_key: dict[str, EngineeringObject] = {}
         candidate_names: list[str] = []
         for row in objects:
             candidate_names.append(row.filename)
-            for key in bom_where_used_keys(row.filename):
-                by_key.setdefault(key, row)
             logical = CreoFileManager.normalize_creo_filename(row.filename).lower()
-            if logical:
+            if logical and "." in logical:
                 by_key.setdefault(logical, row)
 
-        # Extension-qualified names only — bare stems false-positive Where Used
-        # (e.g. part number ``1003573`` appearing in an unrelated assembly).
+        # Extension + name boundaries only (not bare stems / glued substrings).
         matcher = CadNameMatcher(candidate_names, include_stems=False)
         edges_added = 0
         edges_existing = 0
@@ -521,7 +538,6 @@ class MetadataService:
         # for this chunk finishes, or SQLite holds a write lock across multi‑MB reads
         # and hangs the rest of CreoPDM (status GET, UI, etc.).
         pending: list[tuple[int, int, str]] = []
-        prune_ids: list[int] = []
         # End the list_objects read transaction before vault I/O.
         session.commit()
 
@@ -560,38 +576,9 @@ class MetadataService:
                 == ".drw"
                 else DependencyType.ASSEMBLY_MEMBER.value
             )
-            # Remove stem-only false edges left by older indexers for this parent.
-            if blob:
-                existing = session.scalars(
-                    select(Dependency).where(
-                        Dependency.product_id == product.id,
-                        Dependency.parent_object_id == parent.id,
-                        Dependency.dependency_type == dep_type,
-                    )
-                ).all()
-                for edge in existing:
-                    child = session.get(EngineeringObject, edge.child_object_id)
-                    if child is None:
-                        continue
-                    logical = CreoFileManager.normalize_creo_filename(child.filename).lower()
-                    if not logical or "." not in logical:
-                        continue
-                    full = logical.encode("ascii", "ignore")
-                    stem = Path(logical).stem.lower().encode("ascii", "ignore")
-                    if full in blob:
-                        continue
-                    if len(stem) >= 2 and stem in blob:
-                        prune_ids.append(int(edge.id))
             for child_id in child_ids:
                 pending.append((parent.id, child_id, dep_type))
 
-        if prune_ids:
-            session.execute(delete(Dependency).where(Dependency.id.in_(prune_ids)))
-            session.flush()
-            logger.info(
-                "Removed %s stem-only false Where Used edge(s) during rebuild",
-                len(prune_ids),
-            )
         edges_added, edges_existing = self.upsert_dependency_edges(
             session, product.id, pending
         )

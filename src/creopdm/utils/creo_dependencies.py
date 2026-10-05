@@ -11,7 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from creopdm.creo.file_manager import CreoFileManager
-from creopdm.utils.cad_name_matcher import CadNameMatcher
+from creopdm.utils.cad_name_matcher import CadNameMatcher, find_bounded_token
 from creopdm.utils.classify import is_creo_openable
 from creopdm.utils.folders import folder_of, objects_in_folder_view
 
@@ -73,10 +73,10 @@ def names_referenced_in_model(path: Path, candidates: list[str]) -> set[str]:
 
 
 def logical_name_in_model(path: Path, filename: str) -> bool:
-    """True when the vault file contains the logical ``name.ext`` (not bare stem).
+    """True when the vault file contains bounded logical ``name.ext`` (not bare stem).
 
-    Bare stems (``1003573`` without ``.asm``) appear in unrelated Creo files and
-    created false Where Used / Top Level parents.
+    Bare stems and names glued inside longer tokens create false Where Used /
+    Top Level parents (e.g. ``844j.asm`` claimed by an assembly that only has parts).
     """
     logical = CreoFileManager.normalize_creo_filename(filename).lower()
     if not logical or "." not in logical:
@@ -85,7 +85,7 @@ def logical_name_in_model(path: Path, filename: str) -> bool:
     if len(token) < 5:
         return False
     lower = read_model_scan_blob(path)
-    return bool(lower) and token in lower
+    return bool(lower) and find_bounded_token(lower, token)
 
 
 def model_references_filename(path: Path, filename: str) -> bool:

@@ -108,18 +108,20 @@ def test_top_level_assemblies_ignore_drawing_parents(data_dir, identity: StaticU
         assert "asm-child" not in tops
 
 
-def test_rebuild_prunes_stem_only_false_where_used_edges(
+def test_rebuild_clears_false_where_used_so_top_level_returns(
     data_dir, identity: StaticUserProvider
 ):
-    """Bare part number in parent bytes must not keep a Where Used / Top Level hit."""
+    """Stale at311912→844j style edges must clear when parent bytes have no member."""
     from sqlalchemy import select
 
     ctx = build_context(ConfigManager(), users=identity)
     vault = ctx.config.workspace_for_product("stem-false")
     vault.mkdir(parents=True, exist_ok=True)
-    # Stem only — not ``1003573.asm`` — must be pruned on rebuild.
-    (vault / "other.asm").write_bytes(b"parameter VALUE 1003573 end")
-    (vault / "1003573.asm").write_bytes(b"asm")
+    # Parent tree is parts only — no bounded ``844j.asm`` / ``1003573.asm`` token.
+    (vault / "at311912.asm").write_bytes(
+        b"\x00".join([b"14m7303.prt", b"r44302_3.prt", b"t74416.prt", b"24m7027.prt"])
+    )
+    (vault / "844j.asm").write_bytes(b"asm")
 
     with ctx.session_factory() as db:
         product = Product(
@@ -133,17 +135,23 @@ def test_rebuild_prunes_stem_only_false_where_used_edges(
         db.flush()
         parent = _obj(
             product.id,
-            filename="other.asm",
+            filename="at311912.asm",
             object_type="CREO_ASSEMBLY",
             uuid="asm-other",
         )
         child = _obj(
             product.id,
-            filename="1003573.asm",
+            filename="844j.asm",
             object_type="CREO_ASSEMBLY",
             uuid="asm-top",
         )
-        db.add_all([parent, child])
+        part = _obj(
+            product.id,
+            filename="14m7303.prt",
+            object_type="CREO_PART",
+            uuid="prt-14m",
+        )
+        db.add_all([parent, child, part])
         db.flush()
         db.add(
             Dependency(
@@ -167,9 +175,14 @@ def test_rebuild_prunes_stem_only_false_where_used_edges(
         edges = list(
             db.scalars(select(Dependency).where(Dependency.product_id == product_id))
         )
-        assert edges == []
+        # Part member may be indexed; false asm→asm edge must be gone.
+        assert not any(
+            edge.parent_object_id == parent.id and edge.child_object_id == child.id
+            for edge in edges
+        )
         tops = set(ctx.metadata.top_level_assembly_uuids(db, product_id))
-        assert tops == {"asm-other", "asm-top"}
+        assert "asm-top" in tops
+        assert "asm-other" in tops
 
 
 def test_where_used_index_absent_without_dependencies(data_dir, identity: StaticUserProvider):
