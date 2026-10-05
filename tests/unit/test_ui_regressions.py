@@ -1972,18 +1972,26 @@ def test_admin_hub_panel_fills_full_width():
     assert "can_view_objects" in audit_util
     assert "Open product Files" in audit_util
     assert "Open file Details" in audit_util
-    assert "not the vault Git history" in audit_util
+    assert "Not vault Git history" in audit_util
     assert "cannot be edited or deleted" in audit_util
     assert "<th>Client</th>" in audit_util
     assert "<th>Machine</th>" not in audit_util
     assert 'row.machine != "web"' in audit_util
     assert "audit-filter-grid" in css
-    assert "grid-template-columns: minmax(0, 28rem)" in css
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
+    assert "grid-column: 1 / -1" in css
     assert 'input[type="date"]' in css
+    assert "Newest first. Not vault Git history" in audit_util
     assert "one week ago" in (
         ROOT / "docs" / "user-interactions.md"
     ).read_text(encoding="utf-8")
+    assert "multi-column grid" in (
+        ROOT / "docs" / "user-interactions.md"
+    ).read_text(encoding="utf-8")
     assert "links only when you can open that product" in (
+        ROOT / "docs" / "user-interactions.md"
+    ).read_text(encoding="utf-8")
+    assert "stack filters in one tall single column" in (
         ROOT / "docs" / "user-interactions.md"
     ).read_text(encoding="utf-8")
     avail_util = (
@@ -2164,7 +2172,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "utilities.access" in docs  # must-not: old umbrella
     assert "folder’s used size" in docs or "folder" in docs
     assert "Audit log" in docs
-    assert "Git is not the audit source" in docs or "not the vault Git history" in docs
+    assert "Git is not the audit source" in docs or "vault Git history" in docs
     assert "Search" in docs or "dropdowns" in docs
     assert "Compacting vault history" in docs
     assert "Availability" in docs
