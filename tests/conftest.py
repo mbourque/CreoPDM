@@ -13,6 +13,7 @@ from creopdm.app import build_context, create_app
 from creopdm.config import ConfigManager
 from creopdm.services.git_service import GitService
 from creopdm.utils.identity import StaticUserProvider
+from tests.pytest_basetemp import cleanup_stale_pytest_tmp
 
 PYTEST_LAST_LOG = "pytest-last.log"
 
@@ -20,6 +21,9 @@ PYTEST_LAST_LOG = "pytest-last.log"
 def pytest_configure(config):
     """Keep pytest temps in the repo. Windows often locks %TEMP%\\pytest-of-*."""
     root = Path(config.rootpath)
+    # Always scrub leftovers before any test collection/run. Locked Windows DBs
+    # may survive one attempt; the next pytest run retries.
+    cleanup_stale_pytest_tmp(root)
     configured = getattr(config.option, "basetemp", None)
     # pyproject used to force --basetemp=pytest-tmp; that shared tree gets stuck
     # on locked creopdm.db (WinError 32) and fails every following run's setup.
@@ -27,10 +31,18 @@ def pytest_configure(config):
         stamp = f"{os.getpid()}-{int(time.time())}"
         base = root / f"pytest-tmp-{stamp}"
         config.option.basetemp = str(base)
-        for stale in root.glob("pytest-tmp*"):
-            if stale.resolve() == base.resolve():
-                continue
-            shutil.rmtree(stale, ignore_errors=True)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Drop this run's basetemp when possible so the tree does not pile up."""
+    root = Path(session.config.rootpath)
+    configured = getattr(session.config.option, "basetemp", None)
+    if configured:
+        base = Path(str(configured))
+        if base.exists() and base.name.startswith("pytest-tmp"):
+            shutil.rmtree(base, ignore_errors=True)
+    # Second pass for anything left from parallel/aborted runs.
+    cleanup_stale_pytest_tmp(root)
 
 
 @pytest.fixture(autouse=True)

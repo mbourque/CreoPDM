@@ -176,14 +176,15 @@ class ZipImportJobs:
         )
 
     def set_recording(self, job_id: str, *, files_done: int = 0, files_total: int = 0) -> None:
+        """Post-Git finish: DB rows are bulk; the N-of-M count is vault tip cleanup."""
         total = max(0, int(files_total))
         done = max(0, int(files_done))
         if total > 0 and done > 0:
-            msg = f"Recording in database… {done} of {total}"
+            msg = f"Finishing vault files… {done} of {total}"
         elif total > 0:
-            msg = f"Recording {total} files in database…"
+            msg = f"Saving {total} files to the database…"
         else:
-            msg = "Recording in database…"
+            msg = "Saving files to the database…"
         self.update(
             job_id,
             phase="recording",

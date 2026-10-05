@@ -14,6 +14,8 @@ The user **always** runs code and shell commands themselves (tests, git, service
 3. Wait for their result — paste, “passed”, or `@pytest-last.log` (repo root; from `tests/conftest.py`).
 4. Treat their output as the source of truth.
 
+Repo-root `pytest-tmp` / `pytest-tmp-*` dirs are scrubbed automatically before and after each pytest run (`tests/pytest_basetemp.py` via `conftest.py`). Do not tell the user to manually `Remove-Item` those folders. Leave `.pytest_cache` alone.
+
 ## Do not run yourself
 
 - `pytest` / test suites

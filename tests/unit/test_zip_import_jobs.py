@@ -28,8 +28,10 @@ def test_zip_import_job_phase_messages():
     jobs.set_committing(job_id, files_total=4024)
     assert "Committing" in jobs.get(job_id).message
 
+    jobs.set_recording(job_id, files_done=0, files_total=4024)
+    assert "database" in jobs.get(job_id).message.lower()
     jobs.set_recording(job_id, files_done=100, files_total=4024)
-    assert jobs.get(job_id).message == "Recording in database… 100 of 4024"
+    assert jobs.get(job_id).message == "Finishing vault files… 100 of 4024"
 
     jobs.set_done(job_id, files_total=4024)
     done = jobs.get(job_id)
