@@ -2017,10 +2017,12 @@ def test_admin_hub_panel_fills_full_width():
     assert "Indexing Where Used… preparing…" in script
     assert "expectStartedAt" in script
     assert "invokeBusyCancel" in script
+    assert "forceClearBusy" in script
     assert 'id="busy-cancel-btn"' in (
         ROOT / "src" / "creopdm" / "templates" / "base.html"
     ).read_text(encoding="utf-8")
     assert "Never preventDefault without a runner" in script
+    assert "Cancelling Where Used indexing…" in script
     products_api = (
         ROOT / "src" / "creopdm" / "api" / "products.py"
     ).read_text(encoding="utf-8")

@@ -74,6 +74,33 @@ def test_cancel_where_used_api_is_wired():
     assert 'method: "DELETE"' in script
     assert "forceClearBusy" in script
     assert "invokeBusyCancel" in script
+    base = (root / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
+    assert 'id="busy-cancel-btn"' in base
+
+
+def test_where_used_cancel_marks_job_cancelled(data_dir, identity: StaticUserProvider):
+    """Cancel must flip status so the busy poll exits and the overlay can clear."""
+    ctx = build_context(ConfigManager(), users=identity)
+    product_uuid = str(uuid.uuid4())
+    with ctx.session_factory() as db:
+        db.add(
+            Product(
+                uuid=product_uuid,
+                name="WU Cancel",
+                vault_folder="wu-cancel",
+                repository_path=str(ctx.config.workspace_for_product("wu-cancel")),
+                default_branch="main",
+            )
+        )
+        db.commit()
+    started = ctx.where_used_index.start(product_uuid)
+    assert started.state in {"queued", "running", "done"}
+    ctx.where_used_index.cancel(product_uuid)
+    status = ctx.where_used_index.get(product_uuid)
+    # Already-finished jobs stay done; in-flight jobs become cancelled.
+    assert status.state in {"cancelled", "done"}
+    if status.state == "cancelled":
+        assert status.error == "Cancelled."
 
 
 def test_add_endpoints_do_not_start_where_used_mid_chunk():

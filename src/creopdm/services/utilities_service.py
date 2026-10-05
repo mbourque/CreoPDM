@@ -1059,50 +1059,6 @@ def clear_product_creo_metadata(
     return product, cleared
 
 
-def rebuild_product_where_used(
-    ctx: AppContext,
-    db: Session,
-    *,
-    product_uuid: str,
-    confirm_name: str,
-) -> tuple[Product, int, int]:
-    """Clear then re-index Where Used from vault bytes (same path as gear Rebuild)."""
-    product = _load_product_for_repair(
-        db, product_uuid=product_uuid, confirm_name=confirm_name
-    )
-    edges_added = 0
-    edges_existing = 0
-    offset = 0
-    # Chunked like the background job so large products do not hold one long write.
-    while True:
-        chunk = ctx.metadata.rebuild_where_used_from_vault(
-            db,
-            product.uuid,
-            offset=offset,
-            limit=20,
-        )
-        edges_added += int(chunk.edges_added or 0)
-        edges_existing += int(chunk.edges_existing or 0)
-        offset = int(chunk.next_offset or 0)
-        if chunk.done:
-            break
-    ctx.activities.record(
-        db,
-        ActivityAction.PRODUCT_UPDATED,
-        ctx.users.get_current_user(),
-        product_id=product.id,
-        object_id=None,
-        details={
-            "product": product.name,
-            "action": "rebuild_where_used",
-            "edges_added": edges_added,
-            "edges_existing": edges_existing,
-        },
-    )
-    db.flush()
-    return product, edges_added, edges_existing
-
-
 def repair_product_database(
     ctx: AppContext,
     db: Session,
