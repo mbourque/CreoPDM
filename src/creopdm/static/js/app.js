@@ -7688,16 +7688,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return { path: fullPath, filename: logicalName, working_directory: directory };
   }
 
+  function openTimeoutMessage() {
+    if (creoOpenMode() === "embedded" && !likelyStandaloneBrowser()) {
+      return "Open timed out. Check creopdm-agent and that Creo is Connected, then try again.";
+    }
+    return "Open timed out. Check that creopdm-agent is running, then try again.";
+  }
+
   async function openPdmObject(target) {
     // Keep the busy overlay up through prepare + materialize until Creo/OS open starts.
     // Always clear on timeout/error so Session offline / hung agent cannot leave Opening… stuck.
     return withBusy("Preparing…", async () => {
       try {
-        return await withTimeout(
-          openPdmObjectWork(target),
-          180000,
-          "Open timed out. Check creopdm-agent and that Creo is Connected, then try again."
-        );
+        return await withTimeout(openPdmObjectWork(target), 180000, openTimeoutMessage());
       } catch (err) {
         const message = err && err.message ? err.message : String(err);
         showError($("#toolbar-error"), message || "Could not open the file.");

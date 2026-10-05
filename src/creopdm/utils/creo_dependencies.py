@@ -214,6 +214,8 @@ def collect_open_dependency_walk(
             continue
         if not path.is_file():
             continue
+        # Same-folder first — product-wide scans on multi-thousand vaults made
+        # "Finding dependencies…" hang (and often match string-table noise).
         immediate = select_dependency_objects(
             primary_relative=rel,
             primary_filename=filename,
@@ -222,10 +224,9 @@ def collect_open_dependency_walk(
             model_path=path,
             model_extensions=model_extensions,
             all_cad_extensions=all_cad_extensions,
-            scope="product",
+            scope="folder",
         )
-        if not immediate and depth == 0:
-            # First level: also try same-folder fallback (empty/unreadable scan).
+        if not immediate:
             immediate = select_dependency_objects(
                 primary_relative=rel,
                 primary_filename=filename,
@@ -234,7 +235,7 @@ def collect_open_dependency_walk(
                 model_path=path,
                 model_extensions=model_extensions,
                 all_cad_extensions=all_cad_extensions,
-                scope="folder",
+                scope="product",
             )
         dep_type = _open_dependency_type(filename)
         for obj in immediate:

@@ -99,6 +99,25 @@ def test_select_dependency_objects_skips_huge_unreferenced_pool(tmp_path: Path):
     assert chosen == []
 
 
+def test_open_dependency_walk_prefers_folder_scope_before_product():
+    """Regression: product-first scans hung Finding dependencies on large vaults."""
+    text = Path("src/creopdm/utils/creo_dependencies.py").read_text(encoding="utf-8")
+    walk = text.split("while queue and len(out) < _MAX_OPEN_DEPENDENCIES_TOTAL:", 1)[1]
+    walk = walk.split("return out, edges", 1)[0]
+    assert 'scope="folder"' in walk
+    assert 'scope="product"' in walk
+    assert walk.index('scope="folder"') < walk.index('scope="product"')
+
+
+def test_open_deps_do_not_materialize_during_find():
+    """Finding dependencies must locate only — materialize is the agent's job."""
+    text = Path("src/creopdm/services/creo_service.py").read_text(encoding="utf-8")
+    body = text.split("def _dependencies_for(", 1)[1].split("def _open_resolved(", 1)[0]
+    assert "locate_content" in body
+    assert "materialize(" not in body
+    assert "_MAX_OPEN_FROM_WHERE_USED" in body
+
+
 def test_collect_open_dependencies_walks_subassembly_tree(tmp_path: Path):
     """Top asm → sub asm → part via vault bytes only (no Where Used index)."""
     top = tmp_path / "top.asm.1"

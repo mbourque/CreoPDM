@@ -266,13 +266,21 @@ class CreoService:
                     root_id = int(row.id)
                     break
 
-        # Prefer the Where Used dependency table when this model already has
-        # edges (fast reopen). Fall back to a vault byte-scan walk only when
-        # nothing is indexed yet — do not rescan every open when DB knows it.
+        # Prefer a modest Where Used tree (fast reopen). Huge trees are usually
+        # string-table noise from Rebuild — fall back to a folder-first vault scan.
+        # Never materialize during this step (that made Finding dependencies… hang).
+        _MAX_OPEN_FROM_WHERE_USED = 120
         source = "where-used"
         chosen: list[EngineeringObject] = []
         if root_id is not None:
             chosen = self._where_used_dependency_objects(session, product.id, root_id)
+            if len(chosen) > _MAX_OPEN_FROM_WHERE_USED:
+                logger.info(
+                    "Open deps: ignoring %s Where Used rows for %s (likely noisy index)",
+                    len(chosen),
+                    Path(filename).name,
+                )
+                chosen = []
 
         if not chosen:
             source = "vault-scan"
@@ -281,15 +289,9 @@ class CreoService:
                 try:
                     return self._workspaces.locate_content(product, obj)  # type: ignore[arg-type]
                 except PathValidationError:
-                    try:
-                        return self._workspaces.materialize(
-                            product,
-                            obj,  # type: ignore[arg-type]
-                            writable=False,
-                            overwrite_modified=True,
-                        )
-                    except Exception:  # noqa: BLE001
-                        return None
+                    return None
+                except Exception:  # noqa: BLE001
+                    return None
 
             chosen, edges = collect_open_dependency_walk(
                 primary_relative=relative_path,
@@ -302,7 +304,7 @@ class CreoService:
                 resolve_path=_resolve,
                 skip_object_id=root_id if root_id is not None else skip_object_id,
             )
-            # Same scan Rebuild Where Used uses — persist so Top Level / reopen use DB.
+            # Persist bounded name.ext edges so Top Level / reopen can use DB.
             if edges and self._metadata is not None:
                 added, existing = self._metadata.upsert_dependency_edges(
                     session, product.id, edges
@@ -314,6 +316,12 @@ class CreoService:
                         Path(filename).name,
                         existing,
                     )
+        logger.info(
+            "Open deps for %s via %s (%s files)",
+            Path(filename).name,
+            source,
+            len(chosen),
+        )
 
         # Metadata only — do not locate/materialize each vault tip here (that made
         # "Finding dependencies…" crawl on large assemblies). The agent fetches

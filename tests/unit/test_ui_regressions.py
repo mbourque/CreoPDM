@@ -635,7 +635,11 @@ def test_soft_nav_skips_creojs_reconnect():
     open_wrap = _between(script, "async function openPdmObject(", "async function openPdmObjectWork(")
     assert 'withBusy("Preparing…"' in open_wrap
     assert "withTimeout(" in open_wrap
-    assert "Open timed out" in open_wrap
+    assert "openTimeoutMessage()" in open_wrap
+    assert "function openTimeoutMessage(" in script
+    timeout_msg = _between(script, "function openTimeoutMessage(", "async function openPdmObject(")
+    assert "creopdm-agent is running" in timeout_msg
+    assert "Creo is Connected" in timeout_msg
     assert "function setOpenPrepareBusyMessage(" in script
     assert "function setOpenDownloadBusyMessage(" in script
     assert 'setBusyMessage("Finding dependencies…")' in script
