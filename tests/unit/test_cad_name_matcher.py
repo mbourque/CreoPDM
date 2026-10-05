@@ -38,9 +38,11 @@ def test_read_model_scan_blob_includes_utf16le_component_names(tmp_path):
     asm = tmp_path / "top.asm.1"
     # Creo often stores component names as UTF-16LE wide strings.
     wide = "at311912".encode("utf-16le")
+    # Preceding ASCII text + NUL must not glue into the wide name (rat311912).
     asm.write_bytes(b"header\x00" + wide + b"\x00footer")
     blob = read_model_scan_blob(asm)
     assert b"at311912" in blob
+    assert b"rat311912" not in blob
     matcher = CadNameMatcher(
         ["at311912.asm"],
         include_stems=True,
@@ -61,3 +63,17 @@ def test_hyphen_glues_creo_name_boundaries():
     )
     assert matcher.find(b"\x00foo-bar\x00") == {"foo-bar.asm"}
     assert "foo.asm" not in matcher.find(b"\x00foo-bar\x00")
+
+
+def test_stem_does_not_match_prefix_of_name_with_extension():
+    """``844j`` must not match inside ``844j.asmx`` / ``844j.asm`` as a stem."""
+    matcher = CadNameMatcher(
+        ["844j.asm"],
+        include_stems=True,
+        require_boundaries=True,
+        min_stem_len=4,
+        unique_stems_only=True,
+    )
+    assert "844j.asm" not in matcher.find(b"\x00844j.asmx\x00")
+    assert matcher.find(b"\x00844j.asm\x00") == {"844j.asm"}
+    assert matcher.find(b"\x00844j\x00") == {"844j.asm"}

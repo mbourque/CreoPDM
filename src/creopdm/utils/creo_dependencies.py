@@ -25,6 +25,10 @@ _NEEDS_DEPENDENCY_SUFFIXES = frozenset({".asm", ".drw"})
 _SCAN_LIMIT = 8 * 1024 * 1024
 # Rebuild Where Used is background; read the whole tip (component tables can sit late).
 _WHERE_USED_SCAN_LIMIT: int | None = None
+# Creo tips often embed a product-wide name table. Stem matching then links almost
+# every assembly as a "child" (Top Level → 0) and falsely parents the true root.
+# When a parent resolves more than this many members, keep only bounded name.ext.
+_MAX_WHERE_USED_CHILDREN_PER_PARENT = 80
 # Below this, plain ``in`` checks are cheaper than building an automaton.
 _MATCHER_THRESHOLD = 48
 # Safety caps for deep assembly trees.
@@ -41,6 +45,17 @@ def needs_open_dependencies(object_type: str, filename: str) -> bool:
     return Path(logical).suffix.lower() in _NEEDS_DEPENDENCY_SUFFIXES
 
 
+def _is_ascii_name_byte(byte: int) -> bool:
+    """ASCII Creo name character (either case) — used before the blob is lowercased."""
+    return (
+        48 <= byte <= 57  # 0-9
+        or 65 <= byte <= 90  # A-Z
+        or 97 <= byte <= 122  # a-z
+        or byte == 95  # _
+        or byte == 45  # -
+    )
+
+
 def _utf16le_ascii_runs(raw: bytes) -> bytes:
     """Collapse UTF-16LE ASCII runs to contiguous bytes (Creo wide component names)."""
     out = bytearray()
@@ -48,6 +63,11 @@ def _utf16le_ascii_runs(raw: bytes) -> bytes:
     length = len(raw)
     while index + 1 < length:
         if raw[index + 1] == 0 and 32 <= raw[index] < 127:
+            # Do not start a wide run glued to a preceding ASCII letter
+            # (``header\\x00`` + ``a\\x00t\\x00…`` must not become ``rat…``).
+            if index > 0 and _is_ascii_name_byte(raw[index - 1]):
+                index += 1
+                continue
             start = index
             while index + 1 < length and raw[index + 1] == 0 and 32 <= raw[index] < 127:
                 index += 2
@@ -267,9 +287,9 @@ def collect_open_dependency_walk(
             continue
         if not path.is_file():
             continue
-        # Same-folder first — product-wide scans on multi-thousand vaults made
-        # "Finding dependencies…" hang (and often match string-table noise).
-        immediate = select_dependency_objects(
+        # Folder first, then product — merge so cross-folder parts are not skipped
+        # when a small folder falls back to "all siblings" without byte hits.
+        folder_hits = select_dependency_objects(
             primary_relative=rel,
             primary_filename=filename,
             object_type=otype,
@@ -279,17 +299,23 @@ def collect_open_dependency_walk(
             all_cad_extensions=all_cad_extensions,
             scope="folder",
         )
-        if not immediate:
-            immediate = select_dependency_objects(
-                primary_relative=rel,
-                primary_filename=filename,
-                object_type=otype,
-                siblings=siblings,
-                model_path=path,
-                model_extensions=model_extensions,
-                all_cad_extensions=all_cad_extensions,
-                scope="product",
-            )
+        product_hits = select_dependency_objects(
+            primary_relative=rel,
+            primary_filename=filename,
+            object_type=otype,
+            siblings=siblings,
+            model_path=path,
+            model_extensions=model_extensions,
+            all_cad_extensions=all_cad_extensions,
+            scope="product",
+        )
+        merged: dict[str, object] = {}
+        for obj in (*product_hits, *folder_hits):
+            obj_id = getattr(obj, "id", None)
+            obj_rel = str(getattr(obj, "relative_path", "") or "").replace("\\", "/")
+            key = f"id:{obj_id}" if obj_id is not None else obj_rel.lower()
+            merged.setdefault(key, obj)
+        immediate = list(merged.values())
         dep_type = _open_dependency_type(filename)
         for obj in immediate:
             obj_id = getattr(obj, "id", None)

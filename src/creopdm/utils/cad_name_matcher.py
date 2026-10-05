@@ -139,6 +139,15 @@ class CadNameMatcher:
                     start = end - lengths[pattern_index]
                     if not token_has_name_boundaries(lower_blob, start, end):
                         continue
+                    # Bare stems must not match the prefix of ``name.ext`` /
+                    # ``name.asmx`` — only a true extensionless component token.
+                    token = lower_blob[start:end]
+                    if (
+                        b"." not in token
+                        and end < len(lower_blob)
+                        and lower_blob[end] == 46  # '.'
+                    ):
+                        continue
                 found.update(logicals[pattern_index])
         return found
 

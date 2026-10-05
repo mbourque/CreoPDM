@@ -65,6 +65,7 @@ def test_matcher_prefers_asm_when_part_and_asm_share_stem():
     # Bare "shaft" → assembly (Top Level needs sub-asm edges).
     assert matcher.find(b"\x00shaft\x00") == {"shaft.asm"}
     assert matcher.find(b"\x00pin\x00") == {"pin.prt"}
+    # Full ``shaft.prt`` must not also fire the bare stem → shaft.asm.
     assert matcher.find(b"\x00shaft.prt\x00") == {"shaft.prt"}
 
 

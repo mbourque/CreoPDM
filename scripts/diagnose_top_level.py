@@ -153,6 +153,30 @@ def main() -> int:
             print(f"OK: {expected_root} is in DB top-level set")
         else:
             print(f"WARN: {expected_root} is NOT in DB top-level set")
+            root_row = next(
+                (
+                    row
+                    for row in asms
+                    if CreoFileManager.normalize_creo_filename(row.filename).lower()
+                    == expected_root
+                ),
+                None,
+            )
+            if root_row is not None:
+                id_to_name = {
+                    row.id: CreoFileManager.normalize_creo_filename(row.filename).lower()
+                    for row in objects
+                }
+                claimants = [
+                    id_to_name.get(edge.parent_object_id, f"id:{edge.parent_object_id}")
+                    for edge in member_edges
+                    if edge.child_object_id == root_row.id
+                ]
+                print(f"DB parents of {expected_root} ({len(claimants)}):")
+                for name in sorted(claimants)[:30]:
+                    print(f"  {name}")
+                if len(claimants) > 30:
+                    print(f"  ... +{len(claimants) - 30} more")
         print("DB top-level names (first 60):")
         for name in db_top_names[:60]:
             mark = " <-- expected" if name == expected_root else ""
@@ -177,10 +201,18 @@ def main() -> int:
             min_stem_len=4,
             unique_stems_only=True,
         )
+        matcher_ext = CadNameMatcher(
+            candidate_names,
+            include_stems=False,
+            require_boundaries=True,
+        )
 
         children_of: dict[int, set[int]] = defaultdict(set)
+        children_ext_of: dict[int, set[int]] = defaultdict(set)
         missing_vault = 0
         oversized = 0
+        fanout: list[int] = []
+        noisy_parents = 0
         for parent in parents:
             try:
                 path = ctx.workspaces.locate_content(product, parent)
@@ -199,34 +231,84 @@ def main() -> int:
                 oversized += 1
             blob = read_model_scan_blob(path, max_bytes=_WHERE_USED_SCAN_LIMIT)
             found = matcher.find(blob) if blob else set()
+            found_ext = matcher_ext.find(blob) if blob else set()
+            kids: set[int] = set()
+            kids_ext: set[int] = set()
             for name in found:
                 logical = CreoFileManager.normalize_creo_filename(name).lower()
                 child = by_key.get(logical)
                 if child is None or child.id == parent.id:
                     continue
-                children_of[parent.id].add(child.id)
+                kids.add(child.id)
+            for name in found_ext:
+                logical = CreoFileManager.normalize_creo_filename(name).lower()
+                child = by_key.get(logical)
+                if child is None or child.id == parent.id:
+                    continue
+                kids_ext.add(child.id)
+            fanout.append(len(kids))
+            if len(kids) > 80:
+                noisy_parents += 1
+            children_of[parent.id] = kids
+            children_ext_of[parent.id] = kids_ext
 
         referenced: set[int] = set()
         for kids in children_of.values():
             referenced.update(kids)
+        referenced_ext: set[int] = set()
+        for kids in children_ext_of.values():
+            referenced_ext.update(kids)
+        # Trusted graph: stem matches only when parent fan-out is modest.
+        trusted: set[int] = set()
+        for parent_id, kids in children_of.items():
+            if len(kids) <= 80:
+                trusted.update(kids)
+            else:
+                trusted.update(children_ext_of.get(parent_id) or set())
         mem_tops = sorted(
             CreoFileManager.normalize_creo_filename(row.filename).lower()
             for row in asms
             if row.id not in referenced
         )
+        mem_tops_ext = sorted(
+            CreoFileManager.normalize_creo_filename(row.filename).lower()
+            for row in asms
+            if row.id not in referenced_ext
+        )
+        mem_tops_trusted = sorted(
+            CreoFileManager.normalize_creo_filename(row.filename).lower()
+            for row in asms
+            if row.id not in trusted
+        )
+        fanout_sorted = sorted(fanout)
+        p50 = fanout_sorted[len(fanout_sorted) // 2] if fanout_sorted else 0
+        p90 = fanout_sorted[int(len(fanout_sorted) * 0.9)] if fanout_sorted else 0
+        pmax = fanout_sorted[-1] if fanout_sorted else 0
         print(
-            f"In-memory rebuild top-level: {len(mem_tops)} "
+            f"In-memory rebuild top-level (stems): {len(mem_tops)} "
             f"(missing_vault={missing_vault}, parents_over_8MiB={oversized})"
         )
-        print("In-memory top-level names (first 60):")
-        for name in mem_tops[:60]:
+        print(f"In-memory rebuild top-level (name.ext only): {len(mem_tops_ext)}")
+        print(
+            f"In-memory rebuild top-level (trusted fan-out<=80 else ext): {len(mem_tops_trusted)}"
+        )
+        print(
+            f"Parent match fan-out: n={len(fanout)} p50={p50} p90={p90} max={pmax} "
+            f"noisy(>80)={noisy_parents}"
+        )
+        if expected_root in mem_tops_trusted:
+            print(f"OK: {expected_root} would be top-level under trusted graph")
+        else:
+            print(f"WARN: {expected_root} still not top-level under trusted graph")
+        print("Trusted top-level names (first 60):")
+        for name in mem_tops_trusted[:60]:
             mark = " <-- expected" if name == expected_root else ""
             print(f"  {name}{mark}")
-        if len(mem_tops) > 60:
-            print(f"  ... +{len(mem_tops) - 60} more")
+        if len(mem_tops_trusted) > 60:
+            print(f"  ... +{len(mem_tops_trusted) - 60} more")
         print()
 
-        orphans = [row for row in asms if row.id not in referenced]
+        orphans = [row for row in asms if row.id not in trusted]
         orphans.sort(key=lambda row: (row.filename or "").lower())
         # Prefer explaining non-root orphans first.
         orphans_focus = [
@@ -235,7 +317,7 @@ def main() -> int:
             if CreoFileManager.normalize_creo_filename(row.filename).lower() != expected_root
         ][: max(0, args.max_orphans)]
 
-        print(f"Explaining up to {len(orphans_focus)} non-root orphan assemblies:")
+        print(f"Explaining up to {len(orphans_focus)} non-root trusted-orphan assemblies:")
         print("(hit = how the orphan's name appears inside some other asm/drw vault file)")
         print()
 
