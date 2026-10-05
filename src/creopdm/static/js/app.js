@@ -11313,8 +11313,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           if (form.querySelector('input[name="clear_metadata"]')?.checked) {
             parts.push("clear metadata");
           }
-          if (form.querySelector('input[name="clear_where_used"]')?.checked) {
-            parts.push("clear Where Used");
+          if (form.querySelector('input[name="rebuild_where_used"]')?.checked) {
+            parts.push("rebuild Where Used");
           }
           message = parts.length
             ? `Repairing product database for ${label} (${parts.join(", ")})…`

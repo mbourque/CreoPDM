@@ -2269,7 +2269,7 @@ def _utilities_rebuild_response(
     rebuild_confirm_name: str = "",
     rebuild_do_rebuild: bool = False,
     rebuild_clear_metadata: bool = False,
-    rebuild_clear_where_used: bool = False,
+    rebuild_rebuild_where_used: bool = False,
     error: str | None = None,
     success: str | None = None,
     status_code: int = 200,
@@ -2286,7 +2286,7 @@ def _utilities_rebuild_response(
             "rebuild_confirm_name": rebuild_confirm_name,
             "rebuild_do_rebuild": rebuild_do_rebuild,
             "rebuild_clear_metadata": rebuild_clear_metadata,
-            "rebuild_clear_where_used": rebuild_clear_where_used,
+            "rebuild_rebuild_where_used": rebuild_rebuild_where_used,
             "error": error,
             "success": success,
         },
@@ -2295,7 +2295,7 @@ def _utilities_rebuild_response(
 
 
 def _utilities_repair_success_message(result) -> str:
-    """Plain-language success line for Rebuild / clear metadata / clear Where Used."""
+    """Plain-language success line for Rebuild / clear metadata / rebuild Where Used."""
     parts: list[str] = []
     if result.rebuilt:
         tip = (result.head or "")[:12]
@@ -2305,22 +2305,23 @@ def _utilities_repair_success_message(result) -> str:
             f"(removed {result.objects_removed} old file row(s), "
             f"registered {result.files_registered} tip file(s))"
         )
-    else:
-        if result.metadata_cleared:
-            parts.append(
-                f"deleted Creo metadata from {result.metadata_versions} version row(s)"
-            )
-        if result.where_used_cleared:
-            parts.append(
-                f"deleted {result.where_used_edges} Where Used link(s)"
-            )
+    elif result.metadata_cleared:
+        parts.append(
+            f"deleted Creo metadata from {result.metadata_versions} version row(s)"
+        )
+    if result.where_used_rebuilt:
+        parts.append(
+            f"rebuilt Where Used "
+            f"({result.where_used_edges_added} new link(s), "
+            f"{result.where_used_edges_existing} already stored)"
+        )
     body = "; ".join(parts) if parts else "updated the product database"
     hints: list[str] = []
-    if result.rebuilt or result.where_used_cleared:
+    if result.rebuilt and not result.where_used_rebuilt:
         hints.append(
             "Run Rebuild Where Used if you need Top Level / dependencies again"
         )
-    if result.rebuilt or result.metadata_cleared:
+    if result.metadata_cleared:
         hints.append("collect metadata again if needed")
     if hints:
         body += ". " + "; ".join(hints)
@@ -2692,7 +2693,7 @@ def admin_utilities_rebuild_product_db(
     confirm: str = Form(""),
     do_rebuild: str = Form(""),
     clear_metadata: str = Form(""),
-    clear_where_used: str = Form(""),
+    rebuild_where_used: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -2705,13 +2706,13 @@ def admin_utilities_rebuild_product_db(
     typed = confirm_name or ""
     want_rebuild = do_rebuild == "1"
     want_metadata = clear_metadata == "1"
-    want_where_used = clear_where_used == "1"
+    want_where_used = rebuild_where_used == "1"
     form_state = dict(
         rebuild_product_id=pid,
         rebuild_confirm_name=typed,
         rebuild_do_rebuild=want_rebuild,
         rebuild_clear_metadata=want_metadata,
-        rebuild_clear_where_used=want_where_used,
+        rebuild_rebuild_where_used=want_where_used,
     )
     if confirm != "1":
         return _utilities_rebuild_response(
@@ -2731,7 +2732,7 @@ def admin_utilities_rebuild_product_db(
             manager,
             error=(
                 "Choose at least one action: rebuild from vault, delete Creo metadata, "
-                "or delete Where Used."
+                "or delete and rebuild Where Used."
             ),
             status_code=400,
             **form_state,
@@ -2744,7 +2745,7 @@ def admin_utilities_rebuild_product_db(
             confirm_name=typed,
             rebuild=want_rebuild,
             clear_metadata=want_metadata,
-            clear_where_used=want_where_used,
+            rebuild_where_used=want_where_used,
         )
         db.commit()
     except CreoPDMError as exc:

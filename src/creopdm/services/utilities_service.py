@@ -126,7 +126,7 @@ class RebuildProductDbResult:
 
 @dataclass(frozen=True, slots=True)
 class ProductDbRepairResult:
-    """Outcome of Utilities → Rebuild / clear metadata / clear Where Used."""
+    """Outcome of Utilities → Rebuild / clear metadata / rebuild Where Used."""
 
     product_uuid: str
     product_name: str
@@ -136,8 +136,9 @@ class ProductDbRepairResult:
     files_registered: int = 0
     metadata_cleared: bool = False
     metadata_versions: int = 0
-    where_used_cleared: bool = False
-    where_used_edges: int = 0
+    where_used_rebuilt: bool = False
+    where_used_edges_added: int = 0
+    where_used_edges_existing: int = 0
 
 
 def active_user_emails(db: Session) -> list[str]:
@@ -1058,34 +1059,48 @@ def clear_product_creo_metadata(
     return product, cleared
 
 
-def clear_product_where_used(
+def rebuild_product_where_used(
     ctx: AppContext,
     db: Session,
     *,
     product_uuid: str,
     confirm_name: str,
-) -> tuple[Product, int]:
-    """Delete Where Used / dependency edges for one product (DB only)."""
+) -> tuple[Product, int, int]:
+    """Clear then re-index Where Used from vault bytes (same path as gear Rebuild)."""
     product = _load_product_for_repair(
         db, product_uuid=product_uuid, confirm_name=confirm_name
     )
-    with ctx.locks.acquire(product.uuid, timeout=60.0):
-        result = db.execute(delete(Dependency).where(Dependency.product_id == product.id))
-        cleared = int(result.rowcount or 0)
-        ctx.activities.record(
+    edges_added = 0
+    edges_existing = 0
+    offset = 0
+    # Chunked like the background job so large products do not hold one long write.
+    while True:
+        chunk = ctx.metadata.rebuild_where_used_from_vault(
             db,
-            ActivityAction.PRODUCT_UPDATED,
-            ctx.users.get_current_user(),
-            product_id=product.id,
-            object_id=None,
-            details={
-                "product": product.name,
-                "action": "clear_where_used",
-                "edges_removed": cleared,
-            },
+            product.uuid,
+            offset=offset,
+            limit=20,
         )
-        db.flush()
-    return product, cleared
+        edges_added += int(chunk.edges_added or 0)
+        edges_existing += int(chunk.edges_existing or 0)
+        offset = int(chunk.next_offset or 0)
+        if chunk.done:
+            break
+    ctx.activities.record(
+        db,
+        ActivityAction.PRODUCT_UPDATED,
+        ctx.users.get_current_user(),
+        product_id=product.id,
+        object_id=None,
+        details={
+            "product": product.name,
+            "action": "rebuild_where_used",
+            "edges_added": edges_added,
+            "edges_existing": edges_existing,
+        },
+    )
+    db.flush()
+    return product, edges_added, edges_existing
 
 
 def repair_product_database(
@@ -1096,17 +1111,27 @@ def repair_product_database(
     confirm_name: str,
     rebuild: bool = False,
     clear_metadata: bool = False,
-    clear_where_used: bool = False,
+    rebuild_where_used: bool = False,
 ) -> ProductDbRepairResult:
-    """Run selected product DB repair actions (rebuild / clear metadata / clear WU)."""
-    if not (rebuild or clear_metadata or clear_where_used):
+    """Run selected product DB repair actions (rebuild / clear metadata / rebuild WU)."""
+    if not (rebuild or clear_metadata or rebuild_where_used):
         raise ValidationAppError(
             "Choose at least one action: rebuild from vault, delete Creo metadata, "
-            "or delete Where Used."
+            "or delete and rebuild Where Used."
         )
     product = _load_product_for_repair(
         db, product_uuid=product_uuid, confirm_name=confirm_name
     )
+
+    rebuilt_flag = False
+    head = ""
+    objects_removed = 0
+    files_registered = 0
+    meta_cleared = False
+    meta_versions = 0
+    wu_rebuilt = False
+    wu_added = 0
+    wu_existing = 0
 
     if rebuild:
         rebuilt = rebuild_product_database_from_vault(
@@ -1115,35 +1140,36 @@ def repair_product_database(
             product_uuid=product.uuid,
             confirm_name=confirm_name,
         )
-        # Rebuild drops old rows (metadata + Where Used go with them).
-        return ProductDbRepairResult(
-            product_uuid=rebuilt.product_uuid,
-            product_name=rebuilt.product_name,
-            rebuilt=True,
-            head=rebuilt.head,
-            objects_removed=rebuilt.objects_removed,
-            files_registered=rebuilt.files_registered,
-            metadata_cleared=True,
-            where_used_cleared=True,
-        )
-
-    meta_versions = 0
-    wu_edges = 0
-    if clear_metadata:
+        rebuilt_flag = True
+        head = rebuilt.head
+        objects_removed = rebuilt.objects_removed
+        files_registered = rebuilt.files_registered
+        # File-list rebuild drops old rows (metadata + Where Used go with them).
+        meta_cleared = True
+    elif clear_metadata:
         _, meta_versions = clear_product_creo_metadata(
             ctx, db, product_uuid=product.uuid, confirm_name=confirm_name
         )
-    if clear_where_used:
-        _, wu_edges = clear_product_where_used(
+        meta_cleared = True
+
+    if rebuild_where_used:
+        _, wu_added, wu_existing = rebuild_product_where_used(
             ctx, db, product_uuid=product.uuid, confirm_name=confirm_name
         )
+        wu_rebuilt = True
+
     return ProductDbRepairResult(
         product_uuid=product.uuid,
         product_name=product.name,
-        metadata_cleared=clear_metadata,
+        rebuilt=rebuilt_flag,
+        head=head,
+        objects_removed=objects_removed,
+        files_registered=files_registered,
+        metadata_cleared=meta_cleared,
         metadata_versions=meta_versions,
-        where_used_cleared=clear_where_used,
-        where_used_edges=wu_edges,
+        where_used_rebuilt=wu_rebuilt,
+        where_used_edges_added=wu_added,
+        where_used_edges_existing=wu_existing,
     )
 
 

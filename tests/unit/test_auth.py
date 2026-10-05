@@ -507,7 +507,8 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert 'id="utilities-rebuild-product-form"' in rebuild_page.text
     assert 'name="do_rebuild"' in rebuild_page.text
     assert 'name="clear_metadata"' in rebuild_page.text
-    assert 'name="clear_where_used"' in rebuild_page.text
+    assert 'name="rebuild_where_used"' in rebuild_page.text
+    assert "Delete and rebuild Where Used" in rebuild_page.text
     assert "checked" in rebuild_page.text  # rebuild action defaulted on
 
     delete_page = auth_client.get("/admin/utilities/delete-products")

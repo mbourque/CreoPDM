@@ -17,9 +17,11 @@
   <p class="muted">
     Repair one product’s <strong>database rows</strong> without rewriting vault Git history.
     Choose one or more actions below. <strong>Rebuild from vault tip</strong> replaces the file list
-    (and clears checkouts, Where Used, and Creo metadata with those old rows). The other actions
-    only delete collected Creo metadata and/or Where Used links. Works when the product is locked
-    or <strong>Archived</strong> (admin recovery). Rebuild requires every checkout released first.
+    (and clears checkouts, Where Used, and Creo metadata with those old rows).
+    <strong>Delete collected Creo metadata</strong> clears identity/BOM/parameters only.
+    <strong>Delete and rebuild Where Used</strong> clears dependency links then re-indexes from the vault
+    (same as the product gear). Works when the product is locked or <strong>Archived</strong>
+    (admin recovery). File-list rebuild requires every checkout released first.
   </p>
 
   {% if success %}
@@ -50,8 +52,8 @@
           Delete collected Creo metadata
         </label>
         <label class="choice">
-          <input type="checkbox" name="clear_where_used" value="1" {% if rebuild_clear_where_used %}checked{% endif %}>
-          Delete Where Used links
+          <input type="checkbox" name="rebuild_where_used" value="1" {% if rebuild_rebuild_where_used %}checked{% endif %}>
+          Delete and rebuild Where Used
         </label>
       </fieldset>
       <label>Type the product name to confirm

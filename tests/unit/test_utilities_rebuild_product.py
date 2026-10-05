@@ -271,17 +271,23 @@ def test_clear_metadata_keeps_file_rows(data_dir, identity: StaticUserProvider):
         assert params == []
 
 
-def test_clear_where_used_keeps_files_and_metadata(
+def test_rebuild_where_used_replaces_stale_edges(
     data_dir, identity: StaticUserProvider
 ):
-    """Delete Where Used must only remove Dependency edges for that product."""
+    """Delete-and-rebuild Where Used clears stale links and re-indexes from vault."""
     ctx = build_context(ConfigManager(), users=identity)
+    vault = ctx.config.workspace_for_product("wu-rebuild")
+    vault.mkdir(parents=True, exist_ok=True)
+    (vault / "assy.asm").write_bytes(b"\x00".join([b"shaft.prt"]))
+    (vault / "shaft.prt").write_bytes(b"part")
+    (vault / "orphan.prt").write_bytes(b"orphan")
+
     with ctx.session_factory() as db:
         product = Product(
             uuid=str(uuid.uuid4()),
-            name="WU Clear",
-            vault_folder="wu-clear",
-            repository_path=str(ctx.config.vaults_dir / "wu-clear"),
+            name="WU Rebuild",
+            vault_folder="wu-rebuild",
+            repository_path=str(vault),
             default_branch="main",
         )
         db.add(product)
@@ -304,7 +310,16 @@ def test_clear_where_used_keeps_files_and_metadata(
             object_type="CREO_PART",
             relative_path="shaft.prt",
         )
-        db.add_all([parent, child])
+        orphan = EngineeringObject(
+            uuid=str(uuid.uuid4()),
+            product_id=product.id,
+            name="orphan",
+            filename="orphan.prt",
+            extension="prt",
+            object_type="CREO_PART",
+            relative_path="orphan.prt",
+        )
+        db.add_all([parent, child, orphan])
         db.flush()
         ver = ObjectVersion(
             uuid=str(uuid.uuid4()),
@@ -323,11 +338,12 @@ def test_clear_where_used_keeps_files_and_metadata(
         db.add(ver)
         db.flush()
         child.current_version_id = ver.id
+        # Stale false parent→orphan edge that vault bytes do not support.
         db.add(
             Dependency(
                 product_id=product.id,
                 parent_object_id=parent.id,
-                child_object_id=child.id,
+                child_object_id=orphan.id,
                 dependency_type=DependencyType.ASSEMBLY_MEMBER.value,
             )
         )
@@ -337,13 +353,12 @@ def test_clear_where_used_keeps_files_and_metadata(
             ctx,
             db,
             product_uuid=product.uuid,
-            confirm_name="WU Clear",
-            clear_where_used=True,
+            confirm_name="WU Rebuild",
+            rebuild_where_used=True,
         )
         db.commit()
 
-        assert result.where_used_cleared is True
-        assert result.where_used_edges == 1
+        assert result.where_used_rebuilt is True
         assert result.rebuilt is False
         assert result.metadata_cleared is False
         edges = list(
@@ -351,24 +366,34 @@ def test_clear_where_used_keeps_files_and_metadata(
                 select(Dependency).where(Dependency.product_id == product.id)
             ).all()
         )
-        assert edges == []
+        assert any(
+            edge.parent_object_id == parent.id and edge.child_object_id == child.id
+            for edge in edges
+        )
+        assert not any(
+            edge.parent_object_id == parent.id and edge.child_object_id == orphan.id
+            for edge in edges
+        )
         tip = db.get(ObjectVersion, ver.id)
         assert tip is not None
         assert tip.identity_json == '{"keep":true}'
-        assert db.get(EngineeringObject, parent.id) is not None
-        assert db.get(EngineeringObject, child.id) is not None
 
 
-def test_repair_clear_metadata_and_where_used_together(
+def test_repair_clear_metadata_and_rebuild_where_used_together(
     data_dir, identity: StaticUserProvider
 ):
     ctx = build_context(ConfigManager(), users=identity)
+    vault = ctx.config.workspace_for_product("both-repair")
+    vault.mkdir(parents=True, exist_ok=True)
+    (vault / "assy.asm").write_bytes(b"\x00".join([b"part.prt"]))
+    (vault / "part.prt").write_bytes(b"part")
+
     with ctx.session_factory() as db:
         product = Product(
             uuid=str(uuid.uuid4()),
-            name="Both Clear",
-            vault_folder="both-clear",
-            repository_path=str(ctx.config.vaults_dir / "both-clear"),
+            name="Both Repair",
+            vault_folder="both-repair",
+            repository_path=str(vault),
             default_branch="main",
         )
         db.add(product)
@@ -424,19 +449,22 @@ def test_repair_clear_metadata_and_where_used_together(
             ctx,
             db,
             product_uuid=product.uuid,
-            confirm_name="Both Clear",
+            confirm_name="Both Repair",
             clear_metadata=True,
-            clear_where_used=True,
+            rebuild_where_used=True,
         )
         db.commit()
 
         assert result.metadata_cleared is True
-        assert result.where_used_cleared is True
+        assert result.where_used_rebuilt is True
         assert result.rebuilt is False
         assert db.get(ObjectVersion, ver.id).bom_json is None
-        assert (
-            db.scalar(
+        edges = list(
+            db.scalars(
                 select(Dependency).where(Dependency.product_id == product.id)
-            )
-            is None
+            ).all()
+        )
+        assert any(
+            edge.parent_object_id == parent.id and edge.child_object_id == child.id
+            for edge in edges
         )
