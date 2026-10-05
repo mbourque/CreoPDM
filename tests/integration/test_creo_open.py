@@ -522,6 +522,7 @@ class EmbeddedConnector(RecordingConnector):
 
 @requires_git
 def test_open_embedded_does_not_launch_cad(data_dir, repo_parent, identity: StaticUserProvider):
+    """Embedded + launch must not spawn CAD; browser download is the fallback."""
     recorder = EmbeddedConnector()
     ctx = build_context(ConfigManager(), users=identity)
     ctx.creo = recorder
@@ -535,9 +536,12 @@ def test_open_embedded_does_not_launch_cad(data_dir, repo_parent, identity: Stat
         )
         assert created.status_code == 201, created.text
         object_id = created.json()["uuid"]
+        # Session-offline Chrome / no-agent fallback: download for OS association.
         opened = client.post("/api/creo/open", json={"object_id": object_id})
-        assert opened.status_code == 400, opened.text
-        assert "built-in browser" in opened.json()["error"]["message"].lower()
+        assert opened.status_code == 200, opened.text
+        body = opened.json()
+        assert body["method"] == "browser"
+        assert body["url"] == f"/api/objects/{object_id}/content"
         assert recorder.opened == []
         prepared = client.post(
             "/api/creo/open",

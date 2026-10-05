@@ -7707,16 +7707,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function likelyStandaloneBrowser() {
     // True for Chrome/Edge/Firefox outside Creo — Embedded setting may still fall
-    // back to OS association. False when we look like Creo's embedded browser.
-    if (hostedCreoJS() || inCreoBrowser() || creoExternalBridge()) return false;
-    if (window.CreoJS) return false;
-    try {
-      if (typeof pfcGetCurrentSession === "function") return false;
-    } catch {
-      /* ignore */
-    }
+    // back to OS association. Do not treat a loaded creojs.js (window.CreoJS) as
+    // being inside Creo; that script is served to every browser and used to make
+    // Session-offline Chrome take the "open from built-in browser" dead end.
+    if (hostedCreoJS() || looksLikeCreoEmbeddedBrowser()) return false;
     const ua = String(navigator.userAgent || "");
-    if (/creo|ptc|parametric/i.test(ua)) return false;
     return /Chrome|Edg|Firefox|Safari/i.test(ua);
   }
 

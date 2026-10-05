@@ -262,7 +262,7 @@ Otherwise the app asks how you want to open it (must show the chooser in Creo’
 
 If open seems to do nothing, check the error line under the toolbar, and that creopdm-agent is running on the Creo PC. Large downloads can take a while.
 
-**Settings → Open Creo models with:** **Embedded** options (help + Creo.JS path) sit under that radio and are grayed out when **OS file association** is selected. Embedded only uses Creo.JS inside Creo’s embedded browser; otherwise Open uses the OS association. The top-bar Creo pill shows session only (**Creo: Connected** / **Creo: Session offline**), not the open-mode name.
+**Settings → Open Creo models with:** **Embedded** options (help + Creo.JS path) sit under that radio and are grayed out when **OS file association** is selected. Embedded only uses Creo.JS inside Creo’s embedded browser; otherwise Open uses the OS association (including when the pill says **Creo: Session offline** in Chrome/Edge — do not tell the user to open from Creo’s built-in browser just because Embedded is selected). The top-bar Creo pill shows session only (**Creo: Connected** / **Creo: Session offline**), not the open-mode name.
 
 **Set Working Directory** (toolbar) does the same WD step on its own; it only appears inside Creo’s browser when Creo.JS is connected.
 

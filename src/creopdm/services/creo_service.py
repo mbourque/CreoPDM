@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 from creopdm.constants import DependencyType
 from creopdm.creo.base import CreoConnector
 from creopdm.creo.file_manager import CreoFileManager
-from creopdm.exceptions import CreoUnavailableError, PathValidationError, ValidationAppError
+from creopdm.exceptions import CreoUnavailableError, PathValidationError
 from creopdm.logging_setup import get_logger
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
@@ -402,12 +402,10 @@ class CreoService:
                 method = self._open_view_path(path, browser_url=browser_url)
                 if method == "browser":
                     url = browser_url
-            elif open_mode == "embedded":
-                raise ValidationAppError(
-                    "Open this model from Creo's built-in browser.",
-                    details={"path": str(path), "filename": path.name},
-                )
-            elif open_mode == "association":
+            elif open_mode in {"embedded", "association"}:
+                # Embedded open is Creo.JS on the client. When the UI falls back
+                # (Chrome/Edge, Session offline, no agent), return a download so
+                # Windows association can open the file — never spawn CAD here.
                 method, url = "browser", browser_url
             else:
                 method = self._open_path(path, browser_url=browser_url)

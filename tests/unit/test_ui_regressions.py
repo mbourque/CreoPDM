@@ -602,6 +602,13 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "hostedCreoJS() && embeddedMode" in open_fn or 'hostedCreoJS() && creoOpenMode() === "embedded"' in open_fn
     assert 'openViaAgent(openSpec.path, "association")' in open_fn
     assert "function likelyStandaloneBrowser(" in script
+    standalone = _between(
+        script, "function likelyStandaloneBrowser(", "async function openPdmObjectWork("
+    )
+    # Loaded creojs.js must not block Windows-association fallback when Session offline.
+    assert "looksLikeCreoEmbeddedBrowser()" in standalone
+    assert "window.CreoJS" not in standalone
+    assert "inCreoBrowser()" not in standalone
     assert "Waiting for Creo.JS…" in open_fn
     assert "Creo.JS is not connected yet" in open_fn
     assert "Windows file association from the embedded browser" in open_fn
