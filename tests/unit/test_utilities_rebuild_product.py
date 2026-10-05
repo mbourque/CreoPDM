@@ -1,4 +1,4 @@
-"""Utilities → Rebuild product database from vault Git tip."""
+"""Utilities → Rebuild product database / clear metadata / clear Where Used."""
 
 from __future__ import annotations
 
@@ -11,11 +11,17 @@ from sqlalchemy import select
 
 from creopdm.app import build_context
 from creopdm.config import ConfigManager
+from creopdm.constants import DependencyType
 from creopdm.exceptions import ValidationAppError
+from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
+from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
 from creopdm.models.version import ObjectVersion
-from creopdm.services.utilities_service import rebuild_product_database_from_vault
+from creopdm.services.utilities_service import (
+    rebuild_product_database_from_vault,
+    repair_product_database,
+)
 from creopdm.utils.identity import StaticUserProvider
 from tests.conftest import requires_git
 
@@ -156,3 +162,281 @@ def test_rebuild_requires_exact_name(data_dir, identity: StaticUserProvider):
                 product_uuid=product.uuid,
                 confirm_name="wrong",
             )
+
+
+def test_repair_requires_at_least_one_action(data_dir, identity: StaticUserProvider):
+    ctx = build_context(ConfigManager(), users=identity)
+    with ctx.session_factory() as db:
+        product = Product(
+            uuid=str(uuid.uuid4()),
+            name="No Action",
+            vault_folder="no-action",
+            repository_path=str(ctx.config.vaults_dir / "no-action"),
+            default_branch="main",
+        )
+        db.add(product)
+        db.commit()
+        with pytest.raises(ValidationAppError, match="at least one action"):
+            repair_product_database(
+                ctx,
+                db,
+                product_uuid=product.uuid,
+                confirm_name="No Action",
+            )
+
+
+def test_clear_metadata_keeps_file_rows(data_dir, identity: StaticUserProvider):
+    """Delete Creo metadata must not drop EngineeringObject / tip versions."""
+    ctx = build_context(ConfigManager(), users=identity)
+    with ctx.session_factory() as db:
+        product = Product(
+            uuid=str(uuid.uuid4()),
+            name="Meta Clear",
+            vault_folder="meta-clear",
+            repository_path=str(ctx.config.vaults_dir / "meta-clear"),
+            default_branch="main",
+        )
+        db.add(product)
+        db.flush()
+        obj = EngineeringObject(
+            uuid=str(uuid.uuid4()),
+            product_id=product.id,
+            name="shaft",
+            filename="shaft.prt",
+            extension="prt",
+            object_type="CREO_PART",
+            relative_path="shaft.prt",
+        )
+        db.add(obj)
+        db.flush()
+        ver = ObjectVersion(
+            uuid=str(uuid.uuid4()),
+            object_id=obj.id,
+            revision="A",
+            iteration=1,
+            filename="shaft.prt",
+            relative_path="shaft.prt",
+            identity_json='{"name":"shaft"}',
+            bom_json='{"items":[]}',
+            materials_json='{"mat":"steel"}',
+            units_json='{"len":"mm"}',
+            mass_json='{"mass":1}',
+            family_table_json='{"rows":[]}',
+            features_json='{"n":1}',
+            git_commit_hash="a" * 40,
+            content_hash="c" * 64,
+            file_size=10,
+            created_by="tester",
+            comment="tip",
+        )
+        db.add(ver)
+        db.flush()
+        obj.current_version_id = ver.id
+        db.add(
+            Parameter(
+                object_id=obj.id,
+                version_id=ver.id,
+                name="PTC_MATERIAL",
+                value="STEEL",
+            )
+        )
+        db.commit()
+
+        result = repair_product_database(
+            ctx,
+            db,
+            product_uuid=product.uuid,
+            confirm_name="Meta Clear",
+            clear_metadata=True,
+        )
+        db.commit()
+
+        assert result.metadata_cleared is True
+        assert result.rebuilt is False
+        assert result.metadata_versions == 1
+        still = db.get(EngineeringObject, obj.id)
+        assert still is not None
+        tip = db.get(ObjectVersion, ver.id)
+        assert tip is not None
+        assert tip.identity_json is None
+        assert tip.bom_json is None
+        assert tip.materials_json is None
+        assert tip.units_json is None
+        assert tip.mass_json is None
+        assert tip.family_table_json is None
+        assert tip.features_json is None
+        params = list(
+            db.scalars(select(Parameter).where(Parameter.object_id == obj.id)).all()
+        )
+        assert params == []
+
+
+def test_clear_where_used_keeps_files_and_metadata(
+    data_dir, identity: StaticUserProvider
+):
+    """Delete Where Used must only remove Dependency edges for that product."""
+    ctx = build_context(ConfigManager(), users=identity)
+    with ctx.session_factory() as db:
+        product = Product(
+            uuid=str(uuid.uuid4()),
+            name="WU Clear",
+            vault_folder="wu-clear",
+            repository_path=str(ctx.config.vaults_dir / "wu-clear"),
+            default_branch="main",
+        )
+        db.add(product)
+        db.flush()
+        parent = EngineeringObject(
+            uuid=str(uuid.uuid4()),
+            product_id=product.id,
+            name="assy",
+            filename="assy.asm",
+            extension="asm",
+            object_type="CREO_ASSEMBLY",
+            relative_path="assy.asm",
+        )
+        child = EngineeringObject(
+            uuid=str(uuid.uuid4()),
+            product_id=product.id,
+            name="shaft",
+            filename="shaft.prt",
+            extension="prt",
+            object_type="CREO_PART",
+            relative_path="shaft.prt",
+        )
+        db.add_all([parent, child])
+        db.flush()
+        ver = ObjectVersion(
+            uuid=str(uuid.uuid4()),
+            object_id=child.id,
+            revision="A",
+            iteration=1,
+            filename="shaft.prt",
+            relative_path="shaft.prt",
+            identity_json='{"keep":true}',
+            git_commit_hash="b" * 40,
+            content_hash="d" * 64,
+            file_size=10,
+            created_by="tester",
+            comment="tip",
+        )
+        db.add(ver)
+        db.flush()
+        child.current_version_id = ver.id
+        db.add(
+            Dependency(
+                product_id=product.id,
+                parent_object_id=parent.id,
+                child_object_id=child.id,
+                dependency_type=DependencyType.ASSEMBLY_MEMBER.value,
+            )
+        )
+        db.commit()
+
+        result = repair_product_database(
+            ctx,
+            db,
+            product_uuid=product.uuid,
+            confirm_name="WU Clear",
+            clear_where_used=True,
+        )
+        db.commit()
+
+        assert result.where_used_cleared is True
+        assert result.where_used_edges == 1
+        assert result.rebuilt is False
+        assert result.metadata_cleared is False
+        edges = list(
+            db.scalars(
+                select(Dependency).where(Dependency.product_id == product.id)
+            ).all()
+        )
+        assert edges == []
+        tip = db.get(ObjectVersion, ver.id)
+        assert tip is not None
+        assert tip.identity_json == '{"keep":true}'
+        assert db.get(EngineeringObject, parent.id) is not None
+        assert db.get(EngineeringObject, child.id) is not None
+
+
+def test_repair_clear_metadata_and_where_used_together(
+    data_dir, identity: StaticUserProvider
+):
+    ctx = build_context(ConfigManager(), users=identity)
+    with ctx.session_factory() as db:
+        product = Product(
+            uuid=str(uuid.uuid4()),
+            name="Both Clear",
+            vault_folder="both-clear",
+            repository_path=str(ctx.config.vaults_dir / "both-clear"),
+            default_branch="main",
+        )
+        db.add(product)
+        db.flush()
+        parent = EngineeringObject(
+            uuid=str(uuid.uuid4()),
+            product_id=product.id,
+            name="assy",
+            filename="assy.asm",
+            extension="asm",
+            object_type="CREO_ASSEMBLY",
+            relative_path="assy.asm",
+        )
+        child = EngineeringObject(
+            uuid=str(uuid.uuid4()),
+            product_id=product.id,
+            name="part",
+            filename="part.prt",
+            extension="prt",
+            object_type="CREO_PART",
+            relative_path="part.prt",
+        )
+        db.add_all([parent, child])
+        db.flush()
+        ver = ObjectVersion(
+            uuid=str(uuid.uuid4()),
+            object_id=child.id,
+            revision="A",
+            iteration=1,
+            filename="part.prt",
+            relative_path="part.prt",
+            bom_json="[]",
+            git_commit_hash="e" * 40,
+            content_hash="f" * 64,
+            file_size=4,
+            created_by="tester",
+            comment="tip",
+        )
+        db.add(ver)
+        db.flush()
+        child.current_version_id = ver.id
+        db.add(
+            Dependency(
+                product_id=product.id,
+                parent_object_id=parent.id,
+                child_object_id=child.id,
+                dependency_type=DependencyType.ASSEMBLY_MEMBER.value,
+            )
+        )
+        db.commit()
+
+        result = repair_product_database(
+            ctx,
+            db,
+            product_uuid=product.uuid,
+            confirm_name="Both Clear",
+            clear_metadata=True,
+            clear_where_used=True,
+        )
+        db.commit()
+
+        assert result.metadata_cleared is True
+        assert result.where_used_cleared is True
+        assert result.rebuilt is False
+        assert db.get(ObjectVersion, ver.id).bom_json is None
+        assert (
+            db.scalar(
+                select(Dependency).where(Dependency.product_id == product.id)
+            )
+            is None
+        )

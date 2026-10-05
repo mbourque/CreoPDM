@@ -11306,7 +11306,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (form.id === "utilities-compact-vault-form") {
           message = `Compacting vault history for ${label}…`;
         } else if (form.id === "utilities-rebuild-product-form") {
-          message = `Rebuilding product database for ${label}…`;
+          const parts = [];
+          if (form.querySelector('input[name="do_rebuild"]')?.checked) {
+            parts.push("rebuild");
+          }
+          if (form.querySelector('input[name="clear_metadata"]')?.checked) {
+            parts.push("clear metadata");
+          }
+          if (form.querySelector('input[name="clear_where_used"]')?.checked) {
+            parts.push("clear Where Used");
+          }
+          message = parts.length
+            ? `Repairing product database for ${label} (${parts.join(", ")})…`
+            : `Repairing product database for ${label}…`;
         } else if (form.id === "utilities-delete-products-form") {
           message = `Deleting product ${label}…`;
         } else {

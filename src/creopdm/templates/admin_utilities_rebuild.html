@@ -15,9 +15,11 @@
   </nav>
   <h1>Rebuild product database</h1>
   <p class="muted">
-    Rebuilds one product’s <strong>file list and tip versions in the database</strong> from that product’s vault Git tip.
-    Vault files and Git history stay as they are. Clears checkouts, Where Used links, and collected Creo metadata for files in that product.
-    Release every checkout first. Works when the product is locked or <strong>Archived</strong> (admin recovery).
+    Repair one product’s <strong>database rows</strong> without rewriting vault Git history.
+    Choose one or more actions below. <strong>Rebuild from vault tip</strong> replaces the file list
+    (and clears checkouts, Where Used, and Creo metadata with those old rows). The other actions
+    only delete collected Creo metadata and/or Where Used links. Works when the product is locked
+    or <strong>Archived</strong> (admin recovery). Rebuild requires every checkout released first.
   </p>
 
   {% if success %}
@@ -37,15 +39,30 @@
           {% endfor %}
         </select>
       </label>
+      <fieldset class="product-access-fieldset">
+        <legend>Actions (choose at least one)</legend>
+        <label class="choice">
+          <input type="checkbox" name="do_rebuild" value="1" {% if rebuild_do_rebuild %}checked{% endif %}>
+          Rebuild file list from vault Git tip
+        </label>
+        <label class="choice">
+          <input type="checkbox" name="clear_metadata" value="1" {% if rebuild_clear_metadata %}checked{% endif %}>
+          Delete collected Creo metadata
+        </label>
+        <label class="choice">
+          <input type="checkbox" name="clear_where_used" value="1" {% if rebuild_clear_where_used %}checked{% endif %}>
+          Delete Where Used links
+        </label>
+      </fieldset>
       <label>Type the product name to confirm
         <input name="confirm_name" type="text" value="{{ rebuild_confirm_name }}" required autocomplete="off" maxlength="255">
       </label>
       <label class="choice">
         <input type="checkbox" name="confirm" value="1" required>
-        I understand this replaces the product’s file database from the vault tip
+        I understand this changes the product’s database as selected above
       </label>
       <p class="form-actions">
-        <button type="submit" class="btn btn-danger" {% if not rebuild_products %}disabled{% endif %}>Rebuild product database</button>
+        <button type="submit" class="btn btn-danger" {% if not rebuild_products %}disabled{% endif %}>Run selected actions</button>
         <a class="btn" href="/admin/utilities">Back to Utilities</a>
       </p>
     </form>

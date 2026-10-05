@@ -2267,6 +2267,9 @@ def _utilities_rebuild_response(
     *,
     rebuild_product_id: str = "",
     rebuild_confirm_name: str = "",
+    rebuild_do_rebuild: bool = False,
+    rebuild_clear_metadata: bool = False,
+    rebuild_clear_where_used: bool = False,
     error: str | None = None,
     success: str | None = None,
     status_code: int = 200,
@@ -2281,11 +2284,47 @@ def _utilities_rebuild_response(
             "rebuild_products": list_products_for_compact(db),
             "rebuild_product_id": rebuild_product_id,
             "rebuild_confirm_name": rebuild_confirm_name,
+            "rebuild_do_rebuild": rebuild_do_rebuild,
+            "rebuild_clear_metadata": rebuild_clear_metadata,
+            "rebuild_clear_where_used": rebuild_clear_where_used,
             "error": error,
             "success": success,
         },
         status_code=status_code,
     )
+
+
+def _utilities_repair_success_message(result) -> str:
+    """Plain-language success line for Rebuild / clear metadata / clear Where Used."""
+    parts: list[str] = []
+    if result.rebuilt:
+        tip = (result.head or "")[:12]
+        tip_bit = f" from vault tip {tip}" if tip else ""
+        parts.append(
+            f"rebuilt file list{tip_bit} "
+            f"(removed {result.objects_removed} old file row(s), "
+            f"registered {result.files_registered} tip file(s))"
+        )
+    else:
+        if result.metadata_cleared:
+            parts.append(
+                f"deleted Creo metadata from {result.metadata_versions} version row(s)"
+            )
+        if result.where_used_cleared:
+            parts.append(
+                f"deleted {result.where_used_edges} Where Used link(s)"
+            )
+    body = "; ".join(parts) if parts else "updated the product database"
+    hints: list[str] = []
+    if result.rebuilt or result.where_used_cleared:
+        hints.append(
+            "Run Rebuild Where Used if you need Top Level / dependencies again"
+        )
+    if result.rebuilt or result.metadata_cleared:
+        hints.append("collect metadata again if needed")
+    if hints:
+        body += ". " + "; ".join(hints)
+    return f"Updated {result.product_name}: {body}."
 
 
 def _utilities_health_response(
@@ -2397,7 +2436,9 @@ def admin_utilities_rebuild_product_page(
     manager = _require_utilities_access(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    return _utilities_rebuild_response(request, ctx, db, manager)
+    return _utilities_rebuild_response(
+        request, ctx, db, manager, rebuild_do_rebuild=True
+    )
 
 
 @router.get("/admin/utilities/health", response_class=HTMLResponse)
@@ -2649,33 +2690,61 @@ def admin_utilities_rebuild_product_db(
     product_id: str = Form(""),
     confirm_name: str = Form(""),
     confirm: str = Form(""),
+    do_rebuild: str = Form(""),
+    clear_metadata: str = Form(""),
+    clear_where_used: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
     manager = _require_utilities_access(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    from creopdm.services.utilities_service import rebuild_product_database_from_vault
+    from creopdm.services.utilities_service import repair_product_database
 
     pid = (product_id or "").strip()
     typed = confirm_name or ""
+    want_rebuild = do_rebuild == "1"
+    want_metadata = clear_metadata == "1"
+    want_where_used = clear_where_used == "1"
+    form_state = dict(
+        rebuild_product_id=pid,
+        rebuild_confirm_name=typed,
+        rebuild_do_rebuild=want_rebuild,
+        rebuild_clear_metadata=want_metadata,
+        rebuild_clear_where_used=want_where_used,
+    )
     if confirm != "1":
         return _utilities_rebuild_response(
             request,
             ctx,
             db,
             manager,
-            rebuild_product_id=pid,
-            rebuild_confirm_name=typed,
-            error="Confirm that you want to replace this product’s file database from the vault tip.",
+            error="Confirm that you want to change this product’s database as selected.",
             status_code=400,
+            **form_state,
+        )
+    if not (want_rebuild or want_metadata or want_where_used):
+        return _utilities_rebuild_response(
+            request,
+            ctx,
+            db,
+            manager,
+            error=(
+                "Choose at least one action: rebuild from vault, delete Creo metadata, "
+                "or delete Where Used."
+            ),
+            status_code=400,
+            **form_state,
         )
     try:
-        result = rebuild_product_database_from_vault(
+        result = repair_product_database(
             ctx,
             db,
             product_uuid=pid,
             confirm_name=typed,
+            rebuild=want_rebuild,
+            clear_metadata=want_metadata,
+            clear_where_used=want_where_used,
         )
         db.commit()
     except CreoPDMError as exc:
@@ -2685,20 +2754,14 @@ def admin_utilities_rebuild_product_db(
             ctx,
             db,
             manager,
-            rebuild_product_id=pid,
-            rebuild_confirm_name=typed,
             error=exc.message,
             status_code=400,
+            **form_state,
         )
     return _utilities_rebuild_response(
         request,
         ctx,
         db,
         manager,
-        success=(
-            f"Rebuilt database for {result.product_name} from vault tip "
-            f"{result.head[:12]}: removed {result.objects_removed} old file row(s), "
-            f"registered {result.files_registered} tip file(s). "
-            "Run Rebuild Where Used if you need Top Level / dependencies again."
-        ),
+        success=_utilities_repair_success_message(result),
     )

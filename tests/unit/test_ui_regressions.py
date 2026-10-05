@@ -1937,7 +1937,7 @@ def test_admin_hub_panel_fills_full_width():
     assert 'href="/admin/utilities/rebuild-product"' in utilities
     assert 'href="/admin/utilities/delete-products"' in utilities
     assert 'href="/admin/utilities/health"' in utilities
-    assert "rebuild a product database from its vault" in utilities
+    assert "clear Creo metadata / Where Used" in utilities
     assert 'action="/admin/utilities/email-all"' not in utilities
     assert "Disk space" not in utilities
     email_util = (
@@ -2005,13 +2005,20 @@ def test_admin_hub_panel_fills_full_width():
     assert 'form.id === "utilities-rebuild-product-form"' in script
     assert 'form.id === "utilities-delete-products-form"' in script
     assert "Compacting vault history for ${label}" in script
-    assert "Rebuilding product database for ${label}" in script
+    assert "Repairing product database for ${label}" in script
+    assert 'input[name="do_rebuild"]' in script
+    assert 'input[name="clear_metadata"]' in script
+    assert 'input[name="clear_where_used"]' in script
     assert "Deleting product ${label}" in script
     rebuild_tmpl = (
         ROOT / "src" / "creopdm" / "templates" / "admin_utilities_rebuild.html"
     ).read_text(encoding="utf-8")
     assert 'id="utilities-rebuild-product-form"' in rebuild_tmpl
     assert 'action="/admin/utilities/rebuild-product-db"' in rebuild_tmpl
+    assert 'name="do_rebuild"' in rebuild_tmpl
+    assert 'name="clear_metadata"' in rebuild_tmpl
+    assert 'name="clear_where_used"' in rebuild_tmpl
+    assert "Run selected actions" in rebuild_tmpl
     settings = (ROOT / "src" / "creopdm" / "templates" / "settings.html").read_text(encoding="utf-8")
     assert "<h1>System Settings</h1>" in settings
     assert "admin-hub" in settings

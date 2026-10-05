@@ -124,6 +124,22 @@ class RebuildProductDbResult:
     files_registered: int
 
 
+@dataclass(frozen=True, slots=True)
+class ProductDbRepairResult:
+    """Outcome of Utilities → Rebuild / clear metadata / clear Where Used."""
+
+    product_uuid: str
+    product_name: str
+    rebuilt: bool = False
+    head: str = ""
+    objects_removed: int = 0
+    files_registered: int = 0
+    metadata_cleared: bool = False
+    metadata_versions: int = 0
+    where_used_cleared: bool = False
+    where_used_edges: int = 0
+
+
 def active_user_emails(db: Session) -> list[str]:
     """Unique email addresses for ACTIVE users (order preserved)."""
     rows = db.scalars(
@@ -957,6 +973,180 @@ def _clear_product_object_records(db: Session, product: Product) -> int:
     return len(object_ids)
 
 
+def _load_product_for_repair(
+    db: Session, *, product_uuid: str, confirm_name: str
+) -> Product:
+    uuid_value = (product_uuid or "").strip()
+    typed = (confirm_name or "").strip()
+    if not uuid_value:
+        raise ValidationAppError("Choose a product.")
+    if not typed:
+        raise ValidationAppError("Type the product name exactly to confirm.")
+    product = db.scalar(select(Product).where(Product.uuid == uuid_value))
+    if product is None:
+        raise ProductNotFoundError("Product not found.", details={"uuid": uuid_value})
+    if typed != product.name:
+        raise ValidationAppError(
+            "Type the product name exactly to confirm.",
+            details={"product": product.name},
+        )
+    return product
+
+
+def _count_active_checkouts(db: Session, product_id: int) -> int:
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(Checkout)
+            .join(EngineeringObject, EngineeringObject.id == Checkout.object_id)
+            .where(
+                EngineeringObject.product_id == product_id,
+                Checkout.status == CheckoutStatus.ACTIVE.value,
+            )
+        )
+        or 0
+    )
+
+
+def clear_product_creo_metadata(
+    ctx: AppContext,
+    db: Session,
+    *,
+    product_uuid: str,
+    confirm_name: str,
+) -> tuple[Product, int]:
+    """Strip collected Creo metadata from all versions for one product (DB only)."""
+    product = _load_product_for_repair(
+        db, product_uuid=product_uuid, confirm_name=confirm_name
+    )
+    object_ids = list(
+        db.scalars(
+            select(EngineeringObject.id).where(EngineeringObject.product_id == product.id)
+        ).all()
+    )
+    if not object_ids:
+        return product, 0
+    with ctx.locks.acquire(product.uuid, timeout=60.0):
+        db.execute(delete(Parameter).where(Parameter.object_id.in_(object_ids)))
+        result = db.execute(
+            update(ObjectVersion)
+            .where(ObjectVersion.object_id.in_(object_ids))
+            .values(
+                identity_json=None,
+                materials_json=None,
+                bom_json=None,
+                units_json=None,
+                mass_json=None,
+                family_table_json=None,
+                features_json=None,
+            )
+        )
+        cleared = int(result.rowcount or 0)
+        ctx.activities.record(
+            db,
+            ActivityAction.PRODUCT_UPDATED,
+            ctx.users.get_current_user(),
+            product_id=product.id,
+            object_id=None,
+            details={
+                "product": product.name,
+                "action": "clear_creo_metadata",
+                "versions_cleared": cleared,
+            },
+        )
+        db.flush()
+    return product, cleared
+
+
+def clear_product_where_used(
+    ctx: AppContext,
+    db: Session,
+    *,
+    product_uuid: str,
+    confirm_name: str,
+) -> tuple[Product, int]:
+    """Delete Where Used / dependency edges for one product (DB only)."""
+    product = _load_product_for_repair(
+        db, product_uuid=product_uuid, confirm_name=confirm_name
+    )
+    with ctx.locks.acquire(product.uuid, timeout=60.0):
+        result = db.execute(delete(Dependency).where(Dependency.product_id == product.id))
+        cleared = int(result.rowcount or 0)
+        ctx.activities.record(
+            db,
+            ActivityAction.PRODUCT_UPDATED,
+            ctx.users.get_current_user(),
+            product_id=product.id,
+            object_id=None,
+            details={
+                "product": product.name,
+                "action": "clear_where_used",
+                "edges_removed": cleared,
+            },
+        )
+        db.flush()
+    return product, cleared
+
+
+def repair_product_database(
+    ctx: AppContext,
+    db: Session,
+    *,
+    product_uuid: str,
+    confirm_name: str,
+    rebuild: bool = False,
+    clear_metadata: bool = False,
+    clear_where_used: bool = False,
+) -> ProductDbRepairResult:
+    """Run selected product DB repair actions (rebuild / clear metadata / clear WU)."""
+    if not (rebuild or clear_metadata or clear_where_used):
+        raise ValidationAppError(
+            "Choose at least one action: rebuild from vault, delete Creo metadata, "
+            "or delete Where Used."
+        )
+    product = _load_product_for_repair(
+        db, product_uuid=product_uuid, confirm_name=confirm_name
+    )
+
+    if rebuild:
+        rebuilt = rebuild_product_database_from_vault(
+            ctx,
+            db,
+            product_uuid=product.uuid,
+            confirm_name=confirm_name,
+        )
+        # Rebuild drops old rows (metadata + Where Used go with them).
+        return ProductDbRepairResult(
+            product_uuid=rebuilt.product_uuid,
+            product_name=rebuilt.product_name,
+            rebuilt=True,
+            head=rebuilt.head,
+            objects_removed=rebuilt.objects_removed,
+            files_registered=rebuilt.files_registered,
+            metadata_cleared=True,
+            where_used_cleared=True,
+        )
+
+    meta_versions = 0
+    wu_edges = 0
+    if clear_metadata:
+        _, meta_versions = clear_product_creo_metadata(
+            ctx, db, product_uuid=product.uuid, confirm_name=confirm_name
+        )
+    if clear_where_used:
+        _, wu_edges = clear_product_where_used(
+            ctx, db, product_uuid=product.uuid, confirm_name=confirm_name
+        )
+    return ProductDbRepairResult(
+        product_uuid=product.uuid,
+        product_name=product.name,
+        metadata_cleared=clear_metadata,
+        metadata_versions=meta_versions,
+        where_used_cleared=clear_where_used,
+        where_used_edges=wu_edges,
+    )
+
+
 def rebuild_product_database_from_vault(
     ctx: AppContext,
     db: Session,
@@ -972,34 +1162,11 @@ def rebuild_product_database_from_vault(
     """
     import uuid as uuid_mod
 
-    uuid_value = (product_uuid or "").strip()
-    typed = (confirm_name or "").strip()
-    if not uuid_value:
-        raise ValidationAppError("Choose a product.")
-    if not typed:
-        raise ValidationAppError("Type the product name exactly to confirm.")
-
-    product = db.scalar(select(Product).where(Product.uuid == uuid_value))
-    if product is None:
-        raise ProductNotFoundError("Product not found.", details={"uuid": uuid_value})
-    if typed != product.name:
-        raise ValidationAppError(
-            "Type the product name exactly to confirm.",
-            details={"product": product.name},
-        )
-
-    active_checkouts = int(
-        db.scalar(
-            select(func.count())
-            .select_from(Checkout)
-            .join(EngineeringObject, EngineeringObject.id == Checkout.object_id)
-            .where(
-                EngineeringObject.product_id == product.id,
-                Checkout.status == CheckoutStatus.ACTIVE.value,
-            )
-        )
-        or 0
+    product = _load_product_for_repair(
+        db, product_uuid=product_uuid, confirm_name=confirm_name
     )
+
+    active_checkouts = _count_active_checkouts(db, product.id)
     if active_checkouts:
         raise ValidationAppError(
             f"Release all checkouts first ({active_checkouts} active).",
@@ -1043,18 +1210,7 @@ def rebuild_product_database_from_vault(
     now = datetime.now(timezone.utc)
 
     with ctx.locks.acquire(product.uuid, timeout=120.0):
-        active_checkouts = int(
-            db.scalar(
-                select(func.count())
-                .select_from(Checkout)
-                .join(EngineeringObject, EngineeringObject.id == Checkout.object_id)
-                .where(
-                    EngineeringObject.product_id == product.id,
-                    Checkout.status == CheckoutStatus.ACTIVE.value,
-                )
-            )
-            or 0
-        )
+        active_checkouts = _count_active_checkouts(db, product.id)
         if active_checkouts:
             raise ValidationAppError(
                 f"Release all checkouts first ({active_checkouts} active).",

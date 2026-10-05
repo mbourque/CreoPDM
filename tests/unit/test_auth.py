@@ -482,7 +482,9 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert 'href="/admin/utilities/rebuild-product"' in hub.text
     assert 'href="/admin/utilities/delete-products"' in hub.text
     assert 'href="/admin/utilities/health"' in hub.text
-    assert "rebuild a product database from its vault" in hub.text
+    assert "Rebuild product database" in hub.text
+    assert "Creo metadata" in hub.text
+    assert "Where Used" in hub.text
     assert 'action="/admin/utilities/email-all"' not in hub.text
     assert 'action="/admin/utilities/compact-vault"' not in hub.text
     assert 'action="/admin/utilities/rebuild-product-db"' not in hub.text
@@ -503,6 +505,10 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "Rebuild product database" in rebuild_page.text
     assert 'action="/admin/utilities/rebuild-product-db"' in rebuild_page.text
     assert 'id="utilities-rebuild-product-form"' in rebuild_page.text
+    assert 'name="do_rebuild"' in rebuild_page.text
+    assert 'name="clear_metadata"' in rebuild_page.text
+    assert 'name="clear_where_used"' in rebuild_page.text
+    assert "checked" in rebuild_page.text  # rebuild action defaulted on
 
     delete_page = auth_client.get("/admin/utilities/delete-products")
     assert delete_page.status_code == 200
