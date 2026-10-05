@@ -33,6 +33,7 @@ from creopdm.utils.creo_dependencies import (
     model_references_filename,
     needs_open_dependencies,
     _MAX_WHERE_USED_ASM_PARENTS,
+    _TOP_LEVEL_STEM_OMIT,
     _WHERE_USED_SCAN_LIMIT,
     _WHERE_USED_STEM_BLOCKLIST,
     read_model_scan_blob,
@@ -308,9 +309,9 @@ class MetadataService:
         """Assemblies not used by another assembly (drawing parents ignored).
 
         Requires a Where Used index. An assembly referenced only from a drawing
-        still counts as top-level. Datum-named assemblies (``front.asm``,
-        ``top.asm``, …) are omitted — bare ``FRONT``/``TOP`` hits are Creo
-        plane/view noise, not a second product root.
+        still counts as top-level. Default Creo datum-named assemblies
+        (``front.asm``, ``left.asm``, …) are omitted from the pill — not
+        common roots like ``top.asm``.
         """
         Parent = aliased(EngineeringObject)
         referenced = (
@@ -336,7 +337,7 @@ class MetadataService:
             stem = Path(
                 CreoFileManager.normalize_creo_filename(row.filename)
             ).stem.lower()
-            if stem in _WHERE_USED_STEM_BLOCKLIST:
+            if stem in _TOP_LEVEL_STEM_OMIT:
                 continue
             out.append(str(row.uuid))
         return out

@@ -55,6 +55,9 @@ _WHERE_USED_STEM_BLOCKLIST = frozenset(
         "quilt",
     }
 )
+# Omit from the Top Level pill only (stem blocklist stays broader for matching).
+# Do not include common real roots like ``top.asm`` / ``main.asm``.
+_TOP_LEVEL_STEM_OMIT = frozenset({"front", "back", "left", "right"})
 # Below this, plain ``in`` checks are cheaper than building an automaton.
 _MATCHER_THRESHOLD = 48
 # Safety caps for deep assembly trees.

@@ -612,7 +612,12 @@ def test_soft_nav_skips_creojs_reconnect():
     )
     # Loaded creojs.js must not block Windows-association fallback when Session offline.
     assert "looksLikeCreoEmbeddedBrowser()" in standalone
-    assert "window.CreoJS" not in standalone
+    assert "hostedCreoJS()" in standalone
+    # Comments may mention CreoJS; executable body must not key off window.CreoJS.
+    body = "\n".join(
+        line for line in standalone.splitlines() if not line.lstrip().startswith("//")
+    )
+    assert "window.CreoJS" not in body
     assert "inCreoBrowser()" not in standalone
     assert "Waiting for Creo.JS…" in open_fn
     assert "Creo.JS is not connected yet" in open_fn
@@ -1450,7 +1455,7 @@ def test_toolbar_hides_inactive_actions():
     apply_creo = _between(
         script, "function applyCreoSessionOnlyVisibility(", "function promoteCreoPillWhenSessionLive("
     )
-    assert "Set Working Directory: only when inside Creo" in apply_creo
+    assert "Set Working Directory + Collect metadata: only inside Creo" in apply_creo
     assert "el.hidden = !inSession" in apply_creo
     assert 'btn.id === "set-creo-dir-btn"' in apply_creo
     assert 'Boolean($("article.detail"))' in apply_creo
