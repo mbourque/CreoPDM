@@ -1138,6 +1138,7 @@ def test_open_model_uses_nested_cache_folder():
     assert "function creoFileOpenTypeFilter(" in base
     assert 'return "db_1"' in base
     assert "diskForTrail" in open_fn
+    assert open_fn.index("creoTryOpenViaTrail(") < open_fn.index("openAsmAsMfg(")
     # New file / Modified local: try logical tip after numbered .prt.1 fails.
     assert "creoLogicalFileName(shortDisk" in open_fn
     assert "logicalName !== shortDisk" in open_fn

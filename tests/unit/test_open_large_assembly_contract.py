@@ -98,6 +98,10 @@ def test_contract_embedded_open_prefers_file_open_trail():
     assert "flood retrieval/regen" in trail_fn
     assert open_fn.index("creoTryOpenViaTrail(") < open_fn.index("creoTryOpenName(")
     assert "diskForTrail" in open_fn
+    # MFG Toolkit open must not run before File > Open trail (red CAB / flash).
+    assert "do NOT openAsmAsMfg here" in open_fn or "Do NOT openAsmAsMfg" in open_fn
+    assert open_fn.index("creoTryOpenViaTrail(") < open_fn.index("openAsmAsMfg(")
+    assert "Last-resort only" in base
     script = APP_JS.read_text(encoding="utf-8")
     after_open = script.split("async function captureCreoMetadataAfterOpen(", 1)[1].split(
         "function metadataTargetsFromResult(", 1
