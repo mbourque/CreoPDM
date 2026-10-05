@@ -30,3 +30,34 @@ def test_names_referenced_uses_matcher_for_large_candidate_sets(tmp_path):
     found = names_referenced_in_model(asm, candidates)
     assert "pin.prt" in {item.lower() for item in found}
     assert "part0.prt" not in {item.lower() for item in found}
+
+
+def test_read_model_scan_blob_includes_utf16le_component_names(tmp_path):
+    from creopdm.utils.creo_dependencies import read_model_scan_blob
+
+    asm = tmp_path / "top.asm.1"
+    # Creo often stores component names as UTF-16LE wide strings.
+    wide = "at311912".encode("utf-16le")
+    asm.write_bytes(b"header\x00" + wide + b"\x00footer")
+    blob = read_model_scan_blob(asm)
+    assert b"at311912" in blob
+    matcher = CadNameMatcher(
+        ["at311912.asm"],
+        include_stems=True,
+        require_boundaries=True,
+        min_stem_len=4,
+        unique_stems_only=True,
+    )
+    assert matcher.find(blob) == {"at311912.asm"}
+
+
+def test_hyphen_glues_creo_name_boundaries():
+    """Creo allows hyphens — do not treat foo inside foo-bar as a member."""
+    matcher = CadNameMatcher(
+        ["foo.asm", "foo-bar.asm"],
+        include_stems=True,
+        require_boundaries=True,
+        unique_stems_only=True,
+    )
+    assert matcher.find(b"\x00foo-bar\x00") == {"foo-bar.asm"}
+    assert "foo.asm" not in matcher.find(b"\x00foo-bar\x00")

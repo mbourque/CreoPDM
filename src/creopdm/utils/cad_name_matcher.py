@@ -14,11 +14,12 @@ from creopdm.creo.file_manager import CreoFileManager
 
 
 def is_creo_name_char(byte: int) -> bool:
-    """Alphanumeric or underscore — characters that glue Creo names together."""
+    """Characters that glue Creo names together (alnum, underscore, hyphen)."""
     return (
         48 <= byte <= 57  # 0-9
         or 97 <= byte <= 122  # a-z (blob is lowercased)
         or byte == 95  # _
+        or byte == 45  # - (allowed in Creo model names)
     )
 
 
@@ -74,7 +75,7 @@ class CadNameMatcher:
             (not include_stems) if require_boundaries is None else bool(require_boundaries)
         )
         logicals: list[str] = []
-        stem_counts: dict[str, int] = {}
+        stem_to_logicals: dict[str, list[str]] = {}
         for name in filenames:
             logical = CreoFileManager.normalize_creo_filename(name).lower()
             if not logical:
@@ -83,17 +84,24 @@ class CadNameMatcher:
             if include_stems:
                 stem = Path(logical).stem.lower()
                 if stem:
-                    stem_counts[stem] = stem_counts.get(stem, 0) + 1
+                    bucket = stem_to_logicals.setdefault(stem, [])
+                    if logical not in bucket:
+                        bucket.append(logical)
 
         token_to_logicals: dict[bytes, list[str]] = {}
         for logical in logicals:
             tokens = {logical.encode("ascii", "ignore")}
             if include_stems:
                 stem = Path(logical).stem.lower()
-                if len(stem) >= max(2, int(min_stem_len)) and (
-                    not unique_stems_only or stem_counts.get(stem, 0) == 1
-                ):
-                    tokens.add(stem.encode("ascii", "ignore"))
+                if len(stem) >= max(2, int(min_stem_len)):
+                    peers = stem_to_logicals.get(stem) or [logical]
+                    allow_stem = True
+                    if unique_stems_only and len(peers) > 1:
+                        # Prefer the sole .asm when part+asm share a Creo name.
+                        asms = [row for row in peers if Path(row).suffix == ".asm"]
+                        allow_stem = len(asms) == 1 and asms[0] == logical
+                    if allow_stem:
+                        tokens.add(stem.encode("ascii", "ignore"))
             for token in tokens:
                 if len(token) < 2:
                     continue

@@ -55,16 +55,18 @@ def test_rebuild_uses_bounded_unique_stems_for_creo_component_names():
     assert "unique_stems_only=True" in text
 
 
-def test_matcher_skips_ambiguous_stems_when_unique_only():
+def test_matcher_prefers_asm_when_part_and_asm_share_stem():
     matcher = CadNameMatcher(
         ["shaft.prt", "shaft.asm", "pin.prt"],
         include_stems=True,
         require_boundaries=True,
         unique_stems_only=True,
     )
-    assert matcher.find(b"\x00shaft\x00") == set()
+    # Bare "shaft" → assembly (Top Level needs sub-asm edges).
+    assert matcher.find(b"\x00shaft\x00") == {"shaft.asm"}
     assert matcher.find(b"\x00pin\x00") == {"pin.prt"}
     assert matcher.find(b"\x00shaft.prt\x00") == {"shaft.prt"}
+
 
 
 def test_matcher_with_stems_still_finds_extensionless_for_open():

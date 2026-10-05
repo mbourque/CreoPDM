@@ -38,8 +38,31 @@ def needs_open_dependencies(object_type: str, filename: str) -> bool:
     return Path(logical).suffix.lower() in _NEEDS_DEPENDENCY_SUFFIXES
 
 
+def _utf16le_ascii_runs(raw: bytes) -> bytes:
+    """Collapse UTF-16LE ASCII runs to contiguous bytes (Creo wide component names)."""
+    out = bytearray()
+    index = 0
+    length = len(raw)
+    while index + 1 < length:
+        if raw[index + 1] == 0 and 32 <= raw[index] < 127:
+            start = index
+            while index + 1 < length and raw[index + 1] == 0 and 32 <= raw[index] < 127:
+                index += 2
+            # At least 2 characters (4 bytes) — skip noise.
+            if index - start >= 4:
+                out.extend(raw[pos] for pos in range(start, index, 2))
+                out.append(0)
+            continue
+        index += 1
+    return bytes(out)
+
+
 def read_model_scan_blob(path: Path) -> bytes:
-    """Read up to ``_SCAN_LIMIT`` bytes from a Creo file (lowercased)."""
+    """Read up to ``_SCAN_LIMIT`` bytes from a Creo file (lowercased).
+
+    Appends collapsed UTF-16LE ASCII runs so bare component names stored as
+    wide strings still match the same CadNameMatcher tokens.
+    """
     if not path.is_file():
         return b""
     try:
@@ -48,7 +71,11 @@ def read_model_scan_blob(path: Path) -> bytes:
             blob = handle.read(min(size, _SCAN_LIMIT))
     except OSError:
         return b""
-    return blob.lower()
+    lower = blob.lower()
+    wide = _utf16le_ascii_runs(blob)
+    if not wide:
+        return lower
+    return lower + b"\x00" + wide.lower()
 
 
 def names_referenced_in_model(
