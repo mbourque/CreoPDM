@@ -32,6 +32,7 @@ from creopdm.services.object_service import ObjectService
 from creopdm.utils.creo_dependencies import (
     model_references_filename,
     needs_open_dependencies,
+    _WHERE_USED_SCAN_LIMIT,
     read_model_scan_blob,
 )
 from creopdm.utils.creo_model_class import normalize_creo_identity
@@ -568,7 +569,8 @@ class MetadataService:
                 )
                 missing += 1
                 continue
-            blob = read_model_scan_blob(path)
+            # Full tip — component tables are often past the 8 MiB Open window.
+            blob = read_model_scan_blob(path, max_bytes=_WHERE_USED_SCAN_LIMIT)
             found = matcher.find(blob) if blob else set()
             child_ids: set[int] = set()
             for name in found:
@@ -578,9 +580,19 @@ class MetadataService:
                 child = by_key.get(logical)
                 if child is None and "." not in logical and len(logical) >= 4:
                     rows = stem_to_rows.get(logical) or []
-                    # Ambiguous stems (part + asm same name) — skip.
                     if len(rows) == 1:
                         child = rows[0]
+                    else:
+                        asms = [
+                            row
+                            for row in rows
+                            if Path(
+                                CreoFileManager.normalize_creo_filename(row.filename)
+                            ).suffix.lower()
+                            == ".asm"
+                        ]
+                        if len(asms) == 1:
+                            child = asms[0]
                 if child is None or child.id == parent.id:
                     continue
                 child_ids.add(child.id)

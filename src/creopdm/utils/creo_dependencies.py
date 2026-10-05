@@ -21,7 +21,10 @@ _NEEDS_DEPENDENCIES = frozenset({
     "CREO_DRAWING",
 })
 _NEEDS_DEPENDENCY_SUFFIXES = frozenset({".asm", ".drw"})
+# Open / Finding dependencies — keep small so one request cannot wedge the worker.
 _SCAN_LIMIT = 8 * 1024 * 1024
+# Rebuild Where Used is background; read the whole tip (component tables can sit late).
+_WHERE_USED_SCAN_LIMIT: int | None = None
 # Below this, plain ``in`` checks are cheaper than building an automaton.
 _MATCHER_THRESHOLD = 48
 # Safety caps for deep assembly trees.
@@ -57,8 +60,11 @@ def _utf16le_ascii_runs(raw: bytes) -> bytes:
     return bytes(out)
 
 
-def read_model_scan_blob(path: Path) -> bytes:
-    """Read up to ``_SCAN_LIMIT`` bytes from a Creo file (lowercased).
+def read_model_scan_blob(path: Path, *, max_bytes: int | None = _SCAN_LIMIT) -> bytes:
+    """Read Creo tip bytes (lowercased) for name matching.
+
+    Default ``max_bytes`` is the Open scan window. Pass ``None`` (or
+    ``_WHERE_USED_SCAN_LIMIT``) from Rebuild so late component tables are not missed.
 
     Appends collapsed UTF-16LE ASCII runs so bare component names stored as
     wide strings still match the same CadNameMatcher tokens.
@@ -67,8 +73,9 @@ def read_model_scan_blob(path: Path) -> bytes:
         return b""
     try:
         size = path.stat().st_size
+        take = size if max_bytes is None else min(size, int(max_bytes))
         with path.open("rb") as handle:
-            blob = handle.read(min(size, _SCAN_LIMIT))
+            blob = handle.read(take)
     except OSError:
         return b""
     lower = blob.lower()

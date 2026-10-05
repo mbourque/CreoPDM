@@ -111,6 +111,12 @@ def test_open_dependency_walk_prefers_folder_scope_before_product():
     assert "include_stems=not strict" in text
     # 2500 open deps exhausted QueuePool and took the site down.
     assert "_MAX_OPEN_DEPENDENCIES_TOTAL = 150" in text
+    assert "_WHERE_USED_SCAN_LIMIT" in text
+
+
+def test_rebuild_reads_full_tip_for_where_used():
+    text = Path("src/creopdm/services/metadata_service.py").read_text(encoding="utf-8")
+    assert "max_bytes=_WHERE_USED_SCAN_LIMIT" in text
 
 
 def test_open_deps_do_not_materialize_during_find():
