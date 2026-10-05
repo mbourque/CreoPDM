@@ -196,7 +196,11 @@ class CheckoutService:
                 user,
                 product_id=product.id,
                 object_id=obj.id,
-                details={"workspace": str(workspace_file)},
+                details={
+                    "filename": obj.filename,
+                    "object_uuid": obj.uuid,
+                    "workspace": str(workspace_file),
+                },
             )
             logger.info("Checked out %s by %s", obj.filename, user.user_name)
             return record
@@ -251,7 +255,11 @@ class CheckoutService:
                 user,
                 product_id=product.id,
                 object_id=obj.id,
-                details={"workspace": str(workspace_file)},
+                details={
+                    "filename": obj.filename,
+                    "object_uuid": obj.uuid,
+                    "workspace": str(workspace_file),
+                },
             )
             logger.info("Cancelled checkout of %s", obj.filename)
 
@@ -285,6 +293,7 @@ class CheckoutService:
                 object_id=obj.id,
                 details={
                     "filename": obj.filename,
+                    "object_uuid": obj.uuid,
                     "workspace": str(workspace_file),
                     "previous_user": previous_user,
                     "previous_machine": previous_machine,

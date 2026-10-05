@@ -33,6 +33,30 @@ _REDACT_DETAIL_KEYS = frozenset(
     }
 )
 
+ACTION_LABELS: dict[str, str] = {
+    ActivityAction.PRODUCT_CREATED.value: "Product created",
+    ActivityAction.PRODUCT_UPDATED.value: "Product updated",
+    ActivityAction.OBJECT_ADDED.value: "Object added",
+    ActivityAction.OBJECT_REMOVED.value: "Object removed",
+    ActivityAction.WORKSPACE_CLEARED.value: "Workspace cleared",
+    ActivityAction.CHECKED_OUT.value: "Checked out",
+    ActivityAction.CHECKOUT_CANCELLED.value: "Checkout cancelled",
+    ActivityAction.CHECKOUT_OVERRIDE.value: "Checkout override",
+    ActivityAction.CHECKED_IN.value: "Checked in",
+    ActivityAction.VERSION_RESTORED.value: "Version restored",
+    ActivityAction.VAULT_HISTORY_COMPACTED.value: "Vault history compacted",
+    ActivityAction.PRODUCT_DB_REBUILT.value: "Product DB rebuilt",
+    ActivityAction.USER_CREATED.value: "User created",
+    ActivityAction.USER_DISABLED.value: "User disabled",
+    ActivityAction.USER_ENABLED.value: "User enabled",
+    ActivityAction.USER_LOGIN.value: "Signed in",
+    ActivityAction.USER_LOGOUT.value: "Signed out",
+    ActivityAction.LOGIN_FAILED.value: "Sign-in failed",
+    ActivityAction.ROLE_CHANGED.value: "Role changed",
+    ActivityAction.MEMBERSHIP_CHANGED.value: "Membership changed",
+    ActivityAction.SYSTEM_SETTING_CHANGED.value: "System setting changed",
+}
+
 
 def redact_audit_details(details: dict[str, Any] | None) -> dict[str, Any] | None:
     """Drop or mask secret-bearing fields before persisting audit event_data."""
@@ -53,12 +77,18 @@ def redact_audit_details(details: dict[str, Any] | None) -> dict[str, Any] | Non
     return out
 
 
+def action_label(action: str) -> str:
+    key = (action or "").strip()
+    return ACTION_LABELS.get(key, key or "—")
+
+
 @dataclass(frozen=True)
 class AuditEventRow:
     """Display row for Utilities → Audit log."""
 
     uuid: str
     action: str
+    action_label: str
     timestamp: datetime | None
     user: str
     user_uuid: str | None
@@ -113,6 +143,7 @@ class ActivityService:
         username: str | None = None,
         product_uuid: str | None = None,
         object_query: str | None = None,
+        q: str | None = None,
         since: datetime | None = None,
         until: datetime | None = None,
         limit: int = AUDIT_PAGE_SIZE,
@@ -120,13 +151,15 @@ class ActivityService:
         """Newest-first audit rows for Utilities → Audit log."""
         take = max(1, min(int(limit or AUDIT_PAGE_SIZE), AUDIT_PAGE_SIZE))
         stmt = select(Activity).order_by(Activity.timestamp.desc(), Activity.id.desc())
+        joined_product = False
+        joined_object = False
 
         action_key = (action or "").strip()
         if action_key:
             stmt = stmt.where(Activity.action == action_key)
         user_key = (username or "").strip()
         if user_key:
-            stmt = stmt.where(Activity.user.ilike(f"%{user_key}%"))
+            stmt = stmt.where(Activity.user == user_key)
         if since is not None:
             stmt = stmt.where(Activity.timestamp >= since)
         if until is not None:
@@ -137,10 +170,10 @@ class ActivityService:
             stmt = stmt.join(Product, Activity.product_id == Product.id).where(
                 Product.uuid == product_key
             )
+            joined_product = True
 
         obj_key = (object_query or "").strip()
         if obj_key:
-            # Match linked object uuid/filename, or filename stored only in details_json.
             like = f"%{obj_key}%"
             stmt = stmt.outerjoin(
                 EngineeringObject, Activity.object_id == EngineeringObject.id
@@ -149,6 +182,32 @@ class ActivityService:
                     EngineeringObject.uuid == obj_key,
                     EngineeringObject.filename.ilike(like),
                     Activity.details_json.ilike(like),
+                )
+            )
+            joined_object = True
+
+        search = (q or "").strip()
+        if search:
+            like = f"%{search}%"
+            if not joined_product:
+                stmt = stmt.outerjoin(Product, Activity.product_id == Product.id)
+                joined_product = True
+            if not joined_object:
+                stmt = stmt.outerjoin(
+                    EngineeringObject, Activity.object_id == EngineeringObject.id
+                )
+                joined_object = True
+            stmt = stmt.where(
+                or_(
+                    Activity.user.ilike(like),
+                    Activity.action.ilike(like),
+                    Activity.comment.ilike(like),
+                    Activity.details_json.ilike(like),
+                    Activity.machine.ilike(like),
+                    Product.name.ilike(like),
+                    Product.uuid.ilike(like),
+                    EngineeringObject.filename.ilike(like),
+                    EngineeringObject.uuid.ilike(like),
                 )
             )
 
@@ -182,14 +241,19 @@ class ActivityService:
                     details = {"raw": row.details_json}
             product = products.get(row.product_id) if row.product_id else None
             obj = objects.get(row.object_id) if row.object_id else None
-            filename = obj.filename if obj else None
-            if not filename:
-                raw_name = details.get("filename")
-                filename = str(raw_name) if raw_name else None
+            filename = _object_label(details, obj)
+            object_uuid = None
+            if obj is not None:
+                object_uuid = obj.uuid
+            else:
+                raw_uuid = details.get("object_uuid")
+                if isinstance(raw_uuid, str) and raw_uuid.strip():
+                    object_uuid = raw_uuid.strip()
             out.append(
                 AuditEventRow(
                     uuid=row.uuid,
                     action=row.action,
+                    action_label=action_label(row.action),
                     timestamp=row.timestamp,
                     user=row.user,
                     user_uuid=row.user_uuid,
@@ -197,13 +261,37 @@ class ActivityService:
                     comment=row.comment,
                     product_uuid=product.uuid if product else None,
                     product_name=product.name if product else None,
-                    object_uuid=obj.uuid if obj else None,
+                    object_uuid=object_uuid,
                     object_filename=filename,
                     summary=_event_summary(row.action, details, row.comment),
                     details=details,
                 )
             )
         return out
+
+
+def _object_label(details: dict[str, Any], obj: EngineeringObject | None) -> str | None:
+    if obj is not None and (obj.filename or "").strip():
+        return obj.filename
+    names = details.get("filenames")
+    if isinstance(names, list) and names:
+        first = str(names[0])
+        count = details.get("count")
+        total = int(count) if isinstance(count, int) and count > 0 else len(names)
+        extra = total - 1
+        if extra > 0:
+            return f"{first} (+{extra} more)"
+        return first
+    raw_name = details.get("filename")
+    if isinstance(raw_name, str) and raw_name.strip():
+        return raw_name.strip()
+    count = details.get("count")
+    if isinstance(count, int) and count > 0:
+        return f"{count} files"
+    rel = details.get("relative_path")
+    if isinstance(rel, str) and rel.strip():
+        return rel.strip().rsplit("/", 1)[-1]
+    return None
 
 
 def _event_summary(
@@ -229,10 +317,31 @@ def _event_summary(
         if isinstance(changed, list) and changed and not parts:
             parts.append(", ".join(str(item) for item in changed[:6]))
     if action in {ActivityAction.CHECKED_IN.value, "CHECKED_IN"}:
+        prev = details.get("previous_iteration")
         it = details.get("iteration")
-        if it is not None:
+        if prev is not None and it is not None:
+            parts.append(f"iteration {prev} → {it}")
+        elif it is not None:
             parts.append(f"iteration {it}")
+        commit = details.get("git_commit")
+        if commit:
+            parts.append(f"git {str(commit)[:8]}")
     if action in {
+        ActivityAction.OBJECT_ADDED.value,
+        "OBJECT_ADDED",
+        ActivityAction.OBJECT_REMOVED.value,
+        "OBJECT_REMOVED",
+        ActivityAction.CHECKED_OUT.value,
+        "CHECKED_OUT",
+    }:
+        label = _object_label(details, None)
+        if label and label not in parts:
+            parts.append(label)
+        commit = details.get("git_commit")
+        if commit and action in {ActivityAction.OBJECT_ADDED.value, "OBJECT_ADDED"}:
+            parts.append(f"git {str(commit)[:8]}")
+    if action in {
+        ActivityAction.CHECKOUT_OVERRIDE.value,
         "CHECKOUT_OVERRIDE",
         ActivityAction.CHECKOUT_CANCELLED.value,
     }:
@@ -240,28 +349,41 @@ def _event_summary(
         if prev:
             parts.append(f"was {prev}")
     if action in {
-        "USER_CREATED",
-        "USER_DISABLED",
-        "USER_ENABLED",
-        "ROLE_CHANGED",
+        ActivityAction.USER_CREATED.value,
+        ActivityAction.USER_DISABLED.value,
+        ActivityAction.USER_ENABLED.value,
+        ActivityAction.USER_LOGIN.value,
+        ActivityAction.USER_LOGOUT.value,
+        ActivityAction.LOGIN_FAILED.value,
+        ActivityAction.ROLE_CHANGED.value,
         "ROLE_ASSIGNED",
-        "MEMBERSHIP_CHANGED",
-        "SYSTEM_SETTING_CHANGED",
+        ActivityAction.MEMBERSHIP_CHANGED.value,
+        ActivityAction.SYSTEM_SETTING_CHANGED.value,
     }:
-        for key in ("username", "role", "setting", "target_user", "product"):
+        for key in (
+            "username",
+            "role",
+            "setting",
+            "target_user",
+            "product",
+            "reason",
+            "ip",
+        ):
             if details.get(key):
                 parts.append(f"{key}={details[key]}")
                 break
     if not parts:
-        filename = details.get("filename")
-        if filename:
-            parts.append(str(filename))
+        label = _object_label(details, None)
+        if label:
+            parts.append(label)
     return " · ".join(parts) if parts else ""
 
 
 __all__ = [
+    "ACTION_LABELS",
     "AUDIT_PAGE_SIZE",
     "ActivityService",
     "AuditEventRow",
+    "action_label",
     "redact_audit_details",
 ]

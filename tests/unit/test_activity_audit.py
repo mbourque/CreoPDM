@@ -7,18 +7,30 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import inspect, select
 
-from creopdm.app import build_context
+from creopdm.app import build_context, create_app
 from creopdm.config import ConfigManager
 from creopdm.constants import ActivityAction
 from creopdm.models.activity import Activity
 from creopdm.services.activity_service import ActivityService, redact_audit_details
 from creopdm.utils.identity import StaticUserProvider, UserIdentity
+from fastapi.testclient import TestClient
 from tests.conftest import requires_git
 
 
 @pytest.fixture()
 def ctx(data_dir):
     return build_context(ConfigManager(), users=StaticUserProvider("Alice", "ENG-PC-17"))
+
+
+@pytest.fixture()
+def auth_ctx(data_dir):
+    return build_context(ConfigManager())
+
+
+@pytest.fixture()
+def auth_client(auth_ctx):
+    with TestClient(create_app(auth_ctx)) as client:
+        yield client
 
 
 def test_activity_model_has_audit_columns(ctx):
@@ -58,8 +70,19 @@ def test_list_events_filters_action_user_and_object(ctx):
             db,
             ActivityAction.CHECKED_IN,
             other,
-            details={"filename": "bracket.prt", "iteration": 2},
+            details={
+                "filename": "bracket.prt",
+                "iteration": 2,
+                "previous_iteration": 1,
+                "git_commit": "8fa24c1abcdef",
+            },
             comment="fix hole",
+        )
+        svc.record(
+            db,
+            ActivityAction.OBJECT_ADDED,
+            actor,
+            details={"count": 3, "filenames": ["a.prt", "b.prt", "c.prt"], "filename": "a.prt"},
         )
         svc.record(
             db,
@@ -72,15 +95,26 @@ def test_list_events_filters_action_user_and_object(ctx):
         by_action = svc.list_events(db, action=ActivityAction.CHECKED_IN.value)
         assert len(by_action) == 1
         assert by_action[0].action == ActivityAction.CHECKED_IN.value
+        assert by_action[0].action_label == "Checked in"
         assert by_action[0].object_filename == "bracket.prt"
-        assert "iteration 2" in by_action[0].summary
+        assert "iteration 1 → 2" in by_action[0].summary
+        assert "git 8fa24c1" in by_action[0].summary
 
-        by_user = svc.list_events(db, username="ali")
+        by_user = svc.list_events(db, username="Alice")
         assert {row.user for row in by_user} == {"Alice"}
 
         by_object = svc.list_events(db, object_query="bracket")
         assert len(by_object) == 1
         assert by_object[0].comment == "fix hole"
+
+        by_search = svc.list_events(db, q="bracket")
+        assert len(by_search) == 1
+        assert by_search[0].object_filename == "bracket.prt"
+
+        added = svc.list_events(db, action=ActivityAction.OBJECT_ADDED.value)
+        assert len(added) == 1
+        assert added[0].object_filename == "a.prt (+2 more)"
+        assert "a.prt" in added[0].summary
 
         settings_rows = svc.list_events(
             db, action=ActivityAction.SYSTEM_SETTING_CHANGED.value
@@ -90,6 +124,92 @@ def test_list_events_filters_action_user_and_object(ctx):
 
         since = datetime.now(timezone.utc) + timedelta(days=1)
         assert svc.list_events(db, since=since) == []
+
+
+@requires_git
+def test_checkin_audit_includes_prev_iteration_and_commit(client, data_dir):
+    created = client.post("/api/products", json={"name": "Audit Checkin"})
+    assert created.status_code == 201, created.text
+    product = created.json()
+    added = client.post(
+        f"/api/products/{product['uuid']}/objects",
+        files={"file": ("pin.prt", b"pin-v1", "application/octet-stream")},
+        data={"comment": "Add pin"},
+    )
+    assert added.status_code == 201, added.text
+    obj = added.json()
+    assert client.post(f"/api/objects/{obj['uuid']}/checkout").status_code == 200
+    vault_folder = product.get("vault_folder") or product["uuid"]
+    workspace = data_dir / "vaults" / vault_folder / "pin.prt"
+    workspace.write_bytes(b"pin-v2")
+    checked = client.post(
+        f"/api/objects/{obj['uuid']}/checkin",
+        json={"comment": "Grew the pin"},
+    )
+    assert checked.status_code == 200, checked.text
+
+    with client.app.state.ctx.session_factory() as db:
+        from creopdm.services.activity_service import ActivityService
+
+        rows = ActivityService().list_events(db, action=ActivityAction.CHECKED_IN.value)
+        assert rows
+        row = rows[0]
+        assert row.details.get("previous_iteration") == 1
+        assert row.details.get("iteration") == 2
+        assert row.details.get("git_commit")
+        assert row.object_filename == "pin.prt"
+        assert "iteration 1 → 2" in row.summary
+        assert "git " in row.summary
+
+
+def test_login_logout_and_failed_login_are_audited(auth_client, auth_ctx):
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "email": "admin@example.com",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    with auth_ctx.session_factory() as db:
+        from creopdm.services.activity_service import ActivityService
+
+        logins = ActivityService().list_events(db, action=ActivityAction.USER_LOGIN.value)
+        # setup signs in without going through /login — no USER_LOGIN required here.
+        assert isinstance(logins, list)
+
+    bad = auth_client.post(
+        "/login",
+        data={"username": "admin", "password": "WrongPass1"},
+        follow_redirects=False,
+    )
+    assert bad.status_code == 400
+    with auth_ctx.session_factory() as db:
+        from creopdm.services.activity_service import ActivityService
+
+        fails = ActivityService().list_events(db, action=ActivityAction.LOGIN_FAILED.value)
+        assert fails
+        assert fails[0].details.get("reason") == "bad_password"
+
+    ok = auth_client.post(
+        "/login",
+        data={"username": "admin", "password": "AdminPass1"},
+        follow_redirects=False,
+    )
+    assert ok.status_code in {302, 303}
+    auth_client.get("/logout", follow_redirects=False)
+    with auth_ctx.session_factory() as db:
+        from creopdm.services.activity_service import ActivityService
+
+        logins = ActivityService().list_events(db, action=ActivityAction.USER_LOGIN.value)
+        logouts = ActivityService().list_events(db, action=ActivityAction.USER_LOGOUT.value)
+        assert logins
+        assert logouts
+        assert logins[0].user == "admin"
+        assert logouts[0].user == "admin"
 
 
 @requires_git

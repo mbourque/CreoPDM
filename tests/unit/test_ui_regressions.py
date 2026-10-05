@@ -1950,12 +1950,19 @@ def test_admin_hub_panel_fills_full_width():
     ).read_text(encoding="utf-8")
     assert 'id="utilities-audit-filters"' in audit_util
     assert 'id="utilities-audit-table"' in audit_util
+    assert 'id="audit-q"' in audit_util
+    assert 'name="q"' in audit_util
     assert 'name="action"' in audit_util
     assert 'name="username"' in audit_util
     assert 'name="product_uuid"' in audit_util
     assert 'name="object"' in audit_util
+    assert "<select" in audit_util
+    assert "product_choices" in audit_util
+    assert "user_choices" in audit_util
+    assert "action_label" in audit_util
     assert "not the vault Git history" in audit_util
     assert "cannot be edited or deleted" in audit_util
+    assert "audit-filter-grid" in css
     avail_util = (
         ROOT / "src" / "creopdm" / "templates" / "admin_utilities_availability.html"
     ).read_text(encoding="utf-8")
@@ -2127,6 +2134,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "Audit log" in docs
     assert "seven hub tiles" in docs
     assert "Git is not the audit source" in docs or "not the vault Git history" in docs
+    assert "Search" in docs or "dropdowns" in docs
     assert "Compacting vault history" in docs
     assert "Availability" in docs
     assert "/admin/utilities/availability" in docs or "Utilities**" in docs

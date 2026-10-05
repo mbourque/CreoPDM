@@ -110,6 +110,64 @@ def _login_session(request: Request, user: User) -> None:
     )
 
 
+def _client_ip(request: Request) -> str | None:
+    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if forwarded:
+        return forwarded[:128]
+    if request.client and request.client.host:
+        return str(request.client.host)[:128]
+    return None
+
+
+def _audit_web_identity(
+    *,
+    username: str | None = None,
+    user: User | None = None,
+) -> UserIdentity:
+    if user is not None:
+        return UserIdentity(
+            user_name=user.username,
+            machine_name="web",
+            user_uuid=user.uuid,
+            display_name=user.display_name,
+        )
+    name = (username or "").strip() or "anonymous"
+    return UserIdentity(user_name=name[:128], machine_name="web")
+
+
+def _record_auth_audit(
+    ctx: AppContext,
+    db: Session,
+    action: ActivityAction,
+    *,
+    request: Request,
+    username: str | None = None,
+    user: User | None = None,
+    reason: str | None = None,
+) -> None:
+    """Best-effort auth audit write (never blocks sign-in UI)."""
+    details: dict = {}
+    if reason:
+        details["reason"] = reason
+    ip = _client_ip(request)
+    if ip:
+        details["ip"] = ip
+    if user is not None:
+        details["username"] = user.username
+    elif username:
+        details["username"] = (username or "").strip()[:128]
+    try:
+        ctx.activities.record(
+            db,
+            action,
+            _audit_web_identity(username=username, user=user),
+            details=details or None,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
 def _audit_actor(ctx: AppContext) -> UserIdentity:
     """Session identity for audit rows (falls back only when auth is off)."""
     return ctx.users.get_current_user()
@@ -314,6 +372,13 @@ def login_submit(
         user = ctx.user_accounts.authenticate(db, username, password)
         db.commit()
         _login_session(request, user)
+        _record_auth_audit(
+            ctx,
+            db,
+            ActivityAction.USER_LOGIN,
+            request=request,
+            user=user,
+        )
         if user.must_change_password:
             return RedirectResponse("/account/password", status_code=303)
         caps = caps_for_user(ctx.user_accounts, user)
@@ -332,9 +397,27 @@ def login_submit(
         )
         if show_forgot:
             forgot_token = _grant_forgot_password(request, known.username)
+            fail_reason = "bad_password"
         else:
             _clear_forgot_password_grant(request)
             forgot_token = ""
+            if known is None:
+                fail_reason = "unknown_user"
+            elif known.status != UserStatus.ACTIVE.value:
+                fail_reason = "disabled"
+            elif not (username or "").strip() or not (password or "").strip():
+                fail_reason = "empty_fields"
+            else:
+                fail_reason = "rejected"
+        _record_auth_audit(
+            ctx,
+            db,
+            ActivityAction.LOGIN_FAILED,
+            request=request,
+            username=username,
+            user=known if known is not None and known.status == UserStatus.ACTIVE.value else None,
+            reason=fail_reason,
+        )
         return templates.TemplateResponse(
             request,
             "auth_login.html",
@@ -524,7 +607,21 @@ def reset_password_submit(
 
 @router.get("/logout")
 @router.post("/logout")
-def logout(request: Request):
+def logout(
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
+    if user is not None:
+        _record_auth_audit(
+            ctx,
+            db,
+            ActivityAction.USER_LOGOUT,
+            request=request,
+            user=user,
+        )
     _clear_session(request)
     return RedirectResponse("/login", status_code=303)
 
@@ -2553,27 +2650,9 @@ def _utilities_delete_products_response(
 
 def _audit_action_choices() -> list[tuple[str, str]]:
     """Stable filter labels for Utilities → Audit log."""
-    labels = {
-        ActivityAction.PRODUCT_CREATED: "Product created",
-        ActivityAction.PRODUCT_UPDATED: "Product updated",
-        ActivityAction.OBJECT_ADDED: "Object added",
-        ActivityAction.OBJECT_REMOVED: "Object removed",
-        ActivityAction.WORKSPACE_CLEARED: "Workspace cleared",
-        ActivityAction.CHECKED_OUT: "Checked out",
-        ActivityAction.CHECKOUT_CANCELLED: "Checkout cancelled",
-        ActivityAction.CHECKOUT_OVERRIDE: "Checkout override",
-        ActivityAction.CHECKED_IN: "Checked in",
-        ActivityAction.VERSION_RESTORED: "Version restored",
-        ActivityAction.VAULT_HISTORY_COMPACTED: "Vault history compacted",
-        ActivityAction.PRODUCT_DB_REBUILT: "Product DB rebuilt",
-        ActivityAction.USER_CREATED: "User created",
-        ActivityAction.USER_DISABLED: "User disabled",
-        ActivityAction.USER_ENABLED: "User enabled",
-        ActivityAction.ROLE_CHANGED: "Role changed",
-        ActivityAction.MEMBERSHIP_CHANGED: "Membership changed",
-        ActivityAction.SYSTEM_SETTING_CHANGED: "System setting changed",
-    }
-    return [(action.value, labels.get(action, action.value)) for action in labels]
+    from creopdm.services.activity_service import ACTION_LABELS
+
+    return sorted(ACTION_LABELS.items(), key=lambda item: item[1].casefold())
 
 
 def _parse_audit_day(raw: str | None, *, end_of_day: bool = False):
@@ -2592,12 +2671,49 @@ def _parse_audit_day(raw: str | None, *, end_of_day: bool = False):
     return day
 
 
+def _audit_filter_choices(ctx: AppContext, db: Session) -> dict:
+    """Dropdown choices: product name (uuid value), users by username."""
+    from sqlalchemy import distinct, select
+
+    from creopdm.models.activity import Activity
+    from creopdm.models.product import Product
+
+    products = list(
+        db.scalars(select(Product).order_by(Product.name.asc(), Product.id.asc())).all()
+    )
+    product_choices = [
+        {
+            "uuid": p.uuid,
+            "label": f"{p.name} ({p.uuid[:8]}…)" if p.uuid else p.name,
+        }
+        for p in products
+    ]
+
+    users = list(ctx.user_accounts.list_users(db))
+    by_username = {u.username: u for u in users}
+    seen_names = set(by_username)
+    for name in db.scalars(select(distinct(Activity.user)).order_by(Activity.user.asc())).all():
+        text = (name or "").strip()
+        if text:
+            seen_names.add(text)
+    user_choices = []
+    for name in sorted(seen_names, key=str.casefold):
+        known = by_username.get(name)
+        if known is not None:
+            label = f"{known.display_name} ({known.username})"
+        else:
+            label = f"{name} (no longer in users)"
+        user_choices.append({"username": name, "label": label})
+    return {"product_choices": product_choices, "user_choices": user_choices}
+
+
 def _utilities_audit_response(
     request: Request,
     ctx: AppContext,
     db: Session,
     manager: User,
     *,
+    q: str = "",
     since: str = "",
     until: str = "",
     action: str = "",
@@ -2613,9 +2729,11 @@ def _utilities_audit_response(
         username=username or None,
         product_uuid=product_uuid or None,
         object_query=object_query or None,
+        q=q or None,
         since=_parse_audit_day(since),
         until=_parse_audit_day(until, end_of_day=True),
     )
+    choices = _audit_filter_choices(ctx, db)
     return templates.TemplateResponse(
         request,
         "admin_utilities_audit.html",
@@ -2624,7 +2742,10 @@ def _utilities_audit_response(
             "events": events,
             "page_size": AUDIT_PAGE_SIZE,
             "action_choices": _audit_action_choices(),
+            "product_choices": choices["product_choices"],
+            "user_choices": choices["user_choices"],
             "filters": {
+                "q": q or "",
                 "since": since or "",
                 "until": until or "",
                 "action": action or "",
@@ -2734,6 +2855,7 @@ def admin_utilities_delete_products_page(
 @router.get("/admin/utilities/audit", response_class=HTMLResponse)
 def admin_utilities_audit_page(
     request: Request,
+    q: str = Query(""),
     since: str = Query(""),
     until: str = Query(""),
     action: str = Query(""),
@@ -2751,6 +2873,7 @@ def admin_utilities_audit_page(
         ctx,
         db,
         manager,
+        q=q,
         since=since,
         until=until,
         action=action,

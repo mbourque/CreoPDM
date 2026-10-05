@@ -19,34 +19,52 @@
   <form method="get" action="/admin/utilities/audit" class="settings-form settings-form-wide" id="utilities-audit-filters">
     <section class="settings-card">
       <h2>Filters</h2>
-      <div class="form-row">
-        <label for="audit-since">From date</label>
-        <input id="audit-since" name="since" type="date" value="{{ filters.since }}">
-      </div>
-      <div class="form-row">
-        <label for="audit-until">To date</label>
-        <input id="audit-until" name="until" type="date" value="{{ filters.until }}">
-      </div>
-      <div class="form-row">
-        <label for="audit-action">Event</label>
-        <select id="audit-action" name="action">
-          <option value="">All events</option>
-          {% for key, label in action_choices %}
-          <option value="{{ key }}" {% if filters.action == key %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="form-row">
-        <label for="audit-username">User</label>
-        <input id="audit-username" name="username" type="text" value="{{ filters.username }}" placeholder="Username contains…">
-      </div>
-      <div class="form-row">
-        <label for="audit-product">Product UUID</label>
-        <input id="audit-product" name="product_uuid" type="text" value="{{ filters.product_uuid }}" placeholder="Exact product UUID" class="mono">
-      </div>
-      <div class="form-row">
-        <label for="audit-object">Object</label>
-        <input id="audit-object" name="object" type="text" value="{{ filters.object }}" placeholder="Object UUID or filename contains…">
+      <div class="audit-filter-grid">
+        <div class="form-row audit-filter-search">
+          <label for="audit-q">Search</label>
+          <input id="audit-q" name="q" type="search" value="{{ filters.q }}"
+                 placeholder="User, file, product, comment, commit…">
+        </div>
+        <div class="form-row">
+          <label for="audit-action">Event</label>
+          <select id="audit-action" name="action">
+            <option value="">All events</option>
+            {% for key, label in action_choices %}
+            <option value="{{ key }}" {% if filters.action == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="audit-username">User</label>
+          <select id="audit-username" name="username">
+            <option value="">All users</option>
+            {% for choice in user_choices %}
+            <option value="{{ choice.username }}" {% if filters.username == choice.username %}selected{% endif %}>{{ choice.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="audit-product">Product</label>
+          <select id="audit-product" name="product_uuid">
+            <option value="">All products</option>
+            {% for choice in product_choices %}
+            <option value="{{ choice.uuid }}" {% if filters.product_uuid == choice.uuid %}selected{% endif %}>{{ choice.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="audit-object">Object</label>
+          <input id="audit-object" name="object" type="text" value="{{ filters.object }}"
+                 placeholder="Filename or object UUID">
+        </div>
+        <div class="form-row">
+          <label for="audit-since">From date</label>
+          <input id="audit-since" name="since" type="date" value="{{ filters.since }}">
+        </div>
+        <div class="form-row">
+          <label for="audit-until">To date</label>
+          <input id="audit-until" name="until" type="date" value="{{ filters.until }}">
+        </div>
       </div>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Apply filters</button>
@@ -76,7 +94,9 @@
         {% for row in events %}
         <tr>
           <td class="mono">{{ row.timestamp | local_time if row.timestamp else "—" }}</td>
-          <td class="mono">{{ row.action }}</td>
+          <td>
+            <span title="{{ row.action }}">{{ row.action_label }}</span>
+          </td>
           <td>{{ row.user or "—" }}</td>
           <td>{{ row.machine or "—" }}</td>
           <td>

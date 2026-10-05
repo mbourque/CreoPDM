@@ -189,8 +189,9 @@ class CheckinService:
                 logger.exception("Git store failed during check-in of %s", obj.filename)
                 raise
 
+            previous_iteration = int(obj.iteration or 0)
             now = datetime.now(timezone.utc)
-            new_iteration = obj.iteration + 1
+            new_iteration = previous_iteration + 1
             tip_name = Path(new_relative).name
             obj.filename = tip_name
             obj.relative_path = new_relative
@@ -248,7 +249,16 @@ class CheckinService:
                 user,
                 product_id=product.id,
                 object_id=obj.id,
-                details={"iteration": new_iteration, "comment": message, "added": to_add},
+                details={
+                    "filename": tip_name,
+                    "relative_path": new_relative,
+                    "iteration": new_iteration,
+                    "previous_iteration": previous_iteration,
+                    "git_commit": (git_hash or previous_git or "")[:40] or None,
+                    "comment": message,
+                    "added": to_add,
+                },
+                comment=message,
             )
             logger.info("Checked in %s as %s.%s", obj.filename, obj.revision, new_iteration)
             session.refresh(obj)

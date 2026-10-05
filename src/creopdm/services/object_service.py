@@ -321,7 +321,12 @@ class ObjectService:
                     user,
                     product_id=product.id,
                     object_id=None,
-                    details={"filename": filename, "relative_path": relative, "uuid": uuid_value},
+                    details={
+                        "filename": filename,
+                        "relative_path": relative,
+                        "object_uuid": uuid_value,
+                        "uuid": uuid_value,
+                    },
                 )
             except Exception as exc:
                 logger.exception("Metadata failed after unregistering %s", relative)
@@ -395,6 +400,7 @@ class ObjectService:
                     object_id=None,
                     details={
                         "count": count,
+                        "filename": summaries[0]["filename"] if summaries else None,
                         "filenames": [item["filename"] for item in summaries[:20]],
                     },
                 )
@@ -639,7 +645,9 @@ class ObjectService:
                         user.user_name,
                         now,
                     )
-                    self._record_import_activity(session, product, git_plans, user)
+                    self._record_import_activity(
+                        session, product, git_plans, user, git_hash=git_hash
+                    )
                     destinations = [
                         ensure_within(repo, repo / Path(plan.relative)) for plan in git_plans
                     ]
@@ -902,18 +910,33 @@ class ObjectService:
             obj.updated_at = now
         session.flush()
 
-    def _record_import_activity(self, session: Session, product: Product, plans: list[_ImportPlan], user) -> None:
+    def _record_import_activity(
+        self,
+        session: Session,
+        product: Product,
+        plans: list[_ImportPlan],
+        user,
+        *,
+        git_hash: str | None = None,
+    ) -> None:
         new_plans = [plan for plan in plans if plan.kind == "new"]
         later_plans = [plan for plan in plans if plan.kind == "later"]
+        commit = (git_hash or "")[:40] or None
         if len(new_plans) == 1:
             plan = new_plans[0]
+            existing = plan.existing
             self._activities.record(
                 session,
                 ActivityAction.OBJECT_ADDED,
                 user,
                 product_id=product.id,
-                object_id=plan.existing.id if plan.existing is not None else None,
-                details={"filename": plan.stored_name, "relative_path": plan.relative},
+                object_id=existing.id if existing is not None else None,
+                details={
+                    "filename": plan.stored_name,
+                    "relative_path": plan.relative,
+                    "object_uuid": existing.uuid if existing is not None else None,
+                    "git_commit": commit,
+                },
             )
         elif new_plans:
             self._activities.record(
@@ -924,22 +947,29 @@ class ObjectService:
                 object_id=None,
                 details={
                     "count": len(new_plans),
+                    "filename": new_plans[0].stored_name,
                     "filenames": [plan.stored_name for plan in new_plans[:20]],
+                    "git_commit": commit,
                 },
             )
         if len(later_plans) == 1:
             plan = later_plans[0]
-            iteration = plan.existing.iteration if plan.existing is not None else None
+            existing = plan.existing
+            iteration = existing.iteration if existing is not None else None
+            prev = (int(iteration) - 1) if iteration is not None and int(iteration) > 0 else None
             self._activities.record(
                 session,
                 ActivityAction.CHECKED_IN,
                 user,
                 product_id=product.id,
-                object_id=plan.existing.id if plan.existing is not None else None,
+                object_id=existing.id if existing is not None else None,
                 details={
                     "filename": plan.stored_name,
                     "relative_path": plan.relative,
+                    "object_uuid": existing.uuid if existing is not None else None,
                     "iteration": iteration,
+                    "previous_iteration": prev,
+                    "git_commit": commit,
                 },
             )
         elif later_plans:
@@ -949,7 +979,12 @@ class ObjectService:
                 user,
                 product_id=product.id,
                 object_id=None,
-                details={"count": len(later_plans), "iteration": True},
+                details={
+                    "count": len(later_plans),
+                    "filename": later_plans[0].stored_name,
+                    "filenames": [plan.stored_name for plan in later_plans[:20]],
+                    "git_commit": commit,
+                },
             )
 
     def _import_later_save(
@@ -1058,7 +1093,16 @@ class ObjectService:
                 user,
                 product_id=product.id,
                 object_id=existing.id,
-                details={"filename": stored_name, "relative_path": relative, "iteration": new_iteration},
+                details={
+                    "filename": stored_name,
+                    "relative_path": relative,
+                    "object_uuid": existing.uuid,
+                    "iteration": new_iteration,
+                    "previous_iteration": new_iteration - 1,
+                    "git_commit": (git_hash or "")[:40] or None,
+                    "comment": message,
+                },
+                comment=message,
             )
             logger.info("Recorded later save %s as %s.%s", stored_name, existing.revision, new_iteration)
             return existing

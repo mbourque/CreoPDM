@@ -509,9 +509,13 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     audit_page = auth_client.get("/admin/utilities/audit")
     assert audit_page.status_code == 200
     assert 'id="utilities-audit-filters"' in audit_page.text
+    assert 'id="audit-q"' in audit_page.text
+    assert "<select" in audit_page.text
     assert 'id="utilities-audit-table"' in audit_page.text or "No audit events" in audit_page.text
     assert "Audit log" in audit_page.text
     assert "not the vault Git history" in audit_page.text
+    assert "All products" in audit_page.text
+    assert "All users" in audit_page.text
 
     email_page = auth_client.get("/admin/utilities/email-all")
     assert email_page.status_code == 200
