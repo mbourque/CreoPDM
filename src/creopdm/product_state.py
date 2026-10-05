@@ -43,7 +43,7 @@ def product_allows_mutation(product: Any) -> bool:
 
 
 def product_allows_delete(product: Any) -> bool:
-    """Product unregister is always allowed when the role can delete (name confirm).
+    """Product unregister is always allowed when the role can delete (password confirm).
 
     Lifecycle lock / read-only must not trap vaults or DB rows after Archive.
     """

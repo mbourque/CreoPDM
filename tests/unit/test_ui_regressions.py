@@ -527,6 +527,45 @@ def test_delete_product_dialog_offers_local_workspace_checkbox():
     assert "delete-local-workspace" in script
 
 
+def test_delete_product_confirms_with_password_not_product_name():
+    """Regression: gear Delete must re-auth with password — never product-name typing."""
+    html = APP_HTML.read_text(encoding="utf-8")
+    dialog = html.split('id="delete-product-dialog"', 1)[1].split("</dialog>", 1)[0]
+    assert "Enter your password to confirm" in dialog
+    assert 'name="confirm_password"' in dialog
+    assert 'type="password"' in dialog
+    assert "confirm_name" not in dialog
+    assert "Type the product name" not in dialog
+    assert "Type the product name" not in html
+
+    script = _app_js()
+    delete_submit = _between(
+        script,
+        'deleteProductForm?.addEventListener("submit"',
+        "function showProductDialog(",
+    )
+    assert 'formData.get("confirm_password")' in delete_submit
+    assert 'JSON.stringify({ confirm_password: password })' in delete_submit
+    assert "/api/products/${productId}/forget" in delete_submit
+    assert "Type the product name exactly to delete it." not in script
+    assert "confirm_name" not in delete_submit
+
+    schema = (ROOT / "src" / "creopdm" / "schemas" / "common.py").read_text(encoding="utf-8")
+    forget_req = schema.split("class ForgetProductRequest", 1)[1].split("class ", 1)[0]
+    assert "confirm_password" in forget_req
+    assert "confirm_name" not in forget_req
+
+    api = (ROOT / "src" / "creopdm" / "api" / "products.py").read_text(encoding="utf-8")
+    forget_api = api.split("def forget_product(", 1)[1].split("\ndef ", 1)[0]
+    assert "require_danger_password" in forget_api
+    assert "payload.confirm_password" in forget_api
+    assert "confirm_name" not in forget_api
+
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "Trust a product-name match alone" in docs
+    assert "Type the product name exactly to delete it." not in docs
+
+
 def test_delete_workspace_menu_warns_new_files_vault_safe():
     """Remove ▾ → Clear workspace… danger-confirm; no product-name typing; vault stays."""
     html = APP_HTML.read_text(encoding="utf-8")
@@ -666,8 +705,14 @@ def test_soft_nav_skips_creojs_reconnect():
     assert 'withBusy("Preparing…"' in open_wrap
     assert "withTimeout(" in open_wrap
     assert "openTimeoutMessage()" in open_wrap
+    assert "openWorkTimeoutMs(" in open_wrap
     assert "captureCreoMetadataAfterOpen(result)" in open_wrap
     assert "function openTimeoutMessage(" in script
+    assert "function creoOpenModelTimeoutMs(" in script
+    assert "function openWorkTimeoutMs(" in script
+    assert "creoOpenModelTimeoutMs(preparedDependencyCount(prepared))" in open_fn
+    # Fixed 90s was too short for large JD Retrieve after materialize.
+    assert "90000" not in open_fn
     timeout_msg = _between(script, "function openTimeoutMessage(", "async function openPdmObject(")
     assert "creopdm-agent is running" in timeout_msg
     assert "Creo is Connected" in timeout_msg

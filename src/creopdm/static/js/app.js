@@ -348,6 +348,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     ]);
   }
 
+  function preparedDependencyCount(prepared) {
+    const deps = Array.isArray(prepared?.dependencies) ? prepared.dependencies.length : 0;
+    return deps + (prepared?.object_id ? 1 : 0);
+  }
+
+  function creoOpenModelTimeoutMs(depCount) {
+    // Large JD assemblies need many minutes in Creo after materialize — 90s was
+    // too short and surfaced "session may be offline" while Retrieve was still running.
+    const n = Math.max(0, Number(depCount) || 0);
+    return Math.min(900_000, Math.max(90_000, 60_000 + n * 40));
+  }
+
+  function openWorkTimeoutMs(depCount) {
+    // Outer budget must cover prepare + zip materialize + Creo openModel.
+    const n = Math.max(0, Number(depCount) || 0);
+    return Math.min(1_200_000, Math.max(180_000, 120_000 + n * 80));
+  }
+
   function abortSignalAfter(ms) {
     if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
       return AbortSignal.timeout(ms);
@@ -8071,7 +8089,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       await whenCreoJSReady();
       const opened = await withTimeout(
         window.CreoJS.openModel(directory, logicalName, "", diskName, fullPath),
-        90000,
+        creoOpenModelTimeoutMs(1),
         "Creo did not finish opening the model (session may be offline)."
       );
       const openedText = opened == null ? "" : String(opened);
@@ -8116,7 +8134,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     let result = null;
     await withBusy("Preparing…", async () => {
       try {
-        result = await withTimeout(openPdmObjectWork(target), 180000, openTimeoutMessage());
+        result = await withTimeout(
+          openPdmObjectWork(target),
+          openWorkTimeoutMs(5000),
+          openTimeoutMessage()
+        );
       } catch (err) {
         const message = err && err.message ? err.message : String(err);
         showError($("#toolbar-error"), message || "Could not open the file.");
@@ -8242,7 +8264,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               openSpec.disk_name || openSpec.filename || prepared.filename,
               openSpec.path || ""
             ),
-            90000,
+            creoOpenModelTimeoutMs(preparedDependencyCount(prepared)),
             "Creo did not finish opening the model (session may be offline)."
           );
           const openedText = opened == null ? "" : String(opened);
@@ -8284,7 +8306,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               diskName,
               openSpec.path || ""
             ),
-            90000,
+            creoOpenModelTimeoutMs(preparedDependencyCount(prepared)),
             "Creo did not finish opening the Multi-CAD file (session may be offline)."
           );
           const openedText = opened == null ? "" : String(opened);

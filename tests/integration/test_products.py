@@ -532,6 +532,16 @@ def test_forget_product_strips_git_and_keeps_models(client, app, repo_parent, da
     assert not (location / ".git").exists()
     assert model.is_file()
 
+    # Old clients sent confirm_name (product name). Must not delete — password only.
+    name_only = client.post(
+        f"/api/products/{payload['uuid']}/forget",
+        json={"confirm_name": payload["name"]},
+    )
+    assert name_only.status_code == 422, name_only.text
+    assert "Type the product name exactly to delete it." not in name_only.text
+    listing_still = client.get("/api/products")
+    assert any(item["uuid"] == payload["uuid"] for item in listing_still.json())
+
     forgotten = client.post(
         f"/api/products/{payload['uuid']}/forget",
         json={"confirm_password": "test-confirm"},

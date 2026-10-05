@@ -34,4 +34,4 @@ Anything that changes vault/product content or locks (Add, Checkout, Check In, R
 # ✅ GOOD — product_ui.show_add + ensure_product_mutable in the service + contract/API tests
 ```
 
-Undo Checkout may stay available on locked products (Checkout menu + owned row). **Delete product** / forget stays available on locked and **Archived** products (`show_delete_product` + `ensure_product_deletable` — name confirm; must purge vault + DB row). Local workspace discard/purge may stay under `show_remove` without vault/product remove.
+Undo Checkout may stay available on locked products (Checkout menu + owned row). **Delete product** / forget stays available on locked and **Archived** products (`show_delete_product` + `ensure_product_deletable` — password re-auth confirm; must purge vault + DB row). Local workspace discard/purge may stay under `show_remove` without vault/product remove.

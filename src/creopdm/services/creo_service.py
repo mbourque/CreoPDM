@@ -41,13 +41,17 @@ _OPEN_DEPENDENCY_TYPES = frozenset(
         DependencyType.UNKNOWN.value,
     }
 )
-_MAX_DEP_DEPENDENCY_DEPTH = 8
+_MAX_DEP_DEPENDENCY_DEPTH = 64
 # DB walk only (no vault I/O) — large JD trees must fully materialize for Creo.
 # Vault-scan fallback stays capped separately (see creo_dependencies).
 _MAX_DEP_DEPENDENCIES = 8000
 # Prefer vault-scan when the Where Used walk looks incomplete (sparse post-zip /
 # over-pruned index) rather than trusting a handful of edges alone.
 _SPARSE_OPEN_WHERE_USED = 80
+# When Where Used already returned a large tree but still misses many product CAD
+# siblings (magnet holes / depth gaps), fill the rest so Creo gets companions.
+_MIN_PRODUCT_FILL_WHERE_USED = 500
+_PRODUCT_FILL_COVERAGE = 0.95
 
 
 class CreoService:
@@ -312,6 +316,41 @@ class CreoService:
                 source = "vault-scan"
             elif not chosen:
                 source = "vault-scan"
+
+        # Large incomplete Where Used trees (e.g. JD 2748 of 4022) — fill remaining
+        # Creo-openable product siblings so Retrieve is not missing companions.
+        if chosen and skip_object_id is not None:
+            companion_siblings = [
+                row
+                for row in siblings
+                if int(row.id) != int(skip_object_id)
+                and is_creo_openable(
+                    str(row.filename or Path(str(row.relative_path)).name),
+                    model_extensions=models,
+                    extra_cad_extensions=all_cad,
+                )
+            ]
+            if (
+                len(companion_siblings) >= _MIN_PRODUCT_FILL_WHERE_USED
+                and len(chosen) >= _MIN_PRODUCT_FILL_WHERE_USED
+                and len(chosen) < int(_PRODUCT_FILL_COVERAGE * len(companion_siblings))
+            ):
+                by_id = {int(obj.id): obj for obj in chosen}
+                for row in companion_siblings:
+                    if len(by_id) >= _MAX_DEP_DEPENDENCIES:
+                        break
+                    rid = int(row.id)
+                    if rid not in by_id:
+                        by_id[rid] = row
+                if len(by_id) > len(chosen):
+                    logger.info(
+                        "Open deps: filled %s → %s companions from product CAD for %s",
+                        len(chosen),
+                        len(by_id),
+                        Path(filename).name,
+                    )
+                    chosen = list(by_id.values())
+                    source = f"{source}+product-fill"
         logger.info(
             "Open deps for %s via %s (%s files)",
             Path(filename).name,

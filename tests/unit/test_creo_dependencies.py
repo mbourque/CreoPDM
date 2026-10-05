@@ -145,9 +145,19 @@ def test_open_where_used_db_walk_allows_large_jd_trees():
     """DB walk must not hard-cap at 150 — large products need thousands of deps."""
     text = Path("src/creopdm/services/creo_service.py").read_text(encoding="utf-8")
     assert "_MAX_DEP_DEPENDENCIES = 8000" in text
-    from creopdm.services.creo_service import _MAX_DEP_DEPENDENCIES, _SPARSE_OPEN_WHERE_USED
+    assert "_MAX_DEP_DEPENDENCY_DEPTH = 64" in text
+    assert "_MIN_PRODUCT_FILL_WHERE_USED = 500" in text
+    assert "product-fill" in text
+    from creopdm.services.creo_service import (
+        _MAX_DEP_DEPENDENCIES,
+        _MAX_DEP_DEPENDENCY_DEPTH,
+        _MIN_PRODUCT_FILL_WHERE_USED,
+        _SPARSE_OPEN_WHERE_USED,
+    )
 
     assert _MAX_DEP_DEPENDENCIES >= 4000
+    assert _MAX_DEP_DEPENDENCY_DEPTH >= 32
+    assert _MIN_PRODUCT_FILL_WHERE_USED == 500
     assert _SPARSE_OPEN_WHERE_USED == 80
 
 
