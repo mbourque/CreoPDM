@@ -2037,8 +2037,15 @@ def test_admin_hub_panel_fills_full_width():
     auth_pages = (
         ROOT / "src" / "creopdm" / "api" / "auth_pages.py"
     ).read_text(encoding="utf-8")
-    # Server must start the job on form POST — JS-only start left a dead Run button.
-    assert "ctx.where_used_index.start(pid)" in auth_pages
+    # Server must schedule Start after the HTML response — sync start() under the
+    # open request session blocked the form fetch on the indexer write lock
+    # (busy overlay stuck on preparing… with no N of M).
+    rebuild_handler = auth_pages.split("def admin_utilities_rebuild_product_db")[1].split(
+        "\n@router."
+    )[0]
+    assert "background_tasks.add_task(ctx.where_used_index.start, pid)" in rebuild_handler
+    assert "ctx.where_used_index.start(pid)" not in rebuild_handler
+    assert "Form POST schedules Start after the response" in script
     jobs = (
         ROOT / "src" / "creopdm" / "services" / "where_used_index_jobs.py"
     ).read_text(encoding="utf-8")

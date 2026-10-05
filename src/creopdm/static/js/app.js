@@ -1728,8 +1728,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         const priorOk = parsed.querySelector("p.ok")?.textContent?.trim() || "";
         publishBusyMessage("Indexing Where Used… preparing…");
-        // Form POST already started the job; poll with start:true (no-op if still
-        // running) so we bind Cancel and wait on this run's started_at.
+        // Form POST schedules Start after the response (so the HTML fetch is not
+        // blocked by the indexer write lock). POST Start here for N of M + Cancel
+        // (no-op if the background task already started the same run).
         const outcome = await awaitWhereUsedIndex(productId, {
           start: true,
           onProgress: (doneCount, total) => {

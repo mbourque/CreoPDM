@@ -6,7 +6,7 @@ import secrets
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -2678,6 +2678,7 @@ def admin_utilities_compact_vault(
 @router.post("/admin/utilities/rebuild-product-db", response_class=HTMLResponse)
 def admin_utilities_rebuild_product_db(
     request: Request,
+    background_tasks: BackgroundTasks,
     product_id: str = Form(""),
     confirm_name: str = Form(""),
     confirm: str = Form(""),
@@ -2747,9 +2748,12 @@ def admin_utilities_rebuild_product_db(
             **form_state,
         )
     if want_where_used:
-        # Start here so a plain form POST still indexes even if client JS fails.
-        # Page JS polls the same job for N of M (Start again is a no-op while running).
-        ctx.where_used_index.start(pid)
+        # Defer until after the HTML response and request DB session close.
+        # Sync start() here raced the indexer's first write lock against
+        # list_products_for_compact / get_db — form fetch hung and the busy
+        # overlay stayed on "preparing…" with no N of M polls.
+        # Page JS also POSTs Start (no-op if already running) for progress.
+        background_tasks.add_task(ctx.where_used_index.start, pid)
     return _utilities_rebuild_response(
         request,
         ctx,
