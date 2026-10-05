@@ -2310,11 +2310,7 @@ def _utilities_repair_success_message(result) -> str:
             f"deleted Creo metadata from {result.metadata_versions} version row(s)"
         )
     if result.where_used_rebuilt:
-        parts.append(
-            f"rebuilt Where Used "
-            f"({result.where_used_edges_added} new link(s), "
-            f"{result.where_used_edges_existing} already stored)"
-        )
+        parts.append("started Where Used indexing")
     body = "; ".join(parts) if parts else "updated the product database"
     hints: list[str] = []
     if result.rebuilt and not result.where_used_rebuilt:
@@ -2759,6 +2755,10 @@ def admin_utilities_rebuild_product_db(
             status_code=400,
             **form_state,
         )
+    if want_where_used:
+        # Same background job as the product gear — after commit so the indexer
+        # sees the rebuilt file list.
+        ctx.where_used_index.start(pid)
     return _utilities_rebuild_response(
         request,
         ctx,

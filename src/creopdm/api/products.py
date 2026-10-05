@@ -35,6 +35,7 @@ from creopdm.auth_constants import (
     PERMISSION_PRODUCTS_EDIT,
     PERMISSION_PRODUCTS_EXPORT,
     PERMISSION_PRODUCTS_VIEW,
+    PERMISSION_UTILITIES_ACCESS,
 )
 from creopdm.context import AppContext
 from creopdm.constants import ActivityAction
@@ -467,7 +468,9 @@ def start_rebuild_where_used(
 
     Does not touch the DB here so a busy indexer cannot block Start.
     """
-    require_permission(request, ctx, PERMISSION_OBJECTS_METADATA)
+    require_any_permission(
+        request, ctx, PERMISSION_OBJECTS_METADATA, PERMISSION_UTILITIES_ACCESS
+    )
     status = ctx.where_used_index.start(product_id)
     return _where_used_job_response(status)
 
@@ -482,7 +485,9 @@ def rebuild_where_used_status(
     ctx: AppContext = Depends(get_context),
 ) -> WhereUsedIndexJobResponse:
     """Poll background Where Used index job status (memory only — never waits on SQLite)."""
-    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    require_any_permission(
+        request, ctx, PERMISSION_OBJECTS_VIEW, PERMISSION_UTILITIES_ACCESS
+    )
     return _where_used_job_response(ctx.where_used_index.get(product_id))
 
 

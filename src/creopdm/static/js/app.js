@@ -1578,23 +1578,100 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     );
   }
 
+  function utilitiesRepairNotice(form, { ok, error } = {}) {
+    const article = form?.closest("article") || document.querySelector(".admin-utilities");
+    if (!article) return;
+    article.querySelectorAll("p.ok, p.error").forEach((el) => el.remove());
+    const p = document.createElement("p");
+    p.className = error ? "error" : "ok";
+    p.textContent = error || ok || "";
+    const h1 = article.querySelector("h1");
+    if (h1) h1.after(p);
+    else article.prepend(p);
+  }
+
+  async function runUtilitiesRebuildWithWhereUsed(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+    const select = form.querySelector('select[name="product_id"]');
+    const productId = (select?.value || "").trim();
+    const label = select?.selectedOptions?.[0]?.textContent?.trim() || "product";
+    const fd = new FormData(form);
+    const doRebuild = fd.get("do_rebuild") === "1";
+    const clearMeta = fd.get("clear_metadata") === "1";
+    let initial = "Indexing Where Used…";
+    if (doRebuild) initial = `Rebuilding product database for ${label}…`;
+    else if (clearMeta) initial = `Deleting Creo metadata for ${label}…`;
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn instanceof HTMLButtonElement) btn.disabled = true;
+    try {
+      await withBusy(initial, async () => {
+        const response = await fetch(form.getAttribute("action") || form.action, {
+          method: "POST",
+          body: fd,
+        });
+        const html = await response.text();
+        const parsed = new DOMParser().parseFromString(html, "text/html");
+        if (!response.ok) {
+          utilitiesRepairNotice(form, {
+            error:
+              parsed.querySelector("p.error")?.textContent?.trim()
+              || "Could not start the selected actions.",
+          });
+          return;
+        }
+        const priorOk = parsed.querySelector("p.ok")?.textContent?.trim() || "";
+        setBusyMessage("Indexing Where Used…");
+        const outcome = await awaitWhereUsedIndex(productId, {
+          start: false,
+          onProgress: (doneCount, total) => {
+            if (total > 0) {
+              setBusyMessage(`Indexing Where Used… ${doneCount} of ${total}`);
+            } else {
+              setBusyMessage("Indexing Where Used…");
+            }
+          },
+        });
+        if (!outcome || outcome.state === "error" || outcome.state === "timeout") {
+          utilitiesRepairNotice(form, {
+            error: outcome?.error || "Where Used indexing failed.",
+          });
+          return;
+        }
+        if (outcome.state === "done") {
+          const missMsg = outcome.parentsMissing
+            ? ` ${outcome.parentsMissing} parent file(s) missing from vault.`
+            : "";
+          const wu =
+            `Where Used index ready: ${outcome.edgesAdded} new link(s), `
+            + `${outcome.edgesExisting} already stored.${missMsg}`;
+          const msg = priorOk && !/where used/i.test(priorOk) ? `${priorOk} ${wu}` : wu;
+          utilitiesRepairNotice(form, { ok: msg });
+        }
+      });
+    } finally {
+      if (btn instanceof HTMLButtonElement) btn.disabled = false;
+    }
+  }
+
   /**
    * Start Where Used indexing and wait until done/error/cancelled.
    * Used under the Add (and gear Rebuild) busy overlay — not fire-and-forget.
    */
-  async function awaitWhereUsedIndex(productId, { onProgress } = {}) {
+  async function awaitWhereUsedIndex(productId, { onProgress, start = true } = {}) {
     if (!productId) return { started: false };
-    let startResponse;
-    try {
-      startResponse = await fetch(
-        `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`,
-        { method: "POST" }
-      );
-    } catch (exc) {
-      return { started: false, error: exc?.message || "Could not reach CreoPDM." };
-    }
-    if (!startResponse.ok) {
-      return { started: false, error: await readError(startResponse) };
+    if (start) {
+      let startResponse;
+      try {
+        startResponse = await fetch(
+          `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`,
+          { method: "POST" }
+        );
+      } catch (exc) {
+        return { started: false, error: exc?.message || "Could not reach CreoPDM." };
+      }
+      if (!startResponse.ok) {
+        return { started: false, error: await readError(startResponse) };
+      }
     }
     for (let tries = 0; tries < 900; tries += 1) {
       await sleepMs(tries === 0 ? 400 : 1000);
@@ -11230,6 +11307,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     isSoftNavUrl,
     withBusy,
     setBusy,
+    setBusyMessage,
+    awaitWhereUsedIndex,
+    runUtilitiesRebuildWithWhereUsed,
     eventEl,
     syncProductAccessUi,
     isMetadataCollectRunning: () => Boolean(metadataCollectJob.running),
@@ -11306,19 +11386,31 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (form.id === "utilities-compact-vault-form") {
           message = `Compacting vault history for ${label}…`;
         } else if (form.id === "utilities-rebuild-product-form") {
-          const parts = [];
-          if (form.querySelector('input[name="do_rebuild"]')?.checked) {
-            parts.push("rebuild");
+          // FormData reflects checked boxes at submit (querySelector can miss after soft-nav).
+          const fd = new FormData(form);
+          const doRebuild = fd.get("do_rebuild") === "1";
+          const clearMeta = fd.get("clear_metadata") === "1";
+          const rebuildWu = fd.get("rebuild_where_used") === "1";
+          if (rebuildWu) {
+            event.preventDefault();
+            const api = window.__creopdmSoftNavApi;
+            if (api && typeof api.runUtilitiesRebuildWithWhereUsed === "function") {
+              void api.runUtilitiesRebuildWithWhereUsed(form);
+            }
+            return;
           }
-          if (form.querySelector('input[name="clear_metadata"]')?.checked) {
-            parts.push("clear metadata");
+          if (doRebuild && !clearMeta) {
+            message = `Rebuilding product database for ${label}…`;
+          } else if (!doRebuild && clearMeta) {
+            message = `Deleting Creo metadata for ${label}…`;
+          } else {
+            const parts = [];
+            if (doRebuild) parts.push("rebuild file list");
+            if (clearMeta) parts.push("delete metadata");
+            message = parts.length
+              ? `${parts.join(", ")} for ${label}…`
+              : `Repairing product database for ${label}…`;
           }
-          if (form.querySelector('input[name="rebuild_where_used"]')?.checked) {
-            parts.push("rebuild Where Used");
-          }
-          message = parts.length
-            ? `Repairing product database for ${label} (${parts.join(", ")})…`
-            : `Repairing product database for ${label}…`;
         } else if (form.id === "utilities-delete-products-form") {
           message = `Deleting product ${label}…`;
         } else {

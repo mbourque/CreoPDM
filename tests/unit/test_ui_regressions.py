@@ -2005,10 +2005,15 @@ def test_admin_hub_panel_fills_full_width():
     assert 'form.id === "utilities-rebuild-product-form"' in script
     assert 'form.id === "utilities-delete-products-form"' in script
     assert "Compacting vault history for ${label}" in script
-    assert "Repairing product database for ${label}" in script
-    assert 'input[name="do_rebuild"]' in script
-    assert 'input[name="clear_metadata"]' in script
-    assert 'input[name="rebuild_where_used"]' in script
+    assert "Deleting Creo metadata for ${label}" in script
+    assert "Rebuilding product database for ${label}" in script
+    assert 'fd.get("do_rebuild")' in script
+    assert 'fd.get("clear_metadata")' in script
+    assert 'fd.get("rebuild_where_used")' in script
+    # Where Used on this form uses the same overlay/progress as the product gear.
+    assert "runUtilitiesRebuildWithWhereUsed" in script
+    assert 'setBusyMessage(`Indexing Where Used… ${doneCount} of ${total}`)' in script
+    assert "start: false" in script
     assert "Deleting product ${label}" in script
     rebuild_tmpl = (
         ROOT / "src" / "creopdm" / "templates" / "admin_utilities_rebuild.html"

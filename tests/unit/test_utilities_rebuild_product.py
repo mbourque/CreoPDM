@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import time
 import uuid
 from pathlib import Path
 
@@ -24,6 +25,17 @@ from creopdm.services.utilities_service import (
 )
 from creopdm.utils.identity import StaticUserProvider
 from tests.conftest import requires_git
+
+
+def _wait_where_used_job(ctx, product_uuid: str, timeout: float = 20.0):
+    deadline = time.time() + timeout
+    last = None
+    while time.time() < deadline:
+        last = ctx.where_used_index.get(product_uuid)
+        if last.state in {"done", "error", "cancelled"}:
+            return last
+        time.sleep(0.05)
+    return last
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -357,10 +369,14 @@ def test_rebuild_where_used_replaces_stale_edges(
             rebuild_where_used=True,
         )
         db.commit()
-
         assert result.where_used_rebuilt is True
         assert result.rebuilt is False
         assert result.metadata_cleared is False
+        ctx.where_used_index.start(product.uuid)
+        status = _wait_where_used_job(ctx, product.uuid)
+        assert status is not None
+        assert status.state == "done", status.error
+        db.expire_all()
         edges = list(
             db.scalars(
                 select(Dependency).where(Dependency.product_id == product.id)
@@ -454,6 +470,11 @@ def test_repair_clear_metadata_and_rebuild_where_used_together(
             rebuild_where_used=True,
         )
         db.commit()
+        ctx.where_used_index.start(product.uuid)
+        status = _wait_where_used_job(ctx, product.uuid)
+        assert status is not None
+        assert status.state == "done", status.error
+        db.expire_all()
 
         assert result.metadata_cleared is True
         assert result.where_used_rebuilt is True

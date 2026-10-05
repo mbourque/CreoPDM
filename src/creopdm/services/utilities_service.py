@@ -1153,9 +1153,7 @@ def repair_product_database(
         meta_cleared = True
 
     if rebuild_where_used:
-        _, wu_added, wu_existing = rebuild_product_where_used(
-            ctx, db, product_uuid=product.uuid, confirm_name=confirm_name
-        )
+        # Index after the request commits (same background job as the product gear).
         wu_rebuilt = True
 
     return ProductDbRepairResult(
