@@ -2016,6 +2016,21 @@ def test_admin_hub_panel_fills_full_width():
     assert "Indexing Where Used… ${doneCount} of ${total}" in script
     assert "Indexing Where Used… preparing…" in script
     assert "expectStartedAt" in script
+    assert "invokeBusyCancel" in script
+    assert 'id="busy-cancel-btn"' in (
+        ROOT / "src" / "creopdm" / "templates" / "base.html"
+    ).read_text(encoding="utf-8")
+    assert "Never preventDefault without a runner" in script
+    products_api = (
+        ROOT / "src" / "creopdm" / "api" / "products.py"
+    ).read_text(encoding="utf-8")
+    assert "def cancel_rebuild_where_used" in products_api
+    assert "ctx.where_used_index.cancel(product_id)" in products_api
+    auth_pages = (
+        ROOT / "src" / "creopdm" / "api" / "auth_pages.py"
+    ).read_text(encoding="utf-8")
+    # Server must start the job on form POST — JS-only start left a dead Run button.
+    assert "ctx.where_used_index.start(pid)" in auth_pages
     jobs = (
         ROOT / "src" / "creopdm" / "services" / "where_used_index_jobs.py"
     ).read_text(encoding="utf-8")

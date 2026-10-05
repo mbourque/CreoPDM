@@ -64,6 +64,18 @@ def test_where_used_job_primes_parents_total_before_first_chunk(
         time.sleep(0.02)
 
 
+def test_cancel_where_used_api_is_wired():
+    """Busy Cancel must hit DELETE so the overlay can clear."""
+    root = Path(__file__).resolve().parents[2]
+    products = (root / "src" / "creopdm" / "api" / "products.py").read_text(encoding="utf-8")
+    assert "def cancel_rebuild_where_used" in products
+    assert "ctx.where_used_index.cancel(product_id)" in products
+    script = (root / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    assert 'method: "DELETE"' in script
+    assert "forceClearBusy" in script
+    assert "invokeBusyCancel" in script
+
+
 def test_add_endpoints_do_not_start_where_used_mid_chunk():
     """Chunked Add must not kick indexing per request (SQLite contention)."""
     root = Path(__file__).resolve().parents[2]

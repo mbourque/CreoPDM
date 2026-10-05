@@ -2753,7 +2753,10 @@ def admin_utilities_rebuild_product_db(
             status_code=400,
             **form_state,
         )
-    # Where Used index is started by the page JS (same POST + N of M overlay as gear).
+    if want_where_used:
+        # Start here so a plain form POST still indexes even if client JS fails.
+        # Page JS polls the same job for N of M (Start again is a no-op while running).
+        ctx.where_used_index.start(pid)
     return _utilities_rebuild_response(
         request,
         ctx,

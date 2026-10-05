@@ -133,7 +133,10 @@
   <dialog id="busy-overlay" class="busy-overlay">
     <div class="busy-panel" role="status" aria-live="polite">
       <span class="busy-spinner" aria-hidden="true"></span>
-      <p id="busy-message">Working…</p>
+      <div class="busy-copy">
+        <p id="busy-message">Working…</p>
+        <button type="button" class="btn" id="busy-cancel-btn" hidden>Cancel</button>
+      </div>
     </div>
   </dialog>
   <div id="creo-connecting-overlay" class="creo-connecting-overlay" hidden>

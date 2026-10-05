@@ -491,6 +491,23 @@ def rebuild_where_used_status(
     return _where_used_job_response(ctx.where_used_index.get(product_id))
 
 
+@router.delete(
+    "/api/products/{product_id}/rebuild-where-used",
+    response_model=WhereUsedIndexJobResponse,
+)
+def cancel_rebuild_where_used(
+    product_id: str,
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+) -> WhereUsedIndexJobResponse:
+    """Cancel a running Where Used index so the busy overlay can clear cleanly."""
+    require_any_permission(
+        request, ctx, PERMISSION_OBJECTS_METADATA, PERMISSION_UTILITIES_ACCESS
+    )
+    ctx.where_used_index.cancel(product_id)
+    return _where_used_job_response(ctx.where_used_index.get(product_id))
+
+
 def _where_used_job_response(status) -> WhereUsedIndexJobResponse:
     return WhereUsedIndexJobResponse(
         product_id=status.product_id,

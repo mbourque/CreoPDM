@@ -232,20 +232,69 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   let busyDepth = 0;
+  let busyCancelHandler = null;
   const heartbeat = { ids: [], timer: 0 };
-  const busyOverlay = $("#busy-overlay");
-  busyOverlay?.addEventListener("cancel", (event) => event.preventDefault());
+  function busyOverlayEl() {
+    return document.getElementById("busy-overlay");
+  }
+  function busyCancelBtnEl() {
+    return document.getElementById("busy-cancel-btn");
+  }
+  // Bind once with native listener (not pageAbort) — soft boots must not drop Cancel/Escape.
+  if (!window.__creopdmBusyCancelBound) {
+    window.__creopdmBusyCancelBound = true;
+    origAddEventListener.call(
+      document,
+      "cancel",
+      (event) => {
+        if (event.target?.id !== "busy-overlay") return;
+        event.preventDefault();
+        const api = window.__creopdmSoftNavApi;
+        if (api && typeof api.invokeBusyCancel === "function") api.invokeBusyCancel();
+      },
+      true
+    );
+    origAddEventListener.call(
+      document,
+      "click",
+      (event) => {
+        const t = event.target;
+        if (!(t instanceof Element) || !t.closest("#busy-cancel-btn")) return;
+        event.preventDefault();
+        const api = window.__creopdmSoftNavApi;
+        if (api && typeof api.invokeBusyCancel === "function") api.invokeBusyCancel();
+      },
+      true
+    );
+  }
   function showBusyOverlay() {
+    const busyOverlay = busyOverlayEl();
     if (!(busyOverlay instanceof HTMLDialogElement)) return;
     if (!busyOverlay.open) busyOverlay.showModal();
   }
   function hideBusyOverlay() {
+    const busyOverlay = busyOverlayEl();
     if (!(busyOverlay instanceof HTMLDialogElement)) return;
     if (busyOverlay.open) busyOverlay.close();
   }
   function setBusyMessage(message) {
-    const text = $("#busy-message");
+    const text = document.getElementById("busy-message");
     if (text) text.textContent = message || "Working…";
+  }
+  function setBusyCancelHandler(handler) {
+    busyCancelHandler = typeof handler === "function" ? handler : null;
+    const busyCancelBtn = busyCancelBtnEl();
+    if (busyCancelBtn) busyCancelBtn.hidden = !busyCancelHandler;
+  }
+  function invokeBusyCancel() {
+    if (typeof busyCancelHandler === "function") void busyCancelHandler();
+  }
+  function forceClearBusy() {
+    busyDepth = 0;
+    setBusyCancelHandler(null);
+    hideBusyOverlay();
+    document.body.classList.remove("is-busy");
+    document.body.removeAttribute("aria-busy");
   }
   function setBusy(message) {
     busyDepth += 1;
@@ -257,6 +306,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function clearBusy() {
     busyDepth = Math.max(0, busyDepth - 1);
     if (busyDepth > 0) return;
+    setBusyCancelHandler(null);
     hideBusyOverlay();
     document.body.classList.remove("is-busy");
     document.body.removeAttribute("aria-busy");
@@ -1535,8 +1585,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!productId) return;
     showError($("#toolbar-error"), "");
     const outcome = await indexWhereUsedUnderBusy(productId);
-    if (!outcome.started) {
-      showError($("#toolbar-error"), outcome.error || "Could not start Where Used indexing.");
+    if (!outcome?.started) {
+      showError($("#toolbar-error"), outcome?.error || "Could not start Where Used indexing.");
+      return;
+    }
+    if (outcome.state === "cancelled") {
+      showOk(
+        "Where Used indexing cancelled. Run Rebuild Where Used again if Top Level looks incomplete."
+      );
       return;
     }
     if (outcome.state === "error" || outcome.state === "timeout") {
@@ -1574,15 +1630,31 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     else setBusyMessage(message);
   }
 
+  async function cancelWhereUsedIndex(productId) {
+    if (!productId) return;
+    try {
+      await fetch(`/api/products/${encodeURIComponent(productId)}/rebuild-where-used`, {
+        method: "DELETE",
+      });
+    } catch {
+      /* still clear UI even if cancel request fails */
+    }
+  }
+
   async function indexWhereUsedUnderBusy(productId) {
     if (!productId) return null;
-    return withBusy("Indexing Where Used… preparing…", () =>
-      awaitWhereUsedIndex(productId, {
-        onProgress: (doneCount, total) => {
-          publishBusyMessage(whereUsedBusyText(doneCount, total));
-        },
-      })
-    );
+    try {
+      return await withBusy("Indexing Where Used… preparing…", () =>
+        awaitWhereUsedIndex(productId, {
+          onProgress: (doneCount, total) => {
+            publishBusyMessage(whereUsedBusyText(doneCount, total));
+          },
+        })
+      );
+    } finally {
+      // Cancel / Escape must never leave the modal stuck over the app.
+      forceClearBusy();
+    }
   }
 
   function utilitiesRepairNotice(form, { ok, error } = {}) {
@@ -1605,7 +1677,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const fd = new FormData(form);
     const doRebuild = fd.get("do_rebuild") === "1";
     const clearMeta = fd.get("clear_metadata") === "1";
-    let initial = "Indexing Where Used…";
+    let initial = "Indexing Where Used… preparing…";
     if (doRebuild) initial = `Rebuilding product database for ${label}…`;
     else if (clearMeta) initial = `Deleting Creo metadata for ${label}…`;
     const btn = form.querySelector('button[type="submit"]');
@@ -1628,14 +1700,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         const priorOk = parsed.querySelector("p.ok")?.textContent?.trim() || "";
         publishBusyMessage("Indexing Where Used… preparing…");
-        // Start here (not in the form handler) so we wait on this job's started_at
-        // and do not treat a prior "done" status as finished with no N of M.
+        // Form POST already started the job; poll with start:true (no-op if still
+        // running) so we bind Cancel and wait on this run's started_at.
         const outcome = await awaitWhereUsedIndex(productId, {
           start: true,
           onProgress: (doneCount, total) => {
             publishBusyMessage(whereUsedBusyText(doneCount, total));
           },
         });
+        if (outcome?.state === "cancelled") {
+          utilitiesRepairNotice(form, {
+            ok:
+              "Where Used indexing cancelled. Run Delete and rebuild Where Used again "
+              + "if Top Level / dependencies look incomplete.",
+          });
+          return;
+        }
         if (!outcome || outcome.state === "error" || outcome.state === "timeout") {
           utilitiesRepairNotice(form, {
             error: outcome?.error || "Where Used indexing failed.",
@@ -1654,6 +1734,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
       });
     } finally {
+      forceClearBusy();
       if (btn instanceof HTMLButtonElement) btn.disabled = false;
     }
   }
@@ -1661,94 +1742,115 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   /**
    * Start Where Used indexing and wait until done/error/cancelled.
    * Used under the Add (and gear Rebuild) busy overlay — not fire-and-forget.
+   * Cancel (button or Escape) stops the server job and clears the overlay.
    */
   async function awaitWhereUsedIndex(productId, { onProgress, start = true } = {}) {
     if (!productId) return { started: false };
     let expectStartedAt = 0;
-    if (start) {
-      let startResponse;
-      try {
-        startResponse = await fetch(
-          `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`,
-          { method: "POST" }
-        );
-      } catch (exc) {
-        return { started: false, error: exc?.message || "Could not reach CreoPDM." };
-      }
-      if (!startResponse.ok) {
-        return { started: false, error: await readError(startResponse) };
-      }
-      try {
-        const startBody = await startResponse.json();
-        expectStartedAt = Number(startBody.started_at) || 0;
-        const startTotal = Number(startBody.parents_total) || 0;
-        const startDone = Number(startBody.parents_done) || 0;
-        onProgress?.(startDone, startTotal);
-      } catch {
-        /* status body optional */
-      }
-    }
-    for (let tries = 0; tries < 1800; tries += 1) {
-      // Poll often while preparing / first chunk — N of M should appear within ~1s.
-      await sleepMs(tries < 20 ? 250 : 1000);
-      try {
-        const response = await fetch(
-          `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`
-        );
-        if (!response.ok) continue;
-        const body = await response.json();
-        const state = String(body.state || "");
-        const startedAt = Number(body.started_at) || 0;
-        // Ignore a prior job's terminal status (utilities used to flash "done" instantly).
-        if (
-          expectStartedAt
-          && startedAt
-          && startedAt + 0.001 < expectStartedAt
-          && state !== "queued"
-          && state !== "running"
-        ) {
-          continue;
+    let userCancelled = false;
+    let cancelInFlight = false;
+    const requestCancel = async () => {
+      if (userCancelled || cancelInFlight) return;
+      cancelInFlight = true;
+      userCancelled = true;
+      publishBusyMessage("Cancelling Where Used indexing…");
+      await cancelWhereUsedIndex(productId);
+    };
+    setBusyCancelHandler(requestCancel);
+    try {
+      if (start) {
+        let startResponse;
+        try {
+          startResponse = await fetch(
+            `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`,
+            { method: "POST" }
+          );
+        } catch (exc) {
+          return { started: false, error: exc?.message || "Could not reach CreoPDM." };
         }
-        if (state === "queued" || state === "running") {
-          const total = Number(body.parents_total) || 0;
-          const doneCount = Number(body.parents_done) || 0;
-          onProgress?.(doneCount, total);
-          continue;
+        if (!startResponse.ok) {
+          return { started: false, error: await readError(startResponse) };
         }
-        if (state === "done") {
-          if (expectStartedAt && startedAt && startedAt + 0.001 < expectStartedAt) {
-            continue;
-          }
-          return {
-            started: true,
-            state: "done",
-            edgesAdded: Number(body.edges_added) || 0,
-            edgesExisting: Number(body.edges_existing) || 0,
-            parentsMissing: Number(body.parents_missing_vault) || 0,
-          };
+        try {
+          const startBody = await startResponse.json();
+          expectStartedAt = Number(startBody.started_at) || 0;
+          const startTotal = Number(startBody.parents_total) || 0;
+          const startDone = Number(startBody.parents_done) || 0;
+          onProgress?.(startDone, startTotal);
+        } catch {
+          /* status body optional */
         }
-        if (state === "cancelled") {
+      }
+      for (let tries = 0; tries < 1800; tries += 1) {
+        if (userCancelled) {
           return { started: true, state: "cancelled" };
         }
-        if (state === "error") {
-          return {
-            started: true,
-            state: "error",
-            error: body.error || "Where Used indexing failed.",
-          };
+        // Poll often while preparing / first chunk — N of M should appear within ~1s.
+        await sleepMs(tries < 20 ? 250 : 1000);
+        if (userCancelled) {
+          return { started: true, state: "cancelled" };
         }
-        // idle while waiting for a job we started — keep polling
-        if (expectStartedAt || start) continue;
-        return { started: true, state: state || "idle" };
-      } catch {
-        /* ignore transient poll errors */
+        try {
+          const response = await fetch(
+            `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`
+          );
+          if (!response.ok) continue;
+          const body = await response.json();
+          const state = String(body.state || "");
+          const startedAt = Number(body.started_at) || 0;
+          // Ignore a prior job's terminal status (utilities used to flash "done" instantly).
+          if (
+            expectStartedAt
+            && startedAt
+            && startedAt + 0.001 < expectStartedAt
+            && state !== "queued"
+            && state !== "running"
+          ) {
+            continue;
+          }
+          if (state === "queued" || state === "running") {
+            const total = Number(body.parents_total) || 0;
+            const doneCount = Number(body.parents_done) || 0;
+            onProgress?.(doneCount, total);
+            continue;
+          }
+          if (state === "done") {
+            if (expectStartedAt && startedAt && startedAt + 0.001 < expectStartedAt) {
+              continue;
+            }
+            return {
+              started: true,
+              state: "done",
+              edgesAdded: Number(body.edges_added) || 0,
+              edgesExisting: Number(body.edges_existing) || 0,
+              parentsMissing: Number(body.parents_missing_vault) || 0,
+            };
+          }
+          if (state === "cancelled") {
+            return { started: true, state: "cancelled" };
+          }
+          if (state === "error") {
+            return {
+              started: true,
+              state: "error",
+              error: body.error || "Where Used indexing failed.",
+            };
+          }
+          // idle while waiting for a job we started — keep polling
+          if (expectStartedAt || start) continue;
+          return { started: true, state: state || "idle" };
+        } catch {
+          /* ignore transient poll errors */
+        }
       }
+      return {
+        started: true,
+        state: "timeout",
+        error: "Where Used indexing timed out. Try Rebuild Where Used from the product gear.",
+      };
+    } finally {
+      setBusyCancelHandler(null);
     }
-    return {
-      started: true,
-      state: "timeout",
-      error: "Where Used indexing timed out. Try Rebuild Where Used from the product gear.",
-    };
   }
 
   function watchWhereUsedIndex(productId) {
@@ -3452,7 +3554,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         // Same as Add files/folder(s): index under busy overlay, then one Files refresh.
         // No success toast — updated Files list is the confirmation.
         const indexOutcome = await indexWhereUsedUnderBusy(productId);
-        if (indexOutcome?.state === "error" || indexOutcome?.state === "timeout") {
+        if (indexOutcome?.state === "cancelled") {
+          try {
+            sessionStorage.setItem(
+              "creopdmNotice",
+              "Where Used indexing cancelled. Run Rebuild Where Used if Top Level looks incomplete."
+            );
+          } catch {
+            /* private mode / blocked storage */
+          }
+        } else if (indexOutcome?.state === "error" || indexOutcome?.state === "timeout") {
           try {
             sessionStorage.setItem(
               "creopdmNotice",
@@ -4000,7 +4111,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // No success toast — Files refresh is enough (failures still surface above).
       const productId = currentProductId();
       const indexOutcome = await indexWhereUsedUnderBusy(productId);
-      if (indexOutcome?.state === "error" || indexOutcome?.state === "timeout") {
+      if (indexOutcome?.state === "cancelled") {
+        rememberNotice(
+          "Where Used indexing cancelled. Run Rebuild Where Used if Top Level looks incomplete."
+        );
+      } else if (indexOutcome?.state === "error" || indexOutcome?.state === "timeout") {
         rememberNotice(indexOutcome.error || "Where Used indexing failed.");
       }
       reloadPage();
@@ -11339,6 +11454,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     withBusy,
     setBusy,
     setBusyMessage,
+    forceClearBusy,
+    invokeBusyCancel,
     awaitWhereUsedIndex,
     runUtilitiesRebuildWithWhereUsed,
     eventEl,
@@ -11423,12 +11540,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const clearMeta = fd.get("clear_metadata") === "1";
           const rebuildWu = fd.get("rebuild_where_used") === "1";
           if (rebuildWu) {
-            event.preventDefault();
+            // Never preventDefault without a runner — that made Run look like a no-op.
             const api = window.__creopdmSoftNavApi;
-            if (api && typeof api.runUtilitiesRebuildWithWhereUsed === "function") {
-              void api.runUtilitiesRebuildWithWhereUsed(form);
+            const runner = api?.runUtilitiesRebuildWithWhereUsed;
+            if (typeof runner === "function") {
+              event.preventDefault();
+              void runner(form);
+              return;
             }
-            return;
+            // Fallback: let the normal POST run (server starts Where Used; no N of M overlay).
           }
           if (doRebuild && !clearMeta) {
             message = `Rebuilding product database for ${label}…`;

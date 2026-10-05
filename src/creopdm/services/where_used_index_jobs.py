@@ -79,6 +79,7 @@ class WhereUsedIndexJobs:
                 started_at=time.time(),
             )
             self._status[product_uuid] = status
+            run_id = status.started_at
         # Count parents before returning so Start/GET already carry N for the overlay
         # (do not wait for the first vault chunk — that can take minutes).
         try:
@@ -87,7 +88,7 @@ class WhereUsedIndexJobs:
             logger.exception("Where Used parent count failed for %s", product_uuid)
         thread = threading.Thread(
             target=self._run,
-            args=(product_uuid,),
+            args=(product_uuid, run_id),
             name=f"where-used-{product_uuid[:8]}",
             daemon=True,
         )
@@ -142,12 +143,25 @@ class WhereUsedIndexJobs:
         finally:
             session.close()
 
-    def _run(self, product_uuid: str) -> None:
+    def _is_current_run(self, product_uuid: str, run_id: float | None) -> bool:
+        with self._lock:
+            status = self._status.get(product_uuid)
+            if status is None:
+                return False
+            if status.state == "cancelled":
+                return False
+            if run_id is None:
+                return True
+            return status.started_at == run_id
+
+    def _run(self, product_uuid: str, run_id: float | None = None) -> None:
         with self._lock:
             status = self._status.get(product_uuid)
             if status is None:
                 return
             if status.state == "cancelled":
+                return
+            if run_id is not None and status.started_at != run_id:
                 return
             status.state = "running"
         edges_added = 0
@@ -159,7 +173,7 @@ class WhereUsedIndexJobs:
             if self.get(product_uuid).parents_total <= 0:
                 self._prime_parents_total(product_uuid)
             while True:
-                if self._cancelled(product_uuid):
+                if not self._is_current_run(product_uuid, run_id):
                     logger.info("Where Used index cancelled for %s", product_uuid)
                     return
                 # Short DB session: list + write only. Vault byte scans happen inside
@@ -187,6 +201,8 @@ class WhereUsedIndexJobs:
                     status = self._status.get(product_uuid)
                     if status is None or status.state == "cancelled":
                         return
+                    if run_id is not None and status.started_at != run_id:
+                        return
                     status.parents_total = result.parents_total
                     status.parents_done = min(offset, result.parents_total)
                     status.edges_added = edges_added
@@ -199,6 +215,8 @@ class WhereUsedIndexJobs:
             with self._lock:
                 status = self._status.get(product_uuid)
                 if status is None or status.state == "cancelled":
+                    return
+                if run_id is not None and status.started_at != run_id:
                     return
                 status.state = "done"
                 status.finished_at = time.time()
@@ -214,6 +232,8 @@ class WhereUsedIndexJobs:
             with self._lock:
                 status = self._status.get(product_uuid)
                 if status is None or status.state == "cancelled":
+                    return
+                if run_id is not None and status.started_at != run_id:
                     return
                 status.state = "error"
                 status.error = str(exc) or exc.__class__.__name__
