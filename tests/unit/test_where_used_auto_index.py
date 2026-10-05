@@ -150,15 +150,21 @@ def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
     script = (root / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
     assert "async function awaitWhereUsedIndex(" in script
     assert "async function indexWhereUsedUnderBusy(" in script
-    assert "Where Used only after every Add chunk finished" in script
-    add_tail = script.split("Where Used only after every Add chunk finished", 1)[1].split(
+    assert "async function runWhereUsedProgress(" in script
+    # Nested under Add/zip busyDepth — do not clearBusy between import and index.
+    assert "if (busyDepth > 0)" in script
+    assert "no Files flash mid-job" in script
+    # Reject stale/early done so the overlay cannot finish before parents_done catches up.
+    assert "sawActive" in script
+    assert "doneCount < total" in script
+    add_tail = script.split("Keep the same busy overlay through Where Used", 1)[1].split(
         "} finally {\n      addInFlight = false;",
         1,
     )[0]
     assert "indexWhereUsedUnderBusy(productId)" in add_tail
-    assert "reloadPage()" in add_tail
+    assert "reloadPage({ keepBusy: true" in add_tail
     assert "indexing started in the background" not in add_tail
-    # Compressed zip is a separate submit — must also index before refresh.
+    # Compressed zip is a separate submit — must also index before refresh on one overlay.
     zip_submit = script.split('compressedForm?.addEventListener("submit"', 1)[1].split(
         "function useNativePicker(",
         1,
@@ -167,7 +173,27 @@ def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
     assert "import-zip" in zip_submit
     assert "pollZipImportJob" in zip_submit
     assert "zip-import/jobs" in zip_submit
+    assert "jobFilesTotal" in zip_submit
+    assert "One busy session for upload/import AND Where Used" in zip_submit
+    assert "reloadPage({ keepBusy: true" in zip_submit
     docs = (root / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "keep the busy overlay and run **Where Used** indexing there" in docs
+    assert "never clear the overlay and return to Files before indexing finishes" in docs
     assert "Same Where Used overlay step for **Add folder…**" in docs
     assert "phase text" in docs
+    assert "clear the overlay and return you to Files before Where Used finishes" in docs
+
+
+def test_await_where_used_rejects_unfinished_done_status():
+    """Regression: zip refresh with ~every asm as Top Level when poll accepted early done."""
+    root = Path(__file__).resolve().parents[2]
+    script = (root / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    await_fn = script.split("async function awaitWhereUsedIndex(", 1)[1].split(
+        "function watchWhereUsedIndex(",
+        1,
+    )[0]
+    assert "let sawActive = false" in await_fn
+    assert 'if (start && !sawActive)' in await_fn
+    assert "doneCount < total" in await_fn
+    assert "parentsTotal: total" in await_fn
+    assert "parentsDone: doneCount" in await_fn

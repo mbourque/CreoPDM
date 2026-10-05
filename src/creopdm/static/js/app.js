@@ -1667,19 +1667,30 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  async function runWhereUsedProgress(productId) {
+    // Caller already owns the busy overlay — keep it up through N of M.
+    setBusyMessage("Indexing Where Used… preparing…");
+    return awaitWhereUsedIndex(productId, {
+      onProgress: (doneCount, total) => {
+        publishBusyMessage(whereUsedBusyText(doneCount, total));
+      },
+    });
+  }
+
   async function indexWhereUsedUnderBusy(productId) {
     if (!productId) return null;
+    // Nested under Add/Compressed busy: do not clearBusy between import and index
+    // (that flashed the Files list before Where Used finished — false Top Level).
+    if (busyDepth > 0) {
+      return runWhereUsedProgress(productId);
+    }
     try {
       return await withBusy("Indexing Where Used… preparing…", () =>
-        awaitWhereUsedIndex(productId, {
-          onProgress: (doneCount, total) => {
-            publishBusyMessage(whereUsedBusyText(doneCount, total));
-          },
-        })
+        runWhereUsedProgress(productId)
       );
     } finally {
       // Escape cancel must never leave the modal stuck over the app.
-      forceClearBusy();
+      if (busyDepth > 0) forceClearBusy();
     }
   }
 
@@ -1775,6 +1786,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function awaitWhereUsedIndex(productId, { onProgress, start = true } = {}) {
     if (!productId) return { started: false };
     let expectStartedAt = 0;
+    let sawActive = false;
     let userCancelled = false;
     let cancelInFlight = false;
     const ac = new AbortController();
@@ -1813,6 +1825,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         try {
           const startBody = await startResponse.json();
           expectStartedAt = Number(startBody.started_at) || 0;
+          const startState = String(startBody.state || "");
+          if (startState === "queued" || startState === "running") sawActive = true;
           const startTotal = Number(startBody.parents_total) || 0;
           const startDone = Number(startBody.parents_done) || 0;
           onProgress?.(startDone, startTotal);
@@ -1836,6 +1850,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const body = await response.json();
           const state = String(body.state || "");
           const startedAt = Number(body.started_at) || 0;
+          const total = Number(body.parents_total) || 0;
+          const doneCount = Number(body.parents_done) || 0;
           // Ignore a prior job's terminal status (utilities used to flash "done" instantly).
           if (
             expectStartedAt
@@ -1848,8 +1864,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             continue;
           }
           if (state === "queued" || state === "running") {
-            const total = Number(body.parents_total) || 0;
-            const doneCount = Number(body.parents_done) || 0;
+            sawActive = true;
             onProgress?.(doneCount, total);
             await sleepMs(tries < 20 ? 250 : 1000, ac.signal);
             continue;
@@ -1859,12 +1874,25 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               await sleepMs(tries < 20 ? 250 : 1000, ac.signal);
               continue;
             }
+            // Stale idle→done (no Start stamp) or unfinished progress — keep waiting.
+            if (start && !sawActive) {
+              await sleepMs(tries < 20 ? 250 : 1000, ac.signal);
+              continue;
+            }
+            if (total > 0 && doneCount < total) {
+              onProgress?.(doneCount, total);
+              await sleepMs(tries < 20 ? 250 : 1000, ac.signal);
+              continue;
+            }
+            onProgress?.(doneCount, total);
             return {
               started: true,
               state: "done",
               edgesAdded: Number(body.edges_added) || 0,
               edgesExisting: Number(body.edges_existing) || 0,
               parentsMissing: Number(body.parents_missing_vault) || 0,
+              parentsTotal: total,
+              parentsDone: doneCount,
             };
           }
           if (state === "cancelled") {
@@ -3543,7 +3571,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     compressedDialog?.close();
     const pollAbort = new AbortController();
     try {
-      const result = await withBusy(
+      // One busy session for upload/import AND Where Used — clearing between those
+      // returned the Files list early with a sparse graph (~every asm as Top Level).
+      const pack = await withBusy(
         "Starting compressed import…",
         async () => {
           const jobResponse = await fetch(
@@ -3559,9 +3589,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             throw new Error("Could not start zip import progress.");
           }
           if (job.message) setBusyMessage(job.message);
+          let jobFinal = null;
           const pollPromise = pollZipImportJob(productId, jobId, {
             signal: pollAbort.signal,
+          }).then((body) => {
+            jobFinal = body;
+            return body;
           });
+          let result;
           try {
             const response = await fetch(`${agentBase()}/import-zip`, {
               method: "POST",
@@ -3578,7 +3613,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             if (!response.ok) {
               throw new Error(await readError(response));
             }
-            return response.json();
+            result = await response.json();
           } finally {
             pollAbort.abort();
             try {
@@ -3587,49 +3622,77 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               /* aborted */
             }
           }
+          // Huge zips may omit/truncate ok[] in the agent response — job totals still count.
+          let jobFilesTotal =
+            Number(jobFinal?.files_total) || Number(jobFinal?.files_done) || 0;
+          if (!jobFilesTotal && jobId) {
+            try {
+              const statusResponse = await fetch(
+                `/api/products/${encodeURIComponent(productId)}/zip-import/jobs/${encodeURIComponent(jobId)}`
+              );
+              if (statusResponse.ok) {
+                const statusBody = await statusResponse.json();
+                jobFilesTotal =
+                  Number(statusBody.files_total) || Number(statusBody.files_done) || 0;
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+          const okCount = (result?.ok?.length || 0) || jobFilesTotal;
+          let indexOutcome = null;
+          if (okCount) {
+            indexOutcome = await indexWhereUsedUnderBusy(productId);
+            const failedInside = result?.failed || [];
+            if (failedInside.length) {
+              const sample = failedInside
+                .slice(0, 3)
+                .map((item) => item.filename || "file")
+                .join(", ");
+              try {
+                sessionStorage.setItem(
+                  "creopdmNotice",
+                  `Imported ${okCount} file(s); ${failedInside.length} failed (${sample}${failedInside.length > 3 ? ", …" : ""}).`
+                );
+              } catch {
+                /* private mode / blocked storage */
+              }
+            } else if (indexOutcome?.state === "cancelled") {
+              try {
+                sessionStorage.setItem(
+                  "creopdmNotice",
+                  "Where Used indexing cancelled. Run Rebuild Where Used if Top Level looks incomplete."
+                );
+              } catch {
+                /* private mode / blocked storage */
+              }
+            } else if (
+              !indexOutcome?.started
+              || indexOutcome?.state === "error"
+              || indexOutcome?.state === "timeout"
+            ) {
+              try {
+                sessionStorage.setItem(
+                  "creopdmNotice",
+                  indexOutcome?.error
+                    || "Where Used indexing did not finish. Run Rebuild Where Used from the product gear."
+                );
+              } catch {
+                /* private mode / blocked storage */
+              }
+            }
+            // Refresh while this withBusy is still open — no Files flash between index and reload.
+            await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
+          }
+          return { result, indexOutcome, okCount };
         }
       );
+      const result = pack?.result;
       const failed = result?.failed || [];
-      const okCount = result?.ok?.length || 0;
+      const okCount = pack?.okCount || 0;
       if (failed.length && !okCount) {
         const first = failed[0]?.message || "Could not import the zip.";
         showError($("#toolbar-error"), first);
-        return;
-      }
-      if (failed.length && okCount) {
-        const sample = failed
-          .slice(0, 3)
-          .map((item) => item.filename || "file")
-          .join(", ");
-        showError(
-          $("#toolbar-error"),
-          `Imported ${okCount} file(s); ${failed.length} failed (${sample}${failed.length > 3 ? ", …" : ""}).`
-        );
-      }
-      if (okCount) {
-        // Same as Add files/folder(s): index under busy overlay, then one Files refresh.
-        // No success toast — updated Files list is the confirmation.
-        const indexOutcome = await indexWhereUsedUnderBusy(productId);
-        if (indexOutcome?.state === "cancelled") {
-          try {
-            sessionStorage.setItem(
-              "creopdmNotice",
-              "Where Used indexing cancelled. Run Rebuild Where Used if Top Level looks incomplete."
-            );
-          } catch {
-            /* private mode / blocked storage */
-          }
-        } else if (indexOutcome?.state === "error" || indexOutcome?.state === "timeout") {
-          try {
-            sessionStorage.setItem(
-              "creopdmNotice",
-              indexOutcome.error || "Where Used indexing failed."
-            );
-          } catch {
-            /* private mode / blocked storage */
-          }
-        }
-        reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
       }
     } catch (err) {
       pollAbort.abort();
@@ -3911,6 +3974,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (bulkCount && !confirmLargeBulk("Add", bulkCount)) return;
     addInFlight = true;
     let result;
+    let indexOutcome = null;
     try {
     result = await withBusy(
       chosenFolders.length || chosenBaseFolder || chosenAgentFolderBatches.length
@@ -3921,6 +3985,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           ? `Adding ${chosenAgentPaths.length} files…`
           : "Adding files…",
       async () => {
+      const out = await (async () => {
       async function addAgentPathChunks(paths, baseFolder, commentOnce) {
         const agent = await probeCreoAgent();
         if (!agent) {
@@ -4110,76 +4175,96 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         return null;
       }
       return response.json();
+      })();
+      // Keep the same busy overlay through Where Used (no Files flash mid-job).
+      if (out?.ok?.length) {
+        const okN = out.ok.length;
+        if (canGatherCreoMetadata() && okN > 0 && okN <= 50) {
+          setBusyMessage("Capturing Creo metadata…");
+          await pushCreoMetadataForItems(metadataTargetsFromResult(out));
+        }
+        indexOutcome = await indexWhereUsedUnderBusy(productId);
+        const failedInside = out.failed || [];
+        if (failedInside.length) {
+          const codes = (() => {
+            const counts = {};
+            for (const item of failedInside) {
+              const code = String(item?.code || "FAILED").trim() || "FAILED";
+              counts[code] = (counts[code] || 0) + 1;
+            }
+            return Object.keys(counts)
+              .sort()
+              .map((code) => `${code}=${counts[code]}`)
+              .join(", ");
+          })();
+          const sample = failedInside
+            .slice(0, 3)
+            .map((item) => item.filename || item.uuid || "file")
+            .join(", ");
+          try {
+            sessionStorage.setItem(
+              "creopdmNotice",
+              `Added ${okN} file(s); ${failedInside.length} failed` +
+                (codes ? ` [${codes}]` : "") +
+                ` (${sample}${failedInside.length > 3 ? ", …" : ""}).` +
+                " See creopdm-agent log for each file."
+            );
+          } catch {
+            /* private mode / blocked storage */
+          }
+        } else if (indexOutcome?.state === "cancelled") {
+          try {
+            sessionStorage.setItem(
+              "creopdmNotice",
+              "Where Used indexing cancelled. Run Rebuild Where Used if Top Level looks incomplete."
+            );
+          } catch {
+            /* private mode / blocked storage */
+          }
+        } else if (
+          !indexOutcome?.started
+          || indexOutcome?.state === "error"
+          || indexOutcome?.state === "timeout"
+        ) {
+          try {
+            sessionStorage.setItem(
+              "creopdmNotice",
+              indexOutcome?.error
+                || "Where Used indexing did not finish. Run Rebuild Where Used from the product gear."
+            );
+          } catch {
+            /* private mode / blocked storage */
+          }
+        }
+        await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
+      }
+      return out;
     });
     if (!result) return;
     const failed = result.failed || [];
     const okCount = result.ok?.length || 0;
-    const summarizeAddFailures = (items) => {
+    if (failed.length && !okCount) {
+      const first = failed[0]?.message || "Could not add files.";
       const counts = {};
-      for (const item of items || []) {
+      for (const item of failed) {
         const code = String(item?.code || "FAILED").trim() || "FAILED";
         counts[code] = (counts[code] || 0) + 1;
       }
-      return Object.keys(counts)
+      const codes = Object.keys(counts)
         .sort()
         .map((code) => `${code}=${counts[code]}`)
         .join(", ");
-    };
-    const rememberNotice = (message) => {
-      const text = String(message || "").trim();
-      if (!text) return;
-      try {
-        sessionStorage.setItem("creopdmNotice", text);
-      } catch {
-        /* private mode / blocked storage */
-      }
-    };
-    if (failed.length && !okCount) {
-      const first = failed[0]?.message || "Could not add files.";
-      const codes = summarizeAddFailures(failed);
       const msg =
         first +
         ` (${failed.length} files failed` +
         (codes ? `: ${codes}` : "") +
         ").";
       showError($("#add-error"), msg);
-      rememberNotice(msg);
-      return;
-    }
-    if (failed.length && okCount) {
-      const codes = summarizeAddFailures(failed);
-      const sample = failed
-        .slice(0, 3)
-        .map((item) => item.filename || item.uuid || "file")
-        .join(", ");
-      const msg =
-        `Added ${okCount} file(s); ${failed.length} failed` +
-        (codes ? ` [${codes}]` : "") +
-        ` (${sample}${failed.length > 3 ? ", …" : ""}).` +
-        " See creopdm-agent log for each file.";
-      showError($("#add-error"), msg);
-      rememberNotice(msg);
-    }
-    if (canGatherCreoMetadata() && okCount > 0 && okCount <= 50) {
-      await withBusy("Capturing Creo metadata…", async () => {
-        await pushCreoMetadataForItems(metadataTargetsFromResult(result));
-      });
-    }
-    if (okCount) {
-      // Where Used only after every Add chunk finished (never mid-upload —
-      // that contended SQLite and made "Adding files… N of M" crawl).
-      // Same path for Add files / folder / folders; keep overlay until index done.
-      // No success toast — Files refresh is enough (failures still surface above).
-      const productId = currentProductId();
-      const indexOutcome = await indexWhereUsedUnderBusy(productId);
-      if (indexOutcome?.state === "cancelled") {
-        rememberNotice(
-          "Where Used indexing cancelled. Run Rebuild Where Used if Top Level looks incomplete."
-        );
-      } else if (indexOutcome?.state === "error" || indexOutcome?.state === "timeout") {
-        rememberNotice(indexOutcome.error || "Where Used indexing failed.");
+      try {
+        sessionStorage.setItem("creopdmNotice", msg);
+      } catch {
+        /* private mode / blocked storage */
       }
-      reloadPage();
     }
     } finally {
       addInFlight = false;
