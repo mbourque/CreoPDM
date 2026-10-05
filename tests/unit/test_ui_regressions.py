@@ -773,6 +773,25 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "pollCreoBridgeUntilLive" in non_list
     assert "function pollCreoBridgeUntilLive(" in script
     assert "Details does not stay Session offline" in non_list
+    # Files hard load: Connected must not wait on agent /health.
+    list_branch = block.split("} else {")[1]
+    assert "do not wait on" in list_branch or "do not wait on creopdm-agent" in block
+    assert "syncCreoSessionControlsFromBridge()" in list_branch.split("void creoJSReady.then")[0]
+    assert "pollCreoBridgeUntilLive(() => syncCreoSessionControlsFromBridge())" in list_branch
+    assert "probeCreoAgent" in list_branch
+    # Faster reopen: short grace then /creojs.js; tighter overlay / bridge polls.
+    load_creo = _between(script, "(function loadHostedCreoJS() {", "function userFacingError(")
+    assert "appendCreojsFallback" in load_creo
+    assert "graceTries" in load_creo
+    assert 'script.src = "/creojs.js"' in load_creo
+    overlay_guard = _between(
+        script, "function startCreoConnectingOverlayGuard(", "function canGatherCreoMetadata("
+    )
+    assert "tries >= 150" in overlay_guard
+    assert "}, 100);" in overlay_guard
+    bridge_poll = _between(script, "function pollCreoBridgeUntilLive(", "startCreoConnectingOverlayGuard()")
+    assert "bridgeTries >= 100" in bridge_poll
+    assert "}, 100);" in bridge_poll
     # Embedded browser only: block clicks while Creo.JS is still linking.
     assert "function startCreoConnectingOverlayGuard(" in script
     assert "function looksLikeCreoEmbeddedBrowser(" in script
@@ -785,6 +804,8 @@ def test_soft_nav_skips_creojs_reconnect():
     docs_creo = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "Connecting to Creo…" in docs_creo
     assert "never in Chrome/Edge" in docs_creo
+    assert "promote **Connected** as soon as the bridge is live" in docs_creo
+    assert "wait several seconds for agent `/health` before showing Connected" in docs_creo
     # Soft sync must promote a stale Session offline pill when Creo.JS is live.
     soft_sync = _between(
         script, "function syncCreoSessionControlsFromBridge(", "if (soft)"

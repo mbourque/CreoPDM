@@ -140,8 +140,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
       };
       // Creo may inject CreoJS after scanning text/creojs scripts.
-      // Wait longer when the PTC bridge is present so we don't load a second copy.
+      // Brief grace for that inject, then load /creojs.js when the PTC bridge
+      // is present so browser reopen is not stuck waiting ~4s for a no-show.
       let tries = 0;
+      let scriptStarted = false;
       const hasBridge = () => {
         try {
           return !!(window.external && window.external.ptc);
@@ -149,6 +151,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           return false;
         }
       };
+      const appendCreojsFallback = () => {
+        if (scriptStarted || window.CreoJS || !hasBridge()) return;
+        scriptStarted = true;
+        const script = document.createElement("script");
+        script.src = "/creojs.js";
+        script.onload = () => {
+          tryInit();
+          done(Boolean(window.CreoJS));
+        };
+        script.onerror = () => done(Boolean(window.CreoJS));
+        document.head.appendChild(script);
+      };
+      // ~500ms grace with bridge; outside Creo never load creojs.js.
+      const graceTries = hasBridge() ? 10 : 40;
       const maxTries = hasBridge() ? 80 : 40;
       const poll = trackedInterval(() => {
         tries += 1;
@@ -158,6 +174,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           done(true);
           return;
         }
+        if (hasBridge() && tries >= graceTries) {
+          appendCreojsFallback();
+        }
         if (tries < maxTries) return;
         window.clearInterval(poll);
         // Outside Creo, skip loading creojs.js — it cannot talk to a session.
@@ -165,14 +184,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           done(false);
           return;
         }
-        const script = document.createElement("script");
-        script.src = "/creojs.js";
-        script.onload = () => {
-          tryInit();
-          done(Boolean(window.CreoJS));
-        };
-        script.onerror = () => done(Boolean(window.CreoJS));
-        document.head.appendChild(script);
+        appendCreojsFallback();
+        // onload/onerror settle when the script tag was started.
+        if (!scriptStarted) done(false);
       }, 50);
     });
   })());
@@ -5915,6 +5929,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (window.__creopdmCreoConnectingPoll) {
       window.clearInterval(window.__creopdmCreoConnectingPoll);
     }
+    // 100ms poll — clear overlay as soon as the bridge is live (~15s cap).
     window.__creopdmCreoConnectingPoll = trackedInterval(() => {
       tries += 1;
       if (hostedCreoJS()) {
@@ -5923,8 +5938,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         return;
       }
       // ~15s — leave Session offline; do not trap clicks forever.
-      if (tries >= 60) hideCreoConnectingOverlay();
-    }, 250);
+      if (tries >= 150) hideCreoConnectingOverlay();
+    }, 100);
   }
 
   function canGatherCreoMetadata() {
@@ -6479,11 +6494,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     let bridgeTries = 0;
     const bridgePoll = trackedInterval(() => {
       bridgeTries += 1;
-      if (hostedCreoJS() || bridgeTries >= 40) {
+      // ~10s at 100ms — promote Connected as soon as the bridge is readable.
+      if (hostedCreoJS() || bridgeTries >= 100) {
         window.clearInterval(bridgePoll);
         onLive();
       }
-    }, 250);
+    }, 100);
   }
 
   // Soft folder/product switches keep the live Creo.JS bridge and header status
@@ -6503,35 +6519,35 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       pollCreoBridgeUntilLive(() => syncCreoSessionControlsFromBridge());
     });
   } else {
-  void creoJSReady.then(() => {
-    void (async () => {
-      // CREOPDM_STATUS_POLL_V2: at most one /health on load; repeat only if agent says > 0.
-      // Files list only — Open workspace visibility depends on agent online.
-      const agent = await probeCreoAgent();
-      await refreshCreoStatusPill(agent);
-      syncToolbar();
-      // First load: Creo.JS bridge can appear after first paint — re-check a few times.
-      pollCreoBridgeUntilLive(() => {
-        void refreshCreoStatusPill(agent).then(() => syncToolbar());
-      });
-      let seconds = 0;
-      if (agent && Object.prototype.hasOwnProperty.call(agent, "status_poll_interval_seconds")) {
-        const parsed = Number(agent.status_poll_interval_seconds);
-        seconds = Number.isFinite(parsed) ? parsed : 0;
-      }
-      // Poll agent for Open workspace + Embedded status (any open mode).
-      if (seconds > 0 && !window.__creopdmStatusPollId) {
-        const interval = Math.min(120000, Math.max(1000, Math.round(seconds * 1000)));
-        // Survive soft folder/product boots (those abort pageIntervals).
-        window.__creopdmStatusPollId = window.setInterval(() => {
-          if (window.__creopdmSoftNavBusy) return;
-          // Stop probing after soft-nav away from the Files list.
-          if (!document.querySelector("#object-table")) return;
-          void refreshCreoStatusPill().then(() => syncToolbar());
-        }, interval);
-      }
-    })();
-  });
+    // Files list: promote Connected as soon as Creo.JS is live — do not wait on
+    // creopdm-agent /health (that only affects Open workspace / agent online).
+    syncCreoSessionControlsFromBridge();
+    void creoJSReady.then(() => {
+      pollCreoBridgeUntilLive(() => syncCreoSessionControlsFromBridge());
+      void (async () => {
+        // CREOPDM_STATUS_POLL_V2: at most one /health on load; repeat only if agent says > 0.
+        // Files list only — Open workspace visibility depends on agent online.
+        const agent = await probeCreoAgent();
+        await refreshCreoStatusPill(agent);
+        syncToolbar();
+        let seconds = 0;
+        if (agent && Object.prototype.hasOwnProperty.call(agent, "status_poll_interval_seconds")) {
+          const parsed = Number(agent.status_poll_interval_seconds);
+          seconds = Number.isFinite(parsed) ? parsed : 0;
+        }
+        // Poll agent for Open workspace + Embedded status (any open mode).
+        if (seconds > 0 && !window.__creopdmStatusPollId) {
+          const interval = Math.min(120000, Math.max(1000, Math.round(seconds * 1000)));
+          // Survive soft folder/product boots (those abort pageIntervals).
+          window.__creopdmStatusPollId = window.setInterval(() => {
+            if (window.__creopdmSoftNavBusy) return;
+            // Stop probing after soft-nav away from the Files list.
+            if (!document.querySelector("#object-table")) return;
+            void refreshCreoStatusPill().then(() => syncToolbar());
+          }, interval);
+        }
+      })();
+    });
   }
 
   async function agentWorkdir(productId, vaultFolder) {
