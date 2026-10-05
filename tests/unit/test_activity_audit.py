@@ -207,7 +207,7 @@ def test_import_batch_chunks_merge_into_one_audit_row(ctx):
         assert len(row.object_filenames) == 12
         assert row.object_filenames[0] == "a.prt"
         assert row.object_filenames[-1] == "l.prt"
-        assert row.summary == "Add 12 files"
+        assert row.summary == "Add 12 files · git deadbeef"
         assert row.details.get("batch_id") == batch_id
         assert row.details.get("count") == 12
 

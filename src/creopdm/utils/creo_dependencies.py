@@ -28,8 +28,10 @@ _WHERE_USED_SCAN_LIMIT: int | None = None
 # Creo tips often embed a product-wide name table. Stem matching then links almost
 # every assembly as a "child" (Top Level → 0) and falsely parents the true root.
 # After indexing, drop ASSEMBLY_MEMBER edges into assemblies claimed by more than
-# this many parents (e.g. project root name appearing in ~every tip).
-_MAX_WHERE_USED_ASM_PARENTS = 40
+# this many parents (e.g. project root name appearing in ~every tip). Keep this
+# high enough that real shared JD sub-asms (dozens of parents) survive — Open
+# walks those edges; over-pruning left large products with only ~tens of deps.
+_MAX_WHERE_USED_ASM_PARENTS = 200
 # Bare stems that are Creo datum/view words — never treat as component names.
 # ``front.asm`` otherwise becomes a name-table magnet / false Top Level.
 _WHERE_USED_STEM_BLOCKLIST = frozenset(

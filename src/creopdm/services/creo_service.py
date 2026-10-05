@@ -42,7 +42,12 @@ _OPEN_DEPENDENCY_TYPES = frozenset(
     }
 )
 _MAX_DEP_DEPENDENCY_DEPTH = 8
-_MAX_DEP_DEPENDENCIES = 150
+# DB walk only (no vault I/O) — large JD trees must fully materialize for Creo.
+# Vault-scan fallback stays capped separately (see creo_dependencies).
+_MAX_DEP_DEPENDENCIES = 8000
+# Prefer vault-scan when the Where Used walk looks incomplete (sparse post-zip /
+# over-pruned index) rather than trusting a handful of edges alone.
+_SPARSE_OPEN_WHERE_USED = 80
 
 
 class CreoService:
@@ -260,34 +265,26 @@ class CreoService:
                     root_id = int(row.id)
                     break
 
-        # Prefer a modest Where Used tree (fast reopen). Huge trees are usually
-        # string-table noise from Rebuild — fall back to a folder-first vault scan.
-        # Never materialize during this step (that made Finding dependencies… hang).
-        _MAX_OPEN_FROM_WHERE_USED = 120
+        # Prefer the Where Used DB tree (SQL only — safe for thousands of members).
+        # Do not discard large trees as "noise" (that left JD opens with ~tens of
+        # files). Fall back to a folder-first vault scan when the index is missing
+        # or sparse. Never materialize during this step.
         source = "where-used"
         chosen: list[EngineeringObject] = []
         if root_id is not None:
             chosen = self._where_used_dependency_objects(session, product.id, root_id)
-            if len(chosen) > _MAX_OPEN_FROM_WHERE_USED:
-                logger.info(
-                    "Open deps: ignoring %s Where Used rows for %s (likely noisy index)",
-                    len(chosen),
-                    Path(filename).name,
-                )
-                chosen = []
 
-        if not chosen:
-            source = "vault-scan"
+        def _resolve(obj: object) -> Path | None:
+            try:
+                return self._workspaces.locate_content(product, obj)  # type: ignore[arg-type]
+            except PathValidationError:
+                return None
+            except Exception:  # noqa: BLE001
+                return None
 
-            def _resolve(obj: object) -> Path | None:
-                try:
-                    return self._workspaces.locate_content(product, obj)  # type: ignore[arg-type]
-                except PathValidationError:
-                    return None
-                except Exception:  # noqa: BLE001
-                    return None
-
-            chosen, edges = collect_open_dependency_walk(
+        need_vault = not chosen or len(chosen) < _SPARSE_OPEN_WHERE_USED
+        if need_vault:
+            vault_chosen, edges = collect_open_dependency_walk(
                 primary_relative=relative_path,
                 primary_filename=filename,
                 object_type=object_type,
@@ -310,6 +307,11 @@ class CreoService:
                         Path(filename).name,
                         existing,
                     )
+            if len(vault_chosen) > len(chosen):
+                chosen = vault_chosen
+                source = "vault-scan"
+            elif not chosen:
+                source = "vault-scan"
         logger.info(
             "Open deps for %s via %s (%s files)",
             Path(filename).name,

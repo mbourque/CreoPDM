@@ -783,3 +783,152 @@ def test_open_dependencies_prefer_where_used_db(
         names = {item["filename"] for item in opened.json()["dependencies"]}
         assert names == {"sub.asm", "pin.prt"}
         assert opened.json().get("content_hash")
+
+
+@requires_git
+def test_open_dependencies_trust_large_where_used_tree(
+    data_dir, repo_parent, identity: StaticUserProvider
+):
+    """Regression: Where Used trees >120 must not be discarded (JD Open ~23 files)."""
+    from creopdm.constants import DependencyType
+    from creopdm.models.dependency import Dependency
+
+    recorder = RecordingConnector()
+    ctx = build_context(ConfigManager(), users=identity)
+    ctx.creo = recorder
+    ctx.creo_service = CreoService(recorder, ctx.objects, ctx.checkouts, ctx.workspaces)
+    with TestClient(create_app(ctx)) as client:
+        product = client.post("/api/products", json={"name": "LargeWuOpen"}).json()
+        # Opaque bytes so vault-scan cannot invent members — Open must trust DB.
+        top = client.post(
+            f"/api/products/{product['uuid']}/objects",
+            files={"file": ("top.asm", b"opaque-top-no-names", "application/octet-stream")},
+            data={"comment": "Top", "relative_path": "CAD/top.asm"},
+        )
+        assert top.status_code == 201, top.text
+        part_uuids: list[str] = []
+        for index in range(130):
+            part = client.post(
+                f"/api/products/{product['uuid']}/objects",
+                files={
+                    "file": (
+                        f"p{index:03d}.prt",
+                        b"part-only",
+                        "application/octet-stream",
+                    )
+                },
+                data={
+                    "comment": f"P{index}",
+                    "relative_path": f"Parts/p{index:03d}.prt",
+                },
+            )
+            assert part.status_code == 201, part.text
+            part_uuids.append(part.json()["uuid"])
+
+        with ctx.session_factory() as db:
+            product_row = ctx.products.get_product(db, product["uuid"])
+            objs = {
+                row.filename: row
+                for row in ctx.objects.list_objects(db, product_row.id)
+            }
+            top_row = objs["top.asm"]
+            db.add_all(
+                [
+                    Dependency(
+                        product_id=top_row.product_id,
+                        parent_object_id=top_row.id,
+                        child_object_id=objs[f"p{index:03d}.prt"].id,
+                        dependency_type=DependencyType.ASSEMBLY_MEMBER.value,
+                        quantity=1.0,
+                    )
+                    for index in range(130)
+                ]
+            )
+            db.commit()
+
+        opened = client.post(
+            "/api/creo/open",
+            json={"object_id": top.json()["uuid"], "launch": False},
+        )
+        assert opened.status_code == 200, opened.text
+        names = {item["filename"] for item in opened.json()["dependencies"]}
+        assert len(names) == 130
+        assert f"p000.prt" in names
+        assert f"p129.prt" in names
+
+
+@requires_git
+def test_open_dependencies_sparse_where_used_falls_back_to_vault_scan(
+    data_dir, repo_parent, identity: StaticUserProvider
+):
+    """Sparse post-zip Where Used must not block a richer vault scan (JD ~23 files)."""
+    from creopdm.constants import DependencyType
+    from creopdm.models.dependency import Dependency
+
+    recorder = RecordingConnector()
+    ctx = build_context(ConfigManager(), users=identity)
+    ctx.creo = recorder
+    ctx.creo_service = CreoService(
+        recorder, ctx.objects, ctx.checkouts, ctx.workspaces, metadata=ctx.metadata
+    )
+    with TestClient(create_app(ctx)) as client:
+        product = client.post("/api/products", json={"name": "SparseWuOpen"}).json()
+        part = client.post(
+            f"/api/products/{product['uuid']}/objects",
+            files={"file": ("pin.prt", b"part-bytes", "application/octet-stream")},
+            data={"comment": "Part", "relative_path": "Parts/pin.prt"},
+        )
+        extra = client.post(
+            f"/api/products/{product['uuid']}/objects",
+            files={"file": ("extra.prt", b"extra-bytes", "application/octet-stream")},
+            data={"comment": "Extra", "relative_path": "Parts/extra.prt"},
+        )
+        sub = client.post(
+            f"/api/products/{product['uuid']}/objects",
+            files={"file": ("sub.asm", b"uses PIN.PRT", "application/octet-stream")},
+            data={"comment": "Sub", "relative_path": "CAD/sub.asm"},
+        )
+        top = client.post(
+            f"/api/products/{product['uuid']}/objects",
+            files={
+                "file": (
+                    "top.asm",
+                    b"uses SUB.ASM and EXTRA.PRT",
+                    "application/octet-stream",
+                )
+            },
+            data={"comment": "Top", "relative_path": "CAD/top.asm"},
+        )
+        assert part.status_code == 201, part.text
+        assert extra.status_code == 201, extra.text
+        assert sub.status_code == 201, sub.text
+        assert top.status_code == 201, top.text
+
+        # Thin index: only top → sub (incomplete post-zip / early chunk).
+        with ctx.session_factory() as db:
+            product_row = ctx.products.get_product(db, product["uuid"])
+            objs = {
+                row.filename: row
+                for row in ctx.objects.list_objects(db, product_row.id)
+            }
+            db.add(
+                Dependency(
+                    product_id=objs["top.asm"].product_id,
+                    parent_object_id=objs["top.asm"].id,
+                    child_object_id=objs["sub.asm"].id,
+                    dependency_type=DependencyType.ASSEMBLY_MEMBER.value,
+                    quantity=1.0,
+                )
+            )
+            db.commit()
+
+        opened = client.post(
+            "/api/creo/open",
+            json={"object_id": top.json()["uuid"], "launch": False},
+        )
+        assert opened.status_code == 200, opened.text
+        names = {item["filename"] for item in opened.json()["dependencies"]}
+        # Must not stop at sparse WU (sub.asm only) — vault bytes name the rest.
+        assert "sub.asm" in names
+        assert "pin.prt" in names
+        assert "extra.prt" in names

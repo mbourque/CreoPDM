@@ -123,7 +123,8 @@ def test_rebuild_reads_full_tip_for_where_used():
 def test_where_used_magnet_parent_cap_constant():
     from creopdm.utils.creo_dependencies import _MAX_WHERE_USED_ASM_PARENTS
 
-    assert _MAX_WHERE_USED_ASM_PARENTS == 40
+    # Shared JD sub-asms often have dozens of parents; 40 wiped real trees.
+    assert _MAX_WHERE_USED_ASM_PARENTS == 200
 
 
 def test_open_deps_do_not_materialize_during_find():
@@ -132,9 +133,22 @@ def test_open_deps_do_not_materialize_during_find():
     body = text.split("def _dependencies_for(", 1)[1].split("def _open_resolved(", 1)[0]
     assert "locate_content" in body
     assert "materialize(" not in body
-    assert "_MAX_OPEN_FROM_WHERE_USED" in body
+    assert "_SPARSE_OPEN_WHERE_USED" in body
+    # Regression: discarding Where Used trees >120 left JD Open with ~23 files.
+    assert "_MAX_OPEN_FROM_WHERE_USED" not in body
+    assert "likely noisy index" not in body
     open_obj = text.split("def open_object(", 1)[1].split("def open_workspace_file(", 1)[0]
     assert "is_modified" not in open_obj
+
+
+def test_open_where_used_db_walk_allows_large_jd_trees():
+    """DB walk must not hard-cap at 150 — large products need thousands of deps."""
+    text = Path("src/creopdm/services/creo_service.py").read_text(encoding="utf-8")
+    assert "_MAX_DEP_DEPENDENCIES = 8000" in text
+    from creopdm.services.creo_service import _MAX_DEP_DEPENDENCIES, _SPARSE_OPEN_WHERE_USED
+
+    assert _MAX_DEP_DEPENDENCIES >= 4000
+    assert _SPARSE_OPEN_WHERE_USED == 80
 
 
 def test_select_dependency_objects_caps_large_flat_folder_matches(tmp_path: Path):
