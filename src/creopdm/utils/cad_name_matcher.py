@@ -68,12 +68,14 @@ class CadNameMatcher:
         require_boundaries: bool | None = None,
         min_stem_len: int = 2,
         unique_stems_only: bool = False,
+        blocked_stems: frozenset[str] | set[str] | None = None,
     ) -> None:
         # Prefer explicit require_boundaries; else stems-only Open stays loose,
         # extension-only mode stays strict.
         self._require_boundaries = (
             (not include_stems) if require_boundaries is None else bool(require_boundaries)
         )
+        blocked = {item.lower() for item in (blocked_stems or ())}
         logicals: list[str] = []
         stem_to_logicals: dict[str, list[str]] = {}
         for name in filenames:
@@ -93,7 +95,7 @@ class CadNameMatcher:
             tokens = {logical.encode("ascii", "ignore")}
             if include_stems:
                 stem = Path(logical).stem.lower()
-                if len(stem) >= max(2, int(min_stem_len)):
+                if len(stem) >= max(2, int(min_stem_len)) and stem not in blocked:
                     peers = stem_to_logicals.get(stem) or [logical]
                     allow_stem = True
                     if unique_stems_only and len(peers) > 1:

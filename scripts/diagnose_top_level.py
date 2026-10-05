@@ -39,6 +39,7 @@ from creopdm.utils.creo_dependencies import (
     _MAX_WHERE_USED_ASM_PARENTS,
     _SCAN_LIMIT,
     _WHERE_USED_SCAN_LIMIT,
+    _WHERE_USED_STEM_BLOCKLIST,
     _utf16le_ascii_runs,
     needs_open_dependencies,
     read_model_scan_blob,
@@ -201,6 +202,7 @@ def main() -> int:
             require_boundaries=True,
             min_stem_len=4,
             unique_stems_only=True,
+            blocked_stems=_WHERE_USED_STEM_BLOCKLIST,
         )
         matcher_ext = CadNameMatcher(
             candidate_names,
@@ -287,6 +289,8 @@ def main() -> int:
             CreoFileManager.normalize_creo_filename(row.filename).lower()
             for row in asms
             if row.id not in after_magnet
+            and Path(CreoFileManager.normalize_creo_filename(row.filename)).stem.lower()
+            not in _WHERE_USED_STEM_BLOCKLIST
         )
         fanout_sorted = sorted(fanout)
         p50 = fanout_sorted[len(fanout_sorted) // 2] if fanout_sorted else 0

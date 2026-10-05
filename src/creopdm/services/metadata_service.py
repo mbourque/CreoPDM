@@ -34,6 +34,7 @@ from creopdm.utils.creo_dependencies import (
     needs_open_dependencies,
     _MAX_WHERE_USED_ASM_PARENTS,
     _WHERE_USED_SCAN_LIMIT,
+    _WHERE_USED_STEM_BLOCKLIST,
     read_model_scan_blob,
 )
 from creopdm.utils.creo_model_class import normalize_creo_identity
@@ -307,7 +308,9 @@ class MetadataService:
         """Assemblies not used by another assembly (drawing parents ignored).
 
         Requires a Where Used index. An assembly referenced only from a drawing
-        still counts as top-level.
+        still counts as top-level. Datum-named assemblies (``front.asm``,
+        ``top.asm``, …) are omitted — bare ``FRONT``/``TOP`` hits are Creo
+        plane/view noise, not a second product root.
         """
         Parent = aliased(EngineeringObject)
         referenced = (
@@ -320,7 +323,7 @@ class MetadataService:
             )
         )
         rows = session.scalars(
-            select(EngineeringObject.uuid)
+            select(EngineeringObject)
             .where(
                 EngineeringObject.product_id == product_id,
                 EngineeringObject.object_type == _ASSEMBLY_TYPE,
@@ -328,7 +331,15 @@ class MetadataService:
             )
             .order_by(EngineeringObject.filename)
         ).all()
-        return [str(uuid) for uuid in rows]
+        out: list[str] = []
+        for row in rows:
+            stem = Path(
+                CreoFileManager.normalize_creo_filename(row.filename)
+            ).stem.lower()
+            if stem in _WHERE_USED_STEM_BLOCKLIST:
+                continue
+            out.append(str(row.uuid))
+        return out
 
     def where_used(
         self,
@@ -593,6 +604,7 @@ class MetadataService:
             require_boundaries=True,
             min_stem_len=4,
             unique_stems_only=True,
+            blocked_stems=_WHERE_USED_STEM_BLOCKLIST,
         )
         edges_added = 0
         edges_existing = 0

@@ -55,6 +55,23 @@ def test_rebuild_uses_bounded_unique_stems_for_creo_component_names():
     assert "unique_stems_only=True" in text
 
 
+def test_matcher_blocks_creo_datum_stems_like_front():
+    """``front`` is a Creo datum/view word — must not create Where Used via stem."""
+    from creopdm.utils.creo_dependencies import _WHERE_USED_STEM_BLOCKLIST
+
+    matcher = CadNameMatcher(
+        ["front.asm", "844j.asm"],
+        include_stems=True,
+        require_boundaries=True,
+        min_stem_len=4,
+        unique_stems_only=True,
+        blocked_stems=_WHERE_USED_STEM_BLOCKLIST,
+    )
+    assert matcher.find(b"\x00front\x00") == set()
+    assert matcher.find(b"\x00front.asm\x00") == {"front.asm"}
+    assert matcher.find(b"\x00844j\x00") == {"844j.asm"}
+
+
 def test_matcher_prefers_asm_when_part_and_asm_share_stem():
     matcher = CadNameMatcher(
         ["shaft.prt", "shaft.asm", "pin.prt"],

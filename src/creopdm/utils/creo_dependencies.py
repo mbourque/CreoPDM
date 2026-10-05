@@ -30,6 +30,31 @@ _WHERE_USED_SCAN_LIMIT: int | None = None
 # After indexing, drop ASSEMBLY_MEMBER edges into assemblies claimed by more than
 # this many parents (e.g. project root name appearing in ~every tip).
 _MAX_WHERE_USED_ASM_PARENTS = 40
+# Bare stems that are Creo datum/view words — never treat as component names.
+# ``front.asm`` otherwise becomes a name-table magnet / false Top Level.
+_WHERE_USED_STEM_BLOCKLIST = frozenset(
+    {
+        "front",
+        "back",
+        "left",
+        "right",
+        "top",
+        "bottom",
+        "side",
+        "center",
+        "middle",
+        "inner",
+        "outer",
+        "upper",
+        "lower",
+        "main",
+        "base",
+        "core",
+        "default",
+        "solid",
+        "quilt",
+    }
+)
 # Below this, plain ``in`` checks are cheaper than building an automaton.
 _MATCHER_THRESHOLD = 48
 # Safety caps for deep assembly trees.

@@ -320,6 +320,57 @@ def test_prune_magnet_clears_false_parents_of_project_root(
         assert "asm-sub" not in tops
 
 
+def test_top_level_omits_creo_datum_named_assemblies(
+    data_dir, identity: StaticUserProvider
+):
+    """``front.asm`` must not inflate Top Level beside the real root."""
+    ctx = build_context(ConfigManager(), users=identity)
+    with ctx.session_factory() as db:
+        product = Product(
+            uuid="prod-front-tl",
+            name="FrontTL",
+            vault_folder="front-tl",
+            repository_path=str(Path(data_dir) / "vaults" / "front-tl"),
+            default_branch="main",
+        )
+        db.add(product)
+        db.flush()
+        root = _obj(
+            product.id,
+            filename="844j.asm",
+            object_type="CREO_ASSEMBLY",
+            uuid="asm-root",
+        )
+        front = _obj(
+            product.id,
+            filename="front.asm",
+            object_type="CREO_ASSEMBLY",
+            uuid="asm-front",
+        )
+        sub = _obj(
+            product.id,
+            filename="at311912.asm",
+            object_type="CREO_ASSEMBLY",
+            uuid="asm-sub",
+        )
+        db.add_all([root, front, sub])
+        db.flush()
+        # Index present: root uses sub. front has no assembly parent.
+        db.add(
+            Dependency(
+                product_id=product.id,
+                parent_object_id=root.id,
+                child_object_id=sub.id,
+                dependency_type=DependencyType.ASSEMBLY_MEMBER.value,
+                quantity=1.0,
+            )
+        )
+        db.commit()
+        tops = set(ctx.metadata.top_level_assembly_uuids(db, product.id))
+        assert tops == {"asm-root"}
+        assert "asm-front" not in tops
+
+
 def test_where_used_index_absent_without_dependencies(data_dir, identity: StaticUserProvider):
     ctx = build_context(ConfigManager(), users=identity)
     with ctx.session_factory() as db:
