@@ -358,11 +358,22 @@ function creoTrailEscapePath(path) {
     // Trail Inputname expects Windows separators; backslashes are doubled.
     return String(path || "").replace(/\//g, "\\").replace(/\\/g, "\\\\");
 }
+function creoFileOpenTypeFilter(name) {
+    // Creo File Open Type trail tokens (db_1 = Assembly, db_-1 = All Files).
+    var logical = creoLogicalFileName(name || "");
+    var lower = String(logical || "").toLowerCase();
+    var dot = lower.lastIndexOf(".");
+    var suffix = dot >= 0 ? lower.substring(dot) : "";
+    if (suffix === ".asm") {
+        return "db_1";
+    }
+    return "db_-1";
+}
 function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
     /**
      * Drive File > Open without changing Creo's session working directory.
-     * Navigates the dialog address bar to the agent cache folder, sets Type to
-     * All Files (db_-1), then opens the short file name.
+     * Navigates the dialog address bar to the agent cache folder, sets Type
+     * (Assembly for .asm, else All Files), then opens the on-disk basename.
      * Preferred for native Creo tips too — matches opening from the agent
      * workspace in Creo; OpenFile/RetrieveModel can flood retrieval/regen
      * messages on large assemblies that File > Open handles quietly.
@@ -373,7 +384,16 @@ function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
     var absolute = fullPath
         ? String(fullPath)
         : (directory && diskName ? creoJoinPath(directory, diskName) : "");
-    var shortName = diskName || (absolute ? absolute.replace(/^.*[\\\/]/, "") : "");
+    // Prefer the on-disk basename Creo lists in that folder (logical tip or .N).
+    var shortName = absolute
+        ? creoBasename(absolute)
+        : (diskName || "");
+    if (!shortName && absolute) {
+        shortName = absolute.replace(/^.*[\\\/]/, "");
+    }
+    if (!shortName) {
+        shortName = diskName || "";
+    }
     var folder = directory ? String(directory) : "";
     if (!folder && absolute) {
         folder = absolute.replace(/[\\\/][^\\\/]+$/, "");
@@ -383,6 +403,7 @@ function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
     }
     var folderTrail = creoTrailEscapePath(folder);
     var nameTrail = creoTrailEscapePath(shortName);
+    var typeFilter = creoFileOpenTypeFilter(shortName);
     var macro =
         "~ Command `ProCmdModelOpen`;"
         + "~ Trail `` `` `DLG_PREVIEW_POST` `file_open`;"
@@ -392,7 +413,7 @@ function creoTryOpenViaTrail(session, directory, diskName, fullPath) {
         + "~ Activate `file_open` `opt_EMBED_BROWSER_TB_SAB_LAYOUT`;"
         + "~ Open `file_open` `Type`;"
         + "~ Close `file_open` `Type`;"
-        + "~ Select `file_open` `Type` 1 `db_-1`;"
+        + "~ Select `file_open` `Type` 1 `" + typeFilter + "`;"
         + "~ Trail `` `` `PREVIEW_POPUP_TIMER` `file_open:Ph_list.Filelist:<NULL>`;"
         + "~ Input `file_open` `Inputname` `" + nameTrail + "`;"
         + "~ Update `file_open` `Inputname` `" + nameTrail + "`;"
@@ -439,12 +460,18 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
         } catch (errMfg) {}
         // Prefer File > Open trail for native Creo tips (and Multi-CAD). Do not
         // ChangeDirectory first — the trail navigates the dialog like a manual
-        // open from the agent workspace.
-        if (creoTryOpenViaTrail(session, openWd || directory, trailName, preparedPath)) {
+        // open from the agent workspace. Prefer on-disk basename (fullPath),
+        // then logical tip name.
+        var diskForTrail = preparedPath ? creoBasename(preparedPath) : (shortDisk || diskName || "");
+        if (creoTryOpenViaTrail(session, openWd || directory, diskForTrail || trailName, preparedPath)) {
             return filename;
         }
-        if (trailName !== (shortDisk || diskName || filename)
-            && creoTryOpenViaTrail(session, openWd || directory, shortDisk || diskName || filename, preparedPath)) {
+        if (trailName && trailName !== diskForTrail
+            && creoTryOpenViaTrail(session, openWd || directory, trailName, preparedPath)) {
+            return filename;
+        }
+        if (shortDisk && shortDisk !== diskForTrail && shortDisk !== trailName
+            && creoTryOpenViaTrail(session, openWd || directory, shortDisk, preparedPath)) {
             return filename;
         }
         // Fallback: OpenFile / RetrieveModel when RunMacro trail is unavailable.

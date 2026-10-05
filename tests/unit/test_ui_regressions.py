@@ -671,9 +671,14 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "hostedCreoJS()" in prompt_fn
     assert "skip a one-option dialog" in prompt_fn or "!allowCheckout" in prompt_fn
     assert "showWd" in prompt_fn
+    # Skip-chooser still defaults Set WD on when Connected (red CAB / combine-state).
+    assert "setWorkingDirectory: showWd" in prompt_fn
+    from_ui = _between(script, "async function openPdmObjectFromUi(", "async function probeCreoAgent(")
+    assert "setWorkingDirectory: hostedCreoJS()" in from_ui
     assert "agentPdmAuth" in script
     assert "...agentPdmAuth()" in script or "agentPdmAuth()" in script
     open_fn = _between(script, "async function openPdmObjectWork(", "function openPdmLaunchResult(")
+    assert "setCreoWorkingDirectory({ quiet: true })" in open_fn
     assert "hostedCreoJS() && embeddedMode" in open_fn or 'hostedCreoJS() && creoOpenMode() === "embedded"' in open_fn
     assert 'openViaAgent(openSpec.path, "association")' in open_fn
     assert "function likelyStandaloneBrowser(" in script
@@ -1130,6 +1135,9 @@ def test_open_model_uses_nested_cache_folder():
     assert "Prefer File > Open trail" in open_fn
     assert open_fn.index("creoTryOpenViaTrail(") < open_fn.index("ChangeDirectory(cacheDir)")
     assert open_fn.index("creoTryOpenViaTrail(") < open_fn.index("creoTryOpenName(")
+    assert "function creoFileOpenTypeFilter(" in base
+    assert 'return "db_1"' in base
+    assert "diskForTrail" in open_fn
     # New file / Modified local: try logical tip after numbered .prt.1 fails.
     assert "creoLogicalFileName(shortDisk" in open_fn
     assert "logicalName !== shortDisk" in open_fn

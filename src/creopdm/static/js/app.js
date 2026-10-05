@@ -6975,12 +6975,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return String(body.path);
   }
 
-  async function setCreoWorkingDirectory() {
+  async function setCreoWorkingDirectory(options) {
+    const quiet = Boolean(options && options.quiet);
     try {
       await creoJSReady;
       if (!hostedCreoJS()) {
         showError($("#toolbar-error"), "Open this page in Creo's built-in browser to set the working directory.");
-        return;
+        return false;
       }
       if (window.CreoJS && typeof window.CreoJS === "object") {
         window.CreoJS.$ONEXCEPTION = function (exc) {
@@ -6998,7 +6999,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           $("#toolbar-error"),
           "Start creopdm-agent on this Creo PC, then try Set Working Directory again."
         );
-        return;
+        return false;
       }
       const directory = await agentWorkdir(currentProductId(), currentVaultFolder());
       await whenCreoJSReady();
@@ -7006,9 +7007,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const text = result == null ? "" : String(result);
       if (text.indexOf("CREOPDM_ERROR:") === 0) {
         showError($("#toolbar-error"), text.slice("CREOPDM_ERROR:".length));
-        return;
+        return false;
       }
-      showOk("Creo working directory set to the local workspace.");
+      if (!quiet) showOk("Creo working directory set to the local workspace.");
+      return true;
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
       if (!message || message === "[object Object]" || message === "{}") {
@@ -7016,9 +7018,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           $("#toolbar-error"),
           "Creo could not change the working directory. Check that creopdm-agent is running."
         );
-        return;
+        return false;
       }
       showError($("#toolbar-error"), message || "Creo could not change directory.");
+      return false;
     }
   }
   setCreoDirBtn?.addEventListener("click", () => {
@@ -7134,8 +7137,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Working directory only applies inside Creo's embedded browser.
     const showWd = hostedCreoJS();
     // Viewer (or any case with no checkout choice): skip a one-option dialog.
+    // Still default Set WD on when Connected (same as the chooser checkbox).
     if (!allowCheckout) {
-      return Promise.resolve({ action: "open", setWorkingDirectory: false });
+      return Promise.resolve({ action: "open", setWorkingDirectory: showWd });
     }
     if (!dialog || !form || !openRadio) {
       // Do not silently open when checkout was an option — that hid the chooser.
@@ -7268,9 +7272,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const kind = rowCheckoutKind(row);
     // Only skip the chooser when the Checkout column says it is already mine.
     // Do not trust data-owned alone — a stale "1" was opening Available files
-    // with no modal.
+    // with no modal. Default Set WD on when Connected (chooser checkbox default).
     if (objectId && kind === "mine") {
-      return openPdmObject(target);
+      return openPdmObject(target, { setWorkingDirectory: hostedCreoJS() });
     }
     const canCheckout =
       Boolean(objectId) &&
@@ -7295,10 +7299,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // Paint before openModel — Creo collapses the embedded browser on Display.
       applyCheckedOutOnRows(checkedOutIds);
     }
-    if (setWd && hostedCreoJS()) {
-      await setCreoWorkingDirectory();
-    }
-    return openPdmObject(target);
+    // WD is applied inside openPdmObjectWork (before openModel) so skip-chooser
+    // and chooser paths share one place; quiet during the Opening… overlay.
+    return openPdmObject(target, { setWorkingDirectory: setWd });
   }
 
   async function probeCreoAgent() {
@@ -8072,6 +8075,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // New file (local) / Modified newer local — open agent workspace tip.
     // Creo.JS needs the logical tip name (shaft.prt); disk may still be shaft.prt.1.
     const objectId = String(options?.objectId || "").trim();
+    const wantSetWd = options?.setWorkingDirectory !== false;
     const agent = await probeCreoAgent();
     if (!agent) {
       throw new Error(
@@ -8106,6 +8110,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (useCreoSession) {
       setBusyMessage("Opening in Creo…");
       await whenCreoJSReady();
+      // Default Set WD on for Embedded Open (combine-state / group regen context).
+      if (wantSetWd) {
+        await setCreoWorkingDirectory({ quiet: true });
+      }
       const opened = await withTimeout(
         window.CreoJS.openModel(directory, logicalName, "", diskName, fullPath),
         creoOpenModelTimeoutMs(1),
@@ -8147,14 +8155,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return "Open timed out. Check that creopdm-agent is running, then try again.";
   }
 
-  async function openPdmObject(target) {
+  async function openPdmObject(target, options) {
     // Keep the busy overlay up through prepare + materialize until Creo/OS open starts.
     // Always clear on timeout/error so Session offline / hung agent cannot leave Opening… stuck.
+    const openOpts = options && typeof options === "object" ? options : {};
     let result = null;
     await withBusy("Preparing…", async () => {
       try {
         result = await withTimeout(
-          openPdmObjectWork(target),
+          openPdmObjectWork(target, openOpts),
           openWorkTimeoutMs(5000),
           openTimeoutMessage()
         );
@@ -8183,8 +8192,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return /Chrome|Edg|Firefox|Safari/i.test(ua);
   }
 
-  async function openPdmObjectWork(target) {
+  async function openPdmObjectWork(target, options) {
     const spec = typeof target === "string" ? { objectId: target } : target || {};
+    const openOpts = options && typeof options === "object" ? options : {};
+    // Default Set WD on when Connected and caller did not pass a flag (skip-chooser).
+    const wantSetWd =
+      "setWorkingDirectory" in openOpts
+        ? Boolean(openOpts.setWorkingDirectory)
+        : hostedCreoJS();
     // Local-workspace tips (New file local / Newer local save on Modified) must
     // open from the agent cache — not /api/creo/open (vault tip / missing file).
     if (spec.localCache && spec.relativePath) {
@@ -8195,6 +8210,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       return openLocalCacheRelative(productId, spec.relativePath, {
         objectId: spec.objectId || "",
+        setWorkingDirectory: wantSetWd,
       });
     }
     // Only use Creo.JS when we are actually in Creo's embedded browser.
@@ -8275,6 +8291,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         try {
           setBusyMessage("Opening in Creo…");
           await whenCreoJSReady();
+          // Set WD before File > Open trail so combine-state / group regen
+          // resolves companions like a manual open from the workspace.
+          if (wantSetWd) {
+            await setCreoWorkingDirectory({ quiet: true });
+          }
           const opened = await withTimeout(
             window.CreoJS.openModel(
               openSpec.working_directory,

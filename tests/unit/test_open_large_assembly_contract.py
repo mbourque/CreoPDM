@@ -91,14 +91,38 @@ def test_contract_embedded_open_prefers_file_open_trail():
     base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
     open_fn = base.split("function openModel(", 1)[1].split("function setWorkingDirectory(", 1)[0]
     trail_fn = base.split("function creoTryOpenViaTrail(", 1)[1].split("function openModel(", 1)[0]
+    assert "function creoFileOpenTypeFilter(" in base
+    assert 'return "db_1"' in base
+    assert "creoFileOpenTypeFilter(shortName)" in trail_fn
     assert "Prefer File > Open trail" in open_fn
     assert "flood retrieval/regen" in trail_fn
     assert open_fn.index("creoTryOpenViaTrail(") < open_fn.index("creoTryOpenName(")
+    assert "diskForTrail" in open_fn
     script = APP_JS.read_text(encoding="utf-8")
     after_open = script.split("async function captureCreoMetadataAfterOpen(", 1)[1].split(
         "function metadataTargetsFromResult(", 1
     )[0]
     assert "sessionOnly: true" in after_open
+    # Skip-chooser / Viewer: still default Set WD on when Connected.
+    prompt_fn = script.split("function promptOpenCheckout(", 1)[1].split(
+        "async function checkoutBeforeOpen(", 1
+    )[0]
+    assert "setWorkingDirectory: showWd" in prompt_fn
+    skip_branch = prompt_fn.split("!allowCheckout", 1)[1].split("if (!dialog", 1)[0]
+    assert "setWorkingDirectory: showWd" in skip_branch
+    assert "setWorkingDirectory: false" not in skip_branch
+    from_ui = script.split("async function openPdmObjectFromUi(", 1)[1].split(
+        "async function probeCreoAgent(", 1
+    )[0]
+    assert "setWorkingDirectory: hostedCreoJS()" in from_ui
+    open_work = script.split("async function openPdmObjectWork(", 1)[1]
+    assert "setCreoWorkingDirectory({ quiet: true })" in open_work
+    assert open_work.index("setCreoWorkingDirectory({ quiet: true })") < open_work.index(
+        "CreoJS.openModel("
+    )
     docs = DOCS.read_text(encoding="utf-8")
     assert "File > Open" in docs
     assert "prefer Toolkit Retrieve over File > Open" in docs
+    assert "sets Creo" in docs and "working directory" in docs
+    assert "dialog is skipped" in docs
+    assert "Assembly type" in docs
