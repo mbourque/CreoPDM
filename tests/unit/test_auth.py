@@ -446,7 +446,9 @@ def test_admin_can_open_settings(auth_client):
     assert 'href="/admin/products"' in hub.text
     assert 'href="/admin/email"' in hub.text
     assert 'href="/admin/utilities"' in hub.text
-    assert "Email all users, compact vault history, Delete products, and server health checks." in hub.text
+    assert "Email all users, site availability, compact vault history, Delete products, and server health checks." in hub.text
+    assert "Server options hub: Open Creo models, Vault, file types, agent, database, and more." in hub.text
+    assert "Availability, Open Creo models" not in hub.text
     # Help copy is plain text, not wrapped in the section link.
     assert 'href="/admin/users">Add and edit' not in hub.text
     settings_page = auth_client.get("/settings")
