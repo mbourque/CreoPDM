@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
@@ -43,9 +43,11 @@ from creopdm.permissions import (
     default_app_path,
     resolve_post_login_target,
 )
+from creopdm.utils.danger_confirm import require_danger_password
 from creopdm.utils.identity import UserIdentity, client_label_from_request, set_request_identity
 from creopdm.utils.passwords import verify_password
 from creopdm.utils.timefmt import format_local, format_local_pretty
+from creopdm.schemas.common import ConfirmPasswordRequest
 
 # Back-compat for default form role.
 BuiltinRole = StarterRole
@@ -703,6 +705,35 @@ def password_submit(
         },
         status_code=400,
     )
+
+
+@router.post("/api/account/confirm-password", status_code=204)
+def api_confirm_password(
+    payload: ConfirmPasswordRequest,
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Verify the signed-in password for danger-confirm dialogs (Remove, Revert, …)."""
+    try:
+        require_danger_password(
+            ctx,
+            db,
+            payload.password,
+            auth_user=getattr(request.state, "auth_user", None),
+        )
+    except CreoPDMError as exc:
+        return JSONResponse(
+            {
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": exc.message,
+                    "details": getattr(exc, "details", None) or {},
+                }
+            },
+            status_code=400,
+        )
+    return Response(status_code=204)
 
 
 def _require_admin(request: Request, ctx: AppContext, db: Session) -> User | HTMLResponse | RedirectResponse:
@@ -2529,7 +2560,6 @@ def _utilities_compact_response(
     manager: User,
     *,
     compact_product_id: str = "",
-    compact_confirm_name: str = "",
     error: str | None = None,
     success: str | None = None,
     status_code: int = 200,
@@ -2543,7 +2573,6 @@ def _utilities_compact_response(
             **_base_ctx(request, ctx, current_user=manager),
             "compact_products": list_products_for_compact(db),
             "compact_product_id": compact_product_id,
-            "compact_confirm_name": compact_confirm_name,
             "error": error,
             "success": success,
         },
@@ -2558,7 +2587,6 @@ def _utilities_rebuild_response(
     manager: User,
     *,
     rebuild_product_id: str = "",
-    rebuild_confirm_name: str = "",
     rebuild_action: str = "",
     error: str | None = None,
     success: str | None = None,
@@ -2573,7 +2601,6 @@ def _utilities_rebuild_response(
             **_base_ctx(request, ctx, current_user=manager),
             "rebuild_products": list_products_for_compact(db),
             "rebuild_product_id": rebuild_product_id,
-            "rebuild_confirm_name": rebuild_confirm_name,
             "rebuild_action": rebuild_action,
             "error": error,
             "success": success,
@@ -2637,7 +2664,6 @@ def _utilities_delete_products_response(
     manager: User,
     *,
     delete_product_id: str = "",
-    delete_confirm_name: str = "",
     error: str | None = None,
     success: str | None = None,
     status_code: int = 200,
@@ -2651,7 +2677,6 @@ def _utilities_delete_products_response(
             **_base_ctx(request, ctx, current_user=manager),
             "delete_products": list_products_for_compact(db),
             "delete_product_id": delete_product_id,
-            "delete_confirm_name": delete_confirm_name,
             "error": error,
             "success": success,
         },
@@ -2960,11 +2985,13 @@ def admin_utilities_audit_page(
 def admin_utilities_delete_products(
     request: Request,
     product_id: str = Form(""),
-    confirm_name: str = Form(""),
+    confirm_password: str = Form(""),
     confirm: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
+    from creopdm.utils.danger_confirm import require_danger_password
+
     manager = _require_utilities_permission(
         request,
         ctx,
@@ -2975,7 +3002,6 @@ def admin_utilities_delete_products(
     if _is_blocked(manager):
         return manager
     pid = (product_id or "").strip()
-    typed = confirm_name or ""
     if confirm != "1":
         return _utilities_delete_products_response(
             request,
@@ -2983,40 +3009,16 @@ def admin_utilities_delete_products(
             db,
             manager,
             delete_product_id=pid,
-            delete_confirm_name=typed,
             error="Confirm that you want to permanently delete this product’s vault.",
             status_code=400,
         )
     try:
+        require_danger_password(ctx, db, confirm_password, auth_user=manager)
         product = ctx.products.load_product_for_delete(db, pid)
-    except CreoPDMError as exc:
-        return _utilities_delete_products_response(
-            request,
-            ctx,
-            db,
-            manager,
-            delete_product_id=pid,
-            delete_confirm_name=typed,
-            error=exc.message,
-            status_code=400,
-        )
-    if (typed or "").strip() != product.name:
-        return _utilities_delete_products_response(
-            request,
-            ctx,
-            db,
-            manager,
-            delete_product_id=pid,
-            delete_confirm_name=typed,
-            error="Type the exact product name to confirm removal.",
-            status_code=400,
-        )
-    try:
         workspace = ctx.workspaces.vault_for(product)
         result = ctx.products.forget_product(
             db,
             pid,
-            confirm_name=typed,
             workspace_path=workspace,
         )
     except CreoPDMError as exc:
@@ -3027,7 +3029,6 @@ def admin_utilities_delete_products(
             db,
             manager,
             delete_product_id=pid,
-            delete_confirm_name=typed,
             error=exc.message,
             status_code=400,
         )
@@ -3136,7 +3137,7 @@ def admin_utilities_email_all(
 def admin_utilities_compact_vault(
     request: Request,
     product_id: str = Form(""),
-    confirm_name: str = Form(""),
+    confirm_password: str = Form(""),
     confirm: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
@@ -3153,7 +3154,6 @@ def admin_utilities_compact_vault(
     from creopdm.services.utilities_service import compact_product_vault_history
 
     pid = (product_id or "").strip()
-    typed = confirm_name or ""
     if confirm != "1":
         return _utilities_compact_response(
             request,
@@ -3161,7 +3161,6 @@ def admin_utilities_compact_vault(
             db,
             manager,
             compact_product_id=pid,
-            compact_confirm_name=typed,
             error="Confirm that you want to permanently destroy older History for this product.",
             status_code=400,
         )
@@ -3170,7 +3169,7 @@ def admin_utilities_compact_vault(
             ctx,
             db,
             product_uuid=pid,
-            confirm_name=typed,
+            confirm_password=confirm_password,
         )
         db.commit()
     except CreoPDMError as exc:
@@ -3181,7 +3180,6 @@ def admin_utilities_compact_vault(
             db,
             manager,
             compact_product_id=pid,
-            compact_confirm_name=typed,
             error=exc.message,
             status_code=400,
         )
@@ -3208,7 +3206,7 @@ def admin_utilities_rebuild_product_db(
     request: Request,
     background_tasks: BackgroundTasks,
     product_id: str = Form(""),
-    confirm_name: str = Form(""),
+    confirm_password: str = Form(""),
     confirm: str = Form(""),
     repair_action: str = Form(""),
     ctx: AppContext = Depends(get_context),
@@ -3226,14 +3224,12 @@ def admin_utilities_rebuild_product_db(
     from creopdm.services.utilities_service import repair_product_database
 
     pid = (product_id or "").strip()
-    typed = confirm_name or ""
     action = (repair_action or "").strip()
     want_rebuild = action == "rebuild"
     want_metadata = action == "clear_metadata"
     want_where_used = action == "rebuild_where_used"
     form_state = dict(
         rebuild_product_id=pid,
-        rebuild_confirm_name=typed,
         rebuild_action=action if action in {"rebuild", "clear_metadata", "rebuild_where_used"} else "",
     )
     if confirm != "1":
@@ -3264,7 +3260,7 @@ def admin_utilities_rebuild_product_db(
             ctx,
             db,
             product_uuid=pid,
-            confirm_name=typed,
+            confirm_password=confirm_password,
             rebuild=want_rebuild,
             clear_metadata=want_metadata,
             rebuild_where_used=want_where_used,

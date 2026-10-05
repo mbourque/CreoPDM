@@ -105,7 +105,7 @@ def product_ui_capabilities(
         show_remove_product=can_remove_objects and mutable,
         show_rename=has_product and can_edit_product and mutable,
         # Delete/unregister must stay available on locked / Archived products so
-        # vaults are not trapped (typed product-name confirm is the safety gate).
+        # vaults are not trapped (password re-auth confirm is the safety gate).
         show_delete_product=has_product and can_delete_product,
         show_metadata_tools=has_product and can_update_metadata and mutable,
         show_revert=can_revert_objects and mutable,
@@ -131,7 +131,7 @@ def ensure_product_deletable(product: Product, *, action: str = "delete this pro
     """Product delete/forget is not blocked by lifecycle or read-only.
 
     Kept as the API/service gate hook (contract tests require ``ensure_product_deletable``).
-    Callers still require ``products.delete`` and an exact product-name confirm.
+    Callers still require ``products.delete`` and password re-auth confirm.
     """
     if product is None:
         raise ValidationAppError(f"Cannot {action}: product is missing.")

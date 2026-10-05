@@ -753,28 +753,23 @@ def compact_product_vault_history(
     db: Session,
     *,
     product_uuid: str,
-    confirm_name: str,
+    confirm_password: str,
 ) -> CompactVaultResult:
     """Squash one product vault to a single tip commit and prune old ObjectVersions.
 
-    Requires the typed product name to match exactly. Rejects dirty vaults and
+    Requires the signed-in user's password. Rejects dirty vaults and
     products with active checkouts.
     """
+    from creopdm.utils.danger_confirm import require_danger_password
+
     uuid = (product_uuid or "").strip()
-    typed = (confirm_name or "").strip()
     if not uuid:
         raise ValidationAppError("Choose a product.")
-    if not typed:
-        raise ValidationAppError("Type the product name exactly to confirm.")
+    require_danger_password(ctx, db, confirm_password)
 
     product = db.scalar(select(Product).where(Product.uuid == uuid))
     if product is None:
         raise ProductNotFoundError("Product not found.", details={"uuid": uuid})
-    if typed != product.name:
-        raise ValidationAppError(
-            "Type the product name exactly to confirm.",
-            details={"product": product.name},
-        )
 
     active_checkouts = int(
         db.scalar(
@@ -975,23 +970,28 @@ def _clear_product_object_records(db: Session, product: Product) -> int:
 
 
 def _load_product_for_repair(
-    db: Session, *, product_uuid: str, confirm_name: str
+    db: Session, *, product_uuid: str
 ) -> Product:
     uuid_value = (product_uuid or "").strip()
-    typed = (confirm_name or "").strip()
     if not uuid_value:
         raise ValidationAppError("Choose a product.")
-    if not typed:
-        raise ValidationAppError("Type the product name exactly to confirm.")
     product = db.scalar(select(Product).where(Product.uuid == uuid_value))
     if product is None:
         raise ProductNotFoundError("Product not found.", details={"uuid": uuid_value})
-    if typed != product.name:
-        raise ValidationAppError(
-            "Type the product name exactly to confirm.",
-            details={"product": product.name},
-        )
     return product
+
+
+def _confirm_and_load_product_for_repair(
+    ctx: AppContext,
+    db: Session,
+    *,
+    product_uuid: str,
+    confirm_password: str,
+) -> Product:
+    from creopdm.utils.danger_confirm import require_danger_password
+
+    require_danger_password(ctx, db, confirm_password)
+    return _load_product_for_repair(db, product_uuid=product_uuid)
 
 
 def _count_active_checkouts(db: Session, product_id: int) -> int:
@@ -1014,11 +1014,11 @@ def clear_product_creo_metadata(
     db: Session,
     *,
     product_uuid: str,
-    confirm_name: str,
+    confirm_password: str,
 ) -> tuple[Product, int]:
     """Strip collected Creo metadata from all versions for one product (DB only)."""
-    product = _load_product_for_repair(
-        db, product_uuid=product_uuid, confirm_name=confirm_name
+    product = _confirm_and_load_product_for_repair(
+        ctx, db, product_uuid=product_uuid, confirm_password=confirm_password
     )
     object_ids = list(
         db.scalars(
@@ -1064,7 +1064,7 @@ def repair_product_database(
     db: Session,
     *,
     product_uuid: str,
-    confirm_name: str,
+    confirm_password: str,
     rebuild: bool = False,
     clear_metadata: bool = False,
     rebuild_where_used: bool = False,
@@ -1076,8 +1076,8 @@ def repair_product_database(
             "Choose one action: rebuild from vault, delete Creo metadata, "
             "or delete and rebuild Where Used."
         )
-    product = _load_product_for_repair(
-        db, product_uuid=product_uuid, confirm_name=confirm_name
+    product = _confirm_and_load_product_for_repair(
+        ctx, db, product_uuid=product_uuid, confirm_password=confirm_password
     )
 
     rebuilt_flag = False
@@ -1095,7 +1095,7 @@ def repair_product_database(
             ctx,
             db,
             product_uuid=product.uuid,
-            confirm_name=confirm_name,
+            confirm_password=confirm_password,
         )
         rebuilt_flag = True
         head = rebuilt.head
@@ -1105,7 +1105,7 @@ def repair_product_database(
         meta_cleared = True
     elif clear_metadata:
         _, meta_versions = clear_product_creo_metadata(
-            ctx, db, product_uuid=product.uuid, confirm_name=confirm_name
+            ctx, db, product_uuid=product.uuid, confirm_password=confirm_password
         )
         meta_cleared = True
 
@@ -1133,18 +1133,18 @@ def rebuild_product_database_from_vault(
     db: Session,
     *,
     product_uuid: str,
-    confirm_name: str,
+    confirm_password: str,
 ) -> RebuildProductDbResult:
     """Rebuild one product's file/version rows from the vault Git tip (DB only).
 
     Does not rewrite Git history. Clears checkouts, Where Used edges, and Creo
     metadata for that product's files. Works for locked / Archived products
-    (admin recovery). Requires exact product name confirm and no active checkouts.
+    (admin recovery). Requires password re-auth and no active checkouts.
     """
     import uuid as uuid_mod
 
-    product = _load_product_for_repair(
-        db, product_uuid=product_uuid, confirm_name=confirm_name
+    product = _confirm_and_load_product_for_repair(
+        ctx, db, product_uuid=product_uuid, confirm_password=confirm_password
     )
 
     active_checkouts = _count_active_checkouts(db, product.id)

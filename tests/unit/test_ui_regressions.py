@@ -459,8 +459,14 @@ def test_add_partial_failure_notice_survives_reload():
     """Regression: partial add errors were wiped by reloadPage before the user saw them."""
     script = _app_js()
     assert 'sessionStorage.setItem("creopdmNotice"' in script
-    assert "summarizeAddFailures" in script
     assert "See creopdm-agent log" in script
+    # Partial failures stash a notice before keepBusy reload (no local summarize helper).
+    add_tail = script.split("Keep the same busy overlay through Where Used", 1)[1].split(
+        "} finally {\n      addInFlight = false;",
+        1,
+    )[0]
+    assert "failedInside.length" in add_tail
+    assert "creopdmNotice" in add_tail
 
 
 def test_dropped_folder_keeps_nested_relative_paths():
@@ -534,17 +540,17 @@ def test_delete_workspace_menu_warns_new_files_vault_safe():
     assert "Local-only new files that were never added" in script
     assert "empty workspace folder stays" in script
     assert "Vault copies and the product file list are not changed" in script
-    assert "requireProductName: false" in script
+    assert "requirePassword: false" in script
     assert "Same danger-confirm overlay" in script
     assert "deleteWorkspaceBtn?.addEventListener(" in script
     assert "setToolbarActionVisible(deleteWorkspaceBtn, canDeleteWorkspace)" in script
     base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
     assert 'id="danger-confirm-dialog"' in base
-    assert 'id="danger-confirm-name-label"' in base
+    assert 'id="danger-confirm-password-label"' in base
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "### Clear workspace…" in docs
     assert "local-only **new** files" in docs
-    assert "does **not** require typing the product name" in docs
+    assert "does **not** require your password" in docs
     clear_section = docs.split("### Clear workspace…", 1)[1].split("### Remove from Vault…", 1)[0]
     assert "danger-confirm warning dialog" in clear_section
     assert "Clear workspace" in clear_section
@@ -1300,7 +1306,9 @@ def test_history_revert_only_for_older_versions():
     assert 'title: `Revert to ${display}`' in script
     assert 'submitLabel: "Revert"' in script
     assert 'data-product-name="{{ product.name }}"' in detail
-    assert '$("#revert-version-btn")?.dataset.productName' in script
+    # Revert uses password re-auth (same dialog as Remove) — no product-name gate.
+    assert "function confirmByPassword(" in script
+    assert "/api/account/confirm-password" in script
     revert_click = _between(
         script,
         '$("#revert-version-btn")?.addEventListener("click"',
@@ -1352,7 +1360,7 @@ def test_history_revert_only_for_older_versions():
     assert "Offer Revert for the current version" in docs
     assert "rename the vault tip back to an old `.prt.N`" in docs
     assert "leave you checked out with a Check In prompt" in docs
-    assert "type the **exact** product name" in docs
+    assert "enter your **password**" in docs
     assert "plain browser `confirm`" in docs
     assert "History **Revert to selected…**" in docs
     assert "no Check In prompt" in docs
@@ -1384,7 +1392,7 @@ def test_history_revert_only_for_older_versions():
     hist_click = _between(
         script,
         'historyBtn?.addEventListener("click"',
-        "function expectedProductName(",
+        "function confirmByPassword(",
     )
     assert "leavePage(href)" in hist_click
     assert "window.location.href = href" not in hist_click
@@ -1706,10 +1714,11 @@ def test_user_interaction_negative_client_guards():
     filter_body = _between(script, "function filterTopLevelUploads(", "function applyDroppedFiles(")
     assert "parts.length > 2" in filter_body
 
-    # Danger confirm (D1 / N15)
-    confirm = _between(script, "function confirmByProductName(", "function workspacePathsForRemovedObjects(")
-    assert "Type the product name exactly to confirm." in confirm
-    assert "typed !== expected" in confirm
+    # Danger confirm (password re-auth)
+    confirm = _between(script, "function confirmByPassword(", "function workspacePathsForRemovedObjects(")
+    assert "Enter your password to confirm." in confirm
+    assert "/api/account/confirm-password" in confirm
+    assert "const confirmByProductName = confirmByPassword" in script
 
     # Check In comment required on dialog
     assert 'id="checkin-comment"' in html

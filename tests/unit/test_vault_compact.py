@@ -101,14 +101,14 @@ def test_compact_product_vault_prunes_history_and_rejects_gates(client, app, dat
     history = client.get(f"/api/objects/{obj['uuid']}/history").json()
     assert len(history) >= 2
 
-    # Wrong name
+    # Empty password
     with ctx.session_factory() as db:
-        with pytest.raises(ValidationAppError, match="exactly"):
+        with pytest.raises(ValidationAppError, match="password"):
             compact_product_vault_history(
                 ctx,
                 db,
                 product_uuid=product["uuid"],
-                confirm_name="Wrong Name",
+                confirm_password="",
             )
 
     # Active checkout blocks
@@ -119,7 +119,7 @@ def test_compact_product_vault_prunes_history_and_rejects_gates(client, app, dat
                 ctx,
                 db,
                 product_uuid=product["uuid"],
-                confirm_name="Robot Compact",
+                confirm_password="test-confirm",
             )
     assert client.post(f"/api/objects/{obj['uuid']}/undo-checkout").status_code == 200
 
@@ -133,7 +133,7 @@ def test_compact_product_vault_prunes_history_and_rejects_gates(client, app, dat
             ctx,
             db,
             product_uuid=product["uuid"],
-            confirm_name="Robot Compact",
+            confirm_password="test-confirm",
         )
         db.commit()
         assert result.product_name == "Robot Compact"
@@ -188,7 +188,7 @@ def test_compact_drops_blobs_after_remove_from_product(client, app, data_dir):
             ctx,
             db,
             product_uuid=product["uuid"],
-            confirm_name="Remove Then Compact",
+            confirm_password="test-confirm",
         )
         db.commit()
         assert result.new_head

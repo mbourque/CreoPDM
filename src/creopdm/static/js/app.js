@@ -2445,12 +2445,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     event.preventDefault();
     const btn = $("#delete-product-btn");
     const productId = btn?.dataset.product;
-    const expected = (btn?.dataset.name || "").trim();
     if (!productId) return;
     const formData = new FormData(deleteProductForm);
-    const typed = String(formData.get("confirm_name") || "").trim();
-    if (typed !== expected) {
-      showError($("#delete-product-error"), "Type the product name exactly to delete it.");
+    const password = String(formData.get("confirm_password") || "");
+    if (!password) {
+      showError($("#delete-product-error"), "Enter your password to confirm.");
       return;
     }
     const deleteLocal = Boolean($("#delete-local-workspace")?.checked);
@@ -2508,7 +2507,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const forgetResponse = await fetch(`/api/products/${productId}/forget`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ confirm_name: typed }),
+          body: JSON.stringify({ confirm_password: password }),
           signal: abortSignalAfter(120_000),
         });
         if (!forgetResponse.ok) {
@@ -9638,32 +9637,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (href) leavePage(href);
   });
 
-  function expectedProductName() {
-    return (
-      $("#delete-product-btn")?.dataset.name
-      || $("#revert-version-btn")?.dataset.productName
-      || deleteWorkspaceBtn?.dataset.productName
-      || purgeVersionsBtn?.dataset.productName
-      || purgeBtn?.dataset.productName
-      || removeBtn?.dataset.productName
-      || discardLocalBtn?.dataset.productName
-      || ""
-    ).trim();
-  }
-
-  function confirmByProductName({
+  function confirmByPassword({
     title,
     lead,
     note,
     submitLabel,
     detailsHtml = "",
     workspaceOption = false,
-    requireProductName = true,
+    requirePassword = true,
   }) {
     const dialog = $("#danger-confirm-dialog");
     const form = $("#danger-confirm-form");
-    const expected = expectedProductName();
-    if (!dialog || !form || (requireProductName && !expected)) {
+    if (!dialog || !form) {
       return Promise.resolve({ ok: false, deleteWorkspaceFiles: false });
     }
     const titleEl = $("#danger-confirm-title");
@@ -9675,8 +9660,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const workspaceWrap = $("#danger-confirm-workspace-wrap");
     const workspaceHint = $("#danger-confirm-workspace-hint");
     const workspaceCheck = $("#danger-confirm-workspace");
-    const nameLabel = $("#danger-confirm-name-label") || form.querySelector('label[for="danger-confirm-input"]') || form.querySelector("label:has(#danger-confirm-input)");
-    const nameInput = $("#danger-confirm-input");
+    const passwordLabel =
+      $("#danger-confirm-password-label")
+      || form.querySelector('label[for="danger-confirm-input"]')
+      || form.querySelector("label:has(#danger-confirm-input)");
+    const passwordInput = $("#danger-confirm-input");
     if (titleEl) titleEl.textContent = title;
     if (leadEl) leadEl.textContent = lead;
     if (noteStrong) noteStrong.textContent = note || "";
@@ -9695,11 +9683,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       workspaceCheck.disabled = !workspaceOption;
       workspaceCheck.checked = Boolean(workspaceOption);
     }
-    if (nameLabel) nameLabel.hidden = !requireProductName;
-    if (nameInput) {
-      nameInput.required = Boolean(requireProductName);
-      nameInput.hidden = !requireProductName;
-      if (!requireProductName) nameInput.value = "";
+    if (passwordLabel) passwordLabel.hidden = !requirePassword;
+    if (passwordInput) {
+      passwordInput.required = Boolean(requirePassword);
+      passwordInput.hidden = !requirePassword;
+      passwordInput.value = "";
     }
     return new Promise((resolve) => {
       let settled = false;
@@ -9715,10 +9703,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         if (workspaceWrap) workspaceWrap.hidden = true;
         if (workspaceHint) workspaceHint.hidden = true;
-        if (nameLabel) nameLabel.hidden = false;
-        if (nameInput) {
-          nameInput.hidden = false;
-          nameInput.required = true;
+        if (passwordLabel) passwordLabel.hidden = false;
+        if (passwordInput) {
+          passwordInput.hidden = false;
+          passwordInput.required = true;
+          passwordInput.value = "";
         }
         const deleteWorkspaceFiles = Boolean(ok && workspaceOption && workspaceCheck?.checked);
         if (dialog.open) dialog.close();
@@ -9726,13 +9715,37 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       };
       const onCancel = () => finish(false);
       const onClose = () => finish(false);
-      const onSubmit = (event) => {
+      const onSubmit = async (event) => {
         event.preventDefault();
-        if (requireProductName) {
-          const typed = String(new FormData(form).get("confirm_name") || "").trim();
-          if (typed !== expected) {
-            showError($("#danger-confirm-error"), "Type the product name exactly to confirm.");
+        if (requirePassword) {
+          const password = String(new FormData(form).get("confirm_password") || "");
+          if (!password) {
+            showError($("#danger-confirm-error"), "Enter your password to confirm.");
             return;
+          }
+          if (submitBtn) submitBtn.disabled = true;
+          showError($("#danger-confirm-error"), "");
+          try {
+            const response = await fetch("/api/account/confirm-password", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ password }),
+            });
+            if (!response.ok) {
+              showError(
+                $("#danger-confirm-error"),
+                await readError(response) || "Incorrect password."
+              );
+              return;
+            }
+          } catch (exc) {
+            showError(
+              $("#danger-confirm-error"),
+              exc?.message || "Could not verify password."
+            );
+            return;
+          } finally {
+            if (submitBtn) submitBtn.disabled = false;
           }
         }
         finish(true);
@@ -9741,10 +9754,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       $("#danger-confirm-cancel")?.addEventListener("click", onCancel);
       dialog.addEventListener("close", onClose);
       dialog.showModal();
-      if (requireProductName) $("#danger-confirm-input")?.focus();
+      if (requirePassword) $("#danger-confirm-input")?.focus();
       else submitBtn?.focus();
     });
   }
+
+  // Back-compat alias — callers used product-name typing before password re-auth.
+  const confirmByProductName = confirmByPassword;
 
   function workspacePathsForRemovedObjects(productId, selected) {
     // Sync only — do not list the whole agent cache (that stalled Remove for
@@ -10225,7 +10241,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         "Close open models in Creo first (File → Erase) if files are locked. "
         + "This cannot be undone from CreoPDM. Restore from the Recycle Bin on this PC if needed.",
       submitLabel: "Clear workspace",
-      requireProductName: false,
+      requirePassword: false,
     });
     if (!confirmed.ok) return;
     showError($("#toolbar-error"), "");

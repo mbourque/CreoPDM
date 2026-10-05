@@ -109,7 +109,7 @@ def test_locked_product_rejects_all_mutation_apis(client, repo_parent):
     assert undone.status_code == 200, undone.text
 
     # Product delete/forget must still purge locked products (name confirm).
-    forgotten = client.post(f"/api/products/{pid}/forget", json={"confirm_name": product["name"]})
+    forgotten = client.post(f"/api/products/{pid}/forget", json={"confirm_password": "test-confirm"})
     assert forgotten.status_code == 200, forgotten.text
     listing = client.get("/api/products")
     assert listing.status_code == 200

@@ -1,0 +1,24 @@
+---
+description: Deferred — deploy stamp on app.js URL so soft-nav picks up new client JS
+globs: "**/templates/base.html,**/static/js/app.js,**/app.py,**/constants.py,**/api/pages.py"
+alwaysApply: false
+---
+
+# Deferred: stale app.js after deploy (build stamp)
+
+Soft-nav keeps the in-memory `app.js`. It already reloads when the script `src` `?v=` changes (`loadUpdatedAppJs`), but today that string is tied to static `APP_VERSION` (`0.3.0`), so after `./pull-restart.ps1` a hard refresh is often still required.
+
+## Later idea (not implemented) — option 1
+
+Put a **deploy/build stamp** in the `/client/app.js?v=…` URL (content hash of `app.js`, git short hash, or file mtime) so every deploy changes `src`. Soft-nav’s existing compare then swaps the script without a hard reload.
+
+### Do not
+
+- Add a freshness fetch on the Creo **Connecting** path (must not slow connect)
+- Poll `/client/app.js` before Creo.JS is Connected
+- Block boot waiting on a build-id round-trip
+
+### Preferred shape
+
+- Stamp baked into HTML at process start / template render
+- Detection only on soft-nav (HTML already fetched) or idle/focus later — never during connect overlay

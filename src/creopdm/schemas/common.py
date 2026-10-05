@@ -148,7 +148,13 @@ class ProductUpdateRequest(BaseModel):
     description: str | None = Field(default=None, max_length=256)
 
 class ForgetProductRequest(BaseModel):
-    confirm_name: str = Field(min_length=1, max_length=255)
+    confirm_password: str = Field(min_length=1, max_length=256)
+
+
+class ConfirmPasswordRequest(BaseModel):
+    """Re-auth for danger-confirm dialogs (Remove, Revert, Purge, …)."""
+
+    password: str = Field(min_length=1, max_length=256)
 
 
 class ForgetProductResponse(BaseModel):

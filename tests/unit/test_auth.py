@@ -674,7 +674,7 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
         "/admin/utilities/compact-vault",
         data={
             "product_id": "x",
-            "confirm_name": "Nope",
+            "confirm_password": "Nope",
             "confirm": "1",
         },
         follow_redirects=False,
@@ -684,7 +684,7 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
         "/admin/utilities/delete-products",
         data={
             "product_id": "x",
-            "confirm_name": "Nope",
+            "confirm_password": "Nope",
             "confirm": "1",
         },
         follow_redirects=False,
@@ -694,7 +694,7 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
         "/admin/utilities/rebuild-product-db",
         data={
             "product_id": "x",
-            "confirm_name": "Nope",
+            "confirm_password": "Nope",
             "confirm": "1",
         },
         follow_redirects=False,
@@ -766,7 +766,7 @@ def test_utilities_audit_only_role_gates_other_tools(auth_client, auth_ctx):
 
 
 def test_admin_utilities_compact_vault_gate(auth_client, auth_ctx):
-    """Compact requires confirm + exact product name; wrong name does not mutate."""
+    """Compact requires confirm + password; wrong password does not mutate."""
     auth_client.post(
         "/setup",
         data={
@@ -789,24 +789,24 @@ def test_admin_utilities_compact_vault_gate(auth_client, auth_ctx):
         "/admin/utilities/compact-vault",
         data={
             "product_id": product["uuid"],
-            "confirm_name": "Gate Product",
+            "confirm_password": "AdminPass1",
         },
         follow_redirects=False,
     )
     assert missing_confirm.status_code == 400
     assert "Confirm" in missing_confirm.text or "confirm" in missing_confirm.text.lower()
 
-    wrong_name = auth_client.post(
+    wrong_password = auth_client.post(
         "/admin/utilities/compact-vault",
         data={
             "product_id": product["uuid"],
-            "confirm_name": "Wrong",
+            "confirm_password": "WrongPass1",
             "confirm": "1",
         },
         follow_redirects=False,
     )
-    assert wrong_name.status_code == 400
-    assert "exactly" in wrong_name.text.lower()
+    assert wrong_password.status_code == 400
+    assert "password" in wrong_password.text.lower()
 
 
 def test_admin_utilities_email_all_users(auth_client, auth_ctx):
@@ -1773,19 +1773,19 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
         "/admin/utilities/delete-products",
         data={
             "product_id": product["uuid"],
-            "confirm_name": "wrong",
+            "confirm_password": "WrongPass1",
             "confirm": "1",
         },
         follow_redirects=False,
     )
     assert bad_delete.status_code == 400
-    assert "exact product name" in bad_delete.text
+    assert "password" in bad_delete.text.lower()
 
     deleted = auth_client.post(
         "/admin/utilities/delete-products",
         data={
             "product_id": product["uuid"],
-            "confirm_name": "Admin Hub Renamed",
+            "confirm_password": "AdminPass1",
             "confirm": "1",
         },
         follow_redirects=False,

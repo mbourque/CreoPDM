@@ -412,7 +412,9 @@ def test_product_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     assert "confirmByProductName" in script.text
     assert "workspaceOption" in script.text
     assert 'id="danger-confirm-workspace"' in page.text
-    assert "Type the product name exactly to confirm." in script.text
+    assert "confirmByPassword" in script.text
+    assert "/api/account/confirm-password" in script.text
+    assert "Enter your password to confirm." in script.text
     assert "rowHistoryHref" in script.text
     assert "objects/${meta.uuid}#history" not in script.text
     assert "row.dataset.detail = `/products/${productId}/objects/${meta.uuid}`;" in script.text

@@ -256,15 +256,22 @@ def forget_product(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> ForgetProductResponse:
+    from creopdm.utils.danger_confirm import require_danger_password
+
     require_permission(request, ctx, PERMISSION_PRODUCTS_DELETE)
     product = load_accessible_product_for_delete(request, ctx, db, product_id)
+    require_danger_password(
+        ctx,
+        db,
+        payload.confirm_password,
+        auth_user=getattr(request.state, "auth_user", None),
+    )
     # Stop background Where Used so Delete is not stuck behind vault/DB scans.
     ctx.where_used_index.cancel(product_id)
     workspace = ctx.workspaces.vault_for(product)
     result = ctx.products.forget_product(
         db,
         product_id,
-        confirm_name=payload.confirm_name,
         workspace_path=workspace,
     )
     if ctx.config.settings.ui.last_product_uuid == product_id:

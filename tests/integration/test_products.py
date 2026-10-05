@@ -491,12 +491,12 @@ def test_forget_archived_and_inactive_products_purges_db(client, app, data_dir):
 
     gone_a = client.post(
         f"/api/products/{archived['uuid']}/forget",
-        json={"confirm_name": "Old Archived"},
+        json={"confirm_password": "test-confirm"},
     )
     assert gone_a.status_code == 200, gone_a.text
     gone_i = client.post(
         f"/api/products/{inactive['uuid']}/forget",
-        json={"confirm_name": "Old Inactive"},
+        json={"confirm_password": "test-confirm"},
     )
     assert gone_i.status_code == 200, gone_i.text
     assert not vault_a.exists()
@@ -526,16 +526,15 @@ def test_forget_product_strips_git_and_keeps_models(client, app, repo_parent, da
 
     denied = client.post(
         f"/api/products/{payload['uuid']}/forget",
-        json={"confirm_name": "wrong"},
+        json={},
     )
-    assert denied.status_code == 400
-    assert "delete" in denied.json()["error"]["message"].lower()
+    assert denied.status_code == 422
     assert not (location / ".git").exists()
     assert model.is_file()
 
     forgotten = client.post(
         f"/api/products/{payload['uuid']}/forget",
-        json={"confirm_name": "Ribbed"},
+        json={"confirm_password": "test-confirm"},
     )
     assert forgotten.status_code == 200, forgotten.text
     listing = client.get("/api/products")

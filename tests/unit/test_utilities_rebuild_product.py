@@ -127,7 +127,7 @@ def test_rebuild_registers_tip_files_and_drops_stale(data_dir, identity: StaticU
             ctx,
             db,
             product_uuid=product.uuid,
-            confirm_name="Rebuild Two",
+            confirm_password="test-confirm",
         )
         db.commit()
 
@@ -152,7 +152,7 @@ def test_rebuild_registers_tip_files_and_drops_stale(data_dir, identity: StaticU
 
 
 @requires_git
-def test_rebuild_requires_exact_name(data_dir, identity: StaticUserProvider):
+def test_rebuild_requires_password(data_dir, identity: StaticUserProvider):
     ctx = build_context(ConfigManager(), users=identity)
     folder = "rebuild-name"
     vault = ctx.config.vaults_dir / folder
@@ -167,12 +167,12 @@ def test_rebuild_requires_exact_name(data_dir, identity: StaticUserProvider):
         )
         db.add(product)
         db.commit()
-        with pytest.raises(ValidationAppError, match="exactly"):
+        with pytest.raises(ValidationAppError, match="password"):
             rebuild_product_database_from_vault(
                 ctx,
                 db,
                 product_uuid=product.uuid,
-                confirm_name="wrong",
+                confirm_password="",
             )
 
 
@@ -193,14 +193,14 @@ def test_repair_requires_exactly_one_action(data_dir, identity: StaticUserProvid
                 ctx,
                 db,
                 product_uuid=product.uuid,
-                confirm_name="No Action",
+                confirm_password="test-confirm",
             )
         with pytest.raises(ValidationAppError, match="Choose one action"):
             repair_product_database(
                 ctx,
                 db,
                 product_uuid=product.uuid,
-                confirm_name="No Action",
+                confirm_password="test-confirm",
                 clear_metadata=True,
                 rebuild_where_used=True,
             )
@@ -267,7 +267,7 @@ def test_clear_metadata_keeps_file_rows(data_dir, identity: StaticUserProvider):
             ctx,
             db,
             product_uuid=product.uuid,
-            confirm_name="Meta Clear",
+            confirm_password="test-confirm",
             clear_metadata=True,
         )
         db.commit()
@@ -374,7 +374,7 @@ def test_rebuild_where_used_replaces_stale_edges(
             ctx,
             db,
             product_uuid=product.uuid,
-            confirm_name="WU Rebuild",
+            confirm_password="test-confirm",
             rebuild_where_used=True,
         )
         db.commit()

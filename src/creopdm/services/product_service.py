@@ -365,18 +365,15 @@ class ProductService:
         self,
         session: Session,
         product_uuid: str,
-        confirm_name: str,
         workspace_path: Path | None = None,
     ) -> dict[str, str]:
-        """Unregister the product and delete the workspace Git vault."""
+        """Unregister the product and delete the workspace Git vault.
+
+        Callers must verify the signed-in user's password first
+        (``require_danger_password``).
+        """
         product = self.load_product_for_delete(session, product_uuid)
         ensure_product_deletable(product, action="delete this product")
-        expected = product.name.strip()
-        if confirm_name.strip() != expected:
-            raise ValidationAppError(
-                "Type the product name exactly to delete it.",
-                details={"name": expected},
-            )
         leftover = self._workspaces.leftover_source(product)
         name = product.name
         vault = workspace_path if workspace_path is not None else self._workspaces.vault_for(product)
