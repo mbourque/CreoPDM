@@ -80,9 +80,11 @@ pkill -9 -f 'uvicorn.*52113' 2>/dev/null || true
 fuser -k 52113/tcp 2>/dev/null || true
 sleep 1
 '@
-# Normalize CRLF so bash does not see $'\r' on Windows-authored scripts.
-$remote = $remote -replace "`r", ""
-$remote | ssh $SshHost bash -s
+# PowerShell's pipe to ssh re-introduces CRLF; bash then sees sleep 1$'\r'.
+# Send LF-only bytes via base64 so the remote script stays Unix-clean.
+$remoteUnix = ($remote -replace "`r`n", "`n") -replace "`r", ""
+$b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($remoteUnix))
+ssh $SshHost "echo $b64 | base64 -d | bash -s"
 
 Write-Host "==> Starting agent tray"
 Start-CreoPdmAgentTray
