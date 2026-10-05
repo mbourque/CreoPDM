@@ -12,37 +12,51 @@
     <span>Utilities</span>
   </nav>
   <h1>Utilities</h1>
-  <p class="muted">Email all users, site availability, compact vault history, rebuild a product database from its vault, Delete products, Audit log, and server health checks.</p>
+  <p class="muted">Email all users, site availability, compact vault history, rebuild a product database from its vault, Delete products, Audit log, and server health checks. Each tile requires its own Utilities permission.</p>
 
   <div class="admin-tile-grid">
+    {% if can_utilities_availability or can_manage_settings %}
     <section class="admin-tile">
       <h2><a href="/admin/utilities/availability">Availability</a></h2>
       <p>Mark CreoPDM available, or show a maintenance message to non-administrators.</p>
     </section>
+    {% endif %}
+    {% if can_utilities_email_users %}
     <section class="admin-tile">
       <h2><a href="/admin/utilities/email-all">Email all users</a></h2>
       <p>Send one message to every active user (addresses stay private).</p>
     </section>
+    {% endif %}
+    {% if can_utilities_compact_product %}
     <section class="admin-tile">
       <h2><a href="/admin/utilities/compact">Compact product vault history</a></h2>
       <p>Squash one product’s Git history to the tip and free removed-file bytes.</p>
     </section>
+    {% endif %}
+    {% if can_utilities_rebuild_product %}
     <section class="admin-tile">
       <h2><a href="/admin/utilities/rebuild-product">Rebuild product database</a></h2>
       <p>Rebuild one product’s file list from its vault Git tip, clear Creo metadata, or delete and rebuild Where Used (does not rewrite Git).</p>
     </section>
+    {% endif %}
+    {% if can_utilities_delete_product %}
     <section class="admin-tile">
       <h2><a href="/admin/utilities/delete-products">Delete products</a></h2>
       <p>Delete a product’s CreoPDM vault and unregister it from the database.</p>
     </section>
+    {% endif %}
+    {% if can_utilities_audit %}
     <section class="admin-tile">
       <h2><a href="/admin/utilities/audit">Audit log</a></h2>
       <p>Review PDM checkouts, check-ins, membership, user, and settings changes on this server.</p>
     </section>
+    {% endif %}
+    {% if can_utilities_health %}
     <section class="admin-tile">
       <h2><a href="/admin/utilities/health">Health</a></h2>
       <p>System health, CPU load, I/O, product vault checks, database, Git, disk space, counts, and server paths.</p>
     </section>
+    {% endif %}
   </div>
 </article>
 {% endblock %}

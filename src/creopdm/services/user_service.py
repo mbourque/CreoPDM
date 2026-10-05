@@ -36,7 +36,14 @@ from creopdm.auth_constants import (
     PERMISSION_EMAIL_MANAGE,
     PERMISSION_USERS_MANAGE,
     PERMISSION_USERS_PASSWORD,
-    PERMISSION_UTILITIES_ACCESS,
+    PERMISSION_UTILITIES_AUDIT,
+    PERMISSION_UTILITIES_AVAILABILITY,
+    PERMISSION_UTILITIES_COMPACT_PRODUCT,
+    PERMISSION_UTILITIES_DELETE_PRODUCT,
+    PERMISSION_UTILITIES_EMAIL_USERS,
+    PERMISSION_UTILITIES_HEALTH,
+    PERMISSION_UTILITIES_REBUILD_PRODUCT,
+    UTILITIES_PERMISSION_KEYS,
     UserStatus,
 )
 from creopdm.exceptions import NotFoundError, PermissionDeniedError, ValidationAppError
@@ -257,7 +264,29 @@ class UserService:
         return self.has_permission(user, PERMISSION_EMAIL_MANAGE)
 
     def can_access_utilities(self, user: User) -> bool:
-        return self.has_permission(user, PERMISSION_UTILITIES_ACCESS)
+        """True when the user may open Administration → Utilities (any tool)."""
+        return bool(self.permission_keys_for_user(user) & UTILITIES_PERMISSION_KEYS)
+
+    def can_utilities_availability(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_UTILITIES_AVAILABILITY)
+
+    def can_utilities_email_users(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_UTILITIES_EMAIL_USERS)
+
+    def can_utilities_compact_product(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_UTILITIES_COMPACT_PRODUCT)
+
+    def can_utilities_rebuild_product(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_UTILITIES_REBUILD_PRODUCT)
+
+    def can_utilities_delete_product(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_UTILITIES_DELETE_PRODUCT)
+
+    def can_utilities_audit(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_UTILITIES_AUDIT)
+
+    def can_utilities_health(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_UTILITIES_HEALTH)
 
     def is_full_administrator(self, user: User) -> bool:
         """True when the user has all CreoPDM Administration caps on one account."""
@@ -536,7 +565,7 @@ class UserService:
                     "CreoPDM Administration "
                     "(users.manage, users.password, roles.assign, roles.manage, "
                     "products.assign, products.manage, settings.manage, email.manage, "
-                    "and utilities.access)."
+                    "and all utilities.* permissions)."
                 )
             db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
             for perm_id in self._permission_ids_for_keys(db, keys):
@@ -844,7 +873,7 @@ class UserService:
                     "CreoPDM Administration "
                     "(users.manage, users.password, roles.assign, roles.manage, "
                     "products.assign, products.manage, settings.manage, email.manage, "
-                    "and utilities.access)."
+                    "and all utilities.* permissions)."
                 )
         if new_status is not None:
             user.status = new_status

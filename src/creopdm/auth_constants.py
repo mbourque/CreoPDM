@@ -30,7 +30,13 @@ PERMISSION_PRODUCTS_ASSIGN = "products.assign"
 PERMISSION_PRODUCTS_MANAGE = "products.manage"
 PERMISSION_SETTINGS_MANAGE = "settings.manage"
 PERMISSION_EMAIL_MANAGE = "email.manage"
-PERMISSION_UTILITIES_ACCESS = "utilities.access"
+PERMISSION_UTILITIES_AVAILABILITY = "utilities.availability"
+PERMISSION_UTILITIES_EMAIL_USERS = "utilities.email_users"
+PERMISSION_UTILITIES_COMPACT_PRODUCT = "utilities.compact_product"
+PERMISSION_UTILITIES_REBUILD_PRODUCT = "utilities.rebuild_product"
+PERMISSION_UTILITIES_DELETE_PRODUCT = "utilities.delete_product"
+PERMISSION_UTILITIES_AUDIT = "utilities.audit"
+PERMISSION_UTILITIES_HEALTH = "utilities.health"
 PERMISSION_PRODUCTS_VIEW = "products.view"
 PERMISSION_PRODUCTS_CREATE = "products.create"
 PERMISSION_PRODUCTS_EDIT = "products.edit"
@@ -66,7 +72,13 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_PRODUCTS_MANAGE, "Create, edit, and delete products in Administration"),
     (PERMISSION_SETTINGS_MANAGE, "Change global CreoPDM settings"),
     (PERMISSION_EMAIL_MANAGE, "Configure email and notifications in Administration"),
-    (PERMISSION_UTILITIES_ACCESS, "Open Administration → Utilities (health, disk, diagnostics)"),
+    (PERMISSION_UTILITIES_AVAILABILITY, "Utilities → Availability (site maintenance message)"),
+    (PERMISSION_UTILITIES_EMAIL_USERS, "Utilities → Email all users"),
+    (PERMISSION_UTILITIES_COMPACT_PRODUCT, "Utilities → Compact product vault history"),
+    (PERMISSION_UTILITIES_REBUILD_PRODUCT, "Utilities → Rebuild product database"),
+    (PERMISSION_UTILITIES_DELETE_PRODUCT, "Utilities → Delete products"),
+    (PERMISSION_UTILITIES_AUDIT, "Utilities → Audit log"),
+    (PERMISSION_UTILITIES_HEALTH, "Utilities → Health and server Logs"),
     (PERMISSION_PRODUCTS_VIEW, "View products"),
     (PERMISSION_PRODUCTS_CREATE, "Create products"),
     (PERMISSION_PRODUCTS_EDIT, "Edit product properties"),
@@ -98,7 +110,26 @@ ADMINISTRATION_PERMISSION_KEYS: frozenset[str] = frozenset(
         PERMISSION_PRODUCTS_MANAGE,
         PERMISSION_SETTINGS_MANAGE,
         PERMISSION_EMAIL_MANAGE,
-        PERMISSION_UTILITIES_ACCESS,
+        PERMISSION_UTILITIES_AVAILABILITY,
+        PERMISSION_UTILITIES_EMAIL_USERS,
+        PERMISSION_UTILITIES_COMPACT_PRODUCT,
+        PERMISSION_UTILITIES_REBUILD_PRODUCT,
+        PERMISSION_UTILITIES_DELETE_PRODUCT,
+        PERMISSION_UTILITIES_AUDIT,
+        PERMISSION_UTILITIES_HEALTH,
+    )
+)
+
+# Any of these opens Administration → Utilities hub.
+UTILITIES_PERMISSION_KEYS: frozenset[str] = frozenset(
+    (
+        PERMISSION_UTILITIES_AVAILABILITY,
+        PERMISSION_UTILITIES_EMAIL_USERS,
+        PERMISSION_UTILITIES_COMPACT_PRODUCT,
+        PERMISSION_UTILITIES_REBUILD_PRODUCT,
+        PERMISSION_UTILITIES_DELETE_PRODUCT,
+        PERMISSION_UTILITIES_AUDIT,
+        PERMISSION_UTILITIES_HEALTH,
     )
 )
 
@@ -115,7 +146,13 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             PERMISSION_PRODUCTS_MANAGE,
             PERMISSION_SETTINGS_MANAGE,
             PERMISSION_EMAIL_MANAGE,
-            PERMISSION_UTILITIES_ACCESS,
+            PERMISSION_UTILITIES_AVAILABILITY,
+            PERMISSION_UTILITIES_EMAIL_USERS,
+            PERMISSION_UTILITIES_COMPACT_PRODUCT,
+            PERMISSION_UTILITIES_REBUILD_PRODUCT,
+            PERMISSION_UTILITIES_DELETE_PRODUCT,
+            PERMISSION_UTILITIES_AUDIT,
+            PERMISSION_UTILITIES_HEALTH,
         ),
     ),
     (

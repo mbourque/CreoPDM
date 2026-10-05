@@ -107,8 +107,8 @@
           <td>{{ row.user or "—" }}</td>
           <td>{{ row.machine or "—" }}</td>
           <td>
-            {% if row.product_uuid and row.product_name %}
-            <a href="/?product={{ row.product_uuid }}">{{ row.product_name }}</a>
+            {% if row.product_uuid and row.product_name and can_view_products and row.product_uuid in accessible_product_uuids %}
+            <a href="/?product={{ row.product_uuid }}" title="Open product Files">{{ row.product_name }}</a>
             {% elif row.product_name %}
             {{ row.product_name }}
             {% else %}
@@ -116,8 +116,8 @@
             {% endif %}
           </td>
           <td>
-            {% if row.product_uuid and row.object_uuid and row.object_filename %}
-            <a href="/products/{{ row.product_uuid }}/objects/{{ row.object_uuid }}">{{ row.object_filename }}</a>
+            {% if row.product_uuid and row.object_uuid and row.object_filename and can_view_objects and row.product_uuid in accessible_product_uuids %}
+            <a href="/products/{{ row.product_uuid }}/objects/{{ row.object_uuid }}" title="Open file Details">{{ row.object_filename }}</a>
             {% elif row.object_filename %}
             {{ row.object_filename }}
             {% else %}

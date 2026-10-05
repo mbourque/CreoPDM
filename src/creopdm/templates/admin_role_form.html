@@ -33,7 +33,7 @@
       {% if editing_own_role %}
       <input type="hidden" name="description" value="{{ form.description }}">
       {% endif %}
-      <p class="muted small">Permissions control API and toolbar access. At least one active user must keep full <strong>CreoPDM Administration</strong> (<code>users.manage</code>, <code>users.password</code>, <code>roles.assign</code>, <code>roles.manage</code>, <code>products.assign</code>, <code>products.manage</code>, <code>settings.manage</code>, <code>email.manage</code>, and <code>utilities.access</code>) so admins cannot lock themselves out. <code>users.manage</code> alone does not allow changing roles, passwords, or product membership.</p>
+      <p class="muted small">Permissions control API and toolbar access. At least one active user must keep full <strong>CreoPDM Administration</strong> (<code>users.manage</code>, <code>users.password</code>, <code>roles.assign</code>, <code>roles.manage</code>, <code>products.assign</code>, <code>products.manage</code>, <code>settings.manage</code>, <code>email.manage</code>, and all <code>utilities.*</code> keys) so admins cannot lock themselves out. <code>users.manage</code> alone does not allow changing roles, passwords, or product membership.</p>
 
       {% for group in permission_groups %}
       <fieldset class="role-perm-group">

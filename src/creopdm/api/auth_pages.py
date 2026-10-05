@@ -2122,13 +2122,35 @@ def _require_email_manager(
 def _require_utilities_access(
     request: Request, ctx: AppContext, db: Session
 ) -> User | HTMLResponse | RedirectResponse:
+    """Any Utilities permission — hub entry."""
     user_uuid = request.session.get(SESSION_USER_KEY)
     user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
     if user is None:
         return RedirectResponse("/login", status_code=303)
     if not ctx.user_accounts.can_access_utilities(user):
         return HTMLResponse(
-            "<h1>403 Forbidden</h1><p>Utilities access required (utilities.access).</p>",
+            "<h1>403 Forbidden</h1><p>Utilities access required.</p>",
+            status_code=403,
+        )
+    return user
+
+
+def _require_utilities_permission(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    *,
+    check,
+    message: str,
+) -> User | HTMLResponse | RedirectResponse:
+    """Require a specific Utilities tool permission (check(user) -> bool)."""
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not check(user):
+        return HTMLResponse(
+            f"<h1>403 Forbidden</h1><p>{message}</p>",
             status_code=403,
         )
     return user
@@ -2137,18 +2159,17 @@ def _require_utilities_access(
 def _require_utilities_or_settings(
     request: Request, ctx: AppContext, db: Session
 ) -> User | HTMLResponse | RedirectResponse:
-    """Availability lives under Utilities; settings managers can still open the pill link."""
-    user_uuid = request.session.get(SESSION_USER_KEY)
-    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
-    if user is None:
-        return RedirectResponse("/login", status_code=303)
-    if ctx.user_accounts.can_access_utilities(user) or ctx.user_accounts.can_manage_settings(
-        user
-    ):
-        return user
-    return HTMLResponse(
-        "<h1>403 Forbidden</h1><p>Utilities or Settings access required.</p>",
-        status_code=403,
+    """Availability: utilities.availability or settings.manage."""
+    return _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=lambda u: ctx.user_accounts.can_utilities_availability(u)
+        or ctx.user_accounts.can_manage_settings(u),
+        message=(
+            "Utilities Availability or Settings access required "
+            "(utilities.availability or settings.manage)."
+        ),
     )
 
 
@@ -2728,6 +2749,9 @@ def _utilities_audit_response(
     product_uuid: str = "",
     object_query: str = "",
 ):
+    from sqlalchemy import select
+
+    from creopdm.models.product import Product
     from creopdm.services.activity_service import AUDIT_PAGE_SIZE
 
     since_value = (since or "").strip() or _default_audit_since()
@@ -2743,6 +2767,12 @@ def _utilities_audit_response(
         until=_parse_audit_day(until_value, end_of_day=True),
     )
     choices = _audit_filter_choices(ctx, db)
+    accessible_uuids = {
+        p.uuid
+        for p in ctx.user_accounts.filter_accessible_products(
+            manager, list(db.scalars(select(Product)).all())
+        )
+    }
     return templates.TemplateResponse(
         request,
         "admin_utilities_audit.html",
@@ -2753,6 +2783,7 @@ def _utilities_audit_response(
             "action_choices": _audit_action_choices(),
             "product_choices": choices["product_choices"],
             "user_choices": choices["user_choices"],
+            "accessible_product_uuids": accessible_uuids,
             "filters": {
                 "q": q or "",
                 "since": since_value,
@@ -2815,7 +2846,13 @@ def admin_utilities_availability_page(
 def admin_utilities_email_all_page(
     request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
 ):
-    manager = _require_utilities_access(request, ctx, db)
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_email_users,
+        message="Utilities Email all users required (utilities.email_users).",
+    )
     if _is_blocked(manager):
         return manager
     return _utilities_email_response(request, ctx, db, manager)
@@ -2825,7 +2862,13 @@ def admin_utilities_email_all_page(
 def admin_utilities_compact_page(
     request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
 ):
-    manager = _require_utilities_access(request, ctx, db)
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_compact_product,
+        message="Utilities Compact product required (utilities.compact_product).",
+    )
     if _is_blocked(manager):
         return manager
     return _utilities_compact_response(request, ctx, db, manager)
@@ -2835,7 +2878,13 @@ def admin_utilities_compact_page(
 def admin_utilities_rebuild_product_page(
     request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
 ):
-    manager = _require_utilities_access(request, ctx, db)
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_rebuild_product,
+        message="Utilities Rebuild product required (utilities.rebuild_product).",
+    )
     if _is_blocked(manager):
         return manager
     return _utilities_rebuild_response(request, ctx, db, manager)
@@ -2845,7 +2894,13 @@ def admin_utilities_rebuild_product_page(
 def admin_utilities_health_page(
     request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
 ):
-    manager = _require_utilities_access(request, ctx, db)
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_health,
+        message="Utilities Health required (utilities.health).",
+    )
     if _is_blocked(manager):
         return manager
     return _utilities_health_response(request, ctx, db, manager)
@@ -2855,7 +2910,13 @@ def admin_utilities_health_page(
 def admin_utilities_delete_products_page(
     request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
 ):
-    manager = _require_utilities_access(request, ctx, db)
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_delete_product,
+        message="Utilities Delete products required (utilities.delete_product).",
+    )
     if _is_blocked(manager):
         return manager
     return _utilities_delete_products_response(request, ctx, db, manager)
@@ -2874,7 +2935,13 @@ def admin_utilities_audit_page(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
-    manager = _require_utilities_access(request, ctx, db)
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_audit,
+        message="Utilities Audit log required (utilities.audit).",
+    )
     if _is_blocked(manager):
         return manager
     return _utilities_audit_response(
@@ -2901,7 +2968,13 @@ def admin_utilities_delete_products(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
-    manager = _require_utilities_access(request, ctx, db)
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_delete_product,
+        message="Utilities Delete products required (utilities.delete_product).",
+    )
     if _is_blocked(manager):
         return manager
     pid = (product_id or "").strip()
@@ -2980,7 +3053,13 @@ def admin_utilities_logs_page(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
-    manager = _require_utilities_access(request, ctx, db)
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_health,
+        message="Utilities Health required (utilities.health).",
+    )
     if _is_blocked(manager):
         return manager
     return _utilities_logs_response(request, ctx, manager, name=name)
@@ -2995,7 +3074,13 @@ def admin_utilities_email_all(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
-    manager = _require_utilities_access(request, ctx, db)
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_email_users,
+        message="Utilities Email all users required (utilities.email_users).",
+    )
     if _is_blocked(manager):
         return manager
     from creopdm.services.utilities_service import send_email_to_all_users
@@ -3059,7 +3144,13 @@ def admin_utilities_compact_vault(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
-    manager = _require_utilities_access(request, ctx, db)
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_compact_product,
+        message="Utilities Compact product required (utilities.compact_product).",
+    )
     if _is_blocked(manager):
         return manager
     from creopdm.services.utilities_service import compact_product_vault_history
@@ -3126,7 +3217,13 @@ def admin_utilities_rebuild_product_db(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
-    manager = _require_utilities_access(request, ctx, db)
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_rebuild_product,
+        message="Utilities Rebuild product required (utilities.rebuild_product).",
+    )
     if _is_blocked(manager):
         return manager
     from creopdm.services.utilities_service import repair_product_database

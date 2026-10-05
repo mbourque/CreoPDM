@@ -30,8 +30,15 @@ from creopdm.auth_constants import (
     PERMISSION_SETTINGS_MANAGE,
     PERMISSION_USERS_MANAGE,
     PERMISSION_USERS_PASSWORD,
-    PERMISSION_UTILITIES_ACCESS,
+    PERMISSION_UTILITIES_AUDIT,
+    PERMISSION_UTILITIES_AVAILABILITY,
+    PERMISSION_UTILITIES_COMPACT_PRODUCT,
+    PERMISSION_UTILITIES_DELETE_PRODUCT,
+    PERMISSION_UTILITIES_EMAIL_USERS,
+    PERMISSION_UTILITIES_HEALTH,
+    PERMISSION_UTILITIES_REBUILD_PRODUCT,
     TEST_AUTH_PERMISSIONS,
+    UTILITIES_PERMISSION_KEYS,
 )
 from creopdm.models.user import User
 from creopdm.services.user_service import UserService
@@ -49,6 +56,13 @@ class CapabilityFlags:
     can_manage_products: bool
     can_manage_email: bool
     can_access_utilities: bool
+    can_utilities_availability: bool
+    can_utilities_email_users: bool
+    can_utilities_compact_product: bool
+    can_utilities_rebuild_product: bool
+    can_utilities_delete_product: bool
+    can_utilities_audit: bool
+    can_utilities_health: bool
     can_create_product: bool
     can_edit_product: bool
     can_delete_product: bool
@@ -77,7 +91,14 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_manage_settings=PERMISSION_SETTINGS_MANAGE in keys,
         can_manage_products=PERMISSION_PRODUCTS_MANAGE in keys,
         can_manage_email=PERMISSION_EMAIL_MANAGE in keys,
-        can_access_utilities=PERMISSION_UTILITIES_ACCESS in keys,
+        can_access_utilities=bool(keys & UTILITIES_PERMISSION_KEYS),
+        can_utilities_availability=PERMISSION_UTILITIES_AVAILABILITY in keys,
+        can_utilities_email_users=PERMISSION_UTILITIES_EMAIL_USERS in keys,
+        can_utilities_compact_product=PERMISSION_UTILITIES_COMPACT_PRODUCT in keys,
+        can_utilities_rebuild_product=PERMISSION_UTILITIES_REBUILD_PRODUCT in keys,
+        can_utilities_delete_product=PERMISSION_UTILITIES_DELETE_PRODUCT in keys,
+        can_utilities_audit=PERMISSION_UTILITIES_AUDIT in keys,
+        can_utilities_health=PERMISSION_UTILITIES_HEALTH in keys,
         can_create_product=PERMISSION_PRODUCTS_CREATE in keys,
         can_edit_product=PERMISSION_PRODUCTS_EDIT in keys,
         can_delete_product=PERMISSION_PRODUCTS_DELETE in keys,
@@ -119,6 +140,13 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_manage_products = caps.can_manage_products
     request.state.can_manage_email = caps.can_manage_email
     request.state.can_access_utilities = caps.can_access_utilities
+    request.state.can_utilities_availability = caps.can_utilities_availability
+    request.state.can_utilities_email_users = caps.can_utilities_email_users
+    request.state.can_utilities_compact_product = caps.can_utilities_compact_product
+    request.state.can_utilities_rebuild_product = caps.can_utilities_rebuild_product
+    request.state.can_utilities_delete_product = caps.can_utilities_delete_product
+    request.state.can_utilities_audit = caps.can_utilities_audit
+    request.state.can_utilities_health = caps.can_utilities_health
     request.state.can_create_product = caps.can_create_product
     request.state.can_edit_product = caps.can_edit_product
     request.state.can_delete_product = caps.can_delete_product
@@ -147,6 +175,23 @@ def caps_dict(request: Request) -> dict:
         "can_manage_products": bool(getattr(request.state, "can_manage_products", False)),
         "can_manage_email": bool(getattr(request.state, "can_manage_email", False)),
         "can_access_utilities": bool(getattr(request.state, "can_access_utilities", False)),
+        "can_utilities_availability": bool(
+            getattr(request.state, "can_utilities_availability", False)
+        ),
+        "can_utilities_email_users": bool(
+            getattr(request.state, "can_utilities_email_users", False)
+        ),
+        "can_utilities_compact_product": bool(
+            getattr(request.state, "can_utilities_compact_product", False)
+        ),
+        "can_utilities_rebuild_product": bool(
+            getattr(request.state, "can_utilities_rebuild_product", False)
+        ),
+        "can_utilities_delete_product": bool(
+            getattr(request.state, "can_utilities_delete_product", False)
+        ),
+        "can_utilities_audit": bool(getattr(request.state, "can_utilities_audit", False)),
+        "can_utilities_health": bool(getattr(request.state, "can_utilities_health", False)),
         "can_create_product": bool(getattr(request.state, "can_create_product", False)),
         "can_edit_product": bool(getattr(request.state, "can_edit_product", False)),
         "can_delete_product": bool(getattr(request.state, "can_delete_product", False)),
@@ -190,6 +235,7 @@ def can_open_administration(caps: CapabilityFlags) -> bool:
         or caps.can_access_utilities
     )
 
+
 def default_app_path(caps: CapabilityFlags) -> str:
     """Where to send a signed-in user when they have no explicit destination."""
     if caps.can_view_products:
@@ -208,4 +254,3 @@ def resolve_post_login_target(caps: CapabilityFlags, next_url: str | None) -> st
     if nxt.startswith("/") and not nxt.startswith("//"):
         return nxt
     return default
-

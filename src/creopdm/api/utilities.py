@@ -14,9 +14,9 @@ from creopdm.services.utilities_service import collect_utilities_status
 router = APIRouter()
 
 
-def _require_utilities_access(request: Request, ctx: AppContext) -> None:
-    if ctx.auth_enabled and not getattr(request.state, "can_access_utilities", False):
-        raise PermissionDeniedError("Utilities access required (utilities.access).")
+def _require_utilities_health(request: Request, ctx: AppContext) -> None:
+    if ctx.auth_enabled and not getattr(request.state, "can_utilities_health", False):
+        raise PermissionDeniedError("Utilities Health required (utilities.health).")
 
 
 @router.get("/api/admin/utilities/status", response_model=UtilitiesStatusResponse)
@@ -25,5 +25,5 @@ def utilities_status(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ) -> UtilitiesStatusResponse:
-    _require_utilities_access(request, ctx)
+    _require_utilities_health(request, ctx)
     return collect_utilities_status(ctx, db)

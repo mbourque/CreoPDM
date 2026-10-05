@@ -467,7 +467,9 @@ def test_admin_can_open_settings(auth_client):
 
 
 def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
-    """utilities.access opens Utilities; status API works; others get 403."""
+    """Any utilities.* opens Utilities hub; status API needs health; others get 403."""
+    from creopdm.auth_constants import UTILITIES_PERMISSION_KEYS
+
     auth_client.post(
         "/setup",
         data={
@@ -479,6 +481,12 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
         },
         follow_redirects=False,
     )
+    with auth_ctx.session_factory() as db:
+        admin = db.scalar(select(User).where(User.username == "admin"))
+        assert admin is not None
+        admin_keys = auth_ctx.user_accounts.permission_keys_for_user(admin)
+        assert UTILITIES_PERMISSION_KEYS <= admin_keys
+
     hub = auth_client.get("/admin/utilities")
     assert hub.status_code == 200
     assert "admin-page" in hub.text
@@ -609,7 +617,7 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert isinstance(body["user_count"], int)
     assert isinstance(body["active_checkout_count"], int)
 
-    # PDM Manager lacks utilities.access.
+    # PDM Manager lacks all utilities.* keys.
     auth_client.post(
         "/admin/users/new",
         data={
@@ -688,6 +696,69 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
         follow_redirects=False,
     )
     assert denied_rebuild.status_code == 403
+
+
+def test_utilities_audit_only_role_gates_other_tools(auth_client, auth_ctx):
+    """Role with only utilities.audit can open Audit; Compact and Health return 403."""
+    from creopdm.auth_constants import (
+        PERMISSION_UTILITIES_AUDIT,
+        UTILITIES_PERMISSION_KEYS,
+    )
+
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+    with auth_ctx.session_factory() as db:
+        admin = db.scalar(select(User).where(User.username == "admin"))
+        assert admin is not None
+        assert UTILITIES_PERMISSION_KEYS <= auth_ctx.user_accounts.permission_keys_for_user(
+            admin
+        )
+
+    role = auth_client.post(
+        "/admin/roles/new",
+        data={
+            "name": "Audit Only",
+            "description": "Audit log only",
+            "permission": [PERMISSION_UTILITIES_AUDIT],
+        },
+        follow_redirects=False,
+    )
+    assert role.status_code == 303, role.text
+    user = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Auditor",
+            "username": "auditor",
+            "email": "auditor@example.com",
+            "role": "Audit Only",
+            "status": UserStatus.ACTIVE.value,
+            "password": "AuditPass1",
+            "password_confirm": "AuditPass1",
+        },
+        follow_redirects=False,
+    )
+    assert user.status_code == 303, user.text
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(User).where(User.username == "auditor"))
+        assert row is not None
+        row.must_change_password = False
+        db.commit()
+
+    _login(auth_client, "auditor", "AuditPass1")
+    hub = auth_client.get("/admin/utilities")
+    assert hub.status_code == 200
+    assert 'href="/admin/utilities/audit"' in hub.text
+    assert 'href="/admin/utilities/compact"' not in hub.text
+    assert 'href="/admin/utilities/health"' not in hub.text
+    assert 'href="/admin/utilities/email-all"' not in hub.text
+
+    audit = auth_client.get("/admin/utilities/audit")
+    assert audit.status_code == 200
+    assert "Audit log" in audit.text
+
+    assert auth_client.get("/admin/utilities/compact", follow_redirects=False).status_code == 403
+    assert auth_client.get("/admin/utilities/health", follow_redirects=False).status_code == 403
+    assert auth_client.get("/api/admin/utilities/status").status_code == 403
 
 
 def test_admin_utilities_compact_vault_gate(auth_client, auth_ctx):
@@ -1729,7 +1800,7 @@ def test_admin_products_hides_delete_tip_without_delete_permission(
     from creopdm.auth_constants import (
         PERMISSION_PRODUCTS_MANAGE,
         PERMISSION_PRODUCTS_VIEW,
-        PERMISSION_UTILITIES_ACCESS,
+        PERMISSION_UTILITIES_DELETE_PRODUCT,
     )
 
     _setup_admin_and_users(auth_client, auth_ctx)
@@ -1742,7 +1813,7 @@ def test_admin_products_hides_delete_tip_without_delete_permission(
             "permission": [
                 PERMISSION_PRODUCTS_VIEW,
                 PERMISSION_PRODUCTS_MANAGE,
-                PERMISSION_UTILITIES_ACCESS,
+                PERMISSION_UTILITIES_DELETE_PRODUCT,
             ],
         },
         follow_redirects=False,
@@ -1821,8 +1892,8 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
         PERMISSION_PRODUCTS_VIEW,
         PERMISSION_ROLES_MANAGE,
         PERMISSION_USERS_MANAGE,
-        PERMISSION_UTILITIES_ACCESS,
         STARTER_ROLE_PERMISSION_KEYS,
+        UTILITIES_PERMISSION_KEYS,
     )
     from creopdm.models.user import Permission, RolePermission
 
@@ -1864,11 +1935,11 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
     assert PERMISSION_PRODUCTS_DELETE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_PRODUCTS_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_EMAIL_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
-    assert PERMISSION_UTILITIES_ACCESS not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
+    assert not (UTILITIES_PERMISSION_KEYS & keys_by_role[BuiltinRole.PDM_MANAGER.value])
     assert PERMISSION_USERS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_PRODUCTS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_EMAIL_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
-    assert PERMISSION_UTILITIES_ACCESS in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
+    assert UTILITIES_PERMISSION_KEYS <= keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_ROLES_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_OBJECTS_COPY_TO_VAULT in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
@@ -2163,7 +2234,9 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
     assert "CreoPDM Administration" in role_form.text
     assert "products.manage" in role_form.text
     assert "email.manage" in role_form.text
-    assert "utilities.access" in role_form.text
+    assert "utilities.audit" in role_form.text
+    assert "utilities.health" in role_form.text
+    assert "utilities.access" not in role_form.text
     assert "your</strong> role" in role_form.text.lower() or "your role" in role_form.text.lower()
     assert "cannot lock themselves out" in role_form.text.lower()
     assert 'name="name"' in role_form.text and "disabled" in role_form.text
@@ -2865,8 +2938,15 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_SETTINGS_MANAGE,
         PERMISSION_USERS_MANAGE,
         PERMISSION_USERS_PASSWORD,
-        PERMISSION_UTILITIES_ACCESS,
+        PERMISSION_UTILITIES_AUDIT,
+        PERMISSION_UTILITIES_AVAILABILITY,
+        PERMISSION_UTILITIES_COMPACT_PRODUCT,
+        PERMISSION_UTILITIES_DELETE_PRODUCT,
+        PERMISSION_UTILITIES_EMAIL_USERS,
+        PERMISSION_UTILITIES_HEALTH,
+        PERMISSION_UTILITIES_REBUILD_PRODUCT,
         STARTER_ROLE_PERMISSION_KEYS,
+        UTILITIES_PERMISSION_KEYS,
     )
 
     # One account per starter role (admin from /setup; others via Users admin).
@@ -3014,7 +3094,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 or PERMISSION_SETTINGS_MANAGE in allowed
                 or PERMISSION_PRODUCTS_MANAGE in allowed
                 or PERMISSION_EMAIL_MANAGE in allowed
-                or PERMISSION_UTILITIES_ACCESS in allowed
+                or bool(allowed & UTILITIES_PERMISSION_KEYS)
                 or PERMISSION_PRODUCTS_ASSIGN in allowed
                 or PERMISSION_USERS_PASSWORD in allowed
                 or PERMISSION_ROLES_ASSIGN in allowed
@@ -3039,8 +3119,26 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             PERMISSION_SETTINGS_MANAGE: auth_client.get("/api/settings", follow_redirects=False),
             PERMISSION_PRODUCTS_MANAGE: auth_client.get("/admin/products", follow_redirects=False),
             PERMISSION_EMAIL_MANAGE: auth_client.get("/admin/email", follow_redirects=False),
-            PERMISSION_UTILITIES_ACCESS: auth_client.get(
-                "/admin/utilities", follow_redirects=False
+            PERMISSION_UTILITIES_AVAILABILITY: auth_client.get(
+                "/admin/utilities/availability", follow_redirects=False
+            ),
+            PERMISSION_UTILITIES_EMAIL_USERS: auth_client.get(
+                "/admin/utilities/email-all", follow_redirects=False
+            ),
+            PERMISSION_UTILITIES_COMPACT_PRODUCT: auth_client.get(
+                "/admin/utilities/compact", follow_redirects=False
+            ),
+            PERMISSION_UTILITIES_REBUILD_PRODUCT: auth_client.get(
+                "/admin/utilities/rebuild-product", follow_redirects=False
+            ),
+            PERMISSION_UTILITIES_DELETE_PRODUCT: auth_client.get(
+                "/admin/utilities/delete-products", follow_redirects=False
+            ),
+            PERMISSION_UTILITIES_AUDIT: auth_client.get(
+                "/admin/utilities/audit", follow_redirects=False
+            ),
+            PERMISSION_UTILITIES_HEALTH: auth_client.get(
+                "/admin/utilities/health", follow_redirects=False
             ),
             PERMISSION_PRODUCTS_VIEW: auth_client.get(f"/api/products/{product_id}"),
             PERMISSION_OBJECTS_VIEW: auth_client.get(f"/api/objects/{object_id}"),

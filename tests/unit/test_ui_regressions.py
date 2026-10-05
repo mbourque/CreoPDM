@@ -1933,6 +1933,13 @@ def test_admin_hub_panel_fills_full_width():
     )
     assert "<h1>Utilities</h1>" in utilities
     assert "admin-hub" in utilities
+    assert "can_utilities_availability or can_manage_settings" in utilities
+    assert "can_utilities_email_users" in utilities
+    assert "can_utilities_compact_product" in utilities
+    assert "can_utilities_rebuild_product" in utilities
+    assert "can_utilities_delete_product" in utilities
+    assert "can_utilities_audit" in utilities
+    assert "can_utilities_health" in utilities
     assert 'href="/admin/utilities/availability"' in utilities
     assert 'href="/admin/utilities/email-all"' in utilities
     assert 'href="/admin/utilities/compact"' in utilities
@@ -1960,12 +1967,20 @@ def test_admin_hub_panel_fills_full_width():
     assert "product_choices" in audit_util
     assert "user_choices" in audit_util
     assert "action_label" in audit_util
+    assert "accessible_product_uuids" in audit_util
+    assert "can_view_products" in audit_util
+    assert "can_view_objects" in audit_util
+    assert "Open product Files" in audit_util
+    assert "Open file Details" in audit_util
     assert "not the vault Git history" in audit_util
     assert "cannot be edited or deleted" in audit_util
     assert "audit-filter-grid" in css
     assert "grid-template-columns: minmax(0, 28rem)" in css
     assert 'input[type="date"]' in css
     assert "one week ago" in (
+        ROOT / "docs" / "user-interactions.md"
+    ).read_text(encoding="utf-8")
+    assert "links only when you can open that product" in (
         ROOT / "docs" / "user-interactions.md"
     ).read_text(encoding="utf-8")
     avail_util = (
@@ -1997,7 +2012,13 @@ def test_admin_hub_panel_fills_full_width():
     )
     assert "Remove product" not in product_form
     assert '}/delete"' not in product_form
+    assert "can_utilities_delete_product" in product_form
     assert 'href="/admin/utilities/delete-products"' in product_form
+    products_list = (ROOT / "src" / "creopdm" / "templates" / "admin_products.html").read_text(
+        encoding="utf-8"
+    )
+    assert "can_utilities_delete_product" in products_list
+    assert 'href="/admin/utilities/delete-products"' in products_list
     health = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities_health.html").read_text(
         encoding="utf-8"
     )
@@ -2134,10 +2155,12 @@ def test_admin_hub_panel_fills_full_width():
     assert "System Settings" in docs
     assert "hub of short tiles" in docs
     assert "Utilities" in docs
-    assert "utilities.access" in docs
+    assert "utilities.audit" in docs
+    assert "utilities.health" in docs
+    assert "matching Utilities permission" in docs
+    assert "utilities.access" in docs  # must-not: old umbrella
     assert "folder’s used size" in docs or "folder" in docs
     assert "Audit log" in docs
-    assert "seven hub tiles" in docs
     assert "Git is not the audit source" in docs or "not the vault Git history" in docs
     assert "Search" in docs or "dropdowns" in docs
     assert "Compacting vault history" in docs

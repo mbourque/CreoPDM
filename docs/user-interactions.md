@@ -489,18 +489,18 @@ Use a normal browser for these checks. You need the matching Administration perm
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Edit permissions on a role | Save when at least one ACTIVE user still has full CreoPDM Administration (including `email.manage` and `utilities.access`) | Strip the last full admin’s Administration set |
+| Edit permissions on a role | Save when at least one ACTIVE user still has full CreoPDM Administration (including `email.manage` and all `utilities.*` keys) | Strip the last full admin’s Administration set |
 | Change name / description / Administration checkboxes on **your own** role | Reject the change | Let you lock yourself out of Administration |
 
 ### Utilities (Administration → Utilities)
 
-Needs `utilities.access` (Administrator by default; CreoPDM Administration only).
+Needs the matching Utilities permission for each tool (`utilities.availability`, `utilities.email_users`, `utilities.compact_product`, `utilities.rebuild_product`, `utilities.delete_product`, `utilities.audit`, `utilities.health`). Administrator has all of them by default. The hub opens if you have **any** of those keys.
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Open **Utilities** | Show seven hub tiles: **Availability**, **Email all users**, **Compact product vault history**, **Rebuild product database**, **Delete products**, **Audit log**, and **Health** (same pattern as Administration home) | Dump every tool and health section on one long page; let PDM Manager / Engineer open it without the permission; keep Remove/Delete on Administration → Products → Edit; leave **Availability** only under System Settings |
+| Open **Utilities** | Show only the hub tiles your role grants (Availability also when you have `settings.manage`); same pattern as Administration home | Dump every tool and health section on one long page; let PDM Manager / Engineer open a tool without its permission; keep Remove/Delete on Administration → Products → Edit; leave **Availability** only under System Settings; keep a single `utilities.access` umbrella |
 | Open **Availability** | Show the site available / unavailable radios and maintenance message (same Save as System Settings used to); works when locked for maintenance so admins can turn it back on; old `/settings/availability` links redirect here | Hide Availability from Utilities; leave non-admins able to change it |
-| Open **Audit log** | Show a filterable table of server-side PDM events (Timestamp, Event, User, Machine, Product, Object, Comment/summary) with human-readable event names; **Search** across user/file/product/comment; dropdowns for Event, User (name, or “no longer in users”), and Product (name + short UUID); optional object text + date range (**From** defaults to one week ago); filter fields share one width and site font; newest first; page capped; Object/summary show filename from details even when the file row is gone | Treat vault Git history / blame as the audit trail; offer delete or edit of audit rows; expose other products’ events to users without `utilities.access`; require typing product UUIDs to filter; leave From blank by default |
+| Open **Audit log** | Show a filterable table of server-side PDM events (Timestamp, Event, User, Machine, Product, Object, Comment/summary) with human-readable event names; **Search** across user/file/product/comment; dropdowns for Event, User (name, or “no longer in users”), and Product (name + short UUID); optional object text + date range (**From** defaults to one week ago); filter fields share one width and site font; newest first; page capped; Object/summary show filename from details even when the file row is gone; **Product** / **Object** are links only when you can open that product (membership + view permission) — Product opens Files, Object opens Details | Treat vault Git history / blame as the audit trail; offer delete or edit of audit rows; expose Audit to users without `utilities.audit`; require typing product UUIDs to filter; leave From blank by default; link into products the viewer cannot open |
 | Open **Email all users** | Show the broadcast form on its own page | |
 | Fill subject + message, check the confirm box, **Send email to all users** | Email each **active** user individually (using Administration → Email delivery settings); skip disabled accounts; keep addresses private | Send without confirm; put every address in one To/Cc list; email disabled users |
 | Open **Compact product vault history** | Show the compact form on its own page | |
@@ -559,8 +559,8 @@ Try the same with **Add folder…**, **Add folders…**, and **Compressed data�
 - Add user → new account has no products until Membership grants them.  
 - Role dropdown → your own role / a peer role / a higher role must not appear.  
 - Email admin: change SMTP fields then Send test without Save → blocked.
-- Utilities without `utilities.access` → 403; with it → hub tiles for availability / email-all / compact / rebuild-product / delete-products / audit / health; each opens its own page; Health Logs path opens `/admin/utilities/logs`; product Edit has no Remove form.
-- Audit log without `utilities.access` → 403; filters are GET-only (search + dropdowns); no delete/edit UI; Git is not the audit source; Object/summary show filenames from event details.
+- Utilities without any `utilities.*` → 403 on hub; with a tool key → only that tile; Health Logs path opens `/admin/utilities/logs` when `utilities.health`; product Edit has no Remove form; Delete-products tip needs `utilities.delete_product`.
+- Audit log without `utilities.audit` → 403; filters are GET-only (search + dropdowns); no delete/edit UI; Git is not the audit source; Object/summary show filenames from event details; Product/Object links only when the viewer can open that product.
 - Compact vault history → tip stays; older History gone; blocked when checkouts active or vault dirty; busy overlay until the form POST returns.
 - Utilities email-all without confirm or blank subject → blocked; disabled users not emailed.
 - Cancel Watch / Stop watching confirmation → subscription unchanged.
