@@ -318,17 +318,11 @@ class CreoService:
                 source = "vault-scan"
 
         # Large incomplete Where Used trees (e.g. JD 2748 of 4022) — fill remaining
-        # Creo-openable product siblings so Retrieve is not missing companions.
+        # product tips so Retrieve matches what zip/Add stored. Do not filter fill
+        # to Creo-openable only (that dropped one imported companion → 4021/4022).
         if chosen and skip_object_id is not None:
             companion_siblings = [
-                row
-                for row in siblings
-                if int(row.id) != int(skip_object_id)
-                and is_creo_openable(
-                    str(row.filename or Path(str(row.relative_path)).name),
-                    model_extensions=models,
-                    extra_cad_extensions=all_cad,
-                )
+                row for row in siblings if int(row.id) != int(skip_object_id)
             ]
             if (
                 len(companion_siblings) >= _MIN_PRODUCT_FILL_WHERE_USED
@@ -344,7 +338,7 @@ class CreoService:
                         by_id[rid] = row
                 if len(by_id) > len(chosen):
                     logger.info(
-                        "Open deps: filled %s → %s companions from product CAD for %s",
+                        "Open deps: filled %s → %s companions from product tips for %s",
                         len(chosen),
                         len(by_id),
                         Path(filename).name,

@@ -150,6 +150,7 @@ def test_open_where_used_db_walk_allows_large_jd_trees():
     assert "product-fill" in text
     assert "_PRODUCT_FILL_COVERAGE" not in text
     assert "len(chosen) < len(companion_siblings)" in text
+    assert "row for row in siblings if int(row.id) != int(skip_object_id)" in text
     from creopdm.services.creo_service import (
         _MAX_DEP_DEPENDENCIES,
         _MAX_DEP_DEPENDENCY_DEPTH,

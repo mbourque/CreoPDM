@@ -42,6 +42,9 @@ def test_contract_db_walk_allows_thousands_and_deep_trees():
     # Regression: 95% coverage skipped fill when only 1 companion was missing (4021/4022).
     assert "_PRODUCT_FILL_COVERAGE" not in body
     assert "len(chosen) < len(companion_siblings)" in deps_for
+    # Fill must use every vault tip (zip/Add set), not is_creo_openable alone.
+    assert "row for row in siblings if int(row.id) != int(skip_object_id)" in deps_for
+    assert "is_creo_openable(" not in deps_for
 
 
 def test_contract_magnet_prune_allows_shared_jd_subasms():

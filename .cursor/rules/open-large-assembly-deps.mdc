@@ -21,7 +21,7 @@ Opening a Top Level / large Creo assembly must materialize **all Creo-openable c
 
 ## Required behavior
 
-1. **`CreoService._dependencies_for`** — Prefer Where Used DB BFS (`_MAX_DEP_DEPENDENCIES` ≥ 4000, depth ≥ 32). Vault-scan when empty/sparse (`_SPARSE_OPEN_WHERE_USED`). When a large WU tree is still short of product Creo-openable siblings, **product-fill every remaining companion** (`len(chosen) < len(companion_siblings)` — never a 95% cutoff that leaves one file out). Never `_MAX_OPEN_FROM_WHERE_USED` discard.
+1. **`CreoService._dependencies_for`** — Prefer Where Used DB BFS (`_MAX_DEP_DEPENDENCIES` ≥ 4000, depth ≥ 32). Vault-scan when empty/sparse (`_SPARSE_OPEN_WHERE_USED`). When a large WU tree is still short of product siblings, **product-fill every remaining vault tip** (`len(chosen) < len(companion_siblings)` — all objects except the primary, same set zip/Add stored; never filter fill through `is_creo_openable` alone). Never `_MAX_OPEN_FROM_WHERE_USED` discard.
 2. **Magnet prune** — `_MAX_WHERE_USED_ASM_PARENTS` stays high enough for shared sub-asms (200+); only drop true name-table magnets.
 3. **`app.js`** — `creoOpenModelTimeoutMs(preparedDependencyCount(…))` and a generous `openWorkTimeoutMs` for prepare + zip + open. No fixed 90s on vault Open.
 4. **Agent** — Materialize only the prepare list; Finding deps must **locate** only (no server `materialize(` in `_dependencies_for`).
