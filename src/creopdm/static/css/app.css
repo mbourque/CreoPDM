@@ -596,6 +596,46 @@ a.brand:hover { text-decoration: none; color: inherit; }
   font-family: inherit;
   font-size: inherit;
 }
+.admin-utilities .audit-more-toggle {
+  display: inline;
+  margin: 0 0 0 0.35rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent, #0b5fff);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+.admin-utilities .audit-more-toggle:hover,
+.admin-utilities .audit-more-toggle:focus-visible {
+  color: var(--accent-strong, #0842c0);
+}
+.admin-utilities .audit-more-row td {
+  background: #f6f8fa;
+  padding-top: 0.45rem;
+  padding-bottom: 0.65rem;
+}
+.admin-utilities .audit-more-list {
+  margin: 0;
+  padding: 0 0 0 1.15rem;
+  columns: 2;
+  column-gap: 1.5rem;
+  max-width: 48rem;
+}
+.admin-utilities .audit-more-list li {
+  break-inside: avoid;
+  margin: 0.1rem 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+}
+@media (max-width: 700px) {
+  .admin-utilities .audit-more-list {
+    columns: 1;
+  }
+}
 .admin-utilities .settings-card h2 {
   display: flex;
   align-items: center;

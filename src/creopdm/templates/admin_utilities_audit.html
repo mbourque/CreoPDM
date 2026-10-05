@@ -99,7 +99,7 @@
       </thead>
       <tbody>
         {% for row in events %}
-        <tr>
+        <tr class="audit-event-row">
           <td class="mono">{{ row.timestamp | local_time if row.timestamp else "—" }}</td>
           <td>
             <span title="{{ row.action }}">{{ row.action_label }}</span>
@@ -116,7 +116,13 @@
             {% endif %}
           </td>
           <td>
-            {% if row.product_uuid and row.object_uuid and row.object_filename and can_view_objects and row.product_uuid in accessible_product_uuids %}
+            {% if row.object_more_count > 0 and row.object_filenames %}
+            <span class="audit-object-primary">{{ row.object_filenames[0] }}</span>
+            <button type="button" class="audit-more-toggle"
+                    aria-expanded="false"
+                    aria-controls="audit-more-{{ loop.index0 }}"
+                    data-audit-more="audit-more-{{ loop.index0 }}">(+{{ row.object_more_count }} more)</button>
+            {% elif row.product_uuid and row.object_uuid and row.object_filename and can_view_objects and row.product_uuid in accessible_product_uuids %}
             <a href="/products/{{ row.product_uuid }}/objects/{{ row.object_uuid }}" title="Open file Details">{{ row.object_filename }}</a>
             {% elif row.object_filename %}
             {{ row.object_filename }}
@@ -126,6 +132,22 @@
           </td>
           <td>{{ row.summary or row.comment or "—" }}</td>
         </tr>
+        {% if row.object_more_count > 0 and row.object_filenames %}
+        <tr class="audit-more-row" id="audit-more-{{ loop.index0 }}" hidden>
+          <td colspan="7">
+            <ul class="audit-more-list">
+              {% for name in row.object_filenames %}
+              <li>{{ name }}</li>
+              {% endfor %}
+            </ul>
+            {% set stored = row.object_filenames|length %}
+            {% set total = row.object_more_count + 1 %}
+            {% if total > stored %}
+            <p class="muted small">Showing {{ stored }} of {{ total }} files recorded on this event.</p>
+            {% endif %}
+          </td>
+        </tr>
+        {% endif %}
         {% endfor %}
       </tbody>
     </table>
@@ -135,4 +157,21 @@
     {% endif %}
   </section>
 </article>
+<script>
+(function () {
+  var table = document.getElementById("utilities-audit-table");
+  if (!table) return;
+  table.addEventListener("click", function (event) {
+    var btn = event.target.closest(".audit-more-toggle");
+    if (!btn || !table.contains(btn)) return;
+    var id = btn.getAttribute("data-audit-more");
+    var row = id ? document.getElementById(id) : null;
+    if (!row) return;
+    var open = row.hasAttribute("hidden");
+    if (open) row.removeAttribute("hidden");
+    else row.setAttribute("hidden", "");
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+})();
+</script>
 {% endblock %}

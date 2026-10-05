@@ -1982,10 +1982,19 @@ def test_admin_hub_panel_fills_full_width():
     assert "grid-column: 1 / -1" in css
     assert 'input[type="date"]' in css
     assert "Newest first. Not vault Git history" in audit_util
+    assert "audit-more-toggle" in audit_util
+    assert "audit-more-row" in audit_util
+    assert "object_more_count" in audit_util
+    assert "data-audit-more" in audit_util
+    assert ".audit-more-toggle" in css
+    assert ".audit-more-list" in css
     assert "one week ago" in (
         ROOT / "docs" / "user-interactions.md"
     ).read_text(encoding="utf-8")
     assert "multi-column grid" in (
+        ROOT / "docs" / "user-interactions.md"
+    ).read_text(encoding="utf-8")
+    assert "(+N more)" in (
         ROOT / "docs" / "user-interactions.md"
     ).read_text(encoding="utf-8")
     assert "links only when you can open that product" in (

@@ -133,7 +133,10 @@ def test_list_events_filters_action_user_and_object(ctx):
         added = svc.list_events(db, action=ActivityAction.OBJECT_ADDED.value)
         assert len(added) == 1
         assert added[0].object_filename == "a.prt (+2 more)"
-        assert "a.prt" in added[0].summary
+        assert added[0].object_filenames == ("a.prt", "b.prt", "c.prt")
+        assert added[0].object_more_count == 2
+        assert "a.prt" not in added[0].summary
+        assert added[0].summary == ""
 
         settings_rows = svc.list_events(
             db, action=ActivityAction.SYSTEM_SETTING_CHANGED.value

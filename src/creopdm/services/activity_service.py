@@ -98,6 +98,8 @@ class AuditEventRow:
     product_name: str | None
     object_uuid: str | None
     object_filename: str | None
+    object_filenames: tuple[str, ...]
+    object_more_count: int
     summary: str
     details: dict[str, Any]
 
@@ -242,6 +244,7 @@ class ActivityService:
             product = products.get(row.product_id) if row.product_id else None
             obj = objects.get(row.object_id) if row.object_id else None
             filename = _object_label(details, obj)
+            extra_names, more_count = _object_filename_list(details, obj)
             object_uuid = None
             if obj is not None:
                 object_uuid = obj.uuid
@@ -263,6 +266,8 @@ class ActivityService:
                     product_name=product.name if product else None,
                     object_uuid=object_uuid,
                     object_filename=filename,
+                    object_filenames=extra_names,
+                    object_more_count=more_count,
                     summary=_event_summary(row.action, details, row.comment),
                     details=details,
                 )
@@ -270,9 +275,36 @@ class ActivityService:
         return out
 
 
+def _object_filename_list(
+    details: dict[str, Any], obj: EngineeringObject | None
+) -> tuple[tuple[str, ...], int]:
+    """Stored filenames for expand UI, plus how many more exist beyond the first."""
+    names: list[str] = []
+    raw = details.get("filenames")
+    if isinstance(raw, list):
+        names = [str(item).strip() for item in raw if str(item).strip()]
+    if not names and obj is not None and (obj.filename or "").strip():
+        names = [obj.filename.strip()]
+    if not names:
+        single = details.get("filename")
+        if isinstance(single, str) and single.strip():
+            names = [single.strip()]
+    if len(names) <= 1:
+        return tuple(names), 0
+    count = details.get("count")
+    total = int(count) if isinstance(count, int) and count > 0 else len(names)
+    more = max(total - 1, len(names) - 1)
+    return tuple(names), more
+
+
 def _object_label(details: dict[str, Any], obj: EngineeringObject | None) -> str | None:
     if obj is not None and (obj.filename or "").strip():
-        return obj.filename
+        # Prefer batch list when present (force-undo / multi-remove keep one object_id).
+        names = details.get("filenames")
+        if isinstance(names, list) and len(names) > 1:
+            pass
+        else:
+            return obj.filename
     names = details.get("filenames")
     if isinstance(names, list) and names:
         first = str(names[0])
@@ -334,9 +366,7 @@ def _event_summary(
         ActivityAction.CHECKED_OUT.value,
         "CHECKED_OUT",
     }:
-        label = _object_label(details, None)
-        if label and label not in parts:
-            parts.append(label)
+        # Object column already shows the file label; keep summary for extras only.
         commit = details.get("git_commit")
         if commit and action in {ActivityAction.OBJECT_ADDED.value, "OBJECT_ADDED"}:
             parts.append(f"git {str(commit)[:8]}")
@@ -372,10 +402,6 @@ def _event_summary(
             if details.get(key):
                 parts.append(f"{key}={details[key]}")
                 break
-    if not parts:
-        label = _object_label(details, None)
-        if label:
-            parts.append(label)
     return " · ".join(parts) if parts else ""
 
 
