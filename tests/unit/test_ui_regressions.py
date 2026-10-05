@@ -2012,8 +2012,18 @@ def test_admin_hub_panel_fills_full_width():
     assert 'fd.get("rebuild_where_used")' in script
     # Where Used on this form uses the same overlay/progress as the product gear.
     assert "runUtilitiesRebuildWithWhereUsed" in script
-    assert 'setBusyMessage(`Indexing Where Used… ${doneCount} of ${total}`)' in script
-    assert "start: false" in script
+    assert "whereUsedBusyText" in script
+    assert "Indexing Where Used… ${doneCount} of ${total}" in script
+    assert "Indexing Where Used… preparing…" in script
+    assert "expectStartedAt" in script
+    jobs = (
+        ROOT / "src" / "creopdm" / "services" / "where_used_index_jobs.py"
+    ).read_text(encoding="utf-8")
+    assert "_prime_parents_total" in jobs
+    # Count before Start returns — not after the first vault chunk.
+    assert jobs.index("self._prime_parents_total(product_uuid)") < jobs.index(
+        "threading.Thread("
+    )
     assert "Deleting product ${label}" in script
     rebuild_tmpl = (
         ROOT / "src" / "creopdm" / "templates" / "admin_utilities_rebuild.html"

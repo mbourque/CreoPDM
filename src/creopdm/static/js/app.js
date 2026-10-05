@@ -1563,16 +1563,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
+  function whereUsedBusyText(doneCount, total) {
+    if (total > 0) return `Indexing Where Used… ${doneCount} of ${total}`;
+    return "Indexing Where Used… preparing…";
+  }
+
+  function publishBusyMessage(message) {
+    const api = window.__creopdmSoftNavApi;
+    if (api && typeof api.setBusyMessage === "function") api.setBusyMessage(message);
+    else setBusyMessage(message);
+  }
+
   async function indexWhereUsedUnderBusy(productId) {
     if (!productId) return null;
-    return withBusy("Indexing Where Used…", () =>
+    return withBusy("Indexing Where Used… preparing…", () =>
       awaitWhereUsedIndex(productId, {
         onProgress: (doneCount, total) => {
-          if (total > 0) {
-            setBusyMessage(`Indexing Where Used… ${doneCount} of ${total}`);
-          } else {
-            setBusyMessage("Indexing Where Used…");
-          }
+          publishBusyMessage(whereUsedBusyText(doneCount, total));
         },
       })
     );
@@ -1620,15 +1627,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           return;
         }
         const priorOk = parsed.querySelector("p.ok")?.textContent?.trim() || "";
-        setBusyMessage("Indexing Where Used…");
+        publishBusyMessage("Indexing Where Used… preparing…");
+        // Start here (not in the form handler) so we wait on this job's started_at
+        // and do not treat a prior "done" status as finished with no N of M.
         const outcome = await awaitWhereUsedIndex(productId, {
-          start: false,
+          start: true,
           onProgress: (doneCount, total) => {
-            if (total > 0) {
-              setBusyMessage(`Indexing Where Used… ${doneCount} of ${total}`);
-            } else {
-              setBusyMessage("Indexing Where Used…");
-            }
+            publishBusyMessage(whereUsedBusyText(doneCount, total));
           },
         });
         if (!outcome || outcome.state === "error" || outcome.state === "timeout") {
@@ -1659,6 +1664,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
    */
   async function awaitWhereUsedIndex(productId, { onProgress, start = true } = {}) {
     if (!productId) return { started: false };
+    let expectStartedAt = 0;
     if (start) {
       let startResponse;
       try {
@@ -1672,9 +1678,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (!startResponse.ok) {
         return { started: false, error: await readError(startResponse) };
       }
+      try {
+        const startBody = await startResponse.json();
+        expectStartedAt = Number(startBody.started_at) || 0;
+        const startTotal = Number(startBody.parents_total) || 0;
+        const startDone = Number(startBody.parents_done) || 0;
+        onProgress?.(startDone, startTotal);
+      } catch {
+        /* status body optional */
+      }
     }
-    for (let tries = 0; tries < 900; tries += 1) {
-      await sleepMs(tries === 0 ? 400 : 1000);
+    for (let tries = 0; tries < 1800; tries += 1) {
+      // Poll often while preparing / first chunk — N of M should appear within ~1s.
+      await sleepMs(tries < 20 ? 250 : 1000);
       try {
         const response = await fetch(
           `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`
@@ -1682,6 +1698,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (!response.ok) continue;
         const body = await response.json();
         const state = String(body.state || "");
+        const startedAt = Number(body.started_at) || 0;
+        // Ignore a prior job's terminal status (utilities used to flash "done" instantly).
+        if (
+          expectStartedAt
+          && startedAt
+          && startedAt + 0.001 < expectStartedAt
+          && state !== "queued"
+          && state !== "running"
+        ) {
+          continue;
+        }
         if (state === "queued" || state === "running") {
           const total = Number(body.parents_total) || 0;
           const doneCount = Number(body.parents_done) || 0;
@@ -1689,6 +1716,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           continue;
         }
         if (state === "done") {
+          if (expectStartedAt && startedAt && startedAt + 0.001 < expectStartedAt) {
+            continue;
+          }
           return {
             started: true,
             state: "done",
@@ -1707,7 +1737,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             error: body.error || "Where Used indexing failed.",
           };
         }
-        // idle / unknown — treat as finished with nothing to do
+        // idle while waiting for a job we started — keep polling
+        if (expectStartedAt || start) continue;
         return { started: true, state: state || "idle" };
       } catch {
         /* ignore transient poll errors */

@@ -8,8 +8,13 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from sqlalchemy import select
+
 from creopdm.logging_setup import get_logger
+from creopdm.models.object import EngineeringObject
+from creopdm.models.product import Product
 from creopdm.services.metadata_service import MetadataService
+from creopdm.utils.creo_dependencies import needs_open_dependencies
 
 logger = get_logger("where_used_index")
 
@@ -74,6 +79,12 @@ class WhereUsedIndexJobs:
                 started_at=time.time(),
             )
             self._status[product_uuid] = status
+        # Count parents before returning so Start/GET already carry N for the overlay
+        # (do not wait for the first vault chunk — that can take minutes).
+        try:
+            self._prime_parents_total(product_uuid)
+        except Exception:
+            logger.exception("Where Used parent count failed for %s", product_uuid)
         thread = threading.Thread(
             target=self._run,
             args=(product_uuid,),
@@ -104,6 +115,33 @@ class WhereUsedIndexJobs:
             status = self._status.get(product_uuid)
             return status is not None and status.state == "cancelled"
 
+    def _prime_parents_total(self, product_uuid: str) -> None:
+        """Set parents_total with a light query (no version joins) for 0 of N overlay."""
+        session = self.session_factory()
+        try:
+            product = session.scalar(select(Product).where(Product.uuid == product_uuid))
+            if product is None:
+                return
+            # Avoid list_objects() joinedload — huge products stall the Start response.
+            rows = session.execute(
+                select(EngineeringObject.object_type, EngineeringObject.filename).where(
+                    EngineeringObject.product_id == product.id
+                )
+            ).all()
+            total = sum(
+                1
+                for object_type, filename in rows
+                if needs_open_dependencies(object_type or "", filename or "")
+            )
+            with self._lock:
+                status = self._status.get(product_uuid)
+                if status is None or status.state == "cancelled":
+                    return
+                status.parents_total = total
+                status.parents_done = 0
+        finally:
+            session.close()
+
     def _run(self, product_uuid: str) -> None:
         with self._lock:
             status = self._status.get(product_uuid)
@@ -117,6 +155,9 @@ class WhereUsedIndexJobs:
         missing = 0
         offset = 0
         try:
+            # Refresh count if Start could not prime (or product changed).
+            if self.get(product_uuid).parents_total <= 0:
+                self._prime_parents_total(product_uuid)
             while True:
                 if self._cancelled(product_uuid):
                     logger.info("Where Used index cancelled for %s", product_uuid)

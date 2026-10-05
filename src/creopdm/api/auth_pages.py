@@ -2433,9 +2433,7 @@ def admin_utilities_rebuild_product_page(
     manager = _require_utilities_access(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    return _utilities_rebuild_response(
-        request, ctx, db, manager, rebuild_do_rebuild=True
-    )
+    return _utilities_rebuild_response(request, ctx, db, manager)
 
 
 @router.get("/admin/utilities/health", response_class=HTMLResponse)
@@ -2755,10 +2753,7 @@ def admin_utilities_rebuild_product_db(
             status_code=400,
             **form_state,
         )
-    if want_where_used:
-        # Same background job as the product gear — after commit so the indexer
-        # sees the rebuilt file list.
-        ctx.where_used_index.start(pid)
+    # Where Used index is started by the page JS (same POST + N of M overlay as gear).
     return _utilities_rebuild_response(
         request,
         ctx,

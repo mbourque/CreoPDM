@@ -2,9 +2,66 @@
 
 from __future__ import annotations
 
+import time
+import uuid
 from pathlib import Path
 
+from creopdm.app import build_context
+from creopdm.config import ConfigManager
+from creopdm.models.object import EngineeringObject
+from creopdm.models.product import Product
 from creopdm.services.where_used_index_jobs import WHERE_USED_AUTO_INDEX_MIN_FILES
+from creopdm.utils.identity import StaticUserProvider
+
+
+def test_where_used_job_primes_parents_total_before_first_chunk(
+    data_dir, identity: StaticUserProvider
+):
+    """Busy overlay needs 0 of N before the first slow vault scan returns."""
+    ctx = build_context(ConfigManager(), users=identity)
+    vault = ctx.config.workspace_for_product("wu-prime")
+    vault.mkdir(parents=True, exist_ok=True)
+    (vault / "a.asm").write_bytes(b"asm")
+    (vault / "b.asm").write_bytes(b"asm")
+    (vault / "c.prt").write_bytes(b"prt")
+    with ctx.session_factory() as db:
+        product = Product(
+            uuid=str(uuid.uuid4()),
+            name="WU Prime",
+            vault_folder="wu-prime",
+            repository_path=str(vault),
+            default_branch="main",
+        )
+        db.add(product)
+        db.flush()
+        for name, otype in (
+            ("a.asm", "CREO_ASSEMBLY"),
+            ("b.asm", "CREO_ASSEMBLY"),
+            ("c.prt", "CREO_PART"),
+        ):
+            db.add(
+                EngineeringObject(
+                    uuid=str(uuid.uuid4()),
+                    product_id=product.id,
+                    name=name,
+                    filename=name,
+                    extension=name.rsplit(".", 1)[-1],
+                    object_type=otype,
+                    relative_path=name,
+                )
+            )
+        db.commit()
+        product_uuid = product.uuid
+
+    started = ctx.where_used_index.start(product_uuid)
+    # Start() primes synchronously — overlay can show 0 of N on the Start response.
+    assert started.parents_total == 2, started
+    assert started.state in {"queued", "running", "done"}
+    # Wait so the daemon does not race the next test's DB teardown.
+    for _ in range(200):
+        if ctx.where_used_index.get(product_uuid).state in {"done", "error", "cancelled"}:
+            break
+        time.sleep(0.02)
 
 
 def test_add_endpoints_do_not_start_where_used_mid_chunk():
