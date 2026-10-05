@@ -438,26 +438,13 @@ function openModel(directory, filename, fileRelease, diskName, fullPath) {
             }
         } catch (errMfg) {}
         // Prefer File > Open trail for native Creo tips (and Multi-CAD). Do not
-        // ChangeDirectory before the trail — the dialog navigates Look In like a
-        // manual open. After a native trail succeeds, leave session WD on the
-        // open folder so deferred loads (combine states, late companions) still
-        // resolve there — without that, components can show red when switching
-        // states even though File > Open from the same folder works.
+        // ChangeDirectory first — the trail navigates the dialog like a manual
+        // open from the agent workspace.
         if (creoTryOpenViaTrail(session, openWd || directory, trailName, preparedPath)) {
-            if (openWd && creoIsNativeVersioned(versionName)) {
-                try {
-                    session.ChangeDirectory(creoNormalizePath(openWd));
-                } catch (errWdTrail) {}
-            }
             return filename;
         }
         if (trailName !== (shortDisk || diskName || filename)
             && creoTryOpenViaTrail(session, openWd || directory, shortDisk || diskName || filename, preparedPath)) {
-            if (openWd && creoIsNativeVersioned(versionName)) {
-                try {
-                    session.ChangeDirectory(creoNormalizePath(openWd));
-                } catch (errWdTrail2) {}
-            }
             return filename;
         }
         // Fallback: OpenFile / RetrieveModel when RunMacro trail is unavailable.

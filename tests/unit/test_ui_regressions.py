@@ -1130,9 +1130,6 @@ def test_open_model_uses_nested_cache_folder():
     assert "Prefer File > Open trail" in open_fn
     assert open_fn.index("creoTryOpenViaTrail(") < open_fn.index("ChangeDirectory(cacheDir)")
     assert open_fn.index("creoTryOpenViaTrail(") < open_fn.index("creoTryOpenName(")
-    # Native trail leaves WD on the open folder (combine-state deferred loads).
-    assert "ChangeDirectory(creoNormalizePath(openWd))" in open_fn
-    assert "combine states" in open_fn
     # New file / Modified local: try logical tip after numbered .prt.1 fails.
     assert "creoLogicalFileName(shortDisk" in open_fn
     assert "logicalName !== shortDisk" in open_fn
