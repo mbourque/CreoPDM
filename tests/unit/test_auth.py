@@ -516,6 +516,11 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "not the vault Git history" in audit_page.text
     assert "All products" in audit_page.text
     assert "All users" in audit_page.text
+    from datetime import date, timedelta
+
+    expected_since = (date.today() - timedelta(days=7)).isoformat()
+    assert f'id="audit-since"' in audit_page.text
+    assert f'value="{expected_since}"' in audit_page.text
 
     email_page = auth_client.get("/admin/utilities/email-all")
     assert email_page.status_code == 200

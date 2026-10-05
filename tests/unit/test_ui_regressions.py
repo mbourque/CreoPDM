@@ -1963,6 +1963,11 @@ def test_admin_hub_panel_fills_full_width():
     assert "not the vault Git history" in audit_util
     assert "cannot be edited or deleted" in audit_util
     assert "audit-filter-grid" in css
+    assert "grid-template-columns: minmax(0, 28rem)" in css
+    assert 'input[type="date"]' in css
+    assert "one week ago" in (
+        ROOT / "docs" / "user-interactions.md"
+    ).read_text(encoding="utf-8")
     avail_util = (
         ROOT / "src" / "creopdm" / "templates" / "admin_utilities_availability.html"
     ).read_text(encoding="utf-8")

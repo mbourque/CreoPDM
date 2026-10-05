@@ -2671,6 +2671,13 @@ def _parse_audit_day(raw: str | None, *, end_of_day: bool = False):
     return day
 
 
+def _default_audit_since() -> str:
+    """Default From date: one week ago (local calendar day as YYYY-MM-DD)."""
+    from datetime import date, timedelta
+
+    return (date.today() - timedelta(days=7)).isoformat()
+
+
 def _audit_filter_choices(ctx: AppContext, db: Session) -> dict:
     """Dropdown choices: product name (uuid value), users by username."""
     from sqlalchemy import distinct, select
@@ -2723,6 +2730,8 @@ def _utilities_audit_response(
 ):
     from creopdm.services.activity_service import AUDIT_PAGE_SIZE
 
+    since_value = (since or "").strip() or _default_audit_since()
+    until_value = (until or "").strip()
     events = ctx.activities.list_events(
         db,
         action=action or None,
@@ -2730,8 +2739,8 @@ def _utilities_audit_response(
         product_uuid=product_uuid or None,
         object_query=object_query or None,
         q=q or None,
-        since=_parse_audit_day(since),
-        until=_parse_audit_day(until, end_of_day=True),
+        since=_parse_audit_day(since_value),
+        until=_parse_audit_day(until_value, end_of_day=True),
     )
     choices = _audit_filter_choices(ctx, db)
     return templates.TemplateResponse(
@@ -2746,8 +2755,8 @@ def _utilities_audit_response(
             "user_choices": choices["user_choices"],
             "filters": {
                 "q": q or "",
-                "since": since or "",
-                "until": until or "",
+                "since": since_value,
+                "until": until_value,
                 "action": action or "",
                 "username": username or "",
                 "product_uuid": product_uuid or "",

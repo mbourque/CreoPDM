@@ -21,49 +21,56 @@
       <h2>Filters</h2>
       <div class="audit-filter-grid">
         <div class="form-row audit-filter-search">
-          <label for="audit-q">Search</label>
+          <label for="audit-q">Search
           <input id="audit-q" name="q" type="search" value="{{ filters.q }}"
                  placeholder="User, file, product, comment, commit…">
+          </label>
         </div>
         <div class="form-row">
-          <label for="audit-action">Event</label>
+          <label for="audit-action">Event
           <select id="audit-action" name="action">
             <option value="">All events</option>
             {% for key, label in action_choices %}
             <option value="{{ key }}" {% if filters.action == key %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
+          </label>
         </div>
         <div class="form-row">
-          <label for="audit-username">User</label>
+          <label for="audit-username">User
           <select id="audit-username" name="username">
             <option value="">All users</option>
             {% for choice in user_choices %}
             <option value="{{ choice.username }}" {% if filters.username == choice.username %}selected{% endif %}>{{ choice.label }}</option>
             {% endfor %}
           </select>
+          </label>
         </div>
         <div class="form-row">
-          <label for="audit-product">Product</label>
+          <label for="audit-product">Product
           <select id="audit-product" name="product_uuid">
             <option value="">All products</option>
             {% for choice in product_choices %}
             <option value="{{ choice.uuid }}" {% if filters.product_uuid == choice.uuid %}selected{% endif %}>{{ choice.label }}</option>
             {% endfor %}
           </select>
+          </label>
         </div>
         <div class="form-row">
-          <label for="audit-object">Object</label>
+          <label for="audit-object">Object
           <input id="audit-object" name="object" type="text" value="{{ filters.object }}"
                  placeholder="Filename or object UUID">
+          </label>
         </div>
         <div class="form-row">
-          <label for="audit-since">From date</label>
+          <label for="audit-since">From date
           <input id="audit-since" name="since" type="date" value="{{ filters.since }}">
+          </label>
         </div>
         <div class="form-row">
-          <label for="audit-until">To date</label>
+          <label for="audit-until">To date
           <input id="audit-until" name="until" type="date" value="{{ filters.until }}">
+          </label>
         </div>
       </div>
       <div class="form-actions">
