@@ -109,6 +109,8 @@ def test_open_dependency_walk_prefers_folder_scope_before_product():
     assert walk.index('scope="folder"') < walk.index('scope="product"')
     assert "_MAX_OPEN_DEPENDENCY_MATCHES" in text
     assert "include_stems=not strict" in text
+    # 2500 open deps exhausted QueuePool and took the site down.
+    assert "_MAX_OPEN_DEPENDENCIES_TOTAL = 150" in text
 
 
 def test_open_deps_do_not_materialize_during_find():

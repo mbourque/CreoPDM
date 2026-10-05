@@ -25,8 +25,10 @@ _SCAN_LIMIT = 8 * 1024 * 1024
 # Below this, plain ``in`` checks are cheaper than building an automaton.
 _MATCHER_THRESHOLD = 48
 # Safety caps for deep assembly trees.
-_MAX_OPEN_DEPENDENCY_DEPTH = 12
-_MAX_OPEN_DEPENDENCIES_TOTAL = 2500
+# Keep the Open/vault-scan walk small — a single worker + QueuePool (5+10) wedges
+# the whole site when Open prepares thousands of dependencies.
+_MAX_OPEN_DEPENDENCY_DEPTH = 8
+_MAX_OPEN_DEPENDENCIES_TOTAL = 150
 
 
 def needs_open_dependencies(object_type: str, filename: str) -> bool:

@@ -56,9 +56,20 @@ git pull
 
 Write-Host "==> Git pull + force-restart creopdm on $SshHost"
 # Hung Open / Where Used can leave the worker deaf to SIGTERM; kill then start.
-# Never leave the service stopped if pull/pip fails — always attempt start at the end.
+# Pipe to bash -s so a multiline script is not split by ssh argv; EXIT trap
+# always starts the service even if kill/pkill/pull fails mid-way.
 $remote = @'
+set +e
 cd ~/CreoPDM || exit 1
+ensure_started() {
+  systemctl --user reset-failed creopdm.service 2>/dev/null || true
+  systemctl --user start creopdm.service || true
+  sleep 2
+  systemctl --user --no-pager --full status creopdm.service || true
+  curl -sS -o /dev/null -w "health_http=%{http_code}\n" http://127.0.0.1:52113/health \
+    || echo "WARN: /health not responding yet"
+}
+trap ensure_started EXIT
 git pull || echo "WARN: git pull failed (continuing restart)"
 .venv/bin/pip install -e . -q || echo "WARN: pip install failed (continuing restart)"
 systemctl --user stop creopdm.service || true
@@ -66,15 +77,12 @@ sleep 2
 systemctl --user kill -s SIGKILL creopdm.service 2>/dev/null || true
 pkill -9 -f '/CreoPDM/.venv/bin/creopdm' 2>/dev/null || true
 pkill -9 -f 'uvicorn.*52113' 2>/dev/null || true
-# Free the listen port if a stray process still holds it.
 fuser -k 52113/tcp 2>/dev/null || true
 sleep 1
-systemctl --user reset-failed creopdm.service 2>/dev/null || true
-systemctl --user start creopdm.service
-systemctl --user --no-pager --full status creopdm.service || true
-curl -sS -o /dev/null -w "health_http=%{http_code}\n" http://127.0.0.1:52113/health || echo "WARN: /health not responding yet"
 '@
-ssh $SshHost $remote
+# Normalize CRLF so bash does not see $'\r' on Windows-authored scripts.
+$remote = $remote -replace "`r", ""
+$remote | ssh $SshHost bash -s
 
 Write-Host "==> Starting agent tray"
 Start-CreoPdmAgentTray

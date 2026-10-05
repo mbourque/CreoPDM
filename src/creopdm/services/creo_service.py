@@ -41,8 +41,8 @@ _OPEN_DEPENDENCY_TYPES = frozenset(
         DependencyType.UNKNOWN.value,
     }
 )
-_MAX_DEP_DEPENDENCY_DEPTH = 12
-_MAX_DEP_DEPENDENCIES = 2500
+_MAX_DEP_DEPENDENCY_DEPTH = 8
+_MAX_DEP_DEPENDENCIES = 150
 
 
 class CreoService:
