@@ -1838,9 +1838,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function pushOneCreoMetadataTarget(target) {
-    const METADATA_ITEM_TIMEOUT_MS = 90000;
-    let settled = false;
-    const work = async () => {
+    // No per-file JS timeout — large assemblies (e.g. 844j.asm) can take many
+    // minutes in Creo. Skipping them loses the metadata we care about most.
+    // Cancel still works between models; during a Creo retrieve the UI may pause.
+    try {
       let snapshot = await gatherCreoMetadataForFilename(target.filename, "");
       let reason = "";
       if (snapshot && snapshot.__error) {
@@ -1853,23 +1854,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
         }
         if (!filePath) {
-          return { ok: false, timedOut: false, reason: reason || "materialize_failed" };
+          return { ok: false, reason: reason || "materialize_failed" };
         }
         snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
         if (snapshot && snapshot.__error) {
           return {
             ok: false,
-            timedOut: false,
             reason: String(snapshot.__error),
             detail: String(snapshot.__detail || ""),
           };
         }
       }
-      if (!snapshot) return { ok: false, timedOut: false, reason: reason || "gather_failed" };
+      if (!snapshot) return { ok: false, reason: reason || "gather_failed" };
       // Require a real identity filename so empty/failed snapshots are never "saved".
       const identityName = String(snapshot.identity?.file_name || snapshot.identity?.full_name || "").trim();
       if (!identityName) {
-        return { ok: false, timedOut: false, reason: "empty_identity" };
+        return { ok: false, reason: "empty_identity" };
       }
       const body = {
         version_id: target.versionId || null,
@@ -1893,28 +1893,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         });
         return {
           ok: response.ok,
-          timedOut: false,
           reason: response.ok ? "" : "post_failed",
         };
       } catch {
-        return { ok: false, timedOut: false, reason: "post_failed" };
+        return { ok: false, reason: "post_failed" };
       }
-    };
-    try {
-      const result = await Promise.race([
-        work().then((value) => {
-          settled = true;
-          return value;
-        }),
-        new Promise((resolve) => {
-          window.setTimeout(() => {
-            if (!settled) resolve({ ok: false, timedOut: true, reason: "timeout" });
-          }, METADATA_ITEM_TIMEOUT_MS);
-        }),
-      ]);
-      return result;
     } catch {
-      return { ok: false, timedOut: false, reason: "exception" };
+      return { ok: false, reason: "exception" };
     }
   }
 
@@ -1957,32 +1942,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           updatedAt: Date.now(),
         });
         const result = await pushOneCreoMetadataTarget(target);
-        if (result.timedOut) {
-          failed += 1;
-          lastReason = "timeout";
-          index += 1;
-          const waitSec = 8;
-          const pauseMsg =
-            `Creo busy / timeout on ${target.filename} — waiting ${waitSec}s then continuing ` +
-            `(${index} of ${targets.length}; ${captured} saved, ${failed} skipped).`;
-          setBusyMessage(pauseMsg);
-          showOk(pauseMsg);
-          saveMetadataCollectState({
-            ...state,
-            status: "running",
-            index,
-            captured,
-            failed,
-            message: pauseMsg,
-            lastReason,
-            updatedAt: Date.now(),
-          });
-          // Let Creo recover; Cancel still works during the wait.
-          for (let w = 0; w < waitSec * 4 && !metadataCollectJob.cancel; w += 1) {
-            await new Promise((resolve) => window.setTimeout(resolve, 250));
-          }
-          continue;
-        }
         if (result.ok) {
           captured += 1;
           // Keep mass/units/feature gap hints on success so we can watch Collect.
@@ -6065,10 +6024,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         return null;
       }
-      const openSpec = await materializeViaAgent({
-        ...prepared,
-        replace_newer: Boolean(prepared.replace_newer),
-      });
+      const openSpec = await materializeViaAgent(
+        {
+          ...prepared,
+          replace_newer: Boolean(prepared.replace_newer),
+        },
+        // Keep Collect's "N of M" busy text — do not flash workspace-up-to-date.
+        { quietBusy: true }
+      );
       const materialized = String(openSpec.path || "").trim();
       if (materialized && looksLikeLocalWindowsPath(materialized)) {
         return materialized;
@@ -7440,7 +7403,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  async function materializeViaAgentPerFile(prepared, dependencies) {
+  async function materializeViaAgentPerFile(prepared, dependencies, { quietBusy = false } = {}) {
     const response = await fetch(`${agentBase()}/materialize`, {
       method: "POST",
       headers: agentAuthHeaders({ "Content-Type": "application/json" }),
@@ -7475,19 +7438,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       throw new Error(message || "Local CreoPDM agent could not fetch the file.");
     }
     const body = await response.json();
-    const skipped = Number(body.skipped_count) || 0;
-    const downloaded = Number(body.dependencies_written) || 0;
-    if (downloaded > 0) {
-      setBusyMessage(
-        `Updated local workspace (${downloaded} downloaded, ${skipped} already local)…`
-      );
-    } else if (skipped > 0) {
-      setBusyMessage("Local workspace already up to date…");
+    if (!quietBusy) {
+      const skipped = Number(body.skipped_count) || 0;
+      const downloaded = Number(body.dependencies_written) || 0;
+      if (downloaded > 0) {
+        setBusyMessage(
+          `Updated local workspace (${downloaded} downloaded, ${skipped} already local)…`
+        );
+      } else if (skipped > 0) {
+        setBusyMessage("Local workspace already up to date…");
+      }
     }
     return body;
   }
 
-  async function materializeViaAgent(prepared) {
+  async function materializeViaAgent(prepared, { quietBusy = false } = {}) {
     const dependencies = Array.isArray(prepared.dependencies) ? prepared.dependencies : [];
     const ids = [];
     if (prepared.object_id) ids.push(String(prepared.object_id));
@@ -7499,27 +7464,31 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Agent plans first — matching local tips are skipped (no re-download).
     if (unique.length >= BULK_AGENT_CACHE_ZIP_THRESHOLD) {
       try {
-        setBusyMessage(`Checking local index (${unique.length} files)…`);
+        if (!quietBusy) {
+          setBusyMessage(`Checking local index (${unique.length} files)…`);
+        }
         // Pass prepare identities so the agent skips a second 935-id manifest fetch
         // and only looks up `.creopdm_cache_index.json` + file size.
         const zipResult = await materializeCheckedOutToAgentCacheZip(unique, prepared);
-        const downloaded = Number(zipResult?.download_count || 0);
-        const skipped = Number(zipResult?.skipped_count || 0);
-        if (downloaded > 0) {
-          setBusyMessage(`Downloaded ${downloaded} missing file${downloaded === 1 ? "" : "s"}…`);
-        } else if (skipped > 0) {
-          setBusyMessage(`Local workspace up to date (${skipped} files)…`);
-        } else {
-          setBusyMessage("Local workspace already up to date…");
+        if (!quietBusy) {
+          const downloaded = Number(zipResult?.download_count || 0);
+          const skipped = Number(zipResult?.skipped_count || 0);
+          if (downloaded > 0) {
+            setBusyMessage(`Downloaded ${downloaded} missing file${downloaded === 1 ? "" : "s"}…`);
+          } else if (skipped > 0) {
+            setBusyMessage(`Local workspace up to date (${skipped} files)…`);
+          } else {
+            setBusyMessage("Local workspace already up to date…");
+          }
         }
         // Resolve the primary open path only — deps are already on disk.
-        return await materializeViaAgentPerFile(prepared, []);
+        return await materializeViaAgentPerFile(prepared, [], { quietBusy });
       } catch {
         /* fall back to per-file materialize */
-        setOpenDownloadBusyMessage(prepared);
+        if (!quietBusy) setOpenDownloadBusyMessage(prepared);
       }
     }
-    return materializeViaAgentPerFile(prepared, dependencies);
+    return materializeViaAgentPerFile(prepared, dependencies, { quietBusy });
   }
 
   function cachePlanItemsFromPrepared(prepared) {

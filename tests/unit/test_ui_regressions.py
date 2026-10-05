@@ -372,6 +372,10 @@ def test_metadata_gear_items_require_creo_session():
     assert 'setBusy("Collecting Creo metadata…")' in loop
     assert "setBusyMessage(message)" in loop
     assert "clearBusy()" in loop
+    push = _between(script, "async function pushOneCreoMetadataTarget(", "async function runMetadataCollectLoop(")
+    assert "No per-file JS timeout" in push
+    assert "Promise.race" not in push
+    assert "timedOut" not in loop
     # Type labels are SSR — must refresh Files after Collect saves (not only on F5).
     assert "shouldRefreshList = captured > 0" in loop
     assert 'await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" })' in loop
@@ -382,6 +386,8 @@ def test_metadata_gear_items_require_creo_session():
     assert "busy overlay" in docs.lower()
     assert "refresh the Files list" in docs
     assert "stale Type labels until a hard refresh" in docs
+    assert "wait as long as Creo needs" in docs
+    assert "no per-file skip timeout" in docs
     # Product-link soft-nav must not withBusy("Loading…") while Collect owns the overlay.
     assert "isMetadataCollectRunning" in script
     assert "warnMetadataCollectBlockingNav" in script
@@ -666,9 +672,10 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "materializeCheckedOutToAgentCacheZip(unique, prepared)" in mat
     assert "cachePlanItemsFromPrepared" in script
     assert "items: planItems" in script
-    assert "materializeViaAgentPerFile(prepared, [])" in mat
+    assert "materializeViaAgentPerFile(prepared, [], { quietBusy })" in mat
     assert "one zip from CreoPDM" in mat
     assert "Local workspace already up to date" in mat
+    assert "quietBusy" in mat
     docs_open = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "Open a file already checked out to you" in docs_open
     assert "do **not** overwrite with vault bytes" in docs_open
@@ -1030,6 +1037,8 @@ def test_open_model_uses_nested_cache_folder():
     meta = _between(script, "async function prepareLocalPathForMetadata(", "async function gatherCreoMetadataForFilename(")
     assert "openSpec.path" in meta
     assert "looksLikeLocalWindowsPath(materialized)" in meta
+    # Collect keeps "N of M" busy text — materialize must not flash workspace status.
+    assert "quietBusy: true" in meta
 
 
 def test_mobile_browse_css_is_minimal():
