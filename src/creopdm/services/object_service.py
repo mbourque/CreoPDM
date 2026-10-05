@@ -6,7 +6,7 @@ import json
 import os
 import tempfile
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -640,9 +640,13 @@ class ObjectService:
                         now,
                     )
                     self._record_import_activity(session, product, git_plans, user)
-                    for index, plan in enumerate(git_plans, start=1):
-                        destination = ensure_within(repo, repo / Path(plan.relative))
-                        self._purge_numbered_siblings(destination)
+                    destinations = [
+                        ensure_within(repo, repo / Path(plan.relative)) for plan in git_plans
+                    ]
+                    # One iterdir per folder (not per tip) — large flat imports
+                    # were O(n²) listing the vault for each of thousands of tips.
+                    self._purge_numbered_siblings_for_tips(destinations)
+                    for index, destination in enumerate(destinations, start=1):
                         try:
                             set_file_readonly(destination)
                         except Exception:
@@ -1141,39 +1145,54 @@ class ObjectService:
 
     def _purge_numbered_siblings(self, tip: Path) -> None:
         """Delete same-logical Creo saves with a higher .N than ``tip`` in its folder."""
+        self._purge_numbered_siblings_for_tips([tip])
+
+    def _purge_numbered_siblings_for_tips(self, tips: Sequence[Path]) -> None:
+        """Delete higher .N siblings for many tips with one ``iterdir`` per folder."""
         extras = self._cad_extensions()
-        if not tip.is_file():
-            return
-        folder = tip.parent
-        try:
-            tip_resolved = tip.resolve()
-        except OSError:
-            tip_resolved = tip
-        keep_num = CreoFileManager.save_number(tip.name, extras)
-        logical = CreoFileManager.logical_filename(tip.name, extras).lower()
-        try:
-            children = list(folder.iterdir())
-        except OSError:
-            return
-        for child in children:
-            if not child.is_file():
-                continue
+        by_folder: dict[Path, list[Path]] = {}
+        for tip in tips:
+            if tip.is_file():
+                by_folder.setdefault(tip.parent, []).append(tip)
+        for folder, folder_tips in by_folder.items():
+            keep_by_logical: dict[str, int] = {}
+            tip_keys: set[object] = set()
+            tip_names = {tip.name for tip in folder_tips}
+            for tip in folder_tips:
+                logical = CreoFileManager.logical_filename(tip.name, extras).lower()
+                keep_num = CreoFileManager.save_number(tip.name, extras)
+                prev = keep_by_logical.get(logical)
+                if prev is None or keep_num > prev:
+                    keep_by_logical[logical] = keep_num
+                try:
+                    tip_keys.add(tip.resolve())
+                except OSError:
+                    tip_keys.add(tip.name)
             try:
-                if child.resolve() == tip_resolved:
-                    continue
+                children = list(folder.iterdir())
             except OSError:
-                if child.name == tip.name:
+                continue
+            for child in children:
+                if not child.is_file():
                     continue
-            if CreoFileManager.logical_filename(child.name, extras).lower() != logical:
-                continue
-            if CreoFileManager.save_number(child.name, extras) <= keep_num:
-                continue
-            try:
-                set_file_writable(child)
-                child.unlink()
-                logger.info("Removed numbered Creo sibling after vault write: %s", child)
-            except OSError as exc:
-                logger.warning("Could not remove numbered sibling %s: %s", child, exc)
+                try:
+                    child_key: object = child.resolve()
+                except OSError:
+                    child_key = child.name
+                if child_key in tip_keys or child.name in tip_names:
+                    continue
+                logical = CreoFileManager.logical_filename(child.name, extras).lower()
+                keep_num = keep_by_logical.get(logical)
+                if keep_num is None:
+                    continue
+                if CreoFileManager.save_number(child.name, extras) <= keep_num:
+                    continue
+                try:
+                    set_file_writable(child)
+                    child.unlink()
+                    logger.info("Removed numbered Creo sibling after vault write: %s", child)
+                except OSError as exc:
+                    logger.warning("Could not remove numbered sibling %s: %s", child, exc)
 
     def migrate_numbered_vault_tips(
         self,
