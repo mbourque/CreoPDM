@@ -173,6 +173,11 @@ Environment=PATH=%h/CreoPDM/.venv/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=%h/CreoPDM/.venv/bin/creopdm
 Restart=on-failure
 RestartSec=3
+# Hung Open / vault scans ignore a polite stop — kill after a short wait.
+TimeoutStopSec=10
+KillMode=mixed
+KillSignal=SIGTERM
+FinalKillSignal=SIGKILL
 
 [Install]
 WantedBy=default.target
@@ -190,6 +195,18 @@ If an older run used `~/AppData/Local/CreoPDM`, the next start moves that folder
 systemctl --user daemon-reload
 systemctl --user restart creopdm
 ```
+
+If **restart hangs** (Chrome cannot load the home page), force-kill then start:
+
+```bash
+systemctl --user stop creopdm.service
+systemctl --user kill -s SIGKILL creopdm.service
+pkill -9 -f '/CreoPDM/.venv/bin/creopdm' || true
+systemctl --user reset-failed creopdm.service
+systemctl --user start creopdm.service
+```
+
+From Windows, `.\pull-restart.ps1` now does that kill/start after `git pull`.
 
 Useful commands:
 

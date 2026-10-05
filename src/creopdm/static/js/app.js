@@ -436,13 +436,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         // a New files / Modified restore with Overview/History.
         persistListSearchState();
         persistListTabState();
-        const response = await fetch(href, {
-          headers: { Accept: "text/html", "X-CreoPDM-Soft": "1" },
-          credentials: "same-origin",
-          // After remove/add the prior GET is often still in the HTTP cache; without
-          // this, soft reload paints the deleted folder/file until a hard refresh.
-          cache: "no-store",
-        });
+        let response;
+        try {
+          response = await fetch(href, {
+            headers: { Accept: "text/html", "X-CreoPDM-Soft": "1" },
+            credentials: "same-origin",
+            // After remove/add the prior GET is often still in the HTTP cache; without
+            // this, soft reload paints the deleted folder/file until a hard refresh.
+            cache: "no-store",
+            // Hung Open / Where Used can block the only server worker — do not leave
+            // Loading… forever; fall through to a hard navigation attempt.
+            signal: abortSignalAfter(45_000),
+          });
+        } catch {
+          window.location.href = href;
+          return;
+        }
         if (!response.ok) {
           window.location.href = href;
           return;

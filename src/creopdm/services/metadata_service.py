@@ -469,9 +469,9 @@ class MetadataService:
         """Scan vault asm/drw bytes and rewrite Dependency rows (chunked).
 
         At offset 0, clears existing ASSEMBLY_MEMBER / DRAWING_MODEL edges so
-        stale false parents (stem hits / removed components) cannot stick.
-        Then only adds bounded ``name.ext`` hits from vault bytes. After this,
-        Where Used is a SQL lookup on ``dependencies``.
+        stale false parents (glued substrings / removed components) cannot stick.
+        Then indexes bounded ``name.ext`` and unique bare Creo component names
+        from vault bytes. After this, Where Used is a SQL lookup on ``dependencies``.
         """
         if self._workspaces is None:
             raise ValidationAppError(
@@ -519,17 +519,29 @@ class MetadataService:
                 done=True,
             )
 
-        # Map logical name.ext → object (no bare-stem keys for Where Used resolve).
+        # Map logical name.ext → object; unique stems → object (Creo often omits .prt).
         by_key: dict[str, EngineeringObject] = {}
+        stem_to_rows: dict[str, list[EngineeringObject]] = {}
         candidate_names: list[str] = []
         for row in objects:
             candidate_names.append(row.filename)
             logical = CreoFileManager.normalize_creo_filename(row.filename).lower()
-            if logical and "." in logical:
-                by_key.setdefault(logical, row)
+            if not logical or "." not in logical:
+                continue
+            by_key.setdefault(logical, row)
+            stem = Path(logical).stem.lower()
+            if len(stem) >= 4:
+                stem_to_rows.setdefault(stem, []).append(row)
 
-        # Extension + name boundaries only (not bare stems / glued substrings).
-        matcher = CadNameMatcher(candidate_names, include_stems=False)
+        # Creo component tables use bare names; require token boundaries so glued
+        # substrings (false Top Level parents) still do not match.
+        matcher = CadNameMatcher(
+            candidate_names,
+            include_stems=True,
+            require_boundaries=True,
+            min_stem_len=4,
+            unique_stems_only=True,
+        )
         edges_added = 0
         edges_existing = 0
         missing = 0
@@ -561,9 +573,14 @@ class MetadataService:
             child_ids: set[int] = set()
             for name in found:
                 logical = CreoFileManager.normalize_creo_filename(name).lower()
-                if not logical or "." not in logical:
+                if not logical:
                     continue
                 child = by_key.get(logical)
+                if child is None and "." not in logical and len(logical) >= 4:
+                    rows = stem_to_rows.get(logical) or []
+                    # Ambiguous stems (part + asm same name) — skip.
+                    if len(rows) == 1:
+                        child = rows[0]
                 if child is None or child.id == parent.id:
                     continue
                 child_ids.add(child.id)

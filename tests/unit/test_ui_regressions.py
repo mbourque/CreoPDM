@@ -701,6 +701,7 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "softNavTail" in soft_nav
     assert "isSoftNavUrl" in soft_nav
     assert 'cache: "no-store"' in soft_nav
+    assert "abortSignalAfter(45_000)" in soft_nav or "abortSignalAfter(45000)" in soft_nav
 
     leave = _between(script, "function leavePage(", "function reloadPage(")
     assert "isSoftNavUrl(url)" in leave

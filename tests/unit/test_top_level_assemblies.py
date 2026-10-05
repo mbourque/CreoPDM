@@ -185,6 +185,64 @@ def test_rebuild_clears_false_where_used_so_top_level_returns(
         assert "asm-other" in tops
 
 
+def test_rebuild_indexes_bounded_bare_creo_names_for_top_level(
+    data_dir, identity: StaticUserProvider
+):
+    """Creo stores bare component names — rebuild must link them so Top Level collapses."""
+    ctx = build_context(ConfigManager(), users=identity)
+    vault = ctx.config.workspace_for_product("bare-wu")
+    vault.mkdir(parents=True, exist_ok=True)
+    (vault / "844j.asm").write_bytes(b"\x00".join([b"at311912", b"14m7303"]))
+    (vault / "at311912.asm").write_bytes(b"\x00".join([b"14m7303"]))
+    (vault / "14m7303.prt").write_bytes(b"prt")
+
+    with ctx.session_factory() as db:
+        product = Product(
+            uuid="prod-bare-wu",
+            name="BareWU",
+            vault_folder="bare-wu",
+            repository_path=str(vault),
+            default_branch="main",
+        )
+        db.add(product)
+        db.flush()
+        db.add_all(
+            [
+                _obj(
+                    product.id,
+                    filename="844j.asm",
+                    object_type="CREO_ASSEMBLY",
+                    uuid="asm-root",
+                ),
+                _obj(
+                    product.id,
+                    filename="at311912.asm",
+                    object_type="CREO_ASSEMBLY",
+                    uuid="asm-sub",
+                ),
+                _obj(
+                    product.id,
+                    filename="14m7303.prt",
+                    object_type="CREO_PART",
+                    uuid="prt-14m",
+                ),
+            ]
+        )
+        db.commit()
+        product_uuid = product.uuid
+        product_id = product.id
+        # No edges yet → every assembly looks top-level.
+        assert set(ctx.metadata.top_level_assembly_uuids(db, product_id)) == {
+            "asm-root",
+            "asm-sub",
+        }
+
+        ctx.metadata.rebuild_where_used_from_vault(db, product_uuid, offset=0, limit=40)
+        db.commit()
+        tops = set(ctx.metadata.top_level_assembly_uuids(db, product_id))
+        assert tops == {"asm-root"}
+
+
 def test_where_used_index_absent_without_dependencies(data_dir, identity: StaticUserProvider):
     ctx = build_context(ConfigManager(), users=identity)
     with ctx.session_factory() as db:

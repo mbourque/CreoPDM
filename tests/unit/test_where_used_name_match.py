@@ -1,4 +1,4 @@
-"""Where Used must not treat bare name stems as assembly membership."""
+"""Where Used uses bounded stems; glued substrings must not become members."""
 
 from __future__ import annotations
 
@@ -23,7 +23,9 @@ def test_matcher_requires_name_boundaries_for_where_used():
     """Regression: at311912.asm must not claim 844j.asm from a glued/noisy hit."""
     matcher = CadNameMatcher(
         ["844j.asm", "14m7303.prt", "at311912.asm"],
-        include_stems=False,
+        include_stems=True,
+        require_boundaries=True,
+        min_stem_len=4,
     )
     parts_only = (
         b"\x00".join(
@@ -34,12 +36,35 @@ def test_matcher_requires_name_boundaries_for_where_used():
                 b"24m7027.prt",
                 b"x844j.asm",  # glued prefix — not a real member token
                 b"844j.asmx",  # glued suffix
+                b"x844j",  # glued bare stem
             ]
         )
     )
     assert "844j.asm" not in matcher.find(parts_only)
     assert "14m7303.prt" in matcher.find(parts_only)
     assert matcher.find(b"\x00844j.asm\x00") == {"844j.asm"}
+    # Creo component tables often store the bare name with null boundaries.
+    assert matcher.find(b"\x00844j\x00") == {"844j.asm"}
+
+
+def test_rebuild_uses_bounded_unique_stems_for_creo_component_names():
+    text = Path("src/creopdm/services/metadata_service.py").read_text(encoding="utf-8")
+    assert "include_stems=True" in text
+    assert "require_boundaries=True" in text
+    assert "min_stem_len=4" in text
+    assert "unique_stems_only=True" in text
+
+
+def test_matcher_skips_ambiguous_stems_when_unique_only():
+    matcher = CadNameMatcher(
+        ["shaft.prt", "shaft.asm", "pin.prt"],
+        include_stems=True,
+        require_boundaries=True,
+        unique_stems_only=True,
+    )
+    assert matcher.find(b"\x00shaft\x00") == set()
+    assert matcher.find(b"\x00pin\x00") == {"pin.prt"}
+    assert matcher.find(b"\x00shaft.prt\x00") == {"shaft.prt"}
 
 
 def test_matcher_with_stems_still_finds_extensionless_for_open():
@@ -61,7 +86,6 @@ def test_logical_name_in_model_requires_extension(tmp_path: Path):
     assert logical_name_in_model(asm, "1003573.asm") is False
 
 
-def test_rebuild_clears_then_uses_bounded_extension_matcher():
+def test_rebuild_clears_membership_edges_before_reindex():
     text = Path("src/creopdm/services/metadata_service.py").read_text(encoding="utf-8")
-    assert "CadNameMatcher(candidate_names, include_stems=False)" in text
     assert "Cleared ASSEMBLY_MEMBER/DRAWING_MODEL edges" in text

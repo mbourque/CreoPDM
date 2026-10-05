@@ -52,9 +52,9 @@ class CadNameMatcher:
     """Match logical Creo filenames inside a lowercased byte blob.
 
     ``include_stems`` also matches the bare stem (``shaft`` for ``shaft.prt``).
-    That helps Open find neighbors when Creo omits the extension, but it causes
-    false Where Used parents. Where Used indexing should pass
-    ``include_stems=False`` (extension + name boundaries only).
+    Creo often stores component names without the extension. Where Used should
+    use stems **with** ``require_boundaries=True`` so ``1003573`` glued inside
+    another token is ignored, but a real ``\\0shaft\\0`` component still matches.
     """
 
     __slots__ = ("_goto", "_fail", "_out", "_logicals", "_lengths", "_require_boundaries")
@@ -65,20 +65,35 @@ class CadNameMatcher:
         *,
         include_stems: bool = True,
         require_boundaries: bool | None = None,
+        min_stem_len: int = 2,
+        unique_stems_only: bool = False,
     ) -> None:
-        # Where Used (no stems) always requires boundaries; Open stem mode does not.
+        # Prefer explicit require_boundaries; else stems-only Open stays loose,
+        # extension-only mode stays strict.
         self._require_boundaries = (
             (not include_stems) if require_boundaries is None else bool(require_boundaries)
         )
-        token_to_logicals: dict[bytes, list[str]] = {}
+        logicals: list[str] = []
+        stem_counts: dict[str, int] = {}
         for name in filenames:
             logical = CreoFileManager.normalize_creo_filename(name).lower()
             if not logical:
                 continue
+            logicals.append(logical)
+            if include_stems:
+                stem = Path(logical).stem.lower()
+                if stem:
+                    stem_counts[stem] = stem_counts.get(stem, 0) + 1
+
+        token_to_logicals: dict[bytes, list[str]] = {}
+        for logical in logicals:
             tokens = {logical.encode("ascii", "ignore")}
             if include_stems:
                 stem = Path(logical).stem.lower()
-                tokens.add(stem.encode("ascii", "ignore"))
+                if len(stem) >= max(2, int(min_stem_len)) and (
+                    not unique_stems_only or stem_counts.get(stem, 0) == 1
+                ):
+                    tokens.add(stem.encode("ascii", "ignore"))
             for token in tokens:
                 if len(token) < 2:
                     continue
