@@ -2749,10 +2749,9 @@ def admin_utilities_rebuild_product_db(
         )
     if want_where_used:
         # Defer until after the HTML response and request DB session close.
-        # Sync start() here raced the indexer's first write lock against
-        # list_products_for_compact / get_db — form fetch hung and the busy
-        # overlay stayed on "preparing…" with no N of M polls.
-        # Page JS also POSTs Start (no-op if already running) for progress.
+        # Do not sync-start under the open request session (indexer write lock
+        # blocked the form fetch). Page JS POSTs Start for instant N of M;
+        # this BackgroundTask covers plain form POST when JS is unavailable.
         background_tasks.add_task(ctx.where_used_index.start, pid)
     return _utilities_rebuild_response(
         request,

@@ -10,16 +10,15 @@ from creopdm.app import build_context
 from creopdm.config import ConfigManager
 from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
-from creopdm.services.where_used_index_jobs import WHERE_USED_AUTO_INDEX_MIN_FILES
+from creopdm.services.where_used_index_jobs import (
+    WHERE_USED_AUTO_INDEX_MIN_FILES,
+    WhereUsedIndexStatus,
+)
 from creopdm.utils.identity import StaticUserProvider
 
 
-def test_where_used_job_primes_parents_total_before_first_chunk(
-    data_dir, identity: StaticUserProvider
-):
-    """Busy overlay needs 0 of N before the first slow vault scan returns."""
-    ctx = build_context(ConfigManager(), users=identity)
-    vault = ctx.config.workspace_for_product("wu-prime")
+def _product_with_asm_parents(ctx, folder: str, name: str) -> str:
+    vault = ctx.config.workspace_for_product(folder)
     vault.mkdir(parents=True, exist_ok=True)
     (vault / "a.asm").write_bytes(b"asm")
     (vault / "b.asm").write_bytes(b"asm")
@@ -27,14 +26,14 @@ def test_where_used_job_primes_parents_total_before_first_chunk(
     with ctx.session_factory() as db:
         product = Product(
             uuid=str(uuid.uuid4()),
-            name="WU Prime",
-            vault_folder="wu-prime",
+            name=name,
+            vault_folder=folder,
             repository_path=str(vault),
             default_branch="main",
         )
         db.add(product)
         db.flush()
-        for name, otype in (
+        for filename, otype in (
             ("a.asm", "CREO_ASSEMBLY"),
             ("b.asm", "CREO_ASSEMBLY"),
             ("c.prt", "CREO_PART"),
@@ -43,15 +42,23 @@ def test_where_used_job_primes_parents_total_before_first_chunk(
                 EngineeringObject(
                     uuid=str(uuid.uuid4()),
                     product_id=product.id,
-                    name=name,
-                    filename=name,
-                    extension=name.rsplit(".", 1)[-1],
+                    name=filename,
+                    filename=filename,
+                    extension=filename.rsplit(".", 1)[-1],
                     object_type=otype,
-                    relative_path=name,
+                    relative_path=filename,
                 )
             )
         db.commit()
-        product_uuid = product.uuid
+        return product.uuid
+
+
+def test_where_used_job_primes_parents_total_before_first_chunk(
+    data_dir, identity: StaticUserProvider
+):
+    """Busy overlay needs 0 of N before the first slow vault scan returns."""
+    ctx = build_context(ConfigManager(), users=identity)
+    product_uuid = _product_with_asm_parents(ctx, "wu-prime", "WU Prime")
 
     started = ctx.where_used_index.start(product_uuid)
     # Start() primes synchronously — overlay can show 0 of N on the Start response.
@@ -62,6 +69,26 @@ def test_where_used_job_primes_parents_total_before_first_chunk(
         if ctx.where_used_index.get(product_uuid).state in {"done", "error", "cancelled"}:
             break
         time.sleep(0.02)
+
+
+def test_where_used_reentrant_start_primes_total(
+    data_dir, identity: StaticUserProvider
+):
+    """Second Start (utilities JS) must not return parents_total=0 while priming."""
+    ctx = build_context(ConfigManager(), users=identity)
+    product_uuid = _product_with_asm_parents(ctx, "wu-reenter", "WU Reenter")
+    jobs = ctx.where_used_index
+    # Simulate BackgroundTask that created the job but has not primed yet.
+    with jobs._lock:
+        jobs._status[product_uuid] = WhereUsedIndexStatus(
+            product_id=product_uuid,
+            state="queued",
+            started_at=time.time(),
+            parents_total=0,
+        )
+    again = jobs.start(product_uuid)
+    assert again.parents_total == 2, again
+    jobs.cancel(product_uuid)
 
 
 def test_cancel_where_used_api_is_wired():
@@ -75,6 +102,10 @@ def test_cancel_where_used_api_is_wired():
     assert "forceClearBusy" in script
     assert "invokeBusyCancel" in script
     assert "recoverStuckBusyOverlay" in script
+    # Hung Start used to ignore Cancel — abort in-flight Start/poll fetches.
+    assert "ac.abort()" in script or "signal.aborted" in script
+    assert "__creopdmBusyCancelHandler" in script
+    assert 'signal: ac.signal' in script
     base = (root / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
     assert 'id="busy-cancel-btn"' in base
 

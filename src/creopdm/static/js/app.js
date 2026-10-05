@@ -301,11 +301,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function setBusyCancelHandler(handler) {
     // Opt-in only: Cancel button stays hidden unless the job can abort cleanly.
     busyCancelHandler = typeof handler === "function" ? handler : null;
+    // Window slot so the once-bound Cancel click (survives soft boot) always hits
+    // the active job's handler, not a stale closure's null.
+    window.__creopdmBusyCancelHandler = busyCancelHandler;
     const busyCancelBtn = busyCancelBtnEl();
     if (busyCancelBtn) busyCancelBtn.hidden = !busyCancelHandler;
   }
   function invokeBusyCancel() {
-    if (typeof busyCancelHandler === "function") void busyCancelHandler();
+    const handler = window.__creopdmBusyCancelHandler || busyCancelHandler;
+    if (typeof handler === "function") void handler();
   }
   function forceClearBusy() {
     busyDepth = 0;
@@ -1642,8 +1646,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   });
 
-  function sleepMs(ms) {
-    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  function sleepMs(ms, signal) {
+    return new Promise((resolve) => {
+      if (signal?.aborted) {
+        resolve();
+        return;
+      }
+      const timer = window.setTimeout(resolve, ms);
+      if (!signal) return;
+      const onAbort = () => {
+        window.clearTimeout(timer);
+        resolve();
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
   }
 
   function whereUsedBusyText(doneCount, total) {
@@ -1778,11 +1794,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     let expectStartedAt = 0;
     let userCancelled = false;
     let cancelInFlight = false;
+    const ac = new AbortController();
     const requestCancel = async () => {
       if (userCancelled || cancelInFlight) return;
       cancelInFlight = true;
       userCancelled = true;
       publishBusyMessage("Cancelling Where Used indexing…");
+      // Abort Start/poll fetches — otherwise a hung Start left Cancel looking dead.
+      try {
+        ac.abort();
+      } catch {
+        /* ignore */
+      }
       await cancelWhereUsedIndex(productId);
     };
     setBusyCancelHandler(requestCancel);
@@ -1792,11 +1815,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         try {
           startResponse = await fetch(
             `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`,
-            { method: "POST" }
+            { method: "POST", signal: ac.signal }
           );
         } catch (exc) {
+          if (userCancelled || ac.signal.aborted) {
+            return { started: true, state: "cancelled" };
+          }
           return { started: false, error: exc?.message || "Could not reach CreoPDM." };
         }
+        if (userCancelled) return { started: true, state: "cancelled" };
         if (!startResponse.ok) {
           return { started: false, error: await readError(startResponse) };
         }
@@ -1811,19 +1838,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
       }
       for (let tries = 0; tries < 1800; tries += 1) {
-        if (userCancelled) {
-          return { started: true, state: "cancelled" };
-        }
-        // Poll often while preparing / first chunk — N of M should appear within ~1s.
-        await sleepMs(tries < 20 ? 250 : 1000);
-        if (userCancelled) {
+        if (userCancelled || ac.signal.aborted) {
           return { started: true, state: "cancelled" };
         }
         try {
           const response = await fetch(
-            `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`
+            `/api/products/${encodeURIComponent(productId)}/rebuild-where-used`,
+            { signal: ac.signal }
           );
-          if (!response.ok) continue;
+          if (!response.ok) {
+            await sleepMs(tries < 20 ? 250 : 1000, ac.signal);
+            continue;
+          }
           const body = await response.json();
           const state = String(body.state || "");
           const startedAt = Number(body.started_at) || 0;
@@ -1835,16 +1861,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             && state !== "queued"
             && state !== "running"
           ) {
+            await sleepMs(tries < 20 ? 250 : 1000, ac.signal);
             continue;
           }
           if (state === "queued" || state === "running") {
             const total = Number(body.parents_total) || 0;
             const doneCount = Number(body.parents_done) || 0;
             onProgress?.(doneCount, total);
+            await sleepMs(tries < 20 ? 250 : 1000, ac.signal);
             continue;
           }
           if (state === "done") {
             if (expectStartedAt && startedAt && startedAt + 0.001 < expectStartedAt) {
+              await sleepMs(tries < 20 ? 250 : 1000, ac.signal);
               continue;
             }
             return {
@@ -1866,11 +1895,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             };
           }
           // idle while waiting for a job we started — keep polling
-          if (expectStartedAt || start) continue;
+          if (expectStartedAt || start) {
+            await sleepMs(tries < 20 ? 250 : 1000, ac.signal);
+            continue;
+          }
           return { started: true, state: state || "idle" };
         } catch {
+          if (userCancelled || ac.signal.aborted) {
+            return { started: true, state: "cancelled" };
+          }
           /* ignore transient poll errors */
         }
+        await sleepMs(tries < 20 ? 250 : 1000, ac.signal);
       }
       return {
         started: true,

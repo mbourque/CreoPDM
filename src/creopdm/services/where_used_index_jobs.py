@@ -69,30 +69,36 @@ class WhereUsedIndexJobs:
             )
 
     def start(self, product_uuid: str) -> WhereUsedIndexStatus:
+        start_thread = False
+        run_id: float | None = None
         with self._lock:
             current = self._status.get(product_uuid)
-            if current is not None and current.state in {"queued", "running"}:
-                return self.get(product_uuid)
-            status = WhereUsedIndexStatus(
-                product_id=product_uuid,
-                state="queued",
-                started_at=time.time(),
-            )
-            self._status[product_uuid] = status
-            run_id = status.started_at
-        # Count parents before returning so Start/GET already carry N for the overlay
-        # (do not wait for the first vault chunk — that can take minutes).
+            if current is None or current.state not in {"queued", "running"}:
+                status = WhereUsedIndexStatus(
+                    product_id=product_uuid,
+                    state="queued",
+                    started_at=time.time(),
+                )
+                self._status[product_uuid] = status
+                run_id = status.started_at
+                start_thread = True
+        # Always finish priming before returning — a re-entrant Start (utilities form
+        # BackgroundTask + page JS) used to return parents_total=0 while the first
+        # caller was still counting, so the overlay stayed on "preparing…".
         try:
-            self._prime_parents_total(product_uuid)
+            snap = self.get(product_uuid)
+            if snap.state in {"queued", "running"} and snap.parents_total <= 0:
+                self._prime_parents_total(product_uuid)
         except Exception:
             logger.exception("Where Used parent count failed for %s", product_uuid)
-        thread = threading.Thread(
-            target=self._run,
-            args=(product_uuid, run_id),
-            name=f"where-used-{product_uuid[:8]}",
-            daemon=True,
-        )
-        thread.start()
+        if start_thread:
+            thread = threading.Thread(
+                target=self._run,
+                args=(product_uuid, run_id),
+                name=f"where-used-{product_uuid[:8]}",
+                daemon=True,
+            )
+            thread.start()
         return self.get(product_uuid)
 
     def maybe_start_after_add(self, product_uuid: str, added_count: int) -> WhereUsedIndexStatus | None:
