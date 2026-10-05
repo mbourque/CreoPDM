@@ -652,6 +652,10 @@ def settings_section_page(
     from creopdm.api.settings import settings_to_response
     from creopdm.settings_hub import settings_tile
 
+    # Availability moved to Utilities — keep old bookmarks / soft-nav working.
+    if (section or "").strip().lower() == "availability":
+        return RedirectResponse("/admin/utilities/availability", status_code=303)
+
     blocked = _require_settings_page(request, ctx)
     if blocked is not None:
         return blocked

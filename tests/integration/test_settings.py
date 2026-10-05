@@ -230,7 +230,6 @@ def test_get_and_update_settings(client, tmp_path):
     assert "admin-hub" in hub.text
     assert "Server options for this CreoPDM install" in hub.text
     tile_titles = [
-        "Availability",
         "Open Creo models",
         "Vault",
         "Creo Models",
@@ -246,7 +245,6 @@ def test_get_and_update_settings(client, tmp_path):
         "Database",
     ]
     tile_slugs = [
-        "availability",
         "open",
         "vault",
         "creo-models",

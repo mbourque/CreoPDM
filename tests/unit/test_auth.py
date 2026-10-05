@@ -477,11 +477,13 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert hub.status_code == 200
     assert "admin-page" in hub.text
     assert "admin-hub" in hub.text
+    assert 'href="/admin/utilities/availability"' in hub.text
     assert 'href="/admin/utilities/email-all"' in hub.text
     assert 'href="/admin/utilities/compact"' in hub.text
     assert 'href="/admin/utilities/rebuild-product"' in hub.text
     assert 'href="/admin/utilities/delete-products"' in hub.text
     assert 'href="/admin/utilities/health"' in hub.text
+    assert "Availability" in hub.text
     assert "Rebuild product database" in hub.text
     assert "Creo metadata" in hub.text
     assert "Where Used" in hub.text
@@ -489,6 +491,12 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert 'action="/admin/utilities/compact-vault"' not in hub.text
     assert 'action="/admin/utilities/rebuild-product-db"' not in hub.text
     assert "Disk space" not in hub.text
+
+    avail_page = auth_client.get("/admin/utilities/availability")
+    assert avail_page.status_code == 200
+    assert 'id="settings-form"' in avail_page.text
+    assert 'name="site_availability"' in avail_page.text
+    assert "Back to Utilities" in avail_page.text
 
     email_page = auth_client.get("/admin/utilities/email-all")
     assert email_page.status_code == 200
@@ -605,6 +613,7 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     denied = auth_client.get("/admin/utilities", follow_redirects=False)
     assert denied.status_code == 403
     for path in (
+        "/admin/utilities/availability",
         "/admin/utilities/email-all",
         "/admin/utilities/compact",
         "/admin/utilities/delete-products",

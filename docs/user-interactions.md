@@ -438,7 +438,7 @@ Use a normal browser for these checks. You need the matching Administration perm
 | You do | App should | App must not |
 |--------|------------|--------------|
 | Open **Administration** | Show permission-gated tiles (Users, Roles, Membership, Products, Email, **Utilities**, **System Settings**) plus greyed **Audit** and **AI** placeholders with short “coming soon” descriptions; **System Settings** opens a hub of section tiles | Link Audit/AI anywhere; label the settings tile only **Settings**; dump every system setting on one long page from Administration |
-| Open **System Settings** | Open `/settings` as a hub of short tiles in the same order as before (**Availability**, **Open Creo models**, **Vault**, **Creo Models**, **Documents**, **Creo-openable models**, **Text files**, **Non openable CAD**, **Numbered saves**, **File type names**, **Ignored files**, **Network**, **Local Creo agent**, **Database**); each tile opens its own page to edit that section | Dump every settings section on one long page; reorder tiles differently from the former single page |
+| Open **System Settings** | Open `/settings` as a hub of short tiles in the same order as before (**Open Creo models**, **Vault**, **Creo Models**, **Documents**, **Creo-openable models**, **Text files**, **Non openable CAD**, **Numbered saves**, **File type names**, **Ignored files**, **Network**, **Local Creo agent**, **Database**); each tile opens its own page to edit that section | Dump every settings section on one long page; reorder tiles differently from the former single page; keep **Availability** under System Settings (it lives under **Utilities**) |
 | Set **CreoPDM unavailable** and save | Non-administrators see the maintenance message on their **next page open or navigation** (including soft-nav); the default message gets a pretty **Since …** date automatically; administrators keep using the app and the **Unavailable** warning pill appears **immediately** after Save (no need to leave Settings); uploads / check-ins / API calls already in progress are **not** cancelled | Block or roll back in-flight API / Git / DB work; hide the app from administrators; wait until you leave Settings to show the reminder pill; omit when the outage started from the default message |
 | Set **CreoPDM available** again and save | Everyone sees normal pages again; Unavailable pill hides right away after Save | |
 | Leave a product Files page open with no mouse/keyboard/touch for longer than **Pause refresh after idle** | Stop file-list / agent workspace polling until the user interacts again (or the tab becomes visible again); default 10 minutes; **0** = never pause for idle | Keep polling overnight while the tab sits idle with a non-zero idle pause |
@@ -498,7 +498,8 @@ Needs `utilities.access` (Administrator by default; CreoPDM Administration only)
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Open **Utilities** | Show five hub tiles: **Email all users**, **Compact product vault history**, **Rebuild product database**, **Delete products**, and **Health** (same pattern as Administration home) | Dump every tool and health section on one long page; let PDM Manager / Engineer open it without the permission; keep Remove/Delete on Administration → Products → Edit |
+| Open **Utilities** | Show six hub tiles: **Availability**, **Email all users**, **Compact product vault history**, **Rebuild product database**, **Delete products**, and **Health** (same pattern as Administration home) | Dump every tool and health section on one long page; let PDM Manager / Engineer open it without the permission; keep Remove/Delete on Administration → Products → Edit; leave **Availability** only under System Settings |
+| Open **Availability** | Show the site available / unavailable radios and maintenance message (same Save as System Settings used to); works when locked for maintenance so admins can turn it back on; old `/settings/availability` links redirect here | Hide Availability from Utilities; leave non-admins able to change it |
 | Open **Email all users** | Show the broadcast form on its own page | |
 | Fill subject + message, check the confirm box, **Send email to all users** | Email each **active** user individually (using Administration → Email delivery settings); skip disabled accounts; keep addresses private | Send without confirm; put every address in one To/Cc list; email disabled users |
 | Open **Compact product vault history** | Show the compact form on its own page | |
@@ -557,7 +558,7 @@ Try the same with **Add folder…**, **Add folders…**, and **Compressed data�
 - Add user → new account has no products until Membership grants them.  
 - Role dropdown → your own role / a peer role / a higher role must not appear.  
 - Email admin: change SMTP fields then Send test without Save → blocked.
-- Utilities without `utilities.access` → 403; with it → hub tiles for email-all / compact / rebuild-product / delete-products / health; each opens its own page; Health Logs path opens `/admin/utilities/logs`; product Edit has no Remove form.
+- Utilities without `utilities.access` → 403; with it → hub tiles for availability / email-all / compact / rebuild-product / delete-products / health; each opens its own page; Health Logs path opens `/admin/utilities/logs`; product Edit has no Remove form.
 - Compact vault history → tip stays; older History gone; blocked when checkouts active or vault dirty; busy overlay until the form POST returns.
 - Utilities email-all without confirm or blank subject → blocked; disabled users not emailed.
 - Cancel Watch / Stop watching confirmation → subscription unchanged.
@@ -587,7 +588,7 @@ Automated coverage lives mainly in:
 - `tests/unit/test_product_watch.py` (bell when email enabled; per-user watch; subscribe/unsubscribe; one email per bulk action; actor excluded; notifications off skips mail; Force Undo Checkout emails former owner)
 - `tests/unit/test_launch.py` / `tests/unit/test_creopdm_agent.py` (Open workspace creates empty agent cache and opens via ShellExecute explore)
 - `tests/integration/test_settings.py` (Settings open-mode copy mentions OS association fallback)
-- `tests/unit/test_site_availability.py` (unavailable is display-only HTML for non-admins; API stays up; admin pill + Settings Availability panel)
+- `tests/unit/test_site_availability.py` (unavailable is display-only HTML for non-admins; API stays up; admin pill + Utilities → Availability panel)
 - `tests/integration/test_creo_metadata.py` (Collect is `creo-session-only`; Rebuild Where Used is always on the gear when metadata tools are allowed; Details **Where Used** only for Settings → Creo Models extensions)
 - `tests/integration/test_checkout.py` (product lock UI: ON_HOLD / read-only hide Add & Check In; Checkout stays for Undo)
 - `tests/integration/test_product_lifecycle_lock.py` (locked product rejects add/checkout/check-in/remove/rename/metadata; forget/delete still purges; undo still allowed)

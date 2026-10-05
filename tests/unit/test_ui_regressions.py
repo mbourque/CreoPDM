@@ -1932,14 +1932,28 @@ def test_admin_hub_panel_fills_full_width():
     )
     assert "<h1>Utilities</h1>" in utilities
     assert "admin-hub" in utilities
+    assert 'href="/admin/utilities/availability"' in utilities
     assert 'href="/admin/utilities/email-all"' in utilities
     assert 'href="/admin/utilities/compact"' in utilities
     assert 'href="/admin/utilities/rebuild-product"' in utilities
     assert 'href="/admin/utilities/delete-products"' in utilities
     assert 'href="/admin/utilities/health"' in utilities
+    assert "Availability" in utilities
     assert "delete and rebuild Where Used" in utilities
     assert 'action="/admin/utilities/email-all"' not in utilities
     assert "Disk space" not in utilities
+    avail_util = (
+        ROOT / "src" / "creopdm" / "templates" / "admin_utilities_availability.html"
+    ).read_text(encoding="utf-8")
+    assert 'id="settings-form"' in avail_util
+    assert 'data-settings-section="availability"' in avail_util
+    assert "settings_partials/availability.html" in avail_util
+    assert 'href="/admin/utilities"' in avail_util
+    base_html = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'href="/admin/utilities/availability"' in base_html
+    assert 'href="/settings/availability"' not in base_html
     email_util = (
         ROOT / "src" / "creopdm" / "templates" / "admin_utilities_email.html"
     ).read_text(encoding="utf-8")
@@ -2080,9 +2094,8 @@ def test_admin_hub_panel_fills_full_width():
     assert 'href="/settings/{{ tile.slug }}"' in settings or 'href="/settings/' in settings
     assert "settings_tiles" in settings
     hub = (ROOT / "src" / "creopdm" / "settings_hub.py").read_text(encoding="utf-8")
-    assert 'slug="availability"' in hub
+    assert 'slug="availability"' not in hub
     assert 'slug="database"' in hub
-    assert hub.index('slug="availability"') < hub.index('slug="open"')
     assert hub.index('slug="open"') < hub.index('slug="vault"')
     assert hub.index('slug="types"') < hub.index('slug="ignored-files"')
     section = (ROOT / "src" / "creopdm" / "templates" / "settings_section.html").read_text(
@@ -2099,7 +2112,9 @@ def test_admin_hub_panel_fills_full_width():
     assert "folder’s used size" in docs or "folder" in docs
     assert "Audit** and **AI**" in docs or "**Audit** and **AI**" in docs
     assert "Compacting vault history" in docs
-    assert "five hub tiles" in docs
+    assert "six hub tiles" in docs
+    assert "Availability" in docs
+    assert "/admin/utilities/availability" in docs or "Utilities**" in docs
     assert "Rebuild product database" in docs
     assert "Delete products" in docs
     script = _app_js()

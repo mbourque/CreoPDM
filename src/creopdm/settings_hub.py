@@ -16,14 +16,8 @@ class SettingsHubTile:
     page_template: str | None = None
 
 
-# Same order as the old monolithic System Settings form.
+# Same order as the old monolithic System Settings form (Availability lives under Utilities).
 SETTINGS_HUB_TILES: tuple[SettingsHubTile, ...] = (
-    SettingsHubTile(
-        slug="availability",
-        title="Availability",
-        blurb="Mark CreoPDM available, or show a maintenance message to non-administrators.",
-        partial="availability.html",
-    ),
     SettingsHubTile(
         slug="open",
         title="Open Creo models",

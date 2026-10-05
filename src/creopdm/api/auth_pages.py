@@ -1910,6 +1910,24 @@ def _require_utilities_access(
     return user
 
 
+def _require_utilities_or_settings(
+    request: Request, ctx: AppContext, db: Session
+) -> User | HTMLResponse | RedirectResponse:
+    """Availability lives under Utilities; settings managers can still open the pill link."""
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if ctx.user_accounts.can_access_utilities(user) or ctx.user_accounts.can_manage_settings(
+        user
+    ):
+        return user
+    return HTMLResponse(
+        "<h1>403 Forbidden</h1><p>Utilities or Settings access required.</p>",
+        status_code=403,
+    )
+
+
 _DEFAULT_TEST_SUBJECT = "CreoPDM test email"
 _DEFAULT_TEST_MESSAGE = (
     "This is a test message from CreoPDM Administration → Email.\n"
@@ -2201,6 +2219,23 @@ def _utilities_hub_response(
     )
 
 
+def _utilities_availability_response(
+    request: Request,
+    ctx: AppContext,
+    manager: User,
+):
+    from creopdm.api.settings import settings_to_response
+
+    return templates.TemplateResponse(
+        request,
+        "admin_utilities_availability.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "settings": settings_to_response(ctx),
+        },
+    )
+
+
 def _utilities_email_response(
     request: Request,
     ctx: AppContext,
@@ -2400,6 +2435,16 @@ def admin_utilities_page(
     if _is_blocked(manager):
         return manager
     return _utilities_hub_response(request, ctx, manager)
+
+
+@router.get("/admin/utilities/availability", response_class=HTMLResponse)
+def admin_utilities_availability_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_utilities_or_settings(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return _utilities_availability_response(request, ctx, manager)
 
 
 @router.get("/admin/utilities/email-all", response_class=HTMLResponse)

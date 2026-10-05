@@ -147,20 +147,28 @@ def test_unavailable_hides_pages_from_viewer_keeps_api_and_admin(auth_client, au
     assert admin_home.status_code == 200
     assert 'id="site-unavailable-pill"' in admin_home.text
     assert "Unavailable" in admin_home.text
-    assert 'href="/settings/availability"' in admin_home.text
+    assert 'href="/admin/utilities/availability"' in admin_home.text
     # Pill is in the DOM when settings.manage; hidden only when available.
     assert "hidden" not in admin_home.text.split('id="site-unavailable-pill"', 1)[1].split(">", 1)[0]
     assert 'id="object-table"' in admin_home.text
     settings_hub = auth_client.get("/settings")
     assert settings_hub.status_code == 200
-    assert 'href="/settings/availability"' in settings_hub.text
-    settings_page = auth_client.get("/settings/availability")
+    assert 'href="/settings/availability"' not in settings_hub.text
+    assert 'href="/admin/utilities/availability"' not in settings_hub.text
+    util_hub = auth_client.get("/admin/utilities")
+    assert util_hub.status_code == 200
+    assert 'href="/admin/utilities/availability"' in util_hub.text
+    settings_page = auth_client.get("/admin/utilities/availability")
     assert settings_page.status_code == 200
     assert 'id="site-availability"' in settings_page.text
     assert 'id="site-unavailable-pill"' in settings_page.text
     assert "CreoPDM available" in settings_page.text
     assert "CreoPDM unavailable" in settings_page.text
     assert "display-only" in settings_page.text
+    # Old Settings URL redirects to Utilities.
+    legacy = auth_client.get("/settings/availability", follow_redirects=False)
+    assert legacy.status_code == 303
+    assert legacy.headers.get("location") == "/admin/utilities/availability"
 
     # Viewer HTML is replaced; product API still works (no mid-flight disruption).
     _login(auth_client, "view", "ViewPass1")
@@ -186,13 +194,14 @@ def test_unavailable_hides_pages_from_viewer_keeps_api_and_admin(auth_client, au
 def test_settings_html_and_js_wire_availability(auth_client, auth_ctx):
     _setup_admin_and_viewer(auth_client, auth_ctx)
     _login(auth_client, "admin", "AdminPass1")
-    hub = auth_client.get("/settings")
+    hub = auth_client.get("/admin/utilities")
     assert hub.status_code == 200
-    assert 'href="/settings/availability"' in hub.text
-    page = auth_client.get("/settings/availability")
+    assert 'href="/admin/utilities/availability"' in hub.text
+    page = auth_client.get("/admin/utilities/availability")
     assert page.status_code == 200
     assert 'name="site_availability"' in page.text
     assert 'id="site-unavailable-message"' in page.text
+    assert 'id="settings-form"' in page.text
     script = auth_client.get("/static/js/app.js")
     assert script.status_code == 200
     assert "function syncSiteAvailabilityOptions(" in script.text

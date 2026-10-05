@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Availability — Utilities — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page admin-page admin-utilities">
+  <nav class="crumb">
+    {% if can_view_products %}
+    <a href="/">Products</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/utilities">Utilities</a>
+    <span>/</span>
+    <span>Availability</span>
+  </nav>
+  <h1>Availability</h1>
+  <p class="muted">Mark CreoPDM available, or show a maintenance message to non-administrators.</p>
+
+  <form id="settings-form" class="settings-form" data-settings-section="availability">
+    {% include "settings_partials/availability.html" %}
+    <p class="error" id="settings-error" hidden></p>
+    <p class="ok" id="settings-ok" hidden>Saved.</p>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <a class="btn" href="/admin/utilities">Back to Utilities</a>
+    </div>
+  </form>
+</article>
+{% endblock %}
