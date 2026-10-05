@@ -248,9 +248,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       "cancel",
       (event) => {
         if (event.target?.id !== "busy-overlay") return;
+        // Never let Escape dismiss the modal while work owns busyDepth — that hung the UI.
         event.preventDefault();
         const api = window.__creopdmSoftNavApi;
-        if (api && typeof api.invokeBusyCancel === "function") api.invokeBusyCancel();
+        if (api && typeof api.invokeBusyCancel === "function") {
+          // No-op when the current job did not register a cancel handler (Add, Check In, …).
+          api.invokeBusyCancel();
+        }
       },
       true
     );
@@ -263,6 +267,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         event.preventDefault();
         const api = window.__creopdmSoftNavApi;
         if (api && typeof api.invokeBusyCancel === "function") api.invokeBusyCancel();
+      },
+      true
+    );
+    // Safety net: if the dialog is closed while still "busy", unstick the shell.
+    origAddEventListener.call(
+      document,
+      "close",
+      (event) => {
+        if (event.target?.id !== "busy-overlay") return;
+        const api = window.__creopdmSoftNavApi;
+        if (api && typeof api.recoverStuckBusyOverlay === "function") {
+          api.recoverStuckBusyOverlay();
+        }
       },
       true
     );
@@ -282,6 +299,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (text) text.textContent = message || "Working…";
   }
   function setBusyCancelHandler(handler) {
+    // Opt-in only: Cancel button stays hidden unless the job can abort cleanly.
     busyCancelHandler = typeof handler === "function" ? handler : null;
     const busyCancelBtn = busyCancelBtnEl();
     if (busyCancelBtn) busyCancelBtn.hidden = !busyCancelHandler;
@@ -295,6 +313,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     hideBusyOverlay();
     document.body.classList.remove("is-busy");
     document.body.removeAttribute("aria-busy");
+  }
+  function recoverStuckBusyOverlay() {
+    // Dialog closed while depth > 0 (stale listener / browser quirk). Unstick UI only.
+    if (busyDepth <= 0) return;
+    if (typeof busyCancelHandler === "function") {
+      void busyCancelHandler();
+      return;
+    }
+    forceClearBusy();
   }
   function setBusy(message) {
     busyDepth += 1;
@@ -2139,6 +2166,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     syncMetadataCollectControls();
     showError($("#toolbar-error"), "");
     setBusy("Collecting Creo metadata…");
+    // Same Cancel / Escape as Where Used — stops between models; clears overlay via finally.
+    setBusyCancelHandler(() => {
+      metadataCollectJob.cancel = true;
+      publishBusyMessage("Cancelling metadata collection…");
+      showOk("Cancelling metadata collection…");
+    });
     let index = Math.max(0, Number(state.index) || 0);
     let captured = Number(state.captured) || 0;
     let failed = Number(state.failed) || 0;
@@ -2215,7 +2248,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // Type column (SHEETMETAL / MFG / …) comes from SSR — refresh Files after saves.
       shouldRefreshList = captured > 0;
     } finally {
+      setBusyCancelHandler(null);
       clearBusy();
+      forceClearBusy();
       metadataCollectJob.running = false;
       metadataCollectJob.cancel = false;
       syncMetadataCollectControls();
@@ -11456,6 +11491,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     setBusyMessage,
     forceClearBusy,
     invokeBusyCancel,
+    recoverStuckBusyOverlay,
     awaitWhereUsedIndex,
     runUtilitiesRebuildWithWhereUsed,
     eventEl,

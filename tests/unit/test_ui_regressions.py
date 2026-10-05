@@ -2018,11 +2018,17 @@ def test_admin_hub_panel_fills_full_width():
     assert "expectStartedAt" in script
     assert "invokeBusyCancel" in script
     assert "forceClearBusy" in script
+    assert "recoverStuckBusyOverlay" in script
+    assert "Opt-in only" in script
     assert 'id="busy-cancel-btn"' in (
         ROOT / "src" / "creopdm" / "templates" / "base.html"
     ).read_text(encoding="utf-8")
     assert "Never preventDefault without a runner" in script
     assert "Cancelling Where Used indexing…" in script
+    assert "Cancelling metadata collection…" in script
+    docs_busy = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "For **cancellable** jobs only" in docs_busy
+    assert "recoverStuckBusyOverlay" in script
     products_api = (
         ROOT / "src" / "creopdm" / "api" / "products.py"
     ).read_text(encoding="utf-8")

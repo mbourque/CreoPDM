@@ -74,6 +74,7 @@ def test_cancel_where_used_api_is_wired():
     assert 'method: "DELETE"' in script
     assert "forceClearBusy" in script
     assert "invokeBusyCancel" in script
+    assert "recoverStuckBusyOverlay" in script
     base = (root / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
     assert 'id="busy-cancel-btn"' in base
 
