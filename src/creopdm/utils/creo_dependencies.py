@@ -49,15 +49,20 @@ def read_model_scan_blob(path: Path) -> bytes:
     return blob.lower()
 
 
-def names_referenced_in_model(path: Path, candidates: list[str]) -> set[str]:
+def names_referenced_in_model(
+    path: Path,
+    candidates: list[str],
+    *,
+    include_stems: bool = True,
+) -> set[str]:
     """Return candidate logical names that appear as bytes in the Creo file."""
     if not candidates or not path.is_file():
         return set()
     lower = read_model_scan_blob(path)
     if not lower:
         return set()
-    if len(candidates) >= _MATCHER_THRESHOLD:
-        return CadNameMatcher(candidates).find(lower)
+    if len(candidates) >= _MATCHER_THRESHOLD or not include_stems:
+        return CadNameMatcher(candidates, include_stems=include_stems).find(lower)
     found: set[str] = set()
     for name in candidates:
         logical = CreoFileManager.normalize_creo_filename(name).lower()
@@ -98,6 +103,9 @@ def model_references_filename(path: Path, filename: str) -> bool:
 
 
 _MAX_OPEN_DEPENDENCY_POOL = 40
+# Flat multi-thousand vaults put the whole product in "folder" scope — stem
+# matching then hangs Finding dependencies. Cap and prefer name.ext only.
+_MAX_OPEN_DEPENDENCY_MATCHES = 200
 
 
 def select_dependency_objects(
@@ -139,14 +147,23 @@ def select_dependency_objects(
         candidate_names.append(logical)
     if not pool:
         return []
-    referenced = names_referenced_in_model(model_path, candidate_names)
+    # Large/flat pools: bounded name.ext only (stem matching times out Open).
+    strict = len(pool) > _MAX_OPEN_DEPENDENCY_POOL
+    referenced = names_referenced_in_model(
+        model_path, candidate_names, include_stems=not strict
+    )
     if referenced:
+        referenced_lower = {item.lower() for item in referenced}
         narrowed = []
         for obj in pool:
             name = str(getattr(obj, "filename", "") or "")
-            logical = CreoFileManager.normalize_creo_filename(name, (*model_extensions, *all_cad_extensions))
-            if logical in referenced or logical.lower() in {item.lower() for item in referenced}:
+            logical = CreoFileManager.normalize_creo_filename(
+                name, (*model_extensions, *all_cad_extensions)
+            )
+            if logical in referenced or logical.lower() in referenced_lower:
                 narrowed.append(obj)
+            if len(narrowed) >= _MAX_OPEN_DEPENDENCY_MATCHES:
+                break
         if narrowed:
             return narrowed
     # Product-wide without byte hits would pull the whole vault — refuse.

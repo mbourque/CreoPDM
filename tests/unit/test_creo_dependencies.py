@@ -107,6 +107,8 @@ def test_open_dependency_walk_prefers_folder_scope_before_product():
     assert 'scope="folder"' in walk
     assert 'scope="product"' in walk
     assert walk.index('scope="folder"') < walk.index('scope="product"')
+    assert "_MAX_OPEN_DEPENDENCY_MATCHES" in text
+    assert "include_stems=not strict" in text
 
 
 def test_open_deps_do_not_materialize_during_find():
@@ -116,6 +118,29 @@ def test_open_deps_do_not_materialize_during_find():
     assert "locate_content" in body
     assert "materialize(" not in body
     assert "_MAX_OPEN_FROM_WHERE_USED" in body
+    open_obj = text.split("def open_object(", 1)[1].split("def open_workspace_file(", 1)[0]
+    assert "is_modified" not in open_obj
+
+
+def test_select_dependency_objects_caps_large_flat_folder_matches(tmp_path: Path):
+    """Flat folder with thousands of name.ext hits must not return the whole vault."""
+    asm = tmp_path / "top.asm.1"
+    # Many bounded name.ext tokens — like Creo string tables in a flat vault.
+    blob = b"\x00".join(f"part{i}.prt".encode() for i in range(300))
+    asm.write_bytes(blob)
+    siblings = [_Obj("top.asm", "top.asm", object_type="CREO_ASSEMBLY")] + [
+        _Obj(f"part{i}.prt", f"part{i}.prt") for i in range(300)
+    ]
+    chosen = select_dependency_objects(
+        primary_relative="top.asm",
+        primary_filename="top.asm",
+        object_type="CREO_ASSEMBLY",
+        siblings=siblings,
+        model_path=asm,
+        model_extensions=[".prt", ".asm", ".drw"],
+        all_cad_extensions=[],
+    )
+    assert 0 < len(chosen) <= 200
 
 
 def test_collect_open_dependencies_walks_subassembly_tree(tmp_path: Path):

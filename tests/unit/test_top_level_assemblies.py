@@ -235,5 +235,6 @@ def test_top_level_assemblies_pill_wired_in_ui():
     assert 'key === "top_level_assemblies" && next !== "off"' in chip
     assert 'clearMetricFilters(new Set(["top_level_assemblies"]))' in chip
     assert "Top level assemblies" in docs
+    assert "current folder only" in docs
     assert "turn **off** every other pill" in docs
     assert "Where Used" in docs

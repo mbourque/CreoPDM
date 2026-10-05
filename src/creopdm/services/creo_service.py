@@ -74,18 +74,12 @@ class CreoService:
         product = obj.product
         checkout = self._checkouts.active_for(session, obj.id)
         view = self._checkouts.describe(obj, checkout)
+        # Locate the tip for prepare/deps. Do not hash/rematerialize a present tip
+        # here — that made Finding dependencies… hang on large flat products; the
+        # agent downloads by content hash into the local workspace.
         if checkout is None:
             try:
-                latest = self._workspaces.locate_content(product, obj)
-                if self._workspaces.is_modified(product, obj):
-                    path = latest
-                else:
-                    path = self._workspaces.materialize(
-                        product,
-                        obj,
-                        writable=False,
-                        overwrite_modified=True,
-                    )
+                path = self._workspaces.locate_content(product, obj)
             except PathValidationError:
                 path = self._workspaces.materialize(
                     product,
