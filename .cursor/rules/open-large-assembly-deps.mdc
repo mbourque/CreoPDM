@@ -1,0 +1,40 @@
+---
+description: Open Top Level / large assemblies — full companions + scaled Creo timeout (no JD regressions)
+globs: "**/creo_service.py,**/creo_dependencies.py,**/metadata_service.py,**/static/js/app.js,**/user-interactions.md,**/test_creo_*.py,**/test_open_*.py,**/test_ui_regressions.py"
+alwaysApply: true
+---
+
+# Open large assemblies (JD-scale companions)
+
+Opening a Top Level / large Creo assembly must materialize **all Creo-openable companions** the model needs (thousands OK). A broken Retrieve with a thin local workspace is a regression.
+
+## Do not reintroduce
+
+| Anti-pattern | Why it hurt |
+|---|---|
+| Discard Where Used when `len > 120` (“noisy index”) | JD Open got ~23 files; vault-scan capped at 150 |
+| Trust sparse Where Used (`1…79`) and skip vault-scan | Thin post-zip index looked “good enough” |
+| Cap DB Where Used walk at 150 / depth 8 | Truncated deep trees (~2748 of 4022) |
+| Magnet prune asm parents `> 40` | Wiped real shared JD sub-asms |
+| Fixed `90_000` ms `CreoJS.openModel` / short outer Open budget | “session may be offline” while Retrieve still running after materialize |
+| Materialize vault tips during **Finding dependencies…** | Wedged QueuePool / hung the site |
+
+## Required behavior
+
+1. **`CreoService._dependencies_for`** — Prefer Where Used DB BFS (`_MAX_DEP_DEPENDENCIES` ≥ 4000, depth ≥ 32). Vault-scan when empty/sparse (`_SPARSE_OPEN_WHERE_USED`). When a large WU tree is still short of product Creo-openable siblings, **product-fill every remaining companion** (`len(chosen) < len(companion_siblings)` — never a 95% cutoff that leaves one file out). Never `_MAX_OPEN_FROM_WHERE_USED` discard.
+2. **Magnet prune** — `_MAX_WHERE_USED_ASM_PARENTS` stays high enough for shared sub-asms (200+); only drop true name-table magnets.
+3. **`app.js`** — `creoOpenModelTimeoutMs(preparedDependencyCount(…))` and a generous `openWorkTimeoutMs` for prepare + zip + open. No fixed 90s on vault Open.
+4. **Agent** — Materialize only the prepare list; Finding deps must **locate** only (no server `materialize(` in `_dependencies_for`).
+
+## Tests (keep green)
+
+- `tests/unit/test_open_large_assembly_contract.py` — single contract for the anti-patterns above
+- `tests/integration/test_creo_open.py` — `test_open_dependencies_trust_large_where_used_tree`, `test_open_dependencies_sparse_where_used_falls_back_to_vault_scan`
+- Docs: Open row in `docs/user-interactions.md` (fill companions + long Creo wait)
+
+```text
+# ❌ BAD — if len(chosen) > 120: chosen = []
+# ❌ BAD — openModel(..., 90000, "session may be offline")
+# ❌ BAD — _MAX_WHERE_USED_ASM_PARENTS = 40
+# ✅ GOOD — trust large WU + product-fill + creoOpenModelTimeoutMs(deps)
+```

@@ -48,10 +48,10 @@ _MAX_DEP_DEPENDENCIES = 8000
 # Prefer vault-scan when the Where Used walk looks incomplete (sparse post-zip /
 # over-pruned index) rather than trusting a handful of edges alone.
 _SPARSE_OPEN_WHERE_USED = 80
-# When Where Used already returned a large tree but still misses many product CAD
-# siblings (magnet holes / depth gaps), fill the rest so Creo gets companions.
+# When Where Used already returned a large tree but still misses product CAD
+# siblings (magnet holes / depth gaps), fill every remaining Creo-openable
+# companion — do not stop at 95% coverage (that left JD one file short: 4021/4022).
 _MIN_PRODUCT_FILL_WHERE_USED = 500
-_PRODUCT_FILL_COVERAGE = 0.95
 
 
 class CreoService:
@@ -333,7 +333,7 @@ class CreoService:
             if (
                 len(companion_siblings) >= _MIN_PRODUCT_FILL_WHERE_USED
                 and len(chosen) >= _MIN_PRODUCT_FILL_WHERE_USED
-                and len(chosen) < int(_PRODUCT_FILL_COVERAGE * len(companion_siblings))
+                and len(chosen) < len(companion_siblings)
             ):
                 by_id = {int(obj.id): obj for obj in chosen}
                 for row in companion_siblings:

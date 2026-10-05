@@ -585,6 +585,7 @@ Automated coverage lives mainly in:
 - `tests/unit/test_top_level_assemblies.py` (Where Used index gate; drawing parents ignored for top-level; Rebuild clears false asm→asm parents; bare Creo names collapse Top Level)
 - `tests/unit/test_where_used_name_match.py` (Where Used bounded stems + unique stems; glued tokens ignored)
 - `tests/unit/test_creo_dependencies.py` (open dependencies walk sub-assemblies + parts across folders; walk returns storeable edges)
+- `tests/unit/test_open_large_assembly_contract.py` (JD-scale Open: no WU discard, product-fill, magnet prune ≥200, scaled Creo open timeout)
 - `tests/integration/test_creo_open.py` (`test_open_dependencies_prefer_where_used_db`, `test_open_dependencies_trust_large_where_used_tree`, `test_open_dependencies_sparse_where_used_falls_back_to_vault_scan`, nested vault-scan stores Where Used / Top Level)
 - `tests/unit/test_creopdm_agent.py` (`test_agent_materialize_skips_unchanged_local_files`)
 - `tests/unit/test_password_reset.py` (forgot link only after wrong password; GET blocked; wrong email same confirmation / one try; spam disable)
