@@ -6096,12 +6096,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename));
     if (!targets.length || !canGatherCreoMetadata()) return;
     for (const target of targets) {
-      let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
-      if (!filePath) {
-        filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
+      // Session first (Open / Check In often already have the model) — avoids
+      // re-Retrieve + erase of a model the user just opened.
+      let snapshot = await gatherCreoMetadataForFilename(target.filename, "");
+      if (snapshot && snapshot.__error) snapshot = null;
+      if (!snapshot) {
+        let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
+        if (!filePath) {
+          filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
+        }
+        if (!filePath) continue;
+        snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
+        if (snapshot && snapshot.__error) snapshot = null;
       }
-      const snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
       if (!snapshot) continue;
+      const identityName = String(
+        snapshot.identity?.file_name || snapshot.identity?.full_name || ""
+      ).trim();
+      if (!identityName) continue;
       const body = {
         version_id: target.versionId || null,
         identity: snapshot.identity || null,
@@ -6110,6 +6122,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         dependencies: Array.isArray(snapshot.dependencies) ? snapshot.dependencies : [],
         bom: snapshot.bom || null,
         units: snapshot.units || null,
+        // Mass unsupported without a displayed solid — omit so mass_json is preserved.
         family_table: snapshot.family_table || null,
         features: Array.isArray(snapshot.features) && snapshot.features.length
           ? snapshot.features
@@ -6125,6 +6138,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         /* soft-fail — metadata is best-effort */
       }
     }
+  }
+
+  function metadataItemsFromOpenResult(result) {
+    // Only after a Creo.JS session open (not Windows association / browser download).
+    if (!result || !result.creo_object) return [];
+    const uuid = String(result.object_id || "").trim();
+    const filename = String(result.filename || "").trim();
+    if (!uuid || !filename || !isCreoMetadataCandidate(filename)) return [];
+    return [
+      {
+        uuid,
+        filename,
+        // Prefer session gather; local path only as fallback inside push.
+        path: looksLikeLocalWindowsPath(result.path) ? result.path : "",
+        version_id: String(result.version_id || "").trim(),
+      },
+    ];
+  }
+
+  async function captureCreoMetadataAfterOpen(result) {
+    if (!canGatherCreoMetadata()) return;
+    const items = metadataItemsFromOpenResult(result);
+    if (!items.length) return;
+    await withBusy("Capturing Creo metadata…", async () => {
+      await pushCreoMetadataForItems(items);
+    });
   }
 
   function metadataTargetsFromResult(result) {
@@ -7608,9 +7647,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return `${root}${sep}${rel.replace(/\//g, sep)}`;
   }
 
-  async function openLocalCacheRelative(productId, relativePath) {
+  async function openLocalCacheRelative(productId, relativePath, options) {
     // New file (local) / Modified newer local — open agent workspace tip.
     // Creo.JS needs the logical tip name (shaft.prt); disk may still be shaft.prt.1.
+    const objectId = String(options?.objectId || "").trim();
     const agent = await probeCreoAgent();
     if (!agent) {
       throw new Error(
@@ -7654,7 +7694,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (openedText.indexOf("CREOPDM_ERROR:") === 0) {
         throw new Error(openedText.slice("CREOPDM_ERROR:".length));
       }
-      return { path: fullPath, filename: logicalName, working_directory: directory };
+      return {
+        path: fullPath,
+        filename: logicalName,
+        working_directory: directory,
+        object_id: objectId || null,
+        // Same flag as vault Creo.JS open — enables opportunistic metadata capture.
+        creo_object: true,
+      };
     }
     if (embeddedMode && !useCreoSession && !likelyStandaloneBrowser()) {
       throw new Error(
@@ -7663,7 +7710,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     setBusyMessage("Opening with Windows…");
     await openViaAgent(fullPath, "association");
-    return { path: fullPath, filename: logicalName, working_directory: directory };
+    return {
+      path: fullPath,
+      filename: logicalName,
+      working_directory: directory,
+      object_id: objectId || null,
+      creo_object: false,
+    };
   }
 
   function openTimeoutMessage() {
@@ -7676,15 +7729,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function openPdmObject(target) {
     // Keep the busy overlay up through prepare + materialize until Creo/OS open starts.
     // Always clear on timeout/error so Session offline / hung agent cannot leave Opening… stuck.
-    return withBusy("Preparing…", async () => {
+    let result = null;
+    await withBusy("Preparing…", async () => {
       try {
-        return await withTimeout(openPdmObjectWork(target), 180000, openTimeoutMessage());
+        result = await withTimeout(openPdmObjectWork(target), 180000, openTimeoutMessage());
       } catch (err) {
         const message = err && err.message ? err.message : String(err);
         showError($("#toolbar-error"), message || "Could not open the file.");
-        return null;
+        result = null;
       }
     });
+    // Best-effort: fill Creo identity/type/deps while the model is in session.
+    try {
+      await captureCreoMetadataAfterOpen(result);
+    } catch {
+      /* soft-fail — open already succeeded */
+    }
+    return result;
   }
 
   function likelyStandaloneBrowser() {
@@ -7707,7 +7768,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         showError($("#toolbar-error"), "No product is selected.");
         return null;
       }
-      return openLocalCacheRelative(productId, spec.relativePath);
+      return openLocalCacheRelative(productId, spec.relativePath, {
+        objectId: spec.objectId || "",
+      });
     }
     // Only use Creo.JS when we are actually in Creo's embedded browser.
     // Outside Creo (Chrome/Edge), always materialize + Windows association.

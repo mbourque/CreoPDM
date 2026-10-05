@@ -385,9 +385,21 @@ def test_metadata_gear_items_require_creo_session():
     assert "metadataCollectJob.running" in soft
     assert "busy overlay" in docs.lower()
     assert "refresh the Files list" in docs
-    assert "stale Type labels until a hard refresh" in docs
+    assert "leave the Files list stale until a hard refresh after Collect" in docs
     assert "wait as long as Creo needs" in docs
     assert "no per-file skip timeout" in docs
+    # Opportunistic capture on day-to-day Creo use (Open / Add / Check In).
+    assert "captureCreoMetadataAfterOpen" in script
+    assert "metadataItemsFromOpenResult" in script
+    assert 'withBusy("Capturing Creo metadata…"' in script
+    push_items = _between(
+        script, "async function pushCreoMetadataForItems(", "function metadataItemsFromOpenResult("
+    )
+    assert 'gatherCreoMetadataForFilename(target.filename, "")' in push_items
+    assert "Session first" in push_items
+    assert "after **Open** into the Creo session" in docs
+    assert "Capturing Creo metadata…" in docs
+    assert "erase the model you just opened" in docs
     # Product-link soft-nav must not withBusy("Loading…") while Collect owns the overlay.
     assert "isMetadataCollectRunning" in script
     assert "warnMetadataCollectBlockingNav" in script
@@ -647,6 +659,7 @@ def test_soft_nav_skips_creojs_reconnect():
     assert 'withBusy("Preparing…"' in open_wrap
     assert "withTimeout(" in open_wrap
     assert "openTimeoutMessage()" in open_wrap
+    assert "captureCreoMetadataAfterOpen(result)" in open_wrap
     assert "function openTimeoutMessage(" in script
     timeout_msg = _between(script, "function openTimeoutMessage(", "async function openPdmObject(")
     assert "creopdm-agent is running" in timeout_msg
@@ -657,6 +670,9 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "setOpenPrepareBusyMessage()" in open_fn
     assert "setOpenDownloadBusyMessage(prepared)" in open_fn
     assert "prefer_local: Boolean(prepared.prefer_local)" in script
+    assert "openLocalCacheRelative(productId, spec.relativePath, {" in open_fn
+    assert "objectId: spec.objectId || \"\"" in open_fn or 'objectId: spec.objectId || ""' in open_fn
+    assert "creo_object: true" in local_open
     download_busy = _between(
         script,
         "function setOpenDownloadBusyMessage(",
@@ -679,6 +695,8 @@ def test_soft_nav_skips_creojs_reconnect():
     docs_open = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "Open a file already checked out to you" in docs_open
     assert "do **not** overwrite with vault bytes" in docs_open
+    assert "Capturing Creo metadata…" in docs_open
+    assert "fail Open because metadata capture failed" in docs_open
     assert "Checking local index" in script
     assert "`.creopdm_cache_index.json`" in docs_open or "creopdm_cache_index" in docs_open
     assert "Checking local cache for ${total} files…" not in script
