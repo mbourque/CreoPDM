@@ -213,6 +213,7 @@ def test_add_paths_sends_purgeable_extensions():
     assert "`Add ${total} files`" in add_chunk
     assert "offset === 0 ? commentOnce" not in add_chunk
     assert 'data.append("batch_total"' in script
+    assert 'data.append("import_batch_id"' in script
     assert "bulkCount > 1 ? `Add ${bulkCount} files`" in script
     assert "importExtensionSet" in script
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")

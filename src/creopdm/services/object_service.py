@@ -497,6 +497,7 @@ class ObjectService:
         comment: str | None = None,
         batch_total: int | None = None,
         on_progress: Callable[[str, int, int], None] | None = None,
+        import_batch_id: str | None = None,
     ) -> list[ImportJobResult]:
         """Copy accepted files, then one Git add and one commit.
 
@@ -506,6 +507,8 @@ class ObjectService:
         ``batch_total`` is the full picker count when this call is one chunk of a
         larger Add — used for the auto History comment so chunk size (e.g. 5)
         is not mistaken for the batch size.
+
+        ``import_batch_id`` ties upload chunks of one Add into a single Audit row.
 
         ``on_progress(phase, done, total)`` is optional (zip import busy overlay).
         """
@@ -646,7 +649,14 @@ class ObjectService:
                         now,
                     )
                     self._record_import_activity(
-                        session, product, git_plans, user, git_hash=git_hash
+                        session,
+                        product,
+                        git_plans,
+                        user,
+                        git_hash=git_hash,
+                        batch_total=batch_total,
+                        import_batch_id=import_batch_id,
+                        comment=message,
                     )
                     destinations = [
                         ensure_within(repo, repo / Path(plan.relative)) for plan in git_plans
@@ -918,11 +928,30 @@ class ObjectService:
         user,
         *,
         git_hash: str | None = None,
+        batch_total: int | None = None,
+        import_batch_id: str | None = None,
+        comment: str | None = None,
     ) -> None:
         new_plans = [plan for plan in plans if plan.kind == "new"]
         later_plans = [plan for plan in plans if plan.kind == "later"]
         commit = (git_hash or "")[:40] or None
-        if len(new_plans) == 1:
+        batch_id = (import_batch_id or "").strip() or None
+        note = (comment or "").strip() or None
+
+        if new_plans and batch_id:
+            self._activities.record_or_merge_import_batch(
+                session,
+                ActivityAction.OBJECT_ADDED,
+                user,
+                product_id=product.id,
+                batch_id=batch_id,
+                filenames=[plan.stored_name for plan in new_plans],
+                count_delta=len(new_plans),
+                batch_total=batch_total,
+                git_commit=commit,
+                comment=note,
+            )
+        elif len(new_plans) == 1:
             plan = new_plans[0]
             existing = plan.existing
             self._activities.record(
@@ -937,6 +966,7 @@ class ObjectService:
                     "object_uuid": existing.uuid if existing is not None else None,
                     "git_commit": commit,
                 },
+                comment=note,
             )
         elif new_plans:
             self._activities.record(
@@ -948,11 +978,26 @@ class ObjectService:
                 details={
                     "count": len(new_plans),
                     "filename": new_plans[0].stored_name,
-                    "filenames": [plan.stored_name for plan in new_plans[:20]],
+                    "filenames": [plan.stored_name for plan in new_plans[:200]],
                     "git_commit": commit,
                 },
+                comment=note,
             )
-        if len(later_plans) == 1:
+
+        if later_plans and batch_id:
+            self._activities.record_or_merge_import_batch(
+                session,
+                ActivityAction.CHECKED_IN,
+                user,
+                product_id=product.id,
+                batch_id=batch_id,
+                filenames=[plan.stored_name for plan in later_plans],
+                count_delta=len(later_plans),
+                batch_total=batch_total,
+                git_commit=commit,
+                comment=note,
+            )
+        elif len(later_plans) == 1:
             plan = later_plans[0]
             existing = plan.existing
             iteration = existing.iteration if existing is not None else None
@@ -971,6 +1016,7 @@ class ObjectService:
                     "previous_iteration": prev,
                     "git_commit": commit,
                 },
+                comment=note,
             )
         elif later_plans:
             self._activities.record(
@@ -982,9 +1028,10 @@ class ObjectService:
                 details={
                     "count": len(later_plans),
                     "filename": later_plans[0].stored_name,
-                    "filenames": [plan.stored_name for plan in later_plans[:20]],
+                    "filenames": [plan.stored_name for plan in later_plans[:200]],
                     "git_commit": commit,
                 },
+                comment=note,
             )
 
     def _import_later_save(

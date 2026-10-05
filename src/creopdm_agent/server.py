@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import tempfile
+import uuid
 import zipfile
 from pathlib import Path
 from urllib.parse import quote, urlparse
@@ -1881,6 +1882,7 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             batch_total=batch_total,
             single_filename=jobs[0][0].name if len(jobs) == 1 else None,
         )
+        import_batch_id = str(uuid.uuid4())
         with httpx.Client(timeout=600.0, follow_redirects=True) as client:
             for offset in range(0, len(jobs), chunk_size):
                 chunk = jobs[offset : offset + chunk_size]
@@ -1908,11 +1910,12 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                             offset + len(chunk),
                         )
                         continue
-                    # Same comment + batch_total on every upload chunk.
+                    # Same comment + batch_total + import_batch_id on every upload chunk.
                     if comment:
                         data["comment"] = comment
                     if batch_total > 0:
                         data["batch_total"] = str(batch_total)
+                    data["import_batch_id"] = import_batch_id
                     try:
                         response = client.post(url, headers=headers, data=data or None, files=files)
                     except httpx.HTTPError as exc:

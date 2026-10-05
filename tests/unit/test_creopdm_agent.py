@@ -1876,6 +1876,9 @@ def test_agent_add_paths_comment_on_every_upload_chunk(tmp_path, monkeypatch):
         assert len(posts) >= 3  # 12 files / chunk_size 5
         assert all(post["data"].get("comment") == "Add 935 files" for post in posts)
         assert all(post["data"].get("batch_total") == "935" for post in posts)
+        batch_ids = {post["data"].get("import_batch_id") for post in posts}
+        assert len(batch_ids) == 1
+        assert all(batch_ids)
 
         posts.clear()
         typed = client.post(
@@ -1891,6 +1894,9 @@ def test_agent_add_paths_comment_on_every_upload_chunk(tmp_path, monkeypatch):
         assert typed.status_code == 200, typed.text
         assert all(post["data"].get("comment") == "Library import" for post in posts)
         assert all(post["data"].get("batch_total") == "935" for post in posts)
+        typed_ids = {post["data"].get("import_batch_id") for post in posts}
+        assert len(typed_ids) == 1
+        assert all(typed_ids)
 
 
 def test_agent_purge_versions_deletes_only_older_than_vault_floor(tmp_path):

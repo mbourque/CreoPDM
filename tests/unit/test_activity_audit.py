@@ -148,6 +148,70 @@ def test_list_events_filters_action_user_and_object(ctx):
         assert svc.list_events(db, since=since) == []
 
 
+def test_import_batch_chunks_merge_into_one_audit_row(ctx):
+    """Upload chunks that share import_batch_id become one Object added row."""
+    from creopdm.models.product import Product
+
+    svc = ActivityService()
+    actor = UserIdentity("Alice", "testclient", user_uuid="alice-uuid")
+    with ctx.session_factory() as db:
+        product = Product(
+            uuid="prod-batch",
+            name="Batch Parts",
+            vault_folder="batch-parts",
+            repository_path="/tmp/batch-parts",
+        )
+        db.add(product)
+        db.flush()
+        batch_id = "batch-abc-123"
+        first = svc.record_or_merge_import_batch(
+            db,
+            ActivityAction.OBJECT_ADDED,
+            actor,
+            product_id=product.id,
+            batch_id=batch_id,
+            filenames=["a.prt", "b.prt", "c.prt", "d.prt", "e.prt"],
+            count_delta=5,
+            batch_total=12,
+            comment="Add 12 files",
+        )
+        second = svc.record_or_merge_import_batch(
+            db,
+            ActivityAction.OBJECT_ADDED,
+            actor,
+            product_id=product.id,
+            batch_id=batch_id,
+            filenames=["f.prt", "g.prt", "h.prt", "i.prt", "j.prt"],
+            count_delta=5,
+            batch_total=12,
+            git_commit="deadbeef01",
+        )
+        third = svc.record_or_merge_import_batch(
+            db,
+            ActivityAction.OBJECT_ADDED,
+            actor,
+            product_id=product.id,
+            batch_id=batch_id,
+            filenames=["k.prt", "l.prt"],
+            count_delta=2,
+            batch_total=12,
+        )
+        db.commit()
+        assert first.uuid == second.uuid == third.uuid
+        rows = svc.list_events(db, action=ActivityAction.OBJECT_ADDED.value)
+        assert len(rows) == 1
+        row = rows[0]
+        assert row.comment == "Add 12 files"
+        assert row.object_filename == "a.prt (+11 more)"
+        assert row.object_more_count == 11
+        assert len(row.object_filenames) == 12
+        assert row.object_filenames[0] == "a.prt"
+        assert row.object_filenames[-1] == "l.prt"
+        assert row.summary == "Add 12 files"
+        assert row.details.get("batch_id") == batch_id
+        assert row.details.get("count") == 12
+
+
 @requires_git
 def test_checkin_audit_includes_prev_iteration_and_commit(client, data_dir):
     created = client.post("/api/products", json={"name": "Audit Checkin"})

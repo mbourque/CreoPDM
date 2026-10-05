@@ -137,6 +137,134 @@ class ActivityService:
         session.flush()
         return activity
 
+    def record_or_merge_import_batch(
+        self,
+        session: Session,
+        action: ActivityAction | str,
+        user: UserIdentity,
+        *,
+        product_id: int,
+        batch_id: str,
+        filenames: list[str],
+        count_delta: int,
+        batch_total: int | None = None,
+        git_commit: str | None = None,
+        comment: str | None = None,
+    ) -> Activity:
+        """One Audit row per Add/Check-in batch across upload chunks.
+
+        Chunks share ``batch_id`` (agent/browser). Filenames accumulate (capped);
+        ``count`` sums successfully recorded files across chunks.
+        """
+        action_key = str(action)
+        batch_key = (batch_id or "").strip()
+        if not batch_key:
+            raise ValueError("batch_id is required for import batch merge")
+        names_in = [str(item).strip() for item in filenames if str(item).strip()]
+        delta = max(0, int(count_delta))
+        existing = self._find_import_batch_activity(
+            session,
+            product_id=product_id,
+            user_name=user.user_name,
+            action=action_key,
+            batch_id=batch_key,
+        )
+        if existing is None:
+            details: dict[str, Any] = {
+                "batch_id": batch_key,
+                "count": delta,
+                "filenames": names_in[:200],
+            }
+            if names_in:
+                details["filename"] = names_in[0]
+            if batch_total is not None and int(batch_total) > 0:
+                details["batch_total"] = int(batch_total)
+            if git_commit:
+                details["git_commit"] = str(git_commit)[:40]
+            return self.record(
+                session,
+                action_key,
+                user,
+                product_id=product_id,
+                object_id=None,
+                details=details,
+                comment=comment,
+            )
+
+        details = {}
+        if existing.details_json:
+            try:
+                parsed = json.loads(existing.details_json)
+                if isinstance(parsed, dict):
+                    details = parsed
+            except json.JSONDecodeError:
+                details = {}
+        prior = details.get("filenames")
+        merged: list[str] = []
+        seen: set[str] = set()
+        if isinstance(prior, list):
+            for item in prior:
+                text = str(item).strip()
+                if text and text not in seen:
+                    seen.add(text)
+                    merged.append(text)
+        for text in names_in:
+            if text not in seen:
+                seen.add(text)
+                merged.append(text)
+        details["batch_id"] = batch_key
+        details["filenames"] = merged[:200]
+        if merged:
+            details["filename"] = merged[0]
+        prior_count = details.get("count")
+        base = int(prior_count) if isinstance(prior_count, int) and prior_count > 0 else len(merged)
+        # Prefer sum of chunk successes when prior count was tracking deltas.
+        if isinstance(prior_count, int) and prior_count > 0:
+            details["count"] = prior_count + delta
+        else:
+            details["count"] = max(base, len(merged))
+        if batch_total is not None and int(batch_total) > 0:
+            details["batch_total"] = int(batch_total)
+        if git_commit:
+            details["git_commit"] = str(git_commit)[:40]
+        if comment and not (existing.comment or "").strip():
+            existing.comment = comment.strip()[:2000]
+        existing.details_json = json.dumps(redact_audit_details(details) or {})
+        session.flush()
+        return existing
+
+    def _find_import_batch_activity(
+        self,
+        session: Session,
+        *,
+        product_id: int,
+        user_name: str,
+        action: str,
+        batch_id: str,
+    ) -> Activity | None:
+        rows = list(
+            session.scalars(
+                select(Activity)
+                .where(
+                    Activity.product_id == product_id,
+                    Activity.action == action,
+                    Activity.user == user_name,
+                )
+                .order_by(Activity.timestamp.desc())
+                .limit(40)
+            ).all()
+        )
+        for row in rows:
+            if not row.details_json:
+                continue
+            try:
+                parsed = json.loads(row.details_json)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict) and parsed.get("batch_id") == batch_id:
+                return row
+        return None
+
     def list_events(
         self,
         session: Session,

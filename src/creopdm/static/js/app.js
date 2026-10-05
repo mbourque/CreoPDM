@@ -4040,6 +4040,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const combined = { ok: [], failed: [] };
         const total = chosenUploads.length;
         const parentFolder = currentFolder() || "";
+        const importBatchId =
+          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `add-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         for (let offset = 0; offset < chosenUploads.length; offset += UPLOAD_CHUNK) {
           const chunk = chosenUploads.slice(offset, offset + UPLOAD_CHUNK);
           const done = Math.min(offset + chunk.length, total);
@@ -4050,6 +4054,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             || (total > 1 ? `Add ${total} files` : total === 1 ? `Add ${chunk[0]?.file?.name || "file"}` : "");
           if (uploadComment) data.append("comment", uploadComment);
           data.append("batch_total", String(total));
+          data.append("import_batch_id", importBatchId);
           if (parentFolder) data.append("parent_folder", parentFolder);
           chunk.forEach((item) => {
             data.append("files", item.file, item.file.name);

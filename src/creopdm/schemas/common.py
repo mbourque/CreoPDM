@@ -374,6 +374,8 @@ class ImportLocalRequest(BaseModel):
     comment: str | None = None
     # Full picker count when this request is one chunk of a larger Add.
     batch_total: int | None = None
+    # Shared across upload chunks so Audit shows one Object added row.
+    import_batch_id: str | None = None
     base_folder: str | None = None
     # When true (default), vault paths include the chosen folder name.
     keep_root_folder: bool = True

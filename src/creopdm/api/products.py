@@ -799,6 +799,7 @@ def import_from_disk(
     product = load_accessible_product(request, ctx, db, product_id)
     comment = (payload.comment or "").strip() or None
     batch_total = payload.batch_total if (payload.batch_total or 0) > 0 else None
+    import_batch_id = (payload.import_batch_id or "").strip()[:80] or None
     extras = ctx.config.purgeable_cad_extensions()
     ignored = ctx.config.ignore_patterns()
     ok: list[BatchItemResult] = []
@@ -898,7 +899,12 @@ def import_from_disk(
         )
     if jobs:
         for outcome in ctx.objects.import_files(
-            db, product, jobs, comment, batch_total=batch_total
+            db,
+            product,
+            jobs,
+            comment,
+            batch_total=batch_total,
+            import_batch_id=import_batch_id,
         ):
             if outcome.error is not None:
                 failed.append(
@@ -1009,6 +1015,10 @@ async def import_from_uploads(
                 batch_total = parsed
         except (TypeError, ValueError):
             batch_total = None
+    batch_id_raw = form.get("import_batch_id")
+    import_batch_id = (
+        str(batch_id_raw).strip()[:80] if batch_id_raw not in (None, "") else None
+    ) or None
     product = load_accessible_product(request, ctx, db, product_id)
     temps: list[Path] = []
     jobs: list[tuple[Path, str | None, str | None]] = []
@@ -1072,7 +1082,12 @@ async def import_from_uploads(
             jobs.append((temp_path, filename, relative or None))
         if jobs:
             for outcome in ctx.objects.import_files(
-                db, product, jobs, note, batch_total=batch_total
+                db,
+                product,
+                jobs,
+                note,
+                batch_total=batch_total,
+                import_batch_id=import_batch_id,
             ):
                 if outcome.error is not None:
                     failed.append(
