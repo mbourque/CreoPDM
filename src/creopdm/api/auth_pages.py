@@ -2699,6 +2699,13 @@ def _default_audit_since() -> str:
     return (date.today() - timedelta(days=7)).isoformat()
 
 
+def _default_audit_until() -> str:
+    """Default To date: today (local calendar day as YYYY-MM-DD)."""
+    from datetime import date
+
+    return date.today().isoformat()
+
+
 def _audit_filter_choices(ctx: AppContext, db: Session) -> dict:
     """Dropdown choices: product name (uuid value), users by username."""
     from sqlalchemy import distinct, select
@@ -2755,7 +2762,7 @@ def _utilities_audit_response(
     from creopdm.services.activity_service import AUDIT_PAGE_SIZE
 
     since_value = (since or "").strip() or _default_audit_since()
-    until_value = (until or "").strip()
+    until_value = (until or "").strip() or _default_audit_until()
     events = ctx.activities.list_events(
         db,
         action=action or None,

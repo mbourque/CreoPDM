@@ -527,8 +527,11 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     from datetime import date, timedelta
 
     expected_since = (date.today() - timedelta(days=7)).isoformat()
+    expected_until = date.today().isoformat()
     assert f'id="audit-since"' in audit_page.text
     assert f'value="{expected_since}"' in audit_page.text
+    assert f'id="audit-until"' in audit_page.text
+    assert f'value="{expected_until}"' in audit_page.text
 
     email_page = auth_client.get("/admin/utilities/email-all")
     assert email_page.status_code == 200
