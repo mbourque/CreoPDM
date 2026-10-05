@@ -357,17 +357,71 @@ def _read_disk_sector_totals() -> tuple[int, int] | None:
     return read_sectors, write_sectors
 
 
+def _read_net_byte_totals() -> tuple[int, int] | None:
+    """Sum RX/TX bytes across non-loopback interfaces from Linux ``/proc/net/dev``."""
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        with open("/proc/net/dev", encoding="utf-8") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return None
+    rx_total = 0
+    tx_total = 0
+    matched = 0
+    for line in lines:
+        if ":" not in line:
+            continue
+        name, _, rest = line.partition(":")
+        iface = name.strip()
+        if not iface or iface == "lo":
+            continue
+        parts = rest.split()
+        if len(parts) < 9:
+            continue
+        try:
+            rx_total += int(parts[0])
+            tx_total += int(parts[8])
+        except (TypeError, ValueError):
+            continue
+        matched += 1
+    if matched == 0:
+        return None
+    return rx_total, tx_total
+
+
+def _rate_from_counters(
+    first: tuple[int, int] | None,
+    second: tuple[int, int] | None,
+    *,
+    elapsed: float,
+    scale: int = 1,
+) -> tuple[int | None, int | None]:
+    if first is None or second is None:
+        return None, None
+    elapsed = max(0.05, float(elapsed))
+    a = max(0, second[0] - first[0])
+    b = max(0, second[1] - first[1])
+    return (
+        int(round(a * scale / elapsed)),
+        int(round(b * scale / elapsed)),
+    )
+
+
 def _sample_linux_io(
     sample_seconds: float = _IO_SAMPLE_SECONDS,
-) -> tuple[float | None, int | None, int | None]:
-    """Return ``(iowait_percent, read_bps, write_bps)`` over a short sample."""
+) -> tuple[float | None, int | None, int | None, int | None, int | None]:
+    """Return ``(iowait%, disk_read, disk_write, net_rx, net_tx)`` over one sample."""
     first_io = _read_iowait_times()
     first_disk = _read_disk_sector_totals()
-    if first_io is None and first_disk is None:
-        return None, None, None
-    time.sleep(max(0.05, float(sample_seconds)))
+    first_net = _read_net_byte_totals()
+    if first_io is None and first_disk is None and first_net is None:
+        return None, None, None, None, None
+    elapsed = max(0.05, float(sample_seconds))
+    time.sleep(elapsed)
     second_io = _read_iowait_times()
     second_disk = _read_disk_sector_totals()
+    second_net = _read_net_byte_totals()
 
     iowait_percent: float | None = None
     if first_io is not None and second_io is not None:
@@ -376,23 +430,19 @@ def _sample_linux_io(
         if total_delta > 0:
             iowait_percent = max(0.0, min(100.0, 100.0 * (iowait_delta / total_delta)))
 
-    read_bps: int | None = None
-    write_bps: int | None = None
-    if first_disk is not None and second_disk is not None:
-        elapsed = max(0.05, float(sample_seconds))
-        read_delta = max(0, second_disk[0] - first_disk[0])
-        write_delta = max(0, second_disk[1] - first_disk[1])
-        read_bps = int(round(read_delta * _DISKSTATS_SECTOR_BYTES / elapsed))
-        write_bps = int(round(write_delta * _DISKSTATS_SECTOR_BYTES / elapsed))
-    return iowait_percent, read_bps, write_bps
+    read_bps, write_bps = _rate_from_counters(
+        first_disk, second_disk, elapsed=elapsed, scale=_DISKSTATS_SECTOR_BYTES
+    )
+    net_rx, net_tx = _rate_from_counters(first_net, second_net, elapsed=elapsed, scale=1)
+    return iowait_percent, read_bps, write_bps, net_rx, net_tx
 
 
-def _sample_windows_disk_bps(
+def _sample_windows_io_bps(
     sample_seconds: float = _IO_SAMPLE_SECONDS,
-) -> tuple[int | None, int | None]:
-    """Best-effort PhysicalDisk(_Total) bytes/sec via PDH (Windows)."""
+) -> tuple[int | None, int | None, int | None, int | None]:
+    """Best-effort disk + network bytes/sec via PDH (Windows)."""
     if sys.platform != "win32":
-        return None, None
+        return None, None, None, None
     try:
         import ctypes
         from ctypes import wintypes
@@ -400,7 +450,7 @@ def _sample_windows_disk_bps(
         pdh = ctypes.windll.pdh
         query = wintypes.HANDLE()
         if pdh.PdhOpenQueryW(None, 0, ctypes.byref(query)) != 0:
-            return None, None
+            return None, None, None, None
 
         class PdhFmtCounterValue(ctypes.Structure):
             class _Value(ctypes.Union):
@@ -415,22 +465,35 @@ def _sample_windows_disk_bps(
             _fields_ = [("CStatus", wintypes.DWORD), ("value", _Value)]
 
         PDH_FMT_DOUBLE = 0x00000200
-        counters: list[wintypes.HANDLE] = []
-        paths = (
+        disk_paths = (
             r"\PhysicalDisk(_Total)\Disk Read Bytes/sec",
             r"\PhysicalDisk(_Total)\Disk Write Bytes/sec",
         )
+        net_paths = (
+            r"\Network Interface(_Total)\Bytes Received/sec",
+            r"\Network Interface(_Total)\Bytes Sent/sec",
+        )
+        counters: list[wintypes.HANDLE] = []
         try:
-            for path in paths:
+            for path in disk_paths:
                 counter = wintypes.HANDLE()
                 if pdh.PdhAddEnglishCounterW(query, path, 0, ctypes.byref(counter)) != 0:
-                    return None, None
+                    return None, None, None, None
                 counters.append(counter)
+            # Network is optional — only include when both counters add cleanly.
+            net_handles: list[wintypes.HANDLE] = []
+            for path in net_paths:
+                counter = wintypes.HANDLE()
+                if pdh.PdhAddEnglishCounterW(query, path, 0, ctypes.byref(counter)) != 0:
+                    net_handles = []
+                    break
+                net_handles.append(counter)
+            counters.extend(net_handles)
             if pdh.PdhCollectQueryData(query) != 0:
-                return None, None
+                return None, None, None, None
             time.sleep(max(0.05, float(sample_seconds)))
             if pdh.PdhCollectQueryData(query) != 0:
-                return None, None
+                return None, None, None, None
             values: list[int] = []
             for counter in counters:
                 fmt = PdhFmtCounterValue()
@@ -440,30 +503,35 @@ def _sample_windows_disk_bps(
                     )
                     != 0
                 ):
-                    return None, None
+                    return None, None, None, None
                 values.append(max(0, int(round(float(fmt.value.doubleValue)))))
-            if len(values) != 2:
-                return None, None
-            return values[0], values[1]
+            if len(values) < 2:
+                return None, None, None, None
+            disk_read, disk_write = values[0], values[1]
+            if len(values) >= 4:
+                return disk_read, disk_write, values[2], values[3]
+            return disk_read, disk_write, None, None
         finally:
             pdh.PdhCloseQuery(query)
     except Exception:  # noqa: BLE001 — best-effort host probe
-        return None, None
+        return None, None, None, None
 
 
 def collect_io_usage() -> UtilitiesIoUsage:
-    """Read host I/O wait and disk rates for Utilities → Health (display only)."""
+    """Read host I/O wait, disk, and network rates for Utilities → Health (display only)."""
     iowait: float | None = None
     read_bps: int | None = None
     write_bps: int | None = None
+    net_rx: int | None = None
+    net_tx: int | None = None
     error: str | None = None
     try:
         if sys.platform.startswith("linux"):
-            iowait, read_bps, write_bps = _sample_linux_io()
+            iowait, read_bps, write_bps, net_rx, net_tx = _sample_linux_io()
         elif sys.platform == "win32":
-            read_bps, write_bps = _sample_windows_disk_bps()
-            if read_bps is None and write_bps is None:
-                error = "Disk throughput is not available on this host."
+            read_bps, write_bps, net_rx, net_tx = _sample_windows_io_bps()
+            if read_bps is None and write_bps is None and net_rx is None and net_tx is None:
+                error = "Disk/network throughput is not available on this host."
             else:
                 error = "I/O wait is a Linux kernel metric (not available on Windows)."
         else:
@@ -473,8 +541,17 @@ def collect_io_usage() -> UtilitiesIoUsage:
         iowait = None
         read_bps = None
         write_bps = None
+        net_rx = None
+        net_tx = None
 
-    if iowait is None and read_bps is None and write_bps is None and error is None:
+    if (
+        iowait is None
+        and read_bps is None
+        and write_bps is None
+        and net_rx is None
+        and net_tx is None
+        and error is None
+    ):
         error = "I/O metrics are not available on this host."
 
     return UtilitiesIoUsage(
@@ -485,6 +562,10 @@ def collect_io_usage() -> UtilitiesIoUsage:
         write_bytes_per_sec=write_bps,
         read_label=_format_bytes_per_sec(read_bps),
         write_label=_format_bytes_per_sec(write_bps),
+        net_rx_bytes_per_sec=net_rx,
+        net_tx_bytes_per_sec=net_tx,
+        net_rx_label=_format_bytes_per_sec(net_rx),
+        net_tx_label=_format_bytes_per_sec(net_tx),
         error=error,
     )
 

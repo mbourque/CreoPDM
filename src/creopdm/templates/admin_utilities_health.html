@@ -105,7 +105,7 @@
     <h2>I/O
       <span class="utilities-status utilities-status-cpu-{{ status.io.status }}">{{ status.io.iowait_label }}</span>
     </h2>
-    <p class="muted small">Host I/O wait and disk throughput at refresh (short sample). Does not change overall health status. I/O wait is a Linux kernel metric.</p>
+    <p class="muted small">Host I/O wait, disk, and network throughput at refresh (short sample). Does not change overall health status. I/O wait is a Linux kernel metric; network rates exclude loopback.</p>
     <dl class="kv">
       <dt>I/O wait</dt>
       <dd>
@@ -124,6 +124,10 @@
       <dd>{{ status.io.read_label }}</dd>
       <dt>Disk write</dt>
       <dd>{{ status.io.write_label }}</dd>
+      <dt>Network receive</dt>
+      <dd>{{ status.io.net_rx_label }}</dd>
+      <dt>Network send</dt>
+      <dd>{{ status.io.net_tx_label }}</dd>
       {% if status.io.error %}
       <dt>Note</dt>
       <dd class="muted">{{ status.io.error }}</dd>

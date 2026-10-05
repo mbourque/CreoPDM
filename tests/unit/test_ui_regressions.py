@@ -1968,6 +1968,10 @@ def test_admin_hub_panel_fills_full_width():
     assert "status.io.iowait_label" in health
     assert "status.io.read_label" in health
     assert "status.io.write_label" in health
+    assert "status.io.net_rx_label" in health
+    assert "status.io.net_tx_label" in health
+    assert "Network receive" in health
+    assert "loopback excluded" in health
     assert "I/O wait is a Linux kernel metric" in health
     # System volume row is {{ row.label }} from the API; template gates free/used on kind.
     assert "row.kind == 'volume'" in health or 'row.kind == "volume"' in health

@@ -54,7 +54,7 @@ class UtilitiesCpuUsage(BaseModel):
 
 
 class UtilitiesIoUsage(BaseModel):
-    """Host I/O wait and disk throughput for Administration → Utilities → Health."""
+    """Host I/O wait, disk, and network throughput for Administration → Utilities → Health."""
 
     iowait_percent: float | None = None
     iowait_label: str = "—"
@@ -63,6 +63,10 @@ class UtilitiesIoUsage(BaseModel):
     write_bytes_per_sec: int | None = None
     read_label: str = "—"
     write_label: str = "—"
+    net_rx_bytes_per_sec: int | None = None
+    net_tx_bytes_per_sec: int | None = None
+    net_rx_label: str = "—"
+    net_tx_label: str = "—"
     error: str | None = None
 
 

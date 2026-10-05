@@ -512,6 +512,8 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "I/O wait" in health.text
     assert "Disk read" in health.text
     assert "Disk write" in health.text
+    assert "Network receive" in health.text
+    assert "Network send" in health.text
     assert "Database" in health.text
     assert "Active checkouts" in health.text
     assert 'href="/admin/utilities/logs"' in health.text
@@ -540,6 +542,8 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "iowait_label" in body["io"]
     assert "read_label" in body["io"]
     assert "write_label" in body["io"]
+    assert "net_rx_label" in body["io"]
+    assert "net_tx_label" in body["io"]
     assert body["io"]["status"] in {"ok", "busy", "hot"}
     assert body["database"]["status"] == "ok"
     assert isinstance(body["product_count"], int)
