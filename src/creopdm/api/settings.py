@@ -3,8 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy.orm import Session
 
-from creopdm.api.deps import get_context
+from creopdm.api.deps import get_context, get_db
 from creopdm.api.pages import clear_creo_page_cache
 from creopdm.config import (
     AppSettings,
@@ -20,6 +21,7 @@ from creopdm.constants import (
     DEFAULT_IGNORE_PATTERNS,
     DEFAULT_OPENABLE_CAD_EXTENSIONS,
     DEFAULT_PURGEABLE_EXTENSIONS,
+    ActivityAction,
 )
 from creopdm.context import AppContext
 from creopdm.creo.connector_factory import create_creo_connector
@@ -128,9 +130,11 @@ def update_settings(
     payload: SettingsUpdateRequest,
     request: Request,
     ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
 ) -> SettingsResponse:
     _require_settings_manage(request, ctx)
     current = ctx.settings.model_copy(deep=True)
+    before = _settings_audit_snapshot(current)
     current.creo.connector = "auto"
     if "creo_open_mode" in payload.model_fields_set and payload.creo_open_mode is not None:
         current.creo.open_mode = payload.creo_open_mode
@@ -247,5 +251,55 @@ def update_settings(
             was_unavailable=was_unavailable,
             message=current.ui.site_unavailable_message,
         )
+    after = _settings_audit_snapshot(current)
+    changed = {
+        key: {"old": before[key], "new": after[key]}
+        for key in after
+        if before.get(key) != after.get(key)
+    }
     apply_settings(ctx, current)
+    if changed:
+        ctx.activities.record(
+            db,
+            ActivityAction.SYSTEM_SETTING_CHANGED,
+            ctx.users.get_current_user(),
+            details={
+                "setting": "system",
+                "changed": sorted(changed.keys()),
+                "values": changed,
+            },
+        )
+        db.commit()
     return settings_to_response(ctx)
+
+
+def _settings_audit_snapshot(settings: AppSettings) -> dict:
+    """High-level settings fields for audit (no secrets)."""
+    email = settings.email
+    return {
+        "creo_open_mode": settings.creo.open_mode,
+        "creo_executable": settings.creo.executable,
+        "creo_view_open_mode": settings.creo.view_open_mode,
+        "creo_view_executable": settings.creo.view_executable,
+        "creo_js_library": settings.creo.js_library,
+        "workspace_root": settings.workspace.root,
+        "open_browser_on_start": settings.ui.open_browser_on_start,
+        "cad_model_extensions": list(settings.cad.model_extensions or []),
+        "cad_models_extensions": list(settings.cad.cad_models_extensions or []),
+        "document_extensions": list(settings.cad.document_extensions or []),
+        "purgeable_extensions": list(settings.cad.purgeable_extensions or []),
+        "cad_openable_extensions": list(settings.cad.openable_extensions or []),
+        "cad_extensions": list(settings.cad.extra_extensions or []),
+        "type_labels": list(settings.cad.type_labels or []),
+        "ignore_patterns": list(settings.ignore.patterns or []),
+        "database_url": settings.database.url or "",
+        "port": settings.server.port,
+        "agent_base_url": settings.ui.agent_base_url,
+        "workspace_poll_interval_ms": settings.ui.workspace_poll_interval_ms,
+        "workspace_poll_idle_minutes": settings.ui.workspace_poll_idle_minutes,
+        "site_availability": settings.ui.site_availability,
+        "site_unavailable_message": settings.ui.site_unavailable_message or "",
+        "email_enabled": bool(email.enabled),
+        "email_transport": email.transport,
+        "smtp_password": bool(email.smtp_password),  # presence only; redacted by key name
+    }

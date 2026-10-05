@@ -1922,10 +1922,11 @@ def test_admin_hub_panel_fills_full_width():
     assert ">Utilities</a>" in admin
     assert 'href="/admin/utilities"' in admin
     assert 'class="admin-tile is-disabled"' in admin
-    assert ">Audit</span>" in admin
+    assert ">Audit</span>" not in admin
+    assert "Coming soon: review sign-ins" not in admin
     assert ">AI</span>" in admin
-    assert "Coming soon: review sign-ins" in admin
     assert "Coming soon: configure AI help" in admin
+    assert "Audit log" in admin
     assert ".admin-tile.is-disabled" in css
     utilities = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities.html").read_text(
         encoding="utf-8"
@@ -1937,11 +1938,24 @@ def test_admin_hub_panel_fills_full_width():
     assert 'href="/admin/utilities/compact"' in utilities
     assert 'href="/admin/utilities/rebuild-product"' in utilities
     assert 'href="/admin/utilities/delete-products"' in utilities
+    assert 'href="/admin/utilities/audit"' in utilities
     assert 'href="/admin/utilities/health"' in utilities
     assert "Availability" in utilities
+    assert "Audit log" in utilities
     assert "delete and rebuild Where Used" in utilities
     assert 'action="/admin/utilities/email-all"' not in utilities
     assert "Disk space" not in utilities
+    audit_util = (
+        ROOT / "src" / "creopdm" / "templates" / "admin_utilities_audit.html"
+    ).read_text(encoding="utf-8")
+    assert 'id="utilities-audit-filters"' in audit_util
+    assert 'id="utilities-audit-table"' in audit_util
+    assert 'name="action"' in audit_util
+    assert 'name="username"' in audit_util
+    assert 'name="product_uuid"' in audit_util
+    assert 'name="object"' in audit_util
+    assert "not the vault Git history" in audit_util
+    assert "cannot be edited or deleted" in audit_util
     avail_util = (
         ROOT / "src" / "creopdm" / "templates" / "admin_utilities_availability.html"
     ).read_text(encoding="utf-8")
@@ -2110,9 +2124,10 @@ def test_admin_hub_panel_fills_full_width():
     assert "Utilities" in docs
     assert "utilities.access" in docs
     assert "folder’s used size" in docs or "folder" in docs
-    assert "Audit** and **AI**" in docs or "**Audit** and **AI**" in docs
+    assert "Audit log" in docs
+    assert "seven hub tiles" in docs
+    assert "Git is not the audit source" in docs or "not the vault Git history" in docs
     assert "Compacting vault history" in docs
-    assert "six hub tiles" in docs
     assert "Availability" in docs
     assert "/admin/utilities/availability" in docs or "Utilities**" in docs
     assert "Rebuild product database" in docs

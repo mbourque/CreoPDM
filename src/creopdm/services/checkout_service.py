@@ -279,13 +279,13 @@ class CheckoutService:
             session.flush()
             self._activities.record(
                 session,
-                ActivityAction.CHECKOUT_CANCELLED,
+                ActivityAction.CHECKOUT_OVERRIDE,
                 user,
                 product_id=product.id,
                 object_id=obj.id,
                 details={
+                    "filename": obj.filename,
                     "workspace": str(workspace_file),
-                    "forced": True,
                     "previous_user": previous_user,
                     "previous_machine": previous_machine,
                 },

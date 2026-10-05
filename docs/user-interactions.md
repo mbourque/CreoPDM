@@ -431,13 +431,13 @@ Phone-only **browse** mode (portrait or landscape). No Add / Checkout / Check In
 
 ## 15. Administration (users, roles, membership, email, utilities, system settings)
 
-Use a normal browser for these checks. You need the matching Administration permission for each live tile. **Audit** and **AI** tiles are always shown as disabled placeholders (coming soon) with a short description under the title.
+Use a normal browser for these checks. You need the matching Administration permission for each live tile. The **AI** tile is always shown as a disabled placeholder (coming soon). **Audit log** lives under **Utilities** (not a separate Administration tile).
 
 ### Hub
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Open **Administration** | Show permission-gated tiles (Users, Roles, Membership, Products, Email, **Utilities**, **System Settings**) plus greyed **Audit** and **AI** placeholders with short “coming soon” descriptions; **System Settings** opens a hub of section tiles | Link Audit/AI anywhere; label the settings tile only **Settings**; dump every system setting on one long page from Administration |
+| Open **Administration** | Show permission-gated tiles (Users, Roles, Membership, Products, Email, **Utilities**, **System Settings**) plus a greyed **AI** placeholder with a short “coming soon” description; **Utilities** blurb mentions Audit log; **System Settings** opens a hub of section tiles | Keep a separate disabled **Audit** tile on Administration; label the settings tile only **Settings**; dump every system setting on one long page from Administration |
 | Open **System Settings** | Open `/settings` as a hub of short tiles in the same order as before (**Open Creo models**, **Vault**, **Creo Models**, **Documents**, **Creo-openable models**, **Text files**, **Non openable CAD**, **Numbered saves**, **File type names**, **Ignored files**, **Network**, **Local Creo agent**, **Database**); each tile opens its own page to edit that section | Dump every settings section on one long page; reorder tiles differently from the former single page; keep **Availability** under System Settings (it lives under **Utilities**) |
 | Set **CreoPDM unavailable** and save | Non-administrators see the maintenance message on their **next page open or navigation** (including soft-nav); the default message gets a pretty **Since …** date automatically; administrators keep using the app and the **Unavailable** warning pill appears **immediately** after Save (no need to leave Settings); uploads / check-ins / API calls already in progress are **not** cancelled | Block or roll back in-flight API / Git / DB work; hide the app from administrators; wait until you leave Settings to show the reminder pill; omit when the outage started from the default message |
 | Set **CreoPDM available** again and save | Everyone sees normal pages again; Unavailable pill hides right away after Save | |
@@ -498,8 +498,9 @@ Needs `utilities.access` (Administrator by default; CreoPDM Administration only)
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Open **Utilities** | Show six hub tiles: **Availability**, **Email all users**, **Compact product vault history**, **Rebuild product database**, **Delete products**, and **Health** (same pattern as Administration home) | Dump every tool and health section on one long page; let PDM Manager / Engineer open it without the permission; keep Remove/Delete on Administration → Products → Edit; leave **Availability** only under System Settings |
+| Open **Utilities** | Show seven hub tiles: **Availability**, **Email all users**, **Compact product vault history**, **Rebuild product database**, **Delete products**, **Audit log**, and **Health** (same pattern as Administration home) | Dump every tool and health section on one long page; let PDM Manager / Engineer open it without the permission; keep Remove/Delete on Administration → Products → Edit; leave **Availability** only under System Settings |
 | Open **Availability** | Show the site available / unavailable radios and maintenance message (same Save as System Settings used to); works when locked for maintenance so admins can turn it back on; old `/settings/availability` links redirect here | Hide Availability from Utilities; leave non-admins able to change it |
+| Open **Audit log** | Show a filterable table of server-side PDM events (Timestamp, Event, User, Machine, Product, Object, Comment/summary); GET filters for date range, event, user, product UUID, object UUID/filename; newest first; page capped | Treat vault Git history / blame as the audit trail; offer delete or edit of audit rows; expose other products’ events to users without `utilities.access` |
 | Open **Email all users** | Show the broadcast form on its own page | |
 | Fill subject + message, check the confirm box, **Send email to all users** | Email each **active** user individually (using Administration → Email delivery settings); skip disabled accounts; keep addresses private | Send without confirm; put every address in one To/Cc list; email disabled users |
 | Open **Compact product vault history** | Show the compact form on its own page | |
@@ -558,7 +559,8 @@ Try the same with **Add folder…**, **Add folders…**, and **Compressed data�
 - Add user → new account has no products until Membership grants them.  
 - Role dropdown → your own role / a peer role / a higher role must not appear.  
 - Email admin: change SMTP fields then Send test without Save → blocked.
-- Utilities without `utilities.access` → 403; with it → hub tiles for availability / email-all / compact / rebuild-product / delete-products / health; each opens its own page; Health Logs path opens `/admin/utilities/logs`; product Edit has no Remove form.
+- Utilities without `utilities.access` → 403; with it → hub tiles for availability / email-all / compact / rebuild-product / delete-products / audit / health; each opens its own page; Health Logs path opens `/admin/utilities/logs`; product Edit has no Remove form.
+- Audit log without `utilities.access` → 403; filters are GET-only; no delete/edit UI; Git is not the audit source.
 - Compact vault history → tip stays; older History gone; blocked when checkouts active or vault dirty; busy overlay until the form POST returns.
 - Utilities email-all without confirm or blank subject → blocked; disabled users not emailed.
 - Cancel Watch / Stop watching confirmation → subscription unchanged.
@@ -576,6 +578,7 @@ Automated coverage lives mainly in:
 - `tests/integration/test_objects.py` (create folder / batch remove)
 - `tests/integration/test_checkin.py` (History revert restores Creo `.prt.N` name, not tip overwrite)
 - `tests/unit/test_auth.py` (role matrix + Roles admin + Viewer `products.view` / `objects.view` / `data-can-checkout`; empty-home `products.create` hero; empty-product `objects.add` invite; `test_every_starter_role_login_permission_matrix`; `test_role_with_no_permissions_cannot_browse`; `test_admin_without_products_view_lands_on_administration`; `test_setup_and_admin_user_require_email`; `test_username_rejects_spaces_and_email_needs_domain`; `test_admin_email_settings_save_and_gate`; `test_admin_utilities_status_and_gate`; `test_admin_utilities_email_all_users`; `test_admin_utilities_compact_vault_gate`; `test_admin_membership_product_access_filters_products`; `test_role_assign_must_be_strictly_below_actor`; new users default to no product access)
+- `tests/unit/test_activity_audit.py` (list_events filters; force-undo → `CHECKOUT_OVERRIDE`; settings password redaction; Activity model columns)
 - `tests/unit/test_vault_compact.py` (compact tip-only history; drop removed-file blobs; reject dirty vault / active checkout / wrong name)
 - `tests/unit/test_utilities_rebuild_product.py` (rebuild from vault tip; clear Creo metadata; delete and rebuild Where Used; require exactly one action)
 - `tests/unit/test_where_used_auto_index.py` (prime parents total on Start for 0 of N; Escape → DELETE cancel wiring; Add waits under busy overlay)

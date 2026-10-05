@@ -449,6 +449,10 @@ def test_admin_can_open_settings(auth_client):
     assert "Email all users, site availability, compact vault history, Delete products, and server health checks." in hub.text
     assert "Server options hub: Open Creo models, Vault, file types, agent, database, and more." in hub.text
     assert "Availability, Open Creo models" not in hub.text
+    # Admin chrome uses the same Creo pill as Files (not a bare "—").
+    assert 'id="creo-status"' in hub.text
+    assert "Creo: —" not in hub.text
+    assert "Creo: Session offline" in hub.text or "Creo: Connected" in hub.text or "Creo: Installed" in hub.text
     # Help copy is plain text, not wrapped in the section link.
     assert 'href="/admin/users">Add and edit' not in hub.text
     settings_page = auth_client.get("/settings")
@@ -484,8 +488,10 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert 'href="/admin/utilities/compact"' in hub.text
     assert 'href="/admin/utilities/rebuild-product"' in hub.text
     assert 'href="/admin/utilities/delete-products"' in hub.text
+    assert 'href="/admin/utilities/audit"' in hub.text
     assert 'href="/admin/utilities/health"' in hub.text
     assert "Availability" in hub.text
+    assert "Audit log" in hub.text
     assert "Rebuild product database" in hub.text
     assert "Creo metadata" in hub.text
     assert "Where Used" in hub.text
@@ -499,6 +505,13 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert 'id="settings-form"' in avail_page.text
     assert 'name="site_availability"' in avail_page.text
     assert "Back to Utilities" in avail_page.text
+
+    audit_page = auth_client.get("/admin/utilities/audit")
+    assert audit_page.status_code == 200
+    assert 'id="utilities-audit-filters"' in audit_page.text
+    assert 'id="utilities-audit-table"' in audit_page.text or "No audit events" in audit_page.text
+    assert "Audit log" in audit_page.text
+    assert "not the vault Git history" in audit_page.text
 
     email_page = auth_client.get("/admin/utilities/email-all")
     assert email_page.status_code == 200
@@ -619,6 +632,7 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
         "/admin/utilities/email-all",
         "/admin/utilities/compact",
         "/admin/utilities/delete-products",
+        "/admin/utilities/audit",
         "/admin/utilities/health",
         "/admin/utilities/logs",
     ):
@@ -2054,6 +2068,9 @@ def test_admin_without_products_view_lands_on_administration(auth_client, auth_c
     assert 'href="/">Products</a>' not in hub.text
     assert "No Files access" not in hub.text
     assert '"error"' not in hub.text or "FORBIDDEN" not in hub.text
+    # Without products.view you land on Admin — still a real Creo pill, not "—".
+    assert "Creo: —" not in hub.text
+    assert "Creo: Session offline" in hub.text or "Creo: Connected" in hub.text or "Creo: Installed" in hub.text
 
     home = auth_client.get("/", follow_redirects=False)
     assert home.status_code == 303

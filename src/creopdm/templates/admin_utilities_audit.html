@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Audit log — Utilities — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page admin-page admin-utilities">
+  <nav class="crumb">
+    {% if can_view_products %}
+    <a href="/">Products</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/utilities">Utilities</a>
+    <span>/</span>
+    <span>Audit log</span>
+  </nav>
+  <h1>Audit log</h1>
+  <p class="muted">Server-side PDM activity (checkouts, check-ins, membership, settings, and more). Newest first. This is not the vault Git history — Git is not the audit source. Events cannot be edited or deleted from this page.</p>
+
+  <form method="get" action="/admin/utilities/audit" class="settings-form settings-form-wide" id="utilities-audit-filters">
+    <section class="settings-card">
+      <h2>Filters</h2>
+      <div class="form-row">
+        <label for="audit-since">From date</label>
+        <input id="audit-since" name="since" type="date" value="{{ filters.since }}">
+      </div>
+      <div class="form-row">
+        <label for="audit-until">To date</label>
+        <input id="audit-until" name="until" type="date" value="{{ filters.until }}">
+      </div>
+      <div class="form-row">
+        <label for="audit-action">Event</label>
+        <select id="audit-action" name="action">
+          <option value="">All events</option>
+          {% for key, label in action_choices %}
+          <option value="{{ key }}" {% if filters.action == key %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="audit-username">User</label>
+        <input id="audit-username" name="username" type="text" value="{{ filters.username }}" placeholder="Username contains…">
+      </div>
+      <div class="form-row">
+        <label for="audit-product">Product UUID</label>
+        <input id="audit-product" name="product_uuid" type="text" value="{{ filters.product_uuid }}" placeholder="Exact product UUID" class="mono">
+      </div>
+      <div class="form-row">
+        <label for="audit-object">Object</label>
+        <input id="audit-object" name="object" type="text" value="{{ filters.object }}" placeholder="Object UUID or filename contains…">
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Apply filters</button>
+        <a class="btn" href="/admin/utilities/audit">Clear</a>
+        <a class="btn" href="/admin/utilities">Back to Utilities</a>
+      </div>
+    </section>
+  </form>
+
+  <section class="settings-card settings-form-wide">
+    <h2>Events <span class="muted small">(up to {{ page_size }})</span></h2>
+    {% if events %}
+    <div class="table-wrap">
+    <table class="data-table" id="utilities-audit-table">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Event</th>
+          <th>User</th>
+          <th>Machine</th>
+          <th>Product</th>
+          <th>Object</th>
+          <th>Comment / summary</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in events %}
+        <tr>
+          <td class="mono">{{ row.timestamp | local_time if row.timestamp else "—" }}</td>
+          <td class="mono">{{ row.action }}</td>
+          <td>{{ row.user or "—" }}</td>
+          <td>{{ row.machine or "—" }}</td>
+          <td>
+            {% if row.product_uuid and row.product_name %}
+            <a href="/?product={{ row.product_uuid }}">{{ row.product_name }}</a>
+            {% elif row.product_name %}
+            {{ row.product_name }}
+            {% else %}
+            —
+            {% endif %}
+          </td>
+          <td>
+            {% if row.product_uuid and row.object_uuid and row.object_filename %}
+            <a href="/products/{{ row.product_uuid }}/objects/{{ row.object_uuid }}">{{ row.object_filename }}</a>
+            {% elif row.object_filename %}
+            {{ row.object_filename }}
+            {% else %}
+            —
+            {% endif %}
+          </td>
+          <td>{{ row.summary or row.comment or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No audit events match these filters.</p>
+    {% endif %}
+  </section>
+</article>
+{% endblock %}

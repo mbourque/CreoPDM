@@ -239,6 +239,8 @@ class ProductService:
         user = self._users.get_current_user()
         old_number = (product.number or "").strip() or None
         old_description = (product.description or "").strip() or None
+        old_state = product.state
+        old_read_only = bool(product.read_only)
         identity_changed = (
             new_name != product.name
             or new_number != old_number
@@ -293,7 +295,9 @@ class ProductService:
                         details={
                             "old_name": old_name,
                             "name": new_name,
-                            "state": product.state,
+                            "old_state": old_state,
+                            "new_state": product.state,
+                            "old_read_only": old_read_only,
                             "read_only": bool(product.read_only),
                         },
                     )
@@ -323,7 +327,9 @@ class ProductService:
                 details={
                     "old_name": old_name,
                     "name": new_name,
-                    "state": product.state,
+                    "old_state": old_state,
+                    "new_state": product.state,
+                    "old_read_only": old_read_only,
                     "read_only": bool(product.read_only),
                 },
             )

@@ -26,7 +26,13 @@ from creopdm.auth_session import (
     SESSION_FORGOT_USERNAME_KEY,
     SESSION_USER_KEY,
 )
-from creopdm.constants import APP_NAME, APP_VERSION, PRODUCT_STATE_LABELS, ProductState
+from creopdm.constants import (
+    APP_NAME,
+    APP_VERSION,
+    PRODUCT_STATE_LABELS,
+    ActivityAction,
+    ProductState,
+)
 from creopdm.context import AppContext
 from creopdm.exceptions import CreoPDMError
 from creopdm.models.user import User
@@ -73,8 +79,11 @@ def _base_ctx(
         caps["can_manage_roles"] = can_manage_roles
     if can_manage_settings is not None:
         caps["can_manage_settings"] = can_manage_settings
+    from creopdm.api.pages import _creo_page
     from creopdm.site_availability import site_is_unavailable, site_unavailable_message
 
+    # Same Creo pill fields as Files — do not paint "Creo: —" on Admin/Utilities
+    # (admins without products.view land here first; JS promotes to Connected in Creo).
     return {
         "request": request,
         "app_name": APP_NAME,
@@ -82,13 +91,7 @@ def _base_ctx(
         "auth_user": current_user or getattr(request.state, "auth_user", None),
         "agent_token": getattr(request.state, "agent_token", "") or "",
         **caps,
-        "creo_label": "—",
-        "creo_open_name": "",
-        "creo_open_title": "",
-        "creo_open_mode": "association",
-        "agent_base_url": ctx.settings.ui.agent_base_url,
-        "workspace_poll_interval_ms": ctx.settings.ui.workspace_poll_interval_ms,
-        "workspace_poll_idle_minutes": ctx.settings.ui.workspace_poll_idle_minutes,
+        **_creo_page(ctx),
         "site_unavailable": site_is_unavailable(ctx.settings),
         "site_unavailable_message": site_unavailable_message(ctx.settings),
     }
@@ -105,6 +108,11 @@ def _login_session(request: Request, user: User) -> None:
             display_name=user.display_name,
         )
     )
+
+
+def _audit_actor(ctx: AppContext) -> UserIdentity:
+    """Session identity for audit rows (falls back only when auth is off)."""
+    return ctx.users.get_current_user()
 
 
 def _clear_session(request: Request) -> None:
@@ -900,7 +908,7 @@ def admin_user_create(
         error = "Passwords do not match."
     else:
         try:
-            ctx.user_accounts.create_user(
+            created = ctx.user_accounts.create_user(
                 db,
                 username=username,
                 display_name=display_name,
@@ -911,6 +919,17 @@ def admin_user_create(
                 must_change_password=True,
                 access_all_products=False,
                 actor=admin,
+            )
+            ctx.activities.record(
+                db,
+                ActivityAction.USER_CREATED,
+                _audit_actor(ctx),
+                details={
+                    "username": created.username,
+                    "target_user": created.username,
+                    "role": ctx.user_accounts.primary_role_name(created),
+                    "status": created.status,
+                },
             )
             db.commit()
             return RedirectResponse("/admin/users", status_code=303)
@@ -1045,6 +1064,8 @@ def admin_user_update(
         error = "You cannot change your own role. Ask another administrator."
     else:
         try:
+            old_status = user.status
+            old_role = ctx.user_accounts.primary_role_name(user)
             kwargs: dict = {
                 "display_name": display_name,
                 "email": email,
@@ -1061,7 +1082,47 @@ def admin_user_update(
             if password:
                 kwargs["password"] = password
                 kwargs["must_change_password"] = True
-            ctx.user_accounts.update_user(db, user_uuid, **kwargs)
+            updated = ctx.user_accounts.update_user(db, user_uuid, **kwargs)
+            actor = _audit_actor(ctx)
+            new_status = updated.status
+            if new_status != old_status:
+                if new_status == UserStatus.DISABLED.value:
+                    ctx.activities.record(
+                        db,
+                        ActivityAction.USER_DISABLED,
+                        actor,
+                        details={
+                            "username": updated.username,
+                            "target_user": updated.username,
+                            "old_status": old_status,
+                            "status": new_status,
+                        },
+                    )
+                elif new_status == UserStatus.ACTIVE.value:
+                    ctx.activities.record(
+                        db,
+                        ActivityAction.USER_ENABLED,
+                        actor,
+                        details={
+                            "username": updated.username,
+                            "target_user": updated.username,
+                            "old_status": old_status,
+                            "status": new_status,
+                        },
+                    )
+            new_role = ctx.user_accounts.primary_role_name(updated)
+            if new_role != old_role:
+                ctx.activities.record(
+                    db,
+                    ActivityAction.ROLE_CHANGED,
+                    actor,
+                    details={
+                        "username": updated.username,
+                        "target_user": updated.username,
+                        "old_role": old_role,
+                        "role": new_role,
+                    },
+                )
             db.commit()
             return RedirectResponse("/admin/users", status_code=303)
         except PermissionDeniedError as exc:
@@ -1264,11 +1325,26 @@ def admin_membership_user_save(
     error = None
     try:
         ctx.user_accounts.ensure_can_assign_products(manager)
+        old_all = bool(getattr(user, "access_all_products", True))
+        old_product_uuids = sorted(p.uuid for p in (user.products or []))
         ctx.user_accounts.set_product_access(
             db,
             user,
             access_all=access_all,
             product_uuids=product_uuids if not access_all else None,
+        )
+        ctx.activities.record(
+            db,
+            ActivityAction.MEMBERSHIP_CHANGED,
+            _audit_actor(ctx),
+            details={
+                "username": user.username,
+                "target_user": user.username,
+                "old_access_all_products": old_all,
+                "access_all_products": access_all,
+                "old_product_uuids": old_product_uuids,
+                "product_uuids": [] if access_all else list(product_uuids),
+            },
         )
         db.commit()
         return RedirectResponse("/admin/membership/users", status_code=303)
@@ -1371,8 +1447,27 @@ def admin_membership_product_save(
         members = [str(v).strip() for v in (member_uuid or []) if str(v).strip()]
     error = None
     try:
+        old_members = sorted(
+            u.uuid
+            for u in ctx.user_accounts.list_users(db)
+            if u.status == UserStatus.ACTIVE.value
+            and not getattr(u, "access_all_products", True)
+            and product.id in {p.id for p in (u.products or [])}
+        )
         ctx.user_accounts.set_restricted_product_members(
             db, product, member_user_uuids=members, actor=manager
+        )
+        ctx.activities.record(
+            db,
+            ActivityAction.MEMBERSHIP_CHANGED,
+            _audit_actor(ctx),
+            product_id=product.id,
+            details={
+                "product": product.name,
+                "product_uuid": product.uuid,
+                "old_member_uuids": old_members,
+                "member_uuids": list(members),
+            },
         )
         db.commit()
         return RedirectResponse("/admin/membership/products", status_code=303)
@@ -1479,11 +1574,21 @@ def admin_role_create(
     permission_keys = _parse_permission_keys([str(v) for v in permission])
     error = None
     try:
-        ctx.user_accounts.create_role(
+        role = ctx.user_accounts.create_role(
             db,
             name=name,
             description=description,
             permission_keys=permission_keys,
+        )
+        ctx.activities.record(
+            db,
+            ActivityAction.ROLE_CHANGED,
+            _audit_actor(ctx),
+            details={
+                "role": role.name,
+                "op": "created",
+                "permissions": sorted(permission_keys),
+            },
         )
         db.commit()
         return RedirectResponse("/admin/roles", status_code=303)
@@ -1563,6 +1668,8 @@ def admin_role_update(
     editing_own = ctx.user_accounts.user_holds_role(manager, role)
     error = None
     try:
+        old_name = role.name
+        old_keys = sorted(p.key for p in role.permissions)
         ctx.user_accounts.update_role(
             db,
             role_uuid,
@@ -1570,6 +1677,18 @@ def admin_role_update(
             description=description,
             permission_keys=permission_keys,
             actor=manager,
+        )
+        ctx.activities.record(
+            db,
+            ActivityAction.ROLE_CHANGED,
+            _audit_actor(ctx),
+            details={
+                "role": (name or "").strip() or old_name,
+                "old_role": old_name,
+                "op": "updated",
+                "old_permissions": old_keys,
+                "permissions": sorted(permission_keys),
+            },
         )
         db.commit()
         return RedirectResponse("/admin/roles", status_code=303)
@@ -1612,7 +1731,15 @@ def admin_role_delete(
     if _is_blocked(manager):
         return manager
     try:
+        role = ctx.user_accounts.get_role_by_uuid(db, role_uuid)
+        role_name = role.name if role is not None else role_uuid
         ctx.user_accounts.delete_role(db, role_uuid, actor=manager)
+        ctx.activities.record(
+            db,
+            ActivityAction.ROLE_CHANGED,
+            _audit_actor(ctx),
+            details={"role": role_name, "op": "deleted"},
+        )
         db.commit()
         return RedirectResponse("/admin/roles", status_code=303)
     except CreoPDMError as exc:
@@ -2195,6 +2322,28 @@ def admin_email_submit(
 
     ctx.config.save(new_settings)
     ctx.settings = new_settings
+    password_changed = bool((smtp_password or "").strip())
+    ctx.activities.record(
+        db,
+        ActivityAction.SYSTEM_SETTING_CHANGED,
+        _audit_actor(ctx),
+        details={
+            "setting": "email",
+            "enabled": bool(email.enabled),
+            "transport": email.transport,
+            "from_address": email.from_address or "",
+            "administrator_email": email.administrator_email or "",
+            "smtp_host": email.smtp_host or "",
+            "smtp_port": int(email.smtp_port or 25),
+            "smtp_username": email.smtp_username or "",
+            "smtp_use_tls": bool(email.smtp_use_tls),
+            "smtp_use_auth": bool(email.smtp_use_auth),
+            "smtp_password_changed": password_changed,
+            # Never store the password — redact_audit_details also masks *password* keys.
+            "smtp_password": "[REDACTED]" if password_changed else None,
+        },
+    )
+    db.commit()
     form = _email_form_from_settings(
         ctx,
         test_to=form["test_to"],
@@ -2402,6 +2551,91 @@ def _utilities_delete_products_response(
     )
 
 
+def _audit_action_choices() -> list[tuple[str, str]]:
+    """Stable filter labels for Utilities → Audit log."""
+    labels = {
+        ActivityAction.PRODUCT_CREATED: "Product created",
+        ActivityAction.PRODUCT_UPDATED: "Product updated",
+        ActivityAction.OBJECT_ADDED: "Object added",
+        ActivityAction.OBJECT_REMOVED: "Object removed",
+        ActivityAction.WORKSPACE_CLEARED: "Workspace cleared",
+        ActivityAction.CHECKED_OUT: "Checked out",
+        ActivityAction.CHECKOUT_CANCELLED: "Checkout cancelled",
+        ActivityAction.CHECKOUT_OVERRIDE: "Checkout override",
+        ActivityAction.CHECKED_IN: "Checked in",
+        ActivityAction.VERSION_RESTORED: "Version restored",
+        ActivityAction.VAULT_HISTORY_COMPACTED: "Vault history compacted",
+        ActivityAction.PRODUCT_DB_REBUILT: "Product DB rebuilt",
+        ActivityAction.USER_CREATED: "User created",
+        ActivityAction.USER_DISABLED: "User disabled",
+        ActivityAction.USER_ENABLED: "User enabled",
+        ActivityAction.ROLE_CHANGED: "Role changed",
+        ActivityAction.MEMBERSHIP_CHANGED: "Membership changed",
+        ActivityAction.SYSTEM_SETTING_CHANGED: "System setting changed",
+    }
+    return [(action.value, labels.get(action, action.value)) for action in labels]
+
+
+def _parse_audit_day(raw: str | None, *, end_of_day: bool = False):
+    """Parse YYYY-MM-DD filter into timezone-aware UTC bounds (or None)."""
+    from datetime import datetime, timezone
+
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        day = datetime.strptime(text, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    if end_of_day:
+        return day.replace(hour=23, minute=59, second=59, microsecond=999999)
+    return day
+
+
+def _utilities_audit_response(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    manager: User,
+    *,
+    since: str = "",
+    until: str = "",
+    action: str = "",
+    username: str = "",
+    product_uuid: str = "",
+    object_query: str = "",
+):
+    from creopdm.services.activity_service import AUDIT_PAGE_SIZE
+
+    events = ctx.activities.list_events(
+        db,
+        action=action or None,
+        username=username or None,
+        product_uuid=product_uuid or None,
+        object_query=object_query or None,
+        since=_parse_audit_day(since),
+        until=_parse_audit_day(until, end_of_day=True),
+    )
+    return templates.TemplateResponse(
+        request,
+        "admin_utilities_audit.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "events": events,
+            "page_size": AUDIT_PAGE_SIZE,
+            "action_choices": _audit_action_choices(),
+            "filters": {
+                "since": since or "",
+                "until": until or "",
+                "action": action or "",
+                "username": username or "",
+                "product_uuid": product_uuid or "",
+                "object": object_query or "",
+            },
+        },
+    )
+
+
 def _utilities_logs_response(
     request: Request,
     ctx: AppContext,
@@ -2495,6 +2729,35 @@ def admin_utilities_delete_products_page(
     if _is_blocked(manager):
         return manager
     return _utilities_delete_products_response(request, ctx, db, manager)
+
+
+@router.get("/admin/utilities/audit", response_class=HTMLResponse)
+def admin_utilities_audit_page(
+    request: Request,
+    since: str = Query(""),
+    until: str = Query(""),
+    action: str = Query(""),
+    username: str = Query(""),
+    product_uuid: str = Query(""),
+    object_query: str = Query("", alias="object"),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_utilities_access(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return _utilities_audit_response(
+        request,
+        ctx,
+        db,
+        manager,
+        since=since,
+        until=until,
+        action=action,
+        username=username,
+        product_uuid=product_uuid,
+        object_query=object_query,
+    )
 
 
 @router.post("/admin/utilities/delete-products", response_class=HTMLResponse)
