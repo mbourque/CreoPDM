@@ -153,11 +153,13 @@ def test_unavailable_hides_pages_from_viewer_keeps_api_and_admin(auth_client, au
     assert 'id="object-table"' in admin_home.text
     settings_hub = auth_client.get("/settings")
     assert settings_hub.status_code == 200
+    # Availability is no longer a System Settings hub tile (pill still links to Utilities).
     assert 'href="/settings/availability"' not in settings_hub.text
-    assert 'href="/admin/utilities/availability"' not in settings_hub.text
+    assert ">Availability</a>" not in settings_hub.text
     util_hub = auth_client.get("/admin/utilities")
     assert util_hub.status_code == 200
     assert 'href="/admin/utilities/availability"' in util_hub.text
+    assert "Availability" in util_hub.text
     settings_page = auth_client.get("/admin/utilities/availability")
     assert settings_page.status_code == 200
     assert 'id="site-availability"' in settings_page.text
