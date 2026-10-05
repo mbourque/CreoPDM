@@ -2020,9 +2020,12 @@ def test_admin_hub_panel_fills_full_width():
     assert "forceClearBusy" in script
     assert "recoverStuckBusyOverlay" in script
     assert "Opt-in only" in script
-    assert 'id="busy-cancel-btn"' in (
-        ROOT / "src" / "creopdm" / "templates" / "base.html"
-    ).read_text(encoding="utf-8")
+    # Busy overlay uses Escape only — no Cancel button on the dialog.
+    base_html = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'id="busy-overlay"' in base_html
+    assert 'id="busy-cancel-btn"' not in base_html
     assert "Never preventDefault without a runner" in script
     assert "Cancelling Where Used indexing…" in script
     assert "Cancelling metadata collection…" in script
@@ -2030,6 +2033,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "signal: ac.signal" in script
     docs_busy = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "For **cancellable** jobs only" in docs_busy
+    assert "Press **Escape** on the busy overlay" in docs_busy
     assert "recoverStuckBusyOverlay" in script
     products_api = (
         ROOT / "src" / "creopdm" / "api" / "products.py"

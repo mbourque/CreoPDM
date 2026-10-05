@@ -237,10 +237,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function busyOverlayEl() {
     return document.getElementById("busy-overlay");
   }
-  function busyCancelBtnEl() {
-    return document.getElementById("busy-cancel-btn");
-  }
-  // Bind once with native listener (not pageAbort) — soft boots must not drop Cancel/Escape.
+  // Bind once with native listener (not pageAbort) — soft boots must not drop Escape cancel.
   if (!window.__creopdmBusyCancelBound) {
     window.__creopdmBusyCancelBound = true;
     origAddEventListener.call(
@@ -255,18 +252,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           // No-op when the current job did not register a cancel handler (Add, Check In, …).
           api.invokeBusyCancel();
         }
-      },
-      true
-    );
-    origAddEventListener.call(
-      document,
-      "click",
-      (event) => {
-        const t = event.target;
-        if (!(t instanceof Element) || !t.closest("#busy-cancel-btn")) return;
-        event.preventDefault();
-        const api = window.__creopdmSoftNavApi;
-        if (api && typeof api.invokeBusyCancel === "function") api.invokeBusyCancel();
       },
       true
     );
@@ -299,13 +284,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (text) text.textContent = message || "Working…";
   }
   function setBusyCancelHandler(handler) {
-    // Opt-in only: Cancel button stays hidden unless the job can abort cleanly.
+    // Opt-in only: Escape cancels only when the job registered a clean abort.
     busyCancelHandler = typeof handler === "function" ? handler : null;
-    // Window slot so the once-bound Cancel click (survives soft boot) always hits
+    // Window slot so the once-bound Escape handler (survives soft boot) always hits
     // the active job's handler, not a stale closure's null.
     window.__creopdmBusyCancelHandler = busyCancelHandler;
-    const busyCancelBtn = busyCancelBtnEl();
-    if (busyCancelBtn) busyCancelBtn.hidden = !busyCancelHandler;
   }
   function invokeBusyCancel() {
     const handler = window.__creopdmBusyCancelHandler || busyCancelHandler;
@@ -1695,7 +1678,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         })
       );
     } finally {
-      // Cancel / Escape must never leave the modal stuck over the app.
+      // Escape cancel must never leave the modal stuck over the app.
       forceClearBusy();
     }
   }
@@ -1787,7 +1770,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   /**
    * Start Where Used indexing and wait until done/error/cancelled.
    * Used under the Add (and gear Rebuild) busy overlay — not fire-and-forget.
-   * Cancel (button or Escape) stops the server job and clears the overlay.
+   * Escape stops the server job and clears the overlay.
    */
   async function awaitWhereUsedIndex(productId, { onProgress, start = true } = {}) {
     if (!productId) return { started: false };
@@ -2204,7 +2187,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     syncMetadataCollectControls();
     showError($("#toolbar-error"), "");
     setBusy("Collecting Creo metadata…");
-    // Same Cancel / Escape as Where Used — stops between models; clears overlay via finally.
+    // Same Escape cancel as Where Used — stops between models; clears overlay via finally.
     setBusyCancelHandler(() => {
       metadataCollectJob.cancel = true;
       publishBusyMessage("Cancelling metadata collection…");

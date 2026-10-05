@@ -92,7 +92,7 @@ def test_where_used_reentrant_start_primes_total(
 
 
 def test_cancel_where_used_api_is_wired():
-    """Busy Cancel must hit DELETE so the overlay can clear."""
+    """Escape on busy overlay must hit DELETE so the overlay can clear."""
     root = Path(__file__).resolve().parents[2]
     products = (root / "src" / "creopdm" / "api" / "products.py").read_text(encoding="utf-8")
     assert "def cancel_rebuild_where_used" in products
@@ -102,12 +102,13 @@ def test_cancel_where_used_api_is_wired():
     assert "forceClearBusy" in script
     assert "invokeBusyCancel" in script
     assert "recoverStuckBusyOverlay" in script
-    # Hung Start used to ignore Cancel — abort in-flight Start/poll fetches.
+    # Hung Start used to ignore Escape — abort in-flight Start/poll fetches.
     assert "ac.abort()" in script or "signal.aborted" in script
     assert "__creopdmBusyCancelHandler" in script
-    assert 'signal: ac.signal' in script
+    assert "signal: ac.signal" in script
     base = (root / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
-    assert 'id="busy-cancel-btn"' in base
+    assert 'id="busy-overlay"' in base
+    assert 'id="busy-cancel-btn"' not in base
 
 
 def test_where_used_cancel_marks_job_cancelled(data_dir, identity: StaticUserProvider):
