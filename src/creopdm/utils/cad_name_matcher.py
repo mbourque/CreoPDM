@@ -14,19 +14,36 @@ from creopdm.creo.file_manager import CreoFileManager
 
 
 class CadNameMatcher:
-    """Match logical Creo filenames (and stems) inside a lowercased byte blob."""
+    """Match logical Creo filenames inside a lowercased byte blob.
+
+    ``include_stems`` also matches the bare stem (``shaft`` for ``shaft.prt``).
+    That helps Open find neighbors when Creo omits the extension, but it causes
+    false Where Used parents (part numbers / short names appearing anywhere in
+    unrelated assemblies). Where Used indexing should pass ``include_stems=False``.
+    """
 
     __slots__ = ("_goto", "_fail", "_out", "_logicals")
 
-    def __init__(self, filenames: list[str] | tuple[str, ...]) -> None:
+    def __init__(
+        self,
+        filenames: list[str] | tuple[str, ...],
+        *,
+        include_stems: bool = True,
+    ) -> None:
         token_to_logicals: dict[bytes, list[str]] = {}
         for name in filenames:
             logical = CreoFileManager.normalize_creo_filename(name).lower()
             if not logical:
                 continue
-            stem = Path(logical).stem.lower()
-            for token in {logical.encode("ascii", "ignore"), stem.encode("ascii", "ignore")}:
+            tokens = {logical.encode("ascii", "ignore")}
+            if include_stems:
+                stem = Path(logical).stem.lower()
+                tokens.add(stem.encode("ascii", "ignore"))
+            for token in tokens:
                 if len(token) < 2:
+                    continue
+                # Extension-only mode: skip tokens with no '.' (bare stems).
+                if not include_stems and b"." not in token:
                     continue
                 bucket = token_to_logicals.setdefault(token, [])
                 if logical not in bucket:

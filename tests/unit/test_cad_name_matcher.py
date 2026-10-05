@@ -3,11 +3,18 @@ from creopdm.utils.creo_dependencies import names_referenced_in_model
 
 
 def test_cad_name_matcher_finds_logical_and_stem():
-    matcher = CadNameMatcher(["pin.prt", "Bracket.ASM", "other.prt"])
+    matcher = CadNameMatcher(["pin.prt", "Bracket.ASM", "other.prt"], include_stems=True)
     found = matcher.find(b".... pin.prt .... bracket ....")
     assert "pin.prt" in found
     assert "bracket.asm" in found
     assert "other.prt" not in found
+
+
+def test_cad_name_matcher_extension_only_skips_bare_stem():
+    matcher = CadNameMatcher(["pin.prt", "Bracket.ASM"], include_stems=False)
+    found = matcher.find(b".... pin.prt .... bracket ....")
+    assert "pin.prt" in found
+    assert "bracket.asm" not in found
 
 
 def test_names_referenced_uses_matcher_for_large_candidate_sets(tmp_path):

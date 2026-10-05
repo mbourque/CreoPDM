@@ -108,6 +108,70 @@ def test_top_level_assemblies_ignore_drawing_parents(data_dir, identity: StaticU
         assert "asm-child" not in tops
 
 
+def test_rebuild_prunes_stem_only_false_where_used_edges(
+    data_dir, identity: StaticUserProvider
+):
+    """Bare part number in parent bytes must not keep a Where Used / Top Level hit."""
+    from sqlalchemy import select
+
+    ctx = build_context(ConfigManager(), users=identity)
+    vault = ctx.config.workspace_for_product("stem-false")
+    vault.mkdir(parents=True, exist_ok=True)
+    # Stem only — not ``1003573.asm`` — must be pruned on rebuild.
+    (vault / "other.asm").write_bytes(b"parameter VALUE 1003573 end")
+    (vault / "1003573.asm").write_bytes(b"asm")
+
+    with ctx.session_factory() as db:
+        product = Product(
+            uuid="prod-stem-false",
+            name="StemFalse",
+            vault_folder="stem-false",
+            repository_path=str(vault),
+            default_branch="main",
+        )
+        db.add(product)
+        db.flush()
+        parent = _obj(
+            product.id,
+            filename="other.asm",
+            object_type="CREO_ASSEMBLY",
+            uuid="asm-other",
+        )
+        child = _obj(
+            product.id,
+            filename="1003573.asm",
+            object_type="CREO_ASSEMBLY",
+            uuid="asm-top",
+        )
+        db.add_all([parent, child])
+        db.flush()
+        db.add(
+            Dependency(
+                product_id=product.id,
+                parent_object_id=parent.id,
+                child_object_id=child.id,
+                dependency_type=DependencyType.ASSEMBLY_MEMBER.value,
+                quantity=1.0,
+            )
+        )
+        db.commit()
+        product_uuid = product.uuid
+        product_id = product.id
+        assert "asm-top" not in set(ctx.metadata.top_level_assembly_uuids(db, product_id))
+
+        result = ctx.metadata.rebuild_where_used_from_vault(
+            db, product_uuid, offset=0, limit=40
+        )
+        db.commit()
+        assert result.parents_processed >= 1
+        edges = list(
+            db.scalars(select(Dependency).where(Dependency.product_id == product_id))
+        )
+        assert edges == []
+        tops = set(ctx.metadata.top_level_assembly_uuids(db, product_id))
+        assert tops == {"asm-other", "asm-top"}
+
+
 def test_where_used_index_absent_without_dependencies(data_dir, identity: StaticUserProvider):
     ctx = build_context(ConfigManager(), users=identity)
     with ctx.session_factory() as db:

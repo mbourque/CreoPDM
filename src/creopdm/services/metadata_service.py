@@ -510,7 +510,9 @@ class MetadataService:
             if logical:
                 by_key.setdefault(logical, row)
 
-        matcher = CadNameMatcher(candidate_names)
+        # Extension-qualified names only — bare stems false-positive Where Used
+        # (e.g. part number ``1003573`` appearing in an unrelated assembly).
+        matcher = CadNameMatcher(candidate_names, include_stems=False)
         edges_added = 0
         edges_existing = 0
         missing = 0
@@ -519,6 +521,7 @@ class MetadataService:
         # for this chunk finishes, or SQLite holds a write lock across multi‑MB reads
         # and hangs the rest of CreoPDM (status GET, UI, etc.).
         pending: list[tuple[int, int, str]] = []
+        prune_ids: list[int] = []
         # End the list_objects read transaction before vault I/O.
         session.commit()
 
@@ -538,20 +541,13 @@ class MetadataService:
                 missing += 1
                 continue
             blob = read_model_scan_blob(path)
-            if not blob:
-                continue
-            found = matcher.find(blob)
-            if not found:
-                continue
+            found = matcher.find(blob) if blob else set()
             child_ids: set[int] = set()
             for name in found:
                 logical = CreoFileManager.normalize_creo_filename(name).lower()
+                if not logical or "." not in logical:
+                    continue
                 child = by_key.get(logical)
-                if child is None:
-                    for key in bom_where_used_keys(name):
-                        child = by_key.get(key)
-                        if child is not None:
-                            break
                 if child is None or child.id == parent.id:
                     continue
                 child_ids.add(child.id)
@@ -564,9 +560,38 @@ class MetadataService:
                 == ".drw"
                 else DependencyType.ASSEMBLY_MEMBER.value
             )
+            # Remove stem-only false edges left by older indexers for this parent.
+            if blob:
+                existing = session.scalars(
+                    select(Dependency).where(
+                        Dependency.product_id == product.id,
+                        Dependency.parent_object_id == parent.id,
+                        Dependency.dependency_type == dep_type,
+                    )
+                ).all()
+                for edge in existing:
+                    child = session.get(EngineeringObject, edge.child_object_id)
+                    if child is None:
+                        continue
+                    logical = CreoFileManager.normalize_creo_filename(child.filename).lower()
+                    if not logical or "." not in logical:
+                        continue
+                    full = logical.encode("ascii", "ignore")
+                    stem = Path(logical).stem.lower().encode("ascii", "ignore")
+                    if full in blob:
+                        continue
+                    if len(stem) >= 2 and stem in blob:
+                        prune_ids.append(int(edge.id))
             for child_id in child_ids:
                 pending.append((parent.id, child_id, dep_type))
 
+        if prune_ids:
+            session.execute(delete(Dependency).where(Dependency.id.in_(prune_ids)))
+            session.flush()
+            logger.info(
+                "Removed %s stem-only false Where Used edge(s) during rebuild",
+                len(prune_ids),
+            )
         edges_added, edges_existing = self.upsert_dependency_edges(
             session, product.id, pending
         )

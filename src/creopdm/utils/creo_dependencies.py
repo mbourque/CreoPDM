@@ -72,39 +72,29 @@ def names_referenced_in_model(path: Path, candidates: list[str]) -> set[str]:
     return found
 
 
-def model_references_filename(path: Path, filename: str) -> bool:
-    """True when the vault Creo file byte-content mentions this model name.
+def logical_name_in_model(path: Path, filename: str) -> bool:
+    """True when the vault file contains the logical ``name.ext`` (not bare stem).
 
-    Used for Where Used when Creo.JS BOM metadata was never captured. Matches the
-    same way open-dependency narrowing matches same-folder siblings.
+    Bare stems (``1003573`` without ``.asm``) appear in unrelated Creo files and
+    created false Where Used / Top Level parents.
     """
-    from creopdm.utils.bom_match import bom_where_used_keys
+    logical = CreoFileManager.normalize_creo_filename(filename).lower()
+    if not logical or "." not in logical:
+        return False
+    token = logical.encode("ascii", "ignore")
+    if len(token) < 5:
+        return False
+    lower = read_model_scan_blob(path)
+    return bool(lower) and token in lower
 
-    if not path.is_file():
-        return False
-    tokens: list[bytes] = []
-    seen: set[bytes] = set()
-    for key in sorted(bom_where_used_keys(filename), key=len, reverse=True):
-        raw = key.encode("ascii", "ignore")
-        if len(raw) < 3:
-            continue
-        # Prefer names with an extension, or stems long enough to avoid noise.
-        if b"." not in raw and len(raw) < 5:
-            continue
-        if raw in seen:
-            continue
-        seen.add(raw)
-        tokens.append(raw)
-    if not tokens:
-        return False
-    try:
-        size = path.stat().st_size
-        with path.open("rb") as handle:
-            blob = handle.read(min(size, _SCAN_LIMIT))
-    except OSError:
-        return False
-    lower = blob.lower()
-    return any(token in lower for token in tokens)
+
+def model_references_filename(path: Path, filename: str) -> bool:
+    """True when the vault Creo file mentions this model as ``name.ext``.
+
+    Used for Where Used when Creo.JS BOM metadata was never captured. Stem-only
+    hits are ignored — they false-positive Top Level / Where Used.
+    """
+    return logical_name_in_model(path, filename)
 
 
 _MAX_OPEN_DEPENDENCY_POOL = 40
@@ -256,10 +246,14 @@ def collect_open_dependency_walk(
                 and obj_id is not None
                 and int(obj_id) != int(parent_id)
             ):
-                edge = (int(parent_id), int(obj_id), dep_type)
-                if edge not in edge_seen:
-                    edge_seen.add(edge)
-                    edges.append(edge)
+                child_name = str(getattr(obj, "filename", "") or Path(obj_rel).name)
+                # Stem hits may still download with Open; only persist Where Used
+                # edges when the parent bytes contain the full logical name.ext.
+                if logical_name_in_model(path, child_name):
+                    edge = (int(parent_id), int(obj_id), dep_type)
+                    if edge not in edge_seen:
+                        edge_seen.add(edge)
+                        edges.append(edge)
             if key in seen_keys:
                 continue
             seen_keys.add(key)
