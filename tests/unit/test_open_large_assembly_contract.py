@@ -94,6 +94,13 @@ def test_contract_embedded_open_prefers_file_open_trail():
     assert "Prefer File > Open trail" in open_fn
     assert "flood retrieval/regen" in trail_fn
     assert open_fn.index("creoTryOpenViaTrail(") < open_fn.index("creoTryOpenName(")
+    # After trail: leave WD on open folder (combine-state / deferred companions).
+    assert "deferred loads" in open_fn or "combine states" in open_fn
+    trail_success = open_fn.split("creoTryOpenViaTrail(", 1)[1]
+    assert "ChangeDirectory(creoNormalizePath(openWd))" in trail_success
+    assert trail_success.index("ChangeDirectory(creoNormalizePath(openWd))") < trail_success.index(
+        "creoTryOpenName("
+    )
     script = APP_JS.read_text(encoding="utf-8")
     after_open = script.split("async function captureCreoMetadataAfterOpen(", 1)[1].split(
         "function metadataTargetsFromResult(", 1
@@ -102,3 +109,4 @@ def test_contract_embedded_open_prefers_file_open_trail():
     docs = DOCS.read_text(encoding="utf-8")
     assert "File > Open" in docs
     assert "prefer Toolkit Retrieve over File > Open" in docs
+    assert "working directory" in docs.lower() and "combine-state" in docs
