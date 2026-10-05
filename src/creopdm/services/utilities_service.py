@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import delete, exists, func, select, text, update
+from sqlalchemy import delete, exists, func, or_, select, text, update
 from sqlalchemy.orm import Session, joinedload
 
 from creopdm.auth_constants import UserStatus
@@ -22,8 +22,18 @@ from creopdm.config import (
     path_for_settings_display,
     sqlite_url_for_settings_display,
 )
-from creopdm.constants import APP_NAME, APP_VERSION, ActivityAction, CheckoutStatus, DEFAULT_BRANCH
+from creopdm.constants import (
+    APP_NAME,
+    APP_VERSION,
+    ActivityAction,
+    CheckoutStatus,
+    DEFAULT_BRANCH,
+    DEFAULT_REVISION,
+    INITIAL_ITERATION,
+    LifecycleState,
+)
 from creopdm.context import AppContext
+from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import (
     PathValidationError,
     ProductNotFoundError,
@@ -31,7 +41,9 @@ from creopdm.exceptions import (
     ValidationAppError,
 )
 from creopdm.logging_setup import get_logger
+from creopdm.models.activity import Activity
 from creopdm.models.checkout import Checkout
+from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
 from creopdm.models.parameter import Parameter
 from creopdm.models.product import Product
@@ -47,6 +59,10 @@ from creopdm.schemas.common import (
     UtilitiesStatusResponse,
 )
 from creopdm.site_availability import normalize_site_availability
+from creopdm.utils.classify import classify_filename
+from creopdm.utils.creo_header import creo_release_for
+from creopdm.utils.hashing import calculate_sha256
+from creopdm.utils.paths import assert_safe_relative_path
 from creopdm.utils.vault_folder import validate_vault_folder
 
 logger = get_logger("utilities")
@@ -97,6 +113,15 @@ class CompactVaultResult:
             saved = _format_storage_bytes(self.git_bytes_before - self.git_bytes_after)
             return f".git {before} → {after} (freed {saved})"
         return f".git {before} → {after}"
+
+
+@dataclass(frozen=True, slots=True)
+class RebuildProductDbResult:
+    product_uuid: str
+    product_name: str
+    head: str
+    objects_removed: int
+    files_registered: int
 
 
 def active_user_emails(db: Session) -> list[str]:
@@ -865,6 +890,272 @@ def compact_product_vault_history(
         versions_removed=versions_removed,
         git_bytes_before=before,
         git_bytes_after=after,
+    )
+
+
+def _list_tracked_vault_relpaths(git_exe: str, vault: Path) -> list[str]:
+    """Tracked paths at HEAD (``git ls-files``), posix, no ``.gitkeep``."""
+    result = _run_git_readonly(
+        git_exe,
+        ["ls-files", "-z"],
+        cwd=vault,
+        timeout=120.0,
+    )
+    if result is None or result.returncode != 0:
+        detail = ""
+        if result is not None:
+            detail = (result.stderr or result.stdout or "").strip()
+        raise RepositoryError(
+            detail or "Could not list tracked vault files (git ls-files failed).",
+            details={"vault": str(vault)},
+        )
+    out: list[str] = []
+    for raw in (result.stdout or "").split("\0"):
+        rel = str(raw or "").replace("\\", "/").strip().lstrip("./")
+        if not rel or rel.endswith("/"):
+            continue
+        if Path(rel).name in {".gitkeep", ".gitignore"}:
+            continue
+        try:
+            out.append(assert_safe_relative_path(rel).as_posix())
+        except Exception:  # noqa: BLE001 — skip unsafe/odd paths
+            continue
+    return out
+
+
+def _clear_product_object_records(db: Session, product: Product) -> int:
+    """Remove objects/versions/deps/checkouts for a product; keep the Product row."""
+    objects = list(
+        db.scalars(select(EngineeringObject).where(EngineeringObject.product_id == product.id))
+    )
+    object_ids = [item.id for item in objects]
+    if not object_ids:
+        db.execute(delete(Dependency).where(Dependency.product_id == product.id))
+        db.flush()
+        return 0
+    db.execute(
+        update(EngineeringObject)
+        .where(EngineeringObject.id.in_(object_ids))
+        .values(current_version_id=None)
+    )
+    db.flush()
+    db.execute(delete(Parameter).where(Parameter.object_id.in_(object_ids)))
+    db.execute(delete(Checkout).where(Checkout.object_id.in_(object_ids)))
+    db.execute(
+        delete(Dependency).where(
+            or_(
+                Dependency.parent_object_id.in_(object_ids),
+                Dependency.child_object_id.in_(object_ids),
+                Dependency.product_id == product.id,
+            )
+        )
+    )
+    db.execute(delete(Activity).where(Activity.object_id.in_(object_ids)))
+    db.execute(delete(ObjectVersion).where(ObjectVersion.object_id.in_(object_ids)))
+    db.execute(delete(EngineeringObject).where(EngineeringObject.id.in_(object_ids)))
+    db.flush()
+    return len(object_ids)
+
+
+def rebuild_product_database_from_vault(
+    ctx: AppContext,
+    db: Session,
+    *,
+    product_uuid: str,
+    confirm_name: str,
+) -> RebuildProductDbResult:
+    """Rebuild one product's file/version rows from the vault Git tip (DB only).
+
+    Does not rewrite Git history. Clears checkouts, Where Used edges, and Creo
+    metadata for that product's files. Works for locked / Archived products
+    (admin recovery). Requires exact product name confirm and no active checkouts.
+    """
+    import uuid as uuid_mod
+
+    uuid_value = (product_uuid or "").strip()
+    typed = (confirm_name or "").strip()
+    if not uuid_value:
+        raise ValidationAppError("Choose a product.")
+    if not typed:
+        raise ValidationAppError("Type the product name exactly to confirm.")
+
+    product = db.scalar(select(Product).where(Product.uuid == uuid_value))
+    if product is None:
+        raise ProductNotFoundError("Product not found.", details={"uuid": uuid_value})
+    if typed != product.name:
+        raise ValidationAppError(
+            "Type the product name exactly to confirm.",
+            details={"product": product.name},
+        )
+
+    active_checkouts = int(
+        db.scalar(
+            select(func.count())
+            .select_from(Checkout)
+            .join(EngineeringObject, EngineeringObject.id == Checkout.object_id)
+            .where(
+                EngineeringObject.product_id == product.id,
+                Checkout.status == CheckoutStatus.ACTIVE.value,
+            )
+        )
+        or 0
+    )
+    if active_checkouts:
+        raise ValidationAppError(
+            f"Release all checkouts first ({active_checkouts} active).",
+            details={"active_checkouts": active_checkouts},
+        )
+
+    # Read-only path resolve — do not create a missing vault via ensure_vault.
+    folder = _product_vault_folder_name(product)
+    vault = _vault_path_without_mkdir(ctx.config.vaults_dir, folder)
+    if vault is None or not vault.is_dir():
+        raise ValidationAppError(
+            "This product has no vault folder on disk to rebuild from.",
+            details={"vault_folder": folder},
+        )
+    if not (vault / ".git").exists():
+        raise ValidationAppError(
+            "This product vault has no Git repository (.git missing).",
+            details={"vault": str(vault)},
+        )
+
+    git_exe = (ctx.git.executable or "git").strip() or "git"
+    head_proc = _run_git_readonly(git_exe, ["rev-parse", "HEAD"], cwd=vault, timeout=30.0)
+    if head_proc is None or head_proc.returncode != 0:
+        detail = ""
+        if head_proc is not None:
+            detail = (head_proc.stderr or head_proc.stdout or "").strip()
+        raise ValidationAppError(
+            detail or "Vault Git HEAD is unreadable; cannot rebuild from tip.",
+            details={"vault": str(vault)},
+        )
+    head = (head_proc.stdout or "").strip()
+    if not head:
+        raise ValidationAppError("Vault Git HEAD is empty; cannot rebuild from tip.")
+
+    tracked = _list_tracked_vault_relpaths(git_exe, vault)
+    ignore = ctx.config.ignore_patterns()
+    models = ctx.config.model_cad_extensions()
+    data_extras = ctx.config.data_cad_extensions()
+    documents = ctx.config.document_extensions()
+    user = ctx.users.get_current_user()
+    now = datetime.now(timezone.utc)
+
+    with ctx.locks.acquire(product.uuid, timeout=120.0):
+        active_checkouts = int(
+            db.scalar(
+                select(func.count())
+                .select_from(Checkout)
+                .join(EngineeringObject, EngineeringObject.id == Checkout.object_id)
+                .where(
+                    EngineeringObject.product_id == product.id,
+                    Checkout.status == CheckoutStatus.ACTIVE.value,
+                )
+            )
+            or 0
+        )
+        if active_checkouts:
+            raise ValidationAppError(
+                f"Release all checkouts first ({active_checkouts} active).",
+                details={"active_checkouts": active_checkouts},
+            )
+
+        removed = _clear_product_object_records(db, product)
+        registered = 0
+        for rel in tracked:
+            name = Path(rel).name
+            if CreoFileManager.is_ignored(name, ignore):
+                continue
+            abs_path = vault / Path(rel)
+            if not abs_path.is_file():
+                continue
+            logical = CreoFileManager.logical_repo_path(rel, models)
+            stored_name = Path(logical).name
+            stem = Path(stored_name).stem
+            suffix = Path(stored_name).suffix.lower()
+            object_type = classify_filename(
+                stored_name,
+                extra_cad_extensions=data_extras,
+                model_extensions=models,
+                document_extensions=documents,
+            )
+            try:
+                digest = calculate_sha256(abs_path)
+                size = int(abs_path.stat().st_size)
+            except OSError as exc:
+                raise RepositoryError(
+                    f"Could not read vault file {rel}: {exc}",
+                    details={"relative_path": rel},
+                ) from exc
+            release = creo_release_for(abs_path, stored_name)
+            obj = EngineeringObject(
+                uuid=str(uuid_mod.uuid4()),
+                product_id=product.id,
+                number=stem.upper()[:64] if stem else stored_name.upper()[:64],
+                name=stem or stored_name,
+                filename=stored_name,
+                extension=(suffix or "")[:32],
+                object_type=str(object_type.value),
+                relative_path=logical,
+                revision=DEFAULT_REVISION,
+                iteration=INITIAL_ITERATION,
+                lifecycle_state=LifecycleState.IN_WORK.value,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(obj)
+            db.flush()
+            version = ObjectVersion(
+                uuid=str(uuid_mod.uuid4()),
+                object_id=obj.id,
+                revision=DEFAULT_REVISION,
+                iteration=INITIAL_ITERATION,
+                filename=stored_name,
+                relative_path=logical,
+                creo_release=release,
+                git_commit_hash=head,
+                content_hash=digest,
+                file_size=size,
+                created_by=user.user_name,
+                created_at=now,
+                comment="Rebuilt from vault Git tip",
+            )
+            db.add(version)
+            db.flush()
+            obj.current_version_id = version.id
+            registered += 1
+
+        product.updated_at = now
+        ctx.activities.record(
+            db,
+            ActivityAction.PRODUCT_DB_REBUILT,
+            user,
+            product_id=product.id,
+            object_id=None,
+            details={
+                "product": product.name,
+                "head": head,
+                "objects_removed": removed,
+                "files_registered": registered,
+            },
+        )
+        db.flush()
+
+    logger.info(
+        "Rebuilt product DB from vault for %s (%s): removed %s, registered %s @ %s",
+        product.name,
+        product.uuid,
+        removed,
+        registered,
+        head[:12],
+    )
+    return RebuildProductDbResult(
+        product_uuid=product.uuid,
+        product_name=product.name,
+        head=head,
+        objects_removed=removed,
+        files_registered=registered,
     )
 
 

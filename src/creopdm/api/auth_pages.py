@@ -2259,6 +2259,35 @@ def _utilities_compact_response(
     )
 
 
+def _utilities_rebuild_response(
+    request: Request,
+    ctx: AppContext,
+    db: Session,
+    manager: User,
+    *,
+    rebuild_product_id: str = "",
+    rebuild_confirm_name: str = "",
+    error: str | None = None,
+    success: str | None = None,
+    status_code: int = 200,
+):
+    from creopdm.services.utilities_service import list_products_for_compact
+
+    return templates.TemplateResponse(
+        request,
+        "admin_utilities_rebuild.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "rebuild_products": list_products_for_compact(db),
+            "rebuild_product_id": rebuild_product_id,
+            "rebuild_confirm_name": rebuild_confirm_name,
+            "error": error,
+            "success": success,
+        },
+        status_code=status_code,
+    )
+
+
 def _utilities_health_response(
     request: Request,
     ctx: AppContext,
@@ -2359,6 +2388,16 @@ def admin_utilities_compact_page(
     if _is_blocked(manager):
         return manager
     return _utilities_compact_response(request, ctx, db, manager)
+
+
+@router.get("/admin/utilities/rebuild-product", response_class=HTMLResponse)
+def admin_utilities_rebuild_product_page(
+    request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
+):
+    manager = _require_utilities_access(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    return _utilities_rebuild_response(request, ctx, db, manager)
 
 
 @router.get("/admin/utilities/health", response_class=HTMLResponse)
@@ -2601,4 +2640,65 @@ def admin_utilities_compact_vault(
             f"Compacted vault history for {result.product_name}. "
             f"{result.size_summary}.{version_note}"
         ).strip(),
+    )
+
+
+@router.post("/admin/utilities/rebuild-product-db", response_class=HTMLResponse)
+def admin_utilities_rebuild_product_db(
+    request: Request,
+    product_id: str = Form(""),
+    confirm_name: str = Form(""),
+    confirm: str = Form(""),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_utilities_access(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    from creopdm.services.utilities_service import rebuild_product_database_from_vault
+
+    pid = (product_id or "").strip()
+    typed = confirm_name or ""
+    if confirm != "1":
+        return _utilities_rebuild_response(
+            request,
+            ctx,
+            db,
+            manager,
+            rebuild_product_id=pid,
+            rebuild_confirm_name=typed,
+            error="Confirm that you want to replace this product’s file database from the vault tip.",
+            status_code=400,
+        )
+    try:
+        result = rebuild_product_database_from_vault(
+            ctx,
+            db,
+            product_uuid=pid,
+            confirm_name=typed,
+        )
+        db.commit()
+    except CreoPDMError as exc:
+        db.rollback()
+        return _utilities_rebuild_response(
+            request,
+            ctx,
+            db,
+            manager,
+            rebuild_product_id=pid,
+            rebuild_confirm_name=typed,
+            error=exc.message,
+            status_code=400,
+        )
+    return _utilities_rebuild_response(
+        request,
+        ctx,
+        db,
+        manager,
+        success=(
+            f"Rebuilt database for {result.product_name} from vault tip "
+            f"{result.head[:12]}: removed {result.objects_removed} old file row(s), "
+            f"registered {result.files_registered} tip file(s). "
+            "Run Rebuild Where Used if you need Top Level / dependencies again."
+        ),
     )

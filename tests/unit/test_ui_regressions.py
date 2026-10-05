@@ -1934,9 +1934,10 @@ def test_admin_hub_panel_fills_full_width():
     assert "admin-hub" in utilities
     assert 'href="/admin/utilities/email-all"' in utilities
     assert 'href="/admin/utilities/compact"' in utilities
+    assert 'href="/admin/utilities/rebuild-product"' in utilities
     assert 'href="/admin/utilities/delete-products"' in utilities
     assert 'href="/admin/utilities/health"' in utilities
-    assert "Email all users, compact vault history, Delete products, and server health checks." in utilities
+    assert "rebuild a product database from its vault" in utilities
     assert 'action="/admin/utilities/email-all"' not in utilities
     assert "Disk space" not in utilities
     email_util = (
@@ -2001,9 +2002,16 @@ def test_admin_hub_panel_fills_full_width():
     script = _app_js()
     # Sync compact / delete POSTs can take a while — show busy until the response navigates.
     assert 'form.id === "utilities-compact-vault-form"' in script
+    assert 'form.id === "utilities-rebuild-product-form"' in script
     assert 'form.id === "utilities-delete-products-form"' in script
     assert "Compacting vault history for ${label}" in script
+    assert "Rebuilding product database for ${label}" in script
     assert "Deleting product ${label}" in script
+    rebuild_tmpl = (
+        ROOT / "src" / "creopdm" / "templates" / "admin_utilities_rebuild.html"
+    ).read_text(encoding="utf-8")
+    assert 'id="utilities-rebuild-product-form"' in rebuild_tmpl
+    assert 'action="/admin/utilities/rebuild-product-db"' in rebuild_tmpl
     settings = (ROOT / "src" / "creopdm" / "templates" / "settings.html").read_text(encoding="utf-8")
     assert "<h1>System Settings</h1>" in settings
     assert "admin-hub" in settings
@@ -2029,7 +2037,8 @@ def test_admin_hub_panel_fills_full_width():
     assert "folder’s used size" in docs or "folder" in docs
     assert "Audit** and **AI**" in docs or "**Audit** and **AI**" in docs
     assert "Compacting vault history" in docs
-    assert "four hub tiles" in docs
+    assert "five hub tiles" in docs
+    assert "Rebuild product database" in docs
     assert "Delete products" in docs
     script = _app_js()
     assert "Hub section pages only send fields present" in script

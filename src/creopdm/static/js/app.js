@@ -11305,6 +11305,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         let message = "";
         if (form.id === "utilities-compact-vault-form") {
           message = `Compacting vault history for ${label}…`;
+        } else if (form.id === "utilities-rebuild-product-form") {
+          message = `Rebuilding product database for ${label}…`;
         } else if (form.id === "utilities-delete-products-form") {
           message = `Deleting product ${label}…`;
         } else {

@@ -12,7 +12,7 @@
     <span>Utilities</span>
   </nav>
   <h1>Utilities</h1>
-  <p class="muted">Email all users, compact vault history, Delete products, and server health checks.</p>
+  <p class="muted">Email all users, compact vault history, rebuild a product database from its vault, Delete products, and server health checks.</p>
 
   <div class="admin-tile-grid">
     <section class="admin-tile">
@@ -22,6 +22,10 @@
     <section class="admin-tile">
       <h2><a href="/admin/utilities/compact">Compact product vault history</a></h2>
       <p>Squash one product’s Git history to the tip and free removed-file bytes.</p>
+    </section>
+    <section class="admin-tile">
+      <h2><a href="/admin/utilities/rebuild-product">Rebuild product database</a></h2>
+      <p>Rebuild one product’s file list from its vault Git tip (does not rewrite Git).</p>
     </section>
     <section class="admin-tile">
       <h2><a href="/admin/utilities/delete-products">Delete products</a></h2>

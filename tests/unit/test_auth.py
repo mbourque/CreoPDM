@@ -479,11 +479,13 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "admin-hub" in hub.text
     assert 'href="/admin/utilities/email-all"' in hub.text
     assert 'href="/admin/utilities/compact"' in hub.text
+    assert 'href="/admin/utilities/rebuild-product"' in hub.text
     assert 'href="/admin/utilities/delete-products"' in hub.text
     assert 'href="/admin/utilities/health"' in hub.text
-    assert "Email all users, compact vault history, Delete products, and server health checks." in hub.text
+    assert "rebuild a product database from its vault" in hub.text
     assert 'action="/admin/utilities/email-all"' not in hub.text
     assert 'action="/admin/utilities/compact-vault"' not in hub.text
+    assert 'action="/admin/utilities/rebuild-product-db"' not in hub.text
     assert "Disk space" not in hub.text
 
     email_page = auth_client.get("/admin/utilities/email-all")
@@ -495,6 +497,12 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert compact_page.status_code == 200
     assert "Compact product vault history" in compact_page.text
     assert 'action="/admin/utilities/compact-vault"' in compact_page.text
+
+    rebuild_page = auth_client.get("/admin/utilities/rebuild-product")
+    assert rebuild_page.status_code == 200
+    assert "Rebuild product database" in rebuild_page.text
+    assert 'action="/admin/utilities/rebuild-product-db"' in rebuild_page.text
+    assert 'id="utilities-rebuild-product-form"' in rebuild_page.text
 
     delete_page = auth_client.get("/admin/utilities/delete-products")
     assert delete_page.status_code == 200
@@ -623,6 +631,16 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
         follow_redirects=False,
     )
     assert denied_delete.status_code == 403
+    denied_rebuild = auth_client.post(
+        "/admin/utilities/rebuild-product-db",
+        data={
+            "product_id": "x",
+            "confirm_name": "Nope",
+            "confirm": "1",
+        },
+        follow_redirects=False,
+    )
+    assert denied_rebuild.status_code == 403
 
 
 def test_admin_utilities_compact_vault_gate(auth_client, auth_ctx):

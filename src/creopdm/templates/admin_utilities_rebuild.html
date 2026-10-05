@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Rebuild product database — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page admin-page admin-utilities">
+  <nav class="crumb">
+    {% if can_view_products %}
+    <a href="/">Products</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <a href="/admin/utilities">Utilities</a>
+    <span>/</span>
+    <span>Rebuild product database</span>
+  </nav>
+  <h1>Rebuild product database</h1>
+  <p class="muted">
+    Rebuilds one product’s <strong>file list and tip versions in the database</strong> from that product’s vault Git tip.
+    Vault files and Git history stay as they are. Clears checkouts, Where Used links, and collected Creo metadata for files in that product.
+    Release every checkout first. Works when the product is locked or <strong>Archived</strong> (admin recovery).
+  </p>
+
+  {% if success %}
+  <p class="ok">{{ success }}</p>
+  {% endif %}
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+
+  <section class="settings-card">
+    <form method="post" action="/admin/utilities/rebuild-product-db" class="settings-form" id="utilities-rebuild-product-form">
+      <label>Product
+        <select name="product_id" required>
+          <option value="">Select a product…</option>
+          {% for product in rebuild_products %}
+          <option value="{{ product.uuid }}" {% if rebuild_product_id == product.uuid %}selected{% endif %}>{{ product.name }}{% if product.state == 'ARCHIVED' %} (archived){% elif not product.active %} (inactive){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Type the product name to confirm
+        <input name="confirm_name" type="text" value="{{ rebuild_confirm_name }}" required autocomplete="off" maxlength="255">
+      </label>
+      <label class="choice">
+        <input type="checkbox" name="confirm" value="1" required>
+        I understand this replaces the product’s file database from the vault tip
+      </label>
+      <p class="form-actions">
+        <button type="submit" class="btn btn-danger" {% if not rebuild_products %}disabled{% endif %}>Rebuild product database</button>
+        <a class="btn" href="/admin/utilities">Back to Utilities</a>
+      </p>
+    </form>
+  </section>
+</article>
+{% endblock %}
