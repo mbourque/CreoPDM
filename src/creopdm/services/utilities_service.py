@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -34,6 +35,7 @@ from creopdm.models.version import ObjectVersion
 from creopdm.schemas.common import (
     UtilitiesCpuUsage,
     UtilitiesDiskUsage,
+    UtilitiesIoUsage,
     UtilitiesProbe,
     UtilitiesStatusResponse,
 )
@@ -47,6 +49,15 @@ _LOW_DISK_BYTES = 1_073_741_824  # 1 GiB
 _CPU_BUSY_PERCENT = 70.0
 _CPU_HOT_PERCENT = 90.0
 _CPU_SAMPLE_SECONDS = 0.2
+# I/O wait badge only (does not change overall health status).
+_IOWAIT_BUSY_PERCENT = 20.0
+_IOWAIT_HOT_PERCENT = 40.0
+_IO_SAMPLE_SECONDS = 0.2
+# /proc/diskstats reports sectors; Linux keeps the historical 512-byte unit.
+_DISKSTATS_SECTOR_BYTES = 512
+_WHOLE_DISK_NAME = re.compile(
+    r"^(?:sd[a-z]+|hd[a-z]+|vd[a-z]+|xvd[a-z]+|nvme\d+n\d+|mmcblk\d+)$"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,6 +282,209 @@ def collect_cpu_usage() -> UtilitiesCpuUsage:
         load_5=None if load_5 is None else round(float(load_5), 2),
         load_15=None if load_15 is None else round(float(load_15), 2),
         load_label=load_label,
+        error=error,
+    )
+
+
+def _io_status_for_iowait(percent: float | None) -> str:
+    if percent is None:
+        return "ok"
+    if percent >= _IOWAIT_HOT_PERCENT:
+        return "hot"
+    if percent >= _IOWAIT_BUSY_PERCENT:
+        return "busy"
+    return "ok"
+
+
+def _format_bytes_per_sec(value: int | None) -> str:
+    if value is None:
+        return "—"
+    if value < 0:
+        return "—"
+    return f"{_format_storage_bytes(int(value))}/s"
+
+
+def _read_iowait_times() -> tuple[float, float] | None:
+    """Return ``(iowait, total)`` from Linux ``/proc/stat``, or None."""
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        with open("/proc/stat", encoding="utf-8") as handle:
+            line = handle.readline()
+    except OSError:
+        return None
+    if not line.startswith("cpu "):
+        return None
+    parts = line.split()
+    try:
+        values = [float(part) for part in parts[1:8]]
+    except (TypeError, ValueError):
+        return None
+    if len(values) < 5:
+        return None
+    iowait = values[4]
+    total = sum(values)
+    return iowait, total
+
+
+def _read_disk_sector_totals() -> tuple[int, int] | None:
+    """Sum read/write sectors for whole disks from Linux ``/proc/diskstats``."""
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        with open("/proc/diskstats", encoding="utf-8") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return None
+    read_sectors = 0
+    write_sectors = 0
+    matched = 0
+    for line in lines:
+        parts = line.split()
+        if len(parts) < 10:
+            continue
+        name = parts[2]
+        if not _WHOLE_DISK_NAME.match(name):
+            continue
+        try:
+            read_sectors += int(parts[5])
+            write_sectors += int(parts[9])
+        except (TypeError, ValueError):
+            continue
+        matched += 1
+    if matched == 0:
+        return None
+    return read_sectors, write_sectors
+
+
+def _sample_linux_io(
+    sample_seconds: float = _IO_SAMPLE_SECONDS,
+) -> tuple[float | None, int | None, int | None]:
+    """Return ``(iowait_percent, read_bps, write_bps)`` over a short sample."""
+    first_io = _read_iowait_times()
+    first_disk = _read_disk_sector_totals()
+    if first_io is None and first_disk is None:
+        return None, None, None
+    time.sleep(max(0.05, float(sample_seconds)))
+    second_io = _read_iowait_times()
+    second_disk = _read_disk_sector_totals()
+
+    iowait_percent: float | None = None
+    if first_io is not None and second_io is not None:
+        iowait_delta = second_io[0] - first_io[0]
+        total_delta = second_io[1] - first_io[1]
+        if total_delta > 0:
+            iowait_percent = max(0.0, min(100.0, 100.0 * (iowait_delta / total_delta)))
+
+    read_bps: int | None = None
+    write_bps: int | None = None
+    if first_disk is not None and second_disk is not None:
+        elapsed = max(0.05, float(sample_seconds))
+        read_delta = max(0, second_disk[0] - first_disk[0])
+        write_delta = max(0, second_disk[1] - first_disk[1])
+        read_bps = int(round(read_delta * _DISKSTATS_SECTOR_BYTES / elapsed))
+        write_bps = int(round(write_delta * _DISKSTATS_SECTOR_BYTES / elapsed))
+    return iowait_percent, read_bps, write_bps
+
+
+def _sample_windows_disk_bps(
+    sample_seconds: float = _IO_SAMPLE_SECONDS,
+) -> tuple[int | None, int | None]:
+    """Best-effort PhysicalDisk(_Total) bytes/sec via PDH (Windows)."""
+    if sys.platform != "win32":
+        return None, None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        pdh = ctypes.windll.pdh
+        query = wintypes.HANDLE()
+        if pdh.PdhOpenQueryW(None, 0, ctypes.byref(query)) != 0:
+            return None, None
+
+        class PdhFmtCounterValue(ctypes.Structure):
+            class _Value(ctypes.Union):
+                _fields_ = [
+                    ("longValue", ctypes.c_long),
+                    ("doubleValue", ctypes.c_double),
+                    ("largeValue", ctypes.c_longlong),
+                    ("AnsiStringValue", ctypes.c_char_p),
+                    ("WideStringValue", ctypes.c_wchar_p),
+                ]
+
+            _fields_ = [("CStatus", wintypes.DWORD), ("value", _Value)]
+
+        PDH_FMT_DOUBLE = 0x00000200
+        counters: list[wintypes.HANDLE] = []
+        paths = (
+            r"\PhysicalDisk(_Total)\Disk Read Bytes/sec",
+            r"\PhysicalDisk(_Total)\Disk Write Bytes/sec",
+        )
+        try:
+            for path in paths:
+                counter = wintypes.HANDLE()
+                if pdh.PdhAddEnglishCounterW(query, path, 0, ctypes.byref(counter)) != 0:
+                    return None, None
+                counters.append(counter)
+            if pdh.PdhCollectQueryData(query) != 0:
+                return None, None
+            time.sleep(max(0.05, float(sample_seconds)))
+            if pdh.PdhCollectQueryData(query) != 0:
+                return None, None
+            values: list[int] = []
+            for counter in counters:
+                fmt = PdhFmtCounterValue()
+                if (
+                    pdh.PdhGetFormattedCounterValue(
+                        counter, PDH_FMT_DOUBLE, None, ctypes.byref(fmt)
+                    )
+                    != 0
+                ):
+                    return None, None
+                values.append(max(0, int(round(float(fmt.value.doubleValue)))))
+            if len(values) != 2:
+                return None, None
+            return values[0], values[1]
+        finally:
+            pdh.PdhCloseQuery(query)
+    except Exception:  # noqa: BLE001 — best-effort host probe
+        return None, None
+
+
+def collect_io_usage() -> UtilitiesIoUsage:
+    """Read host I/O wait and disk rates for Utilities → Health (display only)."""
+    iowait: float | None = None
+    read_bps: int | None = None
+    write_bps: int | None = None
+    error: str | None = None
+    try:
+        if sys.platform.startswith("linux"):
+            iowait, read_bps, write_bps = _sample_linux_io()
+        elif sys.platform == "win32":
+            read_bps, write_bps = _sample_windows_disk_bps()
+            if read_bps is None and write_bps is None:
+                error = "Disk throughput is not available on this host."
+            else:
+                error = "I/O wait is a Linux kernel metric (not available on Windows)."
+        else:
+            error = "I/O metrics are not available on this platform."
+    except Exception as exc:  # noqa: BLE001
+        error = str(exc) or "I/O sample failed"
+        iowait = None
+        read_bps = None
+        write_bps = None
+
+    if iowait is None and read_bps is None and write_bps is None and error is None:
+        error = "I/O metrics are not available on this host."
+
+    return UtilitiesIoUsage(
+        iowait_percent=None if iowait is None else round(iowait, 1),
+        iowait_label="—" if iowait is None else f"{iowait:.0f}%",
+        status=_io_status_for_iowait(iowait),
+        read_bytes_per_sec=read_bps,
+        write_bytes_per_sec=write_bps,
+        read_label=_format_bytes_per_sec(read_bps),
+        write_label=_format_bytes_per_sec(write_bps),
         error=error,
     )
 
@@ -780,6 +994,7 @@ def collect_utilities_status(ctx: AppContext, db: Session) -> UtilitiesStatusRes
     site = normalize_site_availability(ctx.settings.ui.site_availability)
     now = datetime.now(timezone.utc).astimezone()
     cpu = collect_cpu_usage()
+    io = collect_io_usage()
 
     return UtilitiesStatusResponse(
         status=overall,
@@ -798,6 +1013,7 @@ def collect_utilities_status(ctx: AppContext, db: Session) -> UtilitiesStatusRes
         git_executable=git_exe,
         git_version=git_version,
         cpu=cpu,
+        io=io,
         disk=disks,
         product_count=product_count,
         user_count=user_count,

@@ -53,6 +53,19 @@ class UtilitiesCpuUsage(BaseModel):
     error: str | None = None
 
 
+class UtilitiesIoUsage(BaseModel):
+    """Host I/O wait and disk throughput for Administration → Utilities → Health."""
+
+    iowait_percent: float | None = None
+    iowait_label: str = "—"
+    status: str = "ok"  # ok | busy | hot from iowait (display only)
+    read_bytes_per_sec: int | None = None
+    write_bytes_per_sec: int | None = None
+    read_label: str = "—"
+    write_label: str = "—"
+    error: str | None = None
+
+
 class UtilitiesStatusResponse(BaseModel):
     """Administration → Utilities snapshot (health, disk, counts)."""
 
@@ -72,6 +85,7 @@ class UtilitiesStatusResponse(BaseModel):
     git_executable: str = "git"
     git_version: str = ""
     cpu: UtilitiesCpuUsage = Field(default_factory=UtilitiesCpuUsage)
+    io: UtilitiesIoUsage = Field(default_factory=UtilitiesIoUsage)
     disk: list[UtilitiesDiskUsage] = Field(default_factory=list)
     product_count: int = 0
     user_count: int = 0

@@ -1964,6 +1964,11 @@ def test_admin_hub_panel_fills_full_width():
     assert ">CPU<" in health or "<h2>CPU" in health
     assert "utilities-cpu-meter" in health
     assert "status.cpu.percent_label" in health
+    assert "<h2>I/O" in health
+    assert "status.io.iowait_label" in health
+    assert "status.io.read_label" in health
+    assert "status.io.write_label" in health
+    assert "I/O wait is a Linux kernel metric" in health
     # System volume row is {{ row.label }} from the API; template gates free/used on kind.
     assert "row.kind == 'volume'" in health or 'row.kind == "volume"' in health
     assert "size of that folder only" in health
@@ -1978,6 +1983,12 @@ def test_admin_hub_panel_fills_full_width():
     assert ".utilities-status-ok" in css
     assert ".utilities-cpu-meter" in css
     assert ".utilities-status-cpu-hot" in css
+    docs_util = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    assert "**I/O**" in docs_util or "I/O wait" in docs_util
+    util_hub = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities.html").read_text(
+        encoding="utf-8"
+    )
+    assert "I/O" in util_hub
     script = _app_js()
     # Sync compact / delete POSTs can take a while — show busy until the response navigates.
     assert 'form.id === "utilities-compact-vault-form"' in script

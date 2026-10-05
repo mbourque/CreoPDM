@@ -102,6 +102,36 @@
   </section>
 
   <section class="settings-card">
+    <h2>I/O
+      <span class="utilities-status utilities-status-cpu-{{ status.io.status }}">{{ status.io.iowait_label }}</span>
+    </h2>
+    <p class="muted small">Host I/O wait and disk throughput at refresh (short sample). Does not change overall health status. I/O wait is a Linux kernel metric.</p>
+    <dl class="kv">
+      <dt>I/O wait</dt>
+      <dd>
+        {% if status.io.iowait_percent is not none %}
+        <div class="utilities-cpu-meter" role="meter" aria-valuemin="0" aria-valuemax="100"
+             aria-valuenow="{{ status.io.iowait_percent|int }}" aria-label="I/O wait {{ status.io.iowait_label }}">
+          <span class="utilities-cpu-meter-fill utilities-cpu-meter-{{ status.io.status }}"
+                style="width: {{ status.io.iowait_percent }}%"></span>
+        </div>
+        <span class="utilities-cpu-meter-text">{{ status.io.iowait_label }}</span>
+        {% else %}
+        —
+        {% endif %}
+      </dd>
+      <dt>Disk read</dt>
+      <dd>{{ status.io.read_label }}</dd>
+      <dt>Disk write</dt>
+      <dd>{{ status.io.write_label }}</dd>
+      {% if status.io.error %}
+      <dt>Note</dt>
+      <dd class="muted">{{ status.io.error }}</dd>
+      {% endif %}
+    </dl>
+  </section>
+
+  <section class="settings-card">
     <h2>Disk space</h2>
     <p class="muted small"><strong>System</strong> is free/used on the volume that holds CreoPDM data (below about 1 GB free is degraded). Other rows are the size of that folder only.</p>
     {% for row in status.disk %}
