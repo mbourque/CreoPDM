@@ -6,6 +6,7 @@ import getpass
 import platform
 from contextvars import ContextVar
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +26,25 @@ def set_request_identity(identity: UserIdentity | None) -> None:
 
 def get_request_identity() -> UserIdentity | None:
     return _request_identity.get()
+
+
+def client_ip_from_request(request: Any) -> str | None:
+    """Best-effort client IP (X-Forwarded-For first hop, else request.client.host)."""
+    headers = getattr(request, "headers", None)
+    if headers is not None:
+        forwarded = (headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        if forwarded:
+            return forwarded[:128]
+    client = getattr(request, "client", None)
+    host = getattr(client, "host", None) if client is not None else None
+    if host:
+        return str(host)[:128]
+    return None
+
+
+def client_label_from_request(request: Any) -> str:
+    """Value stored on Activity.machine for browser/agent HTTP calls."""
+    return client_ip_from_request(request) or "unknown"
 
 
 class CurrentUserProvider:

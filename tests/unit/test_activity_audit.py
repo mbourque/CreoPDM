@@ -38,6 +38,25 @@ def test_activity_model_has_audit_columns(ctx):
     assert {"uuid", "user_uuid", "comment", "action", "timestamp", "details_json"} <= cols
 
 
+def test_client_ip_from_request_prefers_forwarded_for():
+    from creopdm.utils.identity import client_ip_from_request, client_label_from_request
+
+    class _Hdrs(dict):
+        def get(self, key, default=None):
+            return super().get(key.lower(), default)
+
+    class _Req:
+        def __init__(self, forwarded=None, host=None):
+            self.headers = _Hdrs()
+            if forwarded:
+                self.headers["x-forwarded-for"] = forwarded
+            self.client = type("C", (), {"host": host})() if host else None
+
+    assert client_ip_from_request(_Req(forwarded="10.1.2.3, 10.0.0.1", host="127.0.0.1")) == "10.1.2.3"
+    assert client_ip_from_request(_Req(host="192.168.1.9")) == "192.168.1.9"
+    assert client_label_from_request(_Req()) == "unknown"
+
+
 def test_redact_audit_details_masks_password_fields():
     raw = {
         "smtp_password": "super-secret",
@@ -193,6 +212,7 @@ def test_login_logout_and_failed_login_are_audited(auth_client, auth_ctx):
         fails = ActivityService().list_events(db, action=ActivityAction.LOGIN_FAILED.value)
         assert fails
         assert fails[0].details.get("reason") == "bad_password"
+        assert fails[0].machine == "testclient"
 
     ok = auth_client.post(
         "/login",
@@ -210,6 +230,9 @@ def test_login_logout_and_failed_login_are_audited(auth_client, auth_ctx):
         assert logouts
         assert logins[0].user == "admin"
         assert logouts[0].user == "admin"
+        # Browser/agent sessions store client IP (TestClient → "testclient"), not "web".
+        assert logins[0].machine == "testclient"
+        assert logouts[0].machine == "testclient"
 
 
 @requires_git

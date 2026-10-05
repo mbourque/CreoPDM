@@ -53,6 +53,7 @@ from creopdm.utils.identity import (
     SessionAwareUserProvider,
     StaticUserProvider,
     UserIdentity,
+    client_label_from_request,
     set_request_identity,
 )
 
@@ -248,7 +249,7 @@ def create_app(context: AppContext | None = None) -> FastAPI:
             if user is not None:
                 identity = UserIdentity(
                     user_name=user.username,
-                    machine_name="web",
+                    machine_name=client_label_from_request(request),
                     user_uuid=user.uuid,
                     display_name=user.display_name,
                 )

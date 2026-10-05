@@ -1974,6 +1974,9 @@ def test_admin_hub_panel_fills_full_width():
     assert "Open file Details" in audit_util
     assert "not the vault Git history" in audit_util
     assert "cannot be edited or deleted" in audit_util
+    assert "<th>Client</th>" in audit_util
+    assert "<th>Machine</th>" not in audit_util
+    assert 'row.machine != "web"' in audit_util
     assert "audit-filter-grid" in css
     assert "grid-template-columns: minmax(0, 28rem)" in css
     assert 'input[type="date"]' in css

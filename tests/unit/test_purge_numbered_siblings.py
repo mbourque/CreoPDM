@@ -97,6 +97,9 @@ def test_import_files_finish_uses_batch_purge():
     )
     assert "_purge_numbered_siblings_for_tips(destinations)" in text
     # Per-tip purge in the finish loop would look like this again:
-    finish = text.split("self._record_import_activity(session, product, git_plans, user)")[1]
+    marker = "self._record_import_activity("
+    assert marker in text
+    finish = text.split(marker, 1)[1]
     finish = finish.split("except Exception as exc:")[0]
+    assert "_purge_numbered_siblings_for_tips(destinations)" in finish
     assert "_purge_numbered_siblings(destination)" not in finish

@@ -43,7 +43,7 @@ from creopdm.permissions import (
     default_app_path,
     resolve_post_login_target,
 )
-from creopdm.utils.identity import UserIdentity, set_request_identity
+from creopdm.utils.identity import UserIdentity, client_label_from_request, set_request_identity
 from creopdm.utils.passwords import verify_password
 from creopdm.utils.timefmt import format_local, format_local_pretty
 
@@ -103,36 +103,29 @@ def _login_session(request: Request, user: User) -> None:
     set_request_identity(
         UserIdentity(
             user_name=user.username,
-            machine_name="web",
+            machine_name=client_label_from_request(request),
             user_uuid=user.uuid,
             display_name=user.display_name,
         )
     )
 
 
-def _client_ip(request: Request) -> str | None:
-    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
-    if forwarded:
-        return forwarded[:128]
-    if request.client and request.client.host:
-        return str(request.client.host)[:128]
-    return None
-
-
 def _audit_web_identity(
     *,
+    request: Request,
     username: str | None = None,
     user: User | None = None,
 ) -> UserIdentity:
+    machine = client_label_from_request(request)
     if user is not None:
         return UserIdentity(
             user_name=user.username,
-            machine_name="web",
+            machine_name=machine,
             user_uuid=user.uuid,
             display_name=user.display_name,
         )
     name = (username or "").strip() or "anonymous"
-    return UserIdentity(user_name=name[:128], machine_name="web")
+    return UserIdentity(user_name=name[:128], machine_name=machine)
 
 
 def _record_auth_audit(
@@ -149,9 +142,6 @@ def _record_auth_audit(
     details: dict = {}
     if reason:
         details["reason"] = reason
-    ip = _client_ip(request)
-    if ip:
-        details["ip"] = ip
     if user is not None:
         details["username"] = user.username
     elif username:
@@ -160,7 +150,7 @@ def _record_auth_audit(
         ctx.activities.record(
             db,
             action,
-            _audit_web_identity(username=username, user=user),
+            _audit_web_identity(request=request, username=username, user=user),
             details=details or None,
         )
         db.commit()

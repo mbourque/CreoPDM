@@ -91,7 +91,7 @@
           <th>Timestamp</th>
           <th>Event</th>
           <th>User</th>
-          <th>Machine</th>
+          <th>Client</th>
           <th>Product</th>
           <th>Object</th>
           <th>Comment / summary</th>
@@ -105,7 +105,7 @@
             <span title="{{ row.action }}">{{ row.action_label }}</span>
           </td>
           <td>{{ row.user or "—" }}</td>
-          <td>{{ row.machine or "—" }}</td>
+          <td>{% if row.machine and row.machine != "web" %}{{ row.machine }}{% else %}—{% endif %}</td>
           <td>
             {% if row.product_uuid and row.product_name and can_view_products and row.product_uuid in accessible_product_uuids %}
             <a href="/?product={{ row.product_uuid }}" title="Open product Files">{{ row.product_name }}</a>
