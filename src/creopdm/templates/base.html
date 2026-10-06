@@ -941,11 +941,10 @@ function creoNameTokensOverlap(left, right) {
 }
 function creoReadIsSkeletonFlag(handle) {
     /**
-     * PTC pfcSolid.GetIsSkeleton / .IsSkeleton — true for a skeleton or concept
-     * model. Creo.JS getters are often the property `GetIsSkeleton` (a boolean).
-     * Calling GetIsSkeleton() on that boolean throws; we used to miss skeletons.
-     * Do not require typeof === "function".
-     * Returns true, false, or null when the call is unbound / threw.
+     * PTC Creo.JS: pfcSolid.IsSkeleton (property) — true for skeleton/concept.
+     * Prefer property first; GetIsSkeleton() is the wrong form for Creo.JS and
+     * often throws or is unbound. Still accept 1/0 (OTK) as well as true/false.
+     * Returns true, false, or null when unbound / threw.
      */
     if (!handle) return null;
     function fromRaw(raw) {
@@ -958,14 +957,7 @@ function creoReadIsSkeletonFlag(handle) {
             return null;
         }
     }
-    try {
-        var fromGet = fromRaw(handle.GetIsSkeleton);
-        if (fromGet !== null) return fromGet;
-    } catch (errGetProp) {}
-    try {
-        var viaGet = creoFlagBool(handle.GetIsSkeleton());
-        if (viaGet !== null) return viaGet;
-    } catch (errGet) {}
+    // Documented Creo.JS form first: model.IsSkeleton
     try {
         var viaProp = fromRaw(handle.IsSkeleton);
         if (viaProp !== null) return viaProp;
@@ -974,27 +966,38 @@ function creoReadIsSkeletonFlag(handle) {
         var viaCall = creoFlagBool(handle.IsSkeleton());
         if (viaCall !== null) return viaCall;
     } catch (errFn) {}
+    // Some builds expose GetIsSkeleton as a boolean getter property.
+    try {
+        var fromGet = fromRaw(handle.GetIsSkeleton);
+        if (fromGet !== null) return fromGet;
+    } catch (errGetProp) {}
+    try {
+        var viaGet = creoFlagBool(handle.GetIsSkeleton());
+        if (viaGet !== null) return viaGet;
+    } catch (errGet) {}
     return null;
 }
 function creoSolidIsSkeletonAnswer(model) {
     /**
-     * this part's pfcSolid.GetIsSkeleton — not the parent assembly's GetSkeleton.
-     * Prefer pfcSolid.cast: RetrieveModel often yields an unbound pfcModel.
+     * this part's pfcSolid.IsSkeleton — not the parent assembly's GetSkeleton.
+     * Must cast: RetrieveModel often yields a generic pfcModel where IsSkeleton
+     * is unbound until pfcSolid.cast / pfcPart.cast.
      */
     if (!model) return null;
-    var handles = [model];
+    var handles = [];
     try {
         if (typeof pfcSolid !== "undefined" && typeof pfcSolid.cast === "function") {
             var asSolid = pfcSolid.cast(model);
-            if (asSolid) handles.unshift(asSolid);
+            if (asSolid) handles.push(asSolid);
         }
     } catch (errSolid) {}
     try {
         if (typeof pfcPart !== "undefined" && typeof pfcPart.cast === "function") {
             var asPart = pfcPart.cast(model);
-            if (asPart) handles.unshift(asPart);
+            if (asPart) handles.push(asPart);
         }
     } catch (errPart) {}
+    handles.push(model);
     var sawFalse = false;
     for (var h = 0; h < handles.length; h++) {
         var flag = null;
@@ -1224,8 +1227,8 @@ function creoSessionModelIsAssemblySkeleton(session, model) {
 }
 function creoDetectSkeletonRole(session, model, filename) {
     /**
-     * Skeleton is this part's GetIsSkeleton() (PTC pfcSolid). Assemblies never.
-     * If the solid answers false, stop. If the method is unbound, fall back.
+     * Skeleton is this part's IsSkeleton (PTC pfcSolid property). Assemblies never.
+     * If the solid answers false, stop. If unbound, fall back.
      */
     if (creoIsAssemblyModel(model, filename || "")) return false;
     var logical = "";
@@ -1418,8 +1421,8 @@ function creoClassifyManufacturing(session, model, identity) {
 function creoGatherModelRole(model, modelType, parameters, session, filename) {
     /**
      * Mutually exclusive CreoPDM model_role. Family table / flexible / etc. stay elsewhere.
-     * Skeleton is PART-only: this solid's GetIsSkeleton() first. Assemblies never
-     * get SKELETON. Unbound GetIsSkeleton falls back in creoDetectSkeletonRole.
+     * Skeleton is PART-only: this solid's IsSkeleton property first. Assemblies
+     * never get SKELETON. Unbound IsSkeleton falls back in creoDetectSkeletonRole.
      * MFG type → role MFG. PART sheet-metal: SMT_THICKNESS first, then body.IsSheetmetal.
      */
     var kind = String(modelType || "").trim().toUpperCase();

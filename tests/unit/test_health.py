@@ -197,12 +197,15 @@ def test_home_page(client):
     read_skel = text.split("function creoReadIsSkeletonFlag", 1)[1].split(
         "function creoSolidIsSkeletonAnswer", 1
     )[0]
-    assert "handle.GetIsSkeleton()" in read_skel
-    assert "handle.GetIsSkeleton" in read_skel
-    assert read_skel.index("handle.GetIsSkeleton") < read_skel.index("handle.GetIsSkeleton()")
-    assert "creoSolidMethodsBound" in text.split("function creoSolidIsSkeletonAnswer", 1)[1].split(
+    # Creo.JS documents property IsSkeleton first — not GetIsSkeleton().
+    assert "handle.IsSkeleton" in read_skel
+    assert read_skel.index("handle.IsSkeleton") < read_skel.index("handle.GetIsSkeleton")
+    solid_skel = text.split("function creoSolidIsSkeletonAnswer", 1)[1].split(
         "function creoModelIsSkeleton", 1
     )[0]
+    assert "pfcSolid.cast" in solid_skel
+    assert "creoSolidMethodsBound" in solid_skel
+    assert solid_skel.index("pfcSolid.cast") < solid_skel.index("handles.push(model)")
     skel_fn = text.split("function creoDetectSkeletonRole", 1)[1].split(
         "function creoBodyIsSheetmetal", 1
     )[0]
