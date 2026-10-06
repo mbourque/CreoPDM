@@ -581,11 +581,17 @@ def reset_password_submit(
     if (new_password or "") != (new_password_confirm or ""):
         return _reset_error("New password and confirmation do not match.")
     try:
-        ctx.password_resets.reset_password(
+        user = ctx.password_resets.reset_password(
             db,
             raw_token=token,
             username=uname,
             new_password=new_password,
+        )
+        ctx.activities.record(
+            db,
+            ActivityAction.PASSWORD_CHANGED,
+            _audit_web_identity(request=request, user=user, username=user.username),
+            details={"username": user.username, "via": "reset"},
         )
         db.commit()
         return RedirectResponse(
@@ -681,6 +687,12 @@ def password_submit(
     else:
         try:
             ctx.user_accounts.change_password(db, user, current_password, new_password)
+            ctx.activities.record(
+                db,
+                ActivityAction.PASSWORD_CHANGED,
+                _audit_web_identity(request=request, user=user),
+                details={"username": user.username, "via": "account"},
+            )
             db.commit()
             return RedirectResponse(
                 default_app_path(caps_for_user(ctx.user_accounts, user)),
@@ -1202,6 +1214,17 @@ def admin_user_update(
                 kwargs["must_change_password"] = True
             updated = ctx.user_accounts.update_user(db, user_uuid, **kwargs)
             actor = _audit_actor(ctx)
+            if password:
+                ctx.activities.record(
+                    db,
+                    ActivityAction.PASSWORD_CHANGED,
+                    actor,
+                    details={
+                        "username": updated.username,
+                        "target_user": updated.username,
+                        "via": "admin",
+                    },
+                )
             new_status = updated.status
             if new_status != old_status:
                 if new_status == UserStatus.DISABLED.value:

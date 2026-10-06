@@ -304,6 +304,18 @@ def test_forgot_password_requires_username_and_matching_email(auth_client, auth_
     assert "/login" in saved.headers["location"]
     assert "Password updated" in unquote(saved.headers["location"])
 
+    from creopdm.constants import ActivityAction
+    from creopdm.services.activity_service import ActivityService
+
+    with auth_ctx.session_factory() as db:
+        pw_rows = ActivityService().list_events(
+            db, action=ActivityAction.PASSWORD_CHANGED.value
+        )
+        assert pw_rows
+        assert pw_rows[0].user == "engineer"
+        assert pw_rows[0].details.get("via") == "reset"
+        assert pw_rows[0].action_label == "Password changed"
+
     reuse = auth_client.get(f"/reset-password?token={reset_token}&username=engineer")
     assert reuse.status_code == 400
 

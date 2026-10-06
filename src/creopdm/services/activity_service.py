@@ -57,6 +57,7 @@ ACTION_LABELS: dict[str, str] = {
     ActivityAction.USER_LOGIN.value: "Signed in",
     ActivityAction.USER_LOGOUT.value: "Signed out",
     ActivityAction.LOGIN_FAILED.value: "Sign-in failed",
+    ActivityAction.PASSWORD_CHANGED.value: "Password changed",
     ActivityAction.ROLE_CHANGED.value: "Role changed",
     ActivityAction.MEMBERSHIP_CHANGED.value: "Membership changed",
     ActivityAction.SYSTEM_SETTING_CHANGED.value: "System setting changed",
@@ -74,6 +75,8 @@ AUDIT_ACTION_FILTER_CHOICES: list[tuple[str, str]] = [
         f"{ActivityAction.USER_LOGIN.value},{ActivityAction.USER_LOGOUT.value}",
         "Sign in/Sign out",
     ),
+    (ActivityAction.LOGIN_FAILED.value, "Sign-in failed"),
+    (ActivityAction.PASSWORD_CHANGED.value, "Password changed"),
     (ActivityAction.OBJECT_REMOVED.value, "Object removed"),
     (ActivityAction.PRODUCT_CREATED.value, "Product created"),
     (ActivityAction.PRODUCT_UPDATED.value, "Product updated"),
@@ -82,7 +85,6 @@ AUDIT_ACTION_FILTER_CHOICES: list[tuple[str, str]] = [
     (ActivityAction.CHECKOUT_OVERRIDE.value, "Checkout override"),
     (ActivityAction.WORKSPACE_CLEARED.value, "Workspace cleared"),
     (ActivityAction.VERSION_RESTORED.value, "Version restored"),
-    (ActivityAction.LOGIN_FAILED.value, "Sign-in failed"),
     (ActivityAction.USER_CREATED.value, "User created"),
     (ActivityAction.ROLE_CHANGED.value, "Role changed"),
     (ActivityAction.MEMBERSHIP_CHANGED.value, "Membership changed"),
@@ -767,6 +769,7 @@ def _event_summary(
         ActivityAction.USER_LOGIN.value,
         ActivityAction.USER_LOGOUT.value,
         ActivityAction.LOGIN_FAILED.value,
+        ActivityAction.PASSWORD_CHANGED.value,
         ActivityAction.ROLE_CHANGED.value,
         "ROLE_ASSIGNED",
         ActivityAction.MEMBERSHIP_CHANGED.value,
@@ -774,11 +777,12 @@ def _event_summary(
     }:
         for key in (
             "username",
+            "target_user",
             "role",
             "setting",
-            "target_user",
             "product",
             "reason",
+            "via",
             "ip",
         ):
             if details.get(key):

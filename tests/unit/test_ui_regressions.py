@@ -2164,12 +2164,13 @@ def test_admin_hub_panel_fills_full_width():
     check_labels = [label for _, label in AUDIT_ACTION_FILTER_CHOICES]
     assert "Check in/Check out" in check_labels
     assert "Sign in/Sign out" in check_labels
+    assert "Password changed" in check_labels
     assert "Signed in" not in check_labels
     assert "Checked out" not in check_labels
     assert check_labels.index("Check in/Check out") < check_labels.index(
         "Sign in/Sign out"
     )
-    assert check_labels.index("Check in/Check out") < check_labels.index(
+    assert check_labels.index("Password changed") < check_labels.index(
         "Product DB rebuilt"
     )
     assert "export_href" in audit_util

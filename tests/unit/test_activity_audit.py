@@ -389,6 +389,39 @@ def test_login_logout_and_failed_login_are_audited(auth_client, auth_ctx):
         assert logouts[0].machine == "testclient"
 
 
+def test_account_password_change_is_audited(auth_client, auth_ctx):
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "email": "admin@example.com",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    changed = auth_client.post(
+        "/account/password",
+        data={
+            "current_password": "AdminPass1",
+            "new_password": "AdminPass2",
+            "new_password_confirm": "AdminPass2",
+        },
+        follow_redirects=False,
+    )
+    assert changed.status_code in {302, 303}, changed.text
+    with auth_ctx.session_factory() as db:
+        rows = ActivityService().list_events(
+            db, action=ActivityAction.PASSWORD_CHANGED.value
+        )
+        assert rows
+        assert rows[0].action_label == "Password changed"
+        assert rows[0].user == "admin"
+        assert rows[0].details.get("via") == "account"
+        assert "username=admin" in (rows[0].summary or "")
+
+
 @requires_git
 def test_force_undo_records_checkout_override(client, identity, data_dir):
     """Force Undo Checkout must not look like a normal undo in the audit trail."""
