@@ -277,7 +277,9 @@ def test_home_page(client):
     assert "never abort the whole lookup on the first throw" in text
     assert "creoFeatureGenericLabel(name)" in text
     assert 't === "general"' in text
-    assert "creoFeatureFallbackName(typeName, subType)" in text
+    assert "creoFeatureFallbackName(typeName, subType, regenNum)" in text
+    assert "number: regenNum" in text
+    assert 'base + " " + String(regenNum)' in text
     assert "wantFeatureNames = opts.featureNames !== false" in text
     assert "wantNames = opts.featureNames !== false" in text
     assert "featureNames: wantFeatureNames" in text

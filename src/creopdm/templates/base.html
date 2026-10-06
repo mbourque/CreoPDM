@@ -1843,11 +1843,18 @@ function creoFeatureGenericLabel(text) {
     var t = String(text || "").trim().toLowerCase();
     return !t || t === "general" || t === "none" || t === "default";
 }
-function creoFeatureFallbackName(typeName, subType) {
+function creoFeatureFallbackName(typeName, subType, regenNum) {
     // Prefer distinctive subtype (Extrude) over type; skip useless General/None.
-    if (!creoFeatureGenericLabel(subType)) return String(subType).trim();
-    if (!creoFeatureGenericLabel(typeName)) return String(typeName).trim();
-    return String(subType || typeName || "").trim();
+    // Append Creo feature order when present (tree shows "Round 3").
+    var base = "";
+    if (!creoFeatureGenericLabel(subType)) base = String(subType).trim();
+    else if (!creoFeatureGenericLabel(typeName)) base = String(typeName).trim();
+    else base = String(subType || typeName || "").trim();
+    if (!base) return "";
+    if (regenNum != null && regenNum !== "" && isFinite(Number(regenNum))) {
+        return base + " " + String(regenNum);
+    }
+    return base;
 }
 function creoGatherFeatures(model, dbg, session, options) {
     var opts = options && typeof options === "object" ? options : {};
@@ -1930,6 +1937,12 @@ function creoGatherFeatures(model, dbg, session, options) {
                     if (typeof feat.Id !== "undefined") id = feat.Id;
                     else if (typeof feat.GetId === "function") id = feat.GetId();
                 } catch (errId) { id = null; }
+                var regenNum = null;
+                try {
+                    if (typeof feat.Number !== "undefined" && feat.Number != null) {
+                        regenNum = feat.Number;
+                    }
+                } catch (errNum) { regenNum = null; }
                 var name = "";
                 if (wantNames) {
                     try {
@@ -1941,14 +1954,15 @@ function creoGatherFeatures(model, dbg, session, options) {
                 // "General" is a subtype label, not Round / ROUND in the model tree.
                 if (name && creoFeatureGenericLabel(name)) name = "";
                 if (!name) {
-                    name = creoFeatureFallbackName(typeName, subType);
+                    name = creoFeatureFallbackName(typeName, subType, regenNum);
                 }
                 if (!name && !typeName && id == null) continue;
                 rows.push({
                     id: id,
                     name: name || ("Feature " + (id != null ? id : (i + 1))),
                     type: typeName,
-                    subtype: subType
+                    subtype: subType,
+                    number: regenNum
                 });
             } catch (errFeat) {
                 continue;

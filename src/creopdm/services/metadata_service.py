@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -52,7 +53,7 @@ _GENERIC_FEATURE_NAME_LABELS = frozenset({"general", "none", "default"})
 
 
 def normalize_feature_rows(features: Any) -> list[dict[str, Any]]:
-    """Replace useless Name labels (General) with type/subtype for Details."""
+    """Replace useless Name labels (General) with type/subtype[+order] for Details."""
     if not isinstance(features, list):
         return []
     out: list[dict[str, Any]] = []
@@ -63,6 +64,7 @@ def normalize_feature_rows(features: Any) -> list[dict[str, Any]]:
         name = str(row.get("name") or "").strip()
         typ = str(row.get("type") or "").strip()
         sub = str(row.get("subtype") or "").strip()
+        number = row.get("number")
         if name.lower() in _GENERIC_FEATURE_NAME_LABELS:
             name = ""
         if not name:
@@ -72,6 +74,17 @@ def normalize_feature_rows(features: Any) -> list[dict[str, Any]]:
                 name = typ
             else:
                 name = sub
+        # Unnamed features: append Creo order when stored (tree "Round 3").
+        # Leave real renames (RIGHT, DEFAULT_CS) alone.
+        if name and number is not None and number != "" and not re.search(r"\s+\d+$", name):
+            try:
+                order = int(number)
+            except (TypeError, ValueError):
+                order = None
+            if order is not None:
+                lowered = name.lower()
+                if lowered == typ.lower() or lowered == sub.lower():
+                    name = f"{name} {order}"
         row["name"] = name
         out.append(row)
     return out
