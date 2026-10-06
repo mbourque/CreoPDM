@@ -1810,6 +1810,7 @@ function creoFeatureNameText(value) {
 }
 function creoFeatureAssignedName(feat) {
     // Creo.JS model-tree name: prefer `feature.name` (docs), then GetName / Name.
+    // Keep Creo's own auto-names ("INDEPENDENT GEOMETRY 1") when that is what it returns.
     // Unnamed features throw XToolkitNotFound — catch per feature so gather continues.
     if (!feat) return "";
     try {
@@ -1910,7 +1911,7 @@ function creoGatherFeatures(model, dbg, session) {
                     if (typeof feat.Id !== "undefined") id = feat.Id;
                     else if (typeof feat.GetId === "function") id = feat.GetId();
                 } catch (errId) { id = null; }
-                // Tree name via feat.name / GetName; else type/subtype only (no order #).
+                // Tree name via feat.name / GetName; else type/subtype only.
                 var name = "";
                 try {
                     name = creoFeatureAssignedName(feat);

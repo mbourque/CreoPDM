@@ -414,8 +414,8 @@ def test_metadata_gear_items_require_creo_session():
     assert "after **Open** into the Creo session" in docs
     assert "Capturing Creo metadata…" in docs
     assert "erase the model you just opened" in docs
-    assert "soft-refresh Files so Type / Top Level match without F5" in docs
-    assert "leave the Files list stale until a hard refresh after Open saved metadata" in docs
+    assert "soft-refresh Files or Details so Type / Top Level / Features match without F5" in docs
+    assert "leave Files or Details Features stale until a hard refresh after Open saved metadata" in docs
     # Product-link soft-nav must not withBusy("Loading…") while Collect owns the overlay.
     assert "isMetadataCollectRunning" in script
     assert "warnMetadataCollectBlockingNav" in script
@@ -730,10 +730,12 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "openTimeoutMessage()" in open_wrap
     assert "openWorkTimeoutMs(" in open_wrap
     assert "captureCreoMetadataAfterOpen(result)" in open_wrap
-    # Open metadata updates Type / Where Used / Top Level — soft-refresh like Collect.
+    # Open metadata updates Type / Features / Top Level — soft-refresh Files or Details.
     assert "metadataSaved" in open_wrap
     assert 'await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" })' in open_wrap
     assert "metadataSaved > 0" in open_wrap
+    assert "isListPage || onDetail" in open_wrap
+    assert 'url.hash = tab' in open_wrap
     assert "function openTimeoutMessage(" in script
     assert "function creoOpenModelTimeoutMs(" in script
     assert "function openWorkTimeoutMs(" in script

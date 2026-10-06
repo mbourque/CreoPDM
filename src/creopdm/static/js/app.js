@@ -8231,16 +8231,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
     });
     // Best-effort: fill Creo identity/type/deps while the model is in session.
-    // Metadata POST updates Type + Where Used / Top Level — soft-refresh Files
-    // like Collect so the list is not stale until F5.
+    // Metadata POST updates Type / Features / Where Used — soft-refresh Files or
+    // Details so SSR is not stale until the user navigates away and back.
     let metadataSaved = 0;
     try {
       metadataSaved = Number(await captureCreoMetadataAfterOpen(result)) || 0;
     } catch {
       /* soft-fail — open already succeeded */
     }
-    if (metadataSaved > 0 && isListPage) {
+    const onDetail = Boolean($("article.detail"));
+    if (metadataSaved > 0 && (isListPage || onDetail)) {
       try {
+        if (onDetail) {
+          // Keep Features (etc.) selected across the soft-refresh.
+          const tab = document
+            .querySelector(".tabs .tab.is-active")
+            ?.getAttribute("data-tab");
+          if (tab && tab !== "overview") {
+            try {
+              const url = new URL(window.location.href);
+              url.hash = tab;
+              window.history.replaceState(window.history.state, "", url.toString());
+            } catch {
+              /* ignore */
+            }
+          }
+        }
         await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
       } catch {
         /* soft-fail — Open + metadata already succeeded */
@@ -11190,6 +11206,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     document.querySelector('.tab[data-tab="modified"]')?.click();
   } else if (window.location.hash === "#checked-out") {
     document.querySelector('.tab[data-tab="checked-out"]')?.click();
+  } else {
+    // Details tabs after Open metadata soft-refresh (#features, #parameters, …).
+    const detailHash = String(window.location.hash || "").replace(/^#/, "").trim();
+    if (
+      detailHash
+      && $("article.detail")
+      && document.querySelector(`.tabs .tab[data-tab="${detailHash}"]`)
+    ) {
+      document.querySelector(`.tabs .tab[data-tab="${detailHash}"]`)?.click();
+    }
   }
 
   function syncCreoStatusPill(mode, parametricPath, viewPath) {

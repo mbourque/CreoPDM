@@ -111,6 +111,7 @@ def test_contract_embedded_open_prefers_file_open_trail():
         "async function openPdmObjectWork(", 1
     )[0]
     assert "metadataSaved > 0" in open_wrap
+    assert "isListPage || onDetail" in open_wrap
     assert 'reloadPage({ keepBusy: true, busyMessage: "Refreshing…" })' in open_wrap
     # Skip-chooser / Viewer: do not Set WD on Open (WinError 32 on remove-folder).
     prompt_fn = script.split("function promptOpenCheckout(", 1)[1].split(
