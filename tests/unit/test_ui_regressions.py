@@ -381,10 +381,17 @@ def test_metadata_gear_items_require_creo_session():
     assert "No per-file JS timeout" in push
     assert "Promise.race" not in push
     assert "timedOut" not in loop
-    # Type labels are SSR — must refresh Files after Collect saves (not only on F5).
+    # Collect: tip-only prepare, no per-file session probe, refresh once at end.
+    assert 'gatherCreoMetadataForFilename(target.filename, "")' not in push
+    assert "prepareLocalPathForMetadata(target.uuid)" in push
     assert "shouldRefreshList = captured > 0" in loop
     assert 'await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" })' in loop
     assert loop.index("metadataCollectJob.running = false") < loop.index("await reloadPage(")
+    prepare_meta = _between(
+        script, "async function prepareLocalPathForMetadata(", "async function gatherCreoMetadataForFilename("
+    )
+    assert "include_dependencies: false" in prepare_meta
+    assert "include_dependencies: true" not in prepare_meta
     assert "beforeunload" in script
     soft = _between(script, "function softNavigate(", "function leavePage(")
     assert "metadataCollectJob.running" in soft

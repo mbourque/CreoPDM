@@ -2159,31 +2159,25 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // No per-file JS timeout — large assemblies (e.g. 844j.asm) can take many
     // minutes in Creo. Skipping them loses the metadata we care about most.
     // Cancel still works between models; during a Creo retrieve the UI may pause.
+    // Bulk Collect: do NOT probe the empty session first (935× wasted Creo.JS
+    // turns) and do NOT open-prepare full dependency trees — only this tip.
     try {
-      let snapshot = await gatherCreoMetadataForFilename(target.filename, "");
-      let reason = "";
+      let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
+      if (!filePath) {
+        filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
+      }
+      if (!filePath) {
+        return { ok: false, reason: "materialize_failed" };
+      }
+      let snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
       if (snapshot && snapshot.__error) {
-        reason = snapshot.__error;
-        snapshot = null;
+        return {
+          ok: false,
+          reason: String(snapshot.__error),
+          detail: String(snapshot.__detail || ""),
+        };
       }
-      if (!snapshot) {
-        let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
-        if (!filePath) {
-          filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
-        }
-        if (!filePath) {
-          return { ok: false, reason: reason || "materialize_failed" };
-        }
-        snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
-        if (snapshot && snapshot.__error) {
-          return {
-            ok: false,
-            reason: String(snapshot.__error),
-            detail: String(snapshot.__detail || ""),
-          };
-        }
-      }
-      if (!snapshot) return { ok: false, reason: reason || "gather_failed" };
+      if (!snapshot) return { ok: false, reason: "gather_failed" };
       // Require a real identity filename so empty/failed snapshots are never "saved".
       const identityName = String(snapshot.identity?.file_name || snapshot.identity?.full_name || "").trim();
       if (!identityName) {
@@ -6453,13 +6447,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function prepareLocalPathForMetadata(objectId) {
     if (!objectId) return null;
     try {
+      // Tip only — Collect must not walk/materialize the full Where Used tree
+      // for every file (that made 900+ Collect runs feel stuck).
       const response = await fetch("/api/creo/open", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           object_id: objectId,
           launch: false,
-          include_dependencies: true,
+          include_dependencies: false,
         }),
       });
       if (!response.ok) return null;
