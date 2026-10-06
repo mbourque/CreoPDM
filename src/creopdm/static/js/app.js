@@ -11761,10 +11761,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const localTotal = Number(localPending.localNew || 0) + Number(localPending.newerLocal || 0);
       const pending =
         Number(data.pending_saves || 0) + Number(data.new_files || 0) + localTotal;
-      setCheckinQueueCounts(
-        Number(data.pending_saves || 0) + Number(localPending.newerLocal || 0),
-        Number(data.new_files || 0) + Number(localPending.localNew || 0)
-      );
+      // Never paint Modified / New files badges from poll estimates — a brief false
+      // local/vault hit used to flash "· 1" then clear. Confirmed queue loads only.
       if (lastPendingCheckinCount === null || lastPendingCheckinCount !== pending) {
         lastPendingCheckinCount = pending;
         void refreshPendingCheckinIds(watchProductId);
@@ -11813,7 +11811,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           lastChangesPending !== newCount || lastModifiedPending !== modCount;
         lastChangesPending = newCount;
         lastModifiedPending = modCount;
-        // Badge already moved — drop stale lists, then prefetch the current rows.
+        // Poll estimate moved — confirm with the full queue before touching badges.
         if (countsMoved) {
           knownWorkspacePaths.at = 0;
           cachedProductObjects.at = 0;

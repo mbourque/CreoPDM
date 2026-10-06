@@ -324,6 +324,13 @@ def test_modified_tab_between_checked_out_and_new_files():
     assert "**Modified** tab" in docs or "**Modified tab**" in docs
     assert "not modified vault tips" in docs
     assert "live counts for Modified and New files" in docs
+    assert "never flash" in docs.lower() or "must not flicker" in docs.lower()
+    poll = _between(script, "async function pollWorkspaceWatch(", "if (watchProductId) {")
+    assert "setCheckinQueueCounts(" not in poll
+    assert "Never paint Modified / New files badges from poll estimates" in poll
+    assert "prefetchCheckinQueueParts(watchProductId)" in poll
+    assert "await loadChangesTab({ quiet: true, forceNetwork: true })" in poll
+    assert "await loadModifiedTab({ quiet: true, forceNetwork: true })" in poll
 
 
 def test_product_state_badge_in_files_header():
