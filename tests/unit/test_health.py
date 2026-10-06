@@ -240,6 +240,8 @@ def test_home_page(client):
     assert "role=%s" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "skeleton_filename" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "function listSessionSkeletonParts" in text
+    assert "function creoBindSolidForSkeleton" in text
+    assert "GetModel(root, pfcModelType.MDL_PART)" in text
     assert "promoteSkeletonRolesFromSession" in open(
         "src/creopdm/static/js/app.js", encoding="utf-8"
     ).read()
@@ -250,6 +252,9 @@ def test_home_page(client):
         "src/creopdm/services/metadata_service.py", encoding="utf-8"
     ).read()
     assert "skeleton_probe" in open(
+        "src/creopdm/templates/object_detail.html", encoding="utf-8"
+    ).read()
+    assert "bound_class" in open(
         "src/creopdm/templates/object_detail.html", encoding="utf-8"
     ).read()
     assert "IsSheetmetal" in text
