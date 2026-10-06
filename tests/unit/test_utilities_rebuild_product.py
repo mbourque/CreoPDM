@@ -5,10 +5,12 @@ from __future__ import annotations
 import subprocess
 import time
 import uuid
+import warnings
 from pathlib import Path
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import SAWarning
 
 from creopdm.app import build_context
 from creopdm.config import ConfigManager
@@ -123,12 +125,23 @@ def test_rebuild_registers_tip_files_and_drops_stale(data_dir, identity: StaticU
         stale.current_version_id = stale_ver.id
         db.commit()
 
-        result = rebuild_product_database_from_vault(
-            ctx,
-            db,
-            product_uuid=product.uuid,
-            confirm_password="test-confirm",
-        )
+        # Regression: bulk DELETE left ORM rows in the identity map; SQLite reused
+        # PKs and SQLAlchemy warned "Identity map already had an identity".
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", SAWarning)
+            result = rebuild_product_database_from_vault(
+                ctx,
+                db,
+                product_uuid=product.uuid,
+                confirm_password="test-confirm",
+            )
+        identity_warns = [
+            w
+            for w in caught
+            if issubclass(w.category, SAWarning)
+            and "Identity map already had an identity" in str(w.message)
+        ]
+        assert not identity_warns, identity_warns
         db.commit()
 
         assert result.objects_removed == 1

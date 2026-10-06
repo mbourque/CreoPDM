@@ -966,6 +966,10 @@ def _clear_product_object_records(db: Session, product: Product) -> int:
     db.execute(delete(ObjectVersion).where(ObjectVersion.object_id.in_(object_ids)))
     db.execute(delete(EngineeringObject).where(EngineeringObject.id.in_(object_ids)))
     db.flush()
+    # Core DELETE leaves ORM instances in the identity map; expire_all is not
+    # enough — SQLite reuses PKs and SA warns "Identity map already had…".
+    # Caller must re-load Product after this (expunge_all detaches it).
+    db.expunge_all()
     return len(object_ids)
 
 
@@ -1198,7 +1202,14 @@ def rebuild_product_database_from_vault(
                 details={"active_checkouts": active_checkouts},
             )
 
+        product_pk = int(product.id)
         removed = _clear_product_object_records(db, product)
+        product = db.get(Product, product_pk)
+        if product is None:
+            raise ValidationAppError(
+                "Product disappeared while rebuilding the database.",
+                details={"product_id": product_pk},
+            )
         registered = 0
         for rel in tracked:
             name = Path(rel).name
