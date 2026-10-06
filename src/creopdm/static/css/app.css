@@ -535,6 +535,17 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .admin-utilities .settings-card {
   margin-top: 0.85rem;
 }
+.admin-utilities .settings-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.55rem;
+}
+.admin-utilities .settings-card-heading h2 {
+  margin: 0;
+}
 .admin-utilities .audit-filter-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

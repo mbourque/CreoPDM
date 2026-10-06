@@ -2161,18 +2161,25 @@ def test_admin_hub_panel_fills_full_width():
     ).read_text(encoding="utf-8")
     from creopdm.services.activity_service import AUDIT_ACTION_FILTER_CHOICES
 
-    assert AUDIT_ACTION_FILTER_CHOICES[0][1] == "Sign in/Sign out"
-    assert "USER_LOGIN,USER_LOGOUT" in AUDIT_ACTION_FILTER_CHOICES[0][0]
+    assert AUDIT_ACTION_FILTER_CHOICES[0][1] == "Check in/Check out"
+    assert "CHECKED_IN,CHECKED_OUT" in AUDIT_ACTION_FILTER_CHOICES[0][0]
     check_labels = [label for _, label in AUDIT_ACTION_FILTER_CHOICES]
     assert "Check in/Check out" in check_labels
+    assert "Sign in/Sign out" in check_labels
     assert "Signed in" not in check_labels
     assert "Checked out" not in check_labels
-    assert check_labels.index("Sign in/Sign out") < check_labels.index(
-        "Product created"
+    assert check_labels.index("Check in/Check out") < check_labels.index(
+        "Sign in/Sign out"
     )
     assert check_labels.index("Check in/Check out") < check_labels.index(
         "Product DB rebuilt"
     )
+    assert "export_href" in audit_util
+    assert "Export CSV" in audit_util
+    assert "/admin/utilities/audit.csv" in (
+        ROOT / "src" / "creopdm" / "api" / "auth_pages.py"
+    ).read_text(encoding="utf-8")
+    assert "settings-card-heading" in css
     avail_util = (
         ROOT / "src" / "creopdm" / "templates" / "admin_utilities_availability.html"
     ).read_text(encoding="utf-8")

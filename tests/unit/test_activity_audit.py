@@ -166,6 +166,30 @@ def test_list_events_filters_action_user_and_object(ctx):
         assert svc.list_events(db, since=since) == []
 
 
+def test_audit_events_to_csv_includes_headers_and_rows(ctx):
+    from creopdm.services.activity_service import audit_events_to_csv
+
+    svc = ActivityService()
+    actor = UserIdentity("Alice", "ENG-PC-17", user_uuid="alice-uuid")
+    with ctx.session_factory() as db:
+        svc.record(
+            db,
+            ActivityAction.CHECKED_IN,
+            actor,
+            details={"filename": "pin.prt", "iteration": 1},
+            comment="first",
+        )
+        db.commit()
+        rows = svc.list_events(db, action=ActivityAction.CHECKED_IN.value)
+        assert rows
+        csv_text = audit_events_to_csv(rows)
+    assert "Timestamp,Event,Event code,User,Client,Product,Product UUID,Object,Comment / summary" in csv_text
+    assert "Checked in" in csv_text
+    assert "CHECKED_IN" in csv_text
+    assert "Alice" in csv_text
+    assert "pin.prt" in csv_text
+
+
 def test_import_batch_chunks_merge_into_one_audit_row(ctx):
     """Upload chunks that share import_batch_id become one Object added row."""
     from creopdm.models.product import Product

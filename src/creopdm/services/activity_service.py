@@ -59,32 +59,32 @@ ACTION_LABELS: dict[str, str] = {
     ActivityAction.SYSTEM_SETTING_CHANGED.value: "System setting changed",
 }
 
-# Utilities → Audit Event filter: pathway order; rarer admin ops last.
-# Values may be a single action or comma-joined group (e.g. Sign in/Sign out).
+# Utilities → Audit Event filter: most common daily actions first; rare admin ops last.
+# Values may be a single action or comma-joined group (e.g. Check in/Check out).
 AUDIT_ACTION_FILTER_CHOICES: list[tuple[str, str]] = [
+    (
+        f"{ActivityAction.CHECKED_IN.value},{ActivityAction.CHECKED_OUT.value}",
+        "Check in/Check out",
+    ),
+    (ActivityAction.OBJECT_ADDED.value, "Object added"),
     (
         f"{ActivityAction.USER_LOGIN.value},{ActivityAction.USER_LOGOUT.value}",
         "Sign in/Sign out",
     ),
+    (ActivityAction.OBJECT_REMOVED.value, "Object removed"),
+    (ActivityAction.PRODUCT_CREATED.value, "Product created"),
+    (ActivityAction.PRODUCT_UPDATED.value, "Product updated"),
+    (ActivityAction.STATE_CHANGED.value, "Product state changed"),
+    (ActivityAction.CHECKOUT_CANCELLED.value, "Checkout cancelled"),
+    (ActivityAction.CHECKOUT_OVERRIDE.value, "Checkout override"),
+    (ActivityAction.WORKSPACE_CLEARED.value, "Workspace cleared"),
+    (ActivityAction.VERSION_RESTORED.value, "Version restored"),
     (ActivityAction.LOGIN_FAILED.value, "Sign-in failed"),
     (ActivityAction.USER_CREATED.value, "User created"),
     (ActivityAction.ROLE_CHANGED.value, "Role changed"),
     (ActivityAction.MEMBERSHIP_CHANGED.value, "Membership changed"),
     (ActivityAction.USER_ENABLED.value, "User enabled"),
     (ActivityAction.USER_DISABLED.value, "User disabled"),
-    (ActivityAction.PRODUCT_CREATED.value, "Product created"),
-    (ActivityAction.PRODUCT_UPDATED.value, "Product updated"),
-    (ActivityAction.STATE_CHANGED.value, "Product state changed"),
-    (ActivityAction.OBJECT_ADDED.value, "Object added"),
-    (
-        f"{ActivityAction.CHECKED_IN.value},{ActivityAction.CHECKED_OUT.value}",
-        "Check in/Check out",
-    ),
-    (ActivityAction.CHECKOUT_CANCELLED.value, "Checkout cancelled"),
-    (ActivityAction.CHECKOUT_OVERRIDE.value, "Checkout override"),
-    (ActivityAction.OBJECT_REMOVED.value, "Object removed"),
-    (ActivityAction.WORKSPACE_CLEARED.value, "Workspace cleared"),
-    (ActivityAction.VERSION_RESTORED.value, "Version restored"),
     (ActivityAction.PRODUCT_DELETED.value, "Product deleted"),
     (ActivityAction.SYSTEM_SETTING_CHANGED.value, "System setting changed"),
     (ActivityAction.VAULT_HISTORY_COMPACTED.value, "Vault history compacted"),
@@ -114,6 +114,51 @@ def redact_audit_details(details: dict[str, Any] | None) -> dict[str, Any] | Non
 def action_label(action: str) -> str:
     key = (action or "").strip()
     return ACTION_LABELS.get(key, key or "—")
+
+
+def audit_events_to_csv(events: list[AuditEventRow]) -> str:
+    """CSV for Utilities → Audit Export (same columns as the Events table)."""
+    import csv
+    from io import StringIO
+
+    from creopdm.utils.timefmt import format_local
+
+    buf = StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        [
+            "Timestamp",
+            "Event",
+            "Event code",
+            "User",
+            "Client",
+            "Product",
+            "Product UUID",
+            "Object",
+            "Comment / summary",
+        ]
+    )
+    for row in events:
+        product = (row.product_name or "").strip()
+        if product and row.product_deleted:
+            product = f"{product} (deleted)"
+        client = (row.machine or "").strip()
+        if client == "web":
+            client = ""
+        writer.writerow(
+            [
+                format_local(row.timestamp) if row.timestamp else "",
+                row.action_label,
+                row.action,
+                row.user or "",
+                client,
+                product,
+                row.product_uuid or "",
+                row.object_filename or "",
+                (row.summary or row.comment or "").strip(),
+            ]
+        )
+    return buf.getvalue()
 
 
 @dataclass(frozen=True)
@@ -685,5 +730,6 @@ __all__ = [
     "ActivityService",
     "AuditEventRow",
     "action_label",
+    "audit_events_to_csv",
     "redact_audit_details",
 ]

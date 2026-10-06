@@ -2772,6 +2772,7 @@ def _utilities_audit_response(
     object_query: str = "",
 ):
     from sqlalchemy import select
+    from urllib.parse import urlencode
 
     from creopdm.models.product import Product
     from creopdm.services.activity_service import AUDIT_PAGE_SIZE
@@ -2795,6 +2796,18 @@ def _utilities_audit_response(
             manager, list(db.scalars(select(Product)).all())
         )
     }
+    export_params = {
+        "q": q or "",
+        "since": since_value,
+        "until": until_value,
+        "action": action or "",
+        "username": username or "",
+        "product_uuid": product_uuid or "",
+        "object": object_query or "",
+    }
+    export_href = "/admin/utilities/audit.csv?" + urlencode(
+        {k: v for k, v in export_params.items() if v}
+    )
     return templates.TemplateResponse(
         request,
         "admin_utilities_audit.html",
@@ -2806,6 +2819,7 @@ def _utilities_audit_response(
             "product_choices": choices["product_choices"],
             "user_choices": choices["user_choices"],
             "accessible_product_uuids": accessible_uuids,
+            "export_href": export_href,
             "filters": {
                 "q": q or "",
                 "since": since_value,
@@ -2978,6 +2992,59 @@ def admin_utilities_audit_page(
         username=username,
         product_uuid=product_uuid,
         object_query=object_query,
+    )
+
+
+@router.get("/admin/utilities/audit.csv")
+def admin_utilities_audit_csv(
+    request: Request,
+    q: str = Query(""),
+    since: str = Query(""),
+    until: str = Query(""),
+    action: str = Query(""),
+    username: str = Query(""),
+    product_uuid: str = Query(""),
+    object_query: str = Query("", alias="object"),
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    """Download the current Audit filter results as CSV (same cap as the table)."""
+    from datetime import date
+    from urllib.parse import quote
+
+    from fastapi.responses import Response
+
+    from creopdm.services.activity_service import audit_events_to_csv
+
+    manager = _require_utilities_permission(
+        request,
+        ctx,
+        db,
+        check=ctx.user_accounts.can_utilities_audit,
+        message="Utilities Audit log required (utilities.audit).",
+    )
+    if _is_blocked(manager):
+        return manager
+
+    since_value = (since or "").strip() or _default_audit_since()
+    until_value = (until or "").strip() or _default_audit_until()
+    events = ctx.activities.list_events(
+        db,
+        action=action or None,
+        username=username or None,
+        product_uuid=product_uuid or None,
+        object_query=object_query or None,
+        q=q or None,
+        since=_parse_audit_day(since_value),
+        until=_parse_audit_day(until_value, end_of_day=True),
+    )
+    body = audit_events_to_csv(events)
+    filename = f"creopdm-audit-{date.today().isoformat()}.csv"
+    disposition = f"attachment; filename*=UTF-8''{quote(filename)}"
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": disposition},
     )
 
 

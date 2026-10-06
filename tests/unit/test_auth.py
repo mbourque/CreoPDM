@@ -524,6 +524,13 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "not the vault Git history" in audit_page.text or "Not vault Git history" in audit_page.text
     assert "All products" in audit_page.text
     assert "All users" in audit_page.text
+    assert "Export CSV" in audit_page.text
+    assert "/admin/utilities/audit.csv" in audit_page.text
+    csv_resp = auth_client.get("/admin/utilities/audit.csv")
+    assert csv_resp.status_code == 200, csv_resp.text
+    assert "text/csv" in (csv_resp.headers.get("content-type") or "")
+    assert "Timestamp,Event,Event code" in csv_resp.text
+    assert "attachment" in (csv_resp.headers.get("content-disposition") or "").lower()
     from datetime import date, timedelta
 
     expected_since = (date.today() - timedelta(days=7)).isoformat()
