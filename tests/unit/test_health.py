@@ -270,10 +270,14 @@ def test_home_page(client):
     assert "function creoGatherFeatures" in text
     # Model-tree names: GetName first (Collect Retrieve), then feat.name.
     assert "function creoFeatureAssignedName" in text
+    assert "function creoFeatureFallbackName" in text
     assert "feat.GetName" in text
     assert "feat.name" in text
     assert "GetName first" in text
     assert "never abort the whole lookup on the first throw" in text
+    assert "creoFeatureGenericLabel(name)" in text
+    assert 't === "general"' in text
+    assert "creoFeatureFallbackName(typeName, subType)" in text
     assert "wantFeatureNames = opts.featureNames !== false" in text
     assert "wantNames = opts.featureNames !== false" in text
     assert "featureNames: wantFeatureNames" in text

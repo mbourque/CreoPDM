@@ -29,6 +29,7 @@ from creopdm.constants import APP_NAME, APP_VERSION, ObjectType, SIDEBAR_COLLAPS
 from creopdm.context import AppContext
 from creopdm.exceptions import PermissionDeniedError, ProductNotFoundError
 from creopdm.permissions import caps_dict
+from creopdm.services.metadata_service import normalize_feature_rows
 from creopdm.utils.bom_match import bom_generic_label, bom_lookup_keys, format_bom_qty
 from creopdm.utils.classify import (
     display_type_label,
@@ -550,7 +551,9 @@ def object_detail(
     units = metadata.units or {}
     mass = metadata.mass if isinstance(metadata.mass, dict) else None
     family_table = metadata.family_table if isinstance(metadata.family_table, dict) else {}
-    features = metadata.features if isinstance(metadata.features, list) else []
+    features = normalize_feature_rows(
+        metadata.features if isinstance(metadata.features, list) else []
+    )
     bom = metadata.bom if isinstance(metadata.bom, list) else []
     bom = _enrich_bom_tree(bom, _product_bom_index(ctx, db, product.id))
     show_mass_tab = bool(

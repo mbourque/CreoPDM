@@ -416,7 +416,8 @@ def test_metadata_gear_items_require_creo_session():
     push_items = _between(
         script, "async function pushCreoMetadataForItems(", "function metadataItemsFromOpenResult("
     )
-    assert 'gatherCreoMetadataForFilename(target.filename, "")' in push_items
+    assert 'gatherCreoMetadataForFilename(target.filename, "", {' in push_items
+    assert "featureNames," in push_items
     assert "Session first" in push_items
     assert "sessionOnly" in push_items
     assert "let saved = 0" in push_items

@@ -47,6 +47,34 @@ logger = logging.getLogger(__name__)
 
 _DRAWING_PARENT = "CREO_DRAWING"
 _ASSEMBLY_TYPE = "CREO_ASSEMBLY"
+# FeatSubType "General" is not a model-tree name (Round → ROUND, not General).
+_GENERIC_FEATURE_NAME_LABELS = frozenset({"general", "none", "default"})
+
+
+def normalize_feature_rows(features: Any) -> list[dict[str, Any]]:
+    """Replace useless Name labels (General) with type/subtype for Details."""
+    if not isinstance(features, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for feat in features:
+        if not isinstance(feat, dict):
+            continue
+        row = dict(feat)
+        name = str(row.get("name") or "").strip()
+        typ = str(row.get("type") or "").strip()
+        sub = str(row.get("subtype") or "").strip()
+        if name.lower() in _GENERIC_FEATURE_NAME_LABELS:
+            name = ""
+        if not name:
+            if sub and sub.lower() not in _GENERIC_FEATURE_NAME_LABELS:
+                name = sub
+            elif typ:
+                name = typ
+            else:
+                name = sub
+        row["name"] = name
+        out.append(row)
+    return out
 
 
 def _dumps(value: Any) -> str | None:
@@ -105,7 +133,7 @@ class MetadataService:
             version.family_table_json = _dumps(payload.family_table)
 
         if payload.features is not None:
-            version.features_json = _dumps(payload.features)
+            version.features_json = _dumps(normalize_feature_rows(payload.features))
 
         bom_payload = payload.bom
         if bom_payload is not None:
@@ -174,7 +202,9 @@ class MetadataService:
         mass = _loads(version.mass_json)
         family_table = _loads(version.family_table_json)
         features_raw = _loads(version.features_json)
-        features = features_raw if isinstance(features_raw, list) else None
+        features = (
+            normalize_feature_rows(features_raw) if isinstance(features_raw, list) else None
+        )
         captured = bool(
             identity
             or materials
