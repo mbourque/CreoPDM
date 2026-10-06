@@ -4003,7 +4003,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           : "Adding files…",
       async () => {
       const out = await (async () => {
-      async function addAgentPathChunks(paths, baseFolder, commentOnce) {
+      async function addAgentPathChunks(paths, baseFolder, commentOnce, batchOpts) {
         const agent = await probeCreoAgent();
         if (!agent) {
           showError(
@@ -4017,6 +4017,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const chunkSize = 25;
         const combined = { ok: [], failed: [] };
         const parentFolder = currentFolder() || "";
+        const opts = batchOpts && typeof batchOpts === "object" ? batchOpts : {};
+        // One Audit import_batch_id for the whole Add (all 25-path /add-paths calls).
+        const importBatchId = String(opts.importBatchId || "").trim()
+          || (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `add-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+        const batchTotal = Math.max(1, Number(opts.batchTotal) || total);
         const basenameOf = (path) => {
           const text = String(path || "");
           const parts = text.split(/[/\\]/);
@@ -4025,7 +4032,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         // Stable History comment for every chunk (blank → "Add 935 files", not "Add 5 files").
         const effectiveComment =
           String(commentOnce || "").trim()
-          || (total > 1 ? `Add ${total} files` : total === 1 ? `Add ${basenameOf(list[0])}` : "");
+          || (batchTotal > 1
+            ? `Add ${batchTotal} files`
+            : total === 1
+              ? `Add ${basenameOf(list[0])}`
+              : "");
         for (let offset = 0; offset < list.length; offset += chunkSize) {
           const chunk = list.slice(offset, offset + chunkSize);
           const done = Math.min(offset + chunk.length, total);
@@ -4045,7 +4056,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
                 parent_folder: parentFolder,
                 comment: effectiveComment || null,
                 client_offset: offset,
-                client_total: total,
+                client_total: batchTotal,
+                import_batch_id: importBatchId,
                 purgeable_extensions: [...purgeableExtensionSet()],
               }),
             });
@@ -4095,8 +4107,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         return combined;
       }
+      // One batch id for the whole Add so Audit merges agent 25-path calls.
+      const agentImportBatchId =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `add-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       if (chosenAgentFolderBatches.length) {
         const combined = { ok: [], failed: [] };
+        const folderBatchTotal = Math.max(1, Number(bulkCount) || 0)
+          || chosenAgentFolderBatches.reduce(
+            (sum, batch) => sum + (batch.paths?.length || 0),
+            0
+          );
         for (let i = 0; i < chosenAgentFolderBatches.length; i += 1) {
           const batch = chosenAgentFolderBatches[i];
           setBusyMessage(
@@ -4107,7 +4129,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             batch.folder,
             // Prefer typed comment; else full multi-folder pick count (not this folder alone).
             comment
-              || (bulkCount > 1 ? `Add ${bulkCount} files` : "")
+              || (folderBatchTotal > 1 ? `Add ${folderBatchTotal} files` : ""),
+            { importBatchId: agentImportBatchId, batchTotal: folderBatchTotal }
           );
           if (!part) return combined.ok.length ? combined : null;
           combined.ok.push(...(part.ok || []));
@@ -4116,7 +4139,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         return combined;
       }
       if (chosenAgentPaths.length) {
-        return addAgentPathChunks(chosenAgentPaths, chosenAgentBaseFolder, comment);
+        return addAgentPathChunks(
+          chosenAgentPaths,
+          chosenAgentBaseFolder,
+          comment,
+          {
+            importBatchId: agentImportBatchId,
+            batchTotal: chosenAgentPaths.length,
+          }
+        );
       }
       if (chosenUploads.length) {
         const combined = { ok: [], failed: [] };

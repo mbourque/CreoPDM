@@ -1898,6 +1898,24 @@ def test_agent_add_paths_comment_on_every_upload_chunk(tmp_path, monkeypatch):
         assert len(typed_ids) == 1
         assert all(typed_ids)
 
+        # Client 25-path chunks share one import_batch_id across /add-paths calls.
+        posts.clear()
+        shared = "batch-across-client-chunks"
+        for slice_paths in (paths[:5], paths[5:10]):
+            more = client.post(
+                "/add-paths",
+                json={
+                    "pdm_url": "http://pdm.example:52113",
+                    "product_id": "proj-bulk",
+                    "absolute_paths": slice_paths,
+                    "client_total": 935,
+                    "import_batch_id": shared,
+                },
+            )
+            assert more.status_code == 200, more.text
+        assert posts
+        assert {post["data"].get("import_batch_id") for post in posts} == {shared}
+
 
 def test_agent_purge_versions_deletes_only_older_than_vault_floor(tmp_path):
     root = tmp_path / "cache"

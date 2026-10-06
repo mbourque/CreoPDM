@@ -426,6 +426,8 @@ class AddPathsRequest(BaseModel):
     # Browser batch progress (for logs only).
     client_offset: int = 0
     client_total: int = 0
+    # Stable across client 25-path /add-paths calls so Audit merges one Object added.
+    import_batch_id: str | None = None
     # Settings → Purgeable extensions (omit older .ext.N on upload).
     purgeable_extensions: list[str] = Field(default_factory=list)
 
@@ -1882,7 +1884,8 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             batch_total=batch_total,
             single_filename=jobs[0][0].name if len(jobs) == 1 else None,
         )
-        import_batch_id = str(uuid.uuid4())
+        # Prefer client-supplied id (one Add → many /add-paths); else one per request.
+        import_batch_id = (payload.import_batch_id or "").strip()[:80] or str(uuid.uuid4())
         with httpx.Client(timeout=600.0, follow_redirects=True) as client:
             for offset in range(0, len(jobs), chunk_size):
                 chunk = jobs[offset : offset + chunk_size]
