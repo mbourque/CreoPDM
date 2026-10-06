@@ -410,12 +410,21 @@ def post_creo_metadata(
     if isinstance(result.units, dict):
         units_ok = any(str(result.units.get(k) or "").strip() for k in ("system_name", "length", "mass", "time", "temperature"))
     ident = ""
+    model_type = ""
+    model_role = ""
+    skeleton_filename = ""
     if isinstance(result.identity, dict):
         ident = str(result.identity.get("file_name") or result.identity.get("full_name") or "")
+        model_type = str(result.identity.get("model_type") or "")
+        model_role = str(result.identity.get("model_role") or "")
+        skeleton_filename = str(result.identity.get("skeleton_filename") or "")
     logger.info(
-        "Saved Creo metadata for %s (%s): params=%s materials=%s%s deps=%s bom=%s mass=%s units=%s features=%s",
+        "Saved Creo metadata for %s (%s): type=%s role=%s skel=%s params=%s materials=%s%s deps=%s bom=%s mass=%s units=%s features=%s",
         ident or object_id,
         object_id[:8],
+        model_type or "-",
+        model_role or "-",
+        skeleton_filename or "-",
         params,
         mat_current or "none",
         f"/{mat_names} listed" if mat_names else "",

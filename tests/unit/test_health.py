@@ -200,11 +200,15 @@ def test_home_page(client):
     # Creo.JS documents property IsSkeleton first — not GetIsSkeleton().
     assert "handle.IsSkeleton" in read_skel
     assert read_skel.index("handle.IsSkeleton") < read_skel.index("handle.GetIsSkeleton")
+    assert "function creoModelIsDisplayedInSession" in text
+    assert "creoListAssemblyComponentFeatures" in text
+    assert "creoCompTypeIsSkeleton" in text
+    assert "pfcComponentType" in text
     solid_skel = text.split("function creoSolidIsSkeletonAnswer", 1)[1].split(
         "function creoModelIsSkeleton", 1
     )[0]
     assert "pfcSolid.cast" in solid_skel
-    assert "creoSolidMethodsBound" in solid_skel
+    assert "creoModelIsDisplayedInSession" in solid_skel
     assert solid_skel.index("pfcSolid.cast") < solid_skel.index("handles.push(model)")
     skel_fn = text.split("function creoDetectSkeletonRole", 1)[1].split(
         "function creoBodyIsSheetmetal", 1
@@ -217,7 +221,7 @@ def test_home_page(client):
     assert "_skel" in text
     # GetSkeleton helpers must not require typeof === "function" (Creo.JS callables).
     get_skel = text.split("function creoAssemblyGetSkeleton", 1)[1].split(
-        "function creoSkeletonFromAssemblyComponents", 1
+        "function creoCompTypeIsSkeleton", 1
     )[0]
     assert "handle.GetSkeleton()" in get_skel
     assert "handle.GetSkeleton" in get_skel
@@ -229,6 +233,8 @@ def test_home_page(client):
     )[0]
     assert 'stem + ".prt"' in skel_name_fn
     assert "creoIsPartModel(skel" not in skel_name_fn
+    assert "role=%s" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
+    assert "skeleton_filename" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "IsSheetmetal" in text
     assert "pfcModelType.MDL_MFG" in text
     assert "creoFeatureItems(model.ListMaterials())" in text

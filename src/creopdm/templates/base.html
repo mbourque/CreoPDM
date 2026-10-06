@@ -977,11 +977,30 @@ function creoReadIsSkeletonFlag(handle) {
     } catch (errGet) {}
     return null;
 }
-function creoSolidIsSkeletonAnswer(model) {
+function creoModelIsDisplayedInSession(session, model) {
+    /**
+     * Model Info / interactive open binds IsSkeleton correctly. Silent
+     * RetrieveModel often reports IsSkeleton=false for real skeletons
+     * (e.g. 600610010001) — only trust false when this file is active.
+     */
+    if (!session || !model) return false;
+    try {
+        var active = session.GetActiveModel && session.GetActiveModel();
+        if (active && creoSameLogicalModel(active, model)) return true;
+    } catch (errA) {}
+    try {
+        var current = session.CurrentModel;
+        if (current && creoSameLogicalModel(current, model)) return true;
+    } catch (errC) {}
+    return false;
+}
+function creoSolidIsSkeletonAnswer(model, session) {
     /**
      * this part's pfcSolid.IsSkeleton — not the parent assembly's GetSkeleton.
      * Must cast: RetrieveModel often yields a generic pfcModel where IsSkeleton
      * is unbound until pfcSolid.cast / pfcPart.cast.
+     * true → skeleton. false → only trust when the model is displayed; else null
+     * so Collect can still use parent GetSkeleton / component flags.
      */
     if (!model) return null;
     var handles = [];
@@ -1003,19 +1022,13 @@ function creoSolidIsSkeletonAnswer(model) {
         var flag = null;
         try { flag = creoReadIsSkeletonFlag(handles[h]); } catch (errRead) { flag = null; }
         if (flag === true) return true;
-        if (flag === false) {
-            // RetrieveModel handles often return false/unbound; only trust false
-            // on a solid that can actually list features / units.
-            var bound = false;
-            try { bound = creoSolidMethodsBound(handles[h]); } catch (errB) { bound = false; }
-            if (bound) sawFalse = true;
-        }
+        if (flag === false) sawFalse = true;
     }
-    if (sawFalse) return false;
+    if (sawFalse && creoModelIsDisplayedInSession(session, model)) return false;
     return null;
 }
-function creoModelIsSkeleton(model) {
-    return creoSolidIsSkeletonAnswer(model) === true;
+function creoModelIsSkeleton(model, session) {
+    return creoSolidIsSkeletonAnswer(model, session) === true;
 }
 function creoIsPartModel(model, filename) {
     try {
@@ -1049,7 +1062,8 @@ function creoFilenameLooksLikeSkeleton(filename) {
 function creoAssemblyGetSkeleton(assembly) {
     /**
      * PTC sample uses property access: skeleton = assembly.GetSkeleton
-     * (Creo.JS getters). Also try GetSkeleton() — either may throw NotFound.
+     * (Creo.JS getters). Also try GetSkeleton() — either may throw NotFound
+     * or CantAccess (skeleton exists but not in session — walk components next).
      * FileName is often a stem (LAYOUT) with no .prt.
      * Do not treat a callable/method object as the skeleton (it may have Type).
      */
@@ -1096,23 +1110,41 @@ function creoAssemblyGetSkeleton(assembly) {
     }
     return null;
 }
+function creoCompTypeIsSkeleton(compType) {
+    if (compType == null) return false;
+    try {
+        if (typeof pfcComponentType !== "undefined") {
+            var enumSkel = null;
+            try { enumSkel = pfcComponentType.COMP_SKELETON; } catch (errE1) { enumSkel = null; }
+            if (enumSkel == null) {
+                try { enumSkel = pfcComponentType.EPC_SKELETON; } catch (errE2) { enumSkel = null; }
+            }
+            if (enumSkel != null && compType === enumSkel) return true;
+        }
+    } catch (errEnum) {}
+    try {
+        if (/SKELETON/i.test(String(compType))) return true;
+    } catch (errStr) {}
+    return false;
+}
 function creoFeatureIsSkeletonComponent(feat) {
     /**
-     * Skeleton is often a component-feat flag (pfcComponentFeat.IsSkeleton),
-     * not pfcSolid.IsSkeleton on the retrieved part.
+     * Skeleton component in the assembly tree (Model Tree bone icon).
+     * Prefer pfcComponentFeat.IsSkeleton / CompType — works when GetSkeleton
+     * throws CantAccess because the .prt is not loaded.
      */
     if (!feat) return false;
     var handles = [feat];
     try {
         if (typeof pfcComponentFeat !== "undefined" && typeof pfcComponentFeat.cast === "function") {
             var asComp = pfcComponentFeat.cast(feat);
-            if (asComp) handles.push(asComp);
+            if (asComp) handles.unshift(asComp);
         }
     } catch (errCast) {}
     try {
         if (typeof wfcComponentFeat !== "undefined" && typeof wfcComponentFeat.cast === "function") {
             var asWfc = wfcComponentFeat.cast(feat);
-            if (asWfc) handles.push(asWfc);
+            if (asWfc) handles.unshift(asWfc);
         }
     } catch (errWfc) {}
     for (var i = 0; i < handles.length; i++) {
@@ -1121,18 +1153,16 @@ function creoFeatureIsSkeletonComponent(feat) {
         try { if (creoReadIsSkeletonFlag(handle) === true) return true; } catch (errFlag) {}
         try {
             var compType = handle.CompType;
-            if (compType == null && handle.GetCompType) compType = handle.GetCompType();
-            if (compType != null && /SKELETON/i.test(String(compType))) return true;
+            if (compType == null && handle.GetCompType) {
+                try { compType = handle.GetCompType(); } catch (errGet) { compType = null; }
+            }
+            if (creoCompTypeIsSkeleton(compType)) return true;
         } catch (errType) {}
     }
     return false;
 }
-function creoSkeletonFromAssemblyComponents(assembly, session) {
-    /**
-     * When GetSkeleton is unbound, a retrieved assembly may still list the
-     * skeleton component — component-feat IsSkeleton, else child's IsSkeleton.
-     */
-    if (!assembly) return null;
+function creoListAssemblyComponentFeatures(assembly) {
+    if (!assembly) return [];
     var listed = null;
     try {
         if (typeof pfcFeatureType !== "undefined") {
@@ -1142,6 +1172,37 @@ function creoSkeletonFromAssemblyComponents(assembly, session) {
         listed = null;
     }
     var features = creoFeatureItems(listed);
+    if (features.length) return features;
+    // Unbound assembly handle: try ListItems like BOM gather.
+    try {
+        var itemType = null;
+        if (typeof pfcModelItemType !== "undefined" && pfcModelItemType.ITEM_FEATURE != null) {
+            itemType = pfcModelItemType.ITEM_FEATURE;
+        }
+        if (itemType != null) {
+            var allItems = creoFeatureItems(assembly.ListItems(itemType));
+            for (var fi = 0; fi < allItems.length; fi++) {
+                var feat = allItems[fi];
+                if (!feat) continue;
+                try {
+                    if (typeof pfcFeatureType !== "undefined"
+                        && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
+                        features.push(feat);
+                    }
+                } catch (errComp) {}
+            }
+        }
+    } catch (errItems) {}
+    return features;
+}
+function creoSkeletonFromAssemblyComponents(assembly, session) {
+    /**
+     * When GetSkeleton is null / CantAccess, the Model Tree still lists the
+     * skeleton component — read component-feat IsSkeleton / CompType (no child
+     * retrieve required), else child's IsSkeleton when already in session.
+     */
+    if (!assembly) return null;
+    var features = creoListAssemblyComponentFeatures(assembly);
     for (var i = 0; i < features.length; i++) {
         var feat = features[i];
         if (!feat) continue;
@@ -1160,7 +1221,7 @@ function creoSkeletonFromAssemblyComponents(assembly, session) {
         }
         if (!child || creoIsAssemblyModel(child, "")) continue;
         try {
-            if (creoModelIsSkeleton(child)) return child;
+            if (creoModelIsSkeleton(child, session)) return child;
         } catch (errIs) {}
     }
     return null;
@@ -1228,7 +1289,8 @@ function creoSessionModelIsAssemblySkeleton(session, model) {
 function creoDetectSkeletonRole(session, model, filename) {
     /**
      * Skeleton is this part's IsSkeleton (PTC pfcSolid property). Assemblies never.
-     * If the solid answers false, stop. If unbound, fall back.
+     * Model Info shows "SKELETON MODEL : …" when true. Silent Collect Retrieve
+     * often lies with false — only stop on false when the model is displayed.
      */
     if (creoIsAssemblyModel(model, filename || "")) return false;
     var logical = "";
@@ -1238,7 +1300,7 @@ function creoDetectSkeletonRole(session, model, filename) {
     }
     if (!creoIsPartModel(model, filename) && !/\.prt$/i.test(logical)) return false;
     var flag = null;
-    try { flag = creoSolidIsSkeletonAnswer(model); } catch (errIs) { flag = null; }
+    try { flag = creoSolidIsSkeletonAnswer(model, session); } catch (errIs) { flag = null; }
     if (flag === true) return true;
     if (flag === false) return false;
     try {
@@ -2417,7 +2479,7 @@ function creoGatherBom(model, depth, visited, session, skeletonKey) {
                 if (!skelKey) {
                     try {
                         var skelChild = creoResolveComponentModel(session, feat, name);
-                        if (skelChild && creoModelIsSkeleton(skelChild)) skelKey = name;
+                        if (skelChild && creoModelIsSkeleton(skelChild, session)) skelKey = name;
                     } catch (errChildSk) {}
                 }
             }
