@@ -852,6 +852,13 @@ def test_soft_nav_skips_creojs_reconnect():
     )
     assert "tries >= 150" in overlay_guard
     assert "}, 100);" in overlay_guard
+    assert "isAuthShellPage()" in overlay_guard
+    assert 'path === "/login"' in script
+    assert "function isAuthShellPage(" in script
+    auth_shell = _between(script, "function isAuthShellPage(", "function startCreoConnectingOverlayGuard(")
+    assert 'path === "/login"' in auth_shell
+    assert 'path === "/logout"' in auth_shell
+    assert 'getElementById("login-form")' in auth_shell
     bridge_poll = _between(script, "function pollCreoBridgeUntilLive(", "startCreoConnectingOverlayGuard()")
     assert "bridgeTries >= 100" in bridge_poll
     assert "}, 100);" in bridge_poll
@@ -862,11 +869,13 @@ def test_soft_nav_skips_creojs_reconnect():
         encoding="utf-8"
     )
     assert "startCreoConnectingOverlayGuard()" in block
-    assert "soft || hostedCreoJS()" in script
+    assert "soft || hostedCreoJS() || isAuthShellPage()" in overlay_guard
     assert "never plain Chrome/Edge" in script or "Never plain Chrome" in script
     docs_creo = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "Connecting to Creo…" in docs_creo
     assert "never in Chrome/Edge" in docs_creo
+    assert "never on Logout" in docs_creo or "sign-in" in docs_creo
+    assert "leave **Connecting to Creo…** up on the sign-in page after Logout" in docs_creo
     assert "promote **Connected** as soon as the bridge is live" in docs_creo
     assert "wait several seconds for agent `/health` before showing Connected" in docs_creo
     # Soft sync must promote a stale Session offline pill when Creo.JS is live.

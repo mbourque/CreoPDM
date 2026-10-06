@@ -6299,10 +6299,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  function isAuthShellPage() {
+    // Logout hard-loads /login — never block username/password with Connecting…
+    const path = String(window.location.pathname || "");
+    if (
+      path === "/login"
+      || path === "/logout"
+      || path === "/setup"
+      || path === "/forgot-password"
+      || path === "/reset-password"
+    ) {
+      return true;
+    }
+    return Boolean(document.getElementById("login-form"));
+  }
+
   function startCreoConnectingOverlayGuard() {
     // Only in Creo's embedded browser while Creo.JS is still linking.
     // Soft boots keep the live bridge — never block after Soft-nav.
-    if (soft || hostedCreoJS()) {
+    // Auth pages (post-Logout sign-in): never show the overlay — Creo.JS can
+    // re-link in the background; blocking ~15s made Logout feel stuck/offline.
+    if (soft || hostedCreoJS() || isAuthShellPage()) {
       hideCreoConnectingOverlay();
       return;
     }
