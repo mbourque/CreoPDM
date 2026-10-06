@@ -498,8 +498,10 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert 'href="/admin/utilities/delete-products"' in hub.text
     assert 'href="/admin/utilities/audit"' in hub.text
     assert 'href="/admin/utilities/health"' in hub.text
+    assert 'href="/admin/utilities/logs"' in hub.text
     assert "Availability" in hub.text
     assert "Audit log" in hub.text
+    assert ">Logs</a>" in hub.text or "Logs</a>" in hub.text
     assert "Rebuild product database" in hub.text
     assert "Creo metadata" in hub.text
     assert "Where Used" in hub.text
@@ -760,6 +762,7 @@ def test_utilities_audit_only_role_gates_other_tools(auth_client, auth_ctx):
     assert 'href="/admin/utilities/audit"' in hub.text
     assert 'href="/admin/utilities/compact"' not in hub.text
     assert 'href="/admin/utilities/health"' not in hub.text
+    assert 'href="/admin/utilities/logs"' not in hub.text
     assert 'href="/admin/utilities/email-all"' not in hub.text
 
     audit = auth_client.get("/admin/utilities/audit")

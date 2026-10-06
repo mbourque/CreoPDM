@@ -2157,8 +2157,10 @@ def test_admin_hub_panel_fills_full_width():
     assert 'href="/admin/utilities/delete-products"' in utilities
     assert 'href="/admin/utilities/audit"' in utilities
     assert 'href="/admin/utilities/health"' in utilities
+    assert 'href="/admin/utilities/logs"' in utilities
     assert "Availability" in utilities
     assert "Audit log" in utilities
+    assert ">Logs</a>" in utilities
     assert "delete and rebuild Where Used" in utilities
     assert 'action="/admin/utilities/email-all"' not in utilities
     assert "Disk space" not in utilities
@@ -2314,16 +2316,23 @@ def test_admin_hub_panel_fills_full_width():
         encoding="utf-8"
     )
     assert "utilities-log-body" in logs_tmpl
+    logs_crumb = logs_tmpl.split("<nav", 1)[1].split("</nav>", 1)[0]
+    assert 'href="/admin/utilities">Utilities</a>' in logs_crumb
+    assert 'href="/admin/utilities/health"' not in logs_crumb
+    assert "<span>Logs</span>" in logs_crumb
     assert ".utilities-log-body" in css
     assert ".utilities-status-ok" in css
     assert ".utilities-cpu-meter" in css
     assert ".utilities-status-cpu-hot" in css
     docs_util = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "**I/O**" in docs_util or "I/O wait" in docs_util
+    assert "Open **Logs**" in docs_util
+    assert "Utilities hub tile" in docs_util
     util_hub = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities.html").read_text(
         encoding="utf-8"
     )
     assert "I/O" in util_hub
+    assert 'href="/admin/utilities/logs"' in util_hub
     script = _app_js()
     # Sync compact / delete POSTs can take a while — show busy until the response navigates.
     assert 'form.id === "utilities-compact-vault-form"' in script
