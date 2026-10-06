@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, aliased
 
 from creopdm.constants import DependencyType
@@ -115,44 +115,10 @@ class MetadataService:
                 details={"object_id": object_uuid},
             )
 
-        bom_payload = payload.bom
-        if bom_payload is not None:
-            if hasattr(bom_payload, "model_dump"):
-                bom_payload = bom_payload.model_dump()
-            elif isinstance(bom_payload, list):
-                bom_payload = [
-                    item.model_dump() if hasattr(item, "model_dump") else item for item in bom_payload
-                ]
-
-        # Collect / full snapshot posts send materials (even if empty). Erase this
-        # object's Parameter + Dependency rows first, then write — never other objects.
-        is_snapshot = (
-            payload.materials is not None
-            or bom_payload is not None
-            or payload.features is not None
-            or payload.units is not None
-        )
-        self._erase_object_metadata_tables(
-            session,
-            obj,
-            version,
-            clear_parameters=is_snapshot or bool(payload.parameters),
-            clear_dependencies=is_snapshot or bool(payload.dependencies) or bom_payload is not None,
-        )
-
-        stored_identity: dict[str, Any] | None = None
         if payload.identity is not None:
             identity = dict(payload.identity)
             normalize_creo_identity(identity)
-            previous = _loads(version.identity_json)
-            # Assembly Collect flags the child first; a later part snapshot of SOLID
-            # must not wipe SKELETON (Files Type flashes then reverts to Part).
-            if self._keep_part_skeleton_role(obj, previous, identity):
-                identity["model_type"] = "PART"
-                identity["model_role"] = DependencyType.SKELETON.value
-                normalize_creo_identity(identity)
             version.identity_json = _dumps(identity)
-            stored_identity = identity
             common = str(identity.get("common_name") or "").strip()
             if common and (not obj.name or obj.name == obj.filename):
                 obj.name = common[:255]
@@ -172,26 +138,20 @@ class MetadataService:
         if payload.features is not None:
             version.features_json = _dumps(normalize_feature_rows(payload.features))
 
+        bom_payload = payload.bom
         if bom_payload is not None:
+            if hasattr(bom_payload, "model_dump"):
+                bom_payload = bom_payload.model_dump()
+            elif isinstance(bom_payload, list):
+                bom_payload = [
+                    item.model_dump() if hasattr(item, "model_dump") else item for item in bom_payload
+                ]
             version.bom_json = _dumps(bom_payload)
 
-        if is_snapshot or bool(payload.parameters):
-            self._write_parameters(session, obj, version, payload.parameters)
+        self._replace_parameters(session, obj, version, payload.parameters)
 
-        if is_snapshot or bool(payload.dependencies) or bom_payload is not None:
-            self._write_dependencies(session, obj, payload.dependencies, bom_payload)
-            # Assembly GetSkeleton → SKELETON edges: set those part children's role now
-            # so Type updates without relying on a later part Collect seeing GetSkeleton.
-            self._flag_skeleton_children_from_new_edges(
-                session, obj, payload.dependencies, bom_payload, stored_identity
-            )
-        elif stored_identity and stored_identity.get("skeleton_filename"):
-            self._flag_skeleton_children_from_new_edges(
-                session, obj, None, None, stored_identity
-            )
-
-        # Part Collect: if a parent already stored a SKELETON edge to this part, win.
-        self._apply_skeleton_role_from_parent_edges(session, obj, version)
+        if payload.dependencies or bom_payload is not None:
+            self._replace_dependencies(session, obj, payload.dependencies, bom_payload)
 
         session.flush()
         return self.get(session, object_uuid, version.uuid)
@@ -786,241 +746,14 @@ class MetadataService:
             return version
         return obj.current_version
 
-    def clear_product_metadata(self, session: Session, product: Product) -> dict[str, int]:
-        """Wipe stored Creo metadata for every object in the product (Collect start)."""
-        ensure_product_mutable(product, action="update metadata")
-        objects = self._objects.list_objects(session, product.id)
-        object_ids = [row.id for row in objects]
-        params_deleted = 0
-        versions_cleared = 0
-        if object_ids:
-            params_deleted = int(
-                session.execute(delete(Parameter).where(Parameter.object_id.in_(object_ids))).rowcount
-                or 0
-            )
-            result = session.execute(
-                update(ObjectVersion)
-                .where(ObjectVersion.object_id.in_(object_ids))
-                .values(
-                    identity_json=None,
-                    materials_json=None,
-                    bom_json=None,
-                    units_json=None,
-                    mass_json=None,
-                    family_table_json=None,
-                    features_json=None,
-                )
-            )
-            versions_cleared = int(result.rowcount or 0)
-        deps_deleted = int(
-            session.execute(delete(Dependency).where(Dependency.product_id == product.id)).rowcount
-            or 0
-        )
-        session.flush()
-        return {
-            "objects": len(object_ids),
-            "versions_cleared": versions_cleared,
-            "parameters_deleted": params_deleted,
-            "dependencies_deleted": deps_deleted,
-        }
-
-    def _keep_part_skeleton_role(
-        self,
-        obj: EngineeringObject,
-        previous: Any,
-        identity: dict[str, Any],
-    ) -> bool:
-        logical = CreoFileManager.logical_filename(obj.filename or "").lower()
-        if not logical.endswith(".prt"):
-            return False
-        prev_role = ""
-        if isinstance(previous, dict):
-            prev = dict(previous)
-            normalize_creo_identity(prev)
-            prev_role = str(prev.get("model_role") or "").upper()
-        new_role = str(identity.get("model_role") or "").upper()
-        return prev_role == DependencyType.SKELETON.value and new_role != DependencyType.SKELETON.value
-
-    def flag_skeleton_parts_by_filenames(
-        self,
-        session: Session,
-        product: Product,
-        filenames: list[str],
-    ) -> dict[str, int]:
-        """Set model_role=SKELETON on matching .prt tips (Collect end-of-session pass)."""
-        ensure_product_mutable(product)
-        skel_keys: set[str] = set()
-        for name in filenames or []:
-            text = str(name or "").strip()
-            if text:
-                skel_keys.update(bom_lookup_keys(text))
-        if not skel_keys:
-            return {"requested": 0, "flagged": 0}
-        flagged = 0
-        for row in self._objects.list_objects(session, product.id):
-            if not (set(bom_lookup_keys(row.filename)) & skel_keys):
-                continue
-            before = ""
-            ver = self._resolve_version(session, row, None)
-            if ver is not None:
-                prev = _loads(ver.identity_json)
-                if isinstance(prev, dict):
-                    before = str(prev.get("model_role") or "").upper()
-            self._set_part_skeleton_role(session, row)
-            ver = self._resolve_version(session, row, None)
-            role = ""
-            if ver is not None:
-                data = _loads(ver.identity_json)
-                if isinstance(data, dict):
-                    role = str(data.get("model_role") or "").upper()
-            if role == DependencyType.SKELETON.value:
-                flagged += 1
-                if before != role:
-                    logger.info(
-                        "Flagged skeleton part %s (was role=%s)",
-                        row.filename,
-                        before or "-",
-                    )
-        session.flush()
-        return {"requested": len(skel_keys), "flagged": flagged}
-
-    def _set_part_skeleton_role(
-        self,
-        session: Session,
-        child: EngineeringObject,
-    ) -> None:
-        logical = CreoFileManager.logical_filename(child.filename or "").lower()
-        if not logical.endswith(".prt"):
-            return
-        child_version = self._resolve_version(session, child, None)
-        if child_version is None:
-            return
-        identity = _loads(child_version.identity_json)
-        if not isinstance(identity, dict):
-            identity = {}
-        else:
-            identity = dict(identity)
-        normalize_creo_identity(identity)
-        kind = str(identity.get("model_type") or "")
-        if kind and kind != "PART":
-            return
-        if str(identity.get("model_role") or "").upper() == DependencyType.SKELETON.value:
-            return
-        identity["model_type"] = "PART"
-        identity["model_role"] = DependencyType.SKELETON.value
-        if not identity.get("file_name"):
-            identity["file_name"] = child.filename
-        normalize_creo_identity(identity)
-        child_version.identity_json = _dumps(identity)
-
-    def _flag_skeleton_children_from_new_edges(
-        self,
-        session: Session,
-        parent: EngineeringObject,
-        dependencies: list[CreoDependencyPayload] | None,
-        bom_payload: Any,
-        identity: dict[str, Any] | None = None,
-    ) -> None:
-        """When this assembly reports a skeleton part, mark matching .prt children."""
-        skel_keys: set[str] = set()
-        for item in dependencies or []:
-            if str(getattr(item, "dependency_type", "") or "").upper() != DependencyType.SKELETON.value:
-                continue
-            name = str(getattr(item, "filename", "") or "").strip()
-            if name:
-                skel_keys.update(bom_lookup_keys(name))
-        if bom_payload is not None:
-            for filename, _qty, dep_type in self._flatten_bom(bom_payload):
-                if str(dep_type or "").upper() != DependencyType.SKELETON.value:
-                    continue
-                skel_keys.update(bom_lookup_keys(filename))
-        skel_name = ""
-        if isinstance(identity, dict):
-            skel_name = str(identity.get("skeleton_filename") or "").strip()
-        if skel_name:
-            skel_keys.update(bom_lookup_keys(skel_name))
-        if not skel_keys:
-            return
-        for row in self._objects.list_objects(session, parent.product_id):
-            if row.id == parent.id:
-                continue
-            if not (set(bom_lookup_keys(row.filename)) & skel_keys):
-                continue
-            self._set_part_skeleton_role(session, row)
-
-    def _apply_skeleton_role_from_parent_edges(
-        self,
-        session: Session,
-        obj: EngineeringObject,
-        version: ObjectVersion,
-    ) -> None:
-        logical = CreoFileManager.logical_filename(obj.filename or "").lower()
-        if not logical.endswith(".prt"):
-            return
-        has_edge = session.scalar(
-            select(Dependency.id)
-            .where(
-                Dependency.child_object_id == obj.id,
-                Dependency.dependency_type == DependencyType.SKELETON.value,
-            )
-            .limit(1)
-        )
-        if has_edge is None:
-            # GetSkeleton often lands only on the parent identity stem (no SKELETON edge).
-            child_keys = set(bom_lookup_keys(obj.filename))
-            matched = False
-            for row in self._objects.list_objects(session, obj.product_id):
-                if row.id == obj.id:
-                    continue
-                ver = getattr(row, "current_version", None)
-                raw = getattr(ver, "identity_json", None) if ver is not None else None
-                data = _loads(raw)
-                if not isinstance(data, dict):
-                    continue
-                skel_name = str(data.get("skeleton_filename") or "").strip()
-                if skel_name and (set(bom_lookup_keys(skel_name)) & child_keys):
-                    matched = True
-                    break
-            if not matched:
-                return
-        identity = _loads(version.identity_json)
-        if not isinstance(identity, dict):
-            identity = {}
-        else:
-            identity = dict(identity)
-        normalize_creo_identity(identity)
-        kind = str(identity.get("model_type") or "")
-        if kind and kind != "PART":
-            return
-        identity["model_type"] = "PART"
-        identity["model_role"] = DependencyType.SKELETON.value
-        if not identity.get("file_name"):
-            identity["file_name"] = obj.filename
-        normalize_creo_identity(identity)
-        version.identity_json = _dumps(identity)
-
-    def _erase_object_metadata_tables(
-        self,
-        session: Session,
-        obj: EngineeringObject,
-        version: ObjectVersion,
-        *,
-        clear_parameters: bool,
-        clear_dependencies: bool,
-    ) -> None:
-        """Delete this object's Parameter / Dependency rows before rewrite."""
-        if clear_parameters:
-            session.execute(delete(Parameter).where(Parameter.version_id == version.id))
-        if clear_dependencies:
-            session.execute(delete(Dependency).where(Dependency.parent_object_id == obj.id))
-
-    def _write_parameters(
+    def _replace_parameters(
         self,
         session: Session,
         obj: EngineeringObject,
         version: ObjectVersion,
         parameters: list[CreoParamPayload],
     ) -> None:
+        session.execute(delete(Parameter).where(Parameter.version_id == version.id))
         for item in parameters:
             name = (item.name or "").strip()
             if not name:
@@ -1038,13 +771,15 @@ class MetadataService:
                 )
             )
 
-    def _write_dependencies(
+    def _replace_dependencies(
         self,
         session: Session,
         parent: EngineeringObject,
         dependencies: list[CreoDependencyPayload],
         bom: Any,
     ) -> None:
+        session.execute(delete(Dependency).where(Dependency.parent_object_id == parent.id))
+
         refs: list[tuple[str, str, float]] = []
         bom_refs = list(self._flatten_bom(bom)) if bom is not None else []
         bom_has_members = any(
@@ -1066,12 +801,8 @@ class MetadataService:
                 dep_type = (item.dependency_type or DependencyType.ASSEMBLY_MEMBER.value).strip()
                 if self._skip_dependency_ref(dep_type, key_name, parent.filename):
                     continue
-                # Skip assembly members already in the BOM, but keep SKELETON so
-                # GetSkeleton can upgrade ASSEMBLY_MEMBER → SKELETON on merge.
+                # Skip assembly members already represented in the BOM tree.
                 if set(bom_lookup_keys(key_name)) & covered:
-                    if dep_type.upper() != DependencyType.SKELETON.value:
-                        continue
-                    refs.append((key_name, dep_type, 0.0))  # type upgrade only
                     continue
                 refs.append((key_name, dep_type, float(item.quantity or 1.0)))
         else:
@@ -1093,9 +824,7 @@ class MetadataService:
             for key in bom_lookup_keys(row.filename):
                 by_key.setdefault(key, row)
 
-        # child_id → (dep_type, quantity). Prefer SKELETON over ASSEMBLY_MEMBER when
-        # GetSkeleton and BOM both mention the same component.
-        by_child: dict[int, tuple[str, float]] = {}
+        by_child: dict[tuple[int, str], float] = {}
         for filename, dep_type, quantity in refs:
             if self._skip_dependency_ref(dep_type, filename, parent.filename):
                 continue
@@ -1106,20 +835,10 @@ class MetadataService:
                     break
             if child is None:
                 continue
-            kind = (dep_type or DependencyType.ASSEMBLY_MEMBER.value)[:32]
-            qty = float(quantity or 1.0)
-            prev = by_child.get(child.id)
-            if prev is None:
-                by_child[child.id] = (kind, qty)
-                continue
-            prev_kind, prev_qty = prev
-            merged_qty = prev_qty + qty
-            if prev_kind.upper() == DependencyType.SKELETON.value or kind.upper() == DependencyType.SKELETON.value:
-                by_child[child.id] = (DependencyType.SKELETON.value, merged_qty)
-            else:
-                by_child[child.id] = (prev_kind, merged_qty)
+            edge_key = (child.id, (dep_type or DependencyType.ASSEMBLY_MEMBER.value)[:32])
+            by_child[edge_key] = by_child.get(edge_key, 0.0) + float(quantity or 1.0)
 
-        for child_id, (dep_type, quantity) in by_child.items():
+        for (child_id, dep_type), quantity in by_child.items():
             session.add(
                 Dependency(
                     product_id=parent.product_id,

@@ -96,17 +96,6 @@ def test_locked_product_rejects_all_mutation_apis(client, repo_parent):
         hint="creo metadata",
     )
     _assert_locked(
-        client.post(f"/api/products/{pid}/creo-metadata/clear"),
-        hint="clear creo metadata",
-    )
-    _assert_locked(
-        client.post(
-            f"/api/products/{pid}/creo-metadata/flag-skeletons",
-            json={"filenames": ["skel.prt"]},
-        ),
-        hint="flag skeleton metadata",
-    )
-    _assert_locked(
         client.post(
             f"/api/products/{pid}/objects/from-zip",
             files={"file": ("pack.zip", b"PK\x05\x06" + b"\x00" * 18, "application/zip")},

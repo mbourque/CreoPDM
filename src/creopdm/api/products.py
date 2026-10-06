@@ -45,9 +45,6 @@ from creopdm.logging_setup import get_logger
 from creopdm.schemas.common import (
     BatchItemResult,
     BatchOperationResponse,
-    CreoMetadataClearResponse,
-    CreoMetadataFlagSkeletonsRequest,
-    CreoMetadataFlagSkeletonsResponse,
     CreateFolderRequest,
     CreateFolderResponse,
     ForgetProductRequest,
@@ -483,43 +480,6 @@ def start_rebuild_where_used(
     )
     status = ctx.where_used_index.start(product_id)
     return _where_used_job_response(status)
-
-
-@router.post(
-    "/api/products/{product_id}/creo-metadata/clear",
-    response_model=CreoMetadataClearResponse,
-)
-def clear_product_creo_metadata(
-    product_id: str,
-    request: Request,
-    db: Session = Depends(get_db),
-    ctx: AppContext = Depends(get_context),
-) -> CreoMetadataClearResponse:
-    """Erase stored Creo metadata for this product. Collect all runs this first."""
-    require_permission(request, ctx, PERMISSION_OBJECTS_METADATA)
-    product = load_accessible_product(request, ctx, db, product_id)
-    result = ctx.metadata.clear_product_metadata(db, product)
-    db.commit()
-    return CreoMetadataClearResponse.model_validate(result)
-
-
-@router.post(
-    "/api/products/{product_id}/creo-metadata/flag-skeletons",
-    response_model=CreoMetadataFlagSkeletonsResponse,
-)
-def flag_product_skeleton_parts(
-    product_id: str,
-    payload: CreoMetadataFlagSkeletonsRequest,
-    request: Request,
-    db: Session = Depends(get_db),
-    ctx: AppContext = Depends(get_context),
-) -> CreoMetadataFlagSkeletonsResponse:
-    """Mark .prt tips as SKELETON after Collect lists them via session GetSkeleton."""
-    require_permission(request, ctx, PERMISSION_OBJECTS_METADATA)
-    product = load_accessible_product(request, ctx, db, product_id)
-    result = ctx.metadata.flag_skeleton_parts_by_filenames(db, product, payload.filenames)
-    db.commit()
-    return CreoMetadataFlagSkeletonsResponse.model_validate({"ok": True, **result})
 
 
 @router.get(

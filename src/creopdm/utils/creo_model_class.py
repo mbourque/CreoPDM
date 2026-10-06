@@ -80,17 +80,24 @@ def normalize_creo_model_role(value: Any) -> str:
 
 
 def _filename_looks_like_part(filename: Any) -> bool:
-    from creopdm.creo.file_manager import CreoFileManager
-
-    logical = CreoFileManager.logical_filename(str(filename or "")).lower()
-    return logical.endswith(".prt")
+    name = str(filename or "").strip().lower().replace("\\", "/")
+    if not name:
+        return False
+    base = name.rsplit("/", 1)[-1]
+    # Creo versioned tips: layout.prt.2
+    if ".prt." in base:
+        return True
+    return base.endswith(".prt")
 
 
 def _filename_looks_like_assembly(filename: Any) -> bool:
-    from creopdm.creo.file_manager import CreoFileManager
-
-    logical = CreoFileManager.logical_filename(str(filename or "")).lower()
-    return logical.endswith(".asm")
+    name = str(filename or "").strip().lower().replace("\\", "/")
+    if not name:
+        return False
+    base = name.rsplit("/", 1)[-1]
+    if ".asm." in base:
+        return True
+    return base.endswith(".asm")
 
 
 def normalize_creo_identity(identity: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -99,20 +106,34 @@ def normalize_creo_identity(identity: dict[str, Any] | None) -> dict[str, Any] |
         return identity
     identity["model_type"] = normalize_creo_model_type(identity.get("model_type"))
     identity["model_role"] = normalize_creo_model_role(identity.get("model_role"))
-    # Creo skeleton models are parts only — never keep SKELETON on an assembly.
-    # Concept/layout Type on a .prt still counts as a skeleton part.
-    if identity["model_role"] == "SKELETON":
-        kind = identity["model_type"]
-        filename = identity.get("file_name") or identity.get("full_name") or ""
-        if kind == "ASSEMBLY" or _filename_looks_like_assembly(filename):
+    # Skeleton subtype is parts only — never keep it on assemblies.
+    if identity.get("model_role") == "SKELETON":
+        mtype = str(identity.get("model_type") or "")
+        fname = identity.get("file_name") or identity.get("filename") or ""
+        if mtype == "ASSEMBLY" or _filename_looks_like_assembly(fname):
             identity["model_role"] = ""
-        elif _filename_looks_like_part(filename):
-            identity["model_type"] = "PART"
-        elif kind and kind != "PART":
+        elif _filename_looks_like_part(fname):
+            # Creo may report skeleton/concept as LAYOUT; store as PART + SKELETON.
+            if mtype in ("", "LAYOUT"):
+                identity["model_type"] = "PART"
+        elif mtype not in ("PART", ""):
             identity["model_role"] = ""
-        elif not kind:
-            identity["model_type"] = "PART"
+        elif mtype == "" and not _filename_looks_like_part(fname):
+            identity["model_role"] = ""
     return identity
+
+
+def version_has_creo_metadata(version: Any) -> bool:
+    """True when a version row has stored Creo identity or materials from Collect."""
+    if version is None:
+        return False
+    identity = getattr(version, "identity_json", None)
+    if identity is not None and str(identity).strip() not in ("", "null", "{}"):
+        return True
+    materials = getattr(version, "materials_json", None)
+    if materials is not None and str(materials).strip() not in ("", "null", "{}"):
+        return True
+    return False
 
 
 def model_type_from_identity_json(raw: str | None) -> str:
@@ -126,25 +147,6 @@ def model_type_from_identity_json(raw: str | None) -> str:
     if not isinstance(data, dict):
         return ""
     return normalize_creo_model_type(data.get("model_type"))
-
-
-def version_has_creo_metadata(version: Any | None) -> bool:
-    """True when this version already has stored Creo metadata (Collect should skip)."""
-    if version is None:
-        return False
-    if model_type_from_identity_json(getattr(version, "identity_json", None)):
-        return True
-    for attr in (
-        "materials_json",
-        "bom_json",
-        "units_json",
-        "mass_json",
-        "family_table_json",
-        "features_json",
-    ):
-        if getattr(version, attr, None):
-            return True
-    return False
 
 
 # Roles that are useful as the Files list Type column (not generic SOLID).
@@ -174,6 +176,7 @@ def files_list_type_from_identity_json(raw: str | None) -> str:
 
     Prefer a distinctive model_role (SHEETMETAL, SKELETON, MFG, …) over a generic
     model_type (PART). SOLID is never shown — fall through to PART/ASSEMBLY/….
+    Skeleton role is parts-only (assemblies fall through to model_type).
     """
     if not raw:
         return ""
@@ -183,9 +186,9 @@ def files_list_type_from_identity_json(raw: str | None) -> str:
         return ""
     if not isinstance(data, dict):
         return ""
-    identity = dict(data)
-    normalize_creo_identity(identity)
-    role = identity.get("model_role") or ""
+    # Apply the same part-only skeleton rule as save-time normalize.
+    normalize_creo_identity(data)
+    role = normalize_creo_model_role(data.get("model_role"))
     if role in _FILES_LIST_ROLE_LABELS:
         return role
-    return identity.get("model_type") or ""
+    return normalize_creo_model_type(data.get("model_type"))

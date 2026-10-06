@@ -2083,15 +2083,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const lead = $("#collect-metadata-lead");
     const warn = $("#collect-metadata-warn");
     if (!(dialog instanceof HTMLDialogElement) || !form || !lead) {
-      return Promise.resolve(
-        window.confirm(
-          `Collect Creo metadata for ${total} model(s)? This clears stored metadata first, then recaptures each model.`
-        )
-      );
+      return Promise.resolve(window.confirm(`Collect Creo metadata for ${total} model(s)?`));
     }
     lead.textContent =
-      `Clears stored Creo metadata for this product, then captures parameters, materials, units, features, and BOM/structure for ${total} Creo model(s). ` +
-      "Each model is retrieved in Creo when needed. Skeleton parts use this solid’s IsSkeleton property. Mass properties are not collected (unsupported in silent Collect).";
+      `Capture parameters, materials, units, features, and BOM/structure for ${total} Creo model(s) in this product. ` +
+      "Each model is retrieved in the Creo session when needed. Mass properties are not collected (unsupported in silent Collect).";
     if (warn) {
       if (total > METADATA_COLLECT_WARN_THRESHOLD) {
         warn.hidden = false;
@@ -2265,62 +2261,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  function collectMetadataRank(filename) {
-    const logical = String(logicalUploadName(filename) || filename || "").toLowerCase();
-    if (logical.endsWith(".asm")) return 0;
-    if (logical.endsWith(".mfg")) return 1;
-    if (logical.endsWith(".prt")) return 2;
-    return 3;
-  }
-
-  function isAssemblySessionKey(name) {
-    const logical = String(logicalUploadName(name) || name || "").toLowerCase();
-    return logical.endsWith(".asm") || logical.includes(".asm.");
-  }
-
-  async function promoteSkeletonRolesFromSession(productId, targets) {
-    if (!productId || typeof window.CreoJS?.listSessionSkeletonParts !== "function") {
-      return 0;
-    }
-    let listed = null;
-    try {
-      listed = await window.CreoJS.listSessionSkeletonParts();
-    } catch {
-      return 0;
-    }
-    const names = Array.isArray(listed?.skeletons)
-      ? listed.skeletons.map((n) => String(n || "").trim()).filter(Boolean)
-      : [];
-    if (!names.length) return 0;
-    // Prefer product objects that were Collect targets; API matches by filename keys.
-    try {
-      const response = await fetch(
-        `/api/products/${encodeURIComponent(productId)}/creo-metadata/flag-skeletons`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filenames: names }),
-        }
-      );
-      if (!response.ok) return 0;
-      const body = await response.json().catch(() => ({}));
-      const flagged = Number(body.flagged || 0) || 0;
-      if (flagged && Array.isArray(targets)) {
-        /* targets unused — API flags by product filename match */
-      }
-      return flagged;
-    } catch {
-      return 0;
-    }
-  }
-
-  async function flushPendingMetadataErase(pendingErase, options) {
-    const opts = options && typeof options === "object" ? options : {};
-    // During Collect, keep every retrieved model until the loop ends — erasing the
-    // skeleton part after its parent assembly made GetSkeleton throw CantAccess.
-    if (opts.keepAssemblies) return;
-    const queue = Array.isArray(pendingErase) ? pendingErase : [];
-    const list = queue.splice(0, queue.length);
+  async function flushPendingMetadataErase(pendingErase) {
+    const list = Array.isArray(pendingErase) ? pendingErase.splice(0, pendingErase.length) : [];
     if (!list.length) return;
     if (typeof window.CreoJS?.eraseSessionModelsByNames !== "function") return;
     try {
@@ -2353,7 +2295,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     let failed = Number(state.failed) || 0;
     let lastReason = "";
     let shouldRefreshList = false;
-    let skeletonsFlagged = 0;
     const pendingErase = [];
     try {
       if (state.productId) {
@@ -2395,7 +2336,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         index += 1;
         if (pendingErase.length >= 25) {
-          await flushPendingMetadataErase(pendingErase, { keepAssemblies: true });
+          await flushPendingMetadataErase(pendingErase);
         }
         saveMetadataCollectState({
           ...state,
@@ -2412,17 +2353,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           updatedAt: Date.now(),
         });
         await new Promise((resolve) => window.setTimeout(resolve, 0));
-      }
-      // Before erase: assemblies + parts are still in session — GetSkeleton works
-      // here even when per-part IsSkeleton lied during silent Retrieve.
-      try {
-        setBusyMessage("Flagging skeleton parts from Creo session…");
-        skeletonsFlagged = await promoteSkeletonRolesFromSession(state.productId, targets);
-        if (skeletonsFlagged > 0) {
-          lastReason = `flagged ${skeletonsFlagged} skeleton(s)`;
-        }
-      } catch {
-        /* best-effort */
       }
       await flushPendingMetadataErase(pendingErase);
       if (typeof window.CreoJS?.eraseUndisplayedModelsQuiet === "function") {
@@ -2447,7 +2377,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         saveMetadataCollectState(null);
       }
       // Type column (SHEETMETAL / MFG / …) comes from SSR — refresh Files after saves.
-      shouldRefreshList = captured > 0 || skeletonsFlagged > 0;
+      shouldRefreshList = captured > 0;
     } finally {
       setBusyCancelHandler(null);
       clearBusy();
@@ -2497,36 +2427,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         relativePath: String(row.relative_path || "").trim(),
         versionId: String(row.current_version?.uuid || row.version_id || "").trim(),
       }))
-      .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename))
-      .sort((a, b) => {
-        const rank = collectMetadataRank(a.filename) - collectMetadataRank(b.filename);
-        if (rank !== 0) return rank;
-        return String(a.filename).localeCompare(String(b.filename));
-      });
+      .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename));
     if (!targets.length) {
       showOk("No Creo parts, assemblies, or drawings to capture.");
       return;
     }
     const okToStart = await confirmCollectMetadata(targets.length);
     if (!okToStart) return;
-    setBusy("Clearing stored Creo metadata…");
-    try {
-      const cleared = await fetch(
-        `/api/products/${encodeURIComponent(productId)}/creo-metadata/clear`,
-        { method: "POST", headers: { "Content-Type": "application/json" } }
-      );
-      if (!cleared.ok) {
-        clearBusy();
-        forceClearBusy();
-        showError($("#toolbar-error"), "Could not clear stored metadata before Collect.");
-        return;
-      }
-    } catch {
-      clearBusy();
-      forceClearBusy();
-      showError($("#toolbar-error"), "Could not clear stored metadata before Collect.");
-      return;
-    }
 
     const state = {
       productId,

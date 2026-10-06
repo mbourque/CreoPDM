@@ -237,7 +237,6 @@ class ObjectResponse(BaseModel):
     can_checkout: bool = True
     can_checkin: bool = False
     in_workspace: bool = False
-    creo_metadata_captured: bool = False
     created_at: datetime | None
     updated_at: datetime | None
     current_version: ObjectVersionResponse | None = None
@@ -813,26 +812,6 @@ class CreoMetadataResponse(BaseModel):
     family_table: dict[str, object] | None = None
     features: list[dict[str, object]] | None = None
     captured: bool = False
-
-
-class CreoMetadataClearResponse(BaseModel):
-    ok: bool = True
-    objects: int = 0
-    versions_cleared: int = 0
-    parameters_deleted: int = 0
-    dependencies_deleted: int = 0
-
-
-class CreoMetadataFlagSkeletonsRequest(BaseModel):
-    """Filenames from Creo.JS listSessionSkeletonParts (Collect end pass)."""
-
-    filenames: list[str] = Field(default_factory=list)
-
-
-class CreoMetadataFlagSkeletonsResponse(BaseModel):
-    ok: bool = True
-    requested: int = 0
-    flagged: int = 0
 
 
 class WhereUsedItem(BaseModel):

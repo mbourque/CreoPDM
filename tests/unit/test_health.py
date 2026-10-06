@@ -179,84 +179,19 @@ def test_home_page(client):
     assert "model_role" in text
     assert "IsSkeleton" in text
     assert "creoModelIsSkeleton" in text
-    assert "creoSolidIsSkeletonAnswer" in text
-    assert "creoReadIsSkeletonFlag" in text
     assert "creoDetectSkeletonRole" in text
     assert "creoFilenameLooksLikeSkeleton" in text
     assert "creoSessionModelIsAssemblySkeleton" in text
-    assert "creoIsPartModel" in text
-    assert "creoAssemblyGetSkeleton" in text
-    assert "creoFeatureIsSkeletonComponent" in text
-    assert "pfcComponentFeat" in text
-    assert "creoIsSkeletonOfAssembly" in text
-    assert "creoSkeletonLogicalName" in text
     assert "GetSkeleton" in text
     assert "GetIsSkeleton" in text
-    assert 'typeof handle.GetIsSkeleton === "function"' not in text
     assert "pfcSolid.cast" in text
-    read_skel = text.split("function creoReadIsSkeletonFlag", 1)[1].split(
-        "function creoSolidIsSkeletonAnswer", 1
-    )[0]
-    # Creo.JS documents property IsSkeleton first — not GetIsSkeleton().
-    assert "handle.IsSkeleton" in read_skel
-    assert read_skel.index("handle.IsSkeleton") < read_skel.index("handle.GetIsSkeleton")
-    assert "function creoModelIsDisplayedInSession" in text
-    assert "creoListAssemblyComponentFeatures" in text
-    assert "creoCompTypeIsSkeleton" in text
-    assert "pfcComponentType" in text
-    solid_skel = text.split("function creoSolidIsSkeletonAnswer", 1)[1].split(
-        "function creoModelIsSkeleton", 1
-    )[0]
-    assert "pfcSolid.cast" in solid_skel
-    assert "creoModelIsDisplayedInSession" in solid_skel
-    assert solid_skel.index("pfcSolid.cast") < solid_skel.index("handles.push(model)")
     skel_fn = text.split("function creoDetectSkeletonRole", 1)[1].split(
         "function creoBodyIsSheetmetal", 1
     )[0]
-    assert "creoIsPartModel" in skel_fn
-    assert "creoSolidIsSkeletonAnswer" in skel_fn
+    assert "creoModelIsSkeleton" in skel_fn
     assert "creoSessionModelIsAssemblySkeleton" in skel_fn
-    assert "if (flag === false) return false;" in skel_fn
-    # Parent GetSkeleton before trusting displayed false.
-    assert skel_fn.index("creoSessionModelIsAssemblySkeleton") < skel_fn.index(
-        "if (flag === false) return false;"
-    )
     assert "creoFilenameLooksLikeSkeleton" in skel_fn
     assert "_skel" in text
-    # GetSkeleton helpers must not require typeof === "function" (Creo.JS callables).
-    get_skel = text.split("function creoAssemblyGetSkeleton", 1)[1].split(
-        "function creoCompTypeIsSkeleton", 1
-    )[0]
-    assert "handle.GetSkeleton()" in get_skel
-    assert "handle.GetSkeleton" in get_skel
-    assert "FileName" in get_skel
-    assert "creoIsPartModel(skel" not in get_skel
-    assert "creoIsAssemblyModel" in get_skel
-    skel_name_fn = text.split("function creoSkeletonLogicalName", 1)[1].split(
-        "function creoIsSkeletonOfAssembly", 1
-    )[0]
-    assert 'stem + ".prt"' in skel_name_fn
-    assert "creoIsPartModel(skel" not in skel_name_fn
-    assert "role=%s" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
-    assert "skeleton_filename" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
-    assert "function listSessionSkeletonParts" in text
-    assert "function creoBindSolidForSkeleton" in text
-    assert "GetModel(root, pfcModelType.MDL_PART)" in text
-    assert "promoteSkeletonRolesFromSession" in open(
-        "src/creopdm/static/js/app.js", encoding="utf-8"
-    ).read()
-    assert "creo-metadata/flag-skeletons" in open(
-        "src/creopdm/static/js/app.js", encoding="utf-8"
-    ).read()
-    assert "flag_skeleton_parts_by_filenames" in open(
-        "src/creopdm/services/metadata_service.py", encoding="utf-8"
-    ).read()
-    assert "skeleton_probe" in open(
-        "src/creopdm/templates/object_detail.html", encoding="utf-8"
-    ).read()
-    assert "bound_class" in open(
-        "src/creopdm/templates/object_detail.html", encoding="utf-8"
-    ).read()
     assert "IsSheetmetal" in text
     assert "pfcModelType.MDL_MFG" in text
     assert "creoFeatureItems(model.ListMaterials())" in text
@@ -282,7 +217,6 @@ def test_home_page(client):
         "function creoGatherIdentity", 1
     )[0]
     assert "creoDetectSkeletonRole" in role_fn
-    assert role_fn.index('if (kind === "PART")') < role_fn.index("creoDetectSkeletonRole")
     assert role_fn.index("creoDetectSkeletonRole") < role_fn.index("creoModelHasSmtThicknessParam")
     assert role_fn.index("creoModelHasSmtThicknessParam") < role_fn.index("creoModelHasSheetmetalBody")
     assert "allowUndisplayed" in text
@@ -290,34 +224,7 @@ def test_home_page(client):
     assert "Do not RetrieveModel by bare name" in text
     assert "watchWhereUsedIndex" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "runCollectAllMetadata" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "collectMetadataRank" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "keepAssemblies" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "creo-metadata/clear" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "already have metadata stored" not in open(
-        "src/creopdm/static/js/app.js", encoding="utf-8"
-    ).read()
     assert "creopdmMetadataCollect" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "_erase_object_metadata_tables" in open(
-        "src/creopdm/services/metadata_service.py", encoding="utf-8"
-    ).read()
-    assert "clear_product_metadata" in open(
-        "src/creopdm/services/metadata_service.py", encoding="utf-8"
-    ).read()
-    assert "_apply_skeleton_role_from_parent_edges" in open(
-        "src/creopdm/services/metadata_service.py", encoding="utf-8"
-    ).read()
-    assert "_flag_skeleton_children_from_new_edges" in open(
-        "src/creopdm/services/metadata_service.py", encoding="utf-8"
-    ).read()
-    meta_src = open("src/creopdm/services/metadata_service.py", encoding="utf-8").read()
-    assert "_keep_part_skeleton_role" in meta_src
-    assert "skeleton_filename" in meta_src
-    assert "if (opts.keepAssemblies) return;" in open(
-        "src/creopdm/static/js/app.js", encoding="utf-8"
-    ).read()
-    assert "_promote_skeleton_children" not in open(
-        "src/creopdm/services/metadata_service.py", encoding="utf-8"
-    ).read()
     assert "resumeMetadataCollectIfNeeded" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "collect-metadata-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "cancel-metadata-collect-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
@@ -368,7 +275,7 @@ def test_home_page(client):
     assert "feat.GetName" in text
     assert "Prefer feature.name" in text
     assert "const name = feature.name" in text
-    assert "never abort the whole lookup on the first throw" in text
+    assert "Never abort the whole lookup on the first throw" in text
     assert "creoFeatureGenericLabel(name)" in text
     assert 't === "general"' in text
     assert 't === "edge"' in text

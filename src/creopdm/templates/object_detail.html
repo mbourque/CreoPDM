@@ -169,24 +169,6 @@
           {% if identity.model_role %}
           <dt>Subtype</dt><dd>{{ identity.model_role }}</dd>
           {% endif %}
-          {% if identity.skeleton_probe %}
-          <dt>Skeleton probe</dt>
-          <dd class="muted small" title="Creo.JS IsSkeleton diagnostics from last Collect">
-            answer={{ identity.skeleton_probe.answer }}
-            displayed={{ identity.skeleton_probe.displayed }}
-            parent={{ identity.skeleton_probe.session_parent_skeleton }}
-            {% if identity.skeleton_probe.session_skeleton_names %}
-            session={{ identity.skeleton_probe.session_skeleton_names|join(", ") }}
-            {% endif %}
-            class={{ identity.skeleton_probe.class_name or "—" }}
-            bound={{ identity.skeleton_probe.bound_class or "—" }}
-            {% if identity.skeleton_probe.raw %}
-            {% for row in identity.skeleton_probe.raw %}
-            · {{ row.via }}:{{ row.kind }}{% if row.value is not none %}={{ row.value }}{% endif %}{% if row.class_name %}/{{ row.class_name }}{% endif %}
-            {% endfor %}
-            {% endif %}
-          </dd>
-          {% endif %}
           {% if object.creo_release %}
           <dt>Creo</dt><dd>{{ object.creo_release }}</dd>
           {% endif %}
