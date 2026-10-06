@@ -565,6 +565,51 @@ def test_assembly_get_skeleton_promotes_child_role_without_skel_name(
     assert layout_meta.status_code == 200, layout_meta.text
     assert layout_meta.json()["identity"]["model_role"] == "SKELETON"
 
+    # Later Collect of the part alone often returns SOLID — keep SKELETON.
+    again = client.post(
+        f"/api/objects/{layout['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "jd_layout.prt",
+                "model_type": "PART",
+                "model_role": "SOLID",
+            }
+        },
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["identity"]["model_role"] == "SKELETON"
+
+
+@requires_git
+def test_assembly_is_not_promoted_to_skeleton_role(client, repo_parent, tmp_path):
+    """GetSkeleton / SKELETON deps never flag an assembly as SKELETON — parts only."""
+    product = _create_product(client, repo_parent)
+    child_asm = _add_part(client, product["uuid"], tmp_path, "sub.asm.1")
+    top = _add_part(client, product["uuid"], tmp_path, "top.asm.1")
+
+    posted = client.post(
+        f"/api/objects/{top['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "top.asm",
+                "model_type": "ASSEMBLY",
+                "model_role": "SKELETON",
+                "skeleton_filename": "sub.asm",
+            },
+            "dependencies": [
+                {"filename": "sub.asm", "quantity": 1, "dependency_type": "SKELETON"}
+            ],
+        },
+    )
+    assert posted.status_code == 200, posted.text
+    assert posted.json()["identity"].get("model_role") in ("", None)
+
+    listed = client.get(f"/api/products/{product['uuid']}/objects")
+    assert listed.status_code == 200, listed.text
+    by_uuid = {item["uuid"]: item for item in listed.json()}
+    assert by_uuid[child_asm["uuid"]]["type_label"] != "SKELETON"
+    assert by_uuid[top["uuid"]]["type_label"] != "SKELETON"
+
 
 @requires_git
 def test_where_used_tab_only_for_creo_models_extensions(client, repo_parent, tmp_path):

@@ -182,25 +182,29 @@ def test_home_page(client):
     assert "creoDetectSkeletonRole" in text
     assert "creoFilenameLooksLikeSkeleton" in text
     assert "creoSessionModelIsAssemblySkeleton" in text
+    assert "creoIsPartModel" in text
     assert "creoAssemblyGetSkeleton" in text
     assert "creoIsSkeletonOfAssembly" in text
     assert "creoSkeletonLogicalName" in text
     assert "skeleton_filename" in text
     assert "GetSkeleton" in text
     assert "GetIsSkeleton" in text
+    assert 'typeof handle.GetIsSkeleton === "function"' not in text
     assert "pfcSolid.cast" in text
     skel_fn = text.split("function creoDetectSkeletonRole", 1)[1].split(
         "function creoBodyIsSheetmetal", 1
     )[0]
+    assert "creoIsPartModel" in skel_fn
     assert "creoModelIsSkeleton" in skel_fn
     assert "creoSessionModelIsAssemblySkeleton" in skel_fn
     assert "creoFilenameLooksLikeSkeleton" in skel_fn
     assert "_skel" in text
     # GetSkeleton helpers must not require typeof === "function" (Creo.JS callables).
     get_skel = text.split("function creoAssemblyGetSkeleton", 1)[1].split(
-        "function creoSkeletonLogicalName", 1
+        "function creoSkeletonFromAssemblyComponents", 1
     )[0]
     assert "handle.GetSkeleton()" in get_skel
+    assert "handle.GetSkeleton" in get_skel
     assert "IsSheetmetal" in text
     assert "pfcModelType.MDL_MFG" in text
     assert "creoFeatureItems(model.ListMaterials())" in text
@@ -226,6 +230,7 @@ def test_home_page(client):
         "function creoGatherIdentity", 1
     )[0]
     assert "creoDetectSkeletonRole" in role_fn
+    assert role_fn.index('if (kind === "PART")') < role_fn.index("creoDetectSkeletonRole")
     assert role_fn.index("creoDetectSkeletonRole") < role_fn.index("creoModelHasSmtThicknessParam")
     assert role_fn.index("creoModelHasSmtThicknessParam") < role_fn.index("creoModelHasSheetmetalBody")
     assert "allowUndisplayed" in text

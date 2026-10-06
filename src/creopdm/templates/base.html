@@ -885,27 +885,67 @@ function creoModelTypeLabel(type) {
     }
     return "";
 }
+function creoFlagTrue(value) {
+    // Creo.JS / OTK booleans are often 1, not JS true. Do not treat method objects as true.
+    if (value === true || value === 1) return true;
+    return false;
+}
+function creoLooksLikeModel(obj) {
+    if (!obj || (typeof obj !== "object" && typeof obj !== "function")) return false;
+    try { if (obj.FileName) return true; } catch (errF) {}
+    try { if (obj.FullName) return true; } catch (errN) {}
+    try { if (typeof obj.Type !== "undefined" && obj.Type != null) return true; } catch (errT) {}
+    return false;
+}
+function creoModelNameToken(model) {
+    var tokens = [];
+    function add(raw) {
+        var text = String(raw || "").trim();
+        if (!text) return;
+        var logical = creoLogicalFileName(text).toLowerCase();
+        if (logical && tokens.indexOf(logical) < 0) tokens.push(logical);
+        var root = creoModelRoot(logical).toLowerCase();
+        if (root && tokens.indexOf(root) < 0) tokens.push(root);
+    }
+    if (!model) return tokens;
+    if (typeof model === "string") {
+        add(model);
+        return tokens;
+    }
+    try { add(model.FileName); } catch (e1) {}
+    try { add(model.FullName); } catch (e2) {}
+    try { add(model.GenericName); } catch (e3) {}
+    try { add(model.InstanceName); } catch (e4) {}
+    try { add(model.GetFileName()); } catch (e5) {}
+    return tokens;
+}
+function creoNameTokensOverlap(left, right) {
+    if (!left || !right || !left.length || !right.length) return false;
+    for (var i = 0; i < left.length; i++) {
+        for (var j = 0; j < right.length; j++) {
+            if (left[i] && left[i] === right[j]) return true;
+        }
+    }
+    return false;
+}
 function creoModelIsSkeleton(model) {
     /**
      * PTC: pfcSolid.IsSkeleton — true for a skeleton or concept model.
      * Creo 8/9 OTK often leaves GetIsSkeleton null on retrieve handles; only trust
-     * explicit true (never treat false/null as definitive on an unbound handle).
+     * explicit true/1 (never treat false/null as definitive on an unbound handle).
+     * Do not require typeof === "function" — Creo.JS methods often fail that check.
      */
     if (!model) return false;
     function readIsSkeletonTrue(handle) {
         if (!handle) return false;
         try {
-            if (handle.IsSkeleton === true) return true;
+            if (creoFlagTrue(handle.IsSkeleton)) return true;
         } catch (errBool) {}
         try {
-            if (typeof handle.GetIsSkeleton === "function" && handle.GetIsSkeleton() === true) {
-                return true;
-            }
+            if (creoFlagTrue(handle.GetIsSkeleton())) return true;
         } catch (errGet) {}
         try {
-            if (typeof handle.IsSkeleton === "function" && handle.IsSkeleton() === true) {
-                return true;
-            }
+            if (creoFlagTrue(handle.IsSkeleton())) return true;
         } catch (errFn) {}
         return false;
     }
@@ -913,32 +953,42 @@ function creoModelIsSkeleton(model) {
     try {
         if (typeof pfcSolid !== "undefined" && typeof pfcSolid.cast === "function") {
             var asSolid = pfcSolid.cast(model);
-            if (asSolid && asSolid !== model) handles.push(asSolid);
+            if (asSolid) handles.push(asSolid);
         }
     } catch (errSolid) {}
     try {
         if (typeof pfcPart !== "undefined" && typeof pfcPart.cast === "function") {
             var asPart = pfcPart.cast(model);
-            if (asPart && asPart !== model) handles.push(asPart);
+            if (asPart) handles.push(asPart);
         }
     } catch (errPart) {}
-    try {
-        if (typeof pfcAssembly !== "undefined" && typeof pfcAssembly.cast === "function") {
-            var asAsm = pfcAssembly.cast(model);
-            if (asAsm && asAsm !== model) handles.push(asAsm);
-        }
-    } catch (errAsm) {}
     for (var h = 0; h < handles.length; h++) {
         if (readIsSkeletonTrue(handles[h])) return true;
     }
     return false;
 }
+function creoIsPartModel(model, filename) {
+    try {
+        if (typeof pfcModelType !== "undefined" && model && model.Type === pfcModelType.MDL_PART) {
+            return true;
+        }
+    } catch (errType) {}
+    try {
+        if (model && model.isInstanceOf && model.isInstanceOf("pfcPart")) return true;
+    } catch (errInst) {}
+    var name = filename || "";
+    if (!name && model) {
+        try { name = String(model.FileName || model.FullName || ""); } catch (errN) { name = ""; }
+    }
+    return /\.prt$/i.test(creoLogicalFileName(name || ""));
+}
 function creoFilenameLooksLikeSkeleton(filename) {
     /**
-     * Last-resort naming when IsSkeleton / GetSkeleton are unavailable:
-     *   name_skel.prt, name_skeleton.prt, skel_name.prt, skeleton_name.prt
+     * Last-resort naming when IsSkeleton / GetSkeleton are unavailable.
+     * Skeleton models are parts only (.prt), never assemblies.
      */
     var logical = creoLogicalFileName(filename || "").toLowerCase();
+    if (!/\.prt$/.test(logical)) return false;
     var root = creoModelRoot(logical).toLowerCase();
     if (!root) return false;
     if (/_skel$/.test(root) || /_skeleton$/.test(root)) return true;
@@ -949,14 +999,14 @@ function creoFilenameLooksLikeSkeleton(filename) {
 function creoAssemblyGetSkeleton(assembly) {
     /**
      * pfcAssembly.GetSkeleton() — throws when the assembly has no skeleton.
-     * Prefer a direct call (PTC sample); do not require typeof === "function".
+     * Creo.JS may expose this as a method or as the model object (no call).
      */
     if (!assembly) return null;
     var handles = [assembly];
     try {
         if (typeof pfcAssembly !== "undefined" && typeof pfcAssembly.cast === "function") {
             var castAsm = pfcAssembly.cast(assembly);
-            if (castAsm && castAsm !== assembly) handles.push(castAsm);
+            if (castAsm) handles.push(castAsm);
         }
     } catch (errCast) {}
     for (var i = 0; i < handles.length; i++) {
@@ -964,41 +1014,66 @@ function creoAssemblyGetSkeleton(assembly) {
         if (!handle) continue;
         try {
             var skel = handle.GetSkeleton();
-            if (skel) return skel;
+            if (creoLooksLikeModel(skel) && creoIsPartModel(skel, "")) return skel;
         } catch (errGet) {}
         try {
-            if (typeof handle.GetSkeleton === "function") {
-                var skelFn = handle.GetSkeleton();
-                if (skelFn) return skelFn;
-            }
-        } catch (errFn) {}
+            var raw = handle.GetSkeleton;
+            if (creoLooksLikeModel(raw) && creoIsPartModel(raw, "")) return raw;
+        } catch (errProp) {}
     }
     return null;
 }
-function creoSkeletonLogicalName(assembly) {
-    var skel = creoAssemblyGetSkeleton(assembly);
-    if (!skel) return "";
+function creoSkeletonFromAssemblyComponents(assembly, session) {
+    /**
+     * When GetSkeleton is unbound, a retrieved assembly may still list the
+     * skeleton component — check each child's IsSkeleton.
+     */
+    if (!assembly) return null;
+    var listed = null;
     try {
-        return creoLogicalFileName(String(skel.FileName || "")).toLowerCase();
-    } catch (errName) {
-        return "";
+        if (typeof pfcFeatureType !== "undefined") {
+            listed = assembly.ListFeaturesByType(true, pfcFeatureType.FEATTYPE_COMPONENT);
+        }
+    } catch (errList) {
+        listed = null;
     }
+    var features = creoFeatureItems(listed);
+    for (var i = 0; i < features.length; i++) {
+        var feat = features[i];
+        if (!feat) continue;
+        var child = null;
+        try { child = creoResolveComponentModel(session, feat, ""); } catch (errRes) { child = null; }
+        if (!child || !creoIsPartModel(child, "")) continue;
+        try {
+            if (creoModelIsSkeleton(child)) return child;
+        } catch (errIs) {}
+    }
+    return null;
+}
+function creoSkeletonLogicalName(assembly, session) {
+    var skel = creoAssemblyGetSkeleton(assembly);
+    if (!skel) {
+        try { skel = creoSkeletonFromAssemblyComponents(assembly, session); } catch (errComp) { skel = null; }
+    }
+    if (!skel || !creoIsPartModel(skel, "")) return "";
+    var tokens = creoModelNameToken(skel);
+    for (var t = 0; t < tokens.length; t++) {
+        if (/\.prt$/.test(tokens[t])) return tokens[t];
+    }
+    return tokens.length ? tokens[0] : "";
 }
 function creoIsSkeletonOfAssembly(assembly, model) {
     /**
      * PTC-style check:
      *   skeleton = assembly.GetSkeleton();
      *   return skeleton && skeleton.FileName === model.FileName;
-     * Uses logical names so .prt.3 matches .prt.
+     * Also matches FullName / stem so LAYOUT vs layout.prt still hits.
      */
     try {
+        if (!creoIsPartModel(model, "")) return false;
         var skeleton = creoAssemblyGetSkeleton(assembly);
         if (!skeleton || !model) return false;
-        var skelName = "";
-        var modelName = "";
-        try { skelName = creoLogicalFileName(String(skeleton.FileName || "")).toLowerCase(); } catch (errA) {}
-        try { modelName = creoLogicalFileName(String(model.FileName || "")).toLowerCase(); } catch (errB) {}
-        if (skelName && modelName && skelName === modelName) return true;
+        if (creoNameTokensOverlap(creoModelNameToken(skeleton), creoModelNameToken(model))) return true;
         try {
             if (skeleton === model) return true;
         } catch (errSame) {}
@@ -1031,6 +1106,7 @@ function creoSessionModelIsAssemblySkeleton(session, model) {
     return false;
 }
 function creoDetectSkeletonRole(session, model, filename) {
+    if (!creoIsPartModel(model, filename)) return false;
     try {
         if (creoModelIsSkeleton(model)) return true;
     } catch (errIs) {}
@@ -1214,18 +1290,19 @@ function creoClassifyManufacturing(session, model, identity) {
 function creoGatherModelRole(model, modelType, parameters, session, filename) {
     /**
      * Mutually exclusive CreoPDM model_role. Family table / flexible / etc. stay elsewhere.
-     * Skeleton: IsSkeleton, else parent-assembly GetSkeleton match, else _skel name fallback.
+     * Skeleton is PART-only: IsSkeleton, else parent-assembly GetSkeleton match,
+     * else _skel name fallback. Assemblies never get SKELETON.
      * MFG type → role MFG. PART sheet-metal: SMT_THICKNESS first, then body.IsSheetmetal.
      */
     var kind = String(modelType || "").trim().toUpperCase();
     if (!kind || !model) return "";
-    try {
-        if (creoDetectSkeletonRole(session, model, filename)) return "SKELETON";
-    } catch (errSk) {}
     if (kind === "MFG") {
         return "MFG";
     }
     if (kind === "PART") {
+        try {
+            if (creoDetectSkeletonRole(session, model, filename)) return "SKELETON";
+        } catch (errSk) {}
         try {
             if (creoModelHasSmtThicknessParam(model)) return "SHEETMETAL";
         } catch (errSmt) {}
@@ -1438,7 +1515,7 @@ function creoDependencyTypeLabel(dep) {
     } catch (err) {}
     return "REFERENCE";
 }
-function creoGatherDependencies(model) {
+function creoGatherDependencies(model, session) {
     var rows = [];
     try {
         if (typeof model.ListDependencies !== "function") return rows;
@@ -1447,7 +1524,7 @@ function creoGatherDependencies(model) {
             ? listed.getCount()
             : (listed && listed.length) || 0;
         var skelKey = "";
-        try { skelKey = creoSkeletonLogicalName(model); } catch (errSkel) { skelKey = ""; }
+        try { skelKey = creoSkeletonLogicalName(model, session); } catch (errSkel) { skelKey = ""; }
         for (var i = 0; i < count; i++) {
             var dep = typeof listed.get === "function" ? listed.get(i) : listed[i];
             if (!dep) continue;
@@ -1469,7 +1546,8 @@ function creoGatherDependencies(model) {
             if (!childName) continue;
             var logical = creoLogicalFileName(childName);
             var depType = creoDependencyTypeLabel(dep);
-            if (skelKey && logical.toLowerCase() === skelKey) {
+            if (skelKey && /\.prt$/i.test(logical)
+                && creoNameTokensOverlap(creoModelNameToken(logical), creoModelNameToken(skelKey))) {
                 depType = "SKELETON";
             }
             rows.push({
@@ -1482,8 +1560,13 @@ function creoGatherDependencies(model) {
         if (skelKey) {
             var haveSkel = false;
             for (var s = 0; s < rows.length; s++) {
-                if (String(rows[s].filename || "").toLowerCase() === skelKey) {
-                    rows[s].dependency_type = "SKELETON";
+                if (creoNameTokensOverlap(
+                    creoModelNameToken(rows[s].filename),
+                    creoModelNameToken(skelKey)
+                )) {
+                    if (/\.prt$/i.test(String(rows[s].filename || ""))) {
+                        rows[s].dependency_type = "SKELETON";
+                    }
                     haveSkel = true;
                     break;
                 }
@@ -2083,12 +2166,14 @@ function creoFeatureItems(listed) {
         if (count == null) return out;
         for (var i = 0; i < count; i++) {
             var item = null;
-            try {
-                if (typeof listed.Item === "function") item = listed.Item(i);
-                else if (typeof listed.get === "function") item = listed.get(i);
-                else item = listed[i];
-            } catch (errItem) {
-                item = null;
+            try { item = listed.Item(i); } catch (errItemCall) { item = null; }
+            if (!item) {
+                try {
+                    if (typeof listed.get === "function") item = listed.get(i);
+                    else item = listed[i];
+                } catch (errItem) {
+                    item = null;
+                }
             }
             if (item) out.push(item);
         }
@@ -2101,7 +2186,7 @@ function creoResolveComponentModel(session, feat, filename) {
      * missing deps spam Creo with regen failures during metadata/BOM walks.
      */
     try {
-        if (feat && typeof feat.GetModel === "function") {
+        if (feat) {
             var byMethod = feat.GetModel();
             if (byMethod) return byMethod;
         }
@@ -2139,7 +2224,7 @@ function creoGatherBom(model, depth, visited, session, skeletonKey) {
         if (maxDepth < 0) return nodes;
         var solid = creoAsSolid(session, model, null);
         if (!skelKey) {
-            try { skelKey = creoSkeletonLogicalName(solid || model); } catch (errSk) { skelKey = ""; }
+            try { skelKey = creoSkeletonLogicalName(solid || model, session); } catch (errSk) { skelKey = ""; }
         }
         var features = [];
         try {
@@ -2193,7 +2278,9 @@ function creoGatherBom(model, depth, visited, session, skeletonKey) {
             var node = {
                 filename: entry.filename,
                 quantity: entry.quantity,
-                dependency_type: (skelKey && childKey === skelKey) ? "SKELETON" : "ASSEMBLY_MEMBER",
+                dependency_type: (skelKey && /\.prt$/i.test(entry.filename)
+                    && creoNameTokensOverlap(creoModelNameToken(entry.filename), creoModelNameToken(skelKey)))
+                    ? "SKELETON" : "ASSEMBLY_MEMBER",
                 children: []
             };
             if (maxDepth > 0 && !seen[childKey]) {
@@ -2219,7 +2306,7 @@ function creoGatherBomTree(model, session) {
     try { rootName = String(model.FileName || ""); } catch (errName) { rootName = ""; }
     rootName = creoLogicalFileName(rootName) || rootName || "assembly";
     var skelKey = "";
-    try { skelKey = creoSkeletonLogicalName(model); } catch (errSkel) { skelKey = ""; }
+    try { skelKey = creoSkeletonLogicalName(model, session); } catch (errSkel) { skelKey = ""; }
     var children = creoGatherBom(model, 6, {}, session, skelKey);
     return [{
         filename: rootName,
@@ -2374,7 +2461,7 @@ function gatherModelMetadata(filename, filePath, options) {
         } catch (errRoleEarly) {}
         var parameters = creoGatherParameters(model);
         var materials = creoGatherMaterials(model, parameters);
-        var dependencies = creoGatherDependencies(model);
+        var dependencies = creoGatherDependencies(model, session);
         // Upgrade for units/features/BOM; mass is unsupported (Creo.JS unbound solid APIs).
         var solidModel = creoUpgradeSolidModel(session, model, null);
         if (!solidModel) solidModel = model;
@@ -2440,11 +2527,13 @@ function gatherModelMetadata(filename, filePath, options) {
         // Assembly → record GetSkeleton child so the server can flag that part SKELETON
         // even when its filename is not *_skel* and IsSkeleton was unbound on Collect.
         try {
-            var skelLogical = creoSkeletonLogicalName(solidModel);
+            var skelLogical = creoSkeletonLogicalName(solidModel, session);
             if (skelLogical) {
                 identity.skeleton_filename = skelLogical;
                 for (var di = 0; di < dependencies.length; di++) {
-                    if (String(dependencies[di].filename || "").toLowerCase() === skelLogical) {
+                    var depName = String(dependencies[di].filename || "");
+                    if (/\.prt$/i.test(depName)
+                        && creoNameTokensOverlap(creoModelNameToken(depName), creoModelNameToken(skelLogical))) {
                         dependencies[di].dependency_type = "SKELETON";
                     }
                 }

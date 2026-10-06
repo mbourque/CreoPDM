@@ -121,8 +121,24 @@ class MetadataService:
             # Preserve GetSkeleton child name before/after normalize (not a model_role).
             skel_name = str(identity.get("skeleton_filename") or "").strip()
             normalize_creo_identity(identity)
-            if skel_name:
+            if skel_name and not CreoFileManager.logical_filename(skel_name).lower().endswith(".asm"):
                 identity["skeleton_filename"] = skel_name
+            existing = _loads(version.identity_json)
+            if isinstance(existing, dict):
+                old_role = str(existing.get("model_role") or "").strip().upper()
+                new_role = str(identity.get("model_role") or "").strip().upper()
+                # Isolated part Collect often returns SOLID when IsSkeleton is unbound.
+                # Do not wipe a SKELETON role already set from the parent assembly.
+                if (
+                    old_role == DependencyType.SKELETON.value
+                    and new_role in {"", "SOLID"}
+                    and identity.get("model_type") == "PART"
+                ):
+                    identity["model_role"] = DependencyType.SKELETON.value
+                if not identity.get("skeleton_filename"):
+                    old_skel = str(existing.get("skeleton_filename") or "").strip()
+                    if old_skel:
+                        identity["skeleton_filename"] = old_skel
             version.identity_json = _dumps(identity)
             saved_identity = identity
             common = str(identity.get("common_name") or "").strip()
@@ -927,6 +943,9 @@ class MetadataService:
             row_keys = set(bom_lookup_keys(row.filename))
             if not (row_keys & skel_keys):
                 continue
+            # Skeleton models are parts only.
+            if not CreoFileManager.logical_filename(row.filename).lower().endswith(".prt"):
+                continue
             child_version = self._resolve_version(session, row, None)
             if child_version is None:
                 continue
@@ -940,12 +959,7 @@ class MetadataService:
             child_identity["model_role"] = DependencyType.SKELETON.value
             if not child_identity.get("file_name"):
                 child_identity["file_name"] = row.filename
-            if not child_identity.get("model_type"):
-                lower = row.filename.lower()
-                if lower.endswith(".asm"):
-                    child_identity["model_type"] = "ASSEMBLY"
-                elif lower.endswith(".prt"):
-                    child_identity["model_type"] = "PART"
+            child_identity["model_type"] = "PART"
             normalize_creo_identity(child_identity)
             child_version.identity_json = _dumps(child_identity)
 

@@ -36,6 +36,26 @@ def test_normalize_creo_identity_mutates_dict():
     assert identity["common_name"] == "Pin"
 
 
+def test_skeleton_role_only_on_parts():
+    asm = {"model_type": "ASSEMBLY", "model_role": "SKELETON", "file_name": "top.asm"}
+    normalize_creo_identity(asm)
+    assert asm["model_type"] == "ASSEMBLY"
+    assert asm["model_role"] == ""
+
+    named_asm = {"model_type": "", "model_role": "SKELETON", "file_name": "layout.asm.1"}
+    normalize_creo_identity(named_asm)
+    assert named_asm["model_role"] == ""
+
+    part = {"model_type": "PART", "model_role": "SKELETON", "file_name": "layout.prt"}
+    normalize_creo_identity(part)
+    assert part["model_role"] == "SKELETON"
+
+    inferred = {"model_type": "", "model_role": "SKELETON", "file_name": "layout.prt.2"}
+    normalize_creo_identity(inferred)
+    assert inferred["model_type"] == "PART"
+    assert inferred["model_role"] == "SKELETON"
+
+
 def test_model_type_from_identity_json():
     from creopdm.utils.creo_model_class import model_type_from_identity_json
     from creopdm.utils.classify import resolve_type_icon
@@ -73,4 +93,10 @@ def test_files_list_type_prefers_distinctive_role():
         == "MFG"
     )
     assert files_list_type_from_identity_json('{"model_type":"ASSEMBLY"}') == "ASSEMBLY"
+    assert (
+        files_list_type_from_identity_json(
+            '{"model_type":"ASSEMBLY","model_role":"SKELETON"}'
+        )
+        == "ASSEMBLY"
+    )
     assert resolve_type_icon(type_label="SHEETMETAL") == "part.png"

@@ -79,12 +79,36 @@ def normalize_creo_model_role(value: Any) -> str:
     return _MODEL_ROLE_ALIASES.get(raw, "")
 
 
+def _filename_looks_like_part(filename: Any) -> bool:
+    from creopdm.creo.file_manager import CreoFileManager
+
+    logical = CreoFileManager.logical_filename(str(filename or "")).lower()
+    return logical.endswith(".prt")
+
+
+def _filename_looks_like_assembly(filename: Any) -> bool:
+    from creopdm.creo.file_manager import CreoFileManager
+
+    logical = CreoFileManager.logical_filename(str(filename or "")).lower()
+    return logical.endswith(".asm")
+
+
 def normalize_creo_identity(identity: dict[str, Any] | None) -> dict[str, Any] | None:
     """Normalize model_type / model_role keys on an identity dict (in place + return)."""
     if not isinstance(identity, dict):
         return identity
     identity["model_type"] = normalize_creo_model_type(identity.get("model_type"))
     identity["model_role"] = normalize_creo_model_role(identity.get("model_role"))
+    # Creo skeleton models are parts only — never keep SKELETON on an assembly.
+    if identity["model_role"] == "SKELETON":
+        kind = identity["model_type"]
+        filename = identity.get("file_name") or identity.get("full_name") or ""
+        if kind == "ASSEMBLY" or _filename_looks_like_assembly(filename):
+            identity["model_role"] = ""
+        elif kind and kind != "PART":
+            identity["model_role"] = ""
+        elif not kind and _filename_looks_like_part(filename):
+            identity["model_type"] = "PART"
     return identity
 
 
@@ -137,7 +161,9 @@ def files_list_type_from_identity_json(raw: str | None) -> str:
         return ""
     if not isinstance(data, dict):
         return ""
-    role = normalize_creo_model_role(data.get("model_role"))
+    identity = dict(data)
+    normalize_creo_identity(identity)
+    role = identity.get("model_role") or ""
     if role in _FILES_LIST_ROLE_LABELS:
         return role
-    return normalize_creo_model_type(data.get("model_type"))
+    return identity.get("model_type") or ""
