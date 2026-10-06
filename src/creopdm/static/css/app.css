@@ -535,14 +535,19 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .admin-utilities .settings-card {
   margin-top: 0.85rem;
 }
-.admin-utilities .audit-events-heading {
+.admin-utilities h2.audit-events-heading {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  justify-content: space-between;
+  gap: 0.75rem;
   flex-wrap: nowrap;
   width: 100%;
+  box-sizing: border-box;
 }
-.admin-utilities .audit-events-heading .btn {
+.admin-utilities h2.audit-events-heading .audit-events-title {
+  min-width: 0;
+}
+.admin-utilities h2.audit-events-heading .btn {
   margin-left: auto;
   flex-shrink: 0;
 }
