@@ -184,6 +184,8 @@ def test_home_page(client):
     assert "creoSessionModelIsAssemblySkeleton" in text
     assert "creoIsPartModel" in text
     assert "creoAssemblyGetSkeleton" in text
+    assert "creoFeatureIsSkeletonComponent" in text
+    assert "pfcComponentFeat" in text
     assert "creoIsSkeletonOfAssembly" in text
     assert "creoSkeletonLogicalName" in text
     assert "GetSkeleton" in text
@@ -204,6 +206,7 @@ def test_home_page(client):
     )[0]
     assert "handle.GetSkeleton()" in get_skel
     assert "handle.GetSkeleton" in get_skel
+    assert "FileName" in get_skel
     assert "creoIsPartModel(skel" not in get_skel
     assert "creoIsAssemblyModel" in get_skel
     skel_name_fn = text.split("function creoSkeletonLogicalName", 1)[1].split(
@@ -263,6 +266,9 @@ def test_home_page(client):
     assert "_flag_skeleton_children_from_new_edges" in open(
         "src/creopdm/services/metadata_service.py", encoding="utf-8"
     ).read()
+    meta_src = open("src/creopdm/services/metadata_service.py", encoding="utf-8").read()
+    assert "_keep_part_skeleton_role" in meta_src
+    assert "skeleton_filename" in meta_src
     assert "if (opts.keepAssemblies) return;" in open(
         "src/creopdm/static/js/app.js", encoding="utf-8"
     ).read()

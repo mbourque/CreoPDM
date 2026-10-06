@@ -140,10 +140,19 @@ class MetadataService:
             clear_dependencies=is_snapshot or bool(payload.dependencies) or bom_payload is not None,
         )
 
+        stored_identity: dict[str, Any] | None = None
         if payload.identity is not None:
             identity = dict(payload.identity)
             normalize_creo_identity(identity)
+            previous = _loads(version.identity_json)
+            # Assembly Collect flags the child first; a later part snapshot of SOLID
+            # must not wipe SKELETON (Files Type flashes then reverts to Part).
+            if self._keep_part_skeleton_role(obj, previous, identity):
+                identity["model_type"] = "PART"
+                identity["model_role"] = DependencyType.SKELETON.value
+                normalize_creo_identity(identity)
             version.identity_json = _dumps(identity)
+            stored_identity = identity
             common = str(identity.get("common_name") or "").strip()
             if common and (not obj.name or obj.name == obj.filename):
                 obj.name = common[:255]
@@ -174,7 +183,11 @@ class MetadataService:
             # Assembly GetSkeleton → SKELETON edges: set those part children's role now
             # so Type updates without relying on a later part Collect seeing GetSkeleton.
             self._flag_skeleton_children_from_new_edges(
-                session, obj, payload.dependencies, bom_payload
+                session, obj, payload.dependencies, bom_payload, stored_identity
+            )
+        elif stored_identity and stored_identity.get("skeleton_filename"):
+            self._flag_skeleton_children_from_new_edges(
+                session, obj, None, None, stored_identity
             )
 
         # Part Collect: if a parent already stored a SKELETON edge to this part, win.
@@ -811,6 +824,23 @@ class MetadataService:
             "dependencies_deleted": deps_deleted,
         }
 
+    def _keep_part_skeleton_role(
+        self,
+        obj: EngineeringObject,
+        previous: Any,
+        identity: dict[str, Any],
+    ) -> bool:
+        logical = CreoFileManager.logical_filename(obj.filename or "").lower()
+        if not logical.endswith(".prt"):
+            return False
+        prev_role = ""
+        if isinstance(previous, dict):
+            prev = dict(previous)
+            normalize_creo_identity(prev)
+            prev_role = str(prev.get("model_role") or "").upper()
+        new_role = str(identity.get("model_role") or "").upper()
+        return prev_role == DependencyType.SKELETON.value and new_role != DependencyType.SKELETON.value
+
     def _set_part_skeleton_role(
         self,
         session: Session,
@@ -846,8 +876,9 @@ class MetadataService:
         parent: EngineeringObject,
         dependencies: list[CreoDependencyPayload] | None,
         bom_payload: Any,
+        identity: dict[str, Any] | None = None,
     ) -> None:
-        """When this assembly reports SKELETON deps, mark matching .prt children."""
+        """When this assembly reports a skeleton part, mark matching .prt children."""
         skel_keys: set[str] = set()
         for item in dependencies or []:
             if str(getattr(item, "dependency_type", "") or "").upper() != DependencyType.SKELETON.value:
@@ -860,6 +891,11 @@ class MetadataService:
                 if str(dep_type or "").upper() != DependencyType.SKELETON.value:
                     continue
                 skel_keys.update(bom_lookup_keys(filename))
+        skel_name = ""
+        if isinstance(identity, dict):
+            skel_name = str(identity.get("skeleton_filename") or "").strip()
+        if skel_name:
+            skel_keys.update(bom_lookup_keys(skel_name))
         if not skel_keys:
             return
         for row in self._objects.list_objects(session, parent.product_id):
@@ -887,7 +923,23 @@ class MetadataService:
             .limit(1)
         )
         if has_edge is None:
-            return
+            # GetSkeleton often lands only on the parent identity stem (no SKELETON edge).
+            child_keys = set(bom_lookup_keys(obj.filename))
+            matched = False
+            for row in self._objects.list_objects(session, obj.product_id):
+                if row.id == obj.id:
+                    continue
+                ver = getattr(row, "current_version", None)
+                raw = getattr(ver, "identity_json", None) if ver is not None else None
+                data = _loads(raw)
+                if not isinstance(data, dict):
+                    continue
+                skel_name = str(data.get("skeleton_filename") or "").strip()
+                if skel_name and (set(bom_lookup_keys(skel_name)) & child_keys):
+                    matched = True
+                    break
+            if not matched:
+                return
         identity = _loads(version.identity_json)
         if not isinstance(identity, dict):
             identity = {}

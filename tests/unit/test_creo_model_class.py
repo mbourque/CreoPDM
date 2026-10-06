@@ -76,6 +76,12 @@ def test_skeleton_role_only_on_parts():
     assert inferred["model_type"] == "PART"
     assert inferred["model_role"] == "SKELETON"
 
+    # Creo may report a skeleton/concept as LAYOUT; it is still a .prt skeleton part.
+    layout_prt = {"model_type": "LAYOUT", "model_role": "SKELETON", "file_name": "layout.prt"}
+    normalize_creo_identity(layout_prt)
+    assert layout_prt["model_type"] == "PART"
+    assert layout_prt["model_role"] == "SKELETON"
+
 
 def test_model_type_from_identity_json():
     from creopdm.utils.creo_model_class import model_type_from_identity_json

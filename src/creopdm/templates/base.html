@@ -1001,6 +1001,7 @@ function creoAssemblyGetSkeleton(assembly) {
      * PTC sample uses property access: skeleton = assembly.GetSkeleton
      * (Creo.JS getters). Also try GetSkeleton() — either may throw NotFound.
      * FileName is often a stem (LAYOUT) with no .prt.
+     * Do not treat a callable/method object as the skeleton (it may have Type).
      */
     if (!assembly) return null;
     var handles = [assembly];
@@ -1010,38 +1011,78 @@ function creoAssemblyGetSkeleton(assembly) {
             if (castAsm) handles.push(castAsm);
         }
     } catch (errCast) {}
-    function acceptSkel(skel) {
-        if (!creoLooksLikeModel(skel)) return null;
-        if (creoIsAssemblyModel(skel, "")) return null;
+    function namedSkel(skel) {
+        if (!skel) return null;
+        var name = "";
+        try { name = String(skel.FileName || skel.FullName || "").trim(); } catch (errN) { name = ""; }
+        if (!name) {
+            try { name = String(skel.GetFileName()).trim(); } catch (errG) { name = ""; }
+        }
+        if (!name) return null;
+        if (creoIsAssemblyModel(skel, name)) return null;
         return skel;
+    }
+    function invokeGetSkeleton(handle) {
+        try {
+            return namedSkel(handle.GetSkeleton());
+        } catch (errCall) {}
+        return null;
     }
     for (var i = 0; i < handles.length; i++) {
         var handle = handles[i];
         if (!handle) continue;
-        // Property / getter first (PTC Creo.JS style).
-        try {
-            var raw = handle.GetSkeleton;
-            var asProp = acceptSkel(raw);
-            if (asProp) return asProp;
-            // Some builds expose a callable that is not typeof "function".
-            if (raw != null && !creoLooksLikeModel(raw)) {
-                try {
-                    var viaCallProp = acceptSkel(raw());
-                    if (viaCallProp) return viaCallProp;
-                } catch (errCallProp) {}
-            }
-        } catch (errProp) {}
-        try {
-            var skel = acceptSkel(handle.GetSkeleton());
-            if (skel) return skel;
-        } catch (errGet) {}
+        var raw = null;
+        try { raw = handle.GetSkeleton; } catch (errProp) { raw = null; }
+        var fromProp = namedSkel(raw);
+        if (fromProp) return fromProp;
+        if (raw != null) {
+            try {
+                var viaCall = namedSkel(raw());
+                if (viaCall) return viaCall;
+            } catch (errCallProp) {}
+        }
+        var viaMethod = invokeGetSkeleton(handle);
+        if (viaMethod) return viaMethod;
     }
     return null;
+}
+function creoFeatureIsSkeletonComponent(feat) {
+    /**
+     * Skeleton is often a component-feat flag (pfcComponentFeat.IsSkeleton),
+     * not pfcSolid.IsSkeleton on the retrieved part.
+     */
+    if (!feat) return false;
+    var handles = [feat];
+    try {
+        if (typeof pfcComponentFeat !== "undefined" && typeof pfcComponentFeat.cast === "function") {
+            var asComp = pfcComponentFeat.cast(feat);
+            if (asComp) handles.push(asComp);
+        }
+    } catch (errCast) {}
+    try {
+        if (typeof wfcComponentFeat !== "undefined" && typeof wfcComponentFeat.cast === "function") {
+            var asWfc = wfcComponentFeat.cast(feat);
+            if (asWfc) handles.push(asWfc);
+        }
+    } catch (errWfc) {}
+    for (var i = 0; i < handles.length; i++) {
+        var handle = handles[i];
+        if (!handle) continue;
+        try { if (creoFlagTrue(handle.IsSkeleton)) return true; } catch (errBool) {}
+        try { if (creoFlagTrue(handle.GetIsSkeleton())) return true; } catch (errGet) {}
+        try { if (creoFlagTrue(handle.IsSkeleton())) return true; } catch (errFn) {}
+        try {
+            var compType = handle.CompType;
+            if (compType == null && handle.GetCompType) compType = handle.GetCompType();
+            if (compType != null && /SKELETON/i.test(String(compType))) return true;
+        } catch (errType) {}
+    }
+    return false;
 }
 function creoSkeletonFromAssemblyComponents(assembly, session) {
     /**
      * When GetSkeleton is unbound, a retrieved assembly may still list the
-     * skeleton component — check each child's IsSkeleton.
+     * skeleton component — component-feat IsSkeleton, else child's IsSkeleton.
      */
     if (!assembly) return null;
     var listed = null;
@@ -1056,8 +1097,19 @@ function creoSkeletonFromAssemblyComponents(assembly, session) {
     for (var i = 0; i < features.length; i++) {
         var feat = features[i];
         if (!feat) continue;
+        var featIsSkel = false;
+        try { featIsSkel = creoFeatureIsSkeletonComponent(feat); } catch (errFeat) { featIsSkel = false; }
         var child = null;
         try { child = creoResolveComponentModel(session, feat, ""); } catch (errRes) { child = null; }
+        if (featIsSkel) {
+            if (child && !creoIsAssemblyModel(child, "")) return child;
+            var descrName = "";
+            try { descrName = String(creoComponentModelName(feat) || "").trim(); } catch (errNm) { descrName = ""; }
+            if (descrName && !creoIsAssemblyModel(null, descrName)) {
+                return { FileName: descrName };
+            }
+            continue;
+        }
         if (!child || creoIsAssemblyModel(child, "")) continue;
         try {
             if (creoModelIsSkeleton(child)) return child;
@@ -1126,7 +1178,13 @@ function creoSessionModelIsAssemblySkeleton(session, model) {
     return false;
 }
 function creoDetectSkeletonRole(session, model, filename) {
-    if (!creoIsPartModel(model, filename)) return false;
+    if (creoIsAssemblyModel(model, filename || "")) return false;
+    var logical = "";
+    try { logical = creoLogicalFileName(filename || "").toLowerCase(); } catch (errL) { logical = ""; }
+    if (!logical) {
+        try { logical = creoLogicalFileName(String(model.FileName || "")).toLowerCase(); } catch (errM) { logical = ""; }
+    }
+    if (!creoIsPartModel(model, filename) && !/\.prt$/i.test(logical)) return false;
     try {
         if (creoModelIsSkeleton(model)) return true;
     } catch (errIs) {}
@@ -1322,13 +1380,18 @@ function creoGatherModelRole(model, modelType, parameters, session, filename) {
     if (kind === "ASSEMBLY") {
         return "";
     }
-    // Treat as PART when Type said PART, or Type was unbound but file is .prt.
-    var asPart = kind === "PART" || (!kind && creoIsPartModel(model, filename));
-    if (!asPart) return kind ? "" : "";
-    try {
-        if (creoDetectSkeletonRole(session, model, filename)) return "SKELETON";
-    } catch (errSk) {}
-    if (kind !== "PART" && kind) return "";
+    var looksPart = kind === "PART" || creoIsPartModel(model, filename);
+    if (!looksPart) {
+        var logicalRole = "";
+        try { logicalRole = creoLogicalFileName(filename || "").toLowerCase(); } catch (errLf) { logicalRole = ""; }
+        looksPart = /\.prt$/i.test(logicalRole);
+    }
+    if (kind === "PART" || looksPart) {
+        try {
+            if (creoDetectSkeletonRole(session, model, filename)) return "SKELETON";
+        } catch (errSk) {}
+    }
+    if (!looksPart) return kind ? "" : "";
     try {
         if (creoModelHasSmtThicknessParam(model)) return "SHEETMETAL";
     } catch (errSmt) {}
@@ -1538,14 +1601,16 @@ function creoDependencyTypeLabel(dep) {
 }
 function creoGatherDependencies(model, session) {
     var rows = [];
+    var skelKey = "";
+    try { skelKey = creoSkeletonLogicalName(model, session); } catch (errSkel) { skelKey = ""; }
     try {
-        if (typeof model.ListDependencies !== "function") return rows;
-        var listed = model.ListDependencies();
+        var listed = null;
+        try { listed = model.ListDependencies(); } catch (errListFn) {
+            try { listed = model.ListDependencies; } catch (errListProp) { listed = null; }
+        }
         var count = listed && typeof listed.getCount === "function"
             ? listed.getCount()
             : (listed && listed.length) || 0;
-        var skelKey = "";
-        try { skelKey = creoSkeletonLogicalName(model, session); } catch (errSkel) { skelKey = ""; }
         for (var i = 0; i < count; i++) {
             var dep = typeof listed.get === "function" ? listed.get(i) : listed[i];
             if (!dep) continue;
@@ -1577,30 +1642,30 @@ function creoGatherDependencies(model, session) {
                 dependency_type: depType
             });
         }
-        // Ensure the GetSkeleton model appears even when ListDependencies omitted it.
-        if (skelKey) {
-            var haveSkel = false;
-            for (var s = 0; s < rows.length; s++) {
-                if (creoNameTokensOverlap(
-                    creoModelNameToken(rows[s].filename),
-                    creoModelNameToken(skelKey)
-                )) {
-                    if (!creoIsAssemblyModel(null, rows[s].filename)) {
-                        rows[s].dependency_type = "SKELETON";
-                    }
-                    haveSkel = true;
-                    break;
+    } catch (err) {}
+    // Always attach GetSkeleton even when ListDependencies is unbound / not a JS function.
+    if (skelKey) {
+        var haveSkel = false;
+        for (var s = 0; s < rows.length; s++) {
+            if (creoNameTokensOverlap(
+                creoModelNameToken(rows[s].filename),
+                creoModelNameToken(skelKey)
+            )) {
+                if (!creoIsAssemblyModel(null, rows[s].filename)) {
+                    rows[s].dependency_type = "SKELETON";
                 }
-            }
-            if (!haveSkel) {
-                rows.push({
-                    filename: skelKey,
-                    quantity: 1,
-                    dependency_type: "SKELETON"
-                });
+                haveSkel = true;
+                break;
             }
         }
-    } catch (err) {}
+        if (!haveSkel) {
+            rows.push({
+                filename: skelKey,
+                quantity: 1,
+                dependency_type: "SKELETON"
+            });
+        }
+    }
     return rows;
 }
 function creoComponentModelName(feature) {

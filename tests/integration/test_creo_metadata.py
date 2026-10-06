@@ -624,6 +624,52 @@ def test_assembly_skeleton_edge_flags_child_part_role(client, repo_parent, tmp_p
 
 
 @requires_git
+def test_assembly_skeleton_filename_flags_child_without_skeleton_dep(client, repo_parent, tmp_path):
+    """GetSkeleton stem on identity still flags the .prt when deps stay ASSEMBLY_MEMBER."""
+    product = _create_product(client, repo_parent)
+    layout = _add_part(client, product["uuid"], tmp_path, "jd_layout.prt.1")
+    top = _add_part(client, product["uuid"], tmp_path, "jd_top.asm.1")
+
+    posted = client.post(
+        f"/api/objects/{top['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "jd_top.asm",
+                "model_type": "ASSEMBLY",
+                "skeleton_filename": "jd_layout",
+            },
+            "dependencies": [
+                {
+                    "filename": "jd_layout.prt",
+                    "quantity": 1,
+                    "dependency_type": "ASSEMBLY_MEMBER",
+                }
+            ],
+        },
+    )
+    assert posted.status_code == 200, posted.text
+
+    listed = client.get(f"/api/products/{product['uuid']}/objects")
+    assert listed.status_code == 200, listed.text
+    by_uuid = {item["uuid"]: item for item in listed.json()}
+    assert by_uuid[layout["uuid"]]["type_label"] == "SKELETON"
+
+    part_post = client.post(
+        f"/api/objects/{layout['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "jd_layout.prt",
+                "model_type": "PART",
+                "model_role": "SOLID",
+            },
+            "materials": {"current": None, "names": []},
+        },
+    )
+    assert part_post.status_code == 200, part_post.text
+    assert part_post.json()["identity"]["model_role"] == "SKELETON"
+
+
+@requires_git
 def test_collect_clear_wipes_product_creo_metadata(client, repo_parent, tmp_path):
     """Collect-all start endpoint erases stored identity/params/deps for the product."""
     product = _create_product(client, repo_parent)

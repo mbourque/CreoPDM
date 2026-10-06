@@ -100,14 +100,17 @@ def normalize_creo_identity(identity: dict[str, Any] | None) -> dict[str, Any] |
     identity["model_type"] = normalize_creo_model_type(identity.get("model_type"))
     identity["model_role"] = normalize_creo_model_role(identity.get("model_role"))
     # Creo skeleton models are parts only — never keep SKELETON on an assembly.
+    # Concept/layout Type on a .prt still counts as a skeleton part.
     if identity["model_role"] == "SKELETON":
         kind = identity["model_type"]
         filename = identity.get("file_name") or identity.get("full_name") or ""
         if kind == "ASSEMBLY" or _filename_looks_like_assembly(filename):
             identity["model_role"] = ""
+        elif _filename_looks_like_part(filename):
+            identity["model_type"] = "PART"
         elif kind and kind != "PART":
             identity["model_role"] = ""
-        elif not kind and _filename_looks_like_part(filename):
+        elif not kind:
             identity["model_type"] = "PART"
     return identity
 
