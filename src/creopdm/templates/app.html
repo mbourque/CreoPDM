@@ -101,7 +101,7 @@
           </div>
         </div>
         {% endif %}
-        <form class="search-form" id="search-form">
+        <form class="search-form" id="search-form"{% if not (product_object_count | default(0)) %} hidden{% endif %}>
           <label class="sr-only" for="search-input">Search</label>
           <input id="search-input" name="q" type="search"
                  placeholder="Search all files in product"

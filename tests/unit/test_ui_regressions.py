@@ -1573,7 +1573,8 @@ def test_search_form_only_on_files_tab():
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     sync = _between(script, "function syncSearchFormVisibility(", "searchInput?.addEventListener")
-    assert 'form.hidden = activeListTab() !== "files"' in sync
+    assert 'activeListTab() !== "files"' in sync
+    assert "productHasListedObjects()" in sync
     assert "syncSearchFormVisibility()" in script
     tab_click = _between(
         script,
@@ -1802,25 +1803,32 @@ def test_folder_row_click_selects_double_click_opens():
 
 
 def test_metric_filters_hidden_when_product_has_no_objects():
-    """Empty product: hide the whole #metric-filters row (not per-pill zeros)."""
+    """Empty product: hide metric pills and Search (not per-pill zeros)."""
     html = APP_HTML.read_text(encoding="utf-8")
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert 'id="metric-filters"' in html
     assert 'data-product-objects="{{ product_object_count | default(0) }}"' in html
     assert "{% if not (product_object_count | default(0)) %} hidden{% endif %}" in html
+    assert 'id="search-form"{% if not (product_object_count | default(0)) %} hidden{% endif %}' in html
+    assert "function productHasListedObjects(" in script
     sync = _between(
         script,
         "function syncMetricFiltersVisibility(",
         "function setProductObjectCount(",
     )
-    assert 'getAttribute("data-product-objects")' in sync
+    assert "productHasListedObjects()" in sync
     assert "root.hidden = hide" in sync
-    assert "syncMetricFiltersVisibility()" in _between(
+    refresh = _between(
         script, "function refreshTabMetrics(", "function syncMetricFiltersVisibility("
     )
+    assert "syncMetricFiltersVisibility()" in refresh
+    assert "syncSearchFormVisibility()" in refresh
+    search_sync = _between(script, "function syncSearchFormVisibility(", "searchInput?.addEventListener")
+    assert "productHasListedObjects()" in search_sync
     assert "Open a product with **no objects**" in docs
     assert "Hide the whole metric filter row" in docs
+    assert "hide **Search**" in docs
 
 
 def test_folders_metric_pill_before_files():

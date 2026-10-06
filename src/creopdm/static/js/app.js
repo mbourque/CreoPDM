@@ -1200,20 +1200,26 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   }
 
+  function productHasListedObjects() {
+    const root = document.querySelector("#metric-filters");
+    const raw = Number.parseInt(root?.getAttribute("data-product-objects") || "", 10);
+    if (Number.isFinite(raw)) return raw > 0;
+    return productHasVaultFilesForExport();
+  }
+
   function refreshTabMetrics() {
     applyMetricVisibility();
     applyMetricSelection();
     updateMetricCounts();
     syncMetricFiltersVisibility();
+    syncSearchFormVisibility();
     syncToolbar();
   }
 
   function syncMetricFiltersVisibility() {
     const root = document.querySelector("#metric-filters");
     if (!root) return;
-    const raw = Number.parseInt(root.getAttribute("data-product-objects") || "", 10);
-    const hasObjects = Number.isFinite(raw) ? raw > 0 : productHasVaultFilesForExport();
-    const hide = !hasObjects;
+    const hide = !productHasListedObjects();
     if (root.hidden === hide) return;
     root.hidden = hide;
     if (hide) {
@@ -1231,6 +1237,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const n = Math.max(0, Number(count) || 0);
     root.setAttribute("data-product-objects", String(n));
     syncMetricFiltersVisibility();
+    syncSearchFormVisibility();
   }
 
   function setMetricMode(btn, mode) {
@@ -4721,10 +4728,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function syncSearchFormVisibility() {
     // Product search only applies to the Files list — hide on Checked out /
-    // Modified / New files so the box is not left looking broken.
+    // Modified / New files so the box is not left looking broken. Also hide
+    // when the product has no objects yet (nothing to search).
     const form = $("#search-form");
     if (!form) return;
-    form.hidden = activeListTab() !== "files";
+    form.hidden = activeListTab() !== "files" || !productHasListedObjects();
   }
 
   searchInput?.addEventListener("input", onSearchInput);

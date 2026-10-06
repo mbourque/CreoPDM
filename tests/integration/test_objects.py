@@ -22,7 +22,7 @@ def _create_product(client, repo_parent: Path):
 
 @requires_git
 def test_metric_filters_hidden_on_empty_product(client, repo_parent, tmp_path):
-    """Product-wide object count drives #metric-filters visibility (not folder-local zeros)."""
+    """Product-wide object count drives #metric-filters and Search visibility."""
     product, _location = _create_product(client, repo_parent)
     empty = client.get(f"/?product={product['uuid']}")
     assert empty.status_code == 200, empty.text
@@ -30,6 +30,8 @@ def test_metric_filters_hidden_on_empty_product(client, repo_parent, tmp_path):
     assert 'data-product-objects="0"' in empty.text
     metrics = empty.text.split('id="metric-filters"', 1)[1].split(">", 1)[0]
     assert " hidden" in metrics or metrics.endswith("hidden")
+    search = empty.text.split('id="search-form"', 1)[1].split(">", 1)[0]
+    assert " hidden" in search or search.endswith("hidden")
 
     prt = tmp_path / "shaft.prt.1"
     prt.write_bytes(b"FAKE CREO PART")
@@ -44,6 +46,8 @@ def test_metric_filters_hidden_on_empty_product(client, repo_parent, tmp_path):
     assert 'data-product-objects="1"' in filled.text
     metrics_filled = filled.text.split('id="metric-filters"', 1)[1].split(">", 1)[0]
     assert " hidden" not in metrics_filled
+    search_filled = filled.text.split('id="search-form"', 1)[1].split(">", 1)[0]
+    assert " hidden" not in search_filled
 
 
 @requires_git
