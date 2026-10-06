@@ -42,6 +42,7 @@ from creopdm.auth_constants import (
     PERMISSION_UTILITIES_DELETE_PRODUCT,
     PERMISSION_UTILITIES_EMAIL_USERS,
     PERMISSION_UTILITIES_HEALTH,
+    PERMISSION_UTILITIES_LOGS,
     PERMISSION_UTILITIES_REBUILD_PRODUCT,
     UTILITIES_PERMISSION_KEYS,
     UserStatus,
@@ -287,6 +288,9 @@ class UserService:
 
     def can_utilities_health(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_UTILITIES_HEALTH)
+
+    def can_utilities_logs(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_UTILITIES_LOGS)
 
     def is_full_administrator(self, user: User) -> bool:
         """True when the user has all CreoPDM Administration caps on one account."""

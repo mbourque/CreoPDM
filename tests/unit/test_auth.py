@@ -481,11 +481,14 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
         },
         follow_redirects=False,
     )
+    from creopdm.auth_constants import PERMISSION_UTILITIES_LOGS
+
     with auth_ctx.session_factory() as db:
         admin = db.scalar(select(User).where(User.username == "admin"))
         assert admin is not None
         admin_keys = auth_ctx.user_accounts.permission_keys_for_user(admin)
         assert UTILITIES_PERMISSION_KEYS <= admin_keys
+        assert PERMISSION_UTILITIES_LOGS in admin_keys
 
     hub = auth_client.get("/admin/utilities")
     assert hub.status_code == 200
@@ -2249,6 +2252,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
     assert "email.manage" in role_form.text
     assert "utilities.audit" in role_form.text
     assert "utilities.health" in role_form.text
+    assert "utilities.logs" in role_form.text
     assert "utilities.access" not in role_form.text
     assert "your</strong> role" in role_form.text.lower() or "your role" in role_form.text.lower()
     assert "cannot lock themselves out" in role_form.text.lower()
@@ -2957,6 +2961,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_UTILITIES_DELETE_PRODUCT,
         PERMISSION_UTILITIES_EMAIL_USERS,
         PERMISSION_UTILITIES_HEALTH,
+        PERMISSION_UTILITIES_LOGS,
         PERMISSION_UTILITIES_REBUILD_PRODUCT,
         STARTER_ROLE_PERMISSION_KEYS,
         UTILITIES_PERMISSION_KEYS,
@@ -3152,6 +3157,9 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             ),
             PERMISSION_UTILITIES_HEALTH: auth_client.get(
                 "/admin/utilities/health", follow_redirects=False
+            ),
+            PERMISSION_UTILITIES_LOGS: auth_client.get(
+                "/admin/utilities/logs", follow_redirects=False
             ),
             PERMISSION_PRODUCTS_VIEW: auth_client.get(f"/api/products/{product_id}"),
             PERMISSION_OBJECTS_VIEW: auth_client.get(f"/api/objects/{object_id}"),

@@ -2150,6 +2150,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "can_utilities_delete_product" in utilities
     assert "can_utilities_audit" in utilities
     assert "can_utilities_health" in utilities
+    assert "can_utilities_logs" in utilities
     assert 'href="/admin/utilities/availability"' in utilities
     assert 'href="/admin/utilities/email-all"' in utilities
     assert 'href="/admin/utilities/compact"' in utilities
@@ -2161,6 +2162,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "Availability" in utilities
     assert "Audit log" in utilities
     assert ">Logs</a>" in utilities
+    assert "{% if can_utilities_logs %}" in utilities
     assert "delete and rebuild Where Used" in utilities
     assert 'action="/admin/utilities/email-all"' not in utilities
     assert "Disk space" not in utilities
@@ -2311,6 +2313,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "size of that folder only" in health
     assert "<strong>System</strong>" in health
     assert 'href="/admin/utilities/logs"' in health
+    assert "can_utilities_logs" in health
     assert "row.label == 'Logs'" in health or 'row.label == "Logs"' in health
     logs_tmpl = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities_logs.html").read_text(
         encoding="utf-8"
@@ -2430,6 +2433,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "Utilities" in docs
     assert "utilities.audit" in docs
     assert "utilities.health" in docs
+    assert "utilities.logs" in docs
     assert "matching Utilities permission" in docs
     assert "utilities.access" in docs  # must-not: old umbrella
     assert "folder’s used size" in docs or "folder" in docs

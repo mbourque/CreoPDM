@@ -3145,8 +3145,8 @@ def admin_utilities_logs_page(
         request,
         ctx,
         db,
-        check=ctx.user_accounts.can_utilities_health,
-        message="Utilities Health required (utilities.health).",
+        check=ctx.user_accounts.can_utilities_logs,
+        message="Utilities Logs required (utilities.logs).",
     )
     if _is_blocked(manager):
         return manager

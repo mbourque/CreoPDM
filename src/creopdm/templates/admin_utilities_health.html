@@ -168,7 +168,7 @@
     <h3 class="utilities-disk-label">{{ row.label }}</h3>
     <dl class="kv">
       <dt>Path</dt>
-      <dd class="mono">{% if row.label == 'Logs' %}<a href="/admin/utilities/logs">{{ row.path }}</a>{% else %}{{ row.path }}{% endif %}{% if not row.exists %} <span class="muted">(missing)</span>{% endif %}</dd>
+      <dd class="mono">{% if row.label == 'Logs' and can_utilities_logs %}<a href="/admin/utilities/logs">{{ row.path }}</a>{% else %}{{ row.path }}{% endif %}{% if not row.exists %} <span class="muted">(missing)</span>{% endif %}</dd>
       {% if row.error %}
       <dt>Error</dt>
       <dd class="error">{{ row.error }}</dd>
@@ -205,7 +205,7 @@
       <dt>Vaults</dt>
       <dd class="mono">{{ status.vaults_dir }}</dd>
       <dt>Logs</dt>
-      <dd class="mono"><a href="/admin/utilities/logs">{{ status.logs_dir }}</a></dd>
+      <dd class="mono">{% if can_utilities_logs %}<a href="/admin/utilities/logs">{{ status.logs_dir }}</a>{% else %}{{ status.logs_dir }}{% endif %}</dd>
     </dl>
   </section>
 

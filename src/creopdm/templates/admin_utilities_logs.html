@@ -50,7 +50,9 @@
 
   <p>
     <a class="btn" href="/admin/utilities">Back to Utilities</a>
+    {% if can_utilities_health %}
     <a class="btn" href="/admin/utilities/health">Health</a>
+    {% endif %}
   </p>
 </article>
 {% endblock %}

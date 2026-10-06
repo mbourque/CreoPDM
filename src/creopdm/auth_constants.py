@@ -37,6 +37,7 @@ PERMISSION_UTILITIES_REBUILD_PRODUCT = "utilities.rebuild_product"
 PERMISSION_UTILITIES_DELETE_PRODUCT = "utilities.delete_product"
 PERMISSION_UTILITIES_AUDIT = "utilities.audit"
 PERMISSION_UTILITIES_HEALTH = "utilities.health"
+PERMISSION_UTILITIES_LOGS = "utilities.logs"
 PERMISSION_PRODUCTS_VIEW = "products.view"
 PERMISSION_PRODUCTS_CREATE = "products.create"
 PERMISSION_PRODUCTS_EDIT = "products.edit"
@@ -78,7 +79,8 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_UTILITIES_REBUILD_PRODUCT, "Utilities → Rebuild product database"),
     (PERMISSION_UTILITIES_DELETE_PRODUCT, "Utilities → Delete products"),
     (PERMISSION_UTILITIES_AUDIT, "Utilities → Audit log"),
-    (PERMISSION_UTILITIES_HEALTH, "Utilities → Health and server Logs"),
+    (PERMISSION_UTILITIES_HEALTH, "Utilities → Health"),
+    (PERMISSION_UTILITIES_LOGS, "Utilities → Logs"),
     (PERMISSION_PRODUCTS_VIEW, "View products"),
     (PERMISSION_PRODUCTS_CREATE, "Create products"),
     (PERMISSION_PRODUCTS_EDIT, "Edit product properties"),
@@ -117,6 +119,7 @@ ADMINISTRATION_PERMISSION_KEYS: frozenset[str] = frozenset(
         PERMISSION_UTILITIES_DELETE_PRODUCT,
         PERMISSION_UTILITIES_AUDIT,
         PERMISSION_UTILITIES_HEALTH,
+        PERMISSION_UTILITIES_LOGS,
     )
 )
 
@@ -130,6 +133,7 @@ UTILITIES_PERMISSION_KEYS: frozenset[str] = frozenset(
         PERMISSION_UTILITIES_DELETE_PRODUCT,
         PERMISSION_UTILITIES_AUDIT,
         PERMISSION_UTILITIES_HEALTH,
+        PERMISSION_UTILITIES_LOGS,
     )
 )
 
@@ -153,6 +157,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             PERMISSION_UTILITIES_DELETE_PRODUCT,
             PERMISSION_UTILITIES_AUDIT,
             PERMISSION_UTILITIES_HEALTH,
+            PERMISSION_UTILITIES_LOGS,
         ),
     ),
     (

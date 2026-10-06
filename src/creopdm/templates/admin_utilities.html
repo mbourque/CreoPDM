@@ -56,6 +56,8 @@
       <h2><a href="/admin/utilities/health">Health</a></h2>
       <p>System health, CPU load, I/O, product vault checks, database, Git, disk space, counts, and server paths.</p>
     </section>
+    {% endif %}
+    {% if can_utilities_logs %}
     <section class="admin-tile">
       <h2><a href="/admin/utilities/logs">Logs</a></h2>
       <p>Browse server log files and view the end of the selected log (default <span class="mono">creopdm.log</span>).</p>

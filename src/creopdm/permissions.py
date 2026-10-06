@@ -36,6 +36,7 @@ from creopdm.auth_constants import (
     PERMISSION_UTILITIES_DELETE_PRODUCT,
     PERMISSION_UTILITIES_EMAIL_USERS,
     PERMISSION_UTILITIES_HEALTH,
+    PERMISSION_UTILITIES_LOGS,
     PERMISSION_UTILITIES_REBUILD_PRODUCT,
     TEST_AUTH_PERMISSIONS,
     UTILITIES_PERMISSION_KEYS,
@@ -63,6 +64,7 @@ class CapabilityFlags:
     can_utilities_delete_product: bool
     can_utilities_audit: bool
     can_utilities_health: bool
+    can_utilities_logs: bool
     can_create_product: bool
     can_edit_product: bool
     can_delete_product: bool
@@ -99,6 +101,7 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_utilities_delete_product=PERMISSION_UTILITIES_DELETE_PRODUCT in keys,
         can_utilities_audit=PERMISSION_UTILITIES_AUDIT in keys,
         can_utilities_health=PERMISSION_UTILITIES_HEALTH in keys,
+        can_utilities_logs=PERMISSION_UTILITIES_LOGS in keys,
         can_create_product=PERMISSION_PRODUCTS_CREATE in keys,
         can_edit_product=PERMISSION_PRODUCTS_EDIT in keys,
         can_delete_product=PERMISSION_PRODUCTS_DELETE in keys,
@@ -147,6 +150,7 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_utilities_delete_product = caps.can_utilities_delete_product
     request.state.can_utilities_audit = caps.can_utilities_audit
     request.state.can_utilities_health = caps.can_utilities_health
+    request.state.can_utilities_logs = caps.can_utilities_logs
     request.state.can_create_product = caps.can_create_product
     request.state.can_edit_product = caps.can_edit_product
     request.state.can_delete_product = caps.can_delete_product
@@ -192,6 +196,7 @@ def caps_dict(request: Request) -> dict:
         ),
         "can_utilities_audit": bool(getattr(request.state, "can_utilities_audit", False)),
         "can_utilities_health": bool(getattr(request.state, "can_utilities_health", False)),
+        "can_utilities_logs": bool(getattr(request.state, "can_utilities_logs", False)),
         "can_create_product": bool(getattr(request.state, "can_create_product", False)),
         "can_edit_product": bool(getattr(request.state, "can_edit_product", False)),
         "can_delete_product": bool(getattr(request.state, "can_delete_product", False)),
