@@ -186,7 +186,6 @@ def test_home_page(client):
     assert "creoAssemblyGetSkeleton" in text
     assert "creoIsSkeletonOfAssembly" in text
     assert "creoSkeletonLogicalName" in text
-    assert "skeleton_filename" in text
     assert "GetSkeleton" in text
     assert "GetIsSkeleton" in text
     assert 'typeof handle.GetIsSkeleton === "function"' not in text
@@ -205,6 +204,8 @@ def test_home_page(client):
     )[0]
     assert "handle.GetSkeleton()" in get_skel
     assert "handle.GetSkeleton" in get_skel
+    assert "creoIsPartModel(skel" not in get_skel
+    assert "creoIsAssemblyModel" in get_skel
     assert "IsSheetmetal" in text
     assert "pfcModelType.MDL_MFG" in text
     assert "creoFeatureItems(model.ListMaterials())" in text
@@ -238,7 +239,25 @@ def test_home_page(client):
     assert "Do not RetrieveModel by bare name" in text
     assert "watchWhereUsedIndex" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "runCollectAllMetadata" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "collectMetadataRank" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "keepAssemblies" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "creo-metadata/clear" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "already have metadata stored" not in open(
+        "src/creopdm/static/js/app.js", encoding="utf-8"
+    ).read()
     assert "creopdmMetadataCollect" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "_erase_object_metadata_tables" in open(
+        "src/creopdm/services/metadata_service.py", encoding="utf-8"
+    ).read()
+    assert "clear_product_metadata" in open(
+        "src/creopdm/services/metadata_service.py", encoding="utf-8"
+    ).read()
+    assert "_apply_skeleton_role_from_parent_edges" in open(
+        "src/creopdm/services/metadata_service.py", encoding="utf-8"
+    ).read()
+    assert "_promote_skeleton_children" not in open(
+        "src/creopdm/services/metadata_service.py", encoding="utf-8"
+    ).read()
     assert "resumeMetadataCollectIfNeeded" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "collect-metadata-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "cancel-metadata-collect-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

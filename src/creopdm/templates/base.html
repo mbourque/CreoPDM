@@ -1014,11 +1014,12 @@ function creoAssemblyGetSkeleton(assembly) {
         if (!handle) continue;
         try {
             var skel = handle.GetSkeleton();
-            if (creoLooksLikeModel(skel) && creoIsPartModel(skel, "")) return skel;
+            // GetSkeleton FileName is often a stem (LAYOUT) with no .prt — still a part.
+            if (creoLooksLikeModel(skel) && !creoIsAssemblyModel(skel, "")) return skel;
         } catch (errGet) {}
         try {
             var raw = handle.GetSkeleton;
-            if (creoLooksLikeModel(raw) && creoIsPartModel(raw, "")) return raw;
+            if (creoLooksLikeModel(raw) && !creoIsAssemblyModel(raw, "")) return raw;
         } catch (errProp) {}
     }
     return null;
@@ -1043,7 +1044,7 @@ function creoSkeletonFromAssemblyComponents(assembly, session) {
         if (!feat) continue;
         var child = null;
         try { child = creoResolveComponentModel(session, feat, ""); } catch (errRes) { child = null; }
-        if (!child || !creoIsPartModel(child, "")) continue;
+        if (!child || creoIsAssemblyModel(child, "")) continue;
         try {
             if (creoModelIsSkeleton(child)) return child;
         } catch (errIs) {}
@@ -1070,7 +1071,7 @@ function creoIsSkeletonOfAssembly(assembly, model) {
      * Also matches FullName / stem so LAYOUT vs layout.prt still hits.
      */
     try {
-        if (!creoIsPartModel(model, "")) return false;
+        if (creoIsAssemblyModel(model, "")) return false;
         var skeleton = creoAssemblyGetSkeleton(assembly);
         if (!skeleton || !model) return false;
         if (creoNameTokensOverlap(creoModelNameToken(skeleton), creoModelNameToken(model))) return true;
@@ -1089,9 +1090,7 @@ function creoSessionModelIsAssemblySkeleton(session, model) {
      */
     if (!session || !model) return false;
     var listed = null;
-    try {
-        if (typeof session.ListModels === "function") listed = session.ListModels();
-    } catch (errList) {
+    try { listed = session.ListModels(); } catch (errList) {
         listed = null;
     }
     var models = creoFeatureItems(listed);
@@ -1546,7 +1545,7 @@ function creoGatherDependencies(model, session) {
             if (!childName) continue;
             var logical = creoLogicalFileName(childName);
             var depType = creoDependencyTypeLabel(dep);
-            if (skelKey && /\.prt$/i.test(logical)
+            if (skelKey && !creoIsAssemblyModel(null, logical)
                 && creoNameTokensOverlap(creoModelNameToken(logical), creoModelNameToken(skelKey))) {
                 depType = "SKELETON";
             }
@@ -1564,7 +1563,7 @@ function creoGatherDependencies(model, session) {
                     creoModelNameToken(rows[s].filename),
                     creoModelNameToken(skelKey)
                 )) {
-                    if (/\.prt$/i.test(String(rows[s].filename || ""))) {
+                    if (!creoIsAssemblyModel(null, rows[s].filename)) {
                         rows[s].dependency_type = "SKELETON";
                     }
                     haveSkel = true;
@@ -2278,7 +2277,7 @@ function creoGatherBom(model, depth, visited, session, skeletonKey) {
             var node = {
                 filename: entry.filename,
                 quantity: entry.quantity,
-                dependency_type: (skelKey && /\.prt$/i.test(entry.filename)
+                dependency_type: (skelKey && !creoIsAssemblyModel(null, entry.filename)
                     && creoNameTokensOverlap(creoModelNameToken(entry.filename), creoModelNameToken(skelKey)))
                     ? "SKELETON" : "ASSEMBLY_MEMBER",
                 children: []
@@ -2518,22 +2517,22 @@ function gatherModelMetadata(filename, filePath, options) {
             }
         } catch (errBom) {}
         // Final role pass after params are gathered (SMT_THICKNESS / body.IsSheetmetal / skeleton).
+        // Skeleton role is stored only on this model (parts); never pushed onto children.
         try {
             var roleFinal = creoGatherModelRole(
                 solidModel, identity.model_type, parameters, session, filename || identity.file_name
             );
             if (roleFinal) identity.model_role = roleFinal;
         } catch (errRoleFinal) {}
-        // Assembly → record GetSkeleton child so the server can flag that part SKELETON
-        // even when its filename is not *_skel* and IsSkeleton was unbound on Collect.
+        // Assembly structure only: mark dependency_type SKELETON on this assembly's edges.
         try {
             var skelLogical = creoSkeletonLogicalName(solidModel, session);
             if (skelLogical) {
                 identity.skeleton_filename = skelLogical;
                 for (var di = 0; di < dependencies.length; di++) {
                     var depName = String(dependencies[di].filename || "");
-                    if (/\.prt$/i.test(depName)
-                        && creoNameTokensOverlap(creoModelNameToken(depName), creoModelNameToken(skelLogical))) {
+                    if (creoIsAssemblyModel(null, depName)) continue;
+                    if (creoNameTokensOverlap(creoModelNameToken(depName), creoModelNameToken(skelLogical))) {
                         dependencies[di].dependency_type = "SKELETON";
                     }
                 }

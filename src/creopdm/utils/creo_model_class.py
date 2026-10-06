@@ -125,6 +125,25 @@ def model_type_from_identity_json(raw: str | None) -> str:
     return normalize_creo_model_type(data.get("model_type"))
 
 
+def version_has_creo_metadata(version: Any | None) -> bool:
+    """True when this version already has stored Creo metadata (Collect should skip)."""
+    if version is None:
+        return False
+    if model_type_from_identity_json(getattr(version, "identity_json", None)):
+        return True
+    for attr in (
+        "materials_json",
+        "bom_json",
+        "units_json",
+        "mass_json",
+        "family_table_json",
+        "features_json",
+    ):
+        if getattr(version, attr, None):
+            return True
+    return False
+
+
 # Roles that are useful as the Files list Type column (not generic SOLID).
 _FILES_LIST_ROLE_LABELS: frozenset[str] = frozenset(
     {

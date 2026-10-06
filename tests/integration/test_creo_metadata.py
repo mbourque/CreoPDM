@@ -506,10 +506,73 @@ def test_metadata_menu_items_are_creo_session_only(client, repo_parent):
 
 
 @requires_git
-def test_assembly_get_skeleton_promotes_child_role_without_skel_name(
-    client, repo_parent, tmp_path
-):
-    """Assembly GetSkeleton / SKELETON dep flags the child even without *_skel* name."""
+def test_metadata_save_erases_this_objects_old_table_rows(client, repo_parent, tmp_path):
+    """Save deletes this object's old Parameter/Dependency rows before rewrite."""
+    product = _create_product(client, repo_parent)
+    shaft = _add_part(client, product["uuid"], tmp_path, "shaft.prt.1")
+    frame = _add_part(client, product["uuid"], tmp_path, "frame.asm.1")
+
+    first = client.post(
+        f"/api/objects/{frame['uuid']}/creo-metadata",
+        json={
+            "identity": {"file_name": "frame.asm", "model_type": "ASSEMBLY"},
+            "parameters": [
+                {
+                    "name": "OLD_PARAM",
+                    "value": "gone",
+                    "data_type": "STRING",
+                    "is_designated": False,
+                }
+            ],
+            "dependencies": [
+                {"filename": "shaft.prt", "quantity": 1, "dependency_type": "ASSEMBLY_MEMBER"}
+            ],
+        },
+    )
+    assert first.status_code == 200, first.text
+    assert {p["name"] for p in first.json()["parameters"]} == {"OLD_PARAM"}
+    assert len(first.json()["dependencies"]) == 1
+
+    second = client.post(
+        f"/api/objects/{frame['uuid']}/creo-metadata",
+        json={
+            "identity": {"file_name": "frame.asm", "model_type": "ASSEMBLY"},
+            "parameters": [
+                {
+                    "name": "NEW_PARAM",
+                    "value": "kept",
+                    "data_type": "STRING",
+                    "is_designated": True,
+                }
+            ],
+            "dependencies": [],
+            "bom": [
+                {
+                    "filename": "frame.asm",
+                    "quantity": 1,
+                    "dependency_type": "ASSEMBLY_ROOT",
+                    "children": [],
+                }
+            ],
+        },
+    )
+    assert second.status_code == 200, second.text
+    names = [p["name"] for p in second.json()["parameters"]]
+    assert names == ["NEW_PARAM"]
+    assert "OLD_PARAM" not in names
+    # BOM with no members + empty deps → dependency rows erased for this parent.
+    assert second.json()["dependencies"] == []
+
+    listed = client.get(f"/api/products/{product['uuid']}/objects")
+    assert listed.status_code == 200, listed.text
+    by_uuid = {item["uuid"]: item for item in listed.json()}
+    assert by_uuid[frame["uuid"]]["creo_metadata_captured"] is True
+    assert by_uuid[shaft["uuid"]]["creo_metadata_captured"] is False
+
+
+@requires_git
+def test_assembly_metadata_does_not_write_child_skeleton_role(client, repo_parent, tmp_path):
+    """Assembly SKELETON deps are this object's edges only — child identity unchanged."""
     product = _create_product(client, repo_parent)
     layout = _add_part(client, product["uuid"], tmp_path, "jd_layout.prt.1")
     top = _add_part(client, product["uuid"], tmp_path, "jd_top.asm.1")
@@ -521,7 +584,6 @@ def test_assembly_get_skeleton_promotes_child_role_without_skel_name(
                 "file_name": "jd_top.asm",
                 "model_type": "ASSEMBLY",
                 "model_role": "",
-                "skeleton_filename": "jd_layout.prt",
             },
             "dependencies": [
                 {
@@ -530,25 +592,9 @@ def test_assembly_get_skeleton_promotes_child_role_without_skel_name(
                     "dependency_type": "SKELETON",
                 }
             ],
-            "bom": [
-                {
-                    "filename": "jd_top.asm",
-                    "quantity": 1,
-                    "dependency_type": "ASSEMBLY_ROOT",
-                    "children": [
-                        {
-                            "filename": "jd_layout.prt",
-                            "quantity": 1,
-                            "dependency_type": "ASSEMBLY_MEMBER",
-                            "children": [],
-                        }
-                    ],
-                }
-            ],
         },
     )
     assert posted.status_code == 200, posted.text
-    assert posted.json()["identity"].get("skeleton_filename") == "jd_layout.prt"
     deps = posted.json()["dependencies"]
     assert any(
         str(row.get("filename") or "").lower().startswith("jd_layout")
@@ -559,30 +605,74 @@ def test_assembly_get_skeleton_promotes_child_role_without_skel_name(
     listed = client.get(f"/api/products/{product['uuid']}/objects")
     assert listed.status_code == 200, listed.text
     by_uuid = {item["uuid"]: item for item in listed.json()}
-    assert by_uuid[layout["uuid"]]["type_label"] == "SKELETON"
+    assert by_uuid[layout["uuid"]]["type_label"] != "SKELETON"
+    assert by_uuid[layout["uuid"]]["creo_metadata_captured"] is False
 
     layout_meta = client.get(f"/api/objects/{layout['uuid']}/creo-metadata")
     assert layout_meta.status_code == 200, layout_meta.text
-    assert layout_meta.json()["identity"]["model_role"] == "SKELETON"
+    assert layout_meta.json()["captured"] is False
 
-    # Later Collect of the part alone often returns SOLID — keep SKELETON.
-    again = client.post(
+    # Collect the part later (assemblies-first Collect): parent SKELETON edge flags the part.
+    part_post = client.post(
         f"/api/objects/{layout['uuid']}/creo-metadata",
         json={
             "identity": {
                 "file_name": "jd_layout.prt",
                 "model_type": "PART",
                 "model_role": "SOLID",
-            }
+            },
+            "materials": {"current": None, "names": []},
         },
     )
-    assert again.status_code == 200, again.text
-    assert again.json()["identity"]["model_role"] == "SKELETON"
+    assert part_post.status_code == 200, part_post.text
+    assert part_post.json()["identity"]["model_role"] == "SKELETON"
+    listed_after = client.get(f"/api/products/{product['uuid']}/objects")
+    assert listed_after.status_code == 200
+    assert {item["uuid"]: item["type_label"] for item in listed_after.json()}[
+        layout["uuid"]
+    ] == "SKELETON"
+
+
+@requires_git
+def test_collect_clear_wipes_product_creo_metadata(client, repo_parent, tmp_path):
+    """Collect-all start endpoint erases stored identity/params/deps for the product."""
+    product = _create_product(client, repo_parent)
+    shaft = _add_part(client, product["uuid"], tmp_path, "shaft.prt.1")
+    frame = _add_part(client, product["uuid"], tmp_path, "frame.asm.1")
+    posted = client.post(
+        f"/api/objects/{frame['uuid']}/creo-metadata",
+        json={
+            "identity": {"file_name": "frame.asm", "model_type": "ASSEMBLY"},
+            "parameters": [
+                {"name": "DESCRIPTION", "value": "x", "data_type": "STRING", "is_designated": False}
+            ],
+            "dependencies": [
+                {"filename": "shaft.prt", "quantity": 1, "dependency_type": "ASSEMBLY_MEMBER"}
+            ],
+        },
+    )
+    assert posted.status_code == 200, posted.text
+    assert posted.json()["captured"] is True
+
+    cleared = client.post(f"/api/products/{product['uuid']}/creo-metadata/clear")
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["ok"] is True
+    assert cleared.json()["versions_cleared"] >= 1
+
+    fetched = client.get(f"/api/objects/{frame['uuid']}/creo-metadata")
+    assert fetched.status_code == 200
+    assert fetched.json()["captured"] is False
+    assert not fetched.json()["parameters"]
+    assert not fetched.json()["dependencies"]
+    listed = client.get(f"/api/products/{product['uuid']}/objects")
+    by_uuid = {item["uuid"]: item for item in listed.json()}
+    assert by_uuid[frame["uuid"]]["creo_metadata_captured"] is False
+    assert by_uuid[shaft["uuid"]]["creo_metadata_captured"] is False
 
 
 @requires_git
 def test_assembly_is_not_promoted_to_skeleton_role(client, repo_parent, tmp_path):
-    """GetSkeleton / SKELETON deps never flag an assembly as SKELETON — parts only."""
+    """Assemblies never keep model_role SKELETON — parts only."""
     product = _create_product(client, repo_parent)
     child_asm = _add_part(client, product["uuid"], tmp_path, "sub.asm.1")
     top = _add_part(client, product["uuid"], tmp_path, "top.asm.1")
@@ -594,7 +684,6 @@ def test_assembly_is_not_promoted_to_skeleton_role(client, repo_parent, tmp_path
                 "file_name": "top.asm",
                 "model_type": "ASSEMBLY",
                 "model_role": "SKELETON",
-                "skeleton_filename": "sub.asm",
             },
             "dependencies": [
                 {"filename": "sub.asm", "quantity": 1, "dependency_type": "SKELETON"}

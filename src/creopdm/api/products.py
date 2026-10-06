@@ -45,6 +45,7 @@ from creopdm.logging_setup import get_logger
 from creopdm.schemas.common import (
     BatchItemResult,
     BatchOperationResponse,
+    CreoMetadataClearResponse,
     CreateFolderRequest,
     CreateFolderResponse,
     ForgetProductRequest,
@@ -480,6 +481,24 @@ def start_rebuild_where_used(
     )
     status = ctx.where_used_index.start(product_id)
     return _where_used_job_response(status)
+
+
+@router.post(
+    "/api/products/{product_id}/creo-metadata/clear",
+    response_model=CreoMetadataClearResponse,
+)
+def clear_product_creo_metadata(
+    product_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> CreoMetadataClearResponse:
+    """Erase stored Creo metadata for this product. Collect all runs this first."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_METADATA)
+    product = load_accessible_product(request, ctx, db, product_id)
+    result = ctx.metadata.clear_product_metadata(db, product)
+    db.commit()
+    return CreoMetadataClearResponse.model_validate(result)
 
 
 @router.get(

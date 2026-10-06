@@ -11,6 +11,7 @@ from creopdm.product_state import product_allows_mutation
 from creopdm.schemas.common import ObjectResponse, ObjectVersionResponse, ProductResponse
 from creopdm.services.checkout_service import CheckoutView
 from creopdm.utils.classify import display_type_label, resolve_type_icon
+from creopdm.utils.creo_model_class import version_has_creo_metadata
 from creopdm.utils.identity import UserIdentity
 from creopdm.utils.timefmt import as_utc
 
@@ -75,12 +76,18 @@ def object_to_response(
     can_checkin: bool | None = None,
     in_workspace: bool = False,
     type_label: str | None = None,
+    creo_metadata_captured: bool | None = None,
 ) -> ObjectResponse:
     checkout: Checkout | None = view.checkout if view else None
     label = view.label if view else "Available"
     if modified_locally and (view is None or view.owned_by_me or checkout is None):
         label = "Modified locally" if view is None or checkout is None else f"{view.label} · Modified locally"
     resolved_label = type_label if type_label is not None else display_type_label(obj.filename, obj.object_type)
+    captured = (
+        bool(creo_metadata_captured)
+        if creo_metadata_captured is not None
+        else version_has_creo_metadata(obj.current_version)
+    )
     return ObjectResponse(
         uuid=obj.uuid,
         product_uuid=product_uuid,
@@ -111,6 +118,7 @@ def object_to_response(
         can_checkout=view.can_checkout if view else obj.lifecycle_state == "IN_WORK",
         can_checkin=can_checkin if can_checkin is not None else (view.can_checkin if view else False),
         in_workspace=in_workspace,
+        creo_metadata_captured=captured,
         created_at=as_utc(obj.created_at),
         updated_at=as_utc(obj.updated_at),
         current_version=version_to_response(

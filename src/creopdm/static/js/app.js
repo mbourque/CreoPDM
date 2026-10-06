@@ -2083,11 +2083,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const lead = $("#collect-metadata-lead");
     const warn = $("#collect-metadata-warn");
     if (!(dialog instanceof HTMLDialogElement) || !form || !lead) {
-      return Promise.resolve(window.confirm(`Collect Creo metadata for ${total} model(s)?`));
+      return Promise.resolve(
+        window.confirm(
+          `Collect Creo metadata for ${total} model(s)? This clears stored metadata first, then recaptures each model.`
+        )
+      );
     }
     lead.textContent =
-      `Capture parameters, materials, units, features, and BOM/structure for ${total} Creo model(s) in this product. ` +
-      "Each model is retrieved in the Creo session when needed. Mass properties are not collected (unsupported in silent Collect).";
+      `Clears stored Creo metadata for this product, then captures parameters, materials, units, features, and BOM/structure for ${total} Creo model(s). ` +
+      "Assemblies are collected first so GetSkeleton can flag skeleton parts. Each model is retrieved in Creo when needed. Mass properties are not collected (unsupported in silent Collect).";
     if (warn) {
       if (total > METADATA_COLLECT_WARN_THRESHOLD) {
         warn.hidden = false;
@@ -2261,8 +2265,36 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  async function flushPendingMetadataErase(pendingErase) {
-    const list = Array.isArray(pendingErase) ? pendingErase.splice(0, pendingErase.length) : [];
+  function collectMetadataRank(filename) {
+    const logical = String(logicalUploadName(filename) || filename || "").toLowerCase();
+    if (logical.endsWith(".asm")) return 0;
+    if (logical.endsWith(".mfg")) return 1;
+    if (logical.endsWith(".prt")) return 2;
+    return 3;
+  }
+
+  function isAssemblySessionKey(name) {
+    const logical = String(logicalUploadName(name) || name || "").toLowerCase();
+    return logical.endsWith(".asm") || logical.includes(".asm.");
+  }
+
+  async function flushPendingMetadataErase(pendingErase, options) {
+    const opts = options && typeof options === "object" ? options : {};
+    const keepAssemblies = Boolean(opts.keepAssemblies);
+    const queue = Array.isArray(pendingErase) ? pendingErase : [];
+    let list;
+    if (keepAssemblies) {
+      const rest = [];
+      const asms = [];
+      queue.splice(0, queue.length).forEach((key) => {
+        if (isAssemblySessionKey(key)) asms.push(key);
+        else rest.push(key);
+      });
+      asms.forEach((key) => queue.push(key));
+      list = rest;
+    } else {
+      list = queue.splice(0, queue.length);
+    }
     if (!list.length) return;
     if (typeof window.CreoJS?.eraseSessionModelsByNames !== "function") return;
     try {
@@ -2336,7 +2368,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         }
         index += 1;
         if (pendingErase.length >= 25) {
-          await flushPendingMetadataErase(pendingErase);
+          await flushPendingMetadataErase(pendingErase, { keepAssemblies: true });
         }
         saveMetadataCollectState({
           ...state,
@@ -2427,13 +2459,36 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         relativePath: String(row.relative_path || "").trim(),
         versionId: String(row.current_version?.uuid || row.version_id || "").trim(),
       }))
-      .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename));
+      .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename))
+      .sort((a, b) => {
+        const rank = collectMetadataRank(a.filename) - collectMetadataRank(b.filename);
+        if (rank !== 0) return rank;
+        return String(a.filename).localeCompare(String(b.filename));
+      });
     if (!targets.length) {
       showOk("No Creo parts, assemblies, or drawings to capture.");
       return;
     }
     const okToStart = await confirmCollectMetadata(targets.length);
     if (!okToStart) return;
+    setBusy("Clearing stored Creo metadata…");
+    try {
+      const cleared = await fetch(
+        `/api/products/${encodeURIComponent(productId)}/creo-metadata/clear`,
+        { method: "POST", headers: { "Content-Type": "application/json" } }
+      );
+      if (!cleared.ok) {
+        clearBusy();
+        forceClearBusy();
+        showError($("#toolbar-error"), "Could not clear stored metadata before Collect.");
+        return;
+      }
+    } catch {
+      clearBusy();
+      forceClearBusy();
+      showError($("#toolbar-error"), "Could not clear stored metadata before Collect.");
+      return;
+    }
 
     const state = {
       productId,

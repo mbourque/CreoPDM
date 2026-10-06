@@ -36,6 +36,27 @@ def test_normalize_creo_identity_mutates_dict():
     assert identity["common_name"] == "Pin"
 
 
+def test_version_has_creo_metadata():
+    from types import SimpleNamespace
+
+    from creopdm.utils.creo_model_class import version_has_creo_metadata
+
+    assert version_has_creo_metadata(None) is False
+    assert version_has_creo_metadata(SimpleNamespace(identity_json=None)) is False
+    assert (
+        version_has_creo_metadata(
+            SimpleNamespace(identity_json='{"model_type":"PART"}', materials_json=None)
+        )
+        is True
+    )
+    assert (
+        version_has_creo_metadata(
+            SimpleNamespace(identity_json=None, materials_json='{"current":"STEEL"}')
+        )
+        is True
+    )
+
+
 def test_skeleton_role_only_on_parts():
     asm = {"model_type": "ASSEMBLY", "model_role": "SKELETON", "file_name": "top.asm"}
     normalize_creo_identity(asm)
