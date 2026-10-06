@@ -1672,8 +1672,12 @@ def test_toolbar_hides_inactive_actions():
     assert "openBtn.disabled =" not in sync
     assert "| Hidden when |" in docs
     assert "are **hidden** (not greyed out)" in docs
-    # Export selected + Check in selected stay greyed with a hover reason.
-    assert "**Export selected…** and **Check in selected…**" in docs
+    # Export product / Export selected / Check in selected stay greyed with a hover reason.
+    assert "**Export product…**" in docs
+    assert "**Export selected…**" in docs
+    assert "**Check in selected…**" in docs
+    assert "stay visible and greyed" in docs
+    assert "When **every** Export item would be greyed, hide **Export ▾** itself" in docs
     assert "function checkinSelectedHoverTitle(" in script
     assert "checkinBtn.hidden = false" in sync
     assert "checkinBtn.disabled = !canCheckin" in sync
