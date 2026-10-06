@@ -193,6 +193,12 @@ def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
     assert "hostedCreoJS()" in script.split("function canGatherCreoMetadata(", 1)[1].split(
         "async function tryEraseModelsFromCreoSession(", 1
     )[0]
+    # Add returns status "added" — must not only accept checked_in (empty targets = no Collect).
+    targets_fn = script.split("function metadataTargetsFromResult(", 1)[1].split(
+        "function checkedInItemsFromResult(", 1
+    )[0]
+    assert 'status === "added"' in targets_fn
+    assert 'status === "checked_in"' in targets_fn
     docs = (root / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "keep the busy overlay and run **Where Used** indexing there" in docs
     assert "never clear the overlay and return to Files before indexing finishes" in docs

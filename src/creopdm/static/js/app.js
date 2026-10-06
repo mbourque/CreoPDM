@@ -6747,8 +6747,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         .filter((item) => {
           if (!item || !item.uuid || !item.filename) return false;
           const status = String(item.status || "").trim().toLowerCase();
-          // Same filter as checkedInItemsFromResult — skip undo-checkout rows.
-          return !status || status === "checked_in";
+          // Add / zip → "added"; Check In → "checked_in". Skip undo-only rows.
+          return !status || status === "checked_in" || status === "added";
         })
         .map((item) => ({
           uuid: item.uuid,
