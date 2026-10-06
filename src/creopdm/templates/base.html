@@ -1011,7 +1011,7 @@ function creoBindSolidForSkeleton(session, model, filename) {
     /**
      * Collect RetrieveModel yields getClassName "pfcModel". ListFeatures can work
      * on that handle while IsSkeleton stays unbound — Model Info needs a real
-     * pfcSolid/pfcPart. Re-resolve via GetModel(MDL_PART) / GetModelFromDescr.
+     * pfcSolid/pfcPart. Cheap re-resolve: GetModel(MDL_PART) only (no second Retrieve).
      */
     function tryHandle(handle) {
         if (!handle) return null;
@@ -1036,9 +1036,12 @@ function creoBindSolidForSkeleton(session, model, filename) {
     }
     var hit = tryHandle(model);
     if (hit) return hit;
-    if (!session || typeof pfcModelType === "undefined" || typeof pfcModelDescriptor === "undefined") {
-        return model;
-    }
+    // Already a solid/part with no bool → further GetModel will not help.
+    try {
+        var cls = model && model.getClassName ? String(model.getClassName() || "") : "";
+        if (cls === "pfcSolid" || cls === "pfcPart") return model;
+    } catch (errCls) {}
+    if (!session || typeof pfcModelType === "undefined") return model;
     var fileHint = filename || "";
     if (!fileHint && model) {
         try { fileHint = String(model.FileName || ""); } catch (errN) { fileHint = ""; }
@@ -1050,13 +1053,11 @@ function creoBindSolidForSkeleton(session, model, filename) {
         if (hit) return hit;
     } catch (errGet) {}
     try {
-        var descr = pfcModelDescriptor.Create(pfcModelType.MDL_PART, root, "");
-        if (typeof session.GetModelFromDescr === "function") {
+        if (typeof pfcModelDescriptor !== "undefined" && typeof session.GetModelFromDescr === "function") {
+            var descr = pfcModelDescriptor.Create(pfcModelType.MDL_PART, root, "");
             hit = tryHandle(session.GetModelFromDescr(descr));
             if (hit) return hit;
         }
-        hit = tryHandle(session.RetrieveModel(descr));
-        if (hit) return hit;
     } catch (errDescr) {}
     return model;
 }
