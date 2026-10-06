@@ -1,5 +1,6 @@
-Filetype icons (except Creo part/assembly/drawing.png and mfg.png) are from
-vscode-icons (https://github.com/vscode-icons/vscode-icons).
+Filetype icons (except Creo part/assembly/drawing.png, mfg.png, and skeleton.png)
+are from vscode-icons (https://github.com/vscode-icons/vscode-icons).
 Icons: Creative Commons Attribution-ShareAlike (CC BY-SA).
 Branded marks (Microsoft, Adobe, etc.) remain their respective owners.
 mfg.png is a CreoPDM manufacturing type icon (not from vscode-icons).
+skeleton.png is Creo’s Model Tree skeleton-part icon (PTC), resized to match part.png.

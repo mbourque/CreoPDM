@@ -127,3 +127,4 @@ def test_files_list_type_prefers_distinctive_role():
         == "ASSEMBLY"
     )
     assert resolve_type_icon(type_label="SHEETMETAL") == "part.png"
+    assert resolve_type_icon(type_label="SKELETON") == "skeleton.png"
