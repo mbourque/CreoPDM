@@ -2338,14 +2338,13 @@ function gatherModelMetadata(filename, filePath, options) {
                     }
                 }
             }
-            // Collect (featureNames off): skip ListFeatures entirely — unnamed
-            // .name throws and long feature lists dominated bulk time. Open passes
-            // featureNames:true and fills the Features tab from the live session.
-            // POST features:null leaves any prior features_json unchanged.
-            if ((isAsm || isPart) && wantFeatureNames) {
+            // Always list features for the Details Features tab. Collect keeps
+            // featureNames off (type/subtype only — no slow .name throws).
+            // Open passes featureNames:true for model-tree renames.
+            if (isAsm || isPart) {
                 try {
                     features = creoGatherFeatures(solidModel, null, session, {
-                        featureNames: true,
+                        featureNames: wantFeatureNames,
                     });
                 } catch (errFeatGather) {
                     features = [];
