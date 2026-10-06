@@ -1910,11 +1910,7 @@ function creoGatherFeatures(model, dbg, session) {
                     if (typeof feat.Id !== "undefined") id = feat.Id;
                     else if (typeof feat.GetId === "function") id = feat.GetId();
                 } catch (errId) { id = null; }
-                var regenNum = null;
-                try {
-                    if (typeof feat.Number !== "undefined" && feat.Number != null) regenNum = feat.Number;
-                } catch (errNum) { regenNum = null; }
-                // Tree name via feat.GetName (property); type+number only as fallback.
+                // Tree name via feat.name / GetName; else type/subtype only (no order #).
                 var name = "";
                 try {
                     name = creoFeatureAssignedName(feat);
@@ -1922,10 +1918,7 @@ function creoGatherFeatures(model, dbg, session) {
                     name = "";
                 }
                 if (!name) {
-                    if (subType && regenNum != null) name = subType + " " + regenNum;
-                    else if (typeName && regenNum != null) name = typeName + " " + regenNum;
-                    else if (subType) name = subType;
-                    else if (typeName) name = typeName;
+                    name = subType || typeName || "";
                 }
                 if (!name && !typeName && id == null) continue;
                 rows.push({
