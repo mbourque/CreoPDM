@@ -6571,7 +6571,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!canGatherCreoMetadata() || !filename) return null;
     const opts = options && typeof options === "object" ? options : {};
     const deferErase = Boolean(opts.deferErase);
-    const featureNames = Boolean(opts.featureNames);
+    // Default on — Boolean(undefined) was false and wiped Collect/Open names.
+    const featureNames = opts.featureNames !== false;
     const pendingErase = Array.isArray(opts.pendingErase) ? opts.pendingErase : null;
     try {
       await whenCreoJSReady();

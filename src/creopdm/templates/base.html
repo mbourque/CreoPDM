@@ -1803,29 +1803,39 @@ function creoFamilyCellString(value) {
     }
 }
 function creoFeatureNameText(value) {
-    if (value == null || typeof value === "function" || typeof value === "object") return "";
-    var text = String(value).trim();
-    if (!text || text === "[object Object]") return "";
-    return text;
+    // Do not reject typeof==="object" — Creo.JS string wrappers must String().
+    if (value == null || typeof value === "function") return "";
+    try {
+        var text = String(value).trim();
+        if (!text || text === "[object Object]") return "";
+        return text;
+    } catch (err) {
+        return "";
+    }
 }
 function creoFeatureAssignedName(feat) {
-    // Creo.JS model-tree name (`feature.name`). Unnamed features throw
-    // XToolkitNotFound — catch once and stop. Do not cascade GetName/Name:
-    // each throw crosses the Creo.JS bridge and made Collect much slower.
+    // GetName first — that restored tree names (RIGHT, DEFAULT_CS) after Collect
+    // Retrieve. feat.name can throw on retrieved handles even when GetName works;
+    // never abort the whole lookup on the first throw.
     if (!feat) return "";
-    var threw = false;
-    try {
-        var viaName = creoFeatureNameText(feat.name);
-        if (viaName) return viaName;
-    } catch (errName) {
-        threw = true;
-    }
-    if (threw) return "";
-    // Only when .name quietly empty (binding without that alias).
     try {
         var viaGet = creoFeatureNameText(feat.GetName);
         if (viaGet) return viaGet;
     } catch (errGet) {}
+    try {
+        if (typeof feat.GetName === "function") {
+            var viaCall = creoFeatureNameText(feat.GetName());
+            if (viaCall) return viaCall;
+        }
+    } catch (errCall) {}
+    try {
+        var viaName = creoFeatureNameText(feat.name);
+        if (viaName) return viaName;
+    } catch (errName) {}
+    try {
+        var viaCap = creoFeatureNameText(feat.Name);
+        if (viaCap) return viaCap;
+    } catch (errCap) {}
     return "";
 }
 function creoGatherFeatures(model, dbg, session, options) {
@@ -1909,7 +1919,6 @@ function creoGatherFeatures(model, dbg, session, options) {
                     if (typeof feat.Id !== "undefined") id = feat.Id;
                     else if (typeof feat.GetId === "function") id = feat.GetId();
                 } catch (errId) { id = null; }
-                // Tree names only when requested (Open session). Collect uses type only.
                 var name = "";
                 if (wantNames) {
                     try {

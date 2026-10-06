@@ -268,15 +268,21 @@ def test_home_page(client):
     assert "function creoGatherFamilyTable" in text
     assert "function creoGatherBomTree" in text
     assert "function creoGatherFeatures" in text
-    # Model-tree names via feat.name (default on for Collect + Open).
+    # Model-tree names: GetName first (Collect Retrieve), then feat.name.
     assert "function creoFeatureAssignedName" in text
+    assert "feat.GetName" in text
     assert "feat.name" in text
+    assert "GetName first" in text
+    assert "never abort the whole lookup on the first throw" in text
     assert "wantFeatureNames = opts.featureNames !== false" in text
     assert "wantNames = opts.featureNames !== false" in text
     assert "featureNames: wantFeatureNames" in text
-    assert "Do not cascade GetName/Name" in text
+    name_text_fn = text.split("function creoFeatureNameText(", 1)[1].split(
+        "function creoFeatureAssignedName(", 1
+    )[0]
+    assert 'typeof value === "object"' not in name_text_fn
+    assert "Do not reject typeof===\"object\"" in name_text_fn
     assert "creoFeatureStripOrderSuffix" not in text
-    assert "XToolkitNotFound" in text
     assert "pwlFeatureNameGetByID" not in text
     assert 'typeName + " " + regenNum' not in text
     assert "errFeat" in text

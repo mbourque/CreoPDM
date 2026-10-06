@@ -396,6 +396,11 @@ def test_metadata_gear_items_require_creo_session():
     )
     assert "include_dependencies: false" in prepare_meta
     assert "include_dependencies: true" not in prepare_meta
+    gather_meta = _between(
+        script, "async function gatherCreoMetadataForFilename(", "async function pushCreoMetadataForItems("
+    )
+    assert "opts.featureNames !== false" in gather_meta
+    assert "Boolean(opts.featureNames)" not in gather_meta
     assert "beforeunload" in script
     soft = _between(script, "function softNavigate(", "function leavePage(")
     assert "metadataCollectJob.running" in soft
