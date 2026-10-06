@@ -413,6 +413,11 @@ def test_metadata_gear_items_require_creo_session():
     assert "captureCreoMetadataAfterOpen" in script
     assert "metadataItemsFromOpenResult" in script
     assert 'withBusy("Capturing Creo metadata…"' in script
+    assert 'withBusy("Collecting Creo metadata…"' in script
+    assert "function metadataBusyText(" in script
+    assert "hostedCreoJS()" in _between(
+        script, "function canGatherCreoMetadata(", "async function tryEraseModelsFromCreoSession("
+    )
     push_items = _between(
         script, "async function pushCreoMetadataForItems(", "function metadataItemsFromOpenResult("
     )
@@ -420,6 +425,8 @@ def test_metadata_gear_items_require_creo_session():
     assert "featureNames," in push_items
     assert "Session first" in push_items
     assert "sessionOnly" in push_items
+    assert "showProgress" in push_items
+    assert "metadataBusyText(" in push_items
     assert "let saved = 0" in push_items
     assert "if (response.ok) saved += 1" in push_items
     after_open = _between(

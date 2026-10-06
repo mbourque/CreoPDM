@@ -153,7 +153,7 @@ def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
     assert "async function runWhereUsedProgress(" in script
     # Nested under Add/zip busyDepth — do not clearBusy between import and index.
     assert "if (busyDepth > 0)" in script
-    assert "no Files flash mid-job" in script
+    assert "no Files flash" in script
     # Reject stale/early done so the overlay cannot finish before parents_done catches up.
     assert "sawActive" in script
     assert "doneCount < total" in script
@@ -162,6 +162,13 @@ def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
         1,
     )[0]
     assert "indexWhereUsedUnderBusy(productId)" in add_tail
+    assert "canGatherCreoMetadata()" in add_tail
+    assert "pushCreoMetadataForItems(metadataTargetsFromResult(out))" in add_tail
+    # Where Used first; metadata only when Creo.JS is hosted (any count).
+    assert add_tail.index("indexWhereUsedUnderBusy(productId)") < add_tail.index(
+        "pushCreoMetadataForItems(metadataTargetsFromResult(out))"
+    )
+    assert "okN <= 50" not in add_tail
     assert "reloadPage({ keepBusy: true" in add_tail
     assert "indexing started in the background" not in add_tail
     # Compressed zip is a separate submit — must also index before refresh on one overlay.
@@ -170,19 +177,31 @@ def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
         1,
     )[0]
     assert "indexWhereUsedUnderBusy(productId)" in zip_submit
+    assert "canGatherCreoMetadata()" in zip_submit
+    assert "pushCreoMetadataForItems(metadataTargetsFromResult(result))" in zip_submit
+    assert zip_submit.index("indexWhereUsedUnderBusy(productId)") < zip_submit.index(
+        "pushCreoMetadataForItems(metadataTargetsFromResult(result))"
+    )
     assert "import-zip" in zip_submit
     assert "pollZipImportJob" in zip_submit
     assert "zip-import/jobs" in zip_submit
     assert "jobFilesTotal" in zip_submit
     assert "One busy session for upload/import AND Where Used" in zip_submit
     assert "reloadPage({ keepBusy: true" in zip_submit
+    assert "function metadataBusyText(" in script
+    assert "Collecting Creo metadata…" in script
+    assert "hostedCreoJS()" in script.split("function canGatherCreoMetadata(", 1)[1].split(
+        "async function tryEraseModelsFromCreoSession(", 1
+    )[0]
     docs = (root / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "keep the busy overlay and run **Where Used** indexing there" in docs
     assert "never clear the overlay and return to Files before indexing finishes" in docs
-    assert "Same Where Used overlay step for **Add folder…**" in docs
+    assert "Same Where Used (+ Creo metadata when Connected) overlay step" in docs
+    assert "only inside Creo" in docs
     assert "phase text" in docs
     assert "clear the overlay and return you to Files before Where Used finishes" in docs
-
+    assert "cap metadata at 50 files" in docs
+    assert "≤50" not in docs.split("| Collect Creo metadata |", 1)[1].split("|", 1)[0]
 
 def test_await_where_used_rejects_unfinished_done_status():
     """Regression: zip refresh with ~every asm as Top Level when poll accepted early done."""

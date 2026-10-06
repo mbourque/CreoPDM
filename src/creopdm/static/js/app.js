@@ -1668,6 +1668,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return "Indexing Where Used… preparing…";
   }
 
+  function metadataBusyText(doneCount, total, filename) {
+    const name = filename ? `: ${filename}` : "";
+    if (total > 0) return `Collecting Creo metadata… ${doneCount} of ${total}${name}`;
+    return "Collecting Creo metadata…";
+  }
+
   function publishBusyMessage(message) {
     const api = window.__creopdmSoftNavApi;
     if (api && typeof api.setBusyMessage === "function") api.setBusyMessage(message);
@@ -3725,6 +3731,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           let indexOutcome = null;
           if (okCount) {
             indexOutcome = await indexWhereUsedUnderBusy(productId);
+            if (canGatherCreoMetadata() && Array.isArray(result?.ok) && result.ok.length) {
+              publishBusyMessage("Collecting Creo metadata…");
+              await pushCreoMetadataForItems(metadataTargetsFromResult(result));
+            }
             const failedInside = result?.failed || [];
             if (failedInside.length) {
               const sample = failedInside
@@ -4289,14 +4299,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       return response.json();
       })();
-      // Keep the same busy overlay through Where Used (no Files flash mid-job).
+      // Keep the same busy overlay through Where Used then metadata (no Files flash).
       if (out?.ok?.length) {
         const okN = out.ok.length;
-        if (canGatherCreoMetadata() && okN > 0 && okN <= 50) {
-          setBusyMessage("Capturing Creo metadata…");
+        indexOutcome = await indexWhereUsedUnderBusy(productId);
+        if (canGatherCreoMetadata()) {
+          publishBusyMessage("Collecting Creo metadata…");
           await pushCreoMetadataForItems(metadataTargetsFromResult(out));
         }
-        indexOutcome = await indexWhereUsedUnderBusy(productId);
         const failedInside = out.failed || [];
         if (failedInside.length) {
           const codes = (() => {
@@ -6617,6 +6627,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const sessionWaitRounds = Math.max(0, Number(opts.sessionWaitRounds) || 0);
     const sessionWaitMs = Math.max(50, Number(opts.sessionWaitMs) || 500);
     const featureNames = opts.featureNames !== false;
+    const showProgress = opts.progress !== false;
     const targets = (items || [])
       .map((item) => ({
         uuid: String(item?.uuid || item?.object_id || "").trim(),
@@ -6627,7 +6638,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename));
     let saved = 0;
     if (!targets.length || !canGatherCreoMetadata()) return saved;
-    for (const target of targets) {
+    for (let i = 0; i < targets.length; i += 1) {
+      const target = targets[i];
+      if (showProgress) {
+        publishBusyMessage(metadataBusyText(i + 1, targets.length, target.filename));
+      }
       // Session first (Open / Check In often already have the model) — avoids
       // re-Retrieve + erase of a model the user just opened.
       let snapshot = null;
@@ -9823,12 +9838,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // Drop local .N leftovers and rematerialize logical tip — do not Erase Creo session
       // (keeps open models; product check-in must not wipe unrelated windows).
       const localSync = await rematerializeCheckedInLocalTips(result);
-      if (canGatherCreoMetadata()) {
-        await withBusy("Capturing Creo metadata…", async () => {
-          await pushCreoMetadataForItems(metadataTargetsFromResult(result));
-        });
-      }
-      // New files via Add selected… / check-in add paths need Where Used too.
+      // New files via Add selected… / check-in add paths: Where Used first, then metadata.
       const addedPaths = Array.isArray(added) ? added.length : 0;
       const addOnlyCheckin = checkinDialog?.dataset.addOnly === "1";
       if (succeeded && (addOnlyCheckin || addedPaths > 0)) {
@@ -9837,6 +9847,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           checkinBtn?.dataset.product ||
           currentProductId();
         await indexWhereUsedUnderBusy(productIdForIndex);
+      }
+      if (canGatherCreoMetadata()) {
+        await withBusy("Collecting Creo metadata…", async () => {
+          await pushCreoMetadataForItems(metadataTargetsFromResult(result));
+        });
       }
       if (localSync?.agentOffline) {
         showOk(
