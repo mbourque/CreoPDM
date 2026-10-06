@@ -670,6 +670,34 @@ def test_assembly_skeleton_filename_flags_child_without_skeleton_dep(client, rep
 
 
 @requires_git
+def test_flag_skeletons_endpoint_sets_part_role(client, repo_parent, tmp_path):
+    """Collect end-pass: session skeleton names flag matching .prt Type."""
+    product = _create_product(client, repo_parent)
+    layout = _add_part(client, product["uuid"], tmp_path, "600610010001.prt.1")
+    client.post(
+        f"/api/objects/{layout['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "600610010001.prt",
+                "model_type": "PART",
+                "model_role": "SOLID",
+            },
+            "materials": {"current": None, "names": []},
+        },
+    )
+    flagged = client.post(
+        f"/api/products/{product['uuid']}/creo-metadata/flag-skeletons",
+        json={"filenames": ["600610010001", "other.prt"]},
+    )
+    assert flagged.status_code == 200, flagged.text
+    assert flagged.json()["flagged"] >= 1
+
+    listed = client.get(f"/api/products/{product['uuid']}/objects")
+    by_uuid = {item["uuid"]: item for item in listed.json()}
+    assert by_uuid[layout["uuid"]]["type_label"] == "SKELETON"
+
+
+@requires_git
 def test_collect_clear_wipes_product_creo_metadata(client, repo_parent, tmp_path):
     """Collect-all start endpoint erases stored identity/params/deps for the product."""
     product = _create_product(client, repo_parent)

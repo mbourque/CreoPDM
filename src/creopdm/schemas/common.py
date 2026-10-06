@@ -823,6 +823,18 @@ class CreoMetadataClearResponse(BaseModel):
     dependencies_deleted: int = 0
 
 
+class CreoMetadataFlagSkeletonsRequest(BaseModel):
+    """Filenames from Creo.JS listSessionSkeletonParts (Collect end pass)."""
+
+    filenames: list[str] = Field(default_factory=list)
+
+
+class CreoMetadataFlagSkeletonsResponse(BaseModel):
+    ok: bool = True
+    requested: int = 0
+    flagged: int = 0
+
+
 class WhereUsedItem(BaseModel):
     object_id: str
     filename: str

@@ -841,6 +841,49 @@ class MetadataService:
         new_role = str(identity.get("model_role") or "").upper()
         return prev_role == DependencyType.SKELETON.value and new_role != DependencyType.SKELETON.value
 
+    def flag_skeleton_parts_by_filenames(
+        self,
+        session: Session,
+        product: Product,
+        filenames: list[str],
+    ) -> dict[str, int]:
+        """Set model_role=SKELETON on matching .prt tips (Collect end-of-session pass)."""
+        ensure_product_mutable(product)
+        skel_keys: set[str] = set()
+        for name in filenames or []:
+            text = str(name or "").strip()
+            if text:
+                skel_keys.update(bom_lookup_keys(text))
+        if not skel_keys:
+            return {"requested": 0, "flagged": 0}
+        flagged = 0
+        for row in self._objects.list_objects(session, product.id):
+            if not (set(bom_lookup_keys(row.filename)) & skel_keys):
+                continue
+            before = ""
+            ver = self._resolve_version(session, row, None)
+            if ver is not None:
+                prev = _loads(ver.identity_json)
+                if isinstance(prev, dict):
+                    before = str(prev.get("model_role") or "").upper()
+            self._set_part_skeleton_role(session, row)
+            ver = self._resolve_version(session, row, None)
+            role = ""
+            if ver is not None:
+                data = _loads(ver.identity_json)
+                if isinstance(data, dict):
+                    role = str(data.get("model_role") or "").upper()
+            if role == DependencyType.SKELETON.value:
+                flagged += 1
+                if before != role:
+                    logger.info(
+                        "Flagged skeleton part %s (was role=%s)",
+                        row.filename,
+                        before or "-",
+                    )
+        session.flush()
+        return {"requested": len(skel_keys), "flagged": flagged}
+
     def _set_part_skeleton_role(
         self,
         session: Session,

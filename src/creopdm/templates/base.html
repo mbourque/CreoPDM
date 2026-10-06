@@ -1286,11 +1286,134 @@ function creoSessionModelIsAssemblySkeleton(session, model) {
     }
     return false;
 }
+function creoProbeIsSkeletonRaw(handle, label) {
+    var out = { via: String(label || ""), value: null, kind: "missing" };
+    if (!handle) return out;
+    try {
+        var raw = handle.IsSkeleton;
+        out.kind = typeof raw;
+        if (raw === true || raw === 1 || raw === false || raw === 0) {
+            out.value = raw === true || raw === 1;
+            return out;
+        }
+        out.value = String(raw).slice(0, 80);
+    } catch (errProp) {
+        out.kind = "throw:" + creoToolkitErr(errProp);
+    }
+    try {
+        var viaGet = handle.GetIsSkeleton;
+        out.get_kind = typeof viaGet;
+        if (viaGet === true || viaGet === 1 || viaGet === false || viaGet === 0) {
+            out.value = viaGet === true || viaGet === 1;
+            out.kind = "GetIsSkeleton_prop";
+            return out;
+        }
+    } catch (errGet) {
+        out.get_kind = "throw:" + creoToolkitErr(errGet);
+    }
+    return out;
+}
+function creoBuildSkeletonProbe(session, model, filename) {
+    var probe = {
+        filename: String(filename || ""),
+        displayed: false,
+        answer: null,
+        raw: [],
+        class_name: "",
+        session_parent_skeleton: false,
+        session_skeleton_names: []
+    };
+    try { probe.displayed = creoModelIsDisplayedInSession(session, model); } catch (errD) {}
+    try {
+        if (model && model.getClassName) probe.class_name = String(model.getClassName() || "");
+    } catch (errC) {}
+    try { probe.answer = creoSolidIsSkeletonAnswer(model, session); } catch (errA) { probe.answer = null; }
+    var handles = [model];
+    try {
+        if (typeof pfcSolid !== "undefined" && pfcSolid.cast) {
+            var s = pfcSolid.cast(model);
+            if (s) handles.push(s);
+        }
+    } catch (errS) {}
+    try {
+        if (typeof pfcPart !== "undefined" && pfcPart.cast) {
+            var p = pfcPart.cast(model);
+            if (p) handles.push(p);
+        }
+    } catch (errP) {}
+    for (var h = 0; h < handles.length; h++) {
+        probe.raw.push(creoProbeIsSkeletonRaw(handles[h], h === 0 ? "model" : "cast" + h));
+    }
+    try {
+        probe.session_parent_skeleton = creoSessionModelIsAssemblySkeleton(session, model);
+    } catch (errPar) {}
+    try {
+        probe.session_skeleton_names = creoListSessionSkeletonLogicalNames(session);
+    } catch (errList) {
+        probe.session_skeleton_names = [];
+    }
+    return probe;
+}
+var _creoSessionSkelCache = { names: null, at: 0 };
+function creoListSessionSkeletonLogicalNames(session) {
+    /**
+     * After Collect has assemblies + parts in session, GetSkeleton often works
+     * even when per-part IsSkeleton lied during silent Retrieve.
+     */
+    var now = 0;
+    try { now = Date.now(); } catch (errT) { now = 0; }
+    if (_creoSessionSkelCache.names && now && now - _creoSessionSkelCache.at < 3000) {
+        return _creoSessionSkelCache.names.slice();
+    }
+    var found = [];
+    var seen = {};
+    function addName(raw) {
+        var logical = creoLogicalFileName(String(raw || "")).toLowerCase();
+        if (!logical) return;
+        if (logical.indexOf(".") < 0) logical = logical + ".prt";
+        if (!/\.prt$/i.test(logical)) return;
+        if (seen[logical]) return;
+        seen[logical] = true;
+        found.push(logical);
+    }
+    if (!session) return found;
+    var listed = null;
+    try { listed = session.ListModels(); } catch (errList) { listed = null; }
+    var models = creoFeatureItems(listed);
+    for (var i = 0; i < models.length; i++) {
+        var other = models[i];
+        if (!other) continue;
+        var skelName = "";
+        try { skelName = creoSkeletonLogicalName(other, session); } catch (errSk) { skelName = ""; }
+        if (skelName) addName(skelName);
+        try {
+            if (creoSolidIsSkeletonAnswer(other, session) === true) {
+                var selfName = "";
+                try { selfName = String(other.FileName || ""); } catch (errN) { selfName = ""; }
+                addName(selfName);
+            }
+        } catch (errSelf) {}
+    }
+    _creoSessionSkelCache = { names: found.slice(), at: now || 1 };
+    return found;
+}
+function listSessionSkeletonParts() {
+    /** Creo.JS entry: return skeleton .prt logical names currently in session. */
+    try {
+        var session = (typeof pfcGetCurrentSession === "function")
+          ? pfcGetCurrentSession()
+          : pfcGetProESession();
+        return { skeletons: creoListSessionSkeletonLogicalNames(session) };
+    } catch (errAll) {
+        return { skeletons: [], __error: String(errAll && (errAll.message || errAll) || "") };
+    }
+}
 function creoDetectSkeletonRole(session, model, filename) {
     /**
      * Skeleton is this part's IsSkeleton (PTC pfcSolid property). Assemblies never.
      * Model Info shows "SKELETON MODEL : …" when true. Silent Collect Retrieve
      * often lies with false — only stop on false when the model is displayed.
+     * Always try parent-assembly GetSkeleton in session (Collect keeps asms).
      */
     if (creoIsAssemblyModel(model, filename || "")) return false;
     var logical = "";
@@ -1302,10 +1425,11 @@ function creoDetectSkeletonRole(session, model, filename) {
     var flag = null;
     try { flag = creoSolidIsSkeletonAnswer(model, session); } catch (errIs) { flag = null; }
     if (flag === true) return true;
-    if (flag === false) return false;
     try {
         if (creoSessionModelIsAssemblySkeleton(session, model)) return true;
     } catch (errSess) {}
+    // Displayed + explicit false: Model Info would not say SKELETON MODEL.
+    if (flag === false) return false;
     try {
         var name = filename || "";
         if (!name) {
@@ -2751,6 +2875,13 @@ function gatherModelMetadata(filename, filePath, options) {
                 }
             }
         } catch (errSkelId) {}
+        // Debug: what Creo.JS returned for IsSkeleton (Details shows this).
+        try {
+            var probeName = String(filename || identity.file_name || "");
+            if (/\.prt/i.test(probeName) || identity.model_type === "PART") {
+                identity.skeleton_probe = creoBuildSkeletonProbe(session, solidModel, probeName);
+            }
+        } catch (errProbe) {}
         var eraseKeys = [];
         if (weRetrieved) {
             var afterKeys = creoSessionModelKeys(session);

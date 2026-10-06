@@ -215,8 +215,12 @@ def test_home_page(client):
     )[0]
     assert "creoIsPartModel" in skel_fn
     assert "creoSolidIsSkeletonAnswer" in skel_fn
-    assert "if (flag === false) return false;" in skel_fn
     assert "creoSessionModelIsAssemblySkeleton" in skel_fn
+    assert "if (flag === false) return false;" in skel_fn
+    # Parent GetSkeleton before trusting displayed false.
+    assert skel_fn.index("creoSessionModelIsAssemblySkeleton") < skel_fn.index(
+        "if (flag === false) return false;"
+    )
     assert "creoFilenameLooksLikeSkeleton" in skel_fn
     assert "_skel" in text
     # GetSkeleton helpers must not require typeof === "function" (Creo.JS callables).
@@ -235,6 +239,19 @@ def test_home_page(client):
     assert "creoIsPartModel(skel" not in skel_name_fn
     assert "role=%s" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "skeleton_filename" in open("src/creopdm/api/objects.py", encoding="utf-8").read()
+    assert "function listSessionSkeletonParts" in text
+    assert "promoteSkeletonRolesFromSession" in open(
+        "src/creopdm/static/js/app.js", encoding="utf-8"
+    ).read()
+    assert "creo-metadata/flag-skeletons" in open(
+        "src/creopdm/static/js/app.js", encoding="utf-8"
+    ).read()
+    assert "flag_skeleton_parts_by_filenames" in open(
+        "src/creopdm/services/metadata_service.py", encoding="utf-8"
+    ).read()
+    assert "skeleton_probe" in open(
+        "src/creopdm/templates/object_detail.html", encoding="utf-8"
+    ).read()
     assert "IsSheetmetal" in text
     assert "pfcModelType.MDL_MFG" in text
     assert "creoFeatureItems(model.ListMaterials())" in text

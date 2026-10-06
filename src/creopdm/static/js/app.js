@@ -2278,6 +2278,42 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return logical.endsWith(".asm") || logical.includes(".asm.");
   }
 
+  async function promoteSkeletonRolesFromSession(productId, targets) {
+    if (!productId || typeof window.CreoJS?.listSessionSkeletonParts !== "function") {
+      return 0;
+    }
+    let listed = null;
+    try {
+      listed = await window.CreoJS.listSessionSkeletonParts();
+    } catch {
+      return 0;
+    }
+    const names = Array.isArray(listed?.skeletons)
+      ? listed.skeletons.map((n) => String(n || "").trim()).filter(Boolean)
+      : [];
+    if (!names.length) return 0;
+    // Prefer product objects that were Collect targets; API matches by filename keys.
+    try {
+      const response = await fetch(
+        `/api/products/${encodeURIComponent(productId)}/creo-metadata/flag-skeletons`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filenames: names }),
+        }
+      );
+      if (!response.ok) return 0;
+      const body = await response.json().catch(() => ({}));
+      const flagged = Number(body.flagged || 0) || 0;
+      if (flagged && Array.isArray(targets)) {
+        /* targets unused — API flags by product filename match */
+      }
+      return flagged;
+    } catch {
+      return 0;
+    }
+  }
+
   async function flushPendingMetadataErase(pendingErase, options) {
     const opts = options && typeof options === "object" ? options : {};
     // During Collect, keep every retrieved model until the loop ends — erasing the
@@ -2317,6 +2353,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     let failed = Number(state.failed) || 0;
     let lastReason = "";
     let shouldRefreshList = false;
+    let skeletonsFlagged = 0;
     const pendingErase = [];
     try {
       if (state.productId) {
@@ -2376,6 +2413,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         });
         await new Promise((resolve) => window.setTimeout(resolve, 0));
       }
+      // Before erase: assemblies + parts are still in session — GetSkeleton works
+      // here even when per-part IsSkeleton lied during silent Retrieve.
+      try {
+        setBusyMessage("Flagging skeleton parts from Creo session…");
+        skeletonsFlagged = await promoteSkeletonRolesFromSession(state.productId, targets);
+        if (skeletonsFlagged > 0) {
+          lastReason = `flagged ${skeletonsFlagged} skeleton(s)`;
+        }
+      } catch {
+        /* best-effort */
+      }
       await flushPendingMetadataErase(pendingErase);
       if (typeof window.CreoJS?.eraseUndisplayedModelsQuiet === "function") {
         try {
@@ -2399,7 +2447,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         saveMetadataCollectState(null);
       }
       // Type column (SHEETMETAL / MFG / …) comes from SSR — refresh Files after saves.
-      shouldRefreshList = captured > 0;
+      shouldRefreshList = captured > 0 || skeletonsFlagged > 0;
     } finally {
       setBusyCancelHandler(null);
       clearBusy();
