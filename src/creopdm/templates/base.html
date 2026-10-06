@@ -1828,7 +1828,10 @@ function creoFeatureAssignedName(feat) {
     } catch (errGet) {}
     return "";
 }
-function creoGatherFeatures(model, dbg, session) {
+function creoGatherFeatures(model, dbg, session, options) {
+    var opts = options && typeof options === "object" ? options : {};
+    // featureNames opt-in: Collect skips (unnamed .name throws are slow); Open enables.
+    var wantNames = opts.featureNames === true;
     var rows = [];
     try {
         var solidDbg = dbg ? (dbg.solid = dbg.solid || {}) : null;
@@ -1906,12 +1909,14 @@ function creoGatherFeatures(model, dbg, session) {
                     if (typeof feat.Id !== "undefined") id = feat.Id;
                     else if (typeof feat.GetId === "function") id = feat.GetId();
                 } catch (errId) { id = null; }
-                // Tree name via feat.name / GetName; else type/subtype only.
+                // Tree names only when requested (Open session). Collect uses type only.
                 var name = "";
-                try {
-                    name = creoFeatureAssignedName(feat);
-                } catch (errAssigned) {
-                    name = "";
+                if (wantNames) {
+                    try {
+                        name = creoFeatureAssignedName(feat);
+                    } catch (errAssigned) {
+                        name = "";
+                    }
                 }
                 if (!name) {
                     name = subType || typeName || "";
@@ -2255,7 +2260,9 @@ function creoRetrieveForMetadata(session, filePath, filename) {
         }
     }
 }
-function gatherModelMetadata(filename, filePath) {
+function gatherModelMetadata(filename, filePath, options) {
+    var opts = options && typeof options === "object" ? options : {};
+    var wantFeatureNames = opts.featureNames === true;
     try {
         var session = (typeof pfcGetCurrentSession === "function")
           ? pfcGetCurrentSession()
@@ -2331,9 +2338,15 @@ function gatherModelMetadata(filename, filePath) {
                     }
                 }
             }
-            if (isAsm || isPart) {
+            // Collect (featureNames off): skip ListFeatures entirely — unnamed
+            // .name throws and long feature lists dominated bulk time. Open passes
+            // featureNames:true and fills the Features tab from the live session.
+            // POST features:null leaves any prior features_json unchanged.
+            if ((isAsm || isPart) && wantFeatureNames) {
                 try {
-                    features = creoGatherFeatures(solidModel, null, session);
+                    features = creoGatherFeatures(solidModel, null, session, {
+                        featureNames: true,
+                    });
                 } catch (errFeatGather) {
                     features = [];
                 }

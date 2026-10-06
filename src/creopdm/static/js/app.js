@@ -2155,12 +2155,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   }
 
-  async function pushOneCreoMetadataTarget(target) {
+  async function pushOneCreoMetadataTarget(target, options) {
     // No per-file JS timeout — large assemblies (e.g. 844j.asm) can take many
     // minutes in Creo. Skipping them loses the metadata we care about most.
     // Cancel still works between models; during a Creo retrieve the UI may pause.
-    // Bulk Collect: do NOT probe the empty session first (935× wasted Creo.JS
-    // turns) and do NOT open-prepare full dependency trees — only this tip.
+    // Bulk Collect: tip-only prepare, no empty-session probe, defer Erase, skip
+    // feature.name reads (Open session capture fills renamed Features later).
+    const opts = options && typeof options === "object" ? options : {};
     try {
       let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
       if (!filePath) {
@@ -2169,7 +2170,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (!filePath) {
         return { ok: false, reason: "materialize_failed" };
       }
-      let snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
+      let snapshot = await gatherCreoMetadataForFilename(target.filename, filePath, {
+        deferErase: opts.deferErase !== false,
+        featureNames: Boolean(opts.featureNames),
+        pendingErase: opts.pendingErase,
+      });
       if (snapshot && snapshot.__error) {
         return {
           ok: false,
@@ -2215,6 +2220,57 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  async function attachCollectLocalPaths(productId, targets) {
+    // Warm workspace: resolve tip paths once so Collect skips per-file open-prepare.
+    if (!productId || !Array.isArray(targets) || !targets.length) return;
+    try {
+      const [workdir, cacheFiles] = await Promise.all([
+        agentWorkdir(productId, currentVaultFolder()).catch(() => ""),
+        listAgentCacheFiles(productId),
+      ]);
+      if (!workdir || !Array.isArray(cacheFiles) || !cacheFiles.length) return;
+      const byRel = new Map();
+      const byLogical = new Map();
+      cacheFiles.forEach((item) => {
+        const rel = String(item?.relative_path || item?.path || "")
+          .replace(/\\/g, "/")
+          .replace(/^\/+/, "");
+        if (!rel) return;
+        const full = joinLocalWorkspacePath(workdir, rel);
+        if (!full || !looksLikeLocalWindowsPath(full)) return;
+        byRel.set(rel.toLowerCase(), full);
+        const base = PathBasename(rel);
+        const logical = (logicalUploadName(base) || base).toLowerCase();
+        if (logical && !byLogical.has(logical)) byLogical.set(logical, full);
+      });
+      targets.forEach((target) => {
+        if (looksLikeLocalWindowsPath(target.path)) return;
+        const rel = String(target.relativePath || "").replace(/\\/g, "/").replace(/^\/+/, "");
+        if (rel && byRel.has(rel.toLowerCase())) {
+          target.path = byRel.get(rel.toLowerCase());
+          return;
+        }
+        const logical = (logicalUploadName(target.filename) || target.filename || "").toLowerCase();
+        if (logical && byLogical.has(logical)) {
+          target.path = byLogical.get(logical);
+        }
+      });
+    } catch {
+      /* prepare-per-file still works */
+    }
+  }
+
+  async function flushPendingMetadataErase(pendingErase) {
+    const list = Array.isArray(pendingErase) ? pendingErase.splice(0, pendingErase.length) : [];
+    if (!list.length) return;
+    if (typeof window.CreoJS?.eraseSessionModelsByNames !== "function") return;
+    try {
+      await window.CreoJS.eraseSessionModelsByNames(list, { allowUndisplayed: false });
+    } catch {
+      /* best-effort */
+    }
+  }
+
   async function runMetadataCollectLoop(state) {
     if (metadataCollectJob.running) return;
     const targets = Array.isArray(state.targets) ? state.targets : [];
@@ -2238,7 +2294,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     let failed = Number(state.failed) || 0;
     let lastReason = "";
     let shouldRefreshList = false;
+    const pendingErase = [];
     try {
+      if (state.productId) {
+        setBusyMessage("Checking local workspace tips…");
+        await attachCollectLocalPaths(state.productId, targets);
+      }
       while (index < targets.length) {
         if (metadataCollectJob.cancel) break;
         const target = targets[index];
@@ -2248,7 +2309,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           (lastReason ? `, last: ${lastReason}` : "") +
           `)`;
         setBusyMessage(message);
-        showOk(message);
+        // Avoid showOk every file — toolbar churn; busy overlay carries progress.
         saveMetadataCollectState({
           ...state,
           status: "running",
@@ -2259,7 +2320,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           lastReason,
           updatedAt: Date.now(),
         });
-        const result = await pushOneCreoMetadataTarget(target);
+        const result = await pushOneCreoMetadataTarget(target, {
+          deferErase: true,
+          featureNames: false,
+          pendingErase,
+        });
         if (result.ok) {
           captured += 1;
           // Keep mass/units/feature gap hints on success so we can watch Collect.
@@ -2269,6 +2334,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           lastReason = String(result.reason || "skipped");
         }
         index += 1;
+        if (pendingErase.length >= 25) {
+          await flushPendingMetadataErase(pendingErase);
+        }
         saveMetadataCollectState({
           ...state,
           status: "running",
@@ -2285,6 +2353,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         });
         await new Promise((resolve) => window.setTimeout(resolve, 0));
       }
+      await flushPendingMetadataErase(pendingErase);
       if (typeof window.CreoJS?.eraseUndisplayedModelsQuiet === "function") {
         try {
           await window.CreoJS.eraseUndisplayedModelsQuiet();
@@ -2354,6 +2423,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         uuid: String(row.uuid || "").trim(),
         filename: String(row.filename || "").trim(),
         path: "",
+        relativePath: String(row.relative_path || "").trim(),
         versionId: String(row.current_version?.uuid || row.version_id || "").trim(),
       }))
       .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename));
@@ -6496,12 +6566,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  async function gatherCreoMetadataForFilename(filename, filePath) {
+  async function gatherCreoMetadataForFilename(filename, filePath, options) {
     if (!canGatherCreoMetadata() || !filename) return null;
+    const opts = options && typeof options === "object" ? options : {};
+    const deferErase = Boolean(opts.deferErase);
+    const featureNames = Boolean(opts.featureNames);
+    const pendingErase = Array.isArray(opts.pendingErase) ? opts.pendingErase : null;
     try {
       await whenCreoJSReady();
       if (typeof window.CreoJS.gatherModelMetadata !== "function") return null;
-      const snapshot = await window.CreoJS.gatherModelMetadata(filename, filePath || "");
+      const snapshot = await window.CreoJS.gatherModelMetadata(filename, filePath || "", {
+        featureNames,
+      });
       if (!snapshot || typeof snapshot !== "object") return null;
       if (typeof snapshot === "string" && snapshot.startsWith("CREOPDM_ERROR:")) return null;
       if (snapshot.__error) {
@@ -6515,13 +6591,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         : [];
       delete snapshot._pdm_erase_keys;
       // PTC defers Erase until Creo regains control — must be a separate Creo.JS turn.
-      if (eraseKeys.length && typeof window.CreoJS.eraseSessionModelsByNames === "function") {
-        try {
-          // Named Erase only — EraseUndisplayedModels spams the Creo message area
-          // during bulk Collect metadata.
-          await window.CreoJS.eraseSessionModelsByNames(eraseKeys, { allowUndisplayed: false });
-        } catch {
-          /* best-effort session cleanup */
+      // Collect batches erases (deferErase) so 935 models are not 935 Erase turns.
+      if (eraseKeys.length) {
+        if (deferErase && pendingErase) {
+          eraseKeys.forEach((key) => pendingErase.push(key));
+        } else if (typeof window.CreoJS.eraseSessionModelsByNames === "function") {
+          try {
+            await window.CreoJS.eraseSessionModelsByNames(eraseKeys, { allowUndisplayed: false });
+          } catch {
+            /* best-effort session cleanup */
+          }
         }
       }
       return snapshot;
@@ -6535,6 +6614,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const sessionOnly = Boolean(opts.sessionOnly);
     const sessionWaitRounds = Math.max(0, Number(opts.sessionWaitRounds) || 0);
     const sessionWaitMs = Math.max(50, Number(opts.sessionWaitMs) || 500);
+    const featureNames = opts.featureNames !== false;
     const targets = (items || [])
       .map((item) => ({
         uuid: String(item?.uuid || item?.object_id || "").trim(),
@@ -6550,7 +6630,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // re-Retrieve + erase of a model the user just opened.
       let snapshot = null;
       for (let round = 0; round <= sessionWaitRounds; round += 1) {
-        snapshot = await gatherCreoMetadataForFilename(target.filename, "");
+        snapshot = await gatherCreoMetadataForFilename(target.filename, "", {
+          featureNames,
+        });
         if (snapshot && snapshot.__error) snapshot = null;
         if (snapshot) break;
         if (round < sessionWaitRounds) {
@@ -6565,7 +6647,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
         }
         if (!filePath) continue;
-        snapshot = await gatherCreoMetadataForFilename(target.filename, filePath);
+        snapshot = await gatherCreoMetadataForFilename(target.filename, filePath, {
+          featureNames,
+        });
         if (snapshot && snapshot.__error) snapshot = null;
       }
       if (!snapshot) continue;
@@ -6633,6 +6717,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         sessionOnly: true,
         sessionWaitRounds: 60,
         sessionWaitMs: 500,
+        featureNames: true,
       });
     });
     return saved;

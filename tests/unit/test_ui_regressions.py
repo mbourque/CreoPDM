@@ -381,9 +381,13 @@ def test_metadata_gear_items_require_creo_session():
     assert "No per-file JS timeout" in push
     assert "Promise.race" not in push
     assert "timedOut" not in loop
-    # Collect: tip-only prepare, no per-file session probe, refresh once at end.
+    # Collect: tip-only prepare, warm-path skip, batched erase, refresh once at end.
     assert 'gatherCreoMetadataForFilename(target.filename, "")' not in push
     assert "prepareLocalPathForMetadata(target.uuid)" in push
+    assert "featureNames: false" in loop
+    assert "deferErase: true" in loop
+    assert "attachCollectLocalPaths" in loop or "function attachCollectLocalPaths" in script
+    assert "flushPendingMetadataErase" in loop
     assert "shouldRefreshList = captured > 0" in loop
     assert 'await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" })' in loop
     assert loop.index("metadataCollectJob.running = false") < loop.index("await reloadPage(")
@@ -416,6 +420,7 @@ def test_metadata_gear_items_require_creo_session():
         script, "async function captureCreoMetadataAfterOpen(", "function metadataTargetsFromResult("
     )
     assert "sessionOnly: true" in after_open
+    assert "featureNames: true" in after_open
     assert "return saved" in after_open or "return 0" in after_open
     assert "do not disk-Retrieve again after Open" in docs
     assert "after **Open** into the Creo session" in docs

@@ -268,12 +268,13 @@ def test_home_page(client):
     assert "function creoGatherFamilyTable" in text
     assert "function creoGatherBomTree" in text
     assert "function creoGatherFeatures" in text
-    # Model-tree names via Creo.JS feature.name (one throw max — Collect speed).
+    # Features list only when featureNames:true (Open); Collect skips the walk.
     assert "function creoFeatureAssignedName" in text
     assert "feat.name" in text
-    assert "creoFeatureAssignedName(feat)" in text
+    assert "wantFeatureNames = opts.featureNames === true" in text
+    assert "(isAsm || isPart) && wantFeatureNames" in text
     assert "Do not cascade GetName/Name" in text
-    assert 'name = subType || typeName || ""' in text
+    assert "POST features:null leaves any prior features_json unchanged" in text
     assert "creoFeatureStripOrderSuffix" not in text
     assert "XToolkitNotFound" in text
     assert "pwlFeatureNameGetByID" not in text
