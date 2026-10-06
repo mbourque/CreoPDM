@@ -453,7 +453,7 @@
         {% for row in where_used %}
         <tr>
           <td class="filename-cell">
-            <a href="/products/{{ product.uuid }}/objects/{{ row.object_id }}">{{ row.filename }}</a>
+            <a href="/products/{{ product.uuid }}/objects/{{ row.object_id }}#where-used">{{ row.filename }}</a>
             {% if row.relative_path and row.relative_path != row.filename %}
             <div class="muted small">{{ row.relative_path }}</div>
             {% endif %}

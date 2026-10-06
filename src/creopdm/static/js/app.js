@@ -596,10 +596,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           }
         }
         const nextUrl = response.url || href;
+        // fetch() drops the fragment; keep #where-used / #history so Details tabs restore.
+        let historyUrl = nextUrl;
+        if (absolute.hash) {
+          try {
+            const resolved = new URL(nextUrl, window.location.origin);
+            resolved.hash = absolute.hash;
+            historyUrl = `${resolved.pathname}${resolved.search}${resolved.hash}`;
+          } catch {
+            historyUrl = nextUrl;
+          }
+        }
         if (mode === "push") {
-          history.pushState({ creopdmSoft: 1 }, "", nextUrl);
+          history.pushState({ creopdmSoft: 1 }, "", historyUrl);
         } else if (mode === "replace") {
-          history.replaceState({ creopdmSoft: 1 }, "", nextUrl);
+          history.replaceState({ creopdmSoft: 1 }, "", historyUrl);
         }
         // Soft-nav only swaps main.shell — <script app.js> stays in memory. After
         // deploy/pull-restart the HTML cache-bust changes; load that script so Open
@@ -11268,7 +11279,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const rows = items
         .map((row) => {
           const href = productId
-            ? `/products/${encodeURIComponent(productId)}/objects/${encodeURIComponent(row.object_id || "")}`
+            ? `/products/${encodeURIComponent(productId)}/objects/${encodeURIComponent(row.object_id || "")}#where-used`
             : "#";
           const sub =
             row.relative_path && row.relative_path !== row.filename

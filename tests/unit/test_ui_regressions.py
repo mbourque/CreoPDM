@@ -1326,6 +1326,7 @@ def test_details_where_used_tab_gated_on_creo_models():
     )
     pages = (ROOT / "src" / "creopdm" / "api" / "pages.py").read_text(encoding="utf-8")
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    script = _app_js()
     assert "{% if show_where_used %}" in detail
     assert 'data-tab="where-used"' in detail
     assert "matches_cad_models" in pages
@@ -1333,6 +1334,16 @@ def test_details_where_used_tab_gated_on_creo_models():
     assert "show_where_used" in pages
     assert "Where Used** only for files whose extension is in **Settings → Creo Models" in docs
     assert "Show Where Used for Documents" in docs
+    # Parent links keep the Where Used tab so you can traverse up the tree.
+    assert "#where-used" in detail
+    assert "#where-used" in script.split("async function loadWhereUsedTab(", 1)[1].split(
+        "if (window.location.hash === \"#history\"", 1
+    )[0]
+    soft = _between(script, "function softNavigate(", "function leavePage(")
+    assert "absolute.hash" in soft
+    assert "fetch() drops the fragment" in soft
+    assert "already on the Where Used tab" in docs
+    assert "drop `#where-used`" in docs
 
 
 def test_details_bom_qty_renders_whole_numbers():
