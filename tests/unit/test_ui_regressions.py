@@ -1071,6 +1071,9 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert 'beginExport("selected")' in script
     assert "canExportProduct" in script
     assert "exportSelectedBtn.disabled" in script
+    assert "exportProductBtn.disabled" in script
+    assert "productHasVaultFilesForExport" in script
+    assert "no vault files" in script
     assert "/api/products/" in script and "/export" in script
     assert "${agentBase()}/export-zip" in script
     assert "Preparing export…" in script
@@ -1124,6 +1127,7 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "Export product…" in docs
     assert "Export selected…" in docs
     assert "greyed out until" in docs.lower() or "greyed out until" in docs
+    assert "no vault files" in docs.lower() or "empty product" in docs.lower()
     assert "products.export" in docs
     assert "objects.export" in docs
 

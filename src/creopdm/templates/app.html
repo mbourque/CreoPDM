@@ -514,7 +514,7 @@
         <button type="button" class="toolbar-menu-item" role="menuitem" id="export-product-btn"
                 {% if selected %}data-product="{{ selected.uuid }}" data-product-name="{{ selected.name }}"{% endif %}
                 disabled
-                title="Download the entire product vault tip as a zip.">Export product…</button>
+                title="Download the entire product vault tip as a zip. Greyed out when the product has no vault files.">Export product…</button>
         {% endif %}
         {% if can_export_objects %}
         <button type="button" class="toolbar-menu-item" role="menuitem" id="export-selected-btn"

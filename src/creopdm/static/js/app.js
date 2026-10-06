@@ -4773,6 +4773,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const exportMenuPanel = exportMenu?.querySelector(".toolbar-menu-panel");
   const exportProductBtn = $("#export-product-btn");
   const exportSelectedBtn = $("#export-selected-btn");
+
+  function productHasVaultFilesForExport() {
+    const filesMetric = metricButtons().find((btn) => metricKey(btn) === "files");
+    const raw = (filesMetric?.querySelector("strong")?.textContent || "")
+      .replace(/,/g, "")
+      .trim();
+    const fromMetric = Number.parseInt(raw, 10);
+    if (Number.isFinite(fromMetric)) return fromMetric > 0;
+    // Fallback when the Files metric is missing (detail-only / soft-nav edge).
+    return [...document.querySelectorAll("tr.object-row")].some((row) => {
+      const uuid = (row.dataset.uuid || "").trim();
+      return Boolean(uuid) && row.dataset.localCache !== "1";
+    });
+  }
+
   const openWorkspaceBtn = $("#open-workspace-btn");
   const setCreoDirBtn = $("#set-creo-dir-btn");
   const purgeBtn = $("#purge-workspace-btn");
@@ -5285,20 +5300,31 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Visual selection only — do not treat checkout/open fallback ids as an export selection.
     const exportHasSelection =
       selectedRows().flatMap(rowObjectIds).length > 0 || selectedFolderPaths().length > 0;
+    const exportHasVaultFiles = productHasVaultFilesForExport();
     const canShowExportMenu =
       Boolean(productId) && (canExportProduct || canExportObjects);
     setToolbarActionVisible(exportMenuBtn, canShowExportMenu);
     if (!canShowExportMenu) closeExportMenu();
-    // Export product stays enabled whenever the menu is shown and the role allows it.
+    // Export product stays visible but greyed when the product has no vault files.
     if (exportProductBtn) {
       exportProductBtn.hidden = false;
-      exportProductBtn.disabled = !canShowExportMenu || !canExportProduct;
+      const canExportWhole =
+        canShowExportMenu && canExportProduct && exportHasVaultFiles;
+      exportProductBtn.disabled = !canExportWhole;
+      exportProductBtn.title = canExportWhole
+        ? "Download the entire product vault tip as a zip."
+        : !canExportProduct
+          ? "Your role cannot export a whole product (products.export)."
+          : "Nothing to export — this product has no vault files yet.";
     }
     // Export selected stays visible but greyed until files/folders are selected.
     if (exportSelectedBtn) {
       exportSelectedBtn.hidden = false;
       exportSelectedBtn.disabled =
         !canShowExportMenu || !canExportObjects || !exportHasSelection;
+      exportSelectedBtn.title = exportHasSelection
+        ? "Download the selected vault files or folders as a zip."
+        : "Download the selected vault files or folders as a zip. Greyed out until something is selected.";
     }
     const localNewSelected = selected.filter(
       (row) => isNewFileQueueRow(row) && row.dataset.localCache === "1"
@@ -8812,6 +8838,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
     } else if (!canExportProduct) {
       showError($("#toolbar-error"), "Your role cannot export a whole product (products.export).");
+      return;
+    } else if (!productHasVaultFilesForExport()) {
+      showError($("#toolbar-error"), "Nothing to export — this product has no vault files yet.");
       return;
     }
     const productName =
