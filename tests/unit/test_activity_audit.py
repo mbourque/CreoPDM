@@ -35,7 +35,18 @@ def auth_client(auth_ctx):
 
 def test_activity_model_has_audit_columns(ctx):
     cols = {c["name"] for c in inspect(ctx.engine).get_columns("activities")}
-    assert {"uuid", "user_uuid", "comment", "action", "timestamp", "details_json"} <= cols
+    assert {
+        "uuid",
+        "user_uuid",
+        "comment",
+        "action",
+        "timestamp",
+        "details_json",
+        "product_uuid",
+        "product_name",
+        "object_uuid",
+        "object_filename",
+    } <= cols
 
 
 def test_client_ip_from_request_prefers_forwarded_for():
@@ -375,3 +386,47 @@ def test_settings_save_redacts_password_in_audit(app):
         assert rows[0].details["smtp_password"] == "[REDACTED]"
         assert "plain-password-value" not in str(rows[0].details)
         assert rows[0].details["smtp_host"] == "smtp.example"
+
+
+@requires_git
+def test_delete_product_keeps_prior_audit_and_records_deleted(client, data_dir):
+    """Product purge must not wipe activities; PRODUCT_DELETED + snapshots remain."""
+    created = client.post("/api/products", json={"name": "Audit Keep"})
+    assert created.status_code == 201, created.text
+    product = created.json()
+    added = client.post(
+        f"/api/products/{product['uuid']}/objects",
+        files={"file": ("pin.prt", b"pin-v1", "application/octet-stream")},
+        data={"comment": "Add pin"},
+    )
+    assert added.status_code == 201, added.text
+
+    deleted = client.delete(f"/api/products/{product['uuid']}")
+    assert deleted.status_code == 204, deleted.text
+
+    with client.app.state.ctx.session_factory() as db:
+        svc = ActivityService()
+        all_rows = svc.list_events(db, q="Audit Keep")
+        assert all_rows, "expected audit rows after product delete"
+        actions = {row.action for row in all_rows}
+        assert ActivityAction.PRODUCT_CREATED.value in actions
+        assert ActivityAction.OBJECT_ADDED.value in actions
+        assert ActivityAction.PRODUCT_DELETED.value in actions
+        deleted_rows = [
+            row for row in all_rows if row.action == ActivityAction.PRODUCT_DELETED.value
+        ]
+        assert deleted_rows
+        assert deleted_rows[0].product_name == "Audit Keep"
+        assert deleted_rows[0].product_uuid == product["uuid"]
+        assert deleted_rows[0].product_deleted is True
+        added_rows = [
+            row for row in all_rows if row.action == ActivityAction.OBJECT_ADDED.value
+        ]
+        assert added_rows
+        assert added_rows[0].product_name == "Audit Keep"
+        assert added_rows[0].product_deleted is True
+        # Live FKs nulled; snapshot columns remain.
+        raw = list(db.scalars(select(Activity)).all())
+        assert raw
+        assert all(row.product_id is None for row in raw)
+        assert any((row.product_uuid or "") == product["uuid"] for row in raw)

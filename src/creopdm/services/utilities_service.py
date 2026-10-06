@@ -962,7 +962,8 @@ def _clear_product_object_records(db: Session, product: Product) -> int:
             )
         )
     )
-    db.execute(delete(Activity).where(Activity.object_id.in_(object_ids)))
+    # Keep audit rows; null live object FKs (snapshots remain on Activity).
+    db.execute(update(Activity).where(Activity.object_id.in_(object_ids)).values(object_id=None))
     db.execute(delete(ObjectVersion).where(ObjectVersion.object_id.in_(object_ids)))
     db.execute(delete(EngineeringObject).where(EngineeringObject.id.in_(object_ids)))
     db.flush()

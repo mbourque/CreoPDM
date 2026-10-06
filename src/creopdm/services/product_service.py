@@ -27,7 +27,6 @@ from creopdm.exceptions import (
 from creopdm.product_state import ensure_product_deletable, parse_product_state
 from creopdm.utils.vault_folder import normalize_uuid_folder, validate_vault_folder
 from creopdm.logging_setup import get_logger
-from creopdm.models.activity import Activity
 from creopdm.models.checkout import Checkout
 from creopdm.models.dependency import Dependency
 from creopdm.models.object import EngineeringObject
@@ -403,6 +402,24 @@ class ProductService:
         }
 
     def _delete_product_records(self, session: Session, product: Product) -> None:
+        user = self._users.get_current_user()
+        # Append-only audit: record delete, then detach FKs — never wipe history.
+        self._activities.record(
+            session,
+            ActivityAction.PRODUCT_DELETED,
+            user,
+            product_id=product.id,
+            details={
+                "uuid": product.uuid,
+                "name": product.name,
+                "vault_folder": product.vault_folder or product.uuid,
+            },
+            product_uuid=product.uuid,
+            product_name=product.name,
+            comment=f"Deleted product {product.name}",
+        )
+        self._activities.detach_product_activities(session, product.id)
+
         objects = list(
             session.scalars(select(EngineeringObject).where(EngineeringObject.product_id == product.id))
         )
@@ -424,11 +441,9 @@ class ProductService:
                     )
                 )
             )
-            session.execute(delete(Activity).where(Activity.object_id.in_(object_ids)))
             session.execute(delete(ObjectVersion).where(ObjectVersion.object_id.in_(object_ids)))
             session.execute(delete(EngineeringObject).where(EngineeringObject.id.in_(object_ids)))
         session.execute(delete(Dependency).where(Dependency.product_id == product.id))
-        session.execute(delete(Activity).where(Activity.product_id == product.id))
         session.execute(delete(Remote).where(Remote.product_id == product.id))
         session.delete(product)
         session.flush()

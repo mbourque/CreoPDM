@@ -36,6 +36,7 @@ _REDACT_DETAIL_KEYS = frozenset(
 ACTION_LABELS: dict[str, str] = {
     ActivityAction.PRODUCT_CREATED.value: "Product created",
     ActivityAction.PRODUCT_UPDATED.value: "Product updated",
+    ActivityAction.PRODUCT_DELETED.value: "Product deleted",
     ActivityAction.OBJECT_ADDED.value: "Object added",
     ActivityAction.OBJECT_REMOVED.value: "Object removed",
     ActivityAction.WORKSPACE_CLEARED.value: "Workspace cleared",
@@ -96,6 +97,7 @@ class AuditEventRow:
     comment: str | None
     product_uuid: str | None
     product_name: str | None
+    product_deleted: bool
     object_uuid: str | None
     object_filename: str | None
     object_filenames: tuple[str, ...]
@@ -115,6 +117,10 @@ class ActivityService:
         details: dict[str, Any] | None = None,
         *,
         comment: str | None = None,
+        product_uuid: str | None = None,
+        product_name: str | None = None,
+        object_uuid: str | None = None,
+        object_filename: str | None = None,
     ) -> Activity:
         safe = redact_audit_details(details)
         note = (comment or "").strip() or None
@@ -122,10 +128,45 @@ class ActivityService:
             raw = safe.get("comment") or safe.get("reason")
             if isinstance(raw, str) and raw.strip():
                 note = raw.strip()[:2000]
+
+        snap_product_uuid = (product_uuid or "").strip() or None
+        snap_product_name = (product_name or "").strip() or None
+        snap_object_uuid = (object_uuid or "").strip() or None
+        snap_object_filename = (object_filename or "").strip() or None
+
+        if product_id is not None and (snap_product_uuid is None or snap_product_name is None):
+            product = session.get(Product, product_id)
+            if product is not None:
+                snap_product_uuid = snap_product_uuid or product.uuid
+                snap_product_name = snap_product_name or product.name
+        if object_id is not None and (snap_object_uuid is None or snap_object_filename is None):
+            obj = session.get(EngineeringObject, object_id)
+            if obj is not None:
+                snap_object_uuid = snap_object_uuid or obj.uuid
+                snap_object_filename = snap_object_filename or (obj.filename or None)
+
+        # Keep details searchable even after live FKs are nulled.
+        if safe is None:
+            safe = {}
+        if snap_product_uuid and "product_uuid" not in safe:
+            safe["product_uuid"] = snap_product_uuid
+        if snap_product_name and "product_name" not in safe:
+            safe["product_name"] = snap_product_name
+        if snap_object_uuid and "object_uuid" not in safe:
+            safe["object_uuid"] = snap_object_uuid
+        if snap_object_filename and "filename" not in safe:
+            safe["filename"] = snap_object_filename
+        if not safe:
+            safe = None
+
         activity = Activity(
             uuid=str(uuid.uuid4()),
             product_id=product_id,
             object_id=object_id,
+            product_uuid=snap_product_uuid,
+            product_name=snap_product_name,
+            object_uuid=snap_object_uuid,
+            object_filename=snap_object_filename,
             user=user.user_name,
             user_uuid=user.user_uuid,
             machine=user.machine_name,
@@ -136,6 +177,38 @@ class ActivityService:
         session.add(activity)
         session.flush()
         return activity
+
+    def detach_product_activities(self, session: Session, product_id: int) -> None:
+        """Null live product/object FKs; keep snapshot columns and the rows."""
+        from sqlalchemy import update
+
+        object_ids = list(
+            session.scalars(
+                select(EngineeringObject.id).where(EngineeringObject.product_id == product_id)
+            ).all()
+        )
+        if object_ids:
+            session.execute(
+                update(Activity)
+                .where(Activity.object_id.in_(object_ids))
+                .values(object_id=None)
+            )
+        session.execute(
+            update(Activity).where(Activity.product_id == product_id).values(product_id=None)
+        )
+        session.flush()
+
+    def detach_object_activities(self, session: Session, object_ids: list[int]) -> None:
+        """Null live object FKs for purged objects; keep snapshot columns."""
+        from sqlalchemy import update
+
+        ids = [int(item) for item in object_ids if item]
+        if not ids:
+            return
+        session.execute(
+            update(Activity).where(Activity.object_id.in_(ids)).values(object_id=None)
+        )
+        session.flush()
 
     def record_or_merge_import_batch(
         self,
@@ -297,24 +370,33 @@ class ActivityService:
 
         product_key = (product_uuid or "").strip()
         if product_key:
-            stmt = stmt.join(Product, Activity.product_id == Product.id).where(
-                Product.uuid == product_key
+            if not joined_product:
+                stmt = stmt.outerjoin(Product, Activity.product_id == Product.id)
+                joined_product = True
+            stmt = stmt.where(
+                or_(
+                    Product.uuid == product_key,
+                    Activity.product_uuid == product_key,
+                )
             )
-            joined_product = True
 
         obj_key = (object_query or "").strip()
         if obj_key:
             like = f"%{obj_key}%"
-            stmt = stmt.outerjoin(
-                EngineeringObject, Activity.object_id == EngineeringObject.id
-            ).where(
+            if not joined_object:
+                stmt = stmt.outerjoin(
+                    EngineeringObject, Activity.object_id == EngineeringObject.id
+                )
+                joined_object = True
+            stmt = stmt.where(
                 or_(
                     EngineeringObject.uuid == obj_key,
                     EngineeringObject.filename.ilike(like),
+                    Activity.object_uuid == obj_key,
+                    Activity.object_filename.ilike(like),
                     Activity.details_json.ilike(like),
                 )
             )
-            joined_object = True
 
         search = (q or "").strip()
         if search:
@@ -334,6 +416,10 @@ class ActivityService:
                     Activity.comment.ilike(like),
                     Activity.details_json.ilike(like),
                     Activity.machine.ilike(like),
+                    Activity.product_uuid.ilike(like),
+                    Activity.product_name.ilike(like),
+                    Activity.object_uuid.ilike(like),
+                    Activity.object_filename.ilike(like),
                     Product.name.ilike(like),
                     Product.uuid.ilike(like),
                     EngineeringObject.filename.ilike(like),
@@ -371,15 +457,27 @@ class ActivityService:
                     details = {"raw": row.details_json}
             product = products.get(row.product_id) if row.product_id else None
             obj = objects.get(row.object_id) if row.object_id else None
-            filename = _object_label(details, obj)
+            filename = _object_label(details, obj) or (row.object_filename or None)
             extra_names, more_count = _object_filename_list(details, obj)
             object_uuid = None
             if obj is not None:
                 object_uuid = obj.uuid
             else:
-                raw_uuid = details.get("object_uuid")
-                if isinstance(raw_uuid, str) and raw_uuid.strip():
-                    object_uuid = raw_uuid.strip()
+                object_uuid = (row.object_uuid or "").strip() or None
+                if object_uuid is None:
+                    raw_uuid = details.get("object_uuid")
+                    if isinstance(raw_uuid, str) and raw_uuid.strip():
+                        object_uuid = raw_uuid.strip()
+            product_uuid_out = product.uuid if product else ((row.product_uuid or "").strip() or None)
+            product_name_out = product.name if product else ((row.product_name or "").strip() or None)
+            if product_name_out is None:
+                raw_name = details.get("product_name") or details.get("name")
+                if isinstance(raw_name, str) and raw_name.strip():
+                    product_name_out = raw_name.strip()
+            if product_uuid_out is None:
+                raw_pu = details.get("product_uuid")
+                if isinstance(raw_pu, str) and raw_pu.strip():
+                    product_uuid_out = raw_pu.strip()
             out.append(
                 AuditEventRow(
                     uuid=row.uuid,
@@ -390,8 +488,9 @@ class ActivityService:
                     user_uuid=row.user_uuid,
                     machine=row.machine,
                     comment=row.comment,
-                    product_uuid=product.uuid if product else None,
-                    product_name=product.name if product else None,
+                    product_uuid=product_uuid_out,
+                    product_name=product_name_out,
+                    product_deleted=bool(product_uuid_out) and product is None,
                     object_uuid=object_uuid,
                     object_filename=filename,
                     object_filenames=extra_names,
@@ -460,6 +559,10 @@ def _event_summary(
     parts: list[str] = []
     if comment:
         parts.append(comment)
+    if action in {ActivityAction.PRODUCT_DELETED.value, "PRODUCT_DELETED"}:
+        name = details.get("name") or details.get("product_name")
+        if name:
+            parts.append(str(name))
     if action in {ActivityAction.PRODUCT_UPDATED.value, "PRODUCT_UPDATED"}:
         old_s = details.get("old_state") or details.get("state_before")
         new_s = (

@@ -109,6 +109,8 @@
           <td>
             {% if row.product_uuid and row.product_name and can_view_products and row.product_uuid in accessible_product_uuids %}
             <a href="/?product={{ row.product_uuid }}" title="Open product Files">{{ row.product_name }}</a>
+            {% elif row.product_name and row.product_deleted %}
+            <span title="Product no longer in the database">{{ row.product_name }} (deleted)</span>
             {% elif row.product_name %}
             {{ row.product_name }}
             {% else %}
