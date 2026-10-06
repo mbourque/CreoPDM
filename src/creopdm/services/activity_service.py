@@ -59,6 +59,38 @@ ACTION_LABELS: dict[str, str] = {
     ActivityAction.SYSTEM_SETTING_CHANGED.value: "System setting changed",
 }
 
+# Utilities → Audit Event filter: pathway order; rarer admin ops last.
+# Values may be a single action or comma-joined group (e.g. Sign in/Sign out).
+AUDIT_ACTION_FILTER_CHOICES: list[tuple[str, str]] = [
+    (
+        f"{ActivityAction.USER_LOGIN.value},{ActivityAction.USER_LOGOUT.value}",
+        "Sign in/Sign out",
+    ),
+    (ActivityAction.LOGIN_FAILED.value, "Sign-in failed"),
+    (ActivityAction.USER_CREATED.value, "User created"),
+    (ActivityAction.ROLE_CHANGED.value, "Role changed"),
+    (ActivityAction.MEMBERSHIP_CHANGED.value, "Membership changed"),
+    (ActivityAction.USER_ENABLED.value, "User enabled"),
+    (ActivityAction.USER_DISABLED.value, "User disabled"),
+    (ActivityAction.PRODUCT_CREATED.value, "Product created"),
+    (ActivityAction.PRODUCT_UPDATED.value, "Product updated"),
+    (ActivityAction.STATE_CHANGED.value, "Product state changed"),
+    (ActivityAction.OBJECT_ADDED.value, "Object added"),
+    (
+        f"{ActivityAction.CHECKED_IN.value},{ActivityAction.CHECKED_OUT.value}",
+        "Check in/Check out",
+    ),
+    (ActivityAction.CHECKOUT_CANCELLED.value, "Checkout cancelled"),
+    (ActivityAction.CHECKOUT_OVERRIDE.value, "Checkout override"),
+    (ActivityAction.OBJECT_REMOVED.value, "Object removed"),
+    (ActivityAction.WORKSPACE_CLEARED.value, "Workspace cleared"),
+    (ActivityAction.VERSION_RESTORED.value, "Version restored"),
+    (ActivityAction.PRODUCT_DELETED.value, "Product deleted"),
+    (ActivityAction.SYSTEM_SETTING_CHANGED.value, "System setting changed"),
+    (ActivityAction.VAULT_HISTORY_COMPACTED.value, "Vault history compacted"),
+    (ActivityAction.PRODUCT_DB_REBUILT.value, "Product DB rebuilt"),
+]
+
 
 def redact_audit_details(details: dict[str, Any] | None) -> dict[str, Any] | None:
     """Drop or mask secret-bearing fields before persisting audit event_data."""
@@ -360,7 +392,11 @@ class ActivityService:
 
         action_key = (action or "").strip()
         if action_key:
-            stmt = stmt.where(Activity.action == action_key)
+            action_keys = [part.strip() for part in action_key.split(",") if part.strip()]
+            if len(action_keys) == 1:
+                stmt = stmt.where(Activity.action == action_keys[0])
+            elif action_keys:
+                stmt = stmt.where(Activity.action.in_(action_keys))
         user_key = (username or "").strip()
         if user_key:
             stmt = stmt.where(Activity.user == user_key)
@@ -644,6 +680,7 @@ def _event_summary(
 
 __all__ = [
     "ACTION_LABELS",
+    "AUDIT_ACTION_FILTER_CHOICES",
     "AUDIT_PAGE_SIZE",
     "ActivityService",
     "AuditEventRow",

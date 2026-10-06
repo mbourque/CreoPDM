@@ -130,6 +130,13 @@ def test_list_events_filters_action_user_and_object(ctx):
         assert "iteration 1 → 2" in by_action[0].summary
         assert "git 8fa24c1" in by_action[0].summary
 
+        by_check_group = svc.list_events(
+            db,
+            action=f"{ActivityAction.CHECKED_IN.value},{ActivityAction.CHECKED_OUT.value}",
+        )
+        assert len(by_check_group) == 1
+        assert by_check_group[0].action == ActivityAction.CHECKED_IN.value
+
         by_user = svc.list_events(db, username="Alice")
         assert {row.user for row in by_user} == {"Alice"}
 

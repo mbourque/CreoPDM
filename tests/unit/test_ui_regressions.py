@@ -2125,6 +2125,8 @@ def test_admin_hub_panel_fills_full_width():
     assert "<th>Client</th>" in audit_util
     assert "<th>Machine</th>" not in audit_util
     assert 'row.machine != "web"' in audit_util
+    assert "local_time_pretty(row.timestamp)" in audit_util
+    assert 'title="{{ local_time_pretty(row.timestamp) }}"' in audit_util
     assert "audit-filter-grid" in css
     assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
     assert "grid-column: 1 / -1" in css
@@ -2151,6 +2153,26 @@ def test_admin_hub_panel_fills_full_width():
     assert "stack filters in one tall single column" in (
         ROOT / "docs" / "user-interactions.md"
     ).read_text(encoding="utf-8")
+    assert "Sign in/Sign out" in (
+        ROOT / "docs" / "user-interactions.md"
+    ).read_text(encoding="utf-8")
+    assert "Check in/Check out" in (
+        ROOT / "docs" / "user-interactions.md"
+    ).read_text(encoding="utf-8")
+    from creopdm.services.activity_service import AUDIT_ACTION_FILTER_CHOICES
+
+    assert AUDIT_ACTION_FILTER_CHOICES[0][1] == "Sign in/Sign out"
+    assert "USER_LOGIN,USER_LOGOUT" in AUDIT_ACTION_FILTER_CHOICES[0][0]
+    check_labels = [label for _, label in AUDIT_ACTION_FILTER_CHOICES]
+    assert "Check in/Check out" in check_labels
+    assert "Signed in" not in check_labels
+    assert "Checked out" not in check_labels
+    assert check_labels.index("Sign in/Sign out") < check_labels.index(
+        "Product created"
+    )
+    assert check_labels.index("Check in/Check out") < check_labels.index(
+        "Product DB rebuilt"
+    )
     avail_util = (
         ROOT / "src" / "creopdm" / "templates" / "admin_utilities_availability.html"
     ).read_text(encoding="utf-8")

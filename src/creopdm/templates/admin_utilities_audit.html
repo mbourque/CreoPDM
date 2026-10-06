@@ -100,7 +100,7 @@
       <tbody>
         {% for row in events %}
         <tr class="audit-event-row">
-          <td class="mono">{{ row.timestamp | local_time if row.timestamp else "—" }}</td>
+          <td class="mono">{% if row.timestamp %}<span title="{{ local_time_pretty(row.timestamp) }}">{{ local_time(row.timestamp) }}</span>{% else %}—{% endif %}</td>
           <td>
             <span title="{{ row.action }}">{{ row.action_label }}</span>
           </td>

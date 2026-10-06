@@ -2685,10 +2685,10 @@ def _utilities_delete_products_response(
 
 
 def _audit_action_choices() -> list[tuple[str, str]]:
-    """Stable filter labels for Utilities → Audit log."""
-    from creopdm.services.activity_service import ACTION_LABELS
+    """Pathway-ordered Event filter labels (grouped Sign in/out, Check in/out)."""
+    from creopdm.services.activity_service import AUDIT_ACTION_FILTER_CHOICES
 
-    return sorted(ACTION_LABELS.items(), key=lambda item: item[1].casefold())
+    return list(AUDIT_ACTION_FILTER_CHOICES)
 
 
 def _parse_audit_day(raw: str | None, *, end_of_day: bool = False):
