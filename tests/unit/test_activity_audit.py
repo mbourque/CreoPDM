@@ -74,6 +74,9 @@ def test_redact_audit_details_masks_password_fields():
         "password": "also-secret",
         "enabled": True,
         "nested": {"api_token": "tok", "host": "mail.example"},
+        "workspace": r"C:\Users\michael\vaults\abc",
+        "vault_folder": "abc",
+        "relative_path": "folder/part.prt",
     }
     safe = redact_audit_details(raw)
     assert safe is not None
@@ -82,6 +85,48 @@ def test_redact_audit_details_masks_password_fields():
     assert safe["enabled"] is True
     assert safe["nested"]["api_token"] == "[REDACTED]"
     assert safe["nested"]["host"] == "mail.example"
+    assert "workspace" not in safe
+    assert safe["vault_folder"] == "abc"
+    assert safe["relative_path"] == "folder/part.prt"
+
+
+def test_audit_search_ignores_hidden_workspace_path(ctx):
+    """Search must not hit Product created solely via a vault path containing the needle."""
+    svc = ActivityService()
+    actor = UserIdentity("admin", "192.168.1.195", user_uuid="admin-uuid")
+    with ctx.session_factory() as db:
+        svc.record(
+            db,
+            ActivityAction.PRODUCT_CREATED,
+            actor,
+            details={
+                "workspace": r"C:\Users\michael\CreoPDM\vaults\test-uuid",
+                "name": "Test",
+                "vault_folder": "test-uuid",
+            },
+        )
+        svc.record(
+            db,
+            ActivityAction.USER_LOGIN,
+            UserIdentity("michael", "192.168.1.195", user_uuid="mike-uuid"),
+            details={"username": "michael"},
+        )
+        db.commit()
+        hits = svc.list_events(db, q="michael")
+        actions = [row.action for row in hits]
+        assert ActivityAction.USER_LOGIN.value in actions
+        assert ActivityAction.PRODUCT_CREATED.value not in actions
+        # Commit hashes in details still match Search.
+        svc.record(
+            db,
+            ActivityAction.CHECKED_IN,
+            actor,
+            details={"filename": "a.prt", "git_commit": "michaeldeadbeef01"},
+            comment="note",
+        )
+        db.commit()
+        commit_hits = svc.list_events(db, q="michaeldeadbeef")
+        assert any(row.action == ActivityAction.CHECKED_IN.value for row in commit_hits)
 
 
 def test_list_events_filters_action_user_and_object(ctx):

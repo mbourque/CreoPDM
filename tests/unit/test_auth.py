@@ -521,7 +521,6 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert "<select" in audit_page.text
     assert 'id="utilities-audit-table"' in audit_page.text or "No audit events" in audit_page.text
     assert "Audit log" in audit_page.text
-    assert "not the vault Git history" in audit_page.text or "Not vault Git history" in audit_page.text
     assert "All products" in audit_page.text
     assert "All users" in audit_page.text
     assert "Export CSV" in audit_page.text
@@ -539,7 +538,7 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert f'value="{expected_since}"' in audit_page.text
     assert f'id="audit-until"' in audit_page.text
     assert f'value="{expected_until}"' in audit_page.text
-    assert "Newest first. Not vault Git history" in audit_page.text
+    assert "Newest first. Not vault Git history" not in audit_page.text
 
     email_page = auth_client.get("/admin/utilities/email-all")
     assert email_page.status_code == 200

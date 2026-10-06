@@ -209,7 +209,7 @@ class ProductService:
             ActivityAction.PRODUCT_CREATED,
             user,
             product_id=product.id,
-            details={"workspace": str(vault), "name": product.name, "vault_folder": folder},
+            details={"name": product.name, "vault_folder": folder},
         )
         logger.info("Created product %s in workspace %s", product.uuid, vault)
         session.commit()

@@ -19,6 +19,9 @@ from creopdm.utils.identity import UserIdentity
 
 AUDIT_PAGE_SIZE = 100
 
+# Absolute filesystem paths in details — omit on write (they pollute Audit Search).
+_ABS_PATH_DETAIL_KEYS = frozenset({"workspace", "path", "vault", "location"})
+
 # Keys never stored in audit details_json.
 _REDACT_DETAIL_KEYS = frozenset(
     {
@@ -93,12 +96,15 @@ AUDIT_ACTION_FILTER_CHOICES: list[tuple[str, str]] = [
 
 
 def redact_audit_details(details: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Drop or mask secret-bearing fields before persisting audit event_data."""
+    """Drop or mask secret-bearing / absolute-path fields before persisting audit event_data."""
     if not details:
         return None
     out: dict[str, Any] = {}
     for key, value in details.items():
         low = str(key).lower()
+        if low in _ABS_PATH_DETAIL_KEYS:
+            # Keep relative CAD paths (relative_path); drop server filesystem locations.
+            continue
         if low in _REDACT_DETAIL_KEYS or any(
             part in low for part in ("password", "secret", "token")
         ):
@@ -109,6 +115,56 @@ def redact_audit_details(details: dict[str, Any] | None) -> dict[str, Any] | Non
         else:
             out[key] = value
     return out
+
+
+def _details_searchable_text(details: dict[str, Any]) -> str:
+    """Flatten detail values for Search, skipping absolute filesystem path keys."""
+    parts: list[str] = []
+    for key, value in details.items():
+        if str(key).lower() in _ABS_PATH_DETAIL_KEYS:
+            continue
+        if isinstance(value, dict):
+            parts.append(_details_searchable_text(value))
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    parts.append(_details_searchable_text(item))
+                elif item is not None:
+                    parts.append(str(item))
+        elif value is not None:
+            parts.append(str(value))
+    return " ".join(parts)
+
+
+def _row_matches_search(
+    row: Activity,
+    details: dict[str, Any],
+    needle: str,
+    *,
+    product: Product | None,
+    obj: EngineeringObject | None,
+) -> bool:
+    """True when Search needle appears in visible/useful fields (not vault paths)."""
+    n = needle.casefold()
+    candidates = [
+        row.user,
+        row.comment,
+        row.machine,
+        row.action,
+        row.product_uuid,
+        row.product_name,
+        row.object_uuid,
+        row.object_filename,
+        product.name if product is not None else None,
+        product.uuid if product is not None else None,
+        obj.filename if obj is not None else None,
+        obj.uuid if obj is not None else None,
+        _details_searchable_text(details),
+    ]
+    for text in candidates:
+        if text and n in str(text).casefold():
+            return True
+    return False
 
 
 def action_label(action: str) -> str:
@@ -509,7 +565,9 @@ class ActivityService:
                 )
             )
 
-        stmt = stmt.limit(take)
+        # Over-fetch when searching so we can drop path-only detail matches and still fill the page.
+        fetch_limit = min(max(take * 5, take), 500) if search else take
+        stmt = stmt.limit(fetch_limit)
         rows = list(session.scalars(stmt).unique().all())
 
         product_ids = {row.product_id for row in rows if row.product_id}
@@ -539,6 +597,10 @@ class ActivityService:
                     details = {"raw": row.details_json}
             product = products.get(row.product_id) if row.product_id else None
             obj = objects.get(row.object_id) if row.object_id else None
+            if search and not _row_matches_search(
+                row, details, search, product=product, obj=obj
+            ):
+                continue
             filename = _object_label(details, obj) or (row.object_filename or None)
             extra_names, more_count = _object_filename_list(details, obj)
             object_uuid = None
@@ -581,6 +643,8 @@ class ActivityService:
                     details=details,
                 )
             )
+            if len(out) >= take:
+                break
         return out
 
 

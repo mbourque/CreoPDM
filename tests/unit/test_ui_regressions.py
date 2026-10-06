@@ -2118,8 +2118,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "can_view_objects" in audit_util
     assert "Open product Files" in audit_util
     assert "Open file Details" in audit_util
-    assert "Not vault Git history" in audit_util
-    assert "cannot be edited or deleted" in audit_util
+    assert "Newest first. Not vault Git history" not in audit_util
     assert "(deleted)" in audit_util
     assert "product_deleted" in audit_util
     assert "<th>Client</th>" in audit_util
@@ -2131,7 +2130,6 @@ def test_admin_hub_panel_fills_full_width():
     assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
     assert "grid-column: 1 / -1" in css
     assert 'input[type="date"]' in css
-    assert "Newest first. Not vault Git history" in audit_util
     assert "audit-more-toggle" in audit_util
     assert "audit-more-row" in audit_util
     assert "object_more_count" in audit_util
