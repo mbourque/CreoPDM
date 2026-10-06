@@ -5301,15 +5301,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const exportHasSelection =
       selectedRows().flatMap(rowObjectIds).length > 0 || selectedFolderPaths().length > 0;
     const exportHasVaultFiles = productHasVaultFilesForExport();
-    const canShowExportMenu =
-      Boolean(productId) && (canExportProduct || canExportObjects);
+    const canExportWhole = Boolean(productId) && canExportProduct && exportHasVaultFiles;
+    const canExportSelection =
+      Boolean(productId) && canExportObjects && exportHasSelection;
+    // Hide Export ▾ entirely when every menu item would be greyed.
+    const canShowExportMenu = canExportWhole || canExportSelection;
     setToolbarActionVisible(exportMenuBtn, canShowExportMenu);
     if (!canShowExportMenu) closeExportMenu();
-    // Export product stays visible but greyed when the product has no vault files.
+    // Export product stays visible but greyed when the product has no vault files
+    // (only while Export selected… is still usable so the menu stays open).
     if (exportProductBtn) {
       exportProductBtn.hidden = false;
-      const canExportWhole =
-        canShowExportMenu && canExportProduct && exportHasVaultFiles;
       exportProductBtn.disabled = !canExportWhole;
       exportProductBtn.title = canExportWhole
         ? "Download the entire product vault tip as a zip."
@@ -5317,11 +5319,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           ? "Your role cannot export a whole product (products.export)."
           : "Nothing to export — this product has no vault files yet.";
     }
-    // Export selected stays visible but greyed until files/folders are selected.
+    // Export selected stays visible but greyed until files/folders are selected
+    // (only while Export product… is still usable so the menu stays open).
     if (exportSelectedBtn) {
       exportSelectedBtn.hidden = false;
-      exportSelectedBtn.disabled =
-        !canShowExportMenu || !canExportObjects || !exportHasSelection;
+      exportSelectedBtn.disabled = !canExportSelection;
       exportSelectedBtn.title = exportHasSelection
         ? "Download the selected vault files or folders as a zip."
         : "Download the selected vault files or folders as a zip. Greyed out until something is selected.";
