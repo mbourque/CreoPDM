@@ -892,8 +892,13 @@ function creoFlagTrue(value) {
 }
 function creoFlagBool(value) {
     // true/1 → true, false/0 → false, else unbound (null).
-    if (value === true || value === 1) return true;
+    if (value === true || value === 1 || value === -1) return true;
     if (value === false || value === 0) return false;
+    if (typeof value === "string") {
+        var s = value.replace(/^\s+|\s+$/g, "").toLowerCase();
+        if (s === "true" || s === "yes") return true;
+        if (s === "false" || s === "no") return false;
+    }
     return null;
 }
 function creoLooksLikeModel(obj) {
@@ -936,17 +941,33 @@ function creoNameTokensOverlap(left, right) {
 }
 function creoReadIsSkeletonFlag(handle) {
     /**
-     * PTC pfcSolid.GetIsSkeleton() / .IsSkeleton — true for a skeleton or concept
-     * model. Creo.JS methods are often not typeof "function"; do not test that.
+     * PTC pfcSolid.GetIsSkeleton / .IsSkeleton — true for a skeleton or concept
+     * model. Creo.JS getters are often the property `GetIsSkeleton` (a boolean).
+     * Calling GetIsSkeleton() on that boolean throws; we used to miss skeletons.
+     * Do not require typeof === "function".
      * Returns true, false, or null when the call is unbound / threw.
      */
     if (!handle) return null;
+    function fromRaw(raw) {
+        var asBool = creoFlagBool(raw);
+        if (asBool !== null) return asBool;
+        if (raw == null) return null;
+        try {
+            return creoFlagBool(raw());
+        } catch (errCall) {
+            return null;
+        }
+    }
+    try {
+        var fromGet = fromRaw(handle.GetIsSkeleton);
+        if (fromGet !== null) return fromGet;
+    } catch (errGetProp) {}
     try {
         var viaGet = creoFlagBool(handle.GetIsSkeleton());
         if (viaGet !== null) return viaGet;
     } catch (errGet) {}
     try {
-        var viaProp = creoFlagBool(handle.IsSkeleton);
+        var viaProp = fromRaw(handle.IsSkeleton);
         if (viaProp !== null) return viaProp;
     } catch (errProp) {}
     try {
@@ -979,7 +1000,13 @@ function creoSolidIsSkeletonAnswer(model) {
         var flag = null;
         try { flag = creoReadIsSkeletonFlag(handles[h]); } catch (errRead) { flag = null; }
         if (flag === true) return true;
-        if (flag === false) sawFalse = true;
+        if (flag === false) {
+            // RetrieveModel handles often return false/unbound; only trust false
+            // on a solid that can actually list features / units.
+            var bound = false;
+            try { bound = creoSolidMethodsBound(handles[h]); } catch (errB) { bound = false; }
+            if (bound) sawFalse = true;
+        }
     }
     if (sawFalse) return false;
     return null;
@@ -1088,9 +1115,7 @@ function creoFeatureIsSkeletonComponent(feat) {
     for (var i = 0; i < handles.length; i++) {
         var handle = handles[i];
         if (!handle) continue;
-        try { if (creoFlagTrue(handle.IsSkeleton)) return true; } catch (errBool) {}
-        try { if (creoFlagTrue(handle.GetIsSkeleton())) return true; } catch (errGet) {}
-        try { if (creoFlagTrue(handle.IsSkeleton())) return true; } catch (errFn) {}
+        try { if (creoReadIsSkeletonFlag(handle) === true) return true; } catch (errFlag) {}
         try {
             var compType = handle.CompType;
             if (compType == null && handle.GetCompType) compType = handle.GetCompType();
@@ -2382,6 +2407,17 @@ function creoGatherBom(model, depth, visited, session, skeletonKey) {
                 order.push(key);
             }
             qtyByName[key].quantity += 1;
+            if (!skelKey && !creoIsAssemblyModel(null, name)) {
+                var fromFeat = false;
+                try { fromFeat = creoFeatureIsSkeletonComponent(feat); } catch (errFeatSk) { fromFeat = false; }
+                if (fromFeat) skelKey = name;
+                if (!skelKey) {
+                    try {
+                        var skelChild = creoResolveComponentModel(session, feat, name);
+                        if (skelChild && creoModelIsSkeleton(skelChild)) skelKey = name;
+                    } catch (errChildSk) {}
+                }
+            }
         }
         for (var j = 0; j < order.length; j++) {
             var entry = qtyByName[order[j]];

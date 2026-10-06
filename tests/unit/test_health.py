@@ -198,7 +198,11 @@ def test_home_page(client):
         "function creoSolidIsSkeletonAnswer", 1
     )[0]
     assert "handle.GetIsSkeleton()" in read_skel
-    assert read_skel.index("GetIsSkeleton()") < read_skel.index("handle.IsSkeleton")
+    assert "handle.GetIsSkeleton" in read_skel
+    assert read_skel.index("handle.GetIsSkeleton") < read_skel.index("handle.GetIsSkeleton()")
+    assert "creoSolidMethodsBound" in text.split("function creoSolidIsSkeletonAnswer", 1)[1].split(
+        "function creoModelIsSkeleton", 1
+    )[0]
     skel_fn = text.split("function creoDetectSkeletonRole", 1)[1].split(
         "function creoBodyIsSheetmetal", 1
     )[0]
