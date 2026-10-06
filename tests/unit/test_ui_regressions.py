@@ -680,13 +680,16 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "hostedCreoJS()" in prompt_fn
     assert "skip a one-option dialog" in prompt_fn or "!allowCheckout" in prompt_fn
     assert "showWd" in prompt_fn
-    # Skip-chooser still defaults Set WD on when Connected (red CAB / combine-state).
-    assert "setWorkingDirectory: showWd" in prompt_fn
+    # Set WD off by default on Open (locks workspace folder / WinError 32).
+    assert "setWorkingDirectory: false" in prompt_fn
+    assert "wdBox.checked = false" in prompt_fn
     from_ui = _between(script, "async function openPdmObjectFromUi(", "async function probeCreoAgent(")
-    assert "setWorkingDirectory: hostedCreoJS()" in from_ui
+    assert "setWorkingDirectory: false" in from_ui
+    assert "setWorkingDirectory: hostedCreoJS()" not in from_ui
     assert "agentPdmAuth" in script
     assert "...agentPdmAuth()" in script or "agentPdmAuth()" in script
     open_fn = _between(script, "async function openPdmObjectWork(", "function openPdmLaunchResult(")
+    assert "Boolean(openOpts.setWorkingDirectory)" in open_fn
     assert "setCreoWorkingDirectory({ quiet: true })" in open_fn
     assert "hostedCreoJS() && embeddedMode" in open_fn or 'hostedCreoJS() && creoOpenMode() === "embedded"' in open_fn
     assert 'openViaAgent(openSpec.path, "association")' in open_fn

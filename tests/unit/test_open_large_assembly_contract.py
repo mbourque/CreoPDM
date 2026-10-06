@@ -112,26 +112,25 @@ def test_contract_embedded_open_prefers_file_open_trail():
     )[0]
     assert "metadataSaved > 0" in open_wrap
     assert 'reloadPage({ keepBusy: true, busyMessage: "Refreshing…" })' in open_wrap
-    # Skip-chooser / Viewer: still default Set WD on when Connected.
+    # Skip-chooser / Viewer: do not Set WD on Open (WinError 32 on remove-folder).
     prompt_fn = script.split("function promptOpenCheckout(", 1)[1].split(
         "async function checkoutBeforeOpen(", 1
     )[0]
-    assert "setWorkingDirectory: showWd" in prompt_fn
     skip_branch = prompt_fn.split("!allowCheckout", 1)[1].split("if (!dialog", 1)[0]
-    assert "setWorkingDirectory: showWd" in skip_branch
-    assert "setWorkingDirectory: false" not in skip_branch
+    assert "setWorkingDirectory: false" in skip_branch
+    assert "wdBox.checked = false" in prompt_fn
     from_ui = script.split("async function openPdmObjectFromUi(", 1)[1].split(
         "async function probeCreoAgent(", 1
     )[0]
-    assert "setWorkingDirectory: hostedCreoJS()" in from_ui
+    assert "setWorkingDirectory: false" in from_ui
+    assert "setWorkingDirectory: hostedCreoJS()" not in from_ui
     open_work = script.split("async function openPdmObjectWork(", 1)[1]
-    assert "setCreoWorkingDirectory({ quiet: true })" in open_work
-    assert open_work.index("setCreoWorkingDirectory({ quiet: true })") < open_work.index(
-        "CreoJS.openModel("
-    )
+    assert "Boolean(openOpts.setWorkingDirectory)" in open_work
+    assert "if (wantSetWd)" in open_work
+    assert open_work.index("if (wantSetWd)") < open_work.index("CreoJS.openModel(")
     docs = DOCS.read_text(encoding="utf-8")
     assert "File > Open" in docs
     assert "prefer Toolkit Retrieve over File > Open" in docs
-    assert "sets Creo" in docs and "working directory" in docs
-    assert "dialog is skipped" in docs
+    assert "does **not** set Creo" in docs and "working directory" in docs
+    assert "off by default" in docs
     assert "Assembly type" in docs

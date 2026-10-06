@@ -7191,11 +7191,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Object availability AND signed-in user objects.checkout capability.
     const allowCheckout = Boolean(canCheckout) && userCanCheckout();
     // Working directory only applies inside Creo's embedded browser.
+    // Off by default — File > Open trail is enough; Set WD locks the workspace
+    // folder (WinError 32 on Delete product / remove-folder). Opt-in via checkbox.
     const showWd = hostedCreoJS();
     // Viewer (or any case with no checkout choice): skip a one-option dialog.
-    // Still default Set WD on when Connected (same as the chooser checkbox).
     if (!allowCheckout) {
-      return Promise.resolve({ action: "open", setWorkingDirectory: showWd });
+      return Promise.resolve({ action: "open", setWorkingDirectory: false });
     }
     if (!dialog || !form || !openRadio) {
       // Do not silently open when checkout was an option — that hid the chooser.
@@ -7216,7 +7217,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     openRadio.checked = true;
     if (wdBox) {
       wdBox.disabled = !showWd;
-      wdBox.checked = showWd;
+      wdBox.checked = false;
     }
     const fileRadio = $("#open-action-checkout-file");
     const dependenciesRadio = $("#open-action-checkout-dependencies");
@@ -7328,9 +7329,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const kind = rowCheckoutKind(row);
     // Only skip the chooser when the Checkout column says it is already mine.
     // Do not trust data-owned alone — a stale "1" was opening Available files
-    // with no modal. Default Set WD on when Connected (chooser checkbox default).
+    // with no modal. Do not Set WD on Open by default (locks workspace folder).
     if (objectId && kind === "mine") {
-      return openPdmObject(target, { setWorkingDirectory: hostedCreoJS() });
+      return openPdmObject(target, { setWorkingDirectory: false });
     }
     const canCheckout =
       Boolean(objectId) &&
@@ -8131,7 +8132,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // New file (local) / Modified newer local — open agent workspace tip.
     // Creo.JS needs the logical tip name (shaft.prt); disk may still be shaft.prt.1.
     const objectId = String(options?.objectId || "").trim();
-    const wantSetWd = options?.setWorkingDirectory !== false;
+    const wantSetWd = options?.setWorkingDirectory === true;
     const agent = await probeCreoAgent();
     if (!agent) {
       throw new Error(
@@ -8166,7 +8167,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (useCreoSession) {
       setBusyMessage("Opening in Creo…");
       await whenCreoJSReady();
-      // Default Set WD on for Embedded Open (combine-state / group regen context).
+      // Opt-in only — Set WD locks the workspace folder for later remove-folder.
       if (wantSetWd) {
         await setCreoWorkingDirectory({ quiet: true });
       }
@@ -8261,11 +8262,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function openPdmObjectWork(target, options) {
     const spec = typeof target === "string" ? { objectId: target } : target || {};
     const openOpts = options && typeof options === "object" ? options : {};
-    // Default Set WD on when Connected and caller did not pass a flag (skip-chooser).
-    const wantSetWd =
-      "setWorkingDirectory" in openOpts
-        ? Boolean(openOpts.setWorkingDirectory)
-        : hostedCreoJS();
+    // Set WD only when the Open chooser checkbox was checked (or caller opted in).
+    // Default off — File > Open trail resolves companions; WD locks the folder.
+    const wantSetWd = Boolean(openOpts.setWorkingDirectory);
     // Local-workspace tips (New file local / Newer local save on Modified) must
     // open from the agent cache — not /api/creo/open (vault tip / missing file).
     if (spec.localCache && spec.relativePath) {
@@ -8357,8 +8356,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         try {
           setBusyMessage("Opening in Creo…");
           await whenCreoJSReady();
-          // Set WD before File > Open trail so combine-state / group regen
-          // resolves companions like a manual open from the workspace.
+          // Opt-in Set WD only (checkbox); trail open does not need WD.
           if (wantSetWd) {
             await setCreoWorkingDirectory({ quiet: true });
           }
