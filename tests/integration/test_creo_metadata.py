@@ -571,8 +571,8 @@ def test_metadata_save_erases_this_objects_old_table_rows(client, repo_parent, t
 
 
 @requires_git
-def test_assembly_metadata_does_not_write_child_skeleton_role(client, repo_parent, tmp_path):
-    """Assembly SKELETON deps are this object's edges only — child identity unchanged."""
+def test_assembly_skeleton_edge_flags_child_part_role(client, repo_parent, tmp_path):
+    """Assembly GetSkeleton → SKELETON dep sets the matching .prt child's Type."""
     product = _create_product(client, repo_parent)
     layout = _add_part(client, product["uuid"], tmp_path, "jd_layout.prt.1")
     top = _add_part(client, product["uuid"], tmp_path, "jd_top.asm.1")
@@ -587,7 +587,7 @@ def test_assembly_metadata_does_not_write_child_skeleton_role(client, repo_paren
             },
             "dependencies": [
                 {
-                    "filename": "jd_layout.prt",
+                    "filename": "jd_layout",  # stem like Creo GetSkeleton FileName
                     "quantity": 1,
                     "dependency_type": "SKELETON",
                 }
@@ -597,7 +597,7 @@ def test_assembly_metadata_does_not_write_child_skeleton_role(client, repo_paren
     assert posted.status_code == 200, posted.text
     deps = posted.json()["dependencies"]
     assert any(
-        str(row.get("filename") or "").lower().startswith("jd_layout")
+        "jd_layout" in str(row.get("filename") or "").lower()
         and str(row.get("dependency_type") or "").upper() == "SKELETON"
         for row in deps
     )
@@ -605,14 +605,9 @@ def test_assembly_metadata_does_not_write_child_skeleton_role(client, repo_paren
     listed = client.get(f"/api/products/{product['uuid']}/objects")
     assert listed.status_code == 200, listed.text
     by_uuid = {item["uuid"]: item for item in listed.json()}
-    assert by_uuid[layout["uuid"]]["type_label"] != "SKELETON"
-    assert by_uuid[layout["uuid"]]["creo_metadata_captured"] is False
+    assert by_uuid[layout["uuid"]]["type_label"] == "SKELETON"
 
-    layout_meta = client.get(f"/api/objects/{layout['uuid']}/creo-metadata")
-    assert layout_meta.status_code == 200, layout_meta.text
-    assert layout_meta.json()["captured"] is False
-
-    # Collect the part later (assemblies-first Collect): parent SKELETON edge flags the part.
+    # Later part Collect returning SOLID must not wipe SKELETON from the parent edge.
     part_post = client.post(
         f"/api/objects/{layout['uuid']}/creo-metadata",
         json={
@@ -626,11 +621,6 @@ def test_assembly_metadata_does_not_write_child_skeleton_role(client, repo_paren
     )
     assert part_post.status_code == 200, part_post.text
     assert part_post.json()["identity"]["model_role"] == "SKELETON"
-    listed_after = client.get(f"/api/products/{product['uuid']}/objects")
-    assert listed_after.status_code == 200
-    assert {item["uuid"]: item["type_label"] for item in listed_after.json()}[
-        layout["uuid"]
-    ] == "SKELETON"
 
 
 @requires_git

@@ -2280,21 +2280,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function flushPendingMetadataErase(pendingErase, options) {
     const opts = options && typeof options === "object" ? options : {};
-    const keepAssemblies = Boolean(opts.keepAssemblies);
+    // During Collect, keep every retrieved model until the loop ends — erasing the
+    // skeleton part after its parent assembly made GetSkeleton throw CantAccess.
+    if (opts.keepAssemblies) return;
     const queue = Array.isArray(pendingErase) ? pendingErase : [];
-    let list;
-    if (keepAssemblies) {
-      const rest = [];
-      const asms = [];
-      queue.splice(0, queue.length).forEach((key) => {
-        if (isAssemblySessionKey(key)) asms.push(key);
-        else rest.push(key);
-      });
-      asms.forEach((key) => queue.push(key));
-      list = rest;
-    } else {
-      list = queue.splice(0, queue.length);
-    }
+    const list = queue.splice(0, queue.length);
     if (!list.length) return;
     if (typeof window.CreoJS?.eraseSessionModelsByNames !== "function") return;
     try {

@@ -206,6 +206,11 @@ def test_home_page(client):
     assert "handle.GetSkeleton" in get_skel
     assert "creoIsPartModel(skel" not in get_skel
     assert "creoIsAssemblyModel" in get_skel
+    skel_name_fn = text.split("function creoSkeletonLogicalName", 1)[1].split(
+        "function creoIsSkeletonOfAssembly", 1
+    )[0]
+    assert 'stem + ".prt"' in skel_name_fn
+    assert "creoIsPartModel(skel" not in skel_name_fn
     assert "IsSheetmetal" in text
     assert "pfcModelType.MDL_MFG" in text
     assert "creoFeatureItems(model.ListMaterials())" in text
@@ -254,6 +259,12 @@ def test_home_page(client):
     ).read()
     assert "_apply_skeleton_role_from_parent_edges" in open(
         "src/creopdm/services/metadata_service.py", encoding="utf-8"
+    ).read()
+    assert "_flag_skeleton_children_from_new_edges" in open(
+        "src/creopdm/services/metadata_service.py", encoding="utf-8"
+    ).read()
+    assert "if (opts.keepAssemblies) return;" in open(
+        "src/creopdm/static/js/app.js", encoding="utf-8"
     ).read()
     assert "_promote_skeleton_children" not in open(
         "src/creopdm/services/metadata_service.py", encoding="utf-8"

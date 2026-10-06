@@ -998,8 +998,9 @@ function creoFilenameLooksLikeSkeleton(filename) {
 }
 function creoAssemblyGetSkeleton(assembly) {
     /**
-     * pfcAssembly.GetSkeleton() — throws when the assembly has no skeleton.
-     * Creo.JS may expose this as a method or as the model object (no call).
+     * PTC sample uses property access: skeleton = assembly.GetSkeleton
+     * (Creo.JS getters). Also try GetSkeleton() — either may throw NotFound.
+     * FileName is often a stem (LAYOUT) with no .prt.
      */
     if (!assembly) return null;
     var handles = [assembly];
@@ -1009,18 +1010,31 @@ function creoAssemblyGetSkeleton(assembly) {
             if (castAsm) handles.push(castAsm);
         }
     } catch (errCast) {}
+    function acceptSkel(skel) {
+        if (!creoLooksLikeModel(skel)) return null;
+        if (creoIsAssemblyModel(skel, "")) return null;
+        return skel;
+    }
     for (var i = 0; i < handles.length; i++) {
         var handle = handles[i];
         if (!handle) continue;
-        try {
-            var skel = handle.GetSkeleton();
-            // GetSkeleton FileName is often a stem (LAYOUT) with no .prt — still a part.
-            if (creoLooksLikeModel(skel) && !creoIsAssemblyModel(skel, "")) return skel;
-        } catch (errGet) {}
+        // Property / getter first (PTC Creo.JS style).
         try {
             var raw = handle.GetSkeleton;
-            if (creoLooksLikeModel(raw) && !creoIsAssemblyModel(raw, "")) return raw;
+            var asProp = acceptSkel(raw);
+            if (asProp) return asProp;
+            // Some builds expose a callable that is not typeof "function".
+            if (raw != null && !creoLooksLikeModel(raw)) {
+                try {
+                    var viaCallProp = acceptSkel(raw());
+                    if (viaCallProp) return viaCallProp;
+                } catch (errCallProp) {}
+            }
         } catch (errProp) {}
+        try {
+            var skel = acceptSkel(handle.GetSkeleton());
+            if (skel) return skel;
+        } catch (errGet) {}
     }
     return null;
 }
@@ -1056,12 +1070,19 @@ function creoSkeletonLogicalName(assembly, session) {
     if (!skel) {
         try { skel = creoSkeletonFromAssemblyComponents(assembly, session); } catch (errComp) { skel = null; }
     }
-    if (!skel || !creoIsPartModel(skel, "")) return "";
+    // Do not require creoIsPartModel — GetSkeleton names are often extensionless stems.
+    if (!skel || creoIsAssemblyModel(skel, "")) return "";
     var tokens = creoModelNameToken(skel);
     for (var t = 0; t < tokens.length; t++) {
         if (/\.prt$/.test(tokens[t])) return tokens[t];
     }
-    return tokens.length ? tokens[0] : "";
+    // Stem only (LAYOUT) → layout.prt so product object matching works.
+    if (tokens.length) {
+        var stem = tokens[0];
+        if (stem.indexOf(".") < 0) return stem + ".prt";
+        return stem;
+    }
+    return "";
 }
 function creoIsSkeletonOfAssembly(assembly, model) {
     /**
@@ -1294,29 +1315,30 @@ function creoGatherModelRole(model, modelType, parameters, session, filename) {
      * MFG type → role MFG. PART sheet-metal: SMT_THICKNESS first, then body.IsSheetmetal.
      */
     var kind = String(modelType || "").trim().toUpperCase();
-    if (!kind || !model) return "";
+    if (!model) return "";
     if (kind === "MFG") {
         return "MFG";
-    }
-    if (kind === "PART") {
-        try {
-            if (creoDetectSkeletonRole(session, model, filename)) return "SKELETON";
-        } catch (errSk) {}
-        try {
-            if (creoModelHasSmtThicknessParam(model)) return "SHEETMETAL";
-        } catch (errSmt) {}
-        try {
-            if (creoParametersIndicateSheetmetal(parameters)) return "SHEETMETAL";
-        } catch (errPar) {}
-        try {
-            if (creoModelHasSheetmetalBody(model)) return "SHEETMETAL";
-        } catch (errSm) {}
-        return "SOLID";
     }
     if (kind === "ASSEMBLY") {
         return "";
     }
-    return "";
+    // Treat as PART when Type said PART, or Type was unbound but file is .prt.
+    var asPart = kind === "PART" || (!kind && creoIsPartModel(model, filename));
+    if (!asPart) return kind ? "" : "";
+    try {
+        if (creoDetectSkeletonRole(session, model, filename)) return "SKELETON";
+    } catch (errSk) {}
+    if (kind !== "PART" && kind) return "";
+    try {
+        if (creoModelHasSmtThicknessParam(model)) return "SHEETMETAL";
+    } catch (errSmt) {}
+    try {
+        if (creoParametersIndicateSheetmetal(parameters)) return "SHEETMETAL";
+    } catch (errPar) {}
+    try {
+        if (creoModelHasSheetmetalBody(model)) return "SHEETMETAL";
+    } catch (errSm) {}
+    return kind === "PART" || !kind ? "SOLID" : "";
 }
 function creoGatherIdentity(model) {
     var identity = {

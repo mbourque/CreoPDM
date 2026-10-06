@@ -171,9 +171,13 @@ class MetadataService:
 
         if is_snapshot or bool(payload.dependencies) or bom_payload is not None:
             self._write_dependencies(session, obj, payload.dependencies, bom_payload)
+            # Assembly GetSkeleton → SKELETON edges: set those part children's role now
+            # so Type updates without relying on a later part Collect seeing GetSkeleton.
+            self._flag_skeleton_children_from_new_edges(
+                session, obj, payload.dependencies, bom_payload
+            )
 
-        # After this model's rows are written: if a parent assembly already stored a
-        # SKELETON edge to this part, set this part's role (do not write other objects).
+        # Part Collect: if a parent already stored a SKELETON edge to this part, win.
         self._apply_skeleton_role_from_parent_edges(session, obj, version)
 
         session.flush()
@@ -806,6 +810,64 @@ class MetadataService:
             "parameters_deleted": params_deleted,
             "dependencies_deleted": deps_deleted,
         }
+
+    def _set_part_skeleton_role(
+        self,
+        session: Session,
+        child: EngineeringObject,
+    ) -> None:
+        logical = CreoFileManager.logical_filename(child.filename or "").lower()
+        if not logical.endswith(".prt"):
+            return
+        child_version = self._resolve_version(session, child, None)
+        if child_version is None:
+            return
+        identity = _loads(child_version.identity_json)
+        if not isinstance(identity, dict):
+            identity = {}
+        else:
+            identity = dict(identity)
+        normalize_creo_identity(identity)
+        kind = str(identity.get("model_type") or "")
+        if kind and kind != "PART":
+            return
+        if str(identity.get("model_role") or "").upper() == DependencyType.SKELETON.value:
+            return
+        identity["model_type"] = "PART"
+        identity["model_role"] = DependencyType.SKELETON.value
+        if not identity.get("file_name"):
+            identity["file_name"] = child.filename
+        normalize_creo_identity(identity)
+        child_version.identity_json = _dumps(identity)
+
+    def _flag_skeleton_children_from_new_edges(
+        self,
+        session: Session,
+        parent: EngineeringObject,
+        dependencies: list[CreoDependencyPayload] | None,
+        bom_payload: Any,
+    ) -> None:
+        """When this assembly reports SKELETON deps, mark matching .prt children."""
+        skel_keys: set[str] = set()
+        for item in dependencies or []:
+            if str(getattr(item, "dependency_type", "") or "").upper() != DependencyType.SKELETON.value:
+                continue
+            name = str(getattr(item, "filename", "") or "").strip()
+            if name:
+                skel_keys.update(bom_lookup_keys(name))
+        if bom_payload is not None:
+            for filename, _qty, dep_type in self._flatten_bom(bom_payload):
+                if str(dep_type or "").upper() != DependencyType.SKELETON.value:
+                    continue
+                skel_keys.update(bom_lookup_keys(filename))
+        if not skel_keys:
+            return
+        for row in self._objects.list_objects(session, parent.product_id):
+            if row.id == parent.id:
+                continue
+            if not (set(bom_lookup_keys(row.filename)) & skel_keys):
+                continue
+            self._set_part_skeleton_role(session, row)
 
     def _apply_skeleton_role_from_parent_edges(
         self,
