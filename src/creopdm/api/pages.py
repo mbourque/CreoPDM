@@ -139,6 +139,7 @@ _PAGE_DEFAULTS = {
     "watch_unavailable_reason": None,
     "where_used_present": False,
     "top_level_assembly_uuids": [],
+    "product_object_count": 0,
     "is_top_level_assembly": False,
     "local_time": format_local,
     "local_time_pretty": format_local_pretty,
@@ -445,11 +446,13 @@ def home(
     checkoutable_count = 0
     pending_saves = 0
     new_workspace_files = 0
+    product_object_count = 0
     if product is not None:
         objects, list_entries = _folder_page(ctx, db, product, current_folder)
         checkout_count = ctx.checkouts.count_for_product(db, product.id)
         checkoutable_count = ctx.checkouts.count_checkoutable_for_product(db, product.id)
         known = ctx.objects.list_path_index(db, product.id)
+        product_object_count = len(known)
         watch = ctx.workspaces.watch_stamp(product, known)
         pending_saves = int(watch.get("pending_saves") or 0)
         new_workspace_files = int(watch.get("new_files") or 0)
@@ -487,6 +490,7 @@ def home(
             "folder_crumbs": folder_crumbs(current_folder),
             "list_entries": list_entries,
             "status": status,
+            "product_object_count": product_object_count,
             "where_used_present": where_used_present,
             "top_level_assembly_uuids": top_level_assembly_uuids,
             "cad_models_extensions": ctx.config.cad_models_extensions(),

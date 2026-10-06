@@ -1204,7 +1204,33 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     applyMetricVisibility();
     applyMetricSelection();
     updateMetricCounts();
+    syncMetricFiltersVisibility();
     syncToolbar();
+  }
+
+  function syncMetricFiltersVisibility() {
+    const root = document.querySelector("#metric-filters");
+    if (!root) return;
+    const raw = Number.parseInt(root.getAttribute("data-product-objects") || "", 10);
+    const hasObjects = Number.isFinite(raw) ? raw > 0 : productHasVaultFilesForExport();
+    const hide = !hasObjects;
+    if (root.hidden === hide) return;
+    root.hidden = hide;
+    if (hide) {
+      metricButtons().forEach((btn) => {
+        if (metricMode(btn) !== "off") setMetricMode(btn, "off");
+      });
+      applyMetricVisibility();
+      applyMetricSelection();
+    }
+  }
+
+  function setProductObjectCount(count) {
+    const root = document.querySelector("#metric-filters");
+    if (!root) return;
+    const n = Math.max(0, Number(count) || 0);
+    root.setAttribute("data-product-objects", String(n));
+    syncMetricFiltersVisibility();
   }
 
   function setMetricMode(btn, mode) {

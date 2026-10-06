@@ -21,6 +21,32 @@ def _create_product(client, repo_parent: Path):
 
 
 @requires_git
+def test_metric_filters_hidden_on_empty_product(client, repo_parent, tmp_path):
+    """Product-wide object count drives #metric-filters visibility (not folder-local zeros)."""
+    product, _location = _create_product(client, repo_parent)
+    empty = client.get(f"/?product={product['uuid']}")
+    assert empty.status_code == 200, empty.text
+    assert 'id="metric-filters"' in empty.text
+    assert 'data-product-objects="0"' in empty.text
+    metrics = empty.text.split('id="metric-filters"', 1)[1].split(">", 1)[0]
+    assert " hidden" in metrics or metrics.endswith("hidden")
+
+    prt = tmp_path / "shaft.prt.1"
+    prt.write_bytes(b"FAKE CREO PART")
+    added = client.post(
+        f"/api/products/{product['uuid']}/objects",
+        files={"file": ("shaft.prt.1", prt.read_bytes(), "application/octet-stream")},
+        data={"comment": "seed"},
+    )
+    assert added.status_code == 201, added.text
+    filled = client.get(f"/?product={product['uuid']}")
+    assert filled.status_code == 200, filled.text
+    assert 'data-product-objects="1"' in filled.text
+    metrics_filled = filled.text.split('id="metric-filters"', 1)[1].split(">", 1)[0]
+    assert " hidden" not in metrics_filled
+
+
+@requires_git
 def test_import_creo_and_document_files(client, repo_parent, tmp_path):
     product, _location = _create_product(client, repo_parent)
     prt = tmp_path / "shaft.prt.3"
