@@ -1809,17 +1809,18 @@ function creoFeatureNameText(value) {
     return text;
 }
 function creoFeatureAssignedName(feat) {
-    // Creo.JS exposes the model-tree name as the GetName *property*
-    // (PTC: `const oldName = feat.GetName`). Unnamed features throw
-    // XToolkitNotFound — catch per feature so the gather continues.
-    // Do not use browser-side WebLink pfcScript (not present in Creo.JS).
+    // Creo.JS model-tree name: prefer `feature.name` (docs), then GetName / Name.
+    // Unnamed features throw XToolkitNotFound — catch per feature so gather continues.
     if (!feat) return "";
+    try {
+        var viaLower = creoFeatureNameText(feat.name);
+        if (viaLower) return viaLower;
+    } catch (errLower) {}
     try {
         var viaProp = creoFeatureNameText(feat.GetName);
         if (viaProp) return viaProp;
     } catch (errProp) {}
     try {
-        // Some bindings still expose GetName as a callable method.
         if (typeof feat.GetName === "function") {
             var viaCall = creoFeatureNameText(feat.GetName());
             if (viaCall) return viaCall;
