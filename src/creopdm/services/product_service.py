@@ -246,6 +246,9 @@ class ProductService:
             or new_description != old_description
         )
         old_name = product.name
+        state_changed = new_state is not None and new_state != old_state
+        read_only_changed = read_only is not None and bool(read_only) != old_read_only
+        lifecycle_changed = state_changed or read_only_changed
 
         # State / read-only live in the DB only — do not touch the vault Git repo.
         # (A dirty vault with CAD files used to make "rename" commit fail on Save.)
@@ -294,12 +297,25 @@ class ProductService:
                         details={
                             "old_name": old_name,
                             "name": new_name,
-                            "old_state": old_state,
-                            "new_state": product.state,
-                            "old_read_only": old_read_only,
-                            "read_only": bool(product.read_only),
+                            "old_number": old_number,
+                            "number": new_number,
+                            "old_description": old_description,
+                            "description": new_description,
                         },
                     )
+                    if lifecycle_changed:
+                        self._activities.record(
+                            session,
+                            ActivityAction.STATE_CHANGED,
+                            user,
+                            product_id=product.id,
+                            details={
+                                "old_state": old_state,
+                                "new_state": product.state,
+                                "old_read_only": old_read_only,
+                                "read_only": bool(product.read_only),
+                            },
+                        )
                 except Exception as exc:
                     if captured:
                         try:
@@ -311,7 +327,7 @@ class ProductService:
                         "The repository was restored.",
                         details={"name": new_name},
                     ) from exc
-        else:
+        elif lifecycle_changed:
             if new_state is not None:
                 product.state = new_state
             if read_only is not None:
@@ -320,12 +336,10 @@ class ProductService:
             session.flush()
             self._activities.record(
                 session,
-                ActivityAction.PRODUCT_UPDATED,
+                ActivityAction.STATE_CHANGED,
                 user,
                 product_id=product.id,
                 details={
-                    "old_name": old_name,
-                    "name": new_name,
                     "old_state": old_state,
                     "new_state": product.state,
                     "old_read_only": old_read_only,

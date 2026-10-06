@@ -430,3 +430,62 @@ def test_delete_product_keeps_prior_audit_and_records_deleted(client, data_dir):
         assert raw
         assert all(row.product_id is None for row in raw)
         assert any((row.product_uuid or "") == product["uuid"] for row in raw)
+
+
+@requires_git
+def test_product_state_change_records_state_changed_audit(client, data_dir):
+    """Lifecycle/read-only Save must audit STATE_CHANGED, not Product updated."""
+    created = client.post("/api/products", json={"name": "State Audit"})
+    assert created.status_code == 201, created.text
+    product = created.json()
+    ctx = client.app.state.ctx
+
+    with ctx.session_factory() as db:
+        ctx.products.update_product(
+            db,
+            product["uuid"],
+            name="State Audit",
+            number=None,
+            description=None,
+            state="RELEASED",
+            read_only=True,
+        )
+
+    with ctx.session_factory() as db:
+        svc = ActivityService()
+        rows = svc.list_events(db, q="State Audit")
+        actions = [row.action for row in rows]
+        assert ActivityAction.STATE_CHANGED.value in actions
+        assert ActivityAction.PRODUCT_UPDATED.value not in actions
+        state_rows = [
+            row for row in rows if row.action == ActivityAction.STATE_CHANGED.value
+        ]
+        assert state_rows
+        assert state_rows[0].action_label == "Product state changed"
+        assert "RELEASED" in (state_rows[0].summary or "")
+        assert "state" in (state_rows[0].summary or "").lower()
+
+    with ctx.session_factory() as db:
+        ctx.products.update_product(
+            db,
+            product["uuid"],
+            name="State Audit Renamed",
+            number=None,
+            description=None,
+            state="ON_HOLD",
+            read_only=True,
+        )
+
+    with ctx.session_factory() as db:
+        svc = ActivityService()
+        rows = svc.list_events(db, q="State Audit")
+        actions = {row.action for row in rows}
+        assert ActivityAction.PRODUCT_UPDATED.value in actions
+        assert ActivityAction.STATE_CHANGED.value in actions
+        updated = [
+            row for row in rows if row.action == ActivityAction.PRODUCT_UPDATED.value
+        ]
+        assert updated
+        assert "renamed" in (updated[0].summary or "").lower()
+        # Identity change must not put state fields on PRODUCT_UPDATED.
+        assert "old_state" not in (updated[0].details or {})

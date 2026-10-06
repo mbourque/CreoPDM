@@ -37,6 +37,7 @@ ACTION_LABELS: dict[str, str] = {
     ActivityAction.PRODUCT_CREATED.value: "Product created",
     ActivityAction.PRODUCT_UPDATED.value: "Product updated",
     ActivityAction.PRODUCT_DELETED.value: "Product deleted",
+    ActivityAction.STATE_CHANGED.value: "Product state changed",
     ActivityAction.OBJECT_ADDED.value: "Object added",
     ActivityAction.OBJECT_REMOVED.value: "Object removed",
     ActivityAction.WORKSPACE_CLEARED.value: "Workspace cleared",
@@ -563,7 +564,7 @@ def _event_summary(
         name = details.get("name") or details.get("product_name")
         if name:
             parts.append(str(name))
-    if action in {ActivityAction.PRODUCT_UPDATED.value, "PRODUCT_UPDATED"}:
+    if action in {ActivityAction.STATE_CHANGED.value, "STATE_CHANGED"}:
         old_s = details.get("old_state") or details.get("state_before")
         new_s = (
             details.get("new_state")
@@ -576,6 +577,11 @@ def _event_summary(
         new_ro = details.get("read_only")
         if old_ro is not None and new_ro is not None and old_ro != new_ro:
             parts.append(f"read_only {old_ro} → {new_ro}")
+    if action in {ActivityAction.PRODUCT_UPDATED.value, "PRODUCT_UPDATED"}:
+        old_name = details.get("old_name")
+        new_name = details.get("name")
+        if old_name and new_name and old_name != new_name:
+            parts.append(f"renamed {old_name} → {new_name}")
         changed = details.get("changed")
         if isinstance(changed, list) and changed and not parts:
             parts.append(", ".join(str(item) for item in changed[:6]))
