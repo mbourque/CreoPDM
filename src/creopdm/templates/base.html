@@ -1809,28 +1809,23 @@ function creoFeatureNameText(value) {
     return text;
 }
 function creoFeatureAssignedName(feat) {
-    // Creo.JS model-tree name: prefer `feature.name` (docs), then GetName / Name.
-    // Keep Creo's own auto-names ("INDEPENDENT GEOMETRY 1") when that is what it returns.
-    // Unnamed features throw XToolkitNotFound — catch per feature so gather continues.
+    // Creo.JS model-tree name (`feature.name`). Unnamed features throw
+    // XToolkitNotFound — catch once and stop. Do not cascade GetName/Name:
+    // each throw crosses the Creo.JS bridge and made Collect much slower.
     if (!feat) return "";
+    var threw = false;
     try {
-        var viaLower = creoFeatureNameText(feat.name);
-        if (viaLower) return viaLower;
-    } catch (errLower) {}
-    try {
-        var viaProp = creoFeatureNameText(feat.GetName);
-        if (viaProp) return viaProp;
-    } catch (errProp) {}
-    try {
-        if (typeof feat.GetName === "function") {
-            var viaCall = creoFeatureNameText(feat.GetName());
-            if (viaCall) return viaCall;
-        }
-    } catch (errCall) {}
-    try {
-        var viaName = creoFeatureNameText(feat.Name);
+        var viaName = creoFeatureNameText(feat.name);
         if (viaName) return viaName;
-    } catch (errName) {}
+    } catch (errName) {
+        threw = true;
+    }
+    if (threw) return "";
+    // Only when .name quietly empty (binding without that alias).
+    try {
+        var viaGet = creoFeatureNameText(feat.GetName);
+        if (viaGet) return viaGet;
+    } catch (errGet) {}
     return "";
 }
 function creoGatherFeatures(model, dbg, session) {

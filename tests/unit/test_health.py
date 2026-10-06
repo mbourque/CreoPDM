@@ -268,11 +268,11 @@ def test_home_page(client):
     assert "function creoGatherFamilyTable" in text
     assert "function creoGatherBomTree" in text
     assert "function creoGatherFeatures" in text
-    # Model-tree names via Creo.JS feature.name / GetName (keep Creo auto-names as-is).
+    # Model-tree names via Creo.JS feature.name (one throw max — Collect speed).
     assert "function creoFeatureAssignedName" in text
     assert "feat.name" in text
-    assert "feat.GetName" in text
     assert "creoFeatureAssignedName(feat)" in text
+    assert "Do not cascade GetName/Name" in text
     assert 'name = subType || typeName || ""' in text
     assert "creoFeatureStripOrderSuffix" not in text
     assert "XToolkitNotFound" in text
