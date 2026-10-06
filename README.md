@@ -125,7 +125,7 @@ python -m creopdm --port 0
 The console prints the URL to use:
 
 ```
-CreoPDM 0.1.0
+CreoPDM 0.4.0
 Status: Running
 This PC:    http://127.0.0.1:54321
 Other PCs:  http://192.168.x.x:54321

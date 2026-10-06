@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Deferred: stale app.js after deploy (build stamp)
 
-Soft-nav keeps the in-memory `app.js`. It already reloads when the script `src` `?v=` changes (`loadUpdatedAppJs`), but today that string is tied to static `APP_VERSION` (`0.3.0`), so after `./pull-restart.ps1` a hard refresh is often still required.
+Soft-nav keeps the in-memory `app.js`. It already reloads when the script `src` `?v=` changes (`loadUpdatedAppJs`), but today that string is tied to static `APP_VERSION` (`0.4.0`), so after `./pull-restart.ps1` a hard refresh is often still required.
 
 ## Later idea (not implemented) — option 1
 

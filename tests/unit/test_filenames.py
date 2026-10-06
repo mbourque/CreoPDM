@@ -79,8 +79,11 @@ def test_workspace_transients_are_ignored():
 
 
 def test_app_identity():
+    from creopdm_agent import __version__ as agent_version
+
     assert APP_NAME == "CreoPDM"
-    assert APP_VERSION == "0.3.0"
+    assert APP_VERSION == "0.4.0"
+    assert agent_version == "0.4.0"
 
 
 def test_canonical_name_strips_creo_save_numbers():
