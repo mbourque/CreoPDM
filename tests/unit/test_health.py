@@ -268,11 +268,12 @@ def test_home_page(client):
     assert "function creoGatherFamilyTable" in text
     assert "function creoGatherBomTree" in text
     assert "function creoGatherFeatures" in text
-    assert "Do not call feat.GetName" in text
-    # User-renamed feature names (model tree) via WebLink — not FeatTypeName + number.
+    # Model-tree names via Creo.JS feat.GetName property (not FeatTypeName + number).
     assert "function creoFeatureAssignedName" in text
-    assert "pwlFeatureNameGetByID" in text
-    assert "creoFeatureAssignedName(mdlNameExt, id)" in text
+    assert "feat.GetName" in text
+    assert "creoFeatureAssignedName(feat)" in text
+    assert "XToolkitNotFound" in text
+    assert "pwlFeatureNameGetByID" not in text
     assert "errFeat" in text
     assert "errFeatGather" in text
     assert "Do not RetrieveModel here" in text
