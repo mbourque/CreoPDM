@@ -1568,6 +1568,26 @@ def test_files_search_survives_details_and_back():
     assert "Clear search or show the empty folder list just because you opened Details" in docs
 
 
+def test_search_path_middle_truncation():
+    """Long vault-relative paths under search hits truncate in the middle."""
+    script = _app_js()
+    docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
+    css = APP_CSS.read_text(encoding="utf-8")
+    trunc = _between(script, "function truncateMiddlePath(", "function searchPathLineHtml(")
+    assert '"…"' in trunc or "…/" in trunc
+    assert "parts.slice(-2)" in trunc
+    assert "/…/" in trunc
+    path_line = _between(script, "function searchPathLineHtml(", "function searchRowHtml(")
+    assert "truncateMiddlePath(full)" in path_line
+    assert 'class="muted small search-path"' in path_line
+    assert "title=" in path_line
+    row = _between(script, "function searchRowHtml(", "function showFolderView(")
+    assert "searchPathLineHtml(relative, filename)" in row
+    assert "middle truncated" in docs.lower()
+    assert "hover the path for the full string" in docs.lower()
+    assert ".search-path" in css
+
+
 def test_search_form_only_on_files_tab():
     """Search box is for the Files list — hide it on other product list tabs."""
     script = _app_js()

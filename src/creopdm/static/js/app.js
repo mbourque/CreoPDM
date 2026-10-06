@@ -4582,6 +4582,37 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return `<img class="type-icon" src="/static/icons/${escapeHtml(info.file)}" alt="${label}" title="${label}" width="14" height="14" decoding="async">`;
   }
 
+  function truncateMiddlePath(path, maxLen = 64) {
+    // Search (and other product-wide lists) show vault-relative paths under the
+    // filename. Keep the first folder and the leaf so deep trees stay readable.
+    const s = String(path || "").replace(/\\/g, "/");
+    if (s.length <= maxLen) return s;
+    const parts = s.split("/").filter((part) => part.length);
+    if (parts.length >= 2) {
+      const first = parts[0];
+      const last = parts[parts.length - 1];
+      if (parts.length >= 3) {
+        const withParent = `${first}/…/${parts.slice(-2).join("/")}`;
+        if (withParent.length <= maxLen) return withParent;
+      }
+      const withFile = `${first}/…/${last}`;
+      if (withFile.length <= maxLen) return withFile;
+    }
+    const ellip = "…";
+    const budget = Math.max(12, maxLen - ellip.length);
+    const head = Math.ceil(budget * 0.35);
+    const tail = budget - head;
+    return `${s.slice(0, head)}${ellip}${s.slice(-tail)}`;
+  }
+
+  function searchPathLineHtml(relative, filename) {
+    const full = String(relative || "").replace(/\\/g, "/");
+    const name = String(filename || "");
+    if (!full || full === name) return "";
+    const shown = truncateMiddlePath(full);
+    return `<div class="muted small search-path" title="${escapeHtml(full)}">${escapeHtml(shown)}</div>`;
+  }
+
   function searchRowHtml(obj, productId) {
     const relative = String(obj.relative_path || obj.filename || "");
     const folder = folderOfPath(relative);
@@ -4602,9 +4633,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           ? "available"
           : "locked";
     const rev = String(obj.display_revision || obj.revision || "");
-    const pathLine = relative && relative !== filename
-      ? `<div class="muted small">${escapeHtml(relative)}</div>`
-      : "";
+    const pathLine = searchPathLineHtml(relative, filename);
     const icon = typeIconHtml({
       objectType,
       typeLabel,

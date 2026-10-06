@@ -984,6 +984,11 @@ img.type-icon[src$=".svg"] {
   max-width: 100%;
   text-align: left;
 }
+#object-table .object-row td:first-child .search-path,
+#checked-out-table .object-row td:first-child .search-path {
+  /* Middle-truncation is done in JS; keep a single line under the filename. */
+  cursor: default;
+}
 #object-table .folder-row td:first-child {
   white-space: normal;
 }
