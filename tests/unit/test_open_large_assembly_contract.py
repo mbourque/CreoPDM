@@ -107,6 +107,11 @@ def test_contract_embedded_open_prefers_file_open_trail():
         "function metadataTargetsFromResult(", 1
     )[0]
     assert "sessionOnly: true" in after_open
+    open_wrap = script.split("async function openPdmObject(", 1)[1].split(
+        "async function openPdmObjectWork(", 1
+    )[0]
+    assert "metadataSaved > 0" in open_wrap
+    assert 'reloadPage({ keepBusy: true, busyMessage: "Refreshing…" })' in open_wrap
     # Skip-chooser / Viewer: still default Set WD on when Connected.
     prompt_fn = script.split("function promptOpenCheckout(", 1)[1].split(
         "async function checkoutBeforeOpen(", 1

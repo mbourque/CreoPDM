@@ -6547,7 +6547,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         versionId: String(item?.version_id || item?.current_version?.uuid || "").trim(),
       }))
       .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename));
-    if (!targets.length || !canGatherCreoMetadata()) return;
+    let saved = 0;
+    if (!targets.length || !canGatherCreoMetadata()) return saved;
     for (const target of targets) {
       // Session first (Open / Check In often already have the model) — avoids
       // re-Retrieve + erase of a model the user just opened.
@@ -6591,15 +6592,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           : null,
       };
       try {
-        await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
+        const response = await fetch(
+          `/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          }
+        );
+        if (response.ok) saved += 1;
       } catch {
         /* soft-fail — metadata is best-effort */
       }
     }
+    return saved;
   }
 
   function metadataItemsFromOpenResult(result) {
@@ -6620,18 +6626,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function captureCreoMetadataAfterOpen(result) {
-    if (!canGatherCreoMetadata()) return;
+    if (!canGatherCreoMetadata()) return 0;
     const items = metadataItemsFromOpenResult(result);
-    if (!items.length) return;
+    if (!items.length) return 0;
+    let saved = 0;
     await withBusy("Capturing Creo metadata…", async () => {
       // Embedded Open prefers File > Open trail (returns before retrieve finishes).
       // Wait for the model in session; never disk-Retrieve after Open.
-      await pushCreoMetadataForItems(items, {
+      saved = await pushCreoMetadataForItems(items, {
         sessionOnly: true,
         sessionWaitRounds: 60,
         sessionWaitMs: 500,
       });
     });
+    return saved;
   }
 
   function metadataTargetsFromResult(result) {
@@ -8222,10 +8230,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
     });
     // Best-effort: fill Creo identity/type/deps while the model is in session.
+    // Metadata POST updates Type + Where Used / Top Level — soft-refresh Files
+    // like Collect so the list is not stale until F5.
+    let metadataSaved = 0;
     try {
-      await captureCreoMetadataAfterOpen(result);
+      metadataSaved = Number(await captureCreoMetadataAfterOpen(result)) || 0;
     } catch {
       /* soft-fail — open already succeeded */
+    }
+    if (metadataSaved > 0 && isListPage) {
+      try {
+        await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" });
+      } catch {
+        /* soft-fail — Open + metadata already succeeded */
+      }
     }
     return result;
   }
