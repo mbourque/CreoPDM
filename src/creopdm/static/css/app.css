@@ -535,16 +535,16 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .admin-utilities .settings-card {
   margin-top: 0.85rem;
 }
-.admin-utilities .settings-card-heading {
+.admin-utilities .audit-events-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.55rem;
+  gap: 0.55rem;
+  flex-wrap: nowrap;
+  width: 100%;
 }
-.admin-utilities .settings-card-heading h2 {
-  margin: 0;
+.admin-utilities .audit-events-heading .btn {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 .admin-utilities .audit-filter-grid {
   display: grid;

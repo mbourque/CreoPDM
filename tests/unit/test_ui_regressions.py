@@ -2176,10 +2176,12 @@ def test_admin_hub_panel_fills_full_width():
     )
     assert "export_href" in audit_util
     assert "Export CSV" in audit_util
+    assert "audit-events-heading" in audit_util
     assert "/admin/utilities/audit.csv" in (
         ROOT / "src" / "creopdm" / "api" / "auth_pages.py"
     ).read_text(encoding="utf-8")
-    assert "settings-card-heading" in css
+    assert "audit-events-heading" in css
+    assert "margin-left: auto" in css
     avail_util = (
         ROOT / "src" / "creopdm" / "templates" / "admin_utilities_availability.html"
     ).read_text(encoding="utf-8")

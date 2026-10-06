@@ -82,10 +82,9 @@
   </form>
 
   <section class="settings-card settings-form-wide">
-    <div class="settings-card-heading">
-      <h2>Events <span class="muted small">(up to {{ page_size }})</span></h2>
+    <h2 class="audit-events-heading">Events <span class="muted small">(up to {{ page_size }})</span>
       <a class="btn" href="{{ export_href }}" title="Download the filtered results shown below as CSV">Export CSV</a>
-    </div>
+    </h2>
     {% if events %}
     <div class="table-wrap">
     <table class="data-table" id="utilities-audit-table">
