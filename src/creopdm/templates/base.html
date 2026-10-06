@@ -1830,8 +1830,8 @@ function creoFeatureAssignedName(feat) {
 }
 function creoGatherFeatures(model, dbg, session, options) {
     var opts = options && typeof options === "object" ? options : {};
-    // featureNames opt-in: Collect skips (unnamed .name throws are slow); Open enables.
-    var wantNames = opts.featureNames === true;
+    // Default on — Collect + Open need model-tree names (RIGHT, DEFAULT_CS, …).
+    var wantNames = opts.featureNames !== false;
     var rows = [];
     try {
         var solidDbg = dbg ? (dbg.solid = dbg.solid || {}) : null;
@@ -2262,7 +2262,8 @@ function creoRetrieveForMetadata(session, filePath, filename) {
 }
 function gatherModelMetadata(filename, filePath, options) {
     var opts = options && typeof options === "object" ? options : {};
-    var wantFeatureNames = opts.featureNames === true;
+    // Default on (Collect + Open). Pass featureNames:false only to skip .name reads.
+    var wantFeatureNames = opts.featureNames !== false;
     try {
         var session = (typeof pfcGetCurrentSession === "function")
           ? pfcGetCurrentSession()
@@ -2338,9 +2339,6 @@ function gatherModelMetadata(filename, filePath, options) {
                     }
                 }
             }
-            // Always list features for the Details Features tab. Collect keeps
-            // featureNames off (type/subtype only — no slow .name throws).
-            // Open passes featureNames:true for model-tree renames.
             if (isAsm || isPart) {
                 try {
                     features = creoGatherFeatures(solidModel, null, session, {

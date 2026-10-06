@@ -2172,7 +2172,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       let snapshot = await gatherCreoMetadataForFilename(target.filename, filePath, {
         deferErase: opts.deferErase !== false,
-        featureNames: Boolean(opts.featureNames),
+        // Default on — Details Features need tree names (RIGHT, DEFAULT_CS, …).
+        featureNames: opts.featureNames !== false,
         pendingErase: opts.pendingErase,
       });
       if (snapshot && snapshot.__error) {
@@ -2322,7 +2323,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         });
         const result = await pushOneCreoMetadataTarget(target, {
           deferErase: true,
-          featureNames: false,
+          featureNames: true,
           pendingErase,
         });
         if (result.ok) {

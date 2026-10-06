@@ -384,7 +384,7 @@ def test_metadata_gear_items_require_creo_session():
     # Collect: tip-only prepare, warm-path skip, batched erase, refresh once at end.
     assert 'gatherCreoMetadataForFilename(target.filename, "")' not in push
     assert "prepareLocalPathForMetadata(target.uuid)" in push
-    assert "featureNames: false" in loop
+    assert "featureNames: true" in loop
     assert "deferErase: true" in loop
     assert "attachCollectLocalPaths" in loop or "function attachCollectLocalPaths" in script
     assert "flushPendingMetadataErase" in loop

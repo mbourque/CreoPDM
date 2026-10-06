@@ -268,12 +268,12 @@ def test_home_page(client):
     assert "function creoGatherFamilyTable" in text
     assert "function creoGatherBomTree" in text
     assert "function creoGatherFeatures" in text
-    # Features always listed; feat.name only when featureNames:true (Open).
+    # Model-tree names via feat.name (default on for Collect + Open).
     assert "function creoFeatureAssignedName" in text
     assert "feat.name" in text
-    assert "wantFeatureNames = opts.featureNames === true" in text
+    assert "wantFeatureNames = opts.featureNames !== false" in text
+    assert "wantNames = opts.featureNames !== false" in text
     assert "featureNames: wantFeatureNames" in text
-    assert "wantNames = opts.featureNames === true" in text
     assert "Do not cascade GetName/Name" in text
     assert "creoFeatureStripOrderSuffix" not in text
     assert "XToolkitNotFound" in text
