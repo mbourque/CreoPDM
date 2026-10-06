@@ -269,6 +269,10 @@ def test_home_page(client):
     assert "function creoGatherBomTree" in text
     assert "function creoGatherFeatures" in text
     assert "Do not call feat.GetName" in text
+    # User-renamed feature names (model tree) via WebLink — not FeatTypeName + number.
+    assert "function creoFeatureAssignedName" in text
+    assert "pwlFeatureNameGetByID" in text
+    assert "creoFeatureAssignedName(mdlNameExt, id)" in text
     assert "errFeat" in text
     assert "errFeatGather" in text
     assert "Do not RetrieveModel here" in text

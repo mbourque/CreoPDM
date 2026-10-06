@@ -1802,6 +1802,49 @@ function creoFamilyCellString(value) {
         return "";
     }
 }
+function creoFeatureModelFileName(model, solid) {
+    // WebLink feature-name APIs need MdlNameExt (e.g. shaft.prt).
+    var candidates = [solid, model];
+    for (var i = 0; i < candidates.length; i++) {
+        var obj = candidates[i];
+        if (!obj) continue;
+        try {
+            var fileName = String(obj.FileName || "").trim();
+            if (fileName) return creoLogicalFileName(fileName);
+        } catch (errF) {}
+        try {
+            var fullName = String(obj.FullName || "").trim();
+            if (fullName) return creoLogicalFileName(fullName);
+        } catch (errFull) {}
+    }
+    return "";
+}
+function creoFeatureAssignedName(mdlNameExt, featureId) {
+    // Prefer WebLink name-by-id. Do not call feat.GetName() — Creo.JS often
+    // aborts the whole metadata gather on unnamed features (uncatchable).
+    if (!mdlNameExt || featureId == null || featureId === "") return "";
+    var idNum = Number(featureId);
+    if (!isFinite(idNum)) return "";
+    var script = null;
+    try {
+        if (typeof pfcScript !== "undefined" && pfcScript) script = pfcScript;
+    } catch (errScript) {
+        script = null;
+    }
+    if (!script) return "";
+    // Do not gate on typeof===function — same Creo.JS quirk as other toolkit APIs.
+    try {
+        var named = script.pwlFeatureNameGetByID(String(mdlNameExt), idNum);
+        var fromName = named && named.FeatureName != null ? String(named.FeatureName).trim() : "";
+        if (fromName) return fromName;
+    } catch (errName) {}
+    try {
+        var info = script.pwlFeatureInfoGetByID(String(mdlNameExt), idNum);
+        var fromInfo = info && info.FeatureName != null ? String(info.FeatureName).trim() : "";
+        if (fromInfo) return fromInfo;
+    } catch (errInfo) {}
+    return "";
+}
 function creoGatherFeatures(model, dbg, session) {
     var rows = [];
     try {
@@ -1811,6 +1854,8 @@ function creoGatherFeatures(model, dbg, session) {
             if (dbg) dbg.reason = "no_solid";
             return rows;
         }
+        var mdlNameExt = creoFeatureModelFileName(model, solid);
+        if (dbg) dbg.mdl_name_ext = mdlNameExt || "";
         // Do not gate on typeof===function — same Creo.JS quirk as GetMassProperty.
         var listed = null;
         try {
@@ -1886,11 +1931,19 @@ function creoGatherFeatures(model, dbg, session) {
                 } catch (errNum) { regenNum = null; }
                 // Do not call feat.GetName() here: Creo.JS often aborts the whole
                 // metadata gather on unnamed features (uncatchable toolkit error).
+                // User-renamed tree names (SKG-BS-FRONT, …) come from WebLink.
                 var name = "";
-                if (subType && regenNum != null) name = subType + " " + regenNum;
-                else if (typeName && regenNum != null) name = typeName + " " + regenNum;
-                else if (subType) name = subType;
-                else if (typeName) name = typeName;
+                try {
+                    name = creoFeatureAssignedName(mdlNameExt, id);
+                } catch (errAssigned) {
+                    name = "";
+                }
+                if (!name) {
+                    if (subType && regenNum != null) name = subType + " " + regenNum;
+                    else if (typeName && regenNum != null) name = typeName + " " + regenNum;
+                    else if (subType) name = subType;
+                    else if (typeName) name = typeName;
+                }
                 if (!name && !typeName && id == null) continue;
                 rows.push({
                     id: id,
