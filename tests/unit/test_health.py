@@ -277,9 +277,9 @@ def test_home_page(client):
     assert "never abort the whole lookup on the first throw" in text
     assert "creoFeatureGenericLabel(name)" in text
     assert 't === "general"' in text
-    assert "creoFeatureFallbackName(typeName, subType, regenNum)" in text
-    assert "number: regenNum" in text
-    assert 'base + " " + String(regenNum)' in text
+    assert "creoFeatureFallbackName(typeName, subType)" in text
+    assert "never invent" in text or "not GetName" in text
+    assert "number: regenNum" not in text
     assert "wantFeatureNames = opts.featureNames !== false" in text
     assert "wantNames = opts.featureNames !== false" in text
     assert "featureNames: wantFeatureNames" in text
@@ -291,6 +291,7 @@ def test_home_page(client):
     assert "creoFeatureStripOrderSuffix" not in text
     assert "pwlFeatureNameGetByID" not in text
     assert 'typeName + " " + regenNum' not in text
+    assert 'base + " " + String(regenNum)' not in text
     assert "errFeat" in text
     assert "errFeatGather" in text
     assert "Do not RetrieveModel here" in text

@@ -1,4 +1,4 @@
-"""Feature Name column: skip General; append Creo order for unnamed features."""
+"""Feature Name: Creo GetName as-is; never invent order; skip General subtype."""
 
 from creopdm.services.metadata_service import normalize_feature_rows
 
@@ -17,7 +17,8 @@ def test_normalize_feature_rows_replaces_general_with_type():
     assert by_id[19]["name"] == "Extrude"
 
 
-def test_normalize_feature_rows_appends_order_for_unnamed_type():
+def test_normalize_feature_rows_does_not_invent_order_from_number():
+    # Order belongs only if Creo GetName returned it — we must not synthesize.
     rows = normalize_feature_rows(
         [
             {
@@ -34,20 +35,18 @@ def test_normalize_feature_rows_appends_order_for_unnamed_type():
                 "subtype": "Extrude",
                 "number": 1,
             },
-            {
-                "id": 3,
-                "name": "RIGHT",
-                "type": "DATUM PLANE",
-                "subtype": "",
-                "number": 2,
-            },
         ]
     )
     by_id = {row["id"]: row for row in rows}
-    assert by_id[2457]["name"] == "ROUND 3"
-    assert by_id[19]["name"] == "Extrude 1"
-    # Real rename — do not append order.
-    assert by_id[3]["name"] == "RIGHT"
+    assert by_id[2457]["name"] == "ROUND"
+    assert by_id[19]["name"] == "Extrude"
+
+
+def test_normalize_feature_rows_keeps_creo_name_with_order_as_is():
+    rows = normalize_feature_rows(
+        [{"id": 1, "name": "Round 3", "type": "ROUND", "subtype": "General"}]
+    )
+    assert rows[0]["name"] == "Round 3"
 
 
 def test_normalize_feature_rows_ignores_non_dicts():
