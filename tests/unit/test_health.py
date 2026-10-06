@@ -179,6 +179,8 @@ def test_home_page(client):
     assert "model_role" in text
     assert "IsSkeleton" in text
     assert "creoModelIsSkeleton" in text
+    assert "creoSolidIsSkeletonAnswer" in text
+    assert "creoReadIsSkeletonFlag" in text
     assert "creoDetectSkeletonRole" in text
     assert "creoFilenameLooksLikeSkeleton" in text
     assert "creoSessionModelIsAssemblySkeleton" in text
@@ -192,11 +194,17 @@ def test_home_page(client):
     assert "GetIsSkeleton" in text
     assert 'typeof handle.GetIsSkeleton === "function"' not in text
     assert "pfcSolid.cast" in text
+    read_skel = text.split("function creoReadIsSkeletonFlag", 1)[1].split(
+        "function creoSolidIsSkeletonAnswer", 1
+    )[0]
+    assert "handle.GetIsSkeleton()" in read_skel
+    assert read_skel.index("GetIsSkeleton()") < read_skel.index("handle.IsSkeleton")
     skel_fn = text.split("function creoDetectSkeletonRole", 1)[1].split(
         "function creoBodyIsSheetmetal", 1
     )[0]
     assert "creoIsPartModel" in skel_fn
-    assert "creoModelIsSkeleton" in skel_fn
+    assert "creoSolidIsSkeletonAnswer" in skel_fn
+    assert "if (flag === false) return false;" in skel_fn
     assert "creoSessionModelIsAssemblySkeleton" in skel_fn
     assert "creoFilenameLooksLikeSkeleton" in skel_fn
     assert "_skel" in text

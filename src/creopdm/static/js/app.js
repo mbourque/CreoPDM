@@ -2091,7 +2091,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     lead.textContent =
       `Clears stored Creo metadata for this product, then captures parameters, materials, units, features, and BOM/structure for ${total} Creo model(s). ` +
-      "Assemblies are collected first so GetSkeleton can flag skeleton parts. Each model is retrieved in Creo when needed. Mass properties are not collected (unsupported in silent Collect).";
+      "Each model is retrieved in Creo when needed. Skeleton parts use this solid’s GetIsSkeleton(). Mass properties are not collected (unsupported in silent Collect).";
     if (warn) {
       if (total > METADATA_COLLECT_WARN_THRESHOLD) {
         warn.hidden = false;
