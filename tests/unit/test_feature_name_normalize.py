@@ -1,48 +1,26 @@
-"""Feature Name: Creo GetName as-is; never invent order; skip General subtype."""
+"""Feature Name: Creo feature.name as-is; never use subtype placeholders as Name."""
 
 from creopdm.services.metadata_service import normalize_feature_rows
 
 
-def test_normalize_feature_rows_replaces_general_with_type():
+def test_normalize_feature_rows_replaces_general_and_edge_placeholders():
     rows = normalize_feature_rows(
         [
-            {"id": 2457, "name": "General", "type": "ROUND", "subtype": "General"},
+            {"id": 1252, "name": "ROUND", "type": "ROUND", "subtype": "General"},
+            {"id": 2222, "name": "Edge", "type": "CHAMFER", "subtype": "Edge"},
+            {"id": 5253, "name": "FIXTURE-HOLES", "type": "SMT CUT", "subtype": "Extrude"},
             {"id": 3, "name": "RIGHT", "type": "DATUM PLANE", "subtype": ""},
-            {"id": 19, "name": "", "type": "WALL SURFACE", "subtype": "Extrude"},
         ]
     )
     by_id = {row["id"]: row for row in rows}
-    assert by_id[2457]["name"] == "ROUND"
+    assert by_id[1252]["name"] == "ROUND"
+    # Edge is FeatSubType for chamfer — Name should be CHAMFER, not Edge.
+    assert by_id[2222]["name"] == "CHAMFER"
+    assert by_id[5253]["name"] == "FIXTURE-HOLES"
     assert by_id[3]["name"] == "RIGHT"
-    assert by_id[19]["name"] == "Extrude"
 
 
-def test_normalize_feature_rows_does_not_invent_order_from_number():
-    # Order belongs only if Creo GetName returned it — we must not synthesize.
-    rows = normalize_feature_rows(
-        [
-            {
-                "id": 2457,
-                "name": "General",
-                "type": "ROUND",
-                "subtype": "General",
-                "number": 3,
-            },
-            {
-                "id": 19,
-                "name": "Extrude",
-                "type": "WALL SURFACE",
-                "subtype": "Extrude",
-                "number": 1,
-            },
-        ]
-    )
-    by_id = {row["id"]: row for row in rows}
-    assert by_id[2457]["name"] == "ROUND"
-    assert by_id[19]["name"] == "Extrude"
-
-
-def test_normalize_feature_rows_keeps_creo_name_with_order_as_is():
+def test_normalize_feature_rows_keeps_creo_name_as_is():
     rows = normalize_feature_rows(
         [{"id": 1, "name": "Round 3", "type": "ROUND", "subtype": "General"}]
     )

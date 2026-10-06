@@ -47,12 +47,12 @@ logger = logging.getLogger(__name__)
 
 _DRAWING_PARENT = "CREO_DRAWING"
 _ASSEMBLY_TYPE = "CREO_ASSEMBLY"
-# FeatSubType "General" is not a model-tree name (Round → ROUND, not General).
-_GENERIC_FEATURE_NAME_LABELS = frozenset({"general", "none", "default"})
+# FeatSubType placeholders — not model-tree names (Round→ROUND, Chamfer→CHAMFER).
+_GENERIC_FEATURE_NAME_LABELS = frozenset({"general", "none", "default", "edge"})
 
 
 def normalize_feature_rows(features: Any) -> list[dict[str, Any]]:
-    """Replace useless Name labels (General) with type/subtype — do not invent order."""
+    """Replace subtype placeholders used as Name; keep real Creo feature.name values."""
     if not isinstance(features, list):
         return []
     out: list[dict[str, Any]] = []
@@ -63,6 +63,9 @@ def normalize_feature_rows(features: Any) -> list[dict[str, Any]]:
         name = str(row.get("name") or "").strip()
         typ = str(row.get("type") or "").strip()
         sub = str(row.get("subtype") or "").strip()
+        # Name===Subtype (Edge/Edge) is the subtype column, not a rename.
+        if name and sub and name.lower() == sub.lower():
+            name = ""
         if name.lower() in _GENERIC_FEATURE_NAME_LABELS:
             name = ""
         if not name:

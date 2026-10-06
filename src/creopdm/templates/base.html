@@ -1814,10 +1814,14 @@ function creoFeatureNameText(value) {
     }
 }
 function creoFeatureAssignedName(feat) {
-    // GetName first — that restored tree names (RIGHT, DEFAULT_CS) after Collect
-    // Retrieve. feat.name can throw on retrieved handles even when GetName works;
-    // never abort the whole lookup on the first throw.
+    // Prefer feature.name (Creo.JS / what works in session):
+    //   const name = feature.name;
+    // Then GetName / Name. Never abort the whole lookup on the first throw.
     if (!feat) return "";
+    try {
+        var viaName = creoFeatureNameText(feat.name);
+        if (viaName) return viaName;
+    } catch (errName) {}
     try {
         var viaGet = creoFeatureNameText(feat.GetName);
         if (viaGet) return viaGet;
@@ -1829,19 +1833,15 @@ function creoFeatureAssignedName(feat) {
         }
     } catch (errCall) {}
     try {
-        var viaName = creoFeatureNameText(feat.name);
-        if (viaName) return viaName;
-    } catch (errName) {}
-    try {
         var viaCap = creoFeatureNameText(feat.Name);
         if (viaCap) return viaCap;
     } catch (errCap) {}
     return "";
 }
 function creoFeatureGenericLabel(text) {
-    // Creo FeatSubType "General" is not a model-tree name (Round → ROUND, not General).
+    // FeatSubType placeholders — not model-tree names (Round→ROUND, Chamfer→CHAMFER).
     var t = String(text || "").trim().toLowerCase();
-    return !t || t === "general" || t === "none" || t === "default";
+    return !t || t === "general" || t === "none" || t === "default" || t === "edge";
 }
 function creoFeatureFallbackName(typeName, subType) {
     // Only when Creo gave no assigned name. Prefer distinctive subtype (Extrude)
@@ -1939,7 +1939,11 @@ function creoGatherFeatures(model, dbg, session, options) {
                         name = "";
                     }
                 }
-                // Use Creo's name as-is. "General" is FeatSubType, not GetName.
+                // Use Creo feature.name as-is. Drop subtype placeholders mistaken
+                // for names (General, Edge) and Name===Subtype duplicates.
+                if (name && subType && name.toLowerCase() === String(subType).trim().toLowerCase()) {
+                    name = "";
+                }
                 if (name && creoFeatureGenericLabel(name)) name = "";
                 if (!name) {
                     name = creoFeatureFallbackName(typeName, subType);

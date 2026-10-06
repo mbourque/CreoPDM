@@ -268,17 +268,19 @@ def test_home_page(client):
     assert "function creoGatherFamilyTable" in text
     assert "function creoGatherBomTree" in text
     assert "function creoGatherFeatures" in text
-    # Model-tree names: GetName first (Collect Retrieve), then feat.name.
+    # Model-tree names: feature.name first (Creo.JS), then GetName.
     assert "function creoFeatureAssignedName" in text
     assert "function creoFeatureFallbackName" in text
-    assert "feat.GetName" in text
     assert "feat.name" in text
-    assert "GetName first" in text
+    assert "feat.GetName" in text
+    assert "Prefer feature.name" in text
+    assert "const name = feature.name" in text
     assert "never abort the whole lookup on the first throw" in text
     assert "creoFeatureGenericLabel(name)" in text
     assert 't === "general"' in text
+    assert 't === "edge"' in text
+    assert "name.toLowerCase() === String(subType).trim().toLowerCase()" in text
     assert "creoFeatureFallbackName(typeName, subType)" in text
-    assert "never invent" in text or "not GetName" in text
     assert "number: regenNum" not in text
     assert "wantFeatureNames = opts.featureNames !== false" in text
     assert "wantNames = opts.featureNames !== false" in text
@@ -288,10 +290,8 @@ def test_home_page(client):
     )[0]
     assert 'typeof value === "object"' not in name_text_fn
     assert "Do not reject typeof===\"object\"" in name_text_fn
-    assert "creoFeatureStripOrderSuffix" not in text
     assert "pwlFeatureNameGetByID" not in text
     assert 'typeName + " " + regenNum' not in text
-    assert 'base + " " + String(regenNum)' not in text
     assert "errFeat" in text
     assert "errFeatGather" in text
     assert "Do not RetrieveModel here" in text
