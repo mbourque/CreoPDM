@@ -506,6 +506,67 @@ def test_metadata_menu_items_are_creo_session_only(client, repo_parent):
 
 
 @requires_git
+def test_assembly_get_skeleton_promotes_child_role_without_skel_name(
+    client, repo_parent, tmp_path
+):
+    """Assembly GetSkeleton / SKELETON dep flags the child even without *_skel* name."""
+    product = _create_product(client, repo_parent)
+    layout = _add_part(client, product["uuid"], tmp_path, "jd_layout.prt.1")
+    top = _add_part(client, product["uuid"], tmp_path, "jd_top.asm.1")
+
+    posted = client.post(
+        f"/api/objects/{top['uuid']}/creo-metadata",
+        json={
+            "identity": {
+                "file_name": "jd_top.asm",
+                "model_type": "ASSEMBLY",
+                "model_role": "",
+                "skeleton_filename": "jd_layout.prt",
+            },
+            "dependencies": [
+                {
+                    "filename": "jd_layout.prt",
+                    "quantity": 1,
+                    "dependency_type": "SKELETON",
+                }
+            ],
+            "bom": [
+                {
+                    "filename": "jd_top.asm",
+                    "quantity": 1,
+                    "dependency_type": "ASSEMBLY_ROOT",
+                    "children": [
+                        {
+                            "filename": "jd_layout.prt",
+                            "quantity": 1,
+                            "dependency_type": "ASSEMBLY_MEMBER",
+                            "children": [],
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    assert posted.status_code == 200, posted.text
+    assert posted.json()["identity"].get("skeleton_filename") == "jd_layout.prt"
+    deps = posted.json()["dependencies"]
+    assert any(
+        str(row.get("filename") or "").lower().startswith("jd_layout")
+        and str(row.get("dependency_type") or "").upper() == "SKELETON"
+        for row in deps
+    )
+
+    listed = client.get(f"/api/products/{product['uuid']}/objects")
+    assert listed.status_code == 200, listed.text
+    by_uuid = {item["uuid"]: item for item in listed.json()}
+    assert by_uuid[layout["uuid"]]["type_label"] == "SKELETON"
+
+    layout_meta = client.get(f"/api/objects/{layout['uuid']}/creo-metadata")
+    assert layout_meta.status_code == 200, layout_meta.text
+    assert layout_meta.json()["identity"]["model_role"] == "SKELETON"
+
+
+@requires_git
 def test_where_used_tab_only_for_creo_models_extensions(client, repo_parent, tmp_path):
     """Details Where Used follows Settings → Creo Models, not Documents/Other."""
     product = _create_product(client, repo_parent)

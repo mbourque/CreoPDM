@@ -115,10 +115,16 @@ class MetadataService:
                 details={"object_id": object_uuid},
             )
 
+        saved_identity: dict[str, Any] | None = None
         if payload.identity is not None:
             identity = dict(payload.identity)
+            # Preserve GetSkeleton child name before/after normalize (not a model_role).
+            skel_name = str(identity.get("skeleton_filename") or "").strip()
             normalize_creo_identity(identity)
+            if skel_name:
+                identity["skeleton_filename"] = skel_name
             version.identity_json = _dumps(identity)
+            saved_identity = identity
             common = str(identity.get("common_name") or "").strip()
             if common and (not obj.name or obj.name == obj.filename):
                 obj.name = common[:255]
@@ -152,6 +158,17 @@ class MetadataService:
 
         if payload.dependencies or bom_payload is not None:
             self._replace_dependencies(session, obj, payload.dependencies, bom_payload)
+
+        # When an assembly reports GetSkeleton / dependency_type SKELETON, flag that
+        # child as SKELETON even if its filename is not *_skel* and Collect never
+        # saw IsSkeleton=true on the part alone.
+        self._promote_skeleton_children(
+            session,
+            obj,
+            payload.dependencies,
+            bom_payload,
+            saved_identity,
+        )
 
         session.flush()
         return self.get(session, object_uuid, version.uuid)
@@ -801,8 +818,12 @@ class MetadataService:
                 dep_type = (item.dependency_type or DependencyType.ASSEMBLY_MEMBER.value).strip()
                 if self._skip_dependency_ref(dep_type, key_name, parent.filename):
                     continue
-                # Skip assembly members already represented in the BOM tree.
+                # Skip assembly members already in the BOM, but keep SKELETON so
+                # GetSkeleton can upgrade ASSEMBLY_MEMBER → SKELETON on merge.
                 if set(bom_lookup_keys(key_name)) & covered:
+                    if dep_type.upper() != DependencyType.SKELETON.value:
+                        continue
+                    refs.append((key_name, dep_type, 0.0))  # type upgrade only
                     continue
                 refs.append((key_name, dep_type, float(item.quantity or 1.0)))
         else:
@@ -824,7 +845,9 @@ class MetadataService:
             for key in bom_lookup_keys(row.filename):
                 by_key.setdefault(key, row)
 
-        by_child: dict[tuple[int, str], float] = {}
+        # child_id → (dep_type, quantity). Prefer SKELETON over ASSEMBLY_MEMBER when
+        # GetSkeleton and BOM both mention the same component.
+        by_child: dict[int, tuple[str, float]] = {}
         for filename, dep_type, quantity in refs:
             if self._skip_dependency_ref(dep_type, filename, parent.filename):
                 continue
@@ -835,10 +858,20 @@ class MetadataService:
                     break
             if child is None:
                 continue
-            edge_key = (child.id, (dep_type or DependencyType.ASSEMBLY_MEMBER.value)[:32])
-            by_child[edge_key] = by_child.get(edge_key, 0.0) + float(quantity or 1.0)
+            kind = (dep_type or DependencyType.ASSEMBLY_MEMBER.value)[:32]
+            qty = float(quantity or 1.0)
+            prev = by_child.get(child.id)
+            if prev is None:
+                by_child[child.id] = (kind, qty)
+                continue
+            prev_kind, prev_qty = prev
+            merged_qty = prev_qty + qty
+            if prev_kind.upper() == DependencyType.SKELETON.value or kind.upper() == DependencyType.SKELETON.value:
+                by_child[child.id] = (DependencyType.SKELETON.value, merged_qty)
+            else:
+                by_child[child.id] = (prev_kind, merged_qty)
 
-        for (child_id, dep_type), quantity in by_child.items():
+        for child_id, (dep_type, quantity) in by_child.items():
             session.add(
                 Dependency(
                     product_id=parent.product_id,
@@ -857,6 +890,64 @@ class MetadataService:
         parent_keys = set(bom_lookup_keys(parent_filename))
         child_keys = set(bom_lookup_keys(filename))
         return bool(parent_keys and child_keys and (parent_keys & child_keys))
+
+    def _promote_skeleton_children(
+        self,
+        session: Session,
+        parent: EngineeringObject,
+        dependencies: list[CreoDependencyPayload] | None,
+        bom_payload: Any,
+        identity: dict[str, Any] | None,
+    ) -> None:
+        """Set child identity model_role=SKELETON from assembly GetSkeleton signals."""
+        skel_keys: set[str] = set()
+        if isinstance(identity, dict):
+            skel_name = str(identity.get("skeleton_filename") or "").strip()
+            if skel_name:
+                skel_keys.update(bom_lookup_keys(skel_name))
+        for item in dependencies or []:
+            dep_type = str(getattr(item, "dependency_type", None) or "").strip().upper()
+            if dep_type != DependencyType.SKELETON.value:
+                continue
+            name = str(getattr(item, "filename", None) or "").strip()
+            if name:
+                skel_keys.update(bom_lookup_keys(name))
+        if bom_payload is not None:
+            for filename, _qty, dep_type in self._flatten_bom(bom_payload):
+                if str(dep_type or "").strip().upper() != DependencyType.SKELETON.value:
+                    continue
+                skel_keys.update(bom_lookup_keys(filename))
+        if not skel_keys:
+            return
+
+        siblings = self._objects.list_objects(session, parent.product_id)
+        for row in siblings:
+            if row.id == parent.id:
+                continue
+            row_keys = set(bom_lookup_keys(row.filename))
+            if not (row_keys & skel_keys):
+                continue
+            child_version = self._resolve_version(session, row, None)
+            if child_version is None:
+                continue
+            child_identity = _loads(child_version.identity_json)
+            if not isinstance(child_identity, dict):
+                child_identity = {}
+            else:
+                child_identity = dict(child_identity)
+            if str(child_identity.get("model_role") or "").strip().upper() == DependencyType.SKELETON.value:
+                continue
+            child_identity["model_role"] = DependencyType.SKELETON.value
+            if not child_identity.get("file_name"):
+                child_identity["file_name"] = row.filename
+            if not child_identity.get("model_type"):
+                lower = row.filename.lower()
+                if lower.endswith(".asm"):
+                    child_identity["model_type"] = "ASSEMBLY"
+                elif lower.endswith(".prt"):
+                    child_identity["model_type"] = "PART"
+            normalize_creo_identity(child_identity)
+            child_version.identity_json = _dumps(child_identity)
 
     def _flatten_bom(self, bom: Any) -> list[tuple[str, float, str]]:
         rows: list[tuple[str, float, str]] = []
