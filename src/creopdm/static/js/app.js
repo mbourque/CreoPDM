@@ -11272,8 +11272,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const items = Array.isArray(body.items) ? body.items : [];
       if (!host) return;
       if (!items.length) {
-        host.innerHTML =
-          '<p class="muted">Not listed in any captured assembly/drawing BOM in this product yet. Open parent assemblies in Creo and Add or Check In to capture Where Used. (Vault byte-scan is skipped when the product has many assemblies, so the server stays responsive.)</p>';
+        // Top Level means no assembly parents — do not urge "open parents to capture".
+        if (panel.dataset.topLevelAssembly === "1") {
+          host.innerHTML =
+            '<p class="muted">No parent assemblies (Top Level).</p>';
+        } else {
+          host.innerHTML =
+            '<p class="muted">Not listed in any captured assembly/drawing BOM in this product yet. Open parent assemblies in Creo and Add or Check In to capture Where Used. (Vault byte-scan is skipped when the product has many assemblies, so the server stays responsive.)</p>';
+        }
         return;
       }
       const rows = items

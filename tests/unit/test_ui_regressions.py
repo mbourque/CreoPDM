@@ -1344,6 +1344,15 @@ def test_details_where_used_tab_gated_on_creo_models():
     assert "fetch() drops the fragment" in soft
     assert "already on the Where Used tab" in docs
     assert "drop `#where-used`" in docs
+    assert 'data-top-level-assembly=' in detail
+    assert "No parent assemblies (Top Level)" in detail
+    wu_load = script.split("async function loadWhereUsedTab(", 1)[1].split(
+        "if (window.location.hash === \"#history\"", 1
+    )[0]
+    assert 'dataset.topLevelAssembly === "1"' in wu_load
+    assert "No parent assemblies (Top Level)" in wu_load
+    assert "Not listed in any captured assembly/drawing BOM" in wu_load
+    assert "urge “Open parent assemblies…” on Where Used when the file already shows **(Top Level)**" in docs
 
 
 def test_details_bom_qty_renders_whole_numbers():

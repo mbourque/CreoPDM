@@ -436,6 +436,7 @@
   <section class="tab-panel" id="panel-where-used" hidden
            data-object-id="{{ object.uuid }}"
            data-product-id="{{ product.uuid }}"
+           data-top-level-assembly="{{ '1' if is_top_level_assembly else '0' }}"
            data-lazy-where-used="1">
     <div id="where-used-host">
     {% if where_used %}
@@ -467,6 +468,8 @@
       </tbody>
     </table>
     <p class="muted small" id="where-used-scan-hint">Scanning vault for more parents…</p>
+    {% elif is_top_level_assembly %}
+    <p class="muted" id="where-used-empty">No parent assemblies (Top Level).</p>
     {% else %}
     <p class="muted" id="where-used-empty">Looking up assemblies and drawings that reference this file…</p>
     {% endif %}
