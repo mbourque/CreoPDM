@@ -852,13 +852,18 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .settings-nested > label {
   margin-top: 0.35rem;
 }
-.settings-nested.is-disabled {
+.settings-nested.is-disabled,
+.settings-card.is-disabled {
   opacity: 0.45;
 }
 .settings-nested.is-disabled input:disabled,
 .settings-nested.is-disabled textarea:disabled,
 .settings-nested.is-disabled select:disabled,
-.settings-nested.is-disabled button:disabled {
+.settings-nested.is-disabled button:disabled,
+.settings-card.is-disabled input:disabled,
+.settings-card.is-disabled textarea:disabled,
+.settings-card.is-disabled select:disabled,
+.settings-card.is-disabled button:disabled {
   background: #f0f2f4;
   cursor: not-allowed;
 }

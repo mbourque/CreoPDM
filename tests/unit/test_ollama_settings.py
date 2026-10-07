@@ -195,7 +195,8 @@ def test_ai_settings_page_renders(client):
     assert page.status_code == 200
     assert 'name="ai_enabled"' in page.text
     assert "Enable AI features" in page.text
-    assert 'id="ai-ollama-settings-wrap"' in page.text
+    assert 'id="ai-enable-settings"' in page.text
+    assert 'id="ai-ollama-settings"' in page.text
     assert "Ollama host URL" in page.text
     assert 'name="ollama_base_url"' in page.text
     assert 'id="ollama-refresh-models"' in page.text
@@ -211,6 +212,6 @@ def test_ai_settings_page_renders(client):
     assert client.put("/api/settings", json={"ai_enabled": False}).status_code == 200
     off = client.get("/settings/ai")
     assert off.status_code == 200
-    assert "is-disabled" in off.text
-    assert 'id="ai-ollama-settings-wrap"' in off.text
+    assert 'id="ai-ollama-settings"' in off.text
+    assert "settings-card is-disabled" in off.text
     assert "disabled" in off.text.split('name="ollama_base_url"', 1)[1].split(">", 1)[0]

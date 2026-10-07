@@ -12225,13 +12225,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function syncAiSettingsOptions() {
     if (!settingsForm) return;
-    const wrap = settingsForm.querySelector("#ai-ollama-settings-wrap");
-    if (!wrap) return;
+    const card = settingsForm.querySelector("#ai-ollama-settings");
+    if (!card) return;
     const aiOn = Boolean(settingsForm.querySelector('[name="ai_enabled"]')?.checked);
-    wrap.classList.toggle("is-disabled", !aiOn);
-    if (aiOn) wrap.removeAttribute("aria-disabled");
-    else wrap.setAttribute("aria-disabled", "true");
-    wrap.querySelectorAll("input, textarea, select, button").forEach((el) => {
+    card.classList.toggle("is-disabled", !aiOn);
+    if (aiOn) card.removeAttribute("aria-disabled");
+    else card.setAttribute("aria-disabled", "true");
+    card.querySelectorAll("input, textarea, select, button").forEach((el) => {
       el.disabled = !aiOn;
     });
   }
