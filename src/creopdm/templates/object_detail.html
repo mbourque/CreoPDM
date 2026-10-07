@@ -122,6 +122,9 @@
     {% if show_where_used %}
     <button type="button" class="tab" data-tab="where-used">Where Used</button>
     {% endif %}
+    {% if is_creo %}
+    <button type="button" class="tab" data-tab="snapshot">Snapshot</button>
+    {% endif %}
     <button type="button" class="tab" data-tab="history">History{% if workspace_pending %} · unsaved{% endif %}</button>
   </div>
 
@@ -473,6 +476,39 @@
     {% else %}
     <p class="muted" id="where-used-empty">Looking up assemblies and drawings that reference this file…</p>
     {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if is_creo %}
+  <section class="tab-panel" id="panel-snapshot" hidden
+           data-object-id="{{ object.uuid }}"
+           data-tip-version="{{ object.current_version.uuid if object.current_version else '' }}">
+    <p class="muted small">
+      Experimental per-revision model snapshot (features, dimensions, parameters) for AI change summaries.
+      Collect metadata in Creo while a version is tip to create or refresh it. Not used for check-in comments yet.
+    </p>
+    <div class="ai-snapshot-compare">
+      <div class="ai-snapshot-pane" data-pane="a">
+        <div class="ai-snapshot-toolbar">
+          <label class="ai-snapshot-rev-label">
+            <span class="muted small">Rev A</span>
+            <select id="ai-snapshot-rev-a" class="ai-snapshot-rev" aria-label="Snapshot revision A"></select>
+          </label>
+          <button type="button" class="btn" id="ai-snapshot-copy-a" disabled title="Copy Rev A JSON to the clipboard">Copy</button>
+        </div>
+        <pre class="ai-snapshot-body mono" id="ai-snapshot-body-a" tabindex="0">Loading…</pre>
+      </div>
+      <div class="ai-snapshot-pane" data-pane="b">
+        <div class="ai-snapshot-toolbar">
+          <label class="ai-snapshot-rev-label">
+            <span class="muted small">Rev B</span>
+            <select id="ai-snapshot-rev-b" class="ai-snapshot-rev" aria-label="Snapshot revision B"></select>
+          </label>
+          <button type="button" class="btn" id="ai-snapshot-copy-b" disabled title="Copy Rev B JSON to the clipboard">Copy</button>
+        </div>
+        <pre class="ai-snapshot-body mono" id="ai-snapshot-body-b" tabindex="0">Loading…</pre>
+      </div>
     </div>
   </section>
   {% endif %}

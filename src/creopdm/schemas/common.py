@@ -814,6 +814,44 @@ class CreoMetadataResponse(BaseModel):
     captured: bool = False
 
 
+class AiSnapshotRequest(BaseModel):
+    """Experimental per-version AI model snapshot (features / dimensions / parameters)."""
+
+    version_id: str | None = None
+    schema_version: int = 1
+    content_hash: str | None = None
+    capture_status: str = "ok"
+    capture_errors: list[str] = Field(default_factory=list)
+    snapshot: dict[str, Any] = Field(default_factory=dict)
+
+
+class AiSnapshotResponse(BaseModel):
+    object_id: str
+    version_id: str | None = None
+    display_revision: str = ""
+    has_snapshot: bool = False
+    schema_version: int = 1
+    content_hash: str | None = None
+    captured_at: datetime | None = None
+    capture_status: str | None = None
+    capture_errors: list[str] = Field(default_factory=list)
+    snapshot: dict[str, Any] | None = None
+
+
+class AiSnapshotListItem(BaseModel):
+    version_id: str
+    display_revision: str
+    has_snapshot: bool = False
+    captured_at: datetime | None = None
+    capture_status: str | None = None
+    content_hash: str | None = None
+
+
+class AiSnapshotListResponse(BaseModel):
+    object_id: str
+    items: list[AiSnapshotListItem] = Field(default_factory=list)
+
+
 class WhereUsedItem(BaseModel):
     object_id: str
     filename: str

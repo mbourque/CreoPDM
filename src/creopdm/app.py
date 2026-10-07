@@ -37,6 +37,7 @@ from creopdm.services.creo_service import CreoService
 from creopdm.services.email_service import EmailService
 from creopdm.services.git_service import GitService
 from creopdm.services.lock_manager import ProductLockManager
+from creopdm.services.ai_snapshot_service import AiSnapshotService
 from creopdm.services.metadata_service import MetadataService
 from creopdm.services.notification_service import NotificationService
 from creopdm.services.object_service import ObjectService
@@ -97,6 +98,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
         creo_connector,
     )
     metadata = MetadataService(objects, workspaces)
+    ai_snapshots = AiSnapshotService(objects)
     user_accounts = UserService()
     email = EmailService()
     notifications = NotificationService(get_config=lambda: manager.settings.email, email=email)
@@ -125,6 +127,7 @@ def build_context(config: ConfigManager | None = None, users: CurrentUserProvide
             creo_connector, objects, checkouts, workspaces, metadata=metadata
         ),
         metadata=metadata,
+        ai_snapshots=ai_snapshots,
         where_used_index=WhereUsedIndexJobs(session_factory, metadata),
         zip_imports=ZipImportJobs(),
         email=email,

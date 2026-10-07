@@ -1,0 +1,232 @@
+"""Persist and read per-version experimental AI model snapshots."""
+
+from __future__ import annotations
+
+import json
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from creopdm.exceptions import NotFoundError, ValidationAppError
+from creopdm.models.ai_snapshot import ObjectVersionSnapshot
+from creopdm.models.object import EngineeringObject
+from creopdm.models.version import ObjectVersion
+from creopdm.product_state import ensure_product_mutable
+from creopdm.schemas.common import (
+    AiSnapshotListItem,
+    AiSnapshotListResponse,
+    AiSnapshotRequest,
+    AiSnapshotResponse,
+)
+from creopdm.services.object_service import ObjectService
+
+AI_SNAPSHOT_SCHEMA_VERSION = 1
+
+
+def _dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+def _loads(raw: str | None) -> Any:
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def _display_revision(version: ObjectVersion) -> str:
+    rev = str(version.revision or "").strip() or "A"
+    return f"{rev}.{int(version.iteration or 0)}"
+
+
+class AiSnapshotService:
+    def __init__(self, objects: ObjectService) -> None:
+        self._objects = objects
+
+    def _resolve_version(
+        self,
+        session: Session,
+        obj: EngineeringObject,
+        version_uuid: str | None,
+    ) -> ObjectVersion | None:
+        if version_uuid:
+            version = session.scalar(
+                select(ObjectVersion).where(
+                    ObjectVersion.uuid == version_uuid,
+                    ObjectVersion.object_id == obj.id,
+                )
+            )
+            if version is None:
+                raise NotFoundError(
+                    "Version not found for this file.",
+                    details={"version_id": version_uuid, "object_id": obj.uuid},
+                )
+            return version
+        if obj.current_version_id:
+            return session.get(ObjectVersion, obj.current_version_id)
+        return session.scalar(
+            select(ObjectVersion)
+            .where(ObjectVersion.object_id == obj.id)
+            .order_by(ObjectVersion.iteration.desc())
+            .limit(1)
+        )
+
+    def _row_to_response(
+        self,
+        obj: EngineeringObject,
+        version: ObjectVersion,
+        row: ObjectVersionSnapshot | None,
+    ) -> AiSnapshotResponse:
+        if row is None:
+            return AiSnapshotResponse(
+                object_id=obj.uuid,
+                version_id=version.uuid,
+                display_revision=_display_revision(version),
+                has_snapshot=False,
+                schema_version=AI_SNAPSHOT_SCHEMA_VERSION,
+                content_hash=version.content_hash or None,
+                captured_at=None,
+                capture_status=None,
+                capture_errors=[],
+                snapshot=None,
+            )
+        errors = _loads(row.capture_errors)
+        if not isinstance(errors, list):
+            errors = []
+        snapshot = _loads(row.snapshot_json)
+        if not isinstance(snapshot, dict):
+            snapshot = {"raw": snapshot} if snapshot is not None else None
+        return AiSnapshotResponse(
+            object_id=obj.uuid,
+            version_id=version.uuid,
+            display_revision=_display_revision(version),
+            has_snapshot=True,
+            schema_version=int(row.schema_version or AI_SNAPSHOT_SCHEMA_VERSION),
+            content_hash=row.content_hash or version.content_hash or None,
+            captured_at=row.captured_at,
+            capture_status=row.capture_status,
+            capture_errors=[str(item) for item in errors],
+            snapshot=snapshot,
+        )
+
+    def save(
+        self,
+        session: Session,
+        object_uuid: str,
+        payload: AiSnapshotRequest,
+    ) -> AiSnapshotResponse:
+        obj = self._objects.get_object(session, object_uuid)
+        ensure_product_mutable(obj.product, action="save AI snapshot")
+        version = self._resolve_version(session, obj, payload.version_id)
+        if version is None:
+            raise ValidationAppError(
+                "This file has no version to attach an AI snapshot to.",
+                details={"object_id": object_uuid},
+            )
+        if not isinstance(payload.snapshot, dict) or not payload.snapshot:
+            raise ValidationAppError(
+                "AI snapshot body is required.",
+                details={"object_id": object_uuid},
+            )
+
+        schema_version = int(payload.schema_version or AI_SNAPSHOT_SCHEMA_VERSION)
+        status = str(payload.capture_status or "ok").strip().lower() or "ok"
+        if status not in {"ok", "partial", "error"}:
+            status = "partial"
+        errors = [str(item) for item in (payload.capture_errors or []) if str(item).strip()]
+        content_hash = str(payload.content_hash or version.content_hash or "").strip() or None
+
+        document = dict(payload.snapshot)
+        document["schema_version"] = schema_version
+        item = document.get("item") if isinstance(document.get("item"), dict) else {}
+        item = {
+            **item,
+            "object_uuid": obj.uuid,
+            "version_uuid": version.uuid,
+            "display_revision": _display_revision(version),
+            "filename": version.filename or obj.filename,
+            "content_hash": content_hash or item.get("content_hash"),
+        }
+        document["item"] = item
+        capture = document.get("capture") if isinstance(document.get("capture"), dict) else {}
+        now = datetime.now(timezone.utc)
+        capture = {
+            **capture,
+            "status": status,
+            "errors": errors,
+            "captured_at": now.isoformat(),
+        }
+        document["capture"] = capture
+
+        row = session.scalar(
+            select(ObjectVersionSnapshot).where(ObjectVersionSnapshot.version_id == version.id)
+        )
+        if row is None:
+            row = ObjectVersionSnapshot(
+                uuid=str(uuid.uuid4()),
+                object_id=obj.id,
+                version_id=version.id,
+            )
+            session.add(row)
+        row.schema_version = schema_version
+        row.content_hash = content_hash
+        row.captured_at = now
+        row.capture_status = status
+        row.capture_errors = _dumps(errors) if errors else None
+        row.snapshot_json = _dumps(document)
+        session.flush()
+        return self._row_to_response(obj, version, row)
+
+    def get(
+        self,
+        session: Session,
+        object_uuid: str,
+        version_uuid: str | None = None,
+    ) -> AiSnapshotResponse:
+        obj = self._objects.get_object(session, object_uuid)
+        version = self._resolve_version(session, obj, version_uuid)
+        if version is None:
+            return AiSnapshotResponse(
+                object_id=obj.uuid,
+                version_id=None,
+                display_revision="",
+                has_snapshot=False,
+                schema_version=AI_SNAPSHOT_SCHEMA_VERSION,
+            )
+        row = session.scalar(
+            select(ObjectVersionSnapshot).where(ObjectVersionSnapshot.version_id == version.id)
+        )
+        return self._row_to_response(obj, version, row)
+
+    def list_for_object(self, session: Session, object_uuid: str) -> AiSnapshotListResponse:
+        obj = self._objects.get_object(session, object_uuid)
+        versions = session.scalars(
+            select(ObjectVersion)
+            .where(ObjectVersion.object_id == obj.id)
+            .order_by(ObjectVersion.iteration.desc())
+        ).all()
+        snap_by_version = {
+            row.version_id: row
+            for row in session.scalars(
+                select(ObjectVersionSnapshot).where(ObjectVersionSnapshot.object_id == obj.id)
+            ).all()
+        }
+        items: list[AiSnapshotListItem] = []
+        for version in versions:
+            row = snap_by_version.get(version.id)
+            items.append(
+                AiSnapshotListItem(
+                    version_id=version.uuid,
+                    display_revision=_display_revision(version),
+                    has_snapshot=row is not None,
+                    captured_at=row.captured_at if row else None,
+                    capture_status=row.capture_status if row else None,
+                    content_hash=(row.content_hash if row else None) or version.content_hash,
+                )
+            )
+        return AiSnapshotListResponse(object_id=obj.uuid, items=items)

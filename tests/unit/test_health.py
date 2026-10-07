@@ -268,6 +268,9 @@ def test_home_page(client):
     assert "function creoGatherFamilyTable" in text
     assert "function creoGatherBomTree" in text
     assert "function creoGatherFeatures" in text
+    assert "function gatherAiModelSnapshot" in text
+    assert "ExtendsInNegativeDirection" in text
+    assert "ai_snapshot" in text
     # Model-tree names: feature.name first (Creo.JS), then GetName.
     assert "function creoFeatureAssignedName" in text
     assert "function creoFeatureFallbackName" in text

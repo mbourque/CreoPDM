@@ -1598,6 +1598,57 @@ body.is-file-drag #file-drop-overlay {
   font-family: inherit;
   font-size: inherit;
 }
+.ai-snapshot-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  min-height: 0;
+  flex: 1;
+}
+.ai-snapshot-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  min-height: 0;
+}
+.ai-snapshot-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+.ai-snapshot-rev-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
+}
+.ai-snapshot-rev {
+  max-width: 100%;
+}
+.ai-snapshot-body {
+  flex: 1;
+  min-height: 16rem;
+  max-height: min(60vh, 36rem);
+  margin: 0;
+  padding: 0.75rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--surface-2, #f6f7f9);
+  border: 1px solid var(--border, #d8dde6);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+@media (max-width: 900px) {
+  .ai-snapshot-compare {
+    grid-template-columns: 1fr;
+  }
+}
 .detail .kv {
   display: grid;
   grid-template-columns: 9.5rem 1fr;

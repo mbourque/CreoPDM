@@ -2259,6 +2259,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
+        if (response.ok) {
+          await postAiSnapshotFromGather(target.uuid, target.versionId || null, snapshot);
+        }
         return {
           ok: response.ok,
           reason: response.ok ? "" : "post_failed",
@@ -6723,6 +6726,42 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  async function postAiSnapshotFromGather(objectUuid, versionId, gatherSnapshot) {
+    // Soft-fail — AI snapshot must not block Creo metadata save.
+    const ai = gatherSnapshot && typeof gatherSnapshot === "object"
+      ? gatherSnapshot.ai_snapshot
+      : null;
+    if (!objectUuid || !ai || typeof ai !== "object") return false;
+    const capture = ai.capture && typeof ai.capture === "object" ? ai.capture : {};
+    const body = {
+      version_id: versionId || null,
+      schema_version: Number(ai.schema_version) || 1,
+      capture_status: String(capture.status || "ok"),
+      capture_errors: Array.isArray(capture.errors) ? capture.errors.map(String) : [],
+      snapshot: {
+        schema_version: Number(ai.schema_version) || 1,
+        identity: ai.identity || null,
+        features: Array.isArray(ai.features) ? ai.features : [],
+        dimensions: Array.isArray(ai.dimensions) ? ai.dimensions : [],
+        parameters: Array.isArray(ai.parameters) ? ai.parameters : [],
+        capture,
+      },
+    };
+    try {
+      const response = await fetch(
+        `/api/objects/${encodeURIComponent(objectUuid)}/ai-snapshot`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
   async function pushCreoMetadataForItems(items, options) {
     const opts = options && typeof options === "object" ? options : {};
     const sessionOnly = Boolean(opts.sessionOnly);
@@ -6799,7 +6838,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             body: JSON.stringify(body),
           }
         );
-        if (response.ok) saved += 1;
+        if (response.ok) {
+          saved += 1;
+          await postAiSnapshotFromGather(target.uuid, target.versionId || null, snapshot);
+        }
       } catch {
         /* soft-fail — metadata is best-effort */
       }
@@ -11331,6 +11373,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       else if (name === "modified") void loadModifiedTab();
       else if (name === "checked-out") void loadCheckedOutTab();
       else if (name === "where-used") void loadWhereUsedTab();
+      else if (name === "snapshot") void loadAiSnapshotTab();
       else refreshTabMetrics();
       syncSearchFormVisibility();
       syncDetailToolbar();
@@ -11340,6 +11383,153 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
     });
   });
+
+  let aiSnapshotListCache = null;
+  const aiSnapshotJsonByVersion = new Map();
+
+  function aiSnapshotEmptyMessage(displayRevision) {
+    const rev = String(displayRevision || "").trim() || "this revision";
+    return (
+      `No snapshot for ${rev}.\n\n`
+      + "Open the model in Creo and Collect metadata (or Open / Check In with Creo Connected) "
+      + "while this version is the tip to create one."
+    );
+  }
+
+  async function fetchAiSnapshotJson(objectId, versionId) {
+    const key = String(versionId || "");
+    if (aiSnapshotJsonByVersion.has(key)) return aiSnapshotJsonByVersion.get(key);
+    const response = await fetch(
+      `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot?version=${encodeURIComponent(key)}`
+    );
+    if (!response.ok) {
+      throw new Error(await readError(response));
+    }
+    const body = await response.json();
+    const payload = body?.has_snapshot && body.snapshot
+      ? JSON.stringify(body.snapshot, null, 2)
+      : null;
+    aiSnapshotJsonByVersion.set(key, payload);
+    return payload;
+  }
+
+  async function renderAiSnapshotPane(pane, objectId) {
+    const select = $(`#ai-snapshot-rev-${pane}`);
+    const body = $(`#ai-snapshot-body-${pane}`);
+    const copyBtn = $(`#ai-snapshot-copy-${pane}`);
+    if (!select || !body) return;
+    const versionId = String(select.value || "").trim();
+    const label = select.selectedOptions?.[0]?.textContent || versionId;
+    if (!versionId) {
+      body.textContent = "No revisions yet.";
+      if (copyBtn) copyBtn.disabled = true;
+      return;
+    }
+    body.textContent = "Loading…";
+    if (copyBtn) copyBtn.disabled = true;
+    try {
+      const json = await fetchAiSnapshotJson(objectId, versionId);
+      if (!json) {
+        body.textContent = aiSnapshotEmptyMessage(label);
+        if (copyBtn) copyBtn.disabled = true;
+        return;
+      }
+      body.textContent = json;
+      if (copyBtn) {
+        copyBtn.disabled = false;
+        copyBtn.dataset.copyText = json;
+      }
+    } catch (err) {
+      body.textContent = `Could not load snapshot (${err?.message || "error"}).`;
+      if (copyBtn) copyBtn.disabled = true;
+    }
+  }
+
+  async function loadAiSnapshotTab() {
+    const panel = $("#panel-snapshot");
+    if (!panel) return;
+    const objectId = String(panel.dataset.objectId || "").trim();
+    if (!objectId) return;
+    const selectA = $("#ai-snapshot-rev-a");
+    const selectB = $("#ai-snapshot-rev-b");
+    if (!selectA || !selectB) return;
+    try {
+      if (!aiSnapshotListCache) {
+        const response = await fetch(
+          `/api/objects/${encodeURIComponent(objectId)}/ai-snapshots`
+        );
+        if (!response.ok) throw new Error(await readError(response));
+        aiSnapshotListCache = await response.json();
+      }
+      const items = Array.isArray(aiSnapshotListCache?.items)
+        ? aiSnapshotListCache.items
+        : [];
+      const tipVersion = String(panel.dataset.tipVersion || "").trim();
+      const fillSelect = (select, preferIndex) => {
+        const previous = String(select.value || "");
+        select.replaceChildren();
+        items.forEach((item) => {
+          const option = document.createElement("option");
+          option.value = String(item.version_id || "");
+          const rev = String(item.display_revision || option.value);
+          option.textContent = item.has_snapshot ? rev : `${rev} (no snapshot)`;
+          select.appendChild(option);
+        });
+        if (!items.length) return;
+        if (previous && items.some((item) => String(item.version_id) === previous)) {
+          select.value = previous;
+        } else if (
+          preferIndex === 0
+          && tipVersion
+          && items.some((item) => String(item.version_id) === tipVersion)
+        ) {
+          select.value = tipVersion;
+        } else if (items[preferIndex]) {
+          select.value = String(items[preferIndex].version_id || "");
+        } else {
+          select.value = String(items[0].version_id || "");
+        }
+      };
+      fillSelect(selectA, 0);
+      fillSelect(selectB, items.length > 1 ? 1 : 0);
+      await Promise.all([
+        renderAiSnapshotPane("a", objectId),
+        renderAiSnapshotPane("b", objectId),
+      ]);
+    } catch (err) {
+      ["a", "b"].forEach((pane) => {
+        const body = $(`#ai-snapshot-body-${pane}`);
+        if (body) {
+          body.textContent = `Could not load snapshot list (${err?.message || "error"}).`;
+        }
+      });
+    }
+  }
+
+  function bindAiSnapshotControls() {
+    const panel = $("#panel-snapshot");
+    if (!panel || panel.dataset.aiSnapshotBound === "1") return;
+    panel.dataset.aiSnapshotBound = "1";
+    const objectId = String(panel.dataset.objectId || "").trim();
+    ["a", "b"].forEach((pane) => {
+      $(`#ai-snapshot-rev-${pane}`)?.addEventListener("change", () => {
+        void renderAiSnapshotPane(pane, objectId);
+      });
+      $(`#ai-snapshot-copy-${pane}`)?.addEventListener("click", async () => {
+        const btn = $(`#ai-snapshot-copy-${pane}`);
+        const text = String(btn?.dataset.copyText || "").trim();
+        if (!text || !navigator.clipboard?.writeText) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          showOk(`Copied Rev ${pane.toUpperCase()} snapshot JSON.`);
+        } catch {
+          showError($("#toolbar-error"), "Could not copy snapshot JSON.");
+        }
+      });
+    });
+  }
+
+  bindAiSnapshotControls();
 
   let whereUsedLoaded = false;
   async function loadWhereUsedTab() {

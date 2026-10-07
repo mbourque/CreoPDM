@@ -16,6 +16,7 @@ _MUTATION_MODULES = (
     SRC / "services" / "checkin_service.py",
     SRC / "services" / "workspace_service.py",
     SRC / "services" / "metadata_service.py",
+    SRC / "services" / "ai_snapshot_service.py",
     SRC / "services" / "product_service.py",
     SRC / "api" / "products.py",
 )

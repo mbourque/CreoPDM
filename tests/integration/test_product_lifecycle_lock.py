@@ -97,6 +97,16 @@ def test_locked_product_rejects_all_mutation_apis(client, repo_parent):
     )
     _assert_locked(
         client.post(
+            f"/api/objects/{oid}/ai-snapshot",
+            json={
+                "capture_status": "ok",
+                "snapshot": {"features": [], "dimensions": [], "parameters": []},
+            },
+        ),
+        hint="ai snapshot",
+    )
+    _assert_locked(
+        client.post(
             f"/api/products/{pid}/objects/from-zip",
             files={"file": ("pack.zip", b"PK\x05\x06" + b"\x00" * 18, "application/zip")},
             data={"parent_folder": ""},

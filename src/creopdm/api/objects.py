@@ -25,6 +25,9 @@ from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import CheckoutOwnershipError, CreoPDMError, PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.schemas.common import (
+    AiSnapshotListResponse,
+    AiSnapshotRequest,
+    AiSnapshotResponse,
     BatchItemResult,
     BatchObjectRequest,
     BatchRemoveRequest,
@@ -433,6 +436,56 @@ def post_creo_metadata(
         "yes" if result.mass else "no",
         "yes" if units_ok else "no",
         len(result.features or []) if isinstance(result.features, list) else 0,
+    )
+    return result
+
+
+@router.get("/api/objects/{object_id}/ai-snapshot", response_model=AiSnapshotResponse)
+def get_ai_snapshot(
+    object_id: str,
+    request: Request,
+    version: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> AiSnapshotResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    return ctx.ai_snapshots.get(db, object_id, version)
+
+
+@router.get("/api/objects/{object_id}/ai-snapshots", response_model=AiSnapshotListResponse)
+def list_ai_snapshots(
+    object_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> AiSnapshotListResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    return ctx.ai_snapshots.list_for_object(db, object_id)
+
+
+@router.post("/api/objects/{object_id}/ai-snapshot", response_model=AiSnapshotResponse)
+def post_ai_snapshot(
+    object_id: str,
+    payload: AiSnapshotRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> AiSnapshotResponse:
+    require_permission(request, ctx, PERMISSION_OBJECTS_METADATA)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    result = ctx.ai_snapshots.save(db, object_id, payload)
+    logger.info(
+        "Saved AI snapshot for %s (%s): rev=%s status=%s schema=%s",
+        obj.filename or object_id,
+        object_id[:8],
+        result.display_revision or "-",
+        result.capture_status or "-",
+        result.schema_version,
     )
     return result
 
