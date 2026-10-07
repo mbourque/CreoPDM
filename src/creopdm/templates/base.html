@@ -2256,11 +2256,21 @@ function creoGatherModelLevelDimensions(solid, errors) {
 }
 function creoListFeaturesForSnapshot(solid, errors) {
     /**
-     * Configurator uses ListItems(ITEM_FEATURE) first. ListFeaturesByType may
-     * return an empty Collection (truthy) — never treat that as success alone.
+     * Same visible-first order as Features tab (creoGatherFeatures). Prefer
+     * ListFeaturesByType(true) so Creo internal construction features stay out
+     * of Ask AI outlines (unnamed DATUM PLANE under a pattern looked like a
+     * user delete when the pattern was removed). ListItems(ITEM_FEATURE) is a
+     * fallback only — it includes internals.
      */
     var listed = null;
     var items = [];
+    try { listed = solid.ListFeaturesByType(true, null); } catch (err1) {
+        try { listed = solid.ListFeaturesByType(true); } catch (err2) {
+            listed = null;
+        }
+    }
+    items = creoFeatureItems(listed);
+    if (items.length) return items;
     try {
         if (typeof pfcModelItemType !== "undefined" && pfcModelItemType.ITEM_FEATURE != null) {
             listed = solid.ListItems(pfcModelItemType.ITEM_FEATURE);
@@ -2270,25 +2280,27 @@ function creoListFeaturesForSnapshot(solid, errors) {
     } catch (errItems) {
         errors.push("ListItems(ITEM_FEATURE): " + creoToolkitErr(errItems));
     }
-    try { listed = solid.ListFeaturesByType(true, null); } catch (err1) {
-        try { listed = solid.ListFeaturesByType(true); } catch (err2) {
-            try { listed = solid.ListFeaturesByType(false, null); } catch (err3) {
-                try { listed = solid.ListFeaturesByType(false); } catch (err4) { listed = null; }
-            }
-        }
-    }
-    items = creoFeatureItems(listed);
-    if (items.length) return items;
-    try {
-        listed = solid.ListFeaturesByType(false, null);
-    } catch (errAll) {
-        try { listed = solid.ListFeaturesByType(false); } catch (errAll2) { listed = null; }
+    try { listed = solid.ListFeaturesByType(false, null); } catch (err3) {
+        try { listed = solid.ListFeaturesByType(false); } catch (err4) { listed = null; }
     }
     items = creoFeatureItems(listed);
     if (!items.length) {
         errors.push("ListFeaturesByType/ListItems returned no features");
     }
     return items;
+}
+function creoFeatureIsVisibleForSnapshot(feat) {
+    /** Match Features tab: skip Creo internal / invisible construction features. */
+    if (!feat) return false;
+    try {
+        if (typeof feat.IsVisible !== "undefined" && feat.IsVisible === false) return false;
+    } catch (errVis) {}
+    try {
+        if (typeof feat.GetIsVisible === "function" && feat.GetIsVisible() === false) {
+            return false;
+        }
+    } catch (errGet) {}
+    return true;
 }
 function creoIsDrawingModel(model, filename) {
     /**
@@ -2684,6 +2696,10 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                 try {
                     var feat = featItems[i];
                     if (!feat) continue;
+                    // Invisible / internal construction features (e.g. unnamed
+                    // DATUM PLANE owned by a hole pattern) are not in the model
+                    // tree — including them made Ask AI report fake plane deletes.
+                    if (!creoFeatureIsVisibleForSnapshot(feat)) continue;
                     try {
                         if (typeof pfcFeatureType !== "undefined"
                             && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
@@ -2735,12 +2751,20 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                     try {
                         if (feat.Pattern != null && feat.Pattern.Id != null) patternId = feat.Pattern.Id;
                     } catch (errPat) {}
+                    // Pattern-owned non-PATTERN rows are members/internals — fold
+                    // into the PATTERN head (same idea as Feature NNNN shells).
+                    var typeU = String(typeName || "").toUpperCase();
+                    var nameU = String(name || "").toUpperCase();
+                    if (patternId != null && typeU !== "PATTERN" && nameU !== "PATTERN") {
+                        continue;
+                    }
                     features.push({
                         id: id,
                         name: name || typeName || ("Feature " + (id != null ? id : (i + 1))),
                         type: typeName,
                         subtype: subType,
                         status: creoFeatureStatusLabel(feat),
+                        visible: true,
                         regen_order: regenOrder,
                         parent_ids: parentIds,
                         group_id: groupId,

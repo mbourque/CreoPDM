@@ -9,6 +9,7 @@ import pytest
 from creopdm.ai_prompts import (
     build_snapshot_compare_user_prompt,
     format_snapshot_compare_diff_text,
+    format_snapshot_compare_text,
     resolve_snapshot_compare_prompt,
     slim_snapshot_for_compare,
 )
@@ -29,12 +30,21 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "function creoGatherFeatureDimensions(" in text
     assert "function creoGatherModelLevelDimensions(" in text
     assert "function creoListFeaturesForSnapshot(" in text
+    assert "function creoFeatureIsVisibleForSnapshot(" in text
     assert "function creoEnrichAiSnapshotFromMetadata(" in text
     assert "creoEnrichAiSnapshotFromMetadata(ai_snapshot," in text
     # Configurator path: model.ListItems(ITEM_DIMENSION) + ListItems(ITEM_FEATURE).
     assert "ListItems(ITEM_DIMENSION)" in text or "ListItems(types[t])" in text
     assert "creoGatherModelLevelDimensions(solid, errors)" in text
     assert "creoListFeaturesForSnapshot(solid, errors)" in text
+    # Visible-first like Features tab — internals under patterns looked like plane deletes.
+    snap_list = text.split("function creoListFeaturesForSnapshot(", 1)[1].split(
+        "function creoFeatureIsVisibleForSnapshot(", 1
+    )[0]
+    assert "ListFeaturesByType(true" in snap_list
+    assert snap_list.find("ListFeaturesByType(true") < snap_list.find("ListItems(")
+    assert "creoFeatureIsVisibleForSnapshot(feat)" in text
+    assert 'typeU !== "PATTERN"' in text
 
 
 def test_drawing_ai_snapshot_skips_solid_walk():
@@ -485,6 +495,48 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "{" not in pat_prompt
     assert "FEAT_1" in fat_prompt
     assert "outline" not in fat_prompt
+
+    # Pattern-owned unnamed DATUM PLANE is internal — not a user plane delete.
+    ghost_plane_snap = {
+        "identity": {"filename": "plate_3.prt", "model_type": "PART"},
+        "features": [
+            {"name": "PATTERN", "type": "PATTERN", "id": 100},
+            {
+                "name": "DATUM PLANE",
+                "type": "DATUM PLANE",
+                "id": 101,
+                "pattern_id": 100,
+            },
+            {"name": "PATTERN", "type": "PATTERN", "id": 200},
+            {
+                "name": "DATUM PLANE",
+                "type": "DATUM PLANE",
+                "id": 201,
+                "pattern_id": 200,
+                "visible": False,
+            },
+            {"name": "ATTACH_PLANE", "type": "DATUM PLANE", "id": 50},
+        ],
+    }
+    ghost_text = format_snapshot_compare_text(ghost_plane_snap)
+    assert "PATTERN 1" in ghost_text
+    assert "PATTERN 2" in ghost_text
+    assert "ATTACH_PLANE" in ghost_text
+    assert ghost_text.count("DATUM PLANE") == 0
+    ghost_diff = format_snapshot_compare_diff_text(
+        ghost_plane_snap,
+        {
+            "identity": {"filename": "plate_3.prt", "model_type": "PART"},
+            "features": [
+                {"name": "PATTERN", "type": "PATTERN", "id": 100},
+                {"name": "ATTACH_PLANE", "type": "DATUM PLANE", "id": 50},
+            ],
+        },
+    )
+    assert "PATTERN 2" in ghost_diff
+    assert "DATUM PLANE" not in ghost_diff.split("Features removed", 1)[-1].split(
+        "Features added", 1
+    )[0]
 
     # Regression: removed d248=7 and d255=6 must not become "reduced d248 to 6".
     plate_old = {

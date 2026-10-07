@@ -85,6 +85,21 @@ def _is_pattern_placeholder_feature(feat: dict[str, Any]) -> bool:
     return bool(_PLACEHOLDER_FEATURE_NAME.match(name))
 
 
+def _is_invisible_or_pattern_internal_feature(feat: dict[str, Any]) -> bool:
+    """Skip Creo internals that are not in the model tree (false plane deletes)."""
+    if not isinstance(feat, dict):
+        return True
+    if feat.get("visible") is False:
+        return True
+    if _is_pattern_feature(feat):
+        return False
+    pattern_id = feat.get("pattern_id")
+    if pattern_id is not None and str(pattern_id).strip() != "":
+        # Owned by a pattern but not the PATTERN head — construction/member.
+        return True
+    return False
+
+
 def _iter_compare_features(features: list[Any]) -> list[dict[str, Any]]:
     """Real features only; pattern-member shells collapsed onto PATTERN heads."""
     out: list[dict[str, Any]] = []
@@ -96,14 +111,18 @@ def _iter_compare_features(features: list[Any]) -> list[dict[str, Any]]:
         if not isinstance(feat, dict):
             i += 1
             continue
+        if _is_invisible_or_pattern_internal_feature(feat):
+            i += 1
+            continue
         if _is_pattern_placeholder_feature(feat):
             orphan_placeholders += 1
             i += 1
             continue
         if _is_pattern_feature(feat):
             j = i + 1
-            while j < n and isinstance(features[j], dict) and _is_pattern_placeholder_feature(
-                features[j]
+            while j < n and isinstance(features[j], dict) and (
+                _is_pattern_placeholder_feature(features[j])
+                or _is_invisible_or_pattern_internal_feature(features[j])
             ):
                 j += 1
             member_count = j - i - 1
