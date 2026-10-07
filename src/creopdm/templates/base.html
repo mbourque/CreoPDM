@@ -2092,6 +2092,7 @@ function creoReadDimensionRow(dim, featureId) {
     var toleranceType = null;
     var toleranceLimits = null;
     try {
+        // Include Tolerance when Creo exposes it on the dim (defaults count as "in model").
         if (handle.Tolerance != null) {
             try { toleranceType = String(handle.Tolerance.Type || handle.Tolerance.type || ""); } catch (errTt) {}
             try {

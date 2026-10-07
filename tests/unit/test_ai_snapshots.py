@@ -41,6 +41,12 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "creoUnitsFromSnapshotParams(" in text
     assert 'dim.units = angleUnit || "deg"' in text
     assert "Never assign length units to ANGULAR" in text
+    read_dim = text.split("function creoReadDimensionRow(", 1)[1].split(
+        "function creoGatherFeatureDimensions(", 1
+    )[0]
+    assert "UpperLimit" in read_dim
+    assert "tolerance_type: toleranceType" in read_dim
+    assert "defaults count as" in read_dim
 
 
 def test_app_js_posts_ai_snapshot_soft_fail():
