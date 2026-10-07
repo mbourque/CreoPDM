@@ -190,12 +190,18 @@ def test_snapshot_tab_template_and_docs():
     assert 'id="ai-snapshot-compare"' in html
     assert 'data-mode="compare"' in html
     assert 'id="ai-snapshot-scroll"' in html
+    assert 'id="ai-snapshot-diff-row"' in html
+    assert "ai-snapshot-head-row" in html
     assert 'id="ai-snapshot-clip-a"' in html
     assert 'id="ai-snapshot-clip-b"' in html
     assert "ai-snapshot-scroll-rail" in html
-    assert 'grid-template-columns: minmax(0, 1fr) 1rem minmax(0, 1fr)' in (
-        ROOT / "src" / "creopdm" / "static" / "css" / "app.css"
-    ).read_text(encoding="utf-8")
+    css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    assert ".ai-snapshot-diff-row" in css
+    assert "flex-direction: row" in css
+    assert "flex: 0 0 16px" in css
+    assert "IDE-style diff" in css
     assert 'id="ai-snapshot-rev-a"' in html
     assert 'id="ai-snapshot-rev-b"' in html
     assert 'id="ai-snapshot-label-a"' in html

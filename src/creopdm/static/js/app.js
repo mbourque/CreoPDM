@@ -12110,13 +12110,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     rail?.addEventListener("scroll", () => {
       applyAiSnapshotScrollOffset(rail.scrollTop || 0);
     });
-    // Wheel over either text pane drives the center scrollbar.
-    compare?.addEventListener(
+    // Wheel over either text pane drives the center scrollbar only.
+    const diffRow = $("#ai-snapshot-diff-row");
+    diffRow?.addEventListener(
       "wheel",
       (event) => {
         if (!rail) return;
-        const t = event.target;
-        if (!(t instanceof Element) || !t.closest(".ai-snapshot-clip")) return;
         if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
         event.preventDefault();
         rail.scrollTop += event.deltaY;

@@ -1635,47 +1635,71 @@ body.is-file-drag #file-drop-overlay {
   max-height: min(40vh, 22rem);
   overflow: auto;
 }
-/* Two text panes side-by-side; center rail scrollbar scrolls both. */
-.ai-snapshot-compare {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 1rem minmax(0, 1fr);
-  grid-template-rows: auto minmax(16rem, min(60vh, 36rem));
-  column-gap: 0.35rem;
-  row-gap: 0.45rem;
-  min-height: 0;
-  align-items: stretch;
-}
-.ai-snapshot-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 0.5rem;
-  justify-content: space-between;
+/*
+ * IDE-style diff: OLD text | center scrollbar | NEW text.
+ * Use nested flex rows (not CSS grid) — Creo’s embedded browser was stacking
+ * grid columns into one column with a scrollbar per pane.
+ */
+#panel-compare-revisions.ai-snapshot-host,
+#panel-compare-revisions {
   min-width: 0;
 }
-.ai-snapshot-toolbar[data-pane="a"] {
-  grid-column: 1;
-  grid-row: 1;
+.ai-snapshot-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  min-height: 0;
 }
-.ai-snapshot-toolbar-spacer {
-  grid-column: 2;
-  grid-row: 1;
+.ai-snapshot-head-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 1rem;
+  width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
 }
-.ai-snapshot-toolbar[data-pane="b"] {
-  grid-column: 3;
-  grid-row: 1;
+.ai-snapshot-head-row .ai-snapshot-toolbar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex: 1 1 0;
+  width: 0; /* equal columns inside flex row */
+  min-width: 0;
 }
 .ai-snapshot-rev-label {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
   min-width: 0;
-  flex: 1;
+  flex: 1 1 auto;
 }
 .ai-snapshot-rev {
   max-width: 100%;
+  width: 100%;
+}
+.ai-snapshot-diff-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  height: 420px;
+  max-height: 60vh;
+  min-height: 240px;
+  flex: 1 1 auto;
 }
 .ai-snapshot-clip {
+  flex: 1 1 0;
+  width: 0; /* equal left/right panes */
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -1683,34 +1707,28 @@ body.is-file-drag #file-drop-overlay {
   border-radius: 4px;
   background: var(--surface-2, #f6f7f9);
 }
-.ai-snapshot-clip[data-pane="a"] {
-  grid-column: 1;
-  grid-row: 2;
-}
-.ai-snapshot-clip[data-pane="b"] {
-  grid-column: 3;
-  grid-row: 2;
-}
 .ai-snapshot-scroll-rail {
-  grid-column: 2;
-  grid-row: 2;
-  overflow-y: scroll;
+  flex: 0 0 16px;
+  width: 16px;
+  min-width: 16px;
+  max-width: 16px;
   overflow-x: hidden;
-  background: #e8eaee;
-  border: 1px solid var(--border, #d8dde6);
-  border-radius: 4px;
-  scrollbar-width: thin;
-  min-width: 0.85rem;
+  overflow-y: scroll;
+  background: #dfe3e8;
+  border-top: 1px solid var(--border, #d8dde6);
+  border-bottom: 1px solid var(--border, #d8dde6);
+  box-sizing: border-box;
 }
 .ai-snapshot-scroll-spacer {
   width: 1px;
   pointer-events: none;
 }
 .ai-snapshot-body {
+  display: block;
   margin: 0;
   padding: 0.75rem;
-  overflow: visible;
-  max-height: none;
+  overflow: visible !important;
+  max-height: none !important;
   white-space: pre-wrap;
   word-break: break-word;
   background: transparent;
@@ -1718,7 +1736,6 @@ body.is-file-drag #file-drop-overlay {
   border-radius: 0;
   font-size: 0.8rem;
   line-height: 1.35;
-  will-change: transform;
 }
 .detail .kv {
   display: grid;
