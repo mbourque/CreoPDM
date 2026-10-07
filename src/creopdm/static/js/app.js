@@ -10042,19 +10042,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           );
         }
         publishBusyMessage("Asking AI for check-in comment…");
-        const response = await fetch(
-          `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare-pending`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "same-origin",
-            cache: "no-store",
-            body: JSON.stringify({
-              newer_snapshot: newerSnapshot,
-              newer_display_revision: nextDisplay || "pending",
-            }),
-          }
-        );
+        let response;
+        try {
+          response = await fetch(
+            `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare-pending`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "same-origin",
+              cache: "no-store",
+              signal: abortSignalAfter(120_000),
+              body: JSON.stringify({
+                newer_snapshot: newerSnapshot,
+                newer_display_revision: nextDisplay || "pending",
+              }),
+            }
+          );
+        } catch (errFetch) {
+          const aborted =
+            errFetch?.name === "AbortError"
+            || /aborted|timeout/i.test(String(errFetch?.message || errFetch || ""));
+          throw new Error(
+            aborted
+              ? "Ollama timed out after 2 minutes. Is it running on the CreoPDM server and is the model loaded?"
+              : String(errFetch?.message || errFetch || "Could not reach CreoPDM for AI compare.")
+          );
+        }
         if (!response.ok) throw new Error(await readError(response));
         const payload = await response.json();
         const text = String(payload?.summary || "").trim();
@@ -11904,19 +11917,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     showError($("#toolbar-error"), "");
     try {
       const payload = await withBusy("Asking AI what changed…", async () => {
-        const response = await fetch(
-          `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "same-origin",
-            cache: "no-store",
-            body: JSON.stringify({
-              older_version_id: olderId,
-              newer_version_id: newerId,
-            }),
-          }
-        );
+        let response;
+        try {
+          response = await fetch(
+            `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "same-origin",
+              cache: "no-store",
+              signal: abortSignalAfter(120_000),
+              body: JSON.stringify({
+                older_version_id: olderId,
+                newer_version_id: newerId,
+              }),
+            }
+          );
+        } catch (errFetch) {
+          const aborted =
+            errFetch?.name === "AbortError"
+            || /aborted|timeout/i.test(String(errFetch?.message || errFetch || ""));
+          throw new Error(
+            aborted
+              ? "Ollama timed out after 2 minutes. Is it running on the CreoPDM server and is the model loaded?"
+              : String(errFetch?.message || errFetch || "Could not reach CreoPDM for AI compare.")
+          );
+        }
         if (!response.ok) throw new Error(await readError(response));
         return response.json();
       });

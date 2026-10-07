@@ -9,6 +9,7 @@ import pytest
 from creopdm.ai_prompts import (
     build_snapshot_compare_user_prompt,
     resolve_snapshot_compare_prompt,
+    slim_snapshot_for_compare,
 )
 from creopdm.exceptions import ValidationAppError
 from creopdm.services.ai_snapshot_service import AI_SNAPSHOT_SCHEMA_VERSION, AiSnapshotService
@@ -136,6 +137,8 @@ def test_app_js_posts_ai_snapshot_soft_fail():
         "async function askAiCheckinComment(", 1
     )[1].split("checkinBtn?.addEventListener", 1)[0]
     assert "preferDisk" in BASE_HTML.read_text(encoding="utf-8")
+    assert "abortSignalAfter(120_000)" in script
+    assert "Ollama timed out after 2 minutes" in script
     assert 'id="checkin-ask-ai"' in (
         ROOT / "src" / "creopdm" / "templates" / "app.html"
     ).read_text(encoding="utf-8")
@@ -171,7 +174,10 @@ def test_snapshot_tab_template_and_docs():
     assert "Ask AI what changed" in docs
     assert "above** the two JSON panes" in docs or "above the two JSON panes" in docs
     assert "Ask AI for comment" in docs
-    assert "Collect metadata on the modified file" in docs or "Collect metadata on the modified" in docs
+    assert (
+        "fresh gather of the local modified tip" in docs
+        or "Collect metadata on the modified" in docs
+    )
     assert 'id="checkin-ask-ai"' in html
 
 
@@ -198,6 +204,33 @@ def test_snapshot_compare_prompt_requires_saved_text():
     src = Path(ai_prompts.__file__).read_text(encoding="utf-8")
     assert "± allowance" not in src
     assert "change notice" not in src
+    assert "slim_snapshot_for_compare" in src
+    # View outlines must not go to Ollama (they hung check-in Ask AI).
+    bulky = {
+        "features": [
+            {
+                "name": "VIEW_TEMPLATE_1",
+                "type": "VIEW",
+                "outline": [[1.23456789, 2.0, 3.0], [4.0, 5.0, 6.0]],
+            }
+        ],
+        "item": {"display_revision": "A.1"},
+        "capture": {"captured_at": "2026-01-01T00:00:00Z", "status": "ok"},
+    }
+    slim = slim_snapshot_for_compare(bulky)
+    assert "outline" not in slim["features"][0]
+    assert "item" not in slim
+    assert "captured_at" not in slim["capture"]
+    assert slim["capture"]["status"] == "ok"
+    prompt = build_snapshot_compare_user_prompt(
+        older_snapshot=bulky,
+        newer_snapshot={"features": [{"name": "A", "type": "VIEW"}]},
+        older_revision="A.1",
+        newer_revision="pending",
+    )
+    assert "outline" not in prompt
+    assert "1.23456789" not in prompt
+    assert "VIEW_TEMPLATE_1" in prompt
 
 
 @requires_git
