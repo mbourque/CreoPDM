@@ -99,7 +99,7 @@ SETTINGS_HUB_TILES: tuple[SettingsHubTile, ...] = (
     SettingsHubTile(
         slug="ai",
         title="AI",
-        blurb="Ollama host URL and model for snapshot compare and other AI help.",
+        blurb="Enable AI, Ollama host URL, model, and snapshot compare prompt.",
         partial="ai.html",
     ),
 )

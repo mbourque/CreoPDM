@@ -150,6 +150,9 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "/ai-snapshot/compare-pending" in script
     assert 'withBusy("Collecting modified model…"' in script
     assert "function syncCheckinAiAskRow(" in script
+    assert "function aiFeaturesEnabled(" in script
+    assert "aiFeaturesEnabled()" in script
+    assert "AI features are turned off" in script
     assert "function aiSnapshotBodyFromGather(" in script
     # Tip snapshot vs local modified tip — never vault tip materialize.
     assert "function resolvePendingCheckinLocalPath(" in script
@@ -965,3 +968,18 @@ def test_ai_snapshot_compare_pending_uses_tip_and_client_newer(
     assert body["older_version_id"] == tip_version_id
     assert body["newer_version_id"] == ""
     assert body["newer_display_revision"] == "A.2"
+
+    assert client.put("/api/settings", json={"ai_enabled": False}).status_code == 200
+    blocked = client.post(
+        f"/api/objects/{object_id}/ai-snapshot/compare-pending",
+        json={
+            "newer_display_revision": "A.2",
+            "newer_snapshot": {
+                "identity": {"filename": "block.prt", "model_type": "PART"},
+                "features": [],
+                "dimensions": [{"symbol": "width", "value": 100.0, "units": "mm"}],
+            },
+        },
+    )
+    assert blocked.status_code == 400, blocked.text
+    assert "AI features are turned off" in blocked.text

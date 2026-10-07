@@ -282,6 +282,11 @@ class AiSnapshotService:
         newer_version_id: str,
         settings: AppSettings,
     ) -> AiSnapshotCompareResponse:
+        if not bool(settings.ai.enabled):
+            raise ValidationAppError(
+                "AI features are turned off. Open Administration → AI, "
+                "check Enable AI features, and Save."
+            )
         model = str(settings.ai.ollama_model or "").strip()
         if not model:
             raise ValidationAppError(

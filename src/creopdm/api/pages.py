@@ -153,6 +153,7 @@ _PAGE_DEFAULTS = {
     "workspace_poll_idle_minutes": "10",
     "site_unavailable": False,
     "site_unavailable_message": "",
+    "ai_enabled": True,
 }
 
 _CREO_OPEN_NAMES = {
@@ -177,6 +178,7 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
     ctx = getattr(request.app.state, "ctx", None)
     settings = getattr(ctx, "settings", None) if ctx is not None else None
     unavailable = bool(settings and site_is_unavailable(settings))
+    ai_enabled = True if settings is None else bool(getattr(settings.ai, "enabled", True))
     payload = {
         "request": request,
         **_PAGE_DEFAULTS,
@@ -187,6 +189,7 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
         "site_unavailable_message": (
             site_unavailable_message(settings) if settings is not None else ""
         ),
+        "ai_enabled": ai_enabled,
         **context,
     }
     # Role + product lock → one toolbar/gear flag set (see product_state.product_ui_capabilities).

@@ -2447,6 +2447,8 @@ def test_admin_hub_panel_fills_full_width():
     ai_partial = (
         ROOT / "src" / "creopdm" / "templates" / "settings_partials" / "ai.html"
     ).read_text(encoding="utf-8")
+    assert 'name="ai_enabled"' in ai_partial
+    assert "Enable AI features" in ai_partial
     assert 'name="ollama_base_url"' in ai_partial
     assert 'name="ollama_model"' in ai_partial
     assert 'name="snapshot_compare_prompt"' in ai_partial
@@ -2486,6 +2488,9 @@ def test_admin_hub_panel_fills_full_width():
     script = _app_js()
     assert "Hub section pages only send fields present" in script
     assert 'settingsForm.querySelector(\'[name="site_availability"]\')' in script
+    assert 'settingsForm.querySelector(\'[name="ai_enabled"]\')' in script
+    assert "body.ai_enabled" in script
+    assert "document.body.dataset.aiEnabled" in script
     assert 'settingsForm.querySelector(\'[name="ollama_base_url"]\')' in script
     assert 'settingsForm.querySelector(\'[name="snapshot_compare_prompt"]\')' in script
     assert "snapshot-compare-prompt-reset" not in script
@@ -2493,6 +2498,10 @@ def test_admin_hub_panel_fills_full_width():
     assert "/api/settings/ai/ollama/models" in script
     assert "listOllamaModelsFromBrowser" in script
     assert "/api/tags" in script
+    assert "function aiFeaturesEnabled(" in script
+    assert 'data-ai-enabled="' in (
+        ROOT / "src" / "creopdm" / "templates" / "base.html"
+    ).read_text(encoding="utf-8")
 
 
 def test_workspace_poll_pauses_after_idle_setting():

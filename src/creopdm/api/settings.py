@@ -100,6 +100,7 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         site_availability=settings.ui.site_availability,
         site_unavailable_message=site_unavailable_message(settings),
         default_site_unavailable_message=DEFAULT_SITE_UNAVAILABLE_MESSAGE,
+        ai_enabled=bool(settings.ai.enabled),
         ollama_base_url=settings.ai.ollama_base_url,
         ollama_model=settings.ai.ollama_model or "",
         snapshot_compare_prompt=settings.ai.snapshot_compare_prompt or "",
@@ -249,6 +250,8 @@ def update_settings(
         current.ui.site_availability = payload.site_availability
     if payload.site_unavailable_message is not None:
         current.ui.site_unavailable_message = payload.site_unavailable_message
+    if payload.ai_enabled is not None:
+        current.ai.enabled = bool(payload.ai_enabled)
     if payload.ollama_base_url is not None:
         current.ai.ollama_base_url = payload.ollama_base_url
     if payload.ollama_model is not None:
@@ -309,6 +312,7 @@ def _settings_audit_snapshot(settings: AppSettings) -> dict:
         "workspace_poll_idle_minutes": settings.ui.workspace_poll_idle_minutes,
         "site_availability": settings.ui.site_availability,
         "site_unavailable_message": settings.ui.site_unavailable_message or "",
+        "ai_enabled": bool(settings.ai.enabled),
         "ollama_base_url": settings.ai.ollama_base_url,
         "ollama_model": settings.ai.ollama_model or "",
         "snapshot_compare_prompt": bool(settings.ai.snapshot_compare_prompt),

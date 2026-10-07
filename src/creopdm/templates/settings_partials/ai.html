@@ -1,3 +1,17 @@
+<section class="settings-card" id="ai-enable-settings">
+  <label class="choice">
+    <input
+      type="checkbox"
+      id="ai-enabled"
+      name="ai_enabled"
+      value="1"
+      {% if settings.ai_enabled %}checked{% endif %}
+    >
+    Enable AI features
+  </label>
+  <p class="muted small">When off, <strong>Ask AI what changed</strong> and <strong>Ask AI for comment</strong> are hidden and the compare API refuses requests. You can still edit Ollama settings below for when you turn AI back on.</p>
+</section>
+
 <section class="settings-card" id="ai-ollama-settings">
   <p class="muted small">Point CreoPDM at your Ollama server (host name or IP and port). <strong>Refresh models</strong> asks the CreoPDM server first, then falls back to this browser if the server cannot reach Ollama (common when Ollama runs on your Creo PC and CreoPDM runs on another host).</p>
   <label>Ollama host URL

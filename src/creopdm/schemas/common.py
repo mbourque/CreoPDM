@@ -558,6 +558,7 @@ class SettingsResponse(BaseModel):
     site_availability: str = "available"
     site_unavailable_message: str = ""
     default_site_unavailable_message: str = ""
+    ai_enabled: bool = True
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = ""
     snapshot_compare_prompt: str = ""
@@ -593,6 +594,7 @@ class SettingsUpdateRequest(BaseModel):
     workspace_poll_idle_minutes: int | None = None
     site_availability: str | None = None
     site_unavailable_message: str | None = None
+    ai_enabled: bool | None = None
     ollama_base_url: str | None = None
     ollama_model: str | None = None
     snapshot_compare_prompt: str | None = None

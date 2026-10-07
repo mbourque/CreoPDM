@@ -29,6 +29,7 @@
   data-can-copy-to-vault="{{ '1' if can_copy_to_vault else '0' }}"
   data-can-export-product="{{ '1' if can_export_product else '0' }}"
   data-can-export-objects="{{ '1' if can_export_objects else '0' }}"
+  data-ai-enabled="{{ '1' if ai_enabled|default(true) else '0' }}"
   data-agent-token="{{ agent_token | default('') }}"
 >
   <header class="topbar">

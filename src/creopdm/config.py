@@ -383,6 +383,9 @@ class EmailConfig(BaseModel):
 class AiConfig(BaseModel):
     """Local Ollama connection for snapshot compare and related AI help."""
 
+    # Master switch — when false, Ask AI / compare endpoints are gated off.
+    # Default true so existing Ollama setups keep working after upgrade.
+    enabled: bool = True
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = ""
     # Editable on Administration → AI only (no code seed / reset).

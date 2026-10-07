@@ -139,6 +139,7 @@ def test_chat_ollama_requires_model():
 def test_settings_api_persists_ollama_fields(client):
     before = client.get("/api/settings")
     assert before.status_code == 200
+    assert before.json()["ai_enabled"] is True
     assert before.json()["ollama_base_url"] == "http://127.0.0.1:11434"
     assert before.json()["ollama_model"] == ""
     assert before.json()["snapshot_compare_prompt"] == ""
@@ -148,6 +149,7 @@ def test_settings_api_persists_ollama_fields(client):
     saved = client.put(
         "/api/settings",
         json={
+            "ai_enabled": False,
             "ollama_base_url": "http://michael-desktop:11434",
             "ollama_model": "gemma4:latest",
             "snapshot_compare_prompt": custom,
@@ -155,14 +157,20 @@ def test_settings_api_persists_ollama_fields(client):
     )
     assert saved.status_code == 200, saved.text
     body = saved.json()
+    assert body["ai_enabled"] is False
     assert body["ollama_base_url"] == "http://michael-desktop:11434"
     assert body["ollama_model"] == "gemma4:latest"
     assert body["snapshot_compare_prompt"] == custom
 
     again = client.get("/api/settings")
+    assert again.json()["ai_enabled"] is False
     assert again.json()["ollama_base_url"] == "http://michael-desktop:11434"
     assert again.json()["ollama_model"] == "gemma4:latest"
     assert again.json()["snapshot_compare_prompt"] == custom
+
+    reenabled = client.put("/api/settings", json={"ai_enabled": True})
+    assert reenabled.status_code == 200, reenabled.text
+    assert reenabled.json()["ai_enabled"] is True
 
 
 def test_ollama_models_endpoint_uses_query_override(client, monkeypatch):
@@ -185,6 +193,8 @@ def test_ollama_models_endpoint_uses_query_override(client, monkeypatch):
 def test_ai_settings_page_renders(client):
     page = client.get("/settings/ai")
     assert page.status_code == 200
+    assert 'name="ai_enabled"' in page.text
+    assert "Enable AI features" in page.text
     assert "Ollama host URL" in page.text
     assert 'name="ollama_base_url"' in page.text
     assert 'id="ollama-refresh-models"' in page.text
@@ -193,3 +203,4 @@ def test_ai_settings_page_renders(client):
     assert "snapshot-compare-prompt-reset" not in page.text
     assert "Ask AI what changed" in page.text
     assert "Stored only in server settings" in page.text
+    assert 'data-ai-enabled="1"' in page.text

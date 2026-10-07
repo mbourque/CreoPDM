@@ -9909,6 +9909,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     checkinDialog.showModal();
   }
 
+  function aiFeaturesEnabled() {
+    return String(document.body?.dataset?.aiEnabled || "1") === "1";
+  }
+
   function syncCheckinAiAskRow(opts) {
     const row = $("#checkin-ai-row");
     const btn = $("#checkin-ask-ai");
@@ -9920,7 +9924,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       : [];
     const objectId = String(opts?.objectId || ids[0] || "").trim();
     const filename = String(opts?.filename || "").trim();
+    const aiOn = aiFeaturesEnabled();
     const singleCreo =
+      aiOn &&
       !addOnly &&
       canSubmit &&
       ids.length === 1 &&
@@ -9929,11 +9935,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       isCreoMetadataCandidate(filename);
     row.hidden = !singleCreo;
     btn.disabled = !singleCreo || !canGatherCreoMetadata();
-    btn.title = !singleCreo
-      ? "Ask AI for comment works for one modified Creo model at a time"
-      : !canGatherCreoMetadata()
-        ? "Open this page in Creo’s embedded browser with Creo Connected to collect the modified model"
-        : "Collect metadata on the modified model, compare to the tip snapshot, and fill the comment";
+    btn.title = !aiOn
+      ? "AI features are turned off under Administration → AI"
+      : !singleCreo
+        ? "Ask AI for comment works for one modified Creo model at a time"
+        : !canGatherCreoMetadata()
+          ? "Open this page in Creo’s embedded browser with Creo Connected to collect the modified model"
+          : "Collect metadata on the modified model, compare to the tip snapshot, and fill the comment";
     checkinDialog.dataset.aiObjectId = singleCreo ? objectId : "";
     checkinDialog.dataset.aiFilename = singleCreo ? filename : "";
     checkinDialog.dataset.aiNextDisplay = singleCreo
@@ -10013,6 +10021,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const nextDisplay = String(checkinDialog?.dataset.aiNextDisplay || "").trim();
     const commentBox = $("#checkin-comment");
     showError($("#checkin-error"), "");
+    if (!aiFeaturesEnabled()) {
+      showError(
+        $("#checkin-error"),
+        "AI features are turned off. Open Administration → AI, check Enable AI features, and Save."
+      );
+      return;
+    }
     if (!objectId || !filename) {
       showError(
         $("#checkin-error"),
@@ -11860,7 +11875,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (compare) compare.dataset.mode = canCompare ? "compare" : "single";
       if (paneB) paneB.hidden = !canCompare;
       const askRow = $("#ai-snapshot-ask-row");
-      if (askRow) askRow.hidden = !canCompare;
+      if (askRow) askRow.hidden = !canCompare || !aiFeaturesEnabled();
       if (!canCompare) {
         const answer = $("#ai-snapshot-ai-answer");
         if (answer) answer.hidden = true;
@@ -11963,6 +11978,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const answerBox = $("#ai-snapshot-ai-answer");
     const answerBody = $("#ai-snapshot-ai-answer-body");
     const answerMeta = $("#ai-snapshot-ai-answer-meta");
+    if (!aiFeaturesEnabled()) {
+      showError(
+        $("#toolbar-error"),
+        "AI features are turned off. Open Administration → AI, check Enable AI features, and Save."
+      );
+      return;
+    }
     if (!objectId || !compare || compare.dataset.mode !== "compare") {
       showError(
         $("#toolbar-error"),
@@ -12361,6 +12383,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         10
       );
     }
+    if (settingsForm.querySelector('[name="ai_enabled"]')) {
+      // Checkbox omitted from FormData when unchecked — read .checked explicitly.
+      body.ai_enabled = Boolean(
+        settingsForm.querySelector('[name="ai_enabled"]')?.checked
+      );
+    }
     if (settingsForm.querySelector('[name="ollama_base_url"]')) {
       body.ollama_base_url = String(data.get("ollama_base_url") || "").trim();
       body.ollama_model = String(data.get("ollama_model") || "").trim();
@@ -12391,6 +12419,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       syncUnavailableAdminPill(
         String(saved?.site_availability || body.site_availability || "") === "unavailable"
       );
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "ai_enabled")) {
+      const on = Boolean(
+        saved && Object.prototype.hasOwnProperty.call(saved, "ai_enabled")
+          ? saved.ai_enabled
+          : body.ai_enabled
+      );
+      document.body.dataset.aiEnabled = on ? "1" : "0";
     }
     if (body.creo_open_mode) {
       syncCreoStatusPill(body.creo_open_mode);
