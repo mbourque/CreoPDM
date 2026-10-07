@@ -1635,18 +1635,15 @@ body.is-file-drag #file-drop-overlay {
   max-height: min(40vh, 22rem);
   overflow: auto;
 }
+/* Two text panes side-by-side; center rail scrollbar scrolls both. */
 .ai-snapshot-compare {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  min-height: 0;
-  flex: 1;
-}
-.ai-snapshot-toolbars {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem 1rem;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr) 1rem minmax(0, 1fr);
+  grid-template-rows: auto minmax(16rem, min(60vh, 36rem));
+  column-gap: 0.35rem;
+  row-gap: 0.45rem;
+  min-height: 0;
+  align-items: stretch;
 }
 .ai-snapshot-toolbar {
   display: flex;
@@ -1655,6 +1652,18 @@ body.is-file-drag #file-drop-overlay {
   gap: 0.5rem;
   justify-content: space-between;
   min-width: 0;
+}
+.ai-snapshot-toolbar[data-pane="a"] {
+  grid-column: 1;
+  grid-row: 1;
+}
+.ai-snapshot-toolbar-spacer {
+  grid-column: 2;
+  grid-row: 1;
+}
+.ai-snapshot-toolbar[data-pane="b"] {
+  grid-column: 3;
+  grid-row: 1;
 }
 .ai-snapshot-rev-label {
   display: flex;
@@ -1666,36 +1675,32 @@ body.is-file-drag #file-drop-overlay {
 .ai-snapshot-rev {
   max-width: 100%;
 }
-/* Diff-style: one center scrollbar drives both panes. */
-.ai-snapshot-scroll-row {
-  display: grid;
-  grid-template-columns: 1fr 0.85rem 1fr;
-  gap: 0;
-  max-height: min(60vh, 36rem);
-  min-height: 16rem;
-  border: 1px solid var(--border, #d8dde6);
-  border-radius: 4px;
-  background: var(--surface-2, #f6f7f9);
-  overflow: hidden;
-}
-.ai-snapshot-pane {
+.ai-snapshot-clip {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  border: 1px solid var(--border, #d8dde6);
+  border-radius: 4px;
+  background: var(--surface-2, #f6f7f9);
 }
-.ai-snapshot-clip {
-  height: 100%;
-  max-height: min(60vh, 36rem);
-  min-height: 16rem;
-  overflow: hidden;
+.ai-snapshot-clip[data-pane="a"] {
+  grid-column: 1;
+  grid-row: 2;
+}
+.ai-snapshot-clip[data-pane="b"] {
+  grid-column: 3;
+  grid-row: 2;
 }
 .ai-snapshot-scroll-rail {
-  overflow-y: auto;
+  grid-column: 2;
+  grid-row: 2;
+  overflow-y: scroll;
   overflow-x: hidden;
-  background: var(--border, #d8dde6);
-  border-left: 1px solid var(--border, #c5cad3);
-  border-right: 1px solid var(--border, #c5cad3);
+  background: #e8eaee;
+  border: 1px solid var(--border, #d8dde6);
+  border-radius: 4px;
   scrollbar-width: thin;
+  min-width: 0.85rem;
 }
 .ai-snapshot-scroll-spacer {
   width: 1px;
@@ -1714,27 +1719,6 @@ body.is-file-drag #file-drop-overlay {
   font-size: 0.8rem;
   line-height: 1.35;
   will-change: transform;
-}
-@media (max-width: 900px) {
-  .ai-snapshot-toolbars {
-    grid-template-columns: 1fr;
-  }
-  .ai-snapshot-scroll-row {
-    grid-template-columns: 1fr;
-    max-height: none;
-    overflow: visible;
-  }
-  .ai-snapshot-scroll-rail {
-    display: none;
-  }
-  .ai-snapshot-clip {
-    max-height: none;
-    min-height: 0;
-    overflow: visible;
-  }
-  .ai-snapshot-body {
-    transform: none !important;
-  }
 }
 .detail .kv {
   display: grid;

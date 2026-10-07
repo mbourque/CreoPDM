@@ -488,7 +488,7 @@
       Side-by-side outlines for two revisions with saved snapshots
       (features or drawing views, dimensions, parameters, materials, units — plain text, not JSON).
       Defaults to the latest snapshot on the right (NEW) and the one before it on the left (OLD).
-      One scrollbar scrolls both panes. Configure Ollama under Administration → AI for Ask AI.
+      Two text panes with one scrollbar between them. Configure Ollama under Administration → AI for Ask AI.
     </p>
     <div class="ai-snapshot-ask-row" id="ai-snapshot-ask-row" hidden>
       <button type="button" class="btn btn-primary" id="ai-snapshot-ask-ai"
@@ -504,42 +504,35 @@
       <div class="ai-snapshot-ai-answer-body" id="ai-snapshot-ai-answer-body" tabindex="0"></div>
     </div>
     <div class="ai-snapshot-compare" id="ai-snapshot-compare" data-mode="compare">
-      <div class="ai-snapshot-toolbars">
-        <div class="ai-snapshot-toolbar" data-pane="a">
-          <label class="ai-snapshot-rev-label">
-            <span class="muted small" id="ai-snapshot-label-a">OLD</span>
-            <select id="ai-snapshot-rev-a" class="ai-snapshot-rev" aria-label="OLD snapshot revision"></select>
-          </label>
-          <button type="button" class="btn" id="ai-snapshot-copy-a" disabled title="Copy OLD snapshot outline to the clipboard">Copy</button>
-        </div>
-        <div class="ai-snapshot-toolbar" data-pane="b">
-          <label class="ai-snapshot-rev-label">
-            <span class="muted small" id="ai-snapshot-label-b">NEW</span>
-            <select id="ai-snapshot-rev-b" class="ai-snapshot-rev" aria-label="NEW snapshot revision"></select>
-          </label>
-          <button type="button" class="btn" id="ai-snapshot-copy-b" disabled title="Copy NEW snapshot outline to the clipboard">Copy</button>
-        </div>
+      <div class="ai-snapshot-toolbar" data-pane="a">
+        <label class="ai-snapshot-rev-label">
+          <span class="muted small" id="ai-snapshot-label-a">OLD</span>
+          <select id="ai-snapshot-rev-a" class="ai-snapshot-rev" aria-label="OLD snapshot revision"></select>
+        </label>
+        <button type="button" class="btn" id="ai-snapshot-copy-a" disabled title="Copy OLD snapshot outline to the clipboard">Copy</button>
       </div>
-      <div class="ai-snapshot-scroll-row" id="ai-snapshot-scroll-row">
-        <div class="ai-snapshot-pane" data-pane="a">
-          <div class="ai-snapshot-clip">
-            <pre class="ai-snapshot-body mono" id="ai-snapshot-body-a">Loading…</pre>
-          </div>
-        </div>
-        <div
-          class="ai-snapshot-scroll-rail"
-          id="ai-snapshot-scroll"
-          tabindex="0"
-          aria-label="Scroll both revisions"
-          title="Scroll both panes"
-        >
-          <div class="ai-snapshot-scroll-spacer" id="ai-snapshot-scroll-spacer"></div>
-        </div>
-        <div class="ai-snapshot-pane" data-pane="b">
-          <div class="ai-snapshot-clip">
-            <pre class="ai-snapshot-body mono" id="ai-snapshot-body-b">Loading…</pre>
-          </div>
-        </div>
+      <div class="ai-snapshot-toolbar-spacer" aria-hidden="true"></div>
+      <div class="ai-snapshot-toolbar" data-pane="b">
+        <label class="ai-snapshot-rev-label">
+          <span class="muted small" id="ai-snapshot-label-b">NEW</span>
+          <select id="ai-snapshot-rev-b" class="ai-snapshot-rev" aria-label="NEW snapshot revision"></select>
+        </label>
+        <button type="button" class="btn" id="ai-snapshot-copy-b" disabled title="Copy NEW snapshot outline to the clipboard">Copy</button>
+      </div>
+      <div class="ai-snapshot-clip" data-pane="a" id="ai-snapshot-clip-a">
+        <pre class="ai-snapshot-body mono" id="ai-snapshot-body-a">Loading…</pre>
+      </div>
+      <div
+        class="ai-snapshot-scroll-rail"
+        id="ai-snapshot-scroll"
+        tabindex="0"
+        aria-label="Scroll both revisions"
+        title="Scroll both panes"
+      >
+        <div class="ai-snapshot-scroll-spacer" id="ai-snapshot-scroll-spacer"></div>
+      </div>
+      <div class="ai-snapshot-clip" data-pane="b" id="ai-snapshot-clip-b">
+        <pre class="ai-snapshot-body mono" id="ai-snapshot-body-b">Loading…</pre>
       </div>
     </div>
   </section>

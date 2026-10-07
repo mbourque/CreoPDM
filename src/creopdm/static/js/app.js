@@ -11782,9 +11782,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const spacer = $("#ai-snapshot-scroll-spacer");
     const bodyA = $("#ai-snapshot-body-a");
     const bodyB = $("#ai-snapshot-body-b");
-    const clip = document.querySelector("#ai-snapshot-scroll-row .ai-snapshot-clip");
+    const clipA = $("#ai-snapshot-clip-a");
     if (!rail || !spacer || !bodyA || !bodyB) return;
-    const viewH = clip?.clientHeight || rail.clientHeight || 0;
+    const viewH = clipA?.clientHeight || rail.clientHeight || 0;
     const contentH = Math.max(
       bodyA.scrollHeight || 0,
       bodyB.scrollHeight || 0,
@@ -11806,7 +11806,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const rail = $("#ai-snapshot-scroll");
     if (rail) rail.scrollTop = 0;
     applyAiSnapshotScrollOffset(0);
-    syncAiSnapshotScrollLayout();
+    // Layout after paint so clip heights are real.
+    requestAnimationFrame(() => syncAiSnapshotScrollLayout());
   }
 
   async function fetchAiSnapshotOutline(objectId, versionId) {
@@ -12105,15 +12106,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       });
     });
     const rail = $("#ai-snapshot-scroll");
-    const row = $("#ai-snapshot-scroll-row");
+    const compare = $("#ai-snapshot-compare");
     rail?.addEventListener("scroll", () => {
       applyAiSnapshotScrollOffset(rail.scrollTop || 0);
     });
-    // Wheel over either pane drives the center rail (one scrollbar).
-    row?.addEventListener(
+    // Wheel over either text pane drives the center scrollbar.
+    compare?.addEventListener(
       "wheel",
       (event) => {
-        if (!rail || rail.style.display === "none") return;
+        if (!rail) return;
+        const t = event.target;
+        if (!(t instanceof Element) || !t.closest(".ai-snapshot-clip")) return;
         if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
         event.preventDefault();
         rail.scrollTop += event.deltaY;
