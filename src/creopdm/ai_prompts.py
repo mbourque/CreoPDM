@@ -3,9 +3,18 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from creopdm.exceptions import ValidationAppError
+
+# Creo pattern members often land as "Feature 15775" / IFX_ID_* with empty type.
+# Sending hundreds of those to Ollama blew the context so Ask AI said "no changes"
+# even when a whole PATTERN head was deleted.
+_PLACEHOLDER_FEATURE_NAME = re.compile(
+    r"^(?:feature\s+\d+|ifx_id_\d+|no_name)$",
+    re.IGNORECASE,
+)
 
 # Drawing view Outline floats / revision meta bloat Ollama prompts. Large solids
 # (100+ features) used to overflow context so the model only "saw" the newer JSON
@@ -94,6 +103,78 @@ def _pick(row: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
     return out
 
 
+def _feature_type_label(feat: dict[str, Any]) -> str:
+    return str(feat.get("type") or feat.get("subtype") or "").strip().upper()
+
+
+def _is_pattern_feature(feat: dict[str, Any]) -> bool:
+    name = str(feat.get("name") or "").strip().upper()
+    return _feature_type_label(feat) == "PATTERN" or name == "PATTERN"
+
+
+def _is_pattern_placeholder_feature(feat: dict[str, Any]) -> bool:
+    """True for Creo pattern-member shells that drown solid compares."""
+    if not isinstance(feat, dict):
+        return False
+    if _is_pattern_feature(feat):
+        return False
+    # Typed geometry / drawing views stay intact (incl. DATUM named no_name).
+    if _feature_type_label(feat):
+        return False
+    name = str(feat.get("name") or "").strip()
+    if not name:
+        return True
+    return bool(_PLACEHOLDER_FEATURE_NAME.match(name))
+
+
+def _slim_features_for_compare(features: list[Any]) -> list[dict[str, Any]]:
+    """Keep real features; fold pattern-member placeholders into pattern_member_count."""
+    slim: list[dict[str, Any]] = []
+    orphan_placeholders = 0
+    i = 0
+    n = len(features)
+    while i < n:
+        feat = features[i]
+        if not isinstance(feat, dict):
+            i += 1
+            continue
+        if _is_pattern_placeholder_feature(feat):
+            orphan_placeholders += 1
+            i += 1
+            continue
+        row = _pick(feat, _FEATURE_KEEP)
+        if not row:
+            i += 1
+            continue
+        if _is_pattern_feature(feat):
+            member_count = 0
+            j = i + 1
+            while j < n and isinstance(features[j], dict) and _is_pattern_placeholder_feature(
+                features[j]
+            ):
+                member_count += 1
+                j += 1
+            if member_count:
+                row["pattern_member_count"] = member_count
+            slim.append(row)
+            i = j
+            continue
+        slim.append(row)
+        i += 1
+    if orphan_placeholders and slim:
+        # Rare: placeholders before any PATTERN — still signal the omit.
+        slim[0]["orphan_placeholder_count"] = orphan_placeholders
+    elif orphan_placeholders:
+        slim.append(
+            {
+                "name": "PATTERN_MEMBERS",
+                "type": "PATTERN",
+                "pattern_member_count": orphan_placeholders,
+            }
+        )
+    return slim
+
+
 def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     """Copy a snapshot for Ollama — compact fields so older+newer both fit in context."""
     if not isinstance(snapshot, dict):
@@ -115,14 +196,18 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
 
     features = snapshot.get("features")
     if isinstance(features, list):
-        slim_feats = []
-        for feat in features:
-            if not isinstance(feat, dict):
-                continue
-            row = _pick(feat, _FEATURE_KEEP)
-            if row:
-                slim_feats.append(row)
+        slim_feats = _slim_features_for_compare(features)
         out["features"] = slim_feats
+        pattern_rows = [f for f in slim_feats if _is_pattern_feature(f)]
+        if pattern_rows or any(
+            isinstance(f, dict) and _is_pattern_placeholder_feature(f) for f in features
+        ):
+            out["feature_summary"] = {
+                "pattern_count": len(pattern_rows),
+                "pattern_member_total": sum(
+                    int(f.get("pattern_member_count") or 0) for f in pattern_rows
+                ),
+            }
 
     dimensions = snapshot.get("dimensions")
     if isinstance(dimensions, list):

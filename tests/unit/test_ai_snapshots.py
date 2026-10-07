@@ -317,6 +317,89 @@ def test_snapshot_compare_prompt_requires_saved_text():
         newer_revision="A.2",
     )
     assert fat_prompt.index("Older revision (A.1):") < fat_prompt.index("Newer revision (A.2):")
+    # Pattern-member shells ("Feature 15775", IFX_ID_*) must collapse so Ollama
+    # still sees a deleted PATTERN head (false "No model changes" on plate_3).
+    pattern_head = {
+        "id": 15775,
+        "name": "PATTERN",
+        "type": "PATTERN",
+        "subtype": "",
+        "status": "active",
+        "regen_order": 62,
+        "parent_ids": [4460, 1],
+    }
+    member_shells = [
+        {
+            "id": 15780 + i,
+            "name": f"Feature {15780 + i}",
+            "type": "",
+            "subtype": "",
+            "status": "active",
+            "regen_order": None,
+            "parent_ids": [],
+        }
+        for i in range(80)
+    ]
+    ifx_shell = {
+        "id": 10703,
+        "name": "IFX_ID_10703",
+        "type": "",
+        "subtype": "",
+        "status": "active",
+        "regen_order": None,
+        "parent_ids": [],
+    }
+    older_pat = {
+        "identity": {"filename": "plate_3.prt", "model_type": "PART"},
+        "features": [
+            {"id": 4460, "name": "Extrude", "type": "PROTRUSION", "subtype": "Extrude"},
+            {"id": 10776, "name": "PATTERN", "type": "PATTERN", "subtype": "PATTERN"},
+            ifx_shell,
+            *member_shells[:20],
+            pattern_head,
+            *member_shells[20:],
+        ],
+        "dimensions": [
+            {"id": 221, "symbol": "T", "value": 0.5, "units": "in"},
+            {"id": 245, "symbol": "d245", "value": 2, "units": "in", "dim_type": "DIAMETER"},
+        ],
+    }
+    newer_pat = {
+        "identity": {"filename": "plate_3.prt", "model_type": "PART"},
+        "features": [
+            {"id": 4460, "name": "Extrude", "type": "PROTRUSION", "subtype": "Extrude"},
+            {"id": 10776, "name": "PATTERN", "type": "PATTERN", "subtype": "PATTERN"},
+            ifx_shell,
+            *member_shells[:20],
+        ],
+        "dimensions": [
+            {"id": 221, "symbol": "T", "value": 0.5, "units": "in"},
+        ],
+    }
+    slim_older = slim_snapshot_for_compare(older_pat)
+    slim_newer = slim_snapshot_for_compare(newer_pat)
+    assert slim_older["feature_summary"]["pattern_count"] == 2
+    assert slim_newer["feature_summary"]["pattern_count"] == 1
+    older_patterns = [f for f in slim_older["features"] if f.get("name") == "PATTERN"]
+    assert len(older_patterns) == 2
+    assert any(f.get("id") == 15775 and f.get("pattern_member_count", 0) >= 60 for f in older_patterns)
+    assert not any(
+        str(f.get("name") or "").startswith("Feature ") for f in slim_older["features"]
+    )
+    assert not any(
+        str(f.get("name") or "").startswith("IFX_ID_") for f in slim_older["features"]
+    )
+    pat_prompt = build_snapshot_compare_user_prompt(
+        older_snapshot=older_pat,
+        newer_snapshot=newer_pat,
+        older_revision="A.1",
+        newer_revision="A.2",
+    )
+    assert '"pattern_count":2' in pat_prompt
+    assert '"pattern_count":1' in pat_prompt
+    assert "Feature 15780" not in pat_prompt
+    assert '"id":15775' in pat_prompt
+    assert '"id":15775' not in pat_prompt.split("Newer revision (A.2):", 1)[1]
     assert "FEAT_1" in fat_prompt
     assert "outline" not in fat_prompt
 
