@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from creopdm.ai_prompts import (
+    SNAPSHOT_COMPARE_SYSTEM_PROMPT,
+    build_snapshot_compare_user_prompt,
+)
 from creopdm.services.ai_snapshot_service import AI_SNAPSHOT_SCHEMA_VERSION, AiSnapshotService
 from tests.conftest import requires_git
 
@@ -75,6 +79,11 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "fillSelect(selectA, olderSnap?.version_id)" in script
     assert "fillSelect(selectB, newerSnap?.version_id)" in script
     assert 'labelA.textContent = canCompare ? "Older" : "Revision"' in script
+    assert "async function askAiSnapshotCompare(" in script
+    assert "/ai-snapshot/compare" in script
+    assert 'withBusy("Asking AI what changed…"' in script
+    assert "askRow.hidden = !canCompare" in script
+    assert "ai-snapshot-ai-answer-body" in script
 
 
 def test_snapshot_tab_template_and_docs():
@@ -90,6 +99,10 @@ def test_snapshot_tab_template_and_docs():
     assert 'id="ai-snapshot-label-b"' in html
     assert 'id="ai-snapshot-copy-a"' in html
     assert 'id="ai-snapshot-copy-b"' in html
+    assert 'id="ai-snapshot-ask-ai"' in html
+    assert "Ask AI what changed" in html
+    assert 'id="ai-snapshot-ai-answer"' in html
+    assert 'id="ai-snapshot-ask-row" hidden' in html
     assert 'data-pane="b" hidden' in html
     assert "left = older, right = newer" in html
     assert "Open **Snapshot**" in docs
@@ -97,6 +110,24 @@ def test_snapshot_tab_template_and_docs():
     assert "two or more" in docs.lower() and "snapshot" in docs.lower()
     assert "Older" in docs and "Newer" in docs
     assert "A.1 left, A.2 right" in docs
+    assert "Ask AI what changed" in docs
+    assert "above** the two JSON panes" in docs or "above the two JSON panes" in docs
+
+
+def test_snapshot_compare_prompt_forbids_invented_tolerances():
+    assert "Never invent a ± allowance" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
+    assert "paragraph" in SNAPSHOT_COMPARE_SYSTEM_PROMPT.lower()
+    assert "bullet lists" in SNAPSHOT_COMPARE_SYSTEM_PROMPT.lower()
+    user = build_snapshot_compare_user_prompt(
+        older_snapshot={"dimensions": [{"symbol": "d0", "value": 6}]},
+        newer_snapshot={"dimensions": [{"symbol": "d0", "value": 8}]},
+        older_revision="A.1",
+        newer_revision="A.2",
+    )
+    assert "OLDER revision (A.1)" in user
+    assert "NEWER revision (A.2)" in user
+    assert '"value": 6' in user
+    assert '"value": 8' in user
 
 
 @requires_git
@@ -213,3 +244,133 @@ def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_pat
         assert got.snapshot["dimensions"][0]["value"] == 8.0
         listed_svc = svc.list_for_object(db, object_id)
         assert any(item.has_snapshot for item in listed_svc.items)
+
+
+@requires_git
+def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeypatch):
+    """Compare endpoint loads both snapshots, sends prompt + JSON to Ollama, returns summary."""
+    product = client.post(
+        "/api/products",
+        json={"name": "Snap Compare", "number": "SNAP-CMP"},
+    )
+    assert product.status_code == 201, product.text
+    product_id = product.json()["uuid"]
+    prt = tmp_path / "wedge.prt.1"
+    prt.write_bytes(b"FAKE CREO PART")
+    added = client.post(
+        f"/api/products/{product_id}/objects",
+        files={"file": ("wedge.prt.1", prt.read_bytes(), "application/octet-stream")},
+        data={"comment": "v1"},
+    )
+    assert added.status_code == 201, added.text
+    object_id = added.json()["uuid"]
+    older_version_id = added.json()["current_version"]["uuid"]
+
+    older_snap = {
+        "version_id": older_version_id,
+        "schema_version": AI_SNAPSHOT_SCHEMA_VERSION,
+        "capture_status": "ok",
+        "snapshot": {
+            "identity": {"filename": "wedge.prt", "model_type": "PART"},
+            "features": [{"id": 1, "name": "Extrude 1", "type": "Extrude"}],
+            "dimensions": [{"symbol": "d0", "value": 5.0, "units": "mm"}],
+            "parameters": [],
+        },
+    }
+    assert client.post(f"/api/objects/{object_id}/ai-snapshot", json=older_snap).status_code == 200
+
+    # Second version via check-in of a new file tip (workspace check-in path may be heavy);
+    # use object service version bump via another Add of same name if supported, else
+    # save a second snapshot on a new ObjectVersion created through the API.
+    from creopdm.models.object import EngineeringObject
+    from creopdm.models.version import ObjectVersion
+    import uuid as uuid_mod
+    from datetime import datetime, timezone
+
+    ctx = client.app.state.ctx
+    with ctx.session_factory() as db:
+        obj = db.query(EngineeringObject).filter_by(uuid=object_id).one()
+        newer = ObjectVersion(
+            uuid=str(uuid_mod.uuid4()),
+            object_id=obj.id,
+            revision="A",
+            iteration=2,
+            filename="wedge.prt.2",
+            content_hash="deadbeef",
+            file_size=1,
+            created_by="tester",
+            created_at=datetime.now(timezone.utc),
+            comment="v2",
+        )
+        db.add(newer)
+        obj.current_version_id = newer.id
+        db.commit()
+        newer_version_id = newer.uuid
+
+    newer_snap = {
+        "version_id": newer_version_id,
+        "schema_version": AI_SNAPSHOT_SCHEMA_VERSION,
+        "capture_status": "ok",
+        "snapshot": {
+            "identity": {"filename": "wedge.prt", "model_type": "PART"},
+            "features": [{"id": 1, "name": "Extrude 1", "type": "Extrude"}],
+            "dimensions": [{"symbol": "d0", "value": 7.5, "units": "mm"}],
+            "parameters": [],
+        },
+    }
+    assert client.post(f"/api/objects/{object_id}/ai-snapshot", json=newer_snap).status_code == 200
+
+    # Persist Ollama settings used by compare.
+    saved = client.put(
+        "/api/settings",
+        json={
+            "ollama_base_url": "http://michael-desktop:11434",
+            "ollama_model": "gemma4:latest",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    captured: dict = {}
+
+    def fake_chat(base_url, model, messages, *, timeout_s=300.0):
+        captured["base_url"] = base_url
+        captured["model"] = model
+        captured["messages"] = messages
+        assert "Never invent a ± allowance" in messages[0]["content"]
+        assert "OLDER revision" in messages[1]["content"]
+        assert "NEWER revision" in messages[1]["content"]
+        assert "5.0" in messages[1]["content"]
+        assert "7.5" in messages[1]["content"]
+        return "The diameter grew from 5 mm to 7.5 mm."
+
+    monkeypatch.setattr(
+        "creopdm.services.ai_snapshot_service.chat_ollama",
+        fake_chat,
+    )
+
+    compared = client.post(
+        f"/api/objects/{object_id}/ai-snapshot/compare",
+        json={
+            "older_version_id": older_version_id,
+            "newer_version_id": newer_version_id,
+        },
+    )
+    assert compared.status_code == 200, compared.text
+    body = compared.json()
+    assert body["summary"] == "The diameter grew from 5 mm to 7.5 mm."
+    assert body["model"] == "gemma4:latest"
+    assert body["older_version_id"] == older_version_id
+    assert body["newer_version_id"] == newer_version_id
+    assert captured["model"] == "gemma4:latest"
+    assert captured["base_url"] == "http://michael-desktop:11434"
+
+    missing_model = client.put("/api/settings", json={"ollama_model": ""})
+    assert missing_model.status_code == 200
+    rejected = client.post(
+        f"/api/objects/{object_id}/ai-snapshot/compare",
+        json={
+            "older_version_id": older_version_id,
+            "newer_version_id": newer_version_id,
+        },
+    )
+    assert rejected.status_code == 400, rejected.text

@@ -11525,6 +11525,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const labelB = $("#ai-snapshot-label-b");
       if (compare) compare.dataset.mode = canCompare ? "compare" : "single";
       if (paneB) paneB.hidden = !canCompare;
+      const askRow = $("#ai-snapshot-ask-row");
+      if (askRow) askRow.hidden = !canCompare;
+      if (!canCompare) {
+        const answer = $("#ai-snapshot-ai-answer");
+        if (answer) answer.hidden = true;
+      }
       if (labelA) labelA.textContent = canCompare ? "Older" : "Revision";
       if (labelB) labelB.textContent = "Newer";
       selectA.setAttribute(
@@ -11616,6 +11622,76 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  async function askAiSnapshotCompare() {
+    const panel = $("#panel-snapshot");
+    const objectId = String(panel?.dataset.objectId || "").trim();
+    const compare = $("#ai-snapshot-compare");
+    const answerBox = $("#ai-snapshot-ai-answer");
+    const answerBody = $("#ai-snapshot-ai-answer-body");
+    const answerMeta = $("#ai-snapshot-ai-answer-meta");
+    if (!objectId || !compare || compare.dataset.mode !== "compare") {
+      showError(
+        $("#toolbar-error"),
+        "Need two revisions with snapshots before asking AI what changed."
+      );
+      return;
+    }
+    const olderId = String($("#ai-snapshot-rev-a")?.value || "").trim();
+    const newerId = String($("#ai-snapshot-rev-b")?.value || "").trim();
+    if (!olderId || !newerId) {
+      showError($("#toolbar-error"), "Choose older and newer snapshot revisions.");
+      return;
+    }
+    if (olderId === newerId) {
+      showError($("#toolbar-error"), "Pick two different revisions to compare.");
+      return;
+    }
+    showError($("#toolbar-error"), "");
+    try {
+      const payload = await withBusy("Asking AI what changed…", async () => {
+        const response = await fetch(
+          `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            cache: "no-store",
+            body: JSON.stringify({
+              older_version_id: olderId,
+              newer_version_id: newerId,
+            }),
+          }
+        );
+        if (!response.ok) throw new Error(await readError(response));
+        return response.json();
+      });
+      const summary = String(payload?.summary || "").trim();
+      if (!summary) {
+        showError($("#toolbar-error"), "Ollama returned an empty summary.");
+        return;
+      }
+      if (answerBody) answerBody.textContent = summary;
+      if (answerMeta) {
+        const olderRev = String(payload?.older_display_revision || "").trim();
+        const newerRev = String(payload?.newer_display_revision || "").trim();
+        const model = String(payload?.model || "").trim();
+        const parts = [];
+        if (olderRev && newerRev) parts.push(`${olderRev} → ${newerRev}`);
+        if (model) parts.push(model);
+        answerMeta.textContent = parts.join(" · ");
+      }
+      if (answerBox) {
+        answerBox.hidden = false;
+        answerBox.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    } catch (err) {
+      showError(
+        $("#toolbar-error"),
+        String(err?.message || err || "Could not ask AI what changed.")
+      );
+    }
+  }
+
   function bindAiSnapshotControls() {
     const panel = $("#panel-snapshot");
     if (!panel || panel.dataset.aiSnapshotBound === "1") return;
@@ -11656,6 +11732,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             : "newer snapshot";
         showOk(`Copied ${label} JSON.`);
       });
+    });
+    $("#ai-snapshot-ask-ai")?.addEventListener("click", () => {
+      void askAiSnapshotCompare();
     });
   }
 

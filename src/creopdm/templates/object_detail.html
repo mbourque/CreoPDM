@@ -488,8 +488,21 @@
       Experimental per-revision model snapshot (features, dimensions, parameters, materials, units) for AI change summaries.
       Collect metadata in Creo while a version is tip to create or refresh it. Not used for check-in comments yet.
       Side-by-side compare appears only when two or more revisions have snapshots
-      (left = older, right = newer).
+      (left = older, right = newer). Configure Ollama under Administration → AI.
     </p>
+    <div class="ai-snapshot-ask-row" id="ai-snapshot-ask-row" hidden>
+      <button type="button" class="btn btn-primary" id="ai-snapshot-ask-ai"
+              title="Send both snapshots and the compare prompt to the configured Ollama model">
+        Ask AI what changed
+      </button>
+    </div>
+    <div class="ai-snapshot-ai-answer" id="ai-snapshot-ai-answer" hidden>
+      <div class="ai-snapshot-ai-answer-head">
+        <strong>AI summary</strong>
+        <span class="muted small" id="ai-snapshot-ai-answer-meta"></span>
+      </div>
+      <div class="ai-snapshot-ai-answer-body" id="ai-snapshot-ai-answer-body" tabindex="0"></div>
+    </div>
     <div class="ai-snapshot-compare" id="ai-snapshot-compare" data-mode="single">
       <div class="ai-snapshot-pane" data-pane="a">
         <div class="ai-snapshot-toolbar">

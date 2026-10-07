@@ -10,18 +10,25 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from creopdm.ai_prompts import (
+    SNAPSHOT_COMPARE_SYSTEM_PROMPT,
+    build_snapshot_compare_user_prompt,
+)
+from creopdm.config import AppSettings
 from creopdm.exceptions import NotFoundError, ValidationAppError
 from creopdm.models.ai_snapshot import ObjectVersionSnapshot
 from creopdm.models.object import EngineeringObject
 from creopdm.models.version import ObjectVersion
 from creopdm.product_state import ensure_product_mutable
 from creopdm.schemas.common import (
+    AiSnapshotCompareResponse,
     AiSnapshotListItem,
     AiSnapshotListResponse,
     AiSnapshotRequest,
     AiSnapshotResponse,
 )
 from creopdm.services.object_service import ObjectService
+from creopdm.services.ollama_service import chat_ollama
 
 AI_SNAPSHOT_SCHEMA_VERSION = 1
 
@@ -230,3 +237,64 @@ class AiSnapshotService:
                 )
             )
         return AiSnapshotListResponse(object_id=obj.uuid, items=items)
+
+    def compare_with_ollama(
+        self,
+        session: Session,
+        object_uuid: str,
+        older_version_id: str,
+        newer_version_id: str,
+        settings: AppSettings,
+    ) -> AiSnapshotCompareResponse:
+        """Load two snapshots and ask the configured Ollama model what changed."""
+        older_id = (older_version_id or "").strip()
+        newer_id = (newer_version_id or "").strip()
+        if not older_id or not newer_id:
+            raise ValidationAppError("Choose both an older and a newer snapshot revision.")
+        if older_id == newer_id:
+            raise ValidationAppError("Pick two different revisions to compare.")
+
+        older = self.get(session, object_uuid, older_id)
+        newer = self.get(session, object_uuid, newer_id)
+        if not older.has_snapshot or not isinstance(older.snapshot, dict):
+            raise ValidationAppError(
+                f"Revision {older.display_revision or older_id} has no snapshot yet. "
+                "Collect metadata while that version is tip.",
+                details={"version_id": older_id},
+            )
+        if not newer.has_snapshot or not isinstance(newer.snapshot, dict):
+            raise ValidationAppError(
+                f"Revision {newer.display_revision or newer_id} has no snapshot yet. "
+                "Collect metadata while that version is tip.",
+                details={"version_id": newer_id},
+            )
+
+        model = str(settings.ai.ollama_model or "").strip()
+        if not model:
+            raise ValidationAppError(
+                "No Ollama model selected. Open Administration → AI, Refresh models, choose a model, and Save."
+            )
+
+        user_prompt = build_snapshot_compare_user_prompt(
+            older_snapshot=older.snapshot,
+            newer_snapshot=newer.snapshot,
+            older_revision=older.display_revision,
+            newer_revision=newer.display_revision,
+        )
+        summary = chat_ollama(
+            settings.ai.ollama_base_url,
+            model,
+            [
+                {"role": "system", "content": SNAPSHOT_COMPARE_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        return AiSnapshotCompareResponse(
+            object_id=object_uuid,
+            older_version_id=older.version_id or older_id,
+            newer_version_id=newer.version_id or newer_id,
+            older_display_revision=older.display_revision,
+            newer_display_revision=newer.display_revision,
+            model=model,
+            summary=summary,
+        )

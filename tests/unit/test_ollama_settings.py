@@ -7,7 +7,7 @@ import pytest
 
 from creopdm.config import AiConfig, AppSettings
 from creopdm.exceptions import ValidationAppError
-from creopdm.services.ollama_service import list_ollama_models, normalize_ollama_base_url
+from creopdm.services.ollama_service import chat_ollama, list_ollama_models, normalize_ollama_base_url
 
 
 def test_normalize_ollama_base_url_defaults_and_scheme():
@@ -92,6 +92,45 @@ def test_list_ollama_models_unreachable(monkeypatch):
     with pytest.raises(ValidationAppError) as exc:
         list_ollama_models("http://127.0.0.1:11434")
     assert "Could not reach Ollama" in str(exc.value)
+
+
+def test_chat_ollama_posts_messages(monkeypatch):
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"message": {"role": "assistant", "content": "  Diameter grew.  "}}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, json=None):
+            assert url.endswith("/api/chat")
+            assert json["model"] == "gemma4:latest"
+            assert json["stream"] is False
+            assert json["messages"][0]["role"] == "system"
+            return FakeResponse()
+
+    monkeypatch.setattr("creopdm.services.ollama_service.httpx.Client", FakeClient)
+    text = chat_ollama(
+        "http://michael-desktop:11434",
+        "gemma4:latest",
+        [{"role": "system", "content": "sys"}, {"role": "user", "content": "user"}],
+    )
+    assert text == "Diameter grew."
+
+
+def test_chat_ollama_requires_model():
+    with pytest.raises(ValidationAppError) as exc:
+        chat_ollama("http://127.0.0.1:11434", "", [{"role": "user", "content": "hi"}])
+    assert "No Ollama model" in str(exc.value)
 
 
 def test_settings_api_persists_ollama_fields(client):

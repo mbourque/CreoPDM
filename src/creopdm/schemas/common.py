@@ -878,6 +878,31 @@ class AiSnapshotListResponse(BaseModel):
     items: list[AiSnapshotListItem] = Field(default_factory=list)
 
 
+class AiSnapshotCompareRequest(BaseModel):
+    """Ask Ollama to summarize what changed between two revision snapshots."""
+
+    older_version_id: str
+    newer_version_id: str
+
+    @field_validator("older_version_id", "newer_version_id")
+    @classmethod
+    def non_empty_version_id(cls, value: str) -> str:
+        text = (value or "").strip()
+        if not text:
+            raise ValueError("Version id is required.")
+        return text
+
+
+class AiSnapshotCompareResponse(BaseModel):
+    object_id: str
+    older_version_id: str
+    newer_version_id: str
+    older_display_revision: str = ""
+    newer_display_revision: str = ""
+    model: str = ""
+    summary: str = ""
+
+
 class WhereUsedItem(BaseModel):
     object_id: str
     filename: str

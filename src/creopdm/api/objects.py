@@ -25,6 +25,8 @@ from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import CheckoutOwnershipError, CreoPDMError, PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.schemas.common import (
+    AiSnapshotCompareRequest,
+    AiSnapshotCompareResponse,
     AiSnapshotListResponse,
     AiSnapshotRequest,
     AiSnapshotResponse,
@@ -486,6 +488,40 @@ def post_ai_snapshot(
         result.display_revision or "-",
         result.capture_status or "-",
         result.schema_version,
+    )
+    return result
+
+
+@router.post(
+    "/api/objects/{object_id}/ai-snapshot/compare",
+    response_model=AiSnapshotCompareResponse,
+)
+def compare_ai_snapshots(
+    object_id: str,
+    payload: AiSnapshotCompareRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> AiSnapshotCompareResponse:
+    """Ask the configured Ollama model to summarize older → newer snapshot changes."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    result = ctx.ai_snapshots.compare_with_ollama(
+        db,
+        object_id,
+        payload.older_version_id,
+        payload.newer_version_id,
+        ctx.settings,
+    )
+    logger.info(
+        "AI snapshot compare for %s (%s): %s → %s model=%s chars=%s",
+        obj.filename or object_id,
+        object_id[:8],
+        result.older_display_revision or "-",
+        result.newer_display_revision or "-",
+        result.model or "-",
+        len(result.summary or ""),
     )
     return result
 
