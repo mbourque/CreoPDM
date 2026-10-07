@@ -2032,88 +2032,232 @@ function creoParamOwnerRows(owner, ownerLabel) {
     } catch (err) {}
     return rows;
 }
+function creoAsFeature(feat) {
+    if (!feat) return null;
+    try {
+        if (typeof pfcFeature !== "undefined" && typeof pfcFeature.cast === "function") {
+            var casted = pfcFeature.cast(feat);
+            if (casted) return casted;
+        }
+    } catch (errCast) {}
+    return feat;
+}
+function creoDimTypeEnums() {
+    var types = [];
+    try {
+        if (typeof pfcModelItemType !== "undefined") {
+            if (pfcModelItemType.ITEM_DIMENSION != null) types.push(pfcModelItemType.ITEM_DIMENSION);
+            if (pfcModelItemType.ITEM_REF_DIMENSION != null) {
+                types.push(pfcModelItemType.ITEM_REF_DIMENSION);
+            }
+        }
+    } catch (errT) {}
+    return types;
+}
+function creoReadDimensionRow(dim, featureId) {
+    if (!dim) return null;
+    var handle = dim;
+    try {
+        if (typeof pfcDimension !== "undefined" && typeof pfcDimension.cast === "function") {
+            var asDim = pfcDimension.cast(dim);
+            if (asDim) handle = asDim;
+        }
+    } catch (errCast) {}
+    var id = null;
+    try {
+        if (typeof handle.Id !== "undefined") id = handle.Id;
+        else if (typeof handle.GetId === "function") id = handle.GetId();
+    } catch (errId) { id = null; }
+    var symbol = "";
+    try { symbol = String(handle.Name || handle.Symbol || ""); } catch (errSym) { symbol = ""; }
+    var value = null;
+    try {
+        if (typeof handle.GetDimValue === "function") value = handle.GetDimValue();
+        else if (typeof handle.DimValue !== "undefined" && handle.DimValue != null) value = handle.DimValue;
+        else if (typeof handle.Value !== "undefined" && handle.Value != null) value = handle.Value;
+    } catch (errVal) {}
+    var dimTypeName = "";
+    try { dimTypeName = String(handle.Type || handle.DimType || ""); } catch (errT) {}
+    var units = null;
+    try {
+        if (handle.Units != null) units = String(handle.Units.Name || handle.Units || "");
+    } catch (errU) {}
+    var extendsNegative = null;
+    try {
+        if (typeof handle.ExtendsInNegativeDirection !== "undefined") {
+            extendsNegative = Boolean(handle.ExtendsInNegativeDirection);
+        }
+    } catch (errDir) {}
+    var toleranceType = null;
+    var toleranceLimits = null;
+    try {
+        if (handle.Tolerance != null) {
+            try { toleranceType = String(handle.Tolerance.Type || handle.Tolerance.type || ""); } catch (errTt) {}
+            try {
+                toleranceLimits = {
+                    upper: handle.Tolerance.UpperLimit != null ? handle.Tolerance.UpperLimit : handle.Tolerance.upper,
+                    lower: handle.Tolerance.LowerLimit != null ? handle.Tolerance.LowerLimit : handle.Tolerance.lower
+                };
+            } catch (errTl) {}
+        }
+    } catch (errTol) {}
+    var relationDriven = null;
+    try {
+        if (typeof handle.IsRelationDriven !== "undefined") {
+            relationDriven = Boolean(handle.IsRelationDriven);
+        } else if (typeof handle.DrivenByRelation !== "undefined") {
+            relationDriven = Boolean(handle.DrivenByRelation);
+        }
+    } catch (errRel) {}
+    return {
+        id: id,
+        feature_id: featureId == null ? null : featureId,
+        symbol: symbol,
+        value: value,
+        dim_type: dimTypeName,
+        units: units,
+        extends_negative: extendsNegative,
+        tolerance_type: toleranceType,
+        tolerance_limits: toleranceLimits,
+        relation_driven: relationDriven
+    };
+}
 function creoGatherFeatureDimensions(feat, featureId, errors) {
     var dims = [];
     try {
-        var dimType = null;
-        if (typeof pfcModelItemType !== "undefined" && pfcModelItemType.ITEM_DIMENSION != null) {
-            dimType = pfcModelItemType.ITEM_DIMENSION;
-        }
-        if (dimType == null) {
+        var types = creoDimTypeEnums();
+        if (!types.length) {
             errors.push("ITEM_DIMENSION unavailable");
             return dims;
         }
-        if (!creoHasCallable(feat, "ListSubItems") && typeof feat.ListSubItems === "undefined") {
-            errors.push("ListSubItems unavailable for feature " + featureId);
+        var owner = creoAsFeature(feat) || feat;
+        if (!owner) return dims;
+        var listed = null;
+        for (var t = 0; t < types.length && !listed; t++) {
+            try {
+                if (creoHasCallable(owner, "ListSubItems") || typeof owner.ListSubItems !== "undefined") {
+                    listed = owner.ListSubItems(types[t]);
+                    if (listed && !creoFeatureItems(listed).length) listed = null;
+                }
+            } catch (errList) {
+                listed = null;
+            }
+        }
+        if (!listed) {
+            // Empty / unbound — do not spam one error per feature; model fallback covers it.
             return dims;
         }
-        var listed = feat.ListSubItems(dimType);
         var items = creoFeatureItems(listed);
         for (var i = 0; i < items.length; i++) {
-            var dim = items[i];
-            if (!dim) continue;
-            var id = null;
-            try {
-                if (typeof dim.Id !== "undefined") id = dim.Id;
-                else if (typeof dim.GetId === "function") id = dim.GetId();
-            } catch (errId) { id = null; }
-            var symbol = "";
-            try { symbol = String(dim.Name || dim.Symbol || ""); } catch (errSym) { symbol = ""; }
-            var value = null;
-            try {
-                if (typeof dim.DimValue !== "undefined" && dim.DimValue != null) value = dim.DimValue;
-                else if (typeof dim.Value !== "undefined" && dim.Value != null) value = dim.Value;
-            } catch (errVal) {}
-            var dimTypeName = "";
-            try { dimTypeName = String(dim.Type || dim.DimType || ""); } catch (errT) {}
-            var units = null;
-            try {
-                if (dim.Units != null) units = String(dim.Units.Name || dim.Units || "");
-            } catch (errU) {}
-            var extendsNegative = null;
-            try {
-                if (typeof dim.ExtendsInNegativeDirection !== "undefined") {
-                    extendsNegative = Boolean(dim.ExtendsInNegativeDirection);
-                }
-            } catch (errDir) {}
-            var toleranceType = null;
-            var toleranceLimits = null;
-            try {
-                if (dim.Tolerance != null) {
-                    try { toleranceType = String(dim.Tolerance.Type || dim.Tolerance.type || ""); } catch (errTt) {}
-                    try {
-                        toleranceLimits = {
-                            upper: dim.Tolerance.UpperLimit != null ? dim.Tolerance.UpperLimit : dim.Tolerance.upper,
-                            lower: dim.Tolerance.LowerLimit != null ? dim.Tolerance.LowerLimit : dim.Tolerance.lower
-                        };
-                    } catch (errTl) {}
-                }
-            } catch (errTol) {}
-            var relationDriven = null;
-            try {
-                if (typeof dim.IsRelationDriven !== "undefined") {
-                    relationDriven = Boolean(dim.IsRelationDriven);
-                } else if (typeof dim.DrivenByRelation !== "undefined") {
-                    relationDriven = Boolean(dim.DrivenByRelation);
-                }
-            } catch (errRel) {}
-            dims.push({
-                id: id,
-                feature_id: featureId,
-                symbol: symbol,
-                value: value,
-                dim_type: dimTypeName,
-                units: units,
-                extends_negative: extendsNegative,
-                tolerance_type: toleranceType,
-                tolerance_limits: toleranceLimits,
-                relation_driven: relationDriven
-            });
+            var row = creoReadDimensionRow(items[i], featureId);
+            if (row) dims.push(row);
         }
     } catch (err) {
         errors.push("dimensions feature " + featureId + ": " + creoToolkitErr(err));
     }
     return dims;
+}
+function creoEnumName(value) {
+    if (value == null) return "";
+    try {
+        if (typeof value.string === "function") return String(value.string() || "");
+    } catch (errS) {}
+    try { return String(value); } catch (errT) { return ""; }
+}
+function creoOwnerFeatureId(dim) {
+    try {
+        if (dim && typeof dim.GetOwnerFeature === "function") {
+            var owner = dim.GetOwnerFeature();
+            if (owner && typeof owner.Id !== "undefined") return owner.Id;
+        }
+    } catch (errOwn) {}
+    return null;
+}
+function creoGatherModelLevelDimensions(solid, errors) {
+    /**
+     * Primary path used by creo-configurator: model.ListItems(ITEM_DIMENSION).
+     * Per-feature ListSubItems is often empty on silent Retrieve handles.
+     */
+    var dims = [];
+    try {
+        var types = creoDimTypeEnums();
+        if (!types.length) {
+            errors.push("ITEM_DIMENSION unavailable");
+            return dims;
+        }
+        if (!solid) return dims;
+        var seen = {};
+        for (var t = 0; t < types.length; t++) {
+            var listed = null;
+            try {
+                listed = solid.ListItems(types[t]);
+            } catch (errList) {
+                listed = null;
+            }
+            var items = creoFeatureItems(listed);
+            for (var i = 0; i < items.length; i++) {
+                var dim = items[i];
+                if (!dim) continue;
+                var featureId = creoOwnerFeatureId(dim);
+                var row = creoReadDimensionRow(dim, featureId);
+                if (!row) continue;
+                // Prefer DimType enum string (DIM_LINEAR / …) over Type.
+                try {
+                    var dimType = creoEnumName(dim.DimType);
+                    if (dimType) {
+                        if (dimType.indexOf("DIM_") === 0) dimType = dimType.substring(4);
+                        row.dim_type = dimType;
+                    }
+                } catch (errDt) {}
+                var key = String(row.id != null ? row.id : (row.symbol || i));
+                if (seen[key]) continue;
+                seen[key] = true;
+                dims.push(row);
+            }
+        }
+        if (!dims.length) {
+            errors.push("ListItems(ITEM_DIMENSION) returned no dimensions");
+        }
+    } catch (err) {
+        errors.push("model dimensions: " + creoToolkitErr(err));
+    }
+    return dims;
+}
+function creoListFeaturesForSnapshot(solid, errors) {
+    /**
+     * Configurator uses ListItems(ITEM_FEATURE) first. ListFeaturesByType may
+     * return an empty Collection (truthy) — never treat that as success alone.
+     */
+    var listed = null;
+    var items = [];
+    try {
+        if (typeof pfcModelItemType !== "undefined" && pfcModelItemType.ITEM_FEATURE != null) {
+            listed = solid.ListItems(pfcModelItemType.ITEM_FEATURE);
+            items = creoFeatureItems(listed);
+            if (items.length) return items;
+        }
+    } catch (errItems) {
+        errors.push("ListItems(ITEM_FEATURE): " + creoToolkitErr(errItems));
+    }
+    try { listed = solid.ListFeaturesByType(true, null); } catch (err1) {
+        try { listed = solid.ListFeaturesByType(true); } catch (err2) {
+            try { listed = solid.ListFeaturesByType(false, null); } catch (err3) {
+                try { listed = solid.ListFeaturesByType(false); } catch (err4) { listed = null; }
+            }
+        }
+    }
+    items = creoFeatureItems(listed);
+    if (items.length) return items;
+    try {
+        listed = solid.ListFeaturesByType(false, null);
+    } catch (errAll) {
+        try { listed = solid.ListFeaturesByType(false); } catch (errAll2) { listed = null; }
+    }
+    items = creoFeatureItems(listed);
+    if (!items.length) {
+        errors.push("ListFeaturesByType/ListItems returned no features");
+    }
+    return items;
 }
 function gatherAiModelSnapshot(model, session, filename, options) {
     // Experimental richer snapshot for AI compare — separate from Features tab JSON.
@@ -2153,105 +2297,114 @@ function gatherAiModelSnapshot(model, session, filename, options) {
     try {
         var solidDbg = {};
         var solid = creoAsSolid(session, model, solidDbg) || model;
-        var listed = null;
-        try { listed = solid.ListFeaturesByType(true, null); } catch (err1) {
-            try { listed = solid.ListFeaturesByType(true); } catch (err2) {
-                try { listed = solid.ListFeaturesByType(false, null); } catch (err3) {
-                    try { listed = solid.ListFeaturesByType(false); } catch (err4) { listed = null; }
+        // Prefer the same ListItems owners the configurator uses (active Part).
+        var featItems = creoListFeaturesForSnapshot(solid, errors);
+        for (var i = 0; i < featItems.length; i++) {
+            try {
+                var feat = featItems[i];
+                if (!feat) continue;
+                try {
+                    if (typeof pfcFeatureType !== "undefined"
+                        && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
+                        continue;
+                    }
+                } catch (errComp) {}
+                var typeName = "";
+                try { typeName = String(feat.FeatTypeName || ""); } catch (errT) {}
+                var subType = "";
+                try { subType = String(feat.FeatSubType || ""); } catch (errS) {}
+                var id = null;
+                try {
+                    if (typeof feat.Id !== "undefined") id = feat.Id;
+                    else if (typeof feat.GetId === "function") id = feat.GetId();
+                } catch (errId) { id = null; }
+                var name = "";
+                if (wantNames) {
+                    try { name = creoFeatureAssignedName(feat); } catch (errNm) { name = ""; }
                 }
+                if (name && subType && name.toLowerCase() === String(subType).trim().toLowerCase()) {
+                    name = "";
+                }
+                if (name && creoFeatureGenericLabel(name)) name = "";
+                if (!name) name = creoFeatureFallbackName(typeName, subType);
+                var regenOrder = null;
+                try {
+                    if (typeof feat.Number !== "undefined") regenOrder = feat.Number;
+                    else if (typeof feat.GetNumber === "function") regenOrder = feat.GetNumber();
+                } catch (errOrd) {}
+                var parentIds = [];
+                try {
+                    var parents = null;
+                    if (creoHasCallable(feat, "ListParents") || typeof feat.ListParents !== "undefined") {
+                        parents = feat.ListParents();
+                    }
+                    var parentItems = creoFeatureItems(parents);
+                    for (var p = 0; p < parentItems.length; p++) {
+                        try {
+                            var pid = parentItems[p].Id;
+                            if (pid != null) parentIds.push(pid);
+                        } catch (errP) {}
+                    }
+                } catch (errParents) {}
+                var groupId = null;
+                var patternId = null;
+                try {
+                    if (feat.Group != null && feat.Group.Id != null) groupId = feat.Group.Id;
+                } catch (errG) {}
+                try {
+                    if (feat.Pattern != null && feat.Pattern.Id != null) patternId = feat.Pattern.Id;
+                } catch (errPat) {}
+                features.push({
+                    id: id,
+                    name: name || typeName || ("Feature " + (id != null ? id : (i + 1))),
+                    type: typeName,
+                    subtype: subType,
+                    status: creoFeatureStatusLabel(feat),
+                    regen_order: regenOrder,
+                    parent_ids: parentIds,
+                    group_id: groupId,
+                    pattern_id: patternId
+                });
+                if (id != null) {
+                    // Best-effort feature-owned dims; model ListItems is the authority below.
+                    dimensions = dimensions.concat(
+                        creoGatherFeatureDimensions(feat, id, errors)
+                    );
+                    try {
+                        parameters = parameters.concat(
+                            creoParamOwnerRows(feat, "feature:" + id)
+                        );
+                    } catch (errFp) {}
+                }
+            } catch (errFeat) {
+                errors.push("feature[" + i + "]: " + creoToolkitErr(errFeat));
             }
         }
-        if (!listed) {
-            errors.push("ListFeaturesByType unavailable");
-        } else {
-            var featItems = creoFeatureItems(listed);
-            for (var i = 0; i < featItems.length; i++) {
-                try {
-                    var feat = featItems[i];
-                    if (!feat) continue;
-                    try {
-                        if (typeof pfcFeatureType !== "undefined"
-                            && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
-                            continue;
-                        }
-                    } catch (errComp) {}
-                    var typeName = "";
-                    try { typeName = String(feat.FeatTypeName || ""); } catch (errT) {}
-                    var subType = "";
-                    try { subType = String(feat.FeatSubType || ""); } catch (errS) {}
-                    var id = null;
-                    try {
-                        if (typeof feat.Id !== "undefined") id = feat.Id;
-                        else if (typeof feat.GetId === "function") id = feat.GetId();
-                    } catch (errId) { id = null; }
-                    var name = "";
-                    if (wantNames) {
-                        try { name = creoFeatureAssignedName(feat); } catch (errNm) { name = ""; }
-                    }
-                    if (name && subType && name.toLowerCase() === String(subType).trim().toLowerCase()) {
-                        name = "";
-                    }
-                    if (name && creoFeatureGenericLabel(name)) name = "";
-                    if (!name) name = creoFeatureFallbackName(typeName, subType);
-                    var regenOrder = null;
-                    try {
-                        if (typeof feat.Number !== "undefined") regenOrder = feat.Number;
-                        else if (typeof feat.GetNumber === "function") regenOrder = feat.GetNumber();
-                    } catch (errOrd) {}
-                    var parentIds = [];
-                    try {
-                        var parents = null;
-                        if (creoHasCallable(feat, "ListParents") || typeof feat.ListParents !== "undefined") {
-                            parents = feat.ListParents();
-                        }
-                        var parentItems = creoFeatureItems(parents);
-                        for (var p = 0; p < parentItems.length; p++) {
-                            try {
-                                var pid = parentItems[p].Id;
-                                if (pid != null) parentIds.push(pid);
-                            } catch (errP) {}
-                        }
-                    } catch (errParents) {}
-                    var groupId = null;
-                    var patternId = null;
-                    try {
-                        if (feat.Group != null && feat.Group.Id != null) groupId = feat.Group.Id;
-                    } catch (errG) {}
-                    try {
-                        if (feat.Pattern != null && feat.Pattern.Id != null) patternId = feat.Pattern.Id;
-                    } catch (errPat) {}
-                    features.push({
-                        id: id,
-                        name: name || typeName || ("Feature " + (id != null ? id : (i + 1))),
-                        type: typeName,
-                        subtype: subType,
-                        status: creoFeatureStatusLabel(feat),
-                        regen_order: regenOrder,
-                        parent_ids: parentIds,
-                        group_id: groupId,
-                        pattern_id: patternId
-                    });
-                    if (id != null) {
-                        dimensions = dimensions.concat(
-                            creoGatherFeatureDimensions(feat, id, errors)
-                        );
-                        try {
-                            parameters = parameters.concat(
-                                creoParamOwnerRows(feat, "feature:" + id)
-                            );
-                        } catch (errFp) {}
-                    }
-                } catch (errFeat) {
-                    errors.push("feature[" + i + "]: " + creoToolkitErr(errFeat));
-                }
+        // Configurator primary path — always merge model-level ITEM_DIMENSION list.
+        var modelDims = creoGatherModelLevelDimensions(solid, errors);
+        if (modelDims.length) {
+            var seenDim = {};
+            var merged = [];
+            var allDims = modelDims.concat(dimensions);
+            for (var d = 0; d < allDims.length; d++) {
+                var row = allDims[d];
+                if (!row) continue;
+                var key = String(row.id != null ? row.id : ("s:" + (row.symbol || d)));
+                if (seenDim[key]) continue;
+                seenDim[key] = true;
+                merged.push(row);
             }
+            dimensions = merged;
         }
     } catch (errAll) {
         errors.push("features: " + creoToolkitErr(errAll));
     }
     var status = "ok";
-    if (!features.length && !parameters.length) status = errors.length ? "error" : "partial";
-    else if (errors.length) status = "partial";
+    if (!features.length && !parameters.length && !dimensions.length) {
+        status = errors.length ? "error" : "partial";
+    } else if (errors.length || (!features.length && !dimensions.length)) {
+        status = "partial";
+    }
     return {
         schema_version: 1,
         identity: identity,
@@ -2325,8 +2478,9 @@ function creoFeatureItems(listed) {
     if (!listed) return out;
     try {
         var count = null;
-        if (typeof listed.getCount === "function") count = listed.getCount();
-        else if (typeof listed.Count !== "undefined" && listed.Count != null) count = listed.Count;
+        // Creo sequences expose Count (configurator); getCount is a JS-bridge variant.
+        if (typeof listed.Count === "number") count = listed.Count;
+        else if (typeof listed.getCount === "function") count = listed.getCount();
         else if (typeof listed.length === "number") count = listed.length;
         if (count == null) return out;
         for (var i = 0; i < count; i++) {

@@ -487,19 +487,20 @@
     <p class="muted small">
       Experimental per-revision model snapshot (features, dimensions, parameters) for AI change summaries.
       Collect metadata in Creo while a version is tip to create or refresh it. Not used for check-in comments yet.
+      Side-by-side compare appears only when two or more revisions have snapshots.
     </p>
-    <div class="ai-snapshot-compare">
+    <div class="ai-snapshot-compare" id="ai-snapshot-compare" data-mode="single">
       <div class="ai-snapshot-pane" data-pane="a">
         <div class="ai-snapshot-toolbar">
           <label class="ai-snapshot-rev-label">
-            <span class="muted small">Rev A</span>
-            <select id="ai-snapshot-rev-a" class="ai-snapshot-rev" aria-label="Snapshot revision A"></select>
+            <span class="muted small" id="ai-snapshot-label-a">Revision</span>
+            <select id="ai-snapshot-rev-a" class="ai-snapshot-rev" aria-label="Snapshot revision"></select>
           </label>
-          <button type="button" class="btn" id="ai-snapshot-copy-a" disabled title="Copy Rev A JSON to the clipboard">Copy</button>
+          <button type="button" class="btn" id="ai-snapshot-copy-a" disabled title="Copy snapshot JSON to the clipboard">Copy</button>
         </div>
         <pre class="ai-snapshot-body mono" id="ai-snapshot-body-a" tabindex="0">Loading…</pre>
       </div>
-      <div class="ai-snapshot-pane" data-pane="b">
+      <div class="ai-snapshot-pane" data-pane="b" hidden>
         <div class="ai-snapshot-toolbar">
           <label class="ai-snapshot-rev-label">
             <span class="muted small">Rev B</span>

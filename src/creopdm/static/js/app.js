@@ -11499,6 +11499,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!objectId) return;
     const selectA = $("#ai-snapshot-rev-a");
     const selectB = $("#ai-snapshot-rev-b");
+    const compare = $("#ai-snapshot-compare");
+    const paneB = panel.querySelector('.ai-snapshot-pane[data-pane="b"]');
+    const labelA = $("#ai-snapshot-label-a");
     if (!selectA || !selectB) return;
     try {
       if (!aiSnapshotListCache) {
@@ -11511,8 +11514,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const items = Array.isArray(aiSnapshotListCache?.items)
         ? aiSnapshotListCache.items
         : [];
+      const withSnap = items.filter((item) => item && item.has_snapshot);
+      const canCompare = withSnap.length >= 2;
+      if (compare) compare.dataset.mode = canCompare ? "compare" : "single";
+      if (paneB) paneB.hidden = !canCompare;
+      if (labelA) labelA.textContent = canCompare ? "Rev A" : "Revision";
+      selectA.setAttribute("aria-label", canCompare ? "Snapshot revision A" : "Snapshot revision");
       const tipVersion = String(panel.dataset.tipVersion || "").trim();
-      const fillSelect = (select, preferIndex) => {
+      const fillSelect = (select, preferSnapIndex, preferAnyIndex) => {
         const previous = String(select.value || "");
         select.replaceChildren();
         items.forEach((item) => {
@@ -11525,31 +11534,41 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (!items.length) return;
         if (previous && items.some((item) => String(item.version_id) === previous)) {
           select.value = previous;
-        } else if (
-          preferIndex === 0
-          && tipVersion
+          return;
+        }
+        const preferSnap = withSnap[preferSnapIndex];
+        if (preferSnap) {
+          select.value = String(preferSnap.version_id || "");
+          return;
+        }
+        if (
+          tipVersion
           && items.some((item) => String(item.version_id) === tipVersion)
         ) {
           select.value = tipVersion;
-        } else if (items[preferIndex]) {
-          select.value = String(items[preferIndex].version_id || "");
+          return;
+        }
+        if (items[preferAnyIndex]) {
+          select.value = String(items[preferAnyIndex].version_id || "");
         } else {
           select.value = String(items[0].version_id || "");
         }
       };
-      fillSelect(selectA, 0);
-      fillSelect(selectB, items.length > 1 ? 1 : 0);
-      await Promise.all([
-        renderAiSnapshotPane("a", objectId),
-        renderAiSnapshotPane("b", objectId),
-      ]);
+      fillSelect(selectA, 0, 0);
+      if (canCompare) {
+        fillSelect(selectB, 1, 1);
+        await Promise.all([
+          renderAiSnapshotPane("a", objectId),
+          renderAiSnapshotPane("b", objectId),
+        ]);
+      } else {
+        await renderAiSnapshotPane("a", objectId);
+      }
     } catch (err) {
-      ["a", "b"].forEach((pane) => {
-        const body = $(`#ai-snapshot-body-${pane}`);
-        if (body) {
-          body.textContent = `Could not load snapshot list (${err?.message || "error"}).`;
-        }
-      });
+      const body = $("#ai-snapshot-body-a");
+      if (body) {
+        body.textContent = `Could not load snapshot list (${err?.message || "error"}).`;
+      }
     }
   }
 
@@ -11568,7 +11587,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (!text || !navigator.clipboard?.writeText) return;
         try {
           await navigator.clipboard.writeText(text);
-          showOk(`Copied Rev ${pane.toUpperCase()} snapshot JSON.`);
+          const label = pane === "a" && $("#ai-snapshot-compare")?.dataset.mode !== "compare"
+            ? "snapshot"
+            : `Rev ${pane.toUpperCase()} snapshot`;
+          showOk(`Copied ${label} JSON.`);
         } catch {
           showError($("#toolbar-error"), "Could not copy snapshot JSON.");
         }

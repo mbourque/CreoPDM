@@ -18,12 +18,19 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     text = BASE_HTML.read_text(encoding="utf-8")
     assert "function gatherAiModelSnapshot(" in text
     assert "function creoGatherFeatureDimensions(" in text
+    assert "function creoGatherModelLevelDimensions(" in text
+    assert "function creoListFeaturesForSnapshot(" in text
+    # Configurator path: model.ListItems(ITEM_DIMENSION) + ListItems(ITEM_FEATURE).
+    assert "ListItems(ITEM_DIMENSION)" in text or "ListItems(types[t])" in text
+    assert "creoGatherModelLevelDimensions(solid, errors)" in text
+    assert "creoListFeaturesForSnapshot(solid, errors)" in text
     assert "ExtendsInNegativeDirection" in text
     assert "extends_negative" in text
     assert "owner: ownerLabel" in text
     assert "ai_snapshot: ai_snapshot" in text
     assert "ListSubItems" in text
     assert "ITEM_DIMENSION" in text
+    assert "ITEM_FEATURE" in text
 
 
 def test_app_js_posts_ai_snapshot_soft_fail():
@@ -35,6 +42,9 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "async function loadAiSnapshotTab(" in script
     assert "navigator.clipboard.writeText" in script
     assert 'name === "snapshot"' in script
+    assert "withSnap.length >= 2" in script
+    assert 'dataset.mode = canCompare ? "compare" : "single"' in script
+    assert "paneB.hidden = !canCompare" in script
 
 
 def test_snapshot_tab_template_and_docs():
@@ -42,12 +52,16 @@ def test_snapshot_tab_template_and_docs():
     docs = DOCS.read_text(encoding="utf-8")
     assert 'data-tab="snapshot"' in html
     assert 'id="panel-snapshot"' in html
+    assert 'id="ai-snapshot-compare"' in html
+    assert 'data-mode="single"' in html
     assert 'id="ai-snapshot-rev-a"' in html
     assert 'id="ai-snapshot-rev-b"' in html
     assert 'id="ai-snapshot-copy-a"' in html
     assert 'id="ai-snapshot-copy-b"' in html
+    assert 'data-pane="b" hidden' in html
     assert "Open **Snapshot**" in docs
     assert "experimental tab" in docs.lower()
+    assert "two or more" in docs.lower() and "snapshot" in docs.lower()
 
 
 @requires_git

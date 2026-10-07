@@ -1600,10 +1600,13 @@ body.is-file-drag #file-drop-overlay {
 }
 .ai-snapshot-compare {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 1rem;
   min-height: 0;
   flex: 1;
+}
+.ai-snapshot-compare[data-mode="compare"] {
+  grid-template-columns: 1fr 1fr;
 }
 .ai-snapshot-pane {
   display: flex;
@@ -1645,7 +1648,7 @@ body.is-file-drag #file-drop-overlay {
   line-height: 1.35;
 }
 @media (max-width: 900px) {
-  .ai-snapshot-compare {
+  .ai-snapshot-compare[data-mode="compare"] {
     grid-template-columns: 1fr;
   }
 }
