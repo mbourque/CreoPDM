@@ -652,14 +652,36 @@ function creoParamDataType(param) {
         return "STRING";
     }
 }
+function creoModelMatchesRequestedFile(model, filename) {
+    /**
+     * Reject stem-only collisions: looking up wedge.drw must not return wedge.prt
+     * (same InstanceName / root). That poisoned drawing AI snapshots as PART.
+     */
+    if (!model) return false;
+    var wantExt = creoLogicalExtension(filename || "");
+    if (!wantExt) return true;
+    try {
+        var gotName = "";
+        try { gotName = String(model.FileName || ""); } catch (errFn) { gotName = ""; }
+        var gotExt = creoLogicalExtension(gotName);
+        if (gotExt && gotExt !== wantExt) return false;
+    } catch (errExt) {}
+    try {
+        var mt = String(creoModelTypeLabel(model.Type) || "").toUpperCase();
+        if (wantExt === ".drw" && mt && mt !== "DRAWING") return false;
+        if ((wantExt === ".prt" || wantExt === ".asm") && mt === "DRAWING") return false;
+    } catch (errMt) {}
+    return true;
+}
 function creoFindSessionModel(session, filename) {
     var logical = creoLogicalFileName(filename);
     var shortName = creoNormalizePath(logical);
+    var wantExt = creoLogicalExtension(shortName);
     var model = null;
     try {
         if (typeof session.GetModelFromFileName === "function") {
             model = session.GetModelFromFileName(shortName);
-            if (model) return model;
+            if (model && creoModelMatchesRequestedFile(model, shortName)) return model;
         }
     } catch (errGet) {}
     try {
@@ -670,19 +692,26 @@ function creoFindSessionModel(session, filename) {
             var count = listed && typeof listed.getCount === "function"
                 ? listed.getCount()
                 : (listed && listed.length) || 0;
+            var rootFallback = null;
             for (var i = 0; i < count; i++) {
                 var item = typeof listed.get === "function" ? listed.get(i) : listed[i];
                 if (!item) continue;
                 var name = "";
                 try { name = String(item.FileName || ""); } catch (errName) { name = ""; }
                 var lower = name.toLowerCase();
-                if (lower === want || creoLogicalFileName(name).toLowerCase() === want) {
-                    return item;
+                var logicalItem = creoLogicalFileName(name).toLowerCase();
+                if (lower === want || logicalItem === want) {
+                    if (creoModelMatchesRequestedFile(item, shortName)) return item;
+                    continue;
                 }
-                if (wantRoot && creoModelRoot(lower) === wantRoot) {
-                    return item;
+                // Stem match only when extension also matches (or request has no ext).
+                if (wantRoot && creoModelRoot(logicalItem || lower) === wantRoot) {
+                    if (!creoModelMatchesRequestedFile(item, shortName)) continue;
+                    if (!wantExt) return item;
+                    if (!rootFallback) rootFallback = item;
                 }
             }
+            if (rootFallback) return rootFallback;
         }
     } catch (errList) {}
     return null;
@@ -2602,6 +2631,21 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                 units: null,
                 value: viewErased
             });
+            var viewNames = [];
+            for (var vn = 0; vn < features.length; vn++) {
+                if (features[vn] && features[vn].name) {
+                    viewNames.push(String(features[vn].name));
+                }
+            }
+            viewNames.sort();
+            parameters.push({
+                data_type: "STRING",
+                description: null,
+                name: "VIEW_NAMES",
+                owner: "model",
+                units: null,
+                value: viewNames.join(", ")
+            });
             if (sheetCount != null) {
                 parameters.push({
                     data_type: "INTEGER",
@@ -3259,8 +3303,8 @@ function gatherModelMetadata(filename, filePath, options) {
     var opts = options && typeof options === "object" ? options : {};
     // Default on (Collect + Open). Pass featureNames:false only to skip .name reads.
     var wantFeatureNames = opts.featureNames !== false;
-    // Check-in Ask AI: preferDisk reads the modified workspace tip, not a stale
-    // session handle that still matches the vault tip snapshot.
+    // preferDisk: load from filePath when not already in session. Never Erase —
+    // Erase closes the user's Creo window (Ask AI check-in must not do that).
     var preferDisk = opts.preferDisk === true && !!filePath;
     try {
         var session = (typeof pfcGetCurrentSession === "function")
@@ -3273,16 +3317,11 @@ function gatherModelMetadata(filename, filePath, options) {
         var model = null;
         var weRetrieved = false;
         if (preferDisk) {
-            // Drop stale session tip so Retrieve loads the modified workspace tip
-            // (Ask AI check-in: tip snapshot vs file being checked in).
-            // Keep the retrieved model in session (weRetrieved=false) so Ask AI
-            // does not Erase the drawing the user still has open for check-in.
-            try {
-                var stale = creoFindSessionModel(session, filename);
-                if (stale) creoEraseModelQuiet(stale);
-            } catch (errStale) {}
-            model = creoRetrieveForMetadata(session, filePath, filename);
-            weRetrieved = false;
+            model = creoFindSessionModel(session, filename);
+            if (!model) {
+                model = creoRetrieveForMetadata(session, filePath, filename);
+                weRetrieved = !!model;
+            }
         } else {
             model = creoFindSessionModel(session, filename);
             if (!model && filePath) {

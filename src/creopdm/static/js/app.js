@@ -2260,7 +2260,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           body: JSON.stringify(body),
         });
         if (response.ok) {
-          await postAiSnapshotFromGather(target.uuid, target.versionId || null, snapshot);
+          await postAiSnapshotFromGather(target.uuid, target.versionId || null, snapshot, {
+            objectFilename: target.filename,
+          });
         }
         return {
           ok: response.ok,
@@ -6829,6 +6831,21 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!opts.force && objectAiSnapshotTipIsStale(objectUuid)) {
       return false;
     }
+    // Never store PART solid JSON on a .drw object (session stem matched wedge.prt).
+    try {
+      const objectName = String(opts.objectFilename || "").toLowerCase();
+      const idName = String(snapshot.identity?.filename || "").toLowerCase();
+      const idType = String(snapshot.identity?.model_type || "").toUpperCase();
+      if (
+        objectName.endsWith(".drw")
+        && (idType === "PART" || idType === "ASSEMBLY"
+          || idName.endsWith(".prt") || idName.endsWith(".asm"))
+      ) {
+        return false;
+      }
+    } catch {
+      /* continue — server also rejects */
+    }
     const capture = snapshot.capture && typeof snapshot.capture === "object" ? snapshot.capture : {};
     const body = {
       version_id: versionId || null,
@@ -6938,6 +6955,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           // Check In / Open tip capture — force so Modified row paint cannot skip.
           await postAiSnapshotFromGather(target.uuid, target.versionId || null, snapshot, {
             force: true,
+            objectFilename: target.filename,
           });
         }
       } catch {
@@ -10011,27 +10029,37 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     try {
       const summary = await withBusy("Collecting modified model…", async () => {
-        // Older = saved tip snapshot. Newer = gather of the file being checked in
-        // (local modified tip) — not vault tip materialize / stale session.
+        // Older = saved tip snapshot (A.1). Newer = open modified model in Creo
+        // (what you are checking in). Prefer session — never Erase (that closed
+        // the drawing). Disk path only if the model is not in session.
         const pending = await resolvePendingCheckinLocalPath(objectId, filename);
-        if (!pending.path) {
-          throw new Error(
-            "Could not find the modified file in the local workspace. "
-              + "Save in Creo first, then try Ask AI for comment again."
-          );
-        }
-        const gatherName = pending.logicalName || filename;
-        const snapshot = await gatherCreoMetadataForFilename(gatherName, pending.path, {
+        const gatherName =
+          pending.logicalName || logicalUploadName(filename) || filename;
+        let snapshot = await gatherCreoMetadataForFilename(gatherName, "", {
           featureNames: true,
-          preferDisk: true,
         });
-        if (!snapshot || snapshot.__error) {
+        if (snapshot && snapshot.__error) snapshot = null;
+        let gatherSource = snapshot ? "session" : "";
+        if (!snapshot && pending.path) {
+          snapshot = await gatherCreoMetadataForFilename(gatherName, pending.path, {
+            featureNames: true,
+            preferDisk: true,
+          });
+          if (snapshot && snapshot.__error) {
+            throw new Error(
+              String(
+                snapshot.__detail
+                  || snapshot.__error
+                  || "Could not gather metadata from the modified file."
+              )
+            );
+          }
+          gatherSource = "disk";
+        }
+        if (!snapshot) {
           throw new Error(
-            String(
-              snapshot?.__detail
-                || snapshot?.__error
-                || "Could not gather metadata from the modified file."
-            )
+            "Could not find the modified model in Creo. Keep the drawing open "
+              + "(or Save so it is in the local workspace), then try again."
           );
         }
         const newerSnapshot = aiSnapshotBodyFromGather(snapshot);
@@ -10040,6 +10068,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             "Creo did not return an AI snapshot for this model. "
               + "Collect metadata on the tip while it is clean, then try again."
           );
+        }
+        try {
+          if (!newerSnapshot.capture || typeof newerSnapshot.capture !== "object") {
+            newerSnapshot.capture = {};
+          }
+          newerSnapshot.capture.compare_source = gatherSource || "unknown";
+        } catch {
+          /* ignore */
         }
         publishBusyMessage("Asking AI for check-in comment…");
         let response;

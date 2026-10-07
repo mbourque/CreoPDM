@@ -49,6 +49,13 @@ def test_drawing_ai_snapshot_skips_solid_walk():
     # Bare FileName must not override wedge.drw — that skipped views (empty features).
     assert "bare FileName" in text
     assert 'identity.model_type || "").toUpperCase() === "DRAWING"' in text
+    assert "function creoModelMatchesRequestedFile(" in text
+    assert "stem-only collisions" in text
+    find_fn = text.split("function creoFindSessionModel(", 1)[1].split(
+        "function creoSessionModelKeys(", 1
+    )[0]
+    assert "creoModelMatchesRequestedFile(item, shortName)" in find_fn
+    assert "creoModelMatchesRequestedFile(model, shortName)" in find_fn
     # Drawing branch gathers views as type VIEW; solid branch still uses creoAsSolid.
     gather = text.split("function gatherAiModelSnapshot(", 1)[1].split(
         "function creoFeatureNameWeak(", 1
@@ -131,12 +138,18 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "function aiSnapshotBodyFromGather(" in script
     # Tip snapshot vs local modified tip — never vault tip materialize.
     assert "function resolvePendingCheckinLocalPath(" in script
-    assert "preferDisk: true" in script
-    assert "Never materialize the vault tip" in script
+    assert "never Erase" in script
+    assert 'gatherSource = snapshot ? "session"' in script
     assert "prepareLocalPathForMetadata(objectId, filename)" not in script.split(
         "async function askAiCheckinComment(", 1
     )[1].split("checkinBtn?.addEventListener", 1)[0]
-    assert "preferDisk" in BASE_HTML.read_text(encoding="utf-8")
+    base_html = BASE_HTML.read_text(encoding="utf-8")
+    assert "preferDisk" in base_html
+    assert "Never Erase" in base_html
+    assert "creoEraseModelQuiet(stale)" not in base_html
+    assert "VIEW_NAMES" in base_html
+    assert "objectFilename: target.filename" in script
+    assert "session stem matched wedge.prt" in script
     assert "abortSignalAfter(120_000)" in script
     assert "Ollama timed out after 2 minutes" in script
     assert 'id="checkin-ask-ai"' in (
@@ -175,7 +188,8 @@ def test_snapshot_tab_template_and_docs():
     assert "above** the two JSON panes" in docs or "above the two JSON panes" in docs
     assert "Ask AI for comment" in docs
     assert (
-        "fresh gather of the local modified tip" in docs
+        "fresh gather of the model open in Creo" in docs
+        or "fresh gather of the local modified tip" in docs
         or "Collect metadata on the modified" in docs
     )
     assert 'id="checkin-ask-ai"' in html
@@ -347,6 +361,52 @@ def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_pat
         assert got.snapshot["dimensions"][0]["value"] == 8.0
         listed_svc = svc.list_for_object(db, object_id)
         assert any(item.has_snapshot for item in listed_svc.items)
+
+
+@requires_git
+def test_ai_snapshot_rejects_part_json_on_drawing_object(client, repo_parent, tmp_path):
+    """Regression: A.2 for wedge.drw stored wedge.prt solid after stem session match."""
+    product = client.post(
+        "/api/products",
+        json={"name": "Drw Snap Guard", "number": "SNAP-DRW"},
+    )
+    assert product.status_code == 201, product.text
+    product_id = product.json()["uuid"]
+    drw = tmp_path / "wedge.drw.1"
+    drw.write_bytes(b"FAKE CREO DRAWING")
+    added = client.post(
+        f"/api/products/{product_id}/objects",
+        files={"file": ("wedge.drw.1", drw.read_bytes(), "application/octet-stream")},
+        data={"comment": "seed drawing"},
+    )
+    assert added.status_code == 201, added.text
+    obj = added.json()
+    object_id = obj["uuid"]
+    version_id = obj["current_version"]["uuid"]
+    poisoned = {
+        "version_id": version_id,
+        "schema_version": AI_SNAPSHOT_SCHEMA_VERSION,
+        "capture_status": "ok",
+        "capture_errors": [],
+        "snapshot": {
+            "identity": {
+                "filename": "wedge.prt",
+                "model_type": "PART",
+                "generic_name": "",
+                "instance_name": "WEDGE",
+                "units": None,
+            },
+            "features": [{"id": 40, "name": "BASE", "type": "PROTRUSION"}],
+            "dimensions": [],
+            "parameters": [],
+        },
+    }
+    bad = client.post(f"/api/objects/{object_id}/ai-snapshot", json=poisoned)
+    assert bad.status_code == 400, bad.text
+    assert "drawing cannot be a part" in bad.text.lower() or "drawing" in bad.text.lower()
+    empty = client.get(f"/api/objects/{object_id}/ai-snapshot")
+    assert empty.status_code == 200
+    assert empty.json()["has_snapshot"] is False
 
 
 @requires_git

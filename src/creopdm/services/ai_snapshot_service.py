@@ -141,6 +141,30 @@ class AiSnapshotService:
                 details={"object_id": object_uuid},
             )
 
+        # Refuse PART/ASSEMBLY solid walks stored on a drawing object (stem collision).
+        obj_name = str(version.filename or obj.filename or "").lower()
+        identity = payload.snapshot.get("identity") if isinstance(payload.snapshot, dict) else None
+        snap_type = ""
+        snap_file = ""
+        if isinstance(identity, dict):
+            snap_type = str(identity.get("model_type") or "").strip().upper()
+            snap_file = str(identity.get("filename") or "").strip().lower()
+        if obj_name.endswith(".drw") and (
+            snap_type in {"PART", "ASSEMBLY"}
+            or snap_file.endswith(".prt")
+            or snap_file.endswith(".asm")
+        ):
+            raise ValidationAppError(
+                "AI snapshot for a drawing cannot be a part/assembly solid. "
+                "Re-Collect the drawing in Creo Connected.",
+                details={
+                    "object_id": object_uuid,
+                    "object_filename": version.filename or obj.filename,
+                    "snapshot_filename": snap_file or None,
+                    "snapshot_model_type": snap_type or None,
+                },
+            )
+
         schema_version = int(payload.schema_version or AI_SNAPSHOT_SCHEMA_VERSION)
         status = str(payload.capture_status or "ok").strip().lower() or "ok"
         if status not in {"ok", "partial", "error"}:
