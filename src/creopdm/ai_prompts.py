@@ -210,6 +210,134 @@ def _format_dim_value(value: Any) -> str:
     return str(value).strip()
 
 
+def _dimension_outline_line(dim: dict[str, Any]) -> str:
+    symbol = str(dim.get("symbol") or "").strip()
+    value = _format_dim_value(dim.get("value"))
+    unit = str(dim.get("units") or "").strip()
+    piece = f"{symbol} = {value}"
+    if unit:
+        piece += f" {unit}"
+    limits = dim.get("tolerance_limits")
+    if isinstance(limits, dict) and limits:
+        lo = limits.get("lower", limits.get("min"))
+        hi = limits.get("upper", limits.get("max"))
+        if lo is not None and hi is not None:
+            piece += f" (limits {_format_dim_value(lo)}–{_format_dim_value(hi)})"
+    return piece
+
+
+def _dimension_compare_key(dim: dict[str, Any]) -> str:
+    """Value+units+limits only (symbol matched separately)."""
+    value = _format_dim_value(dim.get("value"))
+    unit = str(dim.get("units") or "").strip()
+    key = value if not unit else f"{value} {unit}"
+    limits = dim.get("tolerance_limits")
+    if isinstance(limits, dict) and limits:
+        lo = limits.get("lower", limits.get("min"))
+        hi = limits.get("upper", limits.get("max"))
+        if lo is not None and hi is not None:
+            key += f"|{_format_dim_value(lo)}|{_format_dim_value(hi)}"
+    return key
+
+
+def _feature_outline_labels(snapshot: dict[str, Any]) -> list[str]:
+    identity = snapshot.get("identity") if isinstance(snapshot.get("identity"), dict) else {}
+    drawing = _is_drawing_snapshot(snapshot, identity)
+    features_raw = snapshot.get("features") if isinstance(snapshot.get("features"), list) else []
+    features = _iter_compare_features(features_raw)
+    labels: list[str] = []
+    if drawing:
+        for feat in features:
+            if _is_view_feature(feat):
+                labels.append(_view_display_line(feat).lstrip("- ").strip())
+            else:
+                labels.append(_feature_display_name(feat))
+        return labels
+    pattern_i = 0
+    for feat in features:
+        if _is_pattern_feature(feat):
+            pattern_i += 1
+            labels.append(_feature_display_name(feat, pattern_index=pattern_i))
+        else:
+            labels.append(_feature_display_name(feat))
+    return labels
+
+
+def _count_labels(labels: list[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for label in labels:
+        counts[label] = counts.get(label, 0) + 1
+    return counts
+
+
+def format_snapshot_compare_diff_text(
+    older_snapshot: dict[str, Any] | None,
+    newer_snapshot: dict[str, Any] | None,
+) -> str:
+    """Authoritative OLD→NEW feature/dimension diffs (prevents cross-symbol dim merges)."""
+    older = older_snapshot if isinstance(older_snapshot, dict) else {}
+    newer = newer_snapshot if isinstance(newer_snapshot, dict) else {}
+
+    older_feats = _count_labels(_feature_outline_labels(older))
+    newer_feats = _count_labels(_feature_outline_labels(newer))
+    feat_removed: list[str] = []
+    feat_added: list[str] = []
+    for label in sorted(set(older_feats) | set(newer_feats), key=str.lower):
+        delta = newer_feats.get(label, 0) - older_feats.get(label, 0)
+        if delta < 0:
+            feat_removed.extend([label] * (-delta))
+        elif delta > 0:
+            feat_added.extend([label] * delta)
+
+    older_dims = {
+        str(d.get("symbol") or "").strip(): d
+        for d in _iter_compare_dimensions(
+            older.get("dimensions") if isinstance(older.get("dimensions"), list) else []
+        )
+        if str(d.get("symbol") or "").strip()
+    }
+    newer_dims = {
+        str(d.get("symbol") or "").strip(): d
+        for d in _iter_compare_dimensions(
+            newer.get("dimensions") if isinstance(newer.get("dimensions"), list) else []
+        )
+        if str(d.get("symbol") or "").strip()
+    }
+    dim_removed: list[str] = []
+    dim_added: list[str] = []
+    dim_changed: list[str] = []
+    for symbol in sorted(set(older_dims) | set(newer_dims), key=str.lower):
+        old_dim = older_dims.get(symbol)
+        new_dim = newer_dims.get(symbol)
+        if old_dim is not None and new_dim is None:
+            dim_removed.append(_dimension_outline_line(old_dim))
+        elif old_dim is None and new_dim is not None:
+            dim_added.append(_dimension_outline_line(new_dim))
+        elif old_dim is not None and new_dim is not None:
+            if _dimension_compare_key(old_dim) != _dimension_compare_key(new_dim):
+                dim_changed.append(
+                    f"{symbol}: {_dimension_outline_line(old_dim).split(' = ', 1)[-1]} → "
+                    f"{_dimension_outline_line(new_dim).split(' = ', 1)[-1]}"
+                )
+
+    def _bullet_block(title: str, items: list[str]) -> list[str]:
+        if not items:
+            return [f"{title}: (none)"]
+        return [f"{title}:", *[f"- {item}" for item in items]]
+
+    lines = [
+        "=== Computed differences (authoritative) ===",
+        "Match dimensions by symbol only. Never treat two different symbols as one value change.",
+        "Use singular wording when only one feature or dimension is listed.",
+        *_bullet_block("Features removed", feat_removed),
+        *_bullet_block("Features added", feat_added),
+        *_bullet_block("Dimensions removed", dim_removed),
+        *_bullet_block("Dimensions changed (same symbol)", dim_changed),
+        *_bullet_block("Dimensions added", dim_added),
+    ]
+    return "\n".join(lines)
+
+
 def _iter_compare_dimensions(dimensions: list[Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for dim in dimensions:
@@ -530,6 +658,7 @@ def build_snapshot_compare_user_prompt(
         newer_label = "newer"
     older_text = format_snapshot_compare_text(older_snapshot)
     newer_text = format_snapshot_compare_text(newer_snapshot)
+    diff_text = format_snapshot_compare_diff_text(older_snapshot, newer_snapshot)
     return (
         f"Two snapshots follow. The first is OLD (already checked in); "
         f"the second is NEW (the revision being compared / checked in). "
@@ -538,9 +667,13 @@ def build_snapshot_compare_user_prompt(
         f"{older_text}\n\n"
         f"=== NEW snapshot ({newer_label}) ===\n"
         f"{newer_text}\n\n"
+        f"{diff_text}\n\n"
         f"Summarize only what changed from OLD ({older_label}) to NEW ({newer_label}), "
-        f"following your instructions. Treat the block under "
-        f"\"=== OLD snapshot ===\" as the previous state and "
+        f"following your instructions. Prefer the Computed differences block above — "
+        f"it already matched dimensions by symbol. Never invent a value change by "
+        f"pairing two different symbols (e.g. do not turn removed d248 = 7 and "
+        f"removed d255 = 6 into “reduced d248 from 7 to 6”). "
+        f"Treat the block under \"=== OLD snapshot ===\" as the previous state and "
         f"\"=== NEW snapshot ===\" as the current state. "
         f"Never claim a revision is missing when both revision outlines are present above."
     )

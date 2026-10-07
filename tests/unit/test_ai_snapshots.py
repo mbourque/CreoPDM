@@ -8,6 +8,7 @@ import pytest
 
 from creopdm.ai_prompts import (
     build_snapshot_compare_user_prompt,
+    format_snapshot_compare_diff_text,
     resolve_snapshot_compare_prompt,
     slim_snapshot_for_compare,
 )
@@ -462,15 +463,19 @@ def test_snapshot_compare_prompt_requires_saved_text():
         newer_revision="A.2",
     )
     assert "Features:" in pat_prompt
-    older_half, newer_half = pat_prompt.split("=== NEW snapshot (A.2) ===", 1)
+    older_half, after_old = pat_prompt.split("=== NEW snapshot (A.2) ===", 1)
+    newer_half, _, diff_half = after_old.partition(
+        "=== Computed differences (authoritative) ==="
+    )
     # Number PATTERNs in tree order so Ask AI can say "deleted PATTERN 2", not
     # "deleted pattern instances" when only one PATTERN line disappears.
     assert "- PATTERN 1" in older_half
     assert "- PATTERN 2" in older_half
-    assert "- PATTERN 2" not in newer_half or newer_half.count("PATTERN 2") == 0
     assert older_half.count("PATTERN ") >= 2
     assert "PATTERN 1" in newer_half
     assert "PATTERN 2" not in newer_half
+    assert "PATTERN 2" in diff_half
+    assert "Features removed" in diff_half
     assert "members)" in older_half
     assert "Feature 15780" not in pat_prompt
     assert "15775" not in pat_prompt
@@ -480,6 +485,47 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "{" not in pat_prompt
     assert "FEAT_1" in fat_prompt
     assert "outline" not in fat_prompt
+
+    # Regression: removed d248=7 and d255=6 must not become "reduced d248 to 6".
+    plate_old = {
+        "identity": {"filename": "plate_3.prt", "model_type": "PART"},
+        "features": [
+            {"name": "PATTERN", "type": "PATTERN"},
+            {"name": "PATTERN", "type": "PATTERN"},
+            {"name": "PATTERN", "type": "PATTERN", "pattern_member_count": 1012},
+        ],
+        "dimensions": [
+            {"symbol": "d245", "value": 2, "units": "in"},
+            {"symbol": "d248", "value": 7, "units": "in"},
+            {"symbol": "d255", "value": 6, "units": "in"},
+            {"symbol": "T", "value": 0.5, "units": "in"},
+        ],
+    }
+    plate_new = {
+        "identity": {"filename": "plate_3.prt", "model_type": "PART"},
+        "features": [
+            {"name": "PATTERN", "type": "PATTERN"},
+            {"name": "PATTERN", "type": "PATTERN"},
+        ],
+        "dimensions": [
+            {"symbol": "T", "value": 0.5, "units": "in"},
+        ],
+    }
+    plate_diff = format_snapshot_compare_diff_text(plate_old, plate_new)
+    assert "d248 = 7 in" in plate_diff
+    assert "d255 = 6 in" in plate_diff
+    assert "Dimensions removed:" in plate_diff
+    assert "Dimensions changed (same symbol): (none)" in plate_diff
+    assert "→ 6" not in plate_diff
+    plate_prompt = build_snapshot_compare_user_prompt(
+        older_snapshot=plate_old,
+        newer_snapshot=plate_new,
+        older_revision="A.1",
+        newer_revision="A.2",
+    )
+    assert "Computed differences (authoritative)" in plate_prompt
+    assert "pairing two different symbols" in plate_prompt
+    assert "PATTERN 3" in plate_diff
 
 
 @requires_git
