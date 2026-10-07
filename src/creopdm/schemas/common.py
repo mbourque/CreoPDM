@@ -560,6 +560,8 @@ class SettingsResponse(BaseModel):
     default_site_unavailable_message: str = ""
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = ""
+    snapshot_compare_prompt: str = ""
+    default_snapshot_compare_prompt: str = ""
 
 
 class OllamaModelsResponse(BaseModel):
@@ -594,6 +596,7 @@ class SettingsUpdateRequest(BaseModel):
     site_unavailable_message: str | None = None
     ollama_base_url: str | None = None
     ollama_model: str | None = None
+    snapshot_compare_prompt: str | None = None
 
     @field_validator("creo_open_mode")
     @classmethod
@@ -762,6 +765,16 @@ class SettingsUpdateRequest(BaseModel):
         if value is None:
             return None
         return value.strip()
+
+    @field_validator("snapshot_compare_prompt")
+    @classmethod
+    def valid_snapshot_compare_prompt(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        from creopdm.ai_prompts import DEFAULT_SNAPSHOT_COMPARE_PROMPT
+
+        text = value.strip()
+        return text or DEFAULT_SNAPSHOT_COMPARE_PROMPT.strip()
 
     @field_validator("workspace_poll_interval_ms")
     @classmethod

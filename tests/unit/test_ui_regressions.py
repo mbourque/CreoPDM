@@ -2449,8 +2449,12 @@ def test_admin_hub_panel_fills_full_width():
     ).read_text(encoding="utf-8")
     assert 'name="ollama_base_url"' in ai_partial
     assert 'name="ollama_model"' in ai_partial
+    assert 'name="snapshot_compare_prompt"' in ai_partial
+    assert 'id="snapshot-compare-prompt"' in ai_partial
+    assert 'id="snapshot-compare-prompt-reset"' in ai_partial
+    assert "Ask AI what changed" in ai_partial
     assert 'id="ollama-refresh-models"' in ai_partial
-    assert "Custom instructions are not configured yet" in ai_partial
+    assert "Custom instructions are not configured yet" not in ai_partial
     assert "falls back to this browser" in ai_partial
     assert "Click Refresh models to list installed models" in ai_partial
     section = (ROOT / "src" / "creopdm" / "templates" / "settings_section.html").read_text(
@@ -2481,6 +2485,8 @@ def test_admin_hub_panel_fills_full_width():
     assert "Hub section pages only send fields present" in script
     assert 'settingsForm.querySelector(\'[name="site_availability"]\')' in script
     assert 'settingsForm.querySelector(\'[name="ollama_base_url"]\')' in script
+    assert 'settingsForm.querySelector(\'[name="snapshot_compare_prompt"]\')' in script
+    assert "snapshot-compare-prompt-reset" in script
     assert "refreshOllamaModels" in script
     assert "/api/settings/ai/ollama/models" in script
     assert "listOllamaModelsFromBrowser" in script

@@ -26,6 +26,7 @@ from creopdm.constants import (
 from creopdm.context import AppContext
 from creopdm.creo.connector_factory import create_creo_connector
 from creopdm.exceptions import PathValidationError, PermissionDeniedError
+from creopdm.ai_prompts import DEFAULT_SNAPSHOT_COMPARE_PROMPT
 from creopdm.schemas.common import OllamaModelsResponse, SettingsResponse, SettingsUpdateRequest
 from creopdm.services.ollama_service import list_ollama_models, normalize_ollama_base_url
 from creopdm.site_availability import (
@@ -102,6 +103,8 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         default_site_unavailable_message=DEFAULT_SITE_UNAVAILABLE_MESSAGE,
         ollama_base_url=settings.ai.ollama_base_url,
         ollama_model=settings.ai.ollama_model or "",
+        snapshot_compare_prompt=settings.ai.snapshot_compare_prompt or "",
+        default_snapshot_compare_prompt=DEFAULT_SNAPSHOT_COMPARE_PROMPT.strip(),
     )
 
 
@@ -252,6 +255,8 @@ def update_settings(
         current.ai.ollama_base_url = payload.ollama_base_url
     if payload.ollama_model is not None:
         current.ai.ollama_model = payload.ollama_model
+    if payload.snapshot_compare_prompt is not None:
+        current.ai.snapshot_compare_prompt = payload.snapshot_compare_prompt
     # Turning unavailable on with the stock message → append pretty “Since …” date.
     if current.ui.site_availability == SITE_UNAVAILABLE:
         current.ui.site_unavailable_message = message_for_unavailable_save(
@@ -308,6 +313,7 @@ def _settings_audit_snapshot(settings: AppSettings) -> dict:
         "site_unavailable_message": settings.ui.site_unavailable_message or "",
         "ollama_base_url": settings.ai.ollama_base_url,
         "ollama_model": settings.ai.ollama_model or "",
+        "snapshot_compare_prompt": bool(settings.ai.snapshot_compare_prompt),
         "email_enabled": bool(email.enabled),
         "email_transport": email.transport,
         "smtp_password": bool(email.smtp_password),  # presence only; redacted by key name

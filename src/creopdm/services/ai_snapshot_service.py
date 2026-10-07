@@ -11,8 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from creopdm.ai_prompts import (
-    SNAPSHOT_COMPARE_SYSTEM_PROMPT,
     build_snapshot_compare_user_prompt,
+    resolve_snapshot_compare_prompt,
 )
 from creopdm.config import AppSettings
 from creopdm.exceptions import NotFoundError, ValidationAppError
@@ -275,6 +275,7 @@ class AiSnapshotService:
                 "No Ollama model selected. Open Administration → AI, Refresh models, choose a model, and Save."
             )
 
+        system_prompt = resolve_snapshot_compare_prompt(settings.ai.snapshot_compare_prompt)
         user_prompt = build_snapshot_compare_user_prompt(
             older_snapshot=older.snapshot,
             newer_snapshot=newer.snapshot,
@@ -285,7 +286,7 @@ class AiSnapshotService:
             settings.ai.ollama_base_url,
             model,
             [
-                {"role": "system", "content": SNAPSHOT_COMPARE_SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
         )

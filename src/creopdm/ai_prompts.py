@@ -1,13 +1,13 @@
-"""Reusable prompts for CreoPDM AI features (Ollama)."""
+"""Defaults and helpers for CreoPDM AI prompts (editable copy lives in AI settings)."""
 
 from __future__ import annotations
 
 import json
 from typing import Any
 
-# System role: stable instructions the model should follow every compare.
-# Tuned to the change-notice style the user validated with ChatGPT.
-SNAPSHOT_COMPARE_SYSTEM_PROMPT = """\
+# Seed text for Administration → AI → Snapshot compare prompt (persisted in settings).
+# Compare uses the saved setting, not this constant, once the admin has saved.
+DEFAULT_SNAPSHOT_COMPARE_PROMPT = """\
 You compare two CreoPDM model snapshots (schema v1 JSON) for the same Creo part.
 The user message always includes both: older JSON first, then newer JSON.
 
@@ -47,6 +47,12 @@ with limits of 14–16 mm to 20 mm with limits of 19–21 mm."
 """
 
 
+def resolve_snapshot_compare_prompt(saved: str | None) -> str:
+    """Use the AI-settings prompt when set; otherwise the seed default."""
+    text = str(saved or "").strip()
+    return text or DEFAULT_SNAPSHOT_COMPARE_PROMPT.strip()
+
+
 def build_snapshot_compare_user_prompt(
     *,
     older_snapshot: dict[str, Any],
@@ -54,7 +60,7 @@ def build_snapshot_compare_user_prompt(
     older_revision: str = "",
     newer_revision: str = "",
 ) -> str:
-    """User message: older then newer JSON, matching the ChatGPT paste order."""
+    """User message: older then newer JSON only (instructions come from AI settings)."""
     older_label = (older_revision or "").strip() or "older"
     newer_label = (newer_revision or "").strip() or "newer"
     older_json = json.dumps(older_snapshot, ensure_ascii=False, indent=2, default=str)
@@ -62,9 +68,6 @@ def build_snapshot_compare_user_prompt(
     return (
         f"Older revision ({older_label}):\n{older_json}\n\n"
         f"Newer revision ({newer_label}):\n{newer_json}\n\n"
-        f"Write one short factual change-notice paragraph for what changed from "
-        f"{older_label} to {newer_label}. Diff the features arrays and name every "
-        f"removed feature type (e.g. chamfer and round if both are gone), plus "
-        f"concrete old→new dimension values — same style as the Good example. "
-        f"No generic engineering fluff."
+        f"Summarize what changed from {older_label} to {newer_label}, "
+        f"following your instructions."
     )

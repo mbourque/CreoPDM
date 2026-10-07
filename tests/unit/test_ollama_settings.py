@@ -135,26 +135,34 @@ def test_chat_ollama_requires_model():
 
 
 def test_settings_api_persists_ollama_fields(client):
+    from creopdm.ai_prompts import DEFAULT_SNAPSHOT_COMPARE_PROMPT
+
     before = client.get("/api/settings")
     assert before.status_code == 200
     assert before.json()["ollama_base_url"] == "http://127.0.0.1:11434"
     assert before.json()["ollama_model"] == ""
+    assert before.json()["snapshot_compare_prompt"] == DEFAULT_SNAPSHOT_COMPARE_PROMPT.strip()
+    assert before.json()["default_snapshot_compare_prompt"] == DEFAULT_SNAPSHOT_COMPARE_PROMPT.strip()
 
+    custom = "Compare older then newer. One short paragraph. No fluff."
     saved = client.put(
         "/api/settings",
         json={
             "ollama_base_url": "http://michael-desktop:11434",
             "ollama_model": "gemma4:latest",
+            "snapshot_compare_prompt": custom,
         },
     )
     assert saved.status_code == 200, saved.text
     body = saved.json()
     assert body["ollama_base_url"] == "http://michael-desktop:11434"
     assert body["ollama_model"] == "gemma4:latest"
+    assert body["snapshot_compare_prompt"] == custom
 
     again = client.get("/api/settings")
     assert again.json()["ollama_base_url"] == "http://michael-desktop:11434"
     assert again.json()["ollama_model"] == "gemma4:latest"
+    assert again.json()["snapshot_compare_prompt"] == custom
 
 
 def test_ollama_models_endpoint_uses_query_override(client, monkeypatch):
@@ -180,3 +188,7 @@ def test_ai_settings_page_renders(client):
     assert "Ollama host URL" in page.text
     assert 'name="ollama_base_url"' in page.text
     assert 'id="ollama-refresh-models"' in page.text
+    assert 'name="snapshot_compare_prompt"' in page.text
+    assert "Snapshot compare prompt" in page.text
+    assert 'id="snapshot-compare-prompt-reset"' in page.text
+    assert "Ask AI what changed" in page.text

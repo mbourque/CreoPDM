@@ -5,8 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from creopdm.ai_prompts import (
-    SNAPSHOT_COMPARE_SYSTEM_PROMPT,
+    DEFAULT_SNAPSHOT_COMPARE_PROMPT,
     build_snapshot_compare_user_prompt,
+    resolve_snapshot_compare_prompt,
 )
 from creopdm.services.ai_snapshot_service import AI_SNAPSHOT_SCHEMA_VERSION, AiSnapshotService
 from tests.conftest import requires_git
@@ -114,19 +115,18 @@ def test_snapshot_tab_template_and_docs():
     assert "above** the two JSON panes" in docs or "above the two JSON panes" in docs
 
 
-def test_snapshot_compare_prompt_forbids_invented_tolerances():
-    assert 'No "± allowance"' in SNAPSHOT_COMPARE_SYSTEM_PROMPT
-    assert "one short paragraph" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
-    assert "change notice" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
-    assert "Prefer named dims" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
-    assert "bilateral ± tolerance" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
-    assert "Never say there is no previous state" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
-    assert "Good (write like this):" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
-    assert "Bad (never write like this):" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
-    assert "Reduced width and length from 120 to 100 mm" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
-    assert "manufacturing accuracy" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
-    assert "if both a chamfer and a round were removed, say both" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
-    assert "Compare the features arrays carefully" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
+def test_snapshot_compare_prompt_seed_and_user_message():
+    seed = DEFAULT_SNAPSHOT_COMPARE_PROMPT
+    assert 'No "± allowance"' in seed
+    assert "one short paragraph" in seed
+    assert "change notice" in seed
+    assert "Prefer named dims" in seed
+    assert "bilateral ± tolerance" in seed
+    assert "Never say there is no previous state" in seed
+    assert "Good (write like this):" in seed
+    assert "if both a chamfer and a round were removed, say both" in seed
+    assert resolve_snapshot_compare_prompt("") == seed.strip()
+    assert resolve_snapshot_compare_prompt("  Custom prompt.  ") == "Custom prompt."
     user = build_snapshot_compare_user_prompt(
         older_snapshot={"dimensions": [{"symbol": "d0", "value": 6}]},
         newer_snapshot={"dimensions": [{"symbol": "d0", "value": 8}]},
@@ -135,16 +135,15 @@ def test_snapshot_compare_prompt_forbids_invented_tolerances():
     )
     assert "Older revision (A.1):" in user
     assert "Newer revision (A.2):" in user
-    assert "Diff the features arrays" in user
-    assert "chamfer and round if both are gone" in user
-    assert "No generic engineering fluff" in user
+    assert "following your instructions" in user
     assert '"value": 6' in user
     assert '"value": 8' in user
-    # Prompt-only path — no precomputed feature diff block.
     assert "PRECOMPUTED DIFF" not in user
+    # Compare instructions are the AI-settings field; no hard-coded system constant.
     import creopdm.ai_prompts as ai_prompts
 
-    assert not hasattr(ai_prompts, "build_snapshot_diff_hints")
+    assert not hasattr(ai_prompts, "SNAPSHOT_COMPARE_SYSTEM_PROMPT")
+    assert hasattr(ai_prompts, "DEFAULT_SNAPSHOT_COMPARE_PROMPT")
 
 
 @requires_git
@@ -343,6 +342,7 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
         json={
             "ollama_base_url": "http://michael-desktop:11434",
             "ollama_model": "gemma4:latest",
+            "snapshot_compare_prompt": "Use only facts from the JSON.",
         },
     )
     assert saved.status_code == 200, saved.text
@@ -353,12 +353,10 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
         captured["base_url"] = base_url
         captured["model"] = model
         captured["messages"] = messages
-        assert 'No "± allowance"' in messages[0]["content"]
-        assert "if both a chamfer and a round were removed, say both" in messages[0]["content"]
+        assert messages[0]["content"] == "Use only facts from the JSON."
         assert "Older revision" in messages[1]["content"]
         assert "Newer revision" in messages[1]["content"]
-        assert "Diff the features arrays" in messages[1]["content"]
-        assert "PRECOMPUTED DIFF" not in messages[1]["content"]
+        assert "following your instructions" in messages[1]["content"]
         assert "5.0" in messages[1]["content"]
         assert "7.5" in messages[1]["content"]
         return "Dimension d0 increased from 5 mm to 7.5 mm."

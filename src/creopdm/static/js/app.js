@@ -12018,6 +12018,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       body.ollama_base_url = String(data.get("ollama_base_url") || "").trim();
       body.ollama_model = String(data.get("ollama_model") || "").trim();
     }
+    if (settingsForm.querySelector('[name="snapshot_compare_prompt"]')) {
+      body.snapshot_compare_prompt = String(data.get("snapshot_compare_prompt") || "");
+    }
     const response = await fetch("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -12240,6 +12243,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
   $("#ollama-refresh-models")?.addEventListener("click", () => {
     void refreshOllamaModels();
+  });
+  $("#snapshot-compare-prompt-reset")?.addEventListener("click", () => {
+    const ta = $("#snapshot-compare-prompt");
+    const tpl = $("#snapshot-compare-prompt-default");
+    if (!ta || !tpl) return;
+    ta.value = String(tpl.content?.textContent || tpl.textContent || "").trim();
+    ta.focus();
   });
   if (ollamaSettings) {
     void refreshOllamaModels();

@@ -385,6 +385,8 @@ class AiConfig(BaseModel):
 
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = ""
+    # Editable on Administration → AI; seed default from ai_prompts.
+    snapshot_compare_prompt: str = ""
 
     @field_validator("ollama_base_url")
     @classmethod
@@ -397,6 +399,14 @@ class AiConfig(BaseModel):
     @classmethod
     def strip_model(cls, value: object) -> str:
         return str(value or "").strip()
+
+    @field_validator("snapshot_compare_prompt", mode="before")
+    @classmethod
+    def normalize_snapshot_compare_prompt(cls, value: object) -> str:
+        from creopdm.ai_prompts import DEFAULT_SNAPSHOT_COMPARE_PROMPT
+
+        text = str(value or "").strip()
+        return text or DEFAULT_SNAPSHOT_COMPARE_PROMPT.strip()
 
 
 class AppSettings(BaseModel):

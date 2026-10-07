@@ -24,5 +24,17 @@
       {% endif %}
     </select>
   </label>
-  <p class="muted small">Custom instructions are not configured yet.</p>
+  <label>Snapshot compare prompt
+    <textarea
+      id="snapshot-compare-prompt"
+      name="snapshot_compare_prompt"
+      rows="18"
+      spellcheck="true"
+    >{{ settings.snapshot_compare_prompt }}</textarea>
+  </label>
+  <p class="muted small">Used as the system instructions for <strong>Ask AI what changed</strong> on the Snapshot tab. CreoPDM always appends the older and newer snapshot JSON after this text. Paste and Save to iterate.</p>
+  <div class="form-actions" style="margin-top: 0.5rem;">
+    <button type="button" class="btn" id="snapshot-compare-prompt-reset">Reset prompt to default</button>
+  </div>
+  <template id="snapshot-compare-prompt-default">{{ settings.default_snapshot_compare_prompt }}</template>
 </section>
