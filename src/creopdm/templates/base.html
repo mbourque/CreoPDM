@@ -2261,6 +2261,137 @@ function creoListFeaturesForSnapshot(solid, errors) {
     }
     return items;
 }
+function creoIsDrawingModel(model, filename) {
+    try {
+        if (typeof pfcModelType !== "undefined" && model
+            && model.Type === pfcModelType.MDL_DRAWING) {
+            return true;
+        }
+    } catch (errType) {}
+    var name = String(filename || "");
+    try {
+        if (model && model.FileName) name = String(model.FileName);
+    } catch (errFn) {}
+    name = String(name || "").toLowerCase();
+    try {
+        var logical = creoLogicalFileName(name);
+        if (logical) name = String(logical).toLowerCase();
+    } catch (errLog) {}
+    return /\.drw(\.|$)/.test(name);
+}
+function creoGatherDrawingViews(drawing, errors) {
+    /**
+     * Drawing views for AI compare — never walk the solid via creoAsSolid.
+     * Rows go into snapshot.features as type VIEW so the compare prompt sees them.
+     */
+    var views = [];
+    if (!drawing) return views;
+    try {
+        var listed = null;
+        if (creoHasCallable(drawing, "List2DViews")
+            || typeof drawing.List2DViews !== "undefined") {
+            listed = drawing.List2DViews();
+        } else {
+            errors.push("List2DViews unavailable");
+            return views;
+        }
+        var items = creoFeatureItems(listed);
+        for (var i = 0; i < items.length; i++) {
+            try {
+                var view = items[i];
+                if (!view) continue;
+                var id = null;
+                try {
+                    if (typeof view.Id !== "undefined") id = view.Id;
+                    else if (typeof view.GetId === "function") id = view.GetId();
+                } catch (errId) { id = null; }
+                var name = "";
+                try {
+                    if (typeof view.Name !== "undefined") name = String(view.Name || "");
+                    else if (typeof view.GetName === "function") name = String(view.GetName() || "");
+                } catch (errNm) { name = ""; }
+                var viewType = "";
+                try {
+                    viewType = creoEnumName(view.Type) || String(view.Type || "");
+                } catch (errVt) {}
+                var sheet = null;
+                try {
+                    if (typeof view.GetSheetNumber === "function") sheet = view.GetSheetNumber();
+                    else if (typeof view.SheetNumber !== "undefined") sheet = view.SheetNumber;
+                } catch (errSh) {}
+                views.push({
+                    id: id != null ? id : ("view:" + i),
+                    name: name || ("View " + (i + 1)),
+                    type: "VIEW",
+                    subtype: viewType || "",
+                    status: "active",
+                    regen_order: i + 1,
+                    parent_ids: [],
+                    group_id: null,
+                    pattern_id: null,
+                    sheet: sheet
+                });
+            } catch (errView) {
+                errors.push("view[" + i + "]: " + creoToolkitErr(errView));
+            }
+        }
+        if (!views.length) {
+            errors.push("List2DViews returned no views");
+        }
+    } catch (err) {
+        errors.push("List2DViews: " + creoToolkitErr(err));
+    }
+    return views;
+}
+function creoGatherDrawingSheetCount(drawing, errors) {
+    try {
+        if (!drawing) return null;
+        if (creoHasCallable(drawing, "GetNumberOfSheets")
+            || typeof drawing.GetNumberOfSheets !== "undefined") {
+            return drawing.GetNumberOfSheets();
+        }
+        if (typeof drawing.NumberOfSheets !== "undefined") {
+            return drawing.NumberOfSheets;
+        }
+    } catch (err) {
+        errors.push("sheets: " + creoToolkitErr(err));
+    }
+    return null;
+}
+function creoGatherDrawingModels(drawing, errors) {
+    var models = [];
+    if (!drawing) return models;
+    try {
+        var listed = null;
+        if (creoHasCallable(drawing, "ListModels")
+            || typeof drawing.ListModels !== "undefined") {
+            listed = drawing.ListModels();
+        } else {
+            return models;
+        }
+        var items = creoFeatureItems(listed);
+        for (var i = 0; i < items.length; i++) {
+            try {
+                var m = items[i];
+                if (!m) continue;
+                var row = { filename: "", model_type: "" };
+                try {
+                    var ident = creoGatherIdentity(m);
+                    row.filename = String(ident.file_name || "");
+                    row.model_type = String(ident.model_type || "");
+                } catch (errIdent) {
+                    try { row.filename = String(m.FileName || ""); } catch (errFn) {}
+                }
+                if (row.filename) models.push(row);
+            } catch (errM) {
+                errors.push("drawing model[" + i + "]: " + creoToolkitErr(errM));
+            }
+        }
+    } catch (err) {
+        errors.push("ListModels: " + creoToolkitErr(err));
+    }
+    return models;
+}
 function gatherAiModelSnapshot(model, session, filename, options) {
     // Experimental richer snapshot for AI compare — separate from Features tab JSON.
     var opts = options && typeof options === "object" ? options : {};
@@ -2269,6 +2400,8 @@ function gatherAiModelSnapshot(model, session, filename, options) {
     var features = [];
     var dimensions = [];
     var parameters = [];
+    var drawingModels = [];
+    var sheetCount = null;
     var identity = {
         filename: String(filename || ""),
         model_type: "",
@@ -2285,9 +2418,15 @@ function gatherAiModelSnapshot(model, session, filename, options) {
     } catch (errIdent) {
         errors.push("identity: " + creoToolkitErr(errIdent));
     }
+    var isDrawing = creoIsDrawingModel(model, identity.filename || filename);
+    if (isDrawing && String(identity.model_type || "").toUpperCase() !== "DRAWING") {
+        identity.model_type = "DRAWING";
+    }
     try {
-        var units = creoGatherUnits(model, null, session);
-        if (units) identity.units = units;
+        if (!isDrawing) {
+            var units = creoGatherUnits(model, null, session);
+            if (units) identity.units = units;
+        }
     } catch (errUnits) {
         errors.push("units: " + creoToolkitErr(errUnits));
     }
@@ -2296,110 +2435,147 @@ function gatherAiModelSnapshot(model, session, filename, options) {
     } catch (errParams) {
         errors.push("model params: " + creoToolkitErr(errParams));
     }
-    try {
-        var solidDbg = {};
-        var solid = creoAsSolid(session, model, solidDbg) || model;
-        // Prefer the same ListItems owners the configurator uses (active Part).
-        var featItems = creoListFeaturesForSnapshot(solid, errors);
-        for (var i = 0; i < featItems.length; i++) {
-            try {
-                var feat = featItems[i];
-                if (!feat) continue;
-                try {
-                    if (typeof pfcFeatureType !== "undefined"
-                        && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
-                        continue;
-                    }
-                } catch (errComp) {}
-                var typeName = "";
-                try { typeName = String(feat.FeatTypeName || ""); } catch (errT) {}
-                var subType = "";
-                try { subType = String(feat.FeatSubType || ""); } catch (errS) {}
-                var id = null;
-                try {
-                    if (typeof feat.Id !== "undefined") id = feat.Id;
-                    else if (typeof feat.GetId === "function") id = feat.GetId();
-                } catch (errId) { id = null; }
-                var name = "";
-                if (wantNames) {
-                    try { name = creoFeatureAssignedName(feat); } catch (errNm) { name = ""; }
-                }
-                if (name && subType && name.toLowerCase() === String(subType).trim().toLowerCase()) {
-                    name = "";
-                }
-                if (name && creoFeatureGenericLabel(name)) name = "";
-                if (!name) name = creoFeatureFallbackName(typeName, subType);
-                var regenOrder = null;
-                try {
-                    if (typeof feat.Number !== "undefined") regenOrder = feat.Number;
-                    else if (typeof feat.GetNumber === "function") regenOrder = feat.GetNumber();
-                } catch (errOrd) {}
-                var parentIds = [];
-                try {
-                    var parents = null;
-                    if (creoHasCallable(feat, "ListParents") || typeof feat.ListParents !== "undefined") {
-                        parents = feat.ListParents();
-                    }
-                    var parentItems = creoFeatureItems(parents);
-                    for (var p = 0; p < parentItems.length; p++) {
-                        try {
-                            var pid = parentItems[p].Id;
-                            if (pid != null) parentIds.push(pid);
-                        } catch (errP) {}
-                    }
-                } catch (errParents) {}
-                var groupId = null;
-                var patternId = null;
-                try {
-                    if (feat.Group != null && feat.Group.Id != null) groupId = feat.Group.Id;
-                } catch (errG) {}
-                try {
-                    if (feat.Pattern != null && feat.Pattern.Id != null) patternId = feat.Pattern.Id;
-                } catch (errPat) {}
-                features.push({
-                    id: id,
-                    name: name || typeName || ("Feature " + (id != null ? id : (i + 1))),
-                    type: typeName,
-                    subtype: subType,
-                    status: creoFeatureStatusLabel(feat),
-                    regen_order: regenOrder,
-                    parent_ids: parentIds,
-                    group_id: groupId,
-                    pattern_id: patternId
+    if (isDrawing) {
+        // Drawings: capture views / sheets / drawing dims on the .drw handle.
+        // Never creoAsSolid — that walks the referenced PART and poisons tip compare.
+        try {
+            features = creoGatherDrawingViews(model, errors);
+            sheetCount = creoGatherDrawingSheetCount(model, errors);
+            drawingModels = creoGatherDrawingModels(model, errors);
+            if (sheetCount != null) {
+                parameters.push({
+                    data_type: "INTEGER",
+                    description: null,
+                    name: "NUMBER_OF_SHEETS",
+                    owner: "model",
+                    units: null,
+                    value: sheetCount
                 });
-                if (id != null) {
-                    // Best-effort feature-owned dims; model ListItems is the authority below.
-                    dimensions = dimensions.concat(
-                        creoGatherFeatureDimensions(feat, id, errors)
-                    );
+            }
+            for (var dm = 0; dm < drawingModels.length; dm++) {
+                parameters.push({
+                    data_type: "STRING",
+                    description: null,
+                    name: "DRAWING_MODEL_" + (dm + 1),
+                    owner: "model",
+                    units: null,
+                    value: drawingModels[dm].filename
+                        + (drawingModels[dm].model_type
+                            ? (" (" + drawingModels[dm].model_type + ")")
+                            : "")
+                });
+            }
+            var drwDims = creoGatherModelLevelDimensions(model, errors);
+            if (drwDims.length) dimensions = drwDims;
+        } catch (errDrw) {
+            errors.push("drawing: " + creoToolkitErr(errDrw));
+        }
+    } else {
+        try {
+            var solidDbg = {};
+            var solid = creoAsSolid(session, model, solidDbg) || model;
+            // Prefer the same ListItems owners the configurator uses (active Part).
+            var featItems = creoListFeaturesForSnapshot(solid, errors);
+            for (var i = 0; i < featItems.length; i++) {
+                try {
+                    var feat = featItems[i];
+                    if (!feat) continue;
                     try {
-                        parameters = parameters.concat(
-                            creoParamOwnerRows(feat, "feature:" + id)
+                        if (typeof pfcFeatureType !== "undefined"
+                            && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
+                            continue;
+                        }
+                    } catch (errComp) {}
+                    var typeName = "";
+                    try { typeName = String(feat.FeatTypeName || ""); } catch (errT) {}
+                    var subType = "";
+                    try { subType = String(feat.FeatSubType || ""); } catch (errS) {}
+                    var id = null;
+                    try {
+                        if (typeof feat.Id !== "undefined") id = feat.Id;
+                        else if (typeof feat.GetId === "function") id = feat.GetId();
+                    } catch (errId) { id = null; }
+                    var name = "";
+                    if (wantNames) {
+                        try { name = creoFeatureAssignedName(feat); } catch (errNm) { name = ""; }
+                    }
+                    if (name && subType && name.toLowerCase() === String(subType).trim().toLowerCase()) {
+                        name = "";
+                    }
+                    if (name && creoFeatureGenericLabel(name)) name = "";
+                    if (!name) name = creoFeatureFallbackName(typeName, subType);
+                    var regenOrder = null;
+                    try {
+                        if (typeof feat.Number !== "undefined") regenOrder = feat.Number;
+                        else if (typeof feat.GetNumber === "function") regenOrder = feat.GetNumber();
+                    } catch (errOrd) {}
+                    var parentIds = [];
+                    try {
+                        var parents = null;
+                        if (creoHasCallable(feat, "ListParents") || typeof feat.ListParents !== "undefined") {
+                            parents = feat.ListParents();
+                        }
+                        var parentItems = creoFeatureItems(parents);
+                        for (var p = 0; p < parentItems.length; p++) {
+                            try {
+                                var pid = parentItems[p].Id;
+                                if (pid != null) parentIds.push(pid);
+                            } catch (errP) {}
+                        }
+                    } catch (errParents) {}
+                    var groupId = null;
+                    var patternId = null;
+                    try {
+                        if (feat.Group != null && feat.Group.Id != null) groupId = feat.Group.Id;
+                    } catch (errG) {}
+                    try {
+                        if (feat.Pattern != null && feat.Pattern.Id != null) patternId = feat.Pattern.Id;
+                    } catch (errPat) {}
+                    features.push({
+                        id: id,
+                        name: name || typeName || ("Feature " + (id != null ? id : (i + 1))),
+                        type: typeName,
+                        subtype: subType,
+                        status: creoFeatureStatusLabel(feat),
+                        regen_order: regenOrder,
+                        parent_ids: parentIds,
+                        group_id: groupId,
+                        pattern_id: patternId
+                    });
+                    if (id != null) {
+                        // Best-effort feature-owned dims; model ListItems is the authority below.
+                        dimensions = dimensions.concat(
+                            creoGatherFeatureDimensions(feat, id, errors)
                         );
-                    } catch (errFp) {}
+                        try {
+                            parameters = parameters.concat(
+                                creoParamOwnerRows(feat, "feature:" + id)
+                            );
+                        } catch (errFp) {}
+                    }
+                } catch (errFeat) {
+                    errors.push("feature[" + i + "]: " + creoToolkitErr(errFeat));
                 }
-            } catch (errFeat) {
-                errors.push("feature[" + i + "]: " + creoToolkitErr(errFeat));
             }
-        }
-        // Configurator primary path — always merge model-level ITEM_DIMENSION list.
-        var modelDims = creoGatherModelLevelDimensions(solid, errors);
-        if (modelDims.length) {
-            var seenDim = {};
-            var merged = [];
-            var allDims = modelDims.concat(dimensions);
-            for (var d = 0; d < allDims.length; d++) {
-                var row = allDims[d];
-                if (!row) continue;
-                var key = String(row.id != null ? row.id : ("s:" + (row.symbol || d)));
-                if (seenDim[key]) continue;
-                seenDim[key] = true;
-                merged.push(row);
+            // Configurator primary path — always merge model-level ITEM_DIMENSION list.
+            var modelDims = creoGatherModelLevelDimensions(solid, errors);
+            if (modelDims.length) {
+                var seenDim = {};
+                var merged = [];
+                var allDims = modelDims.concat(dimensions);
+                for (var d = 0; d < allDims.length; d++) {
+                    var row = allDims[d];
+                    if (!row) continue;
+                    var key = String(row.id != null ? row.id : ("s:" + (row.symbol || d)));
+                    if (seenDim[key]) continue;
+                    seenDim[key] = true;
+                    merged.push(row);
+                }
+                dimensions = merged;
             }
-            dimensions = merged;
+        } catch (errAll) {
+            errors.push("features: " + creoToolkitErr(errAll));
         }
-    } catch (errAll) {
-        errors.push("features: " + creoToolkitErr(errAll));
     }
     var status = "ok";
     if (!features.length && !parameters.length && !dimensions.length) {
@@ -2419,7 +2595,9 @@ function gatherAiModelSnapshot(model, session, filename, options) {
         capture: {
             status: status,
             errors: errors,
-            assembly_context: null
+            assembly_context: null,
+            drawing_models: isDrawing ? drawingModels : null,
+            sheet_count: isDrawing ? sheetCount : null
         }
     };
 }
@@ -2499,7 +2677,18 @@ function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
         snapshot.family_table = m.family_table;
     }
     // Merge Features-tab names/types into snapshot rows (same ids Creo assigns).
-    if (Array.isArray(m.features) && m.features.length) {
+    // Skip for drawings — Features tab is empty / solid-only; do not inject PART rows.
+    var snapIsDrw = false;
+    try {
+        var sn = String(
+            (snapshot.identity && snapshot.identity.filename) || ""
+        ).toLowerCase();
+        var st = String(
+            (snapshot.identity && snapshot.identity.model_type) || ""
+        ).toUpperCase();
+        snapIsDrw = st === "DRAWING" || /\.drw(\.|$)/.test(sn);
+    } catch (errDrwCheck) {}
+    if (!snapIsDrw && Array.isArray(m.features) && m.features.length) {
         var byId = {};
         var i;
         for (i = 0; i < m.features.length; i++) {
@@ -3004,7 +3193,17 @@ function gatherModelMetadata(filename, filePath, options) {
         } catch (errRoleFinal) {}
         var ai_snapshot = null;
         try {
-            ai_snapshot = gatherAiModelSnapshot(solidModel, session, filename || identity.file_name, {
+            // Drawings must keep the .drw handle — solidModel via creoAsSolid is the
+            // referenced PART and would poison tip/pending AI compare (prt vs drw).
+            var aiTarget = model;
+            try {
+                if (!creoIsDrawingModel(model, filename || identity.file_name)) {
+                    aiTarget = solidModel;
+                }
+            } catch (errAiTarget) {
+                aiTarget = solidModel;
+            }
+            ai_snapshot = gatherAiModelSnapshot(aiTarget, session, filename || identity.file_name, {
                 featureNames: wantFeatureNames,
             });
         } catch (errAi) {

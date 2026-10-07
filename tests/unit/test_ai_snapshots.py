@@ -33,6 +33,30 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "ListItems(ITEM_DIMENSION)" in text or "ListItems(types[t])" in text
     assert "creoGatherModelLevelDimensions(solid, errors)" in text
     assert "creoListFeaturesForSnapshot(solid, errors)" in text
+
+
+def test_drawing_ai_snapshot_skips_solid_walk():
+    """Regression: tip A.1 for wedge.drw stored PART solid (ROUND/CHAMFER) vs pending DRAWING."""
+    text = BASE_HTML.read_text(encoding="utf-8")
+    assert "function creoIsDrawingModel(" in text
+    assert "function creoGatherDrawingViews(" in text
+    assert "List2DViews" in text
+    assert "GetNumberOfSheets" in text
+    assert "Never creoAsSolid" in text
+    assert "creoIsDrawingModel(model, filename || identity.file_name)" in text
+    assert "snapIsDrw" in text
+    # Drawing branch gathers views as type VIEW; solid branch still uses creoAsSolid.
+    gather = text.split("function gatherAiModelSnapshot(", 1)[1].split(
+        "function creoFeatureNameWeak(", 1
+    )[0]
+    assert 'type: "VIEW"' in gather or "type: \"VIEW\"" in gather
+    assert "isDrawing" in gather
+    assert "creoAsSolid(session, model, solidDbg)" in gather
+    # Solid walk only in the else (part/asm) branch after the drawing early path.
+    drawing_idx = gather.find("if (isDrawing)")
+    solid_idx = gather.find("creoAsSolid(session, model, solidDbg)")
+    assert drawing_idx >= 0
+    assert solid_idx > drawing_idx
     assert "ExtendsInNegativeDirection" in text
     assert "extends_negative" in text
     assert "owner: ownerLabel" in text
