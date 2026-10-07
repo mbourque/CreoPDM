@@ -45,7 +45,13 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "replace(/<<[^>]*>>/g" in text
     assert "function creoMergeDimensionRows(" in text
     assert "function creoStampDimensionFeatureNames(" in text
+    assert "function creoApplyDimOwnerMap(" in text
     assert "creoStampDimensionFeatureNames(dimensions, features)" in text
+    assert "creoApplyDimOwnerMap(dimensions, dimOwnerByDimId, dimOwnerBySymbol)" in text
+    assert "Pass 1 — number PATTERN heads" in text
+    assert "creoHasCallable(dim, \"GetOwnerFeature\")" in text or "GetOwnerFeature" in text.split(
+        "function creoOwnerFeatureId(", 1
+    )[1].split("function creoApplyDimOwnerMap(", 1)[0]
     # Configurator path: model.ListItems(ITEM_DIMENSION) + ListItems(ITEM_FEATURE).
     assert "ListItems(ITEM_DIMENSION)" in text or "ListItems(types[t])" in text
     assert "creoGatherModelLevelDimensions(solid, errors)" in text

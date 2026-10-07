@@ -2211,13 +2211,61 @@ function creoEnumName(value) {
     try { return String(value); } catch (errT) { return ""; }
 }
 function creoOwnerFeatureId(dim) {
+    /**
+     * Creo.JS often exposes toolkit methods that are callable but not
+     * typeof==="function" — use creoHasCallable like the rest of gather.
+     */
     try {
-        if (dim && typeof dim.GetOwnerFeature === "function") {
-            var owner = dim.GetOwnerFeature();
-            if (owner && typeof owner.Id !== "undefined") return owner.Id;
+        if (!dim) return null;
+        var owner = null;
+        try {
+            if (creoHasCallable(dim, "GetOwnerFeature") || typeof dim.GetOwnerFeature !== "undefined") {
+                owner = dim.GetOwnerFeature();
+            }
+        } catch (errGof) { owner = null; }
+        if (!owner) {
+            try {
+                if (creoHasCallable(dim, "GetOwner") || typeof dim.GetOwner !== "undefined") {
+                    owner = dim.GetOwner();
+                }
+            } catch (errGo) { owner = null; }
         }
+        if (!owner && dim.Owner != null) owner = dim.Owner;
+        if (owner) {
+            try {
+                if (typeof owner.Id !== "undefined") return owner.Id;
+            } catch (errId) {}
+            try {
+                if (creoHasCallable(owner, "GetId") || typeof owner.GetId === "function") {
+                    return owner.GetId();
+                }
+            } catch (errGetId) {}
+        }
+        if (dim.FeatId != null) return dim.FeatId;
+        if (dim.feat_id != null) return dim.feat_id;
+        if (dim.ParentId != null) return dim.ParentId;
     } catch (errOwn) {}
     return null;
+}
+function creoApplyDimOwnerMap(dimensions, ownerByDimId, ownerBySymbol) {
+    if (!Array.isArray(dimensions)) return;
+    for (var i = 0; i < dimensions.length; i++) {
+        var row = dimensions[i];
+        if (!row) continue;
+        var hit = null;
+        if (row.id != null && ownerByDimId[String(row.id)]) {
+            hit = ownerByDimId[String(row.id)];
+        } else if (row.symbol && ownerBySymbol[String(row.symbol).toLowerCase()]) {
+            hit = ownerBySymbol[String(row.symbol).toLowerCase()];
+        }
+        if (!hit) continue;
+        if (row.feature_id == null || row.feature_id === "") {
+            row.feature_id = hit.feature_id;
+        }
+        if (!row.feature_name && hit.feature_name) {
+            row.feature_name = hit.feature_name;
+        }
+    }
 }
 function creoGatherModelLevelDimensions(solid, errors) {
     /**
@@ -2764,6 +2812,58 @@ function gatherAiModelSnapshot(model, session, filename, options) {
             var solid = creoAsSolid(session, model, solidDbg) || model;
             // Prefer the same ListItems owners the configurator uses (active Part).
             var featItems = creoListFeaturesForSnapshot(solid, errors);
+            var patternLabelById = {};
+            var patternSeq = 0;
+            // Pass 1 — number PATTERN heads in tree order before members (members
+            // often appear first; dim owners need PATTERN N labels ready).
+            for (var pi = 0; pi < featItems.length; pi++) {
+                try {
+                    var pfeat = featItems[pi];
+                    if (!pfeat || !creoFeatureIsVisibleForSnapshot(pfeat)) continue;
+                    try {
+                        if (typeof pfcFeatureType !== "undefined"
+                            && pfeat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
+                            continue;
+                        }
+                    } catch (errPc) {}
+                    var pType = "";
+                    try { pType = String(pfeat.FeatTypeName || "").toUpperCase(); } catch (errPt) {}
+                    var pName = "";
+                    try { pName = String(creoFeatureAssignedName(pfeat) || "").toUpperCase(); } catch (errPn) {}
+                    if (pType !== "PATTERN" && pName !== "PATTERN") continue;
+                    var pidHead = null;
+                    try {
+                        if (typeof pfeat.Id !== "undefined") pidHead = pfeat.Id;
+                        else if (typeof pfeat.GetId === "function") pidHead = pfeat.GetId();
+                    } catch (errPid) { pidHead = null; }
+                    if (pidHead == null) continue;
+                    patternSeq += 1;
+                    patternLabelById[String(pidHead)] = "PATTERN " + patternSeq;
+                } catch (errPass1) {}
+            }
+            var dimOwnerByDimId = {};
+            var dimOwnerBySymbol = {};
+            function rememberDimOwners(featDims, ownerFeatureId, ownerLabel) {
+                if (!featDims || !featDims.length) return;
+                var label = String(ownerLabel || "").trim();
+                if (label && /^feature\s+\d+$/i.test(label)) label = "";
+                for (var fd = 0; fd < featDims.length; fd++) {
+                    var drow = featDims[fd];
+                    if (!drow) continue;
+                    if (ownerFeatureId != null && (drow.feature_id == null || drow.feature_id === "")) {
+                        drow.feature_id = ownerFeatureId;
+                    }
+                    if (label && !drow.feature_name) drow.feature_name = label;
+                    var hit = {
+                        feature_id: drow.feature_id != null ? drow.feature_id : ownerFeatureId,
+                        feature_name: drow.feature_name || label || ""
+                    };
+                    if (drow.id != null) dimOwnerByDimId[String(drow.id)] = hit;
+                    if (drow.symbol) {
+                        dimOwnerBySymbol[String(drow.symbol).toLowerCase()] = hit;
+                    }
+                }
+            }
             for (var i = 0; i < featItems.length; i++) {
                 try {
                     var feat = featItems[i];
@@ -2827,12 +2927,29 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                     // into the PATTERN head (same idea as Feature NNNN shells).
                     var typeU = String(typeName || "").toUpperCase();
                     var nameU = String(name || "").toUpperCase();
-                    if (patternId != null && typeU !== "PATTERN" && nameU !== "PATTERN") {
+                    var isPatternHead = typeU === "PATTERN" || nameU === "PATTERN";
+                    if (patternId != null && !isPatternHead) {
+                        // Still collect member dims; attribute to PATTERN head for Compare.
+                        if (id != null) {
+                            var memDims = creoGatherFeatureDimensions(feat, id, errors);
+                            var patLabel = patternLabelById[String(patternId)] || "";
+                            rememberDimOwners(
+                                memDims,
+                                patternId,
+                                patLabel
+                            );
+                            dimensions = dimensions.concat(memDims);
+                        }
                         continue;
                     }
+                    var ownerLabel = String(
+                        (isPatternHead && id != null && patternLabelById[String(id)])
+                            ? patternLabelById[String(id)]
+                            : (name || typeName || subType || "")
+                    ).trim();
                     features.push({
                         id: id,
-                        name: name || typeName || ("Feature " + (id != null ? id : (i + 1))),
+                        name: isPatternHead ? "PATTERN" : (name || typeName || ("Feature " + (id != null ? id : (i + 1)))),
                         type: typeName,
                         subtype: subType,
                         status: creoFeatureStatusLabel(feat),
@@ -2845,14 +2962,7 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                     if (id != null) {
                         // Best-effort feature-owned dims; model ListItems merges below.
                         var featDims = creoGatherFeatureDimensions(feat, id, errors);
-                        var ownerLabel = String(name || typeName || subType || "").trim();
-                        if (ownerLabel && !/^feature\s+\d+$/i.test(ownerLabel)) {
-                            for (var fd = 0; fd < featDims.length; fd++) {
-                                if (featDims[fd] && !featDims[fd].feature_name) {
-                                    featDims[fd].feature_name = ownerLabel;
-                                }
-                            }
-                        }
+                        rememberDimOwners(featDims, id, ownerLabel);
                         dimensions = dimensions.concat(featDims);
                         try {
                             parameters = parameters.concat(
@@ -2869,7 +2979,16 @@ function gatherAiModelSnapshot(model, session, filename, options) {
             if (modelDims.length || dimensions.length) {
                 dimensions = creoMergeDimensionRows(dimensions, modelDims);
             }
+            // Model ListItems often omit owner — map by dim id/symbol from feature walk.
+            creoApplyDimOwnerMap(dimensions, dimOwnerByDimId, dimOwnerBySymbol);
             creoStampDimensionFeatureNames(dimensions, features);
+            // PATTERN labels (PATTERN 1…) for dims attributed to pattern heads.
+            for (var di = 0; di < dimensions.length; di++) {
+                var drow = dimensions[di];
+                if (!drow || drow.feature_id == null) continue;
+                var pl = patternLabelById[String(drow.feature_id)];
+                if (pl) drow.feature_name = pl;
+            }
         } catch (errAll) {
             errors.push("features: " + creoToolkitErr(errAll));
         }
