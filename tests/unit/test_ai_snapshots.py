@@ -150,6 +150,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "VIEW_NAMES" in base_html
     assert "objectFilename: target.filename" in script
     assert "session stem matched wedge.prt" in script
+    assert 'nextDisplay !== "—"' in script
     assert "abortSignalAfter(120_000)" in script
     assert "Ollama timed out after 2 minutes" in script
     assert 'id="checkin-ask-ai"' in (
@@ -256,6 +257,33 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert slim["capture"]["status"] == "ok"
     assert all(p["name"] != "MC_VOLUME" for p in slim["parameters"])
     assert any(p["name"] == "NUMBER_OF_VIEWS" for p in slim["parameters"])
+    noisy = {
+        "parameters": [
+            {
+                "name": "BUW_ID",
+                "value": "092826_162440_2",
+                "owner": "feature:13225",
+                "data_type": "STRING",
+            },
+            {
+                "name": "DESCRIPTION",
+                "value": "Bolt",
+                "owner": "model",
+                "data_type": "STRING",
+            },
+        ]
+    }
+    slim_noisy = slim_snapshot_for_compare(noisy)
+    assert all(p["name"] != "BUW_ID" for p in slim_noisy["parameters"])
+    assert any(p["name"] == "DESCRIPTION" for p in slim_noisy["parameters"])
+    dash_prompt = build_snapshot_compare_user_prompt(
+        older_snapshot={"features": []},
+        newer_snapshot={"features": []},
+        older_revision="A.1",
+        newer_revision="—",
+    )
+    assert "Newer revision (newer):" in dash_prompt
+    assert "Newer revision (—):" not in dash_prompt
     prompt = build_snapshot_compare_user_prompt(
         older_snapshot=bulky,
         newer_snapshot={"features": [{"name": "A", "type": "VIEW"}]},

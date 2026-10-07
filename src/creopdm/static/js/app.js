@@ -10090,7 +10090,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               signal: abortSignalAfter(120_000),
               body: JSON.stringify({
                 newer_snapshot: newerSnapshot,
-                newer_display_revision: nextDisplay || "pending",
+                // Queue preview uses "—" for next_display — never send that to Ollama.
+                newer_display_revision:
+                  nextDisplay && nextDisplay !== "—" ? nextDisplay : "pending",
               }),
             }
           );

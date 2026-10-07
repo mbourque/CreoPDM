@@ -138,10 +138,24 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
     parameters = snapshot.get("parameters")
     if isinstance(parameters, list):
         slim_params = []
+        keep_zero = {
+            "NUMBER_OF_VIEWS",
+            "NUMBER_OF_VISIBLE_VIEWS",
+            "NUMBER_OF_ERASED_VIEWS",
+            "NUMBER_OF_SHEETS",
+            "VIEW_NAMES",
+        }
         for param in parameters:
             if not isinstance(param, dict):
                 continue
             name = str(param.get("name") or "").strip().upper()
+            owner = str(param.get("owner") or "").strip().lower()
+            # Feature-owned params (BUW_ID, hole tables, …) drown real feature
+            # diffs and made the model invent "HOLE_CLEARANCE features."
+            if owner.startswith("feature:"):
+                continue
+            if name.startswith("BUW_"):
+                continue
             if name in _DROP_PARAM_NAMES and _is_empty_value(param.get("value")):
                 continue
             if name.startswith("MC_") and _is_empty_value(param.get("value")):
@@ -152,13 +166,7 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
             row = _pick(param, _PARAM_KEEP)
             if row and not _is_empty_value(row.get("value")):
                 slim_params.append(row)
-            elif row and str(row.get("name") or "").upper() in {
-                "NUMBER_OF_VIEWS",
-                "NUMBER_OF_VISIBLE_VIEWS",
-                "NUMBER_OF_ERASED_VIEWS",
-                "NUMBER_OF_SHEETS",
-                "VIEW_NAMES",
-            }:
+            elif row and name in keep_zero:
                 # Keep drawing counters even when value is 0.
                 slim_params.append(row)
         out["parameters"] = slim_params
@@ -196,8 +204,12 @@ def build_snapshot_compare_user_prompt(
     newer_revision: str = "",
 ) -> str:
     """User message: older then newer JSON only (instructions come from AI settings)."""
-    older_label = (older_revision or "").strip() or "older"
-    newer_label = (newer_revision or "").strip() or "newer"
+    older_label = (older_revision or "").strip()
+    newer_label = (newer_revision or "").strip()
+    if not older_label or older_label in {"—", "-"}:
+        older_label = "older"
+    if not newer_label or newer_label in {"—", "-"}:
+        newer_label = "newer"
     # Compact JSON — indent=2 roughly doubles tokens and pushed large parts past context.
     older_json = json.dumps(
         slim_snapshot_for_compare(older_snapshot),
