@@ -314,6 +314,23 @@ def prepare_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, A
     bom = out.get("bom")
     if isinstance(bom, list) and bom:
         out["bom"] = _slim_bom_nodes(bom)
+    # Stamp feature_name onto dims from feature id → name (for older snaps /
+    # gathers that only stored feature_id).
+    labels = _feature_id_label_map(out)
+    dims = out.get("dimensions")
+    if isinstance(dims, list) and labels:
+        stamped: list[Any] = []
+        for dim in dims:
+            if not isinstance(dim, dict):
+                stamped.append(dim)
+                continue
+            row = dict(dim)
+            if not _is_usable_feature_owner_label(str(row.get("feature_name") or "")):
+                owner = _dimension_owner_label(row, labels)
+                if owner:
+                    row["feature_name"] = owner
+            stamped.append(row)
+        out["dimensions"] = stamped
     return out
 
 
@@ -738,6 +755,7 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
                 "value": d.get("value"),
                 "units": d.get("units"),
                 "feature_id": d.get("feature_id"),
+                "feature_name": d.get("feature_name"),
             }
             out["dimensions"].append({k: v for k, v in row.items() if v is not None})
     parameters = snapshot.get("parameters")

@@ -2269,6 +2269,63 @@ function creoGatherModelLevelDimensions(solid, errors) {
     }
     return dims;
 }
+function creoMergeDimensionRows(primary, secondary) {
+    /**
+     * Dedupe by dim id/symbol. Keep feature_id / feature_name from either side
+     * so model ListItems does not wipe owner set by per-feature gather.
+     */
+    var byKey = {};
+    var order = [];
+    function absorb(list) {
+        if (!list || !list.length) return;
+        for (var i = 0; i < list.length; i++) {
+            var row = list[i];
+            if (!row) continue;
+            var key = String(row.id != null ? row.id : ("s:" + (row.symbol || i)));
+            var prev = byKey[key];
+            if (!prev) {
+                byKey[key] = row;
+                order.push(key);
+                continue;
+            }
+            if ((prev.feature_id == null || prev.feature_id === "")
+                && row.feature_id != null && row.feature_id !== "") {
+                prev.feature_id = row.feature_id;
+            }
+            if (!prev.feature_name && row.feature_name) {
+                prev.feature_name = row.feature_name;
+            }
+            if ((prev.symbol == null || prev.symbol === "") && row.symbol) {
+                prev.symbol = row.symbol;
+            }
+        }
+    }
+    absorb(primary);
+    absorb(secondary);
+    var out = [];
+    for (var o = 0; o < order.length; o++) out.push(byKey[order[o]]);
+    return out;
+}
+function creoStampDimensionFeatureNames(dimensions, features) {
+    /** Attach feature_name from feature id so Compare outlines show (Extrude). */
+    if (!Array.isArray(dimensions) || !Array.isArray(features)) return;
+    var byId = {};
+    for (var i = 0; i < features.length; i++) {
+        var f = features[i];
+        if (!f || f.id == null) continue;
+        var label = String(f.name || f.subtype || f.type || "").trim();
+        if (!label) continue;
+        // Skip placeholder Feature 123 labels — outline omits those too.
+        if (/^feature\s+\d+$/i.test(label) || /^ifx_id_\d+$/i.test(label)) continue;
+        byId[String(f.id)] = label;
+    }
+    for (var d = 0; d < dimensions.length; d++) {
+        var row = dimensions[d];
+        if (!row || row.feature_id == null || row.feature_id === "") continue;
+        var name = byId[String(row.feature_id)];
+        if (name) row.feature_name = name;
+    }
+}
 function creoListFeaturesForSnapshot(solid, errors) {
     /**
      * Same visible-first order as Features tab (creoGatherFeatures). Prefer
@@ -2786,10 +2843,17 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                         pattern_id: patternId
                     });
                     if (id != null) {
-                        // Best-effort feature-owned dims; model ListItems is the authority below.
-                        dimensions = dimensions.concat(
-                            creoGatherFeatureDimensions(feat, id, errors)
-                        );
+                        // Best-effort feature-owned dims; model ListItems merges below.
+                        var featDims = creoGatherFeatureDimensions(feat, id, errors);
+                        var ownerLabel = String(name || typeName || subType || "").trim();
+                        if (ownerLabel && !/^feature\s+\d+$/i.test(ownerLabel)) {
+                            for (var fd = 0; fd < featDims.length; fd++) {
+                                if (featDims[fd] && !featDims[fd].feature_name) {
+                                    featDims[fd].feature_name = ownerLabel;
+                                }
+                            }
+                        }
+                        dimensions = dimensions.concat(featDims);
                         try {
                             parameters = parameters.concat(
                                 creoParamOwnerRows(feat, "feature:" + id)
@@ -2800,22 +2864,12 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                     errors.push("feature[" + i + "]: " + creoToolkitErr(errFeat));
                 }
             }
-            // Configurator primary path — always merge model-level ITEM_DIMENSION list.
+            // Merge model-level ITEM_DIMENSION without wiping feature_id / feature_name.
             var modelDims = creoGatherModelLevelDimensions(solid, errors);
-            if (modelDims.length) {
-                var seenDim = {};
-                var merged = [];
-                var allDims = modelDims.concat(dimensions);
-                for (var d = 0; d < allDims.length; d++) {
-                    var row = allDims[d];
-                    if (!row) continue;
-                    var key = String(row.id != null ? row.id : ("s:" + (row.symbol || d)));
-                    if (seenDim[key]) continue;
-                    seenDim[key] = true;
-                    merged.push(row);
-                }
-                dimensions = merged;
+            if (modelDims.length || dimensions.length) {
+                dimensions = creoMergeDimensionRows(dimensions, modelDims);
             }
+            creoStampDimensionFeatureNames(dimensions, features);
         } catch (errAll) {
             errors.push("features: " + creoToolkitErr(errAll));
         }
@@ -2972,6 +3026,10 @@ function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
                 group_id: null,
                 pattern_id: null
             });
+        }
+        // After Features-tab names merge, stamp dim owner names for Compare.
+        if (Array.isArray(snapshot.dimensions) && snapshot.dimensions.length) {
+            creoStampDimensionFeatureNames(snapshot.dimensions, snapshot.features);
         }
     }
     // Merge Parameters-tab model rows (owner=model) when snapshot missed a value.

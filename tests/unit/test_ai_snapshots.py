@@ -43,6 +43,9 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "bom: bom" in text
     assert "function creoBomTipFileName(" in text
     assert "replace(/<<[^>]*>>/g" in text
+    assert "function creoMergeDimensionRows(" in text
+    assert "function creoStampDimensionFeatureNames(" in text
+    assert "creoStampDimensionFeatureNames(dimensions, features)" in text
     # Configurator path: model.ListItems(ITEM_DIMENSION) + ListItems(ITEM_FEATURE).
     assert "ListItems(ITEM_DIMENSION)" in text or "ListItems(types[t])" in text
     assert "creoGatherModelLevelDimensions(solid, errors)" in text
@@ -671,6 +674,22 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "d300 = 1 in (Hole 1)" in dim_owner_text
     assert "(4460)" not in dim_owner_text
     assert "feature_id" not in dim_owner_text
+    # feature_name alone (no id lookup) also works after gather stamp.
+    named_only = format_snapshot_compare_text(
+        {
+            "identity": {"filename": "plate_3.prt", "model_type": "PART"},
+            "features": [],
+            "dimensions": [
+                {
+                    "symbol": "d258",
+                    "value": 95.461,
+                    "units": "in",
+                    "feature_name": "Extrude",
+                }
+            ],
+        }
+    )
+    assert "d258 = 95.461 in (Extrude)" in named_only
     dim_owner_diff = format_snapshot_compare_diff_text(
         dim_owner_snap,
         {
