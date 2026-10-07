@@ -195,6 +195,7 @@ def test_ai_settings_page_renders(client):
     assert page.status_code == 200
     assert 'name="ai_enabled"' in page.text
     assert "Enable AI features" in page.text
+    assert 'id="ai-ollama-settings-wrap"' in page.text
     assert "Ollama host URL" in page.text
     assert 'name="ollama_base_url"' in page.text
     assert 'id="ollama-refresh-models"' in page.text
@@ -204,3 +205,12 @@ def test_ai_settings_page_renders(client):
     assert "Ask AI what changed" in page.text
     assert "Stored only in server settings" in page.text
     assert 'data-ai-enabled="1"' in page.text
+    # Enabled by default — Ollama fields not disabled on first paint.
+    assert "disabled" not in page.text.split('name="ollama_base_url"', 1)[1].split(">", 1)[0]
+
+    assert client.put("/api/settings", json={"ai_enabled": False}).status_code == 200
+    off = client.get("/settings/ai")
+    assert off.status_code == 200
+    assert "is-disabled" in off.text
+    assert 'id="ai-ollama-settings-wrap"' in off.text
+    assert "disabled" in off.text.split('name="ollama_base_url"', 1)[1].split(">", 1)[0]

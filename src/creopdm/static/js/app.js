@@ -12223,6 +12223,25 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
   syncEmbeddedOpenOptions();
 
+  function syncAiSettingsOptions() {
+    if (!settingsForm) return;
+    const wrap = settingsForm.querySelector("#ai-ollama-settings-wrap");
+    if (!wrap) return;
+    const aiOn = Boolean(settingsForm.querySelector('[name="ai_enabled"]')?.checked);
+    wrap.classList.toggle("is-disabled", !aiOn);
+    if (aiOn) wrap.removeAttribute("aria-disabled");
+    else wrap.setAttribute("aria-disabled", "true");
+    wrap.querySelectorAll("input, textarea, select, button").forEach((el) => {
+      el.disabled = !aiOn;
+    });
+  }
+
+  settingsForm?.querySelector('[name="ai_enabled"]')?.addEventListener(
+    "change",
+    syncAiSettingsOptions
+  );
+  syncAiSettingsOptions();
+
   function prettyUnavailableSince(date = new Date()) {
     // Match format_local_pretty: Monday, July 23, 2026 at 5:30pm
     const days = [
@@ -12389,12 +12408,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         settingsForm.querySelector('[name="ai_enabled"]')?.checked
       );
     }
-    if (settingsForm.querySelector('[name="ollama_base_url"]')) {
-      body.ollama_base_url = String(data.get("ollama_base_url") || "").trim();
-      body.ollama_model = String(data.get("ollama_model") || "").trim();
+    // Read .value (not FormData) so disabled Ollama fields still persist on Save.
+    const ollamaUrl = settingsForm.querySelector('[name="ollama_base_url"]');
+    if (ollamaUrl) {
+      body.ollama_base_url = String(ollamaUrl.value || "").trim();
+      body.ollama_model = String(
+        settingsForm.querySelector('[name="ollama_model"]')?.value || ""
+      ).trim();
     }
-    if (settingsForm.querySelector('[name="snapshot_compare_prompt"]')) {
-      body.snapshot_compare_prompt = String(data.get("snapshot_compare_prompt") || "");
+    const promptEl = settingsForm.querySelector('[name="snapshot_compare_prompt"]');
+    if (promptEl) {
+      body.snapshot_compare_prompt = String(promptEl.value || "");
     }
     const response = await fetch("/api/settings", {
       method: "PUT",

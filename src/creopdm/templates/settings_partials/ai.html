@@ -1,4 +1,4 @@
-<section class="settings-card" id="ai-enable-settings">
+<section class="settings-card" id="ai-settings">
   <label class="choice">
     <input
       type="checkbox"
@@ -9,43 +9,48 @@
     >
     Enable AI features
   </label>
-  <p class="muted small">When off, <strong>Ask AI what changed</strong> and <strong>Ask AI for comment</strong> are hidden and the compare API refuses requests. You can still edit Ollama settings below for when you turn AI back on.</p>
-</section>
-
-<section class="settings-card" id="ai-ollama-settings">
-  <p class="muted small">Point CreoPDM at your Ollama server (host name or IP and port). <strong>Refresh models</strong> asks the CreoPDM server first, then falls back to this browser if the server cannot reach Ollama (common when Ollama runs on your Creo PC and CreoPDM runs on another host).</p>
-  <label>Ollama host URL
-    <input
-      id="ollama-base-url"
-      name="ollama_base_url"
-      type="text"
-      value="{{ settings.ollama_base_url }}"
-      placeholder="http://127.0.0.1:11434"
-      autocomplete="off"
-    >
-  </label>
-  <p class="muted small">Example: <code>http://127.0.0.1:11434</code> (Ollama on this PC) or <code>http://michael-desktop:11434</code>. Include the scheme and port (default Ollama port is 11434).</p>
-  <div class="form-actions" style="margin-top: 0.5rem;">
-    <button type="button" class="btn" id="ollama-refresh-models">Refresh models</button>
+  <p class="muted small">When off, <strong>Ask AI what changed</strong> and <strong>Ask AI for comment</strong> are hidden, the compare API refuses requests, and the Ollama fields below are disabled.</p>
+  <div
+    class="settings-nested{% if not settings.ai_enabled %} is-disabled{% endif %}"
+    id="ai-ollama-settings-wrap"
+    {% if not settings.ai_enabled %}aria-disabled="true"{% endif %}
+  >
+    <p class="muted small">Point CreoPDM at your Ollama server (host name or IP and port). <strong>Refresh models</strong> asks the CreoPDM server first, then falls back to this browser if the server cannot reach Ollama (common when Ollama runs on your Creo PC and CreoPDM runs on another host).</p>
+    <label>Ollama host URL
+      <input
+        id="ollama-base-url"
+        name="ollama_base_url"
+        type="text"
+        value="{{ settings.ollama_base_url }}"
+        placeholder="http://127.0.0.1:11434"
+        autocomplete="off"
+        {% if not settings.ai_enabled %}disabled{% endif %}
+      >
+    </label>
+    <p class="muted small">Example: <code>http://127.0.0.1:11434</code> (Ollama on this PC) or <code>http://michael-desktop:11434</code>. Include the scheme and port (default Ollama port is 11434).</p>
+    <div class="form-actions" style="margin-top: 0.5rem;">
+      <button type="button" class="btn" id="ollama-refresh-models"{% if not settings.ai_enabled %} disabled{% endif %}>Refresh models</button>
+    </div>
+    <p class="muted small" id="ollama-status" role="status" aria-live="polite">Click Refresh models to list installed models.</p>
+    <label>Model
+      <select id="ollama-model" name="ollama_model" data-saved-model="{{ settings.ollama_model }}"{% if not settings.ai_enabled %} disabled{% endif %}>
+        {% if settings.ollama_model %}
+        <option value="{{ settings.ollama_model }}" selected>{{ settings.ollama_model }} (saved)</option>
+        {% else %}
+        <option value="">— Refresh models after Ollama is reachable —</option>
+        {% endif %}
+      </select>
+    </label>
+    <label>Snapshot compare prompt
+      <textarea
+        id="snapshot-compare-prompt"
+        name="snapshot_compare_prompt"
+        rows="8"
+        spellcheck="true"
+        placeholder="Paste the system prompt for Ask AI what changed…"
+        {% if not settings.ai_enabled %}disabled{% endif %}
+      >{{ settings.snapshot_compare_prompt }}</textarea>
+    </label>
+    <p class="muted small">Stored only in server settings (not in code). Used as system instructions for <strong>Ask AI what changed</strong>; CreoPDM appends labeled <strong>OLD</strong> and <strong>NEW</strong> plain-language outlines after this text (not raw JSON). Paste, Save, then try again on Snapshot.</p>
   </div>
-  <p class="muted small" id="ollama-status" role="status" aria-live="polite">Click Refresh models to list installed models.</p>
-  <label>Model
-    <select id="ollama-model" name="ollama_model" data-saved-model="{{ settings.ollama_model }}">
-      {% if settings.ollama_model %}
-      <option value="{{ settings.ollama_model }}" selected>{{ settings.ollama_model }} (saved)</option>
-      {% else %}
-      <option value="">— Refresh models after Ollama is reachable —</option>
-      {% endif %}
-    </select>
-  </label>
-  <label>Snapshot compare prompt
-    <textarea
-      id="snapshot-compare-prompt"
-      name="snapshot_compare_prompt"
-      rows="8"
-      spellcheck="true"
-      placeholder="Paste the system prompt for Ask AI what changed…"
-    >{{ settings.snapshot_compare_prompt }}</textarea>
-  </label>
-  <p class="muted small">Stored only in server settings (not in code). Used as system instructions for <strong>Ask AI what changed</strong>; CreoPDM appends labeled <strong>OLD</strong> and <strong>NEW</strong> plain-language outlines after this text (not raw JSON). Paste, Save, then try again on Snapshot.</p>
 </section>

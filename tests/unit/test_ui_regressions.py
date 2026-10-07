@@ -2449,6 +2449,8 @@ def test_admin_hub_panel_fills_full_width():
     ).read_text(encoding="utf-8")
     assert 'name="ai_enabled"' in ai_partial
     assert "Enable AI features" in ai_partial
+    assert 'id="ai-ollama-settings-wrap"' in ai_partial
+    assert "settings-nested" in ai_partial
     assert 'name="ollama_base_url"' in ai_partial
     assert 'name="ollama_model"' in ai_partial
     assert 'name="snapshot_compare_prompt"' in ai_partial
@@ -2491,6 +2493,9 @@ def test_admin_hub_panel_fills_full_width():
     assert 'settingsForm.querySelector(\'[name="ai_enabled"]\')' in script
     assert "body.ai_enabled" in script
     assert "document.body.dataset.aiEnabled" in script
+    assert "function syncAiSettingsOptions(" in script
+    assert "ai-ollama-settings-wrap" in script
+    assert "disabled Ollama fields still persist" in script
     assert 'settingsForm.querySelector(\'[name="ollama_base_url"]\')' in script
     assert 'settingsForm.querySelector(\'[name="snapshot_compare_prompt"]\')' in script
     assert "snapshot-compare-prompt-reset" not in script
