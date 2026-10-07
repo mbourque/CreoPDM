@@ -134,6 +134,14 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert 'withBusy("Collecting modified model…"' in script
     assert "function syncCheckinAiAskRow(" in script
     assert "function aiSnapshotBodyFromGather(" in script
+    # Tip snapshot vs local modified tip — never vault tip materialize.
+    assert "function resolvePendingCheckinLocalPath(" in script
+    assert "preferDisk: true" in script
+    assert "Never materialize the vault tip" in script
+    assert "prepareLocalPathForMetadata(objectId, filename)" not in script.split(
+        "async function askAiCheckinComment(", 1
+    )[1].split("checkinBtn?.addEventListener", 1)[0]
+    assert "preferDisk" in BASE_HTML.read_text(encoding="utf-8")
     assert 'id="checkin-ask-ai"' in (
         ROOT / "src" / "creopdm" / "templates" / "app.html"
     ).read_text(encoding="utf-8")

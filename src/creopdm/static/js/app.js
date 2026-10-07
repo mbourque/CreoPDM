@@ -6733,12 +6733,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const deferErase = Boolean(opts.deferErase);
     // Default on — Boolean(undefined) was false and wiped Collect/Open names.
     const featureNames = opts.featureNames !== false;
+    const preferDisk = opts.preferDisk === true;
     const pendingErase = Array.isArray(opts.pendingErase) ? opts.pendingErase : null;
     try {
       await whenCreoJSReady();
       if (typeof window.CreoJS.gatherModelMetadata !== "function") return null;
       const snapshot = await window.CreoJS.gatherModelMetadata(filename, filePath || "", {
         featureNames,
+        preferDisk: preferDisk && !!filePath,
       });
       if (!snapshot || typeof snapshot !== "object") return null;
       if (typeof snapshot === "string" && snapshot.startsWith("CREOPDM_ERROR:")) return null;
@@ -9919,15 +9921,72 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     checkinDialog.dataset.aiNextDisplay = singleCreo
       ? String(opts?.nextDisplay || "").trim()
       : "";
-    // Prefer a local Windows path from the Files row when present.
+    // Relative path from Files row — resolved to the modified workspace tip below.
     let path = "";
     if (singleCreo) {
       const rowEl = document.querySelector(
         `tr[data-uuid="${CSS.escape(objectId)}"]`
       );
-      path = String(rowEl?.dataset?.path || rowEl?.dataset?.relativePath || "").trim();
+      path = String(rowEl?.dataset?.relativePath || rowEl?.dataset?.path || "").trim();
     }
     checkinDialog.dataset.aiPath = path;
+  }
+
+  async function resolvePendingCheckinLocalPath(objectId, logicalFilename) {
+    /**
+     * Local modified tip for Ask AI (tip snapshot A.n vs file being checked in).
+     * Never materialize the vault tip — that compared A.1 to A.1 again.
+     */
+    const id = String(objectId || "").trim();
+    const productId = currentProductId();
+    if (!id || !productId) return { path: "", diskName: "", logicalName: "" };
+    let tipFilename = String(logicalFilename || "").trim();
+    let rel = String(checkinDialog?.dataset.aiPath || "").trim().replace(/\\/g, "/");
+    try {
+      const items = JSON.parse(checkinDialog?.dataset.pushItems || "[]");
+      const hit = (Array.isArray(items) ? items : []).find(
+        (item) => String(item?.object_id || "") === id
+      );
+      if (hit?.filename) tipFilename = String(hit.filename).trim();
+      if (hit?.relative_path) rel = String(hit.relative_path).trim().replace(/\\/g, "/");
+    } catch {
+      /* keep defaults */
+    }
+    try {
+      const [cacheFiles, objects] = await Promise.all([
+        listAgentCacheFiles(productId),
+        ensureProductObjects(productId),
+      ]);
+      const newer = (await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)).find(
+        (item) => String(item?.uuid || "") === id
+      );
+      if (newer?.filename) tipFilename = String(newer.filename).trim();
+      if (newer?.relative_path) {
+        rel = String(newer.relative_path).trim().replace(/\\/g, "/");
+      }
+    } catch {
+      /* agent offline — try pushItems / relative only */
+    }
+    const logicalName =
+      logicalUploadName(tipFilename) || logicalUploadName(PathBasename(rel)) || tipFilename;
+    const diskName = PathBasename(tipFilename) || PathBasename(rel) || logicalName;
+    // Cache relative may be logical (wedge.drw); disk tip may be wedge.drw.2.
+    let cacheRel = rel;
+    if (cacheRel && diskName && PathBasename(cacheRel).toLowerCase() !== diskName.toLowerCase()) {
+      const dir = cacheRel.includes("/")
+        ? cacheRel.slice(0, cacheRel.lastIndexOf("/") + 1)
+        : "";
+      cacheRel = `${dir}${diskName}`;
+    } else if (!cacheRel && diskName) {
+      cacheRel = diskName;
+    }
+    const directory = await agentWorkdir(productId, currentVaultFolder()).catch(() => "");
+    const path = joinLocalWorkspacePath(directory, cacheRel);
+    return {
+      path: looksLikeLocalWindowsPath(path) ? path : "",
+      diskName,
+      logicalName: logicalName || diskName,
+    };
   }
 
   async function askAiCheckinComment() {
@@ -9952,35 +10011,34 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     try {
       const summary = await withBusy("Collecting modified model…", async () => {
-        let snapshot = await gatherCreoMetadataForFilename(filename, "", {
+        // Older = saved tip snapshot. Newer = gather of the file being checked in
+        // (local modified tip) — not vault tip materialize / stale session.
+        const pending = await resolvePendingCheckinLocalPath(objectId, filename);
+        if (!pending.path) {
+          throw new Error(
+            "Could not find the modified file in the local workspace. "
+              + "Save in Creo first, then try Ask AI for comment again."
+          );
+        }
+        const gatherName = pending.logicalName || filename;
+        const snapshot = await gatherCreoMetadataForFilename(gatherName, pending.path, {
           featureNames: true,
+          preferDisk: true,
         });
-        if (snapshot && snapshot.__error) snapshot = null;
-        if (!snapshot) {
-          let filePath = looksLikeLocalWindowsPath(checkinDialog?.dataset.aiPath || "")
-            ? String(checkinDialog.dataset.aiPath || "")
-            : "";
-          if (!filePath) {
-            filePath = (await prepareLocalPathForMetadata(objectId, filename)) || "";
-          }
-          if (!filePath) {
-            throw new Error(
-              "Could not find the modified model in Creo or the local workspace."
-            );
-          }
-          snapshot = await gatherCreoMetadataForFilename(filename, filePath, {
-            featureNames: true,
-          });
-          if (snapshot && snapshot.__error) {
-            throw new Error(
-              String(snapshot.__detail || snapshot.__error || "Metadata gather failed.")
-            );
-          }
+        if (!snapshot || snapshot.__error) {
+          throw new Error(
+            String(
+              snapshot?.__detail
+                || snapshot?.__error
+                || "Could not gather metadata from the modified file."
+            )
+          );
         }
         const newerSnapshot = aiSnapshotBodyFromGather(snapshot);
         if (!newerSnapshot) {
           throw new Error(
-            "Creo did not return an AI snapshot for this model. Try Collect metadata first."
+            "Creo did not return an AI snapshot for this model. "
+              + "Collect metadata on the tip while it is clean, then try again."
           );
         }
         publishBusyMessage("Asking AI for check-in comment…");

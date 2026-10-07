@@ -3239,6 +3239,9 @@ function gatherModelMetadata(filename, filePath, options) {
     var opts = options && typeof options === "object" ? options : {};
     // Default on (Collect + Open). Pass featureNames:false only to skip .name reads.
     var wantFeatureNames = opts.featureNames !== false;
+    // Check-in Ask AI: preferDisk reads the modified workspace tip, not a stale
+    // session handle that still matches the vault tip snapshot.
+    var preferDisk = opts.preferDisk === true && !!filePath;
     try {
         var session = (typeof pfcGetCurrentSession === "function")
           ? pfcGetCurrentSession()
@@ -3247,11 +3250,25 @@ function gatherModelMetadata(filename, filePath, options) {
             return { __error: "no_creo_session" };
         }
         var beforeKeys = creoSessionModelKeys(session);
-        var model = creoFindSessionModel(session, filename);
+        var model = null;
         var weRetrieved = false;
-        if (!model && filePath) {
+        if (preferDisk) {
+            // Drop stale session tip so Retrieve loads the modified workspace tip
+            // (Ask AI check-in: tip snapshot vs file being checked in).
+            // Keep the retrieved model in session (weRetrieved=false) so Ask AI
+            // does not Erase the drawing the user still has open for check-in.
+            try {
+                var stale = creoFindSessionModel(session, filename);
+                if (stale) creoEraseModelQuiet(stale);
+            } catch (errStale) {}
             model = creoRetrieveForMetadata(session, filePath, filename);
-            weRetrieved = !!model;
+            weRetrieved = false;
+        } else {
+            model = creoFindSessionModel(session, filename);
+            if (!model && filePath) {
+                model = creoRetrieveForMetadata(session, filePath, filename);
+                weRetrieved = !!model;
+            }
         }
         if (!model) {
             return {
