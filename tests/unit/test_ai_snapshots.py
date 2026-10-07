@@ -46,17 +46,21 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "function creoMergeDimensionRows(" in text
     assert "function creoStampDimensionFeatureNames(" in text
     assert "function creoApplyDimOwnerMap(" in text
-    assert "creoStampDimensionFeatureNames(dimensions, features)" in text
-    assert "creoApplyDimOwnerMap(dimensions, dimOwnerByDimId, dimOwnerBySymbol)" in text
+    assert "function creoBuildDimensionOwnerIndex(" in text
+    assert "function creoListFeaturesForDimOwnerSearch(" in text
+    assert "function creoListFeatureDimensionItems(" in text
+    assert "function creoResolveDimOwnerFeature(" in text
+    assert "creoStampDimensionFeatureNames(dimensions, features" in text
+    assert "creoBuildDimensionOwnerIndex(solid, patternLabelById" in text
+    assert "creoApplyDimOwnerMap(dimensions, ownerIdx.byDimId, ownerIdx.bySymbol)" in text
     assert "Pass 1 — number PATTERN heads" in text
-    assert "function creoAsDimension(" in text
-    assert "function creoOwnerFeatureHandle(" in text
-    assert "wfcWDimension" in text
-    assert "GetOwnerFeature" in text.split("function creoOwnerFeatureHandle(", 1)[1].split(
-        "function creoOwnerFeatureId(", 1
+    # Creo.JS getDimensionFeature advice: ListSubItems reverse lookup + internals.
+    assert "getDimensionFeature" in text
+    assert "ListFeaturesByType(null, false)" in text
+    assert "ListSubItems" in text.split("function creoListFeatureDimensionItems(", 1)[1].split(
+        "function creoGatherFeatureDimensions(", 1
     )[0]
-    assert "labelByFeatId" in text
-    assert "patternHeadByMemberId" in text
+    assert "climb to a visible parent" in text
     # Configurator path: model.ListItems(ITEM_DIMENSION) + ListItems(ITEM_FEATURE).
     assert "ListItems(ITEM_DIMENSION)" in text or "ListItems(types[t])" in text
     assert "creoGatherModelLevelDimensions(solid, errors)" in text
@@ -799,7 +803,7 @@ def test_snapshot_compare_prompt_requires_saved_text():
         older_revision="A.1",
         newer_revision="A.2",
     )
-    assert "Prefer Components removed/added" in asm_prompt
+    assert "prefer Components removed/added" in asm_prompt.lower()
     slim_asm = slim_snapshot_for_compare(asm_old)
     assert slim_asm.get("bom")
     assert slim_asm["bom"][0]["filename"] == "conveyor.asm"
