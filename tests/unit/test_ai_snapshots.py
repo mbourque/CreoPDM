@@ -72,7 +72,8 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "ListFeaturesByType(true" in snap_list
     assert snap_list.find("ListFeaturesByType(true") < snap_list.find("ListItems(")
     assert "creoFeatureIsVisibleForSnapshot(feat)" in text
-    assert 'typeU !== "PATTERN"' in text
+    assert 'typeU === "PATTERN"' in text
+    assert "isPatternHead" in text
 
 
 def test_drawing_ai_snapshot_skips_solid_walk():
@@ -803,7 +804,7 @@ def test_snapshot_compare_prompt_requires_saved_text():
         older_revision="A.1",
         newer_revision="A.2",
     )
-    assert "prefer Components removed/added" in asm_prompt.lower()
+    assert "prefer components removed/added" in asm_prompt.lower()
     slim_asm = slim_snapshot_for_compare(asm_old)
     assert slim_asm.get("bom")
     assert slim_asm["bom"][0]["filename"] == "conveyor.asm"
@@ -1026,7 +1027,7 @@ def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_pat
     assert body["snapshot"]["item"]["version_uuid"] == version_id
     assert "Features:" in (body.get("outline") or "")
     assert "Extrude 1" in (body.get("outline") or "")
-    assert "d0 = 6" in (body.get("outline") or "")
+    assert "d0 (Extrude 1) = 6" in (body.get("outline") or "")
     assert '"id":' not in (body.get("outline") or "")
 
     got_get = client.get(
