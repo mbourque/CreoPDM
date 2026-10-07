@@ -362,6 +362,15 @@ def test_snapshot_compare_prompt_requires_saved_text():
         "dimensions": [
             {"id": 221, "symbol": "T", "value": 0.5, "units": "in"},
             {"id": 245, "symbol": "d245", "value": 2, "units": "in", "dim_type": "DIAMETER"},
+            # Pattern item dim — must not reach Ollama (was cited with feature id).
+            {
+                "id": 253,
+                "symbol": "d253",
+                "value": 0,
+                "units": "in",
+                "dim_type": "ITEM_DIMENSION",
+                "feature_id": 15775,
+            },
         ],
     }
     newer_pat = {
@@ -378,28 +387,35 @@ def test_snapshot_compare_prompt_requires_saved_text():
     }
     slim_older = slim_snapshot_for_compare(older_pat)
     slim_newer = slim_snapshot_for_compare(newer_pat)
-    assert slim_older["feature_summary"]["pattern_count"] == 2
-    assert slim_newer["feature_summary"]["pattern_count"] == 1
+    assert "feature_summary" not in slim_older
+    assert "feature_summary" not in slim_newer
     older_patterns = [f for f in slim_older["features"] if f.get("name") == "PATTERN"]
+    newer_patterns = [f for f in slim_newer["features"] if f.get("name") == "PATTERN"]
     assert len(older_patterns) == 2
-    assert any(f.get("id") == 15775 and f.get("pattern_member_count", 0) >= 60 for f in older_patterns)
+    assert len(newer_patterns) == 1
+    assert any(f.get("has_pattern_members") for f in older_patterns)
+    assert not any("id" in f for f in slim_older["features"])
     assert not any(
         str(f.get("name") or "").startswith("Feature ") for f in slim_older["features"]
     )
     assert not any(
         str(f.get("name") or "").startswith("IFX_ID_") for f in slim_older["features"]
     )
+    assert all(d.get("symbol") != "d253" for d in slim_older["dimensions"])
+    assert not any("feature_id" in d for d in slim_older["dimensions"])
     pat_prompt = build_snapshot_compare_user_prompt(
         older_snapshot=older_pat,
         newer_snapshot=newer_pat,
         older_revision="A.1",
         newer_revision="A.2",
     )
-    assert '"pattern_count":2' in pat_prompt
-    assert '"pattern_count":1' in pat_prompt
+    assert "pattern_member_total" not in pat_prompt
+    assert "pattern_count" not in pat_prompt
     assert "Feature 15780" not in pat_prompt
-    assert '"id":15775' in pat_prompt
-    assert '"id":15775' not in pat_prompt.split("Newer revision (A.2):", 1)[1]
+    assert "15775" not in pat_prompt
+    assert "d253" not in pat_prompt
+    # Older has two PATTERN heads; newer one — signal without meta totals.
+    assert pat_prompt.count('"name":"PATTERN"') >= 3
     assert "FEAT_1" in fat_prompt
     assert "outline" not in fat_prompt
 

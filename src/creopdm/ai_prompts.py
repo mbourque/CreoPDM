@@ -19,8 +19,8 @@ _PLACEHOLDER_FEATURE_NAME = re.compile(
 # Drawing view Outline floats / revision meta bloat Ollama prompts. Large solids
 # (100+ features) used to overflow context so the model only "saw" the newer JSON
 # and claimed A.1 was missing.
+# No feature/dim ids in the Ollama payload — models were citing "feature 15775".
 _FEATURE_KEEP = (
-    "id",
     "name",
     "type",
     "subtype",
@@ -36,11 +36,9 @@ _FEATURE_KEEP = (
     "is_background",
 )
 _DIM_KEEP = (
-    "id",
     "symbol",
     "value",
     "units",
-    "feature_id",
     "dim_type",
     "extends_negative",
     "tolerance_type",
@@ -154,24 +152,17 @@ def _slim_features_for_compare(features: list[Any]) -> list[dict[str, Any]]:
             ):
                 member_count += 1
                 j += 1
+            # Keep heads only — do not expose member totals (models quoted
+            # "pattern_member_total from 1062 to 50" instead of "deleted a pattern").
             if member_count:
-                row["pattern_member_count"] = member_count
+                row["has_pattern_members"] = True
             slim.append(row)
             i = j
             continue
         slim.append(row)
         i += 1
-    if orphan_placeholders and slim:
-        # Rare: placeholders before any PATTERN — still signal the omit.
-        slim[0]["orphan_placeholder_count"] = orphan_placeholders
-    elif orphan_placeholders:
-        slim.append(
-            {
-                "name": "PATTERN_MEMBERS",
-                "type": "PATTERN",
-                "pattern_member_count": orphan_placeholders,
-            }
-        )
+    if orphan_placeholders:
+        slim.append({"name": "PATTERN", "type": "PATTERN", "has_pattern_members": True})
     return slim
 
 
@@ -196,24 +187,24 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
 
     features = snapshot.get("features")
     if isinstance(features, list):
-        slim_feats = _slim_features_for_compare(features)
-        out["features"] = slim_feats
-        pattern_rows = [f for f in slim_feats if _is_pattern_feature(f)]
-        if pattern_rows or any(
-            isinstance(f, dict) and _is_pattern_placeholder_feature(f) for f in features
-        ):
-            out["feature_summary"] = {
-                "pattern_count": len(pattern_rows),
-                "pattern_member_total": sum(
-                    int(f.get("pattern_member_count") or 0) for f in pattern_rows
-                ),
-            }
+        out["features"] = _slim_features_for_compare(features)
 
     dimensions = snapshot.get("dimensions")
     if isinstance(dimensions, list):
         slim_dims = []
         for dim in dimensions:
             if not isinstance(dim, dict):
+                continue
+            # Pattern item dims (value 0 / ITEM_DIMENSION) vanish with the pattern
+            # and made Ask AI invent "Removed dimension d253 … feature 15775."
+            dim_type = str(dim.get("dim_type") or "").strip().upper()
+            try:
+                dim_val = float(dim.get("value"))
+            except (TypeError, ValueError):
+                dim_val = None
+            if dim_type == "ITEM_DIMENSION":
+                continue
+            if dim_val == 0.0 and dim.get("feature_id") is not None:
                 continue
             row = _pick(dim, _DIM_KEEP)
             if row:
