@@ -57,12 +57,18 @@ def test_drawing_ai_snapshot_skips_solid_walk():
     solid_idx = gather.find("creoAsSolid(session, model, solidDbg)")
     assert drawing_idx >= 0
     assert solid_idx > drawing_idx
+    assert "function creoView2DIsErased(" in text
+    assert "NUMBER_OF_ERASED_VIEWS" in text
+    assert "NUMBER_OF_VISIBLE_VIEWS" in text
     views_fn = text.split("function creoGatherDrawingViews(", 1)[1].split(
         "function creoGatherDrawingSheetCount(", 1
     )[0]
     assert 'stableId = name ? ("view:" + name)' in views_fn
     assert "scale:" in views_fn
     assert "model:" in views_fn
+    assert 'status = "erased"' in views_fn
+    assert "erased:" in views_fn
+    assert "Creo Erase View keeps the view in List2DViews" in text
     assert "ExtendsInNegativeDirection" in text
     assert "extends_negative" in text
     assert "owner: ownerLabel" in text

@@ -2279,11 +2279,77 @@ function creoIsDrawingModel(model, filename) {
     } catch (errLog) {}
     return /\.drw(\.|$)/.test(name);
 }
+function creoView2DIsErased(view) {
+    /**
+     * Creo Erase View keeps the view in List2DViews — only IsErased flips.
+     * Delete View removes it from the list. Users usually Erase.
+     */
+    if (!view) return null;
+    try {
+        if (typeof view.IsErased === "boolean") return view.IsErased;
+    } catch (errBool) {}
+    try {
+        if (typeof view.IsErased === "function") return !!view.IsErased();
+    } catch (errFn) {}
+    try {
+        if (typeof view.GetIsErased === "function") return !!view.GetIsErased();
+    } catch (errGet) {}
+    try {
+        if (typeof wfcWView2D !== "undefined") {
+            var wv = null;
+            if (typeof wfcWView2D.cast === "function") wv = wfcWView2D.cast(view);
+            else if (typeof view.cast === "function") wv = view.cast(wfcWView2D);
+            if (wv) {
+                if (typeof wv.IsErased === "function") return !!wv.IsErased();
+                if (typeof wv.IsErased === "boolean") return wv.IsErased;
+            }
+        }
+    } catch (errWfc) {}
+    return null;
+}
+function creoView2DOutlineSummary(view) {
+    try {
+        var outline = view.Outline;
+        if (!outline) return null;
+        var pts = [];
+        var n = null;
+        if (typeof outline.Count === "number") n = outline.Count;
+        else if (typeof outline.getCount === "function") n = outline.getCount();
+        else n = 2;
+        for (var i = 0; i < n && i < 4; i++) {
+            var pt = null;
+            try {
+                if (typeof outline.Item === "function") pt = outline.Item(i);
+                else if (typeof outline.get === "function") pt = outline.get(i);
+                else if (typeof outline.GetPoint === "function") pt = outline.GetPoint(i);
+                else pt = outline[i];
+            } catch (errPt) { pt = null; }
+            if (!pt) continue;
+            var coords = [];
+            try {
+                if (typeof pt.Item === "function") {
+                    for (var c = 0; c < 3; c++) {
+                        try { coords.push(Number(pt.Item(c))); } catch (errC) {}
+                    }
+                } else {
+                    if (pt.x != null || pt.X != null) coords.push(Number(pt.x != null ? pt.x : pt.X));
+                    if (pt.y != null || pt.Y != null) coords.push(Number(pt.y != null ? pt.y : pt.Y));
+                    if (pt.z != null || pt.Z != null) coords.push(Number(pt.z != null ? pt.z : pt.Z));
+                }
+            } catch (errCoords) {}
+            if (coords.length) pts.push(coords);
+        }
+        return pts.length ? pts : null;
+    } catch (err) {
+        return null;
+    }
+}
 function creoGatherDrawingViews(drawing, errors) {
     /**
      * Drawing views for AI compare — never walk the solid via creoAsSolid.
      * Rows go into snapshot.features as type VIEW so the compare prompt sees them.
      * Stable id = view Name (Creo View2D has no numeric Id).
+     * Erased views stay in List2DViews with status "erased" (Delete removes them).
      */
     var views = [];
     if (!drawing) return views;
@@ -2310,11 +2376,25 @@ function creoGatherDrawingViews(drawing, errors) {
                 try {
                     viewType = creoEnumName(view.Type) || String(view.Type || "");
                 } catch (errVt) {}
+                var erased = creoView2DIsErased(view);
                 var sheet = null;
                 try {
                     if (typeof view.GetSheetNumber === "function") sheet = view.GetSheetNumber();
                     else if (typeof view.SheetNumber !== "undefined") sheet = view.SheetNumber;
                 } catch (errSh) {}
+                // Erased views often fail GetSheetNumber — try OTK erased-sheet helper.
+                if (sheet == null && erased !== false) {
+                    try {
+                        var wvSheet = null;
+                        if (typeof wfcWView2D !== "undefined" && typeof wfcWView2D.cast === "function") {
+                            wvSheet = wfcWView2D.cast(view);
+                        }
+                        if (wvSheet && typeof wvSheet.GetErasedViewSheet === "function") {
+                            sheet = wvSheet.GetErasedViewSheet();
+                            if (erased == null) erased = true;
+                        }
+                    } catch (errErasedSheet) {}
+                }
                 var scale = null;
                 try {
                     if (typeof view.Scale !== "undefined") scale = view.Scale;
@@ -2338,13 +2418,17 @@ function creoGatherDrawingViews(drawing, errors) {
                 try {
                     if (typeof view.IsBackground !== "undefined") isBg = !!view.IsBackground;
                 } catch (errBg) {}
+                var outline = creoView2DOutlineSummary(view);
                 var stableId = name ? ("view:" + name) : ("view:" + i);
+                var status = "active";
+                if (erased === true) status = "erased";
+                else if (erased === false) status = "active";
                 views.push({
                     id: stableId,
                     name: name || ("View " + (i + 1)),
                     type: "VIEW",
                     subtype: viewType || "",
-                    status: "active",
+                    status: status,
                     regen_order: i + 1,
                     parent_ids: [],
                     group_id: null,
@@ -2352,7 +2436,9 @@ function creoGatherDrawingViews(drawing, errors) {
                     sheet: sheet,
                     scale: scale,
                     model: modelName || null,
-                    is_background: isBg
+                    is_background: isBg,
+                    erased: erased,
+                    outline: outline
                 });
             } catch (errView) {
                 errors.push("view[" + i + "]: " + creoToolkitErr(errView));
@@ -2465,6 +2551,37 @@ function gatherAiModelSnapshot(model, session, filename, options) {
             features = creoGatherDrawingViews(model, errors);
             sheetCount = creoGatherDrawingSheetCount(model, errors);
             drawingModels = creoGatherDrawingModels(model, errors);
+            var viewTotal = features.length;
+            var viewVisible = 0;
+            var viewErased = 0;
+            for (var vi = 0; vi < features.length; vi++) {
+                if (features[vi] && features[vi].erased === true) viewErased += 1;
+                else viewVisible += 1;
+            }
+            parameters.push({
+                data_type: "INTEGER",
+                description: null,
+                name: "NUMBER_OF_VIEWS",
+                owner: "model",
+                units: null,
+                value: viewTotal
+            });
+            parameters.push({
+                data_type: "INTEGER",
+                description: null,
+                name: "NUMBER_OF_VISIBLE_VIEWS",
+                owner: "model",
+                units: null,
+                value: viewVisible
+            });
+            parameters.push({
+                data_type: "INTEGER",
+                description: null,
+                name: "NUMBER_OF_ERASED_VIEWS",
+                owner: "model",
+                units: null,
+                value: viewErased
+            });
             if (sheetCount != null) {
                 parameters.push({
                     data_type: "INTEGER",
