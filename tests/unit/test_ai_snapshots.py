@@ -206,11 +206,13 @@ def test_snapshot_compare_prompt_requires_saved_text():
         older_revision="A.1",
         newer_revision="A.2",
     )
+    assert "Both revisions below are required" in user
     assert "Older revision (A.1):" in user
     assert "Newer revision (A.2):" in user
     assert "following your instructions" in user
-    assert '"value": 6' in user
-    assert '"value": 8' in user
+    assert "Never claim a revision is missing" in user
+    assert '"value":6' in user or '"value": 6' in user
+    assert '"value":8' in user or '"value": 8' in user
     import creopdm.ai_prompts as ai_prompts
 
     assert not hasattr(ai_prompts, "DEFAULT_SNAPSHOT_COMPARE_PROMPT")
@@ -226,7 +228,23 @@ def test_snapshot_compare_prompt_requires_saved_text():
                 "name": "VIEW_TEMPLATE_1",
                 "type": "VIEW",
                 "outline": [[1.23456789, 2.0, 3.0], [4.0, 5.0, 6.0]],
+                "parent_ids": [],
+                "erased": None,
             }
+        ],
+        "parameters": [
+            {
+                "name": "MC_VOLUME",
+                "value": "",
+                "data_type": "DOUBLE",
+                "owner": "model",
+            },
+            {
+                "name": "NUMBER_OF_VIEWS",
+                "value": 4,
+                "data_type": "INTEGER",
+                "owner": "model",
+            },
         ],
         "item": {"display_revision": "A.1"},
         "capture": {"captured_at": "2026-01-01T00:00:00Z", "status": "ok"},
@@ -234,8 +252,10 @@ def test_snapshot_compare_prompt_requires_saved_text():
     slim = slim_snapshot_for_compare(bulky)
     assert "outline" not in slim["features"][0]
     assert "item" not in slim
-    assert "captured_at" not in slim["capture"]
+    assert "captured_at" not in slim.get("capture", {})
     assert slim["capture"]["status"] == "ok"
+    assert all(p["name"] != "MC_VOLUME" for p in slim["parameters"])
+    assert any(p["name"] == "NUMBER_OF_VIEWS" for p in slim["parameters"])
     prompt = build_snapshot_compare_user_prompt(
         older_snapshot=bulky,
         newer_snapshot={"features": [{"name": "A", "type": "VIEW"}]},
@@ -245,6 +265,32 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "outline" not in prompt
     assert "1.23456789" not in prompt
     assert "VIEW_TEMPLATE_1" in prompt
+    # Large solids must keep BOTH revision labels (context overflow looked like "no A.1").
+    fat_features = [
+        {
+            "id": i,
+            "name": f"FEAT_{i}",
+            "type": "CUT",
+            "subtype": "Extrude",
+            "status": "active",
+            "regen_order": i,
+            "parent_ids": [1, 2, 3],
+            "outline": [[float(i), 0.0, 0.0], [1.0, 2.0, 3.0]],
+        }
+        for i in range(1, 140)
+    ]
+    fat_prompt = build_snapshot_compare_user_prompt(
+        older_snapshot={"identity": {"filename": "bolt.prt", "model_type": "PART"}, "features": fat_features},
+        newer_snapshot={
+            "identity": {"filename": "bolt.prt", "model_type": "PART"},
+            "features": fat_features[:-1],
+        },
+        older_revision="A.1",
+        newer_revision="A.2",
+    )
+    assert fat_prompt.index("Older revision (A.1):") < fat_prompt.index("Newer revision (A.2):")
+    assert "FEAT_1" in fat_prompt
+    assert "outline" not in fat_prompt
 
 
 @requires_git
