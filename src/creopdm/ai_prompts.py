@@ -106,14 +106,37 @@ def _iter_compare_features(features: list[Any]) -> list[dict[str, Any]]:
                 features[j]
             ):
                 j += 1
-            out.append(feat)
+            member_count = j - i - 1
+            head = dict(feat)
+            if member_count > 0:
+                head["pattern_member_count"] = member_count
+            out.append(head)
             i = j
             continue
         out.append(feat)
         i += 1
     if orphan_placeholders:
-        out.append({"name": "PATTERN", "type": "PATTERN"})
+        out.append(
+            {
+                "name": "PATTERN",
+                "type": "PATTERN",
+                "pattern_member_count": orphan_placeholders,
+            }
+        )
     return out
+
+
+def _pattern_outline_label(feat: dict[str, Any], *, index: int) -> str:
+    """Number PATTERNs in tree order so OLD vs NEW can name which one was removed."""
+    label = f"PATTERN {index}"
+    members = feat.get("pattern_member_count")
+    try:
+        count = int(members) if members is not None else 0
+    except (TypeError, ValueError):
+        count = 0
+    if count > 0:
+        return f"{label} ({count} members)"
+    return label
 
 
 def _is_drawing_snapshot(snapshot: dict[str, Any], identity: dict[str, Any]) -> bool:
@@ -156,15 +179,18 @@ def _view_display_line(feat: dict[str, Any]) -> str:
     return f"- {name}"
 
 
-def _feature_display_name(feat: dict[str, Any]) -> str:
+def _feature_display_name(feat: dict[str, Any], *, pattern_index: int | None = None) -> str:
     if _is_view_feature(feat):
         return _view_display_line(feat).lstrip("- ").strip()
+    if _is_pattern_feature(feat):
+        idx = pattern_index if pattern_index is not None else 1
+        return _pattern_outline_label(feat, index=idx)
     name = str(feat.get("name") or "").strip()
     ftype = str(feat.get("type") or "").strip()
     subtype = str(feat.get("subtype") or "").strip()
     if not name or _PLACEHOLDER_FEATURE_NAME.match(name):
         name = subtype or ftype or "unnamed feature"
-    if name.upper() in {"PATTERN", "EXTRUDE"} or name.upper() == ftype.upper():
+    if name.upper() in {"EXTRUDE"} or name.upper() == ftype.upper():
         return name
     if ftype and ftype.upper() not in name.upper():
         return f"{name} ({ftype})"
@@ -275,6 +301,7 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
                 "scale": f.get("scale"),
                 "model": f.get("model"),
                 "is_background": f.get("is_background"),
+                "pattern_member_count": f.get("pattern_member_count"),
             }
             out["features"].append({k: v for k, v in row.items() if v is not None})
     dimensions = snapshot.get("dimensions")
@@ -415,7 +442,15 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
     else:
         lines.append("Features:")
         if features:
-            lines.extend(f"- {_feature_display_name(f)}" for f in features)
+            pattern_i = 0
+            for feat in features:
+                if _is_pattern_feature(feat):
+                    pattern_i += 1
+                    lines.append(
+                        f"- {_feature_display_name(feat, pattern_index=pattern_i)}"
+                    )
+                else:
+                    lines.append(f"- {_feature_display_name(feat)}")
         else:
             lines.append("- (none)")
 

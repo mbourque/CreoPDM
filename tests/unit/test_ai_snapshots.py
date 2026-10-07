@@ -462,9 +462,16 @@ def test_snapshot_compare_prompt_requires_saved_text():
         newer_revision="A.2",
     )
     assert "Features:" in pat_prompt
-    assert "PATTERN" in pat_prompt
-    assert pat_prompt.split("=== NEW snapshot (A.2) ===", 1)[0].count("- PATTERN") == 2
-    assert pat_prompt.split("=== NEW snapshot (A.2) ===", 1)[1].count("- PATTERN") == 1
+    older_half, newer_half = pat_prompt.split("=== NEW snapshot (A.2) ===", 1)
+    # Number PATTERNs in tree order so Ask AI can say "deleted PATTERN 2", not
+    # "deleted pattern instances" when only one PATTERN line disappears.
+    assert "- PATTERN 1" in older_half
+    assert "- PATTERN 2" in older_half
+    assert "- PATTERN 2" not in newer_half or newer_half.count("PATTERN 2") == 0
+    assert older_half.count("PATTERN ") >= 2
+    assert "PATTERN 1" in newer_half
+    assert "PATTERN 2" not in newer_half
+    assert "members)" in older_half
     assert "Feature 15780" not in pat_prompt
     assert "15775" not in pat_prompt
     assert "d253" not in pat_prompt
