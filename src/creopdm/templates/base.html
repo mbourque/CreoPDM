@@ -2080,12 +2080,50 @@ function creoParamOwnerRows(owner, ownerLabel) {
 function creoAsFeature(feat) {
     if (!feat) return null;
     try {
+        if (typeof wfcWFeature !== "undefined" && typeof wfcWFeature.cast === "function") {
+            var asW = wfcWFeature.cast(feat);
+            if (asW) return asW;
+        }
+    } catch (errW) {}
+    try {
         if (typeof pfcFeature !== "undefined" && typeof pfcFeature.cast === "function") {
             var casted = pfcFeature.cast(feat);
             if (casted) return casted;
         }
     } catch (errCast) {}
     return feat;
+}
+function creoAsDimension(dim) {
+    /**
+     * wfcWDimension exposes GetOwnerFeature (OTK ProDimensionOwnerfeatureGet).
+     * Plain ListItems handles are often pfcModelItem without that method.
+     */
+    if (!dim) return null;
+    try {
+        if (typeof wfcWDimension !== "undefined" && typeof wfcWDimension.cast === "function") {
+            var asW = wfcWDimension.cast(dim);
+            if (asW) return asW;
+        }
+    } catch (errW) {}
+    try {
+        if (typeof pfcDimension !== "undefined" && typeof pfcDimension.cast === "function") {
+            var asDim = pfcDimension.cast(dim);
+            if (asDim) return asDim;
+        }
+    } catch (errCast) {}
+    return dim;
+}
+function creoFeatureNumericId(feat) {
+    if (!feat) return null;
+    try {
+        if (typeof feat.Id !== "undefined" && feat.Id != null) return feat.Id;
+    } catch (errId) {}
+    try {
+        if (creoHasCallable(feat, "GetId") || typeof feat.GetId !== "undefined") {
+            return feat.GetId();
+        }
+    } catch (errGetId) {}
+    return null;
 }
 function creoDimTypeEnums() {
     var types = [];
@@ -2101,13 +2139,7 @@ function creoDimTypeEnums() {
 }
 function creoReadDimensionRow(dim, featureId) {
     if (!dim) return null;
-    var handle = dim;
-    try {
-        if (typeof pfcDimension !== "undefined" && typeof pfcDimension.cast === "function") {
-            var asDim = pfcDimension.cast(dim);
-            if (asDim) handle = asDim;
-        }
-    } catch (errCast) {}
+    var handle = creoAsDimension(dim) || dim;
     var id = null;
     try {
         if (typeof handle.Id !== "undefined") id = handle.Id;
@@ -2210,37 +2242,47 @@ function creoEnumName(value) {
     } catch (errS) {}
     try { return String(value); } catch (errT) { return ""; }
 }
-function creoOwnerFeatureId(dim) {
+function creoOwnerFeatureHandle(dim) {
     /**
-     * Creo.JS often exposes toolkit methods that are callable but not
-     * typeof==="function" — use creoHasCallable like the rest of gather.
+     * Owning feature for a dimension. Prefer wfcWDimension.GetOwnerFeature
+     * (OTK ProDimensionOwnerfeatureGet); fall back to GetOwner / Owner / FeatId.
      */
     try {
         if (!dim) return null;
-        var owner = null;
-        try {
-            if (creoHasCallable(dim, "GetOwnerFeature") || typeof dim.GetOwnerFeature !== "undefined") {
-                owner = dim.GetOwnerFeature();
-            }
-        } catch (errGof) { owner = null; }
-        if (!owner) {
+        var handle = creoAsDimension(dim) || dim;
+        var candidates = [handle, dim];
+        for (var c = 0; c < candidates.length; c++) {
+            var src = candidates[c];
+            if (!src) continue;
             try {
-                if (creoHasCallable(dim, "GetOwner") || typeof dim.GetOwner !== "undefined") {
-                    owner = dim.GetOwner();
+                if (creoHasCallable(src, "GetOwnerFeature") || typeof src.GetOwnerFeature !== "undefined") {
+                    var ofeat = src.GetOwnerFeature();
+                    if (ofeat) return creoAsFeature(ofeat) || ofeat;
                 }
-            } catch (errGo) { owner = null; }
-        }
-        if (!owner && dim.Owner != null) owner = dim.Owner;
-        if (owner) {
+            } catch (errGof) {}
             try {
-                if (typeof owner.Id !== "undefined") return owner.Id;
-            } catch (errId) {}
-            try {
-                if (creoHasCallable(owner, "GetId") || typeof owner.GetId === "function") {
-                    return owner.GetId();
+                if (creoHasCallable(src, "GetOwner") || typeof src.GetOwner !== "undefined") {
+                    var own = src.GetOwner();
+                    if (own) return creoAsFeature(own) || own;
                 }
-            } catch (errGetId) {}
+            } catch (errGo) {}
+            try {
+                if (src.Owner != null) return creoAsFeature(src.Owner) || src.Owner;
+            } catch (errOw) {}
         }
+    } catch (errOwn) {}
+    return null;
+}
+function creoOwnerFeatureId(dim) {
+    try {
+        if (!dim) return null;
+        var owner = creoOwnerFeatureHandle(dim);
+        var oid = creoFeatureNumericId(owner);
+        if (oid != null) return oid;
+        var handle = creoAsDimension(dim) || dim;
+        if (handle && handle.FeatId != null) return handle.FeatId;
+        if (handle && handle.feat_id != null) return handle.feat_id;
+        if (handle && handle.ParentId != null) return handle.ParentId;
         if (dim.FeatId != null) return dim.FeatId;
         if (dim.feat_id != null) return dim.feat_id;
         if (dim.ParentId != null) return dim.ParentId;
@@ -2292,17 +2334,34 @@ function creoGatherModelLevelDimensions(solid, errors) {
             for (var i = 0; i < items.length; i++) {
                 var dim = items[i];
                 if (!dim) continue;
-                var featureId = creoOwnerFeatureId(dim);
+                var ownerFeat = creoOwnerFeatureHandle(dim);
+                var featureId = creoFeatureNumericId(ownerFeat);
+                if (featureId == null) featureId = creoOwnerFeatureId(dim);
                 var row = creoReadDimensionRow(dim, featureId);
                 if (!row) continue;
                 // Prefer DimType enum string (DIM_LINEAR / …) over Type.
                 try {
-                    var dimType = creoEnumName(dim.DimType);
+                    var handle = creoAsDimension(dim) || dim;
+                    var dimType = creoEnumName(handle.DimType);
                     if (dimType) {
                         if (dimType.indexOf("DIM_") === 0) dimType = dimType.substring(4);
                         row.dim_type = dimType;
                     }
                 } catch (errDt) {}
+                // Best-effort name from owner feature (PATTERN remap stamps later).
+                if (ownerFeat && !row.feature_name) {
+                    try {
+                        var oname = String(creoFeatureAssignedName(ownerFeat) || "").trim();
+                        if (oname && !creoFeatureGenericLabel(oname)
+                            && !/^feature\s+\d+$/i.test(oname)) {
+                            row.feature_name = oname;
+                        } else {
+                            var otype = "";
+                            try { otype = String(ownerFeat.FeatTypeName || ""); } catch (errOt) {}
+                            if (otype) row.feature_name = otype;
+                        }
+                    } catch (errOn) {}
+                }
                 var key = String(row.id != null ? row.id : (row.symbol || i));
                 if (seen[key]) continue;
                 seen[key] = true;
@@ -2354,18 +2413,30 @@ function creoMergeDimensionRows(primary, secondary) {
     for (var o = 0; o < order.length; o++) out.push(byKey[order[o]]);
     return out;
 }
-function creoStampDimensionFeatureNames(dimensions, features) {
-    /** Attach feature_name from feature id so Compare outlines show (Extrude). */
-    if (!Array.isArray(dimensions) || !Array.isArray(features)) return;
+function creoStampDimensionFeatureNames(dimensions, features, extraLabelById) {
+    /**
+     * Attach feature_name from feature id so Compare outlines show (Extrude).
+     * extraLabelById covers pattern members folded out of the features list.
+     */
+    if (!Array.isArray(dimensions)) return;
     var byId = {};
-    for (var i = 0; i < features.length; i++) {
-        var f = features[i];
-        if (!f || f.id == null) continue;
-        var label = String(f.name || f.subtype || f.type || "").trim();
-        if (!label) continue;
-        // Skip placeholder Feature 123 labels — outline omits those too.
-        if (/^feature\s+\d+$/i.test(label) || /^ifx_id_\d+$/i.test(label)) continue;
-        byId[String(f.id)] = label;
+    if (extraLabelById && typeof extraLabelById === "object") {
+        for (var ek in extraLabelById) {
+            if (Object.prototype.hasOwnProperty.call(extraLabelById, ek) && extraLabelById[ek]) {
+                byId[String(ek)] = String(extraLabelById[ek]);
+            }
+        }
+    }
+    if (Array.isArray(features)) {
+        for (var i = 0; i < features.length; i++) {
+            var f = features[i];
+            if (!f || f.id == null) continue;
+            var label = String(f.name || f.subtype || f.type || "").trim();
+            if (!label) continue;
+            // Skip placeholder Feature 123 labels — outline omits those too.
+            if (/^feature\s+\d+$/i.test(label) || /^ifx_id_\d+$/i.test(label)) continue;
+            byId[String(f.id)] = label;
+        }
     }
     for (var d = 0; d < dimensions.length; d++) {
         var row = dimensions[d];
@@ -2843,6 +2914,10 @@ function gatherAiModelSnapshot(model, session, filename, options) {
             }
             var dimOwnerByDimId = {};
             var dimOwnerBySymbol = {};
+            // Includes pattern members (not in features[]) so model-level
+            // GetOwnerFeature ids still resolve to PATTERN N / Extrude / …
+            var labelByFeatId = {};
+            var patternHeadByMemberId = {};
             function rememberDimOwners(featDims, ownerFeatureId, ownerLabel) {
                 if (!featDims || !featDims.length) return;
                 var label = String(ownerLabel || "").trim();
@@ -2882,11 +2957,7 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                     try { typeName = String(feat.FeatTypeName || ""); } catch (errT) {}
                     var subType = "";
                     try { subType = String(feat.FeatSubType || ""); } catch (errS) {}
-                    var id = null;
-                    try {
-                        if (typeof feat.Id !== "undefined") id = feat.Id;
-                        else if (typeof feat.GetId === "function") id = feat.GetId();
-                    } catch (errId) { id = null; }
+                    var id = creoFeatureNumericId(feat);
                     var name = "";
                     if (wantNames) {
                         try { name = creoFeatureAssignedName(feat); } catch (errNm) { name = ""; }
@@ -2930,9 +3001,11 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                     var isPatternHead = typeU === "PATTERN" || nameU === "PATTERN";
                     if (patternId != null && !isPatternHead) {
                         // Still collect member dims; attribute to PATTERN head for Compare.
+                        var patLabel = patternLabelById[String(patternId)] || "";
                         if (id != null) {
-                            var memDims = creoGatherFeatureDimensions(feat, id, errors);
-                            var patLabel = patternLabelById[String(patternId)] || "";
+                            patternHeadByMemberId[String(id)] = patternId;
+                            if (patLabel) labelByFeatId[String(id)] = patLabel;
+                            var memDims = creoGatherFeatureDimensions(feat, patternId, errors);
                             rememberDimOwners(
                                 memDims,
                                 patternId,
@@ -2947,6 +3020,7 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                             ? patternLabelById[String(id)]
                             : (name || typeName || subType || "")
                     ).trim();
+                    if (id != null && ownerLabel) labelByFeatId[String(id)] = ownerLabel;
                     features.push({
                         id: id,
                         name: isPatternHead ? "PATTERN" : (name || typeName || ("Feature " + (id != null ? id : (i + 1)))),
@@ -2981,13 +3055,25 @@ function gatherAiModelSnapshot(model, session, filename, options) {
             }
             // Model ListItems often omit owner — map by dim id/symbol from feature walk.
             creoApplyDimOwnerMap(dimensions, dimOwnerByDimId, dimOwnerBySymbol);
-            creoStampDimensionFeatureNames(dimensions, features);
-            // PATTERN labels (PATTERN 1…) for dims attributed to pattern heads.
+            // Fold member-owned dims onto PATTERN head ids + labels.
             for (var di = 0; di < dimensions.length; di++) {
                 var drow = dimensions[di];
                 if (!drow || drow.feature_id == null) continue;
-                var pl = patternLabelById[String(drow.feature_id)];
+                var fidKey = String(drow.feature_id);
+                var headId = patternHeadByMemberId[fidKey];
+                if (headId != null) {
+                    drow.feature_id = headId;
+                    fidKey = String(headId);
+                }
+                var pl = patternLabelById[fidKey] || labelByFeatId[fidKey];
                 if (pl) drow.feature_name = pl;
+            }
+            creoStampDimensionFeatureNames(dimensions, features, labelByFeatId);
+            for (var dj = 0; dj < dimensions.length; dj++) {
+                var drow2 = dimensions[dj];
+                if (!drow2 || drow2.feature_id == null) continue;
+                var pl2 = patternLabelById[String(drow2.feature_id)];
+                if (pl2) drow2.feature_name = pl2;
             }
         } catch (errAll) {
             errors.push("features: " + creoToolkitErr(errAll));

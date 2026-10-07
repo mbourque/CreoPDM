@@ -469,7 +469,9 @@ def _dimension_outline_line(
     symbol = str(dim.get("symbol") or "").strip()
     value = _format_dim_value(dim.get("value"))
     unit = str(dim.get("units") or "").strip()
-    piece = f"{symbol} = {value}"
+    owner = _dimension_owner_label(dim, feature_labels)
+    # Owner name immediately after the dim id: d238 (ROUND) = 1.03 in
+    piece = f"{symbol} ({owner}) = {value}" if owner else f"{symbol} = {value}"
     if unit:
         piece += f" {unit}"
     limits = dim.get("tolerance_limits")
@@ -478,9 +480,6 @@ def _dimension_outline_line(
         hi = limits.get("upper", limits.get("max"))
         if lo is not None and hi is not None:
             piece += f" (limits {_format_dim_value(lo)}–{_format_dim_value(hi)})"
-    owner = _dimension_owner_label(dim, feature_labels)
-    if owner:
-        piece += f" ({owner})"
     return piece
 
 

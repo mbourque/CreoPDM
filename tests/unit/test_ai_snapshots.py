@@ -49,9 +49,14 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "creoStampDimensionFeatureNames(dimensions, features)" in text
     assert "creoApplyDimOwnerMap(dimensions, dimOwnerByDimId, dimOwnerBySymbol)" in text
     assert "Pass 1 — number PATTERN heads" in text
-    assert "creoHasCallable(dim, \"GetOwnerFeature\")" in text or "GetOwnerFeature" in text.split(
+    assert "function creoAsDimension(" in text
+    assert "function creoOwnerFeatureHandle(" in text
+    assert "wfcWDimension" in text
+    assert "GetOwnerFeature" in text.split("function creoOwnerFeatureHandle(", 1)[1].split(
         "function creoOwnerFeatureId(", 1
-    )[1].split("function creoApplyDimOwnerMap(", 1)[0]
+    )[0]
+    assert "labelByFeatId" in text
+    assert "patternHeadByMemberId" in text
     # Configurator path: model.ListItems(ITEM_DIMENSION) + ListItems(ITEM_FEATURE).
     assert "ListItems(ITEM_DIMENSION)" in text or "ListItems(types[t])" in text
     assert "creoGatherModelLevelDimensions(solid, errors)" in text
@@ -269,7 +274,7 @@ def test_snapshot_tab_template_and_docs():
     assert "FEATTYPE_COMPONENT" in docs
     assert "prepare_snapshot_for_compare" in docs
     assert "parts, assemblies, and drawings" in docs
-    assert "d258 = 95.461 in (Extrude)" in docs
+    assert "d258 (Extrude) = 95.461 in" in docs
     assert "never the Creo feature id" in docs
     assert "Ask AI what changed" in docs
     assert "outline" in docs.lower()
@@ -680,9 +685,9 @@ def test_snapshot_compare_prompt_requires_saved_text():
         ],
     }
     dim_owner_text = format_snapshot_compare_text(dim_owner_snap)
-    assert "d258 = 95.461 in (Extrude)" in dim_owner_text
-    assert "d259 = 21.7 in (Extrude)" in dim_owner_text
-    assert "d300 = 1 in (Hole 1)" in dim_owner_text
+    assert "d258 (Extrude) = 95.461 in" in dim_owner_text
+    assert "d259 (Extrude) = 21.7 in" in dim_owner_text
+    assert "d300 (Hole 1) = 1 in" in dim_owner_text
     assert "(4460)" not in dim_owner_text
     assert "feature_id" not in dim_owner_text
     # feature_name alone (no id lookup) also works after gather stamp.
@@ -700,7 +705,7 @@ def test_snapshot_compare_prompt_requires_saved_text():
             ],
         }
     )
-    assert "d258 = 95.461 in (Extrude)" in named_only
+    assert "d258 (Extrude) = 95.461 in" in named_only
     dim_owner_diff = format_snapshot_compare_diff_text(
         dim_owner_snap,
         {
@@ -711,7 +716,7 @@ def test_snapshot_compare_prompt_requires_saved_text():
             ],
         },
     )
-    assert "d300 = 1 in (Hole 1)" in dim_owner_diff
+    assert "d300 (Hole 1) = 1 in" in dim_owner_diff
     assert "(5000)" not in dim_owner_diff
 
     # Assemblies: Structure/BOM drives component add/remove (Features omit COMPONENT).
