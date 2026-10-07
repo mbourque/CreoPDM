@@ -11517,14 +11517,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const items = Array.isArray(aiSnapshotListCache?.items)
         ? aiSnapshotListCache.items
         : [];
+      // API lists newest-first. Compare defaults: left = older, right = newer.
       const withSnap = items.filter((item) => item && item.has_snapshot);
       const canCompare = withSnap.length >= 2;
+      const newerSnap = withSnap[0] || null;
+      const olderSnap = withSnap.length >= 2 ? withSnap[1] : null;
+      const labelB = $("#ai-snapshot-label-b");
       if (compare) compare.dataset.mode = canCompare ? "compare" : "single";
       if (paneB) paneB.hidden = !canCompare;
-      if (labelA) labelA.textContent = canCompare ? "Rev A" : "Revision";
-      selectA.setAttribute("aria-label", canCompare ? "Snapshot revision A" : "Snapshot revision");
+      if (labelA) labelA.textContent = canCompare ? "Older" : "Revision";
+      if (labelB) labelB.textContent = "Newer";
+      selectA.setAttribute(
+        "aria-label",
+        canCompare ? "Older snapshot revision" : "Snapshot revision"
+      );
+      selectB.setAttribute("aria-label", "Newer snapshot revision");
       const tipVersion = String(panel.dataset.tipVersion || "").trim();
-      const fillSelect = (select, preferSnapIndex, preferAnyIndex) => {
+      const fillSelect = (select, preferredVersionId) => {
         const previous = String(select.value || "");
         select.replaceChildren();
         items.forEach((item) => {
@@ -11535,13 +11544,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           select.appendChild(option);
         });
         if (!items.length) return;
-        if (previous && items.some((item) => String(item.version_id) === previous)) {
+        // Keep a user pick only when both panes already had values (re-render).
+        if (
+          previous
+          && select.dataset.userPicked === "1"
+          && items.some((item) => String(item.version_id) === previous)
+        ) {
           select.value = previous;
           return;
         }
-        const preferSnap = withSnap[preferSnapIndex];
-        if (preferSnap) {
-          select.value = String(preferSnap.version_id || "");
+        const prefer = String(preferredVersionId || "").trim();
+        if (prefer && items.some((item) => String(item.version_id) === prefer)) {
+          select.value = prefer;
           return;
         }
         if (
@@ -11551,20 +11565,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           select.value = tipVersion;
           return;
         }
-        if (items[preferAnyIndex]) {
-          select.value = String(items[preferAnyIndex].version_id || "");
-        } else {
-          select.value = String(items[0].version_id || "");
-        }
+        select.value = String(items[0].version_id || "");
       };
-      fillSelect(selectA, 0, 0);
       if (canCompare) {
-        fillSelect(selectB, 1, 1);
+        fillSelect(selectA, olderSnap?.version_id);
+        fillSelect(selectB, newerSnap?.version_id);
         await Promise.all([
           renderAiSnapshotPane("a", objectId),
           renderAiSnapshotPane("b", objectId),
         ]);
       } else {
+        fillSelect(selectA, newerSnap?.version_id || tipVersion);
         await renderAiSnapshotPane("a", objectId);
       }
     } catch (err) {
@@ -11612,6 +11623,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const objectId = String(panel.dataset.objectId || "").trim();
     ["a", "b"].forEach((pane) => {
       $(`#ai-snapshot-rev-${pane}`)?.addEventListener("change", () => {
+        const select = $(`#ai-snapshot-rev-${pane}`);
+        if (select) select.dataset.userPicked = "1";
         void renderAiSnapshotPane(pane, objectId);
       });
       $(`#ai-snapshot-copy-${pane}`)?.addEventListener("click", async () => {
@@ -11635,9 +11648,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           );
           return;
         }
-        const label = pane === "a" && $("#ai-snapshot-compare")?.dataset.mode !== "compare"
+        const mode = $("#ai-snapshot-compare")?.dataset.mode;
+        const label = mode !== "compare"
           ? "snapshot"
-          : `Rev ${pane.toUpperCase()} snapshot`;
+          : pane === "a"
+            ? "older snapshot"
+            : "newer snapshot";
         showOk(`Copied ${label} JSON.`);
       });
     });

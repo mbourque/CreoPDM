@@ -64,6 +64,11 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "materials: ai.materials" in script
     assert "units: ai.units" in script
     assert "family_table: ai.family_table" in script
+    # Compare defaults: left = older (withSnap[1]), right = newer (withSnap[0]).
+    assert "left = older, right = newer" in script
+    assert "fillSelect(selectA, olderSnap?.version_id)" in script
+    assert "fillSelect(selectB, newerSnap?.version_id)" in script
+    assert 'labelA.textContent = canCompare ? "Older" : "Revision"' in script
 
 
 def test_snapshot_tab_template_and_docs():
@@ -75,12 +80,17 @@ def test_snapshot_tab_template_and_docs():
     assert 'data-mode="single"' in html
     assert 'id="ai-snapshot-rev-a"' in html
     assert 'id="ai-snapshot-rev-b"' in html
+    assert 'id="ai-snapshot-label-a"' in html
+    assert 'id="ai-snapshot-label-b"' in html
     assert 'id="ai-snapshot-copy-a"' in html
     assert 'id="ai-snapshot-copy-b"' in html
     assert 'data-pane="b" hidden' in html
+    assert "left = older, right = newer" in html
     assert "Open **Snapshot**" in docs
     assert "experimental tab" in docs.lower()
     assert "two or more" in docs.lower() and "snapshot" in docs.lower()
+    assert "Older" in docs and "Newer" in docs
+    assert "A.1 left, A.2 right" in docs
 
 
 @requires_git
