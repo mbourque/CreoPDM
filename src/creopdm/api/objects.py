@@ -25,6 +25,7 @@ from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import CheckoutOwnershipError, CreoPDMError, PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.schemas.common import (
+    AiSnapshotComparePendingRequest,
     AiSnapshotCompareRequest,
     AiSnapshotCompareResponse,
     AiSnapshotListResponse,
@@ -516,6 +517,41 @@ def compare_ai_snapshots(
     )
     logger.info(
         "AI snapshot compare for %s (%s): %s → %s model=%s chars=%s",
+        obj.filename or object_id,
+        object_id[:8],
+        result.older_display_revision or "-",
+        result.newer_display_revision or "-",
+        result.model or "-",
+        len(result.summary or ""),
+    )
+    return result
+
+
+@router.post(
+    "/api/objects/{object_id}/ai-snapshot/compare-pending",
+    response_model=AiSnapshotCompareResponse,
+)
+def compare_pending_ai_snapshot(
+    object_id: str,
+    payload: AiSnapshotComparePendingRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> AiSnapshotCompareResponse:
+    """Compare tip snapshot to a gathered not-yet-checked-in model snapshot (check-in comment)."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    result = ctx.ai_snapshots.compare_pending_with_ollama(
+        db,
+        object_id,
+        payload.newer_snapshot,
+        ctx.settings,
+        older_version_id=payload.older_version_id,
+        newer_display_revision=payload.newer_display_revision,
+    )
+    logger.info(
+        "AI pending snapshot compare for %s (%s): %s → %s model=%s chars=%s",
         obj.filename or object_id,
         object_id[:8],
         result.older_display_revision or "-",

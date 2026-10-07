@@ -238,6 +238,48 @@ class AiSnapshotService:
             )
         return AiSnapshotListResponse(object_id=obj.uuid, items=items)
 
+    def _chat_compare(
+        self,
+        *,
+        object_uuid: str,
+        older_snapshot: dict[str, Any],
+        newer_snapshot: dict[str, Any],
+        older_revision: str,
+        newer_revision: str,
+        older_version_id: str,
+        newer_version_id: str,
+        settings: AppSettings,
+    ) -> AiSnapshotCompareResponse:
+        model = str(settings.ai.ollama_model or "").strip()
+        if not model:
+            raise ValidationAppError(
+                "No Ollama model selected. Open Administration → AI, Refresh models, choose a model, and Save."
+            )
+        system_prompt = resolve_snapshot_compare_prompt(settings.ai.snapshot_compare_prompt)
+        user_prompt = build_snapshot_compare_user_prompt(
+            older_snapshot=older_snapshot,
+            newer_snapshot=newer_snapshot,
+            older_revision=older_revision,
+            newer_revision=newer_revision,
+        )
+        summary = chat_ollama(
+            settings.ai.ollama_base_url,
+            model,
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        return AiSnapshotCompareResponse(
+            object_id=object_uuid,
+            older_version_id=older_version_id,
+            newer_version_id=newer_version_id,
+            older_display_revision=older_revision,
+            newer_display_revision=newer_revision,
+            model=model,
+            summary=summary,
+        )
+
     def compare_with_ollama(
         self,
         session: Session,
@@ -246,7 +288,7 @@ class AiSnapshotService:
         newer_version_id: str,
         settings: AppSettings,
     ) -> AiSnapshotCompareResponse:
-        """Load two snapshots and ask the configured Ollama model what changed."""
+        """Load two saved snapshots and ask the configured Ollama model what changed."""
         older_id = (older_version_id or "").strip()
         newer_id = (newer_version_id or "").strip()
         if not older_id or not newer_id:
@@ -268,34 +310,48 @@ class AiSnapshotService:
                 "Collect metadata while that version is tip.",
                 details={"version_id": newer_id},
             )
-
-        model = str(settings.ai.ollama_model or "").strip()
-        if not model:
-            raise ValidationAppError(
-                "No Ollama model selected. Open Administration → AI, Refresh models, choose a model, and Save."
-            )
-
-        system_prompt = resolve_snapshot_compare_prompt(settings.ai.snapshot_compare_prompt)
-        user_prompt = build_snapshot_compare_user_prompt(
+        return self._chat_compare(
+            object_uuid=object_uuid,
             older_snapshot=older.snapshot,
             newer_snapshot=newer.snapshot,
             older_revision=older.display_revision,
             newer_revision=newer.display_revision,
-        )
-        summary = chat_ollama(
-            settings.ai.ollama_base_url,
-            model,
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        return AiSnapshotCompareResponse(
-            object_id=object_uuid,
             older_version_id=older.version_id or older_id,
             newer_version_id=newer.version_id or newer_id,
-            older_display_revision=older.display_revision,
-            newer_display_revision=newer.display_revision,
-            model=model,
-            summary=summary,
+            settings=settings,
+        )
+
+    def compare_pending_with_ollama(
+        self,
+        session: Session,
+        object_uuid: str,
+        newer_snapshot: dict[str, Any],
+        settings: AppSettings,
+        *,
+        older_version_id: str | None = None,
+        newer_display_revision: str = "pending",
+    ) -> AiSnapshotCompareResponse:
+        """Compare tip (or chosen) saved snapshot to a gathered not-yet-checked-in snapshot."""
+        if not isinstance(newer_snapshot, dict) or not newer_snapshot:
+            raise ValidationAppError("Newer snapshot JSON is required.")
+        older_id = (older_version_id or "").strip() or None
+        older = self.get(session, object_uuid, older_id)
+        if not older.version_id:
+            raise ValidationAppError("This file has no version to compare against.")
+        if not older.has_snapshot or not isinstance(older.snapshot, dict):
+            raise ValidationAppError(
+                f"Revision {older.display_revision or older.version_id} has no snapshot yet. "
+                "Collect metadata while that version is tip, then try again.",
+                details={"version_id": older.version_id},
+            )
+        newer_label = (newer_display_revision or "").strip() or "pending"
+        return self._chat_compare(
+            object_uuid=object_uuid,
+            older_snapshot=older.snapshot,
+            newer_snapshot=newer_snapshot,
+            older_revision=older.display_revision,
+            newer_revision=newer_label,
+            older_version_id=older.version_id,
+            newer_version_id="",
+            settings=settings,
         )

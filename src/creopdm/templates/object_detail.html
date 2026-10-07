@@ -486,7 +486,8 @@
            data-tip-version="{{ object.current_version.uuid if object.current_version else '' }}">
     <p class="muted small">
       Experimental per-revision model snapshot (features, dimensions, parameters, materials, units) for AI change summaries.
-      Collect metadata in Creo while a version is tip to create or refresh it. Not used for check-in comments yet.
+      Collect metadata in Creo while a version is tip to create or refresh it.
+      Check In can also Ask AI for a comment from tip vs the modified model.
       Side-by-side compare appears only when two or more revisions have snapshots
       (left = older, right = newer). Configure Ollama under Administration → AI.
     </p>
@@ -716,6 +717,12 @@
     <label>Comment
       <textarea name="comment" id="checkin-comment" rows="3" required placeholder="Changed shaft diameter for new bearing."></textarea>
     </label>
+    <div class="form-actions" id="checkin-ai-row" hidden style="margin: 0.35rem 0 0.75rem;">
+      <button type="button" class="btn" id="checkin-ask-ai"
+              title="Collect metadata on the modified model, compare to the tip snapshot, and fill the comment">
+        Ask AI for comment
+      </button>
+    </div>
     <ul class="detect-list" id="checkin-changes"></ul>
     <div id="checkin-new-wrap" hidden>
       <p class="muted small" id="checkin-new-help">New files in the vault. They are not added unless you check them.</p>

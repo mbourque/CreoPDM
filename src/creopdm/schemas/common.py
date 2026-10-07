@@ -902,10 +902,38 @@ class AiSnapshotCompareRequest(BaseModel):
         return text
 
 
+class AiSnapshotComparePendingRequest(BaseModel):
+    """Compare a saved tip snapshot to a client-gathered (not yet checked-in) snapshot."""
+
+    newer_snapshot: dict[str, Any] = Field(default_factory=dict)
+    older_version_id: str | None = None
+    newer_display_revision: str = "pending"
+
+    @field_validator("newer_snapshot")
+    @classmethod
+    def require_newer_snapshot(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(value, dict) or not value:
+            raise ValueError("Newer snapshot JSON is required.")
+        return value
+
+    @field_validator("older_version_id")
+    @classmethod
+    def strip_older_version_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+    @field_validator("newer_display_revision")
+    @classmethod
+    def strip_newer_label(cls, value: str) -> str:
+        return (value or "").strip() or "pending"
+
+
 class AiSnapshotCompareResponse(BaseModel):
     object_id: str
     older_version_id: str
-    newer_version_id: str
+    newer_version_id: str = ""
     older_display_revision: str = ""
     newer_display_revision: str = ""
     model: str = ""

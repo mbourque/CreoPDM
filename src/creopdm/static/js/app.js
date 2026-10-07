@@ -6771,29 +6771,36 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  async function postAiSnapshotFromGather(objectUuid, versionId, gatherSnapshot) {
-    // Soft-fail — AI snapshot must not block Creo metadata save.
+  function aiSnapshotBodyFromGather(gatherSnapshot) {
     const ai = gatherSnapshot && typeof gatherSnapshot === "object"
       ? gatherSnapshot.ai_snapshot
       : null;
-    if (!objectUuid || !ai || typeof ai !== "object") return false;
+    if (!ai || typeof ai !== "object") return null;
     const capture = ai.capture && typeof ai.capture === "object" ? ai.capture : {};
+    return {
+      schema_version: Number(ai.schema_version) || 1,
+      identity: ai.identity || null,
+      features: Array.isArray(ai.features) ? ai.features : [],
+      dimensions: Array.isArray(ai.dimensions) ? ai.dimensions : [],
+      parameters: Array.isArray(ai.parameters) ? ai.parameters : [],
+      materials: ai.materials && typeof ai.materials === "object" ? ai.materials : null,
+      units: ai.units && typeof ai.units === "object" ? ai.units : null,
+      family_table: ai.family_table && typeof ai.family_table === "object" ? ai.family_table : null,
+      capture,
+    };
+  }
+
+  async function postAiSnapshotFromGather(objectUuid, versionId, gatherSnapshot) {
+    // Soft-fail — AI snapshot must not block Creo metadata save.
+    const snapshot = aiSnapshotBodyFromGather(gatherSnapshot);
+    if (!objectUuid || !snapshot) return false;
+    const capture = snapshot.capture && typeof snapshot.capture === "object" ? snapshot.capture : {};
     const body = {
       version_id: versionId || null,
-      schema_version: Number(ai.schema_version) || 1,
+      schema_version: Number(snapshot.schema_version) || 1,
       capture_status: String(capture.status || "ok"),
       capture_errors: Array.isArray(capture.errors) ? capture.errors.map(String) : [],
-      snapshot: {
-        schema_version: Number(ai.schema_version) || 1,
-        identity: ai.identity || null,
-        features: Array.isArray(ai.features) ? ai.features : [],
-        dimensions: Array.isArray(ai.dimensions) ? ai.dimensions : [],
-        parameters: Array.isArray(ai.parameters) ? ai.parameters : [],
-        materials: ai.materials && typeof ai.materials === "object" ? ai.materials : null,
-        units: ai.units && typeof ai.units === "object" ? ai.units : null,
-        family_table: ai.family_table && typeof ai.family_table === "object" ? ai.family_table : null,
-        capture,
-      },
+      snapshot,
     };
     try {
       const response = await fetch(
@@ -9826,7 +9833,147 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         syncNewFilePick();
       }
     }
+    syncCheckinAiAskRow({
+      addOnly,
+      canSubmit,
+      objectId: useQueue
+        ? (JSON.parse(checkinDialog?.dataset.objectIds || "[]")[0] || "")
+        : objectId,
+      objectIds: useQueue
+        ? JSON.parse(checkinDialog?.dataset.objectIds || "[]")
+        : objectId
+          ? [objectId]
+          : [],
+      filename: objectLabelText,
+      nextDisplay: String(data.next_display || "").trim(),
+    });
     checkinDialog.showModal();
+  }
+
+  function syncCheckinAiAskRow(opts) {
+    const row = $("#checkin-ai-row");
+    const btn = $("#checkin-ask-ai");
+    if (!row || !btn || !checkinDialog) return;
+    const addOnly = Boolean(opts?.addOnly);
+    const canSubmit = Boolean(opts?.canSubmit);
+    const ids = Array.isArray(opts?.objectIds)
+      ? opts.objectIds.map(String).filter(Boolean)
+      : [];
+    const objectId = String(opts?.objectId || ids[0] || "").trim();
+    const filename = String(opts?.filename || "").trim();
+    const singleCreo =
+      !addOnly &&
+      canSubmit &&
+      ids.length === 1 &&
+      objectId &&
+      filename &&
+      isCreoMetadataCandidate(filename);
+    row.hidden = !singleCreo;
+    btn.disabled = !singleCreo || !canGatherCreoMetadata();
+    btn.title = !singleCreo
+      ? "Ask AI for comment works for one modified Creo model at a time"
+      : !canGatherCreoMetadata()
+        ? "Open this page in Creo’s embedded browser with Creo Connected to collect the modified model"
+        : "Collect metadata on the modified model, compare to the tip snapshot, and fill the comment";
+    checkinDialog.dataset.aiObjectId = singleCreo ? objectId : "";
+    checkinDialog.dataset.aiFilename = singleCreo ? filename : "";
+    checkinDialog.dataset.aiNextDisplay = singleCreo
+      ? String(opts?.nextDisplay || "").trim()
+      : "";
+    // Prefer a local Windows path from the Files row when present.
+    let path = "";
+    if (singleCreo) {
+      const rowEl = document.querySelector(
+        `tr[data-uuid="${CSS.escape(objectId)}"]`
+      );
+      path = String(rowEl?.dataset?.path || rowEl?.dataset?.relativePath || "").trim();
+    }
+    checkinDialog.dataset.aiPath = path;
+  }
+
+  async function askAiCheckinComment() {
+    const objectId = String(checkinDialog?.dataset.aiObjectId || "").trim();
+    const filename = String(checkinDialog?.dataset.aiFilename || "").trim();
+    const nextDisplay = String(checkinDialog?.dataset.aiNextDisplay || "").trim();
+    const commentBox = $("#checkin-comment");
+    showError($("#checkin-error"), "");
+    if (!objectId || !filename) {
+      showError(
+        $("#checkin-error"),
+        "Ask AI for comment works for one modified Creo model at a time."
+      );
+      return;
+    }
+    if (!canGatherCreoMetadata()) {
+      showError(
+        $("#checkin-error"),
+        "Open this page in Creo’s embedded browser with Creo Connected to collect the modified model."
+      );
+      return;
+    }
+    try {
+      const summary = await withBusy("Collecting modified model…", async () => {
+        let snapshot = await gatherCreoMetadataForFilename(filename, "", {
+          featureNames: true,
+        });
+        if (snapshot && snapshot.__error) snapshot = null;
+        if (!snapshot) {
+          let filePath = looksLikeLocalWindowsPath(checkinDialog?.dataset.aiPath || "")
+            ? String(checkinDialog.dataset.aiPath || "")
+            : "";
+          if (!filePath) {
+            filePath = (await prepareLocalPathForMetadata(objectId, filename)) || "";
+          }
+          if (!filePath) {
+            throw new Error(
+              "Could not find the modified model in Creo or the local workspace."
+            );
+          }
+          snapshot = await gatherCreoMetadataForFilename(filename, filePath, {
+            featureNames: true,
+          });
+          if (snapshot && snapshot.__error) {
+            throw new Error(
+              String(snapshot.__detail || snapshot.__error || "Metadata gather failed.")
+            );
+          }
+        }
+        const newerSnapshot = aiSnapshotBodyFromGather(snapshot);
+        if (!newerSnapshot) {
+          throw new Error(
+            "Creo did not return an AI snapshot for this model. Try Collect metadata first."
+          );
+        }
+        publishBusyMessage("Asking AI for check-in comment…");
+        const response = await fetch(
+          `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare-pending`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            cache: "no-store",
+            body: JSON.stringify({
+              newer_snapshot: newerSnapshot,
+              newer_display_revision: nextDisplay || "pending",
+            }),
+          }
+        );
+        if (!response.ok) throw new Error(await readError(response));
+        const payload = await response.json();
+        const text = String(payload?.summary || "").trim();
+        if (!text) throw new Error("Ollama returned an empty summary.");
+        return text;
+      });
+      if (commentBox) {
+        commentBox.value = summary;
+        commentBox.focus();
+      }
+    } catch (err) {
+      showError(
+        $("#checkin-error"),
+        String(err?.message || err || "Could not ask AI for a check-in comment.")
+      );
+    }
   }
 
   checkinBtn?.addEventListener("click", () => {
@@ -9836,6 +9983,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     void beginCheckin("product");
   });
 
+  $("#checkin-ask-ai")?.addEventListener("click", () => {
+    void askAiCheckinComment();
+  });
   $("#checkin-cancel")?.addEventListener("click", () => checkinDialog?.close());
   checkinForm?.addEventListener("submit", async (event) => {
     event.preventDefault();

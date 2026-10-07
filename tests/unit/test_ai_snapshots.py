@@ -87,6 +87,17 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert 'withBusy("Asking AI what changed…"' in script
     assert "askRow.hidden = !canCompare" in script
     assert "ai-snapshot-ai-answer-body" in script
+    assert "async function askAiCheckinComment(" in script
+    assert "/ai-snapshot/compare-pending" in script
+    assert 'withBusy("Collecting modified model…"' in script
+    assert "function syncCheckinAiAskRow(" in script
+    assert "function aiSnapshotBodyFromGather(" in script
+    assert 'id="checkin-ask-ai"' in (
+        ROOT / "src" / "creopdm" / "templates" / "app.html"
+    ).read_text(encoding="utf-8")
+    assert "Ask AI for comment" in (
+        ROOT / "src" / "creopdm" / "templates" / "app.html"
+    ).read_text(encoding="utf-8")
 
 
 def test_snapshot_tab_template_and_docs():
@@ -115,6 +126,9 @@ def test_snapshot_tab_template_and_docs():
     assert "A.1 left, A.2 right" in docs
     assert "Ask AI what changed" in docs
     assert "above** the two JSON panes" in docs or "above the two JSON panes" in docs
+    assert "Ask AI for comment" in docs
+    assert "Collect metadata on the modified file" in docs or "Collect metadata on the modified" in docs
+    assert 'id="checkin-ask-ai"' in html
 
 
 def test_snapshot_compare_prompt_requires_saved_text():
@@ -388,3 +402,84 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
         },
     )
     assert rejected.status_code == 400, rejected.text
+
+
+@requires_git
+def test_ai_snapshot_compare_pending_uses_tip_and_client_newer(
+    client, repo_parent, tmp_path, monkeypatch
+):
+    """Check-in path: tip snapshot vs gathered newer JSON (no newer version id yet)."""
+    product = client.post(
+        "/api/products",
+        json={"name": "Snap Pending", "number": "SNAP-PEND"},
+    )
+    assert product.status_code == 201, product.text
+    product_id = product.json()["uuid"]
+    prt = tmp_path / "block.prt.1"
+    prt.write_bytes(b"FAKE CREO PART")
+    added = client.post(
+        f"/api/products/{product_id}/objects",
+        files={"file": ("block.prt.1", prt.read_bytes(), "application/octet-stream")},
+        data={"comment": "v1"},
+    )
+    assert added.status_code == 201, added.text
+    object_id = added.json()["uuid"]
+    tip_version_id = added.json()["current_version"]["uuid"]
+
+    tip_snap = {
+        "version_id": tip_version_id,
+        "schema_version": AI_SNAPSHOT_SCHEMA_VERSION,
+        "capture_status": "ok",
+        "snapshot": {
+            "identity": {"filename": "block.prt", "model_type": "PART"},
+            "features": [{"id": 1, "name": "ROUND", "type": "Round"}],
+            "dimensions": [{"symbol": "width", "value": 120.0, "units": "mm"}],
+            "parameters": [],
+        },
+    }
+    assert client.post(f"/api/objects/{object_id}/ai-snapshot", json=tip_snap).status_code == 200
+
+    assert (
+        client.put(
+            "/api/settings",
+            json={
+                "ollama_model": "qwen3-8b-64k:latest",
+                "snapshot_compare_prompt": "Facts only.",
+            },
+        ).status_code
+        == 200
+    )
+
+    def fake_chat(base_url, model, messages, *, timeout_s=300.0):
+        assert model == "qwen3-8b-64k:latest"
+        assert messages[0]["content"] == "Facts only."
+        assert "Older revision" in messages[1]["content"]
+        assert "Newer revision (A.2)" in messages[1]["content"]
+        assert "120" in messages[1]["content"]
+        assert "100" in messages[1]["content"]
+        assert "ROUND" in messages[1]["content"]
+        return "Reduced width from 120 to 100 mm and removed the round feature."
+
+    monkeypatch.setattr(
+        "creopdm.services.ai_snapshot_service.chat_ollama",
+        fake_chat,
+    )
+
+    pending = client.post(
+        f"/api/objects/{object_id}/ai-snapshot/compare-pending",
+        json={
+            "newer_display_revision": "A.2",
+            "newer_snapshot": {
+                "identity": {"filename": "block.prt", "model_type": "PART"},
+                "features": [],
+                "dimensions": [{"symbol": "width", "value": 100.0, "units": "mm"}],
+                "parameters": [],
+            },
+        },
+    )
+    assert pending.status_code == 200, pending.text
+    body = pending.json()
+    assert body["summary"].startswith("Reduced width")
+    assert body["older_version_id"] == tip_version_id
+    assert body["newer_version_id"] == ""
+    assert body["newer_display_revision"] == "A.2"

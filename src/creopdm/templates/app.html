@@ -727,6 +727,12 @@
     <label>Comment
       <textarea name="comment" id="checkin-comment" rows="3" required placeholder="Changed shaft diameter for new bearing."></textarea>
     </label>
+    <div class="form-actions" id="checkin-ai-row" hidden style="margin: 0.35rem 0 0.75rem;">
+      <button type="button" class="btn" id="checkin-ask-ai"
+              title="Collect metadata on the modified model, compare to the tip snapshot, and fill the comment">
+        Ask AI for comment
+      </button>
+    </div>
     <ul class="detect-list" id="checkin-changes"></ul>
     <div id="checkin-new-wrap" hidden>
       <p class="muted small" id="checkin-new-help">New files in the vault. They are not added unless you check them.</p>
