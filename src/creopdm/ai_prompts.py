@@ -174,6 +174,118 @@ def _is_drawing_snapshot(snapshot: dict[str, Any], identity: dict[str, Any]) -> 
     return False
 
 
+def _is_assembly_snapshot(snapshot: dict[str, Any], identity: dict[str, Any]) -> bool:
+    model_type = str(identity.get("model_type") or "").strip().upper()
+    filename = str(identity.get("filename") or "").strip().lower()
+    if model_type == "ASSEMBLY" or filename.endswith(".asm"):
+        return True
+    bom = snapshot.get("bom")
+    return isinstance(bom, list) and bool(bom)
+
+
+def _bom_nodes(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    bom = snapshot.get("bom")
+    if not isinstance(bom, list):
+        return []
+    return [node for node in bom if isinstance(node, dict)]
+
+
+def _bom_qty(value: Any) -> int:
+    try:
+        qty = int(value) if value is not None else 1
+    except (TypeError, ValueError):
+        qty = 1
+    return qty if qty > 0 else 1
+
+
+def _format_bom_outline_lines(
+    nodes: list[dict[str, Any]], *, depth: int = 0
+) -> list[str]:
+    """Plain Structure tree (same qty rules as Details Structure tab)."""
+    lines: list[str] = []
+    for node in nodes:
+        name = str(node.get("filename") or "").strip() or "—"
+        qty = _bom_qty(node.get("quantity"))
+        indent = "  " * depth
+        if qty != 1:
+            lines.append(f"{indent}- {name} × {qty}")
+        else:
+            lines.append(f"{indent}- {name}")
+        children = node.get("children")
+        if isinstance(children, list) and children:
+            child_nodes = [c for c in children if isinstance(c, dict)]
+            lines.extend(_format_bom_outline_lines(child_nodes, depth=depth + 1))
+    return lines
+
+
+def _bom_member_qty_map(
+    nodes: list[dict[str, Any]], *, path: tuple[str, ...] = ()
+) -> dict[str, tuple[str, int]]:
+    """
+    Path-keyed member quantities (skip ASSEMBLY_ROOT itself).
+    key = lowercased path like 'square_tube_1.prt' or 'sub.asm/child.prt'
+    value = (display_name_with_path, qty)
+    """
+    out: dict[str, tuple[str, int]] = {}
+    for node in nodes:
+        name = str(node.get("filename") or "").strip()
+        if not name:
+            continue
+        name_l = name.lower()
+        dep = str(node.get("dependency_type") or "").strip().upper()
+        qty = _bom_qty(node.get("quantity"))
+        children_raw = node.get("children")
+        children = (
+            [c for c in children_raw if isinstance(c, dict)]
+            if isinstance(children_raw, list)
+            else []
+        )
+        if dep == "ASSEMBLY_ROOT":
+            out.update(_bom_member_qty_map(children, path=()))
+            continue
+        key_path = path + (name_l,)
+        key = "/".join(key_path)
+        display = "/".join(path + (name,)) if path else name
+        prev = out.get(key)
+        if prev:
+            out[key] = (prev[0], prev[1] + qty)
+        else:
+            out[key] = (display, qty)
+        if children:
+            out.update(_bom_member_qty_map(children, path=key_path))
+    return out
+
+
+def _component_outline_label(display: str, qty: int) -> str:
+    if qty != 1:
+        return f"{display} × {qty}"
+    return display
+
+
+def _slim_bom_nodes(nodes: list[Any]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        name = str(node.get("filename") or "").strip()
+        if not name:
+            continue
+        row: dict[str, Any] = {
+            "filename": name,
+            "quantity": _bom_qty(node.get("quantity")),
+        }
+        dep = str(node.get("dependency_type") or "").strip()
+        if dep:
+            row["dependency_type"] = dep
+        children = node.get("children")
+        if isinstance(children, list) and children:
+            slim_children = _slim_bom_nodes(children)
+            if slim_children:
+                row["children"] = slim_children
+        out.append(row)
+    return out
+
+
 def _view_display_line(feat: dict[str, Any]) -> str:
     name = str(feat.get("name") or "").strip() or "unnamed view"
     extras: list[str] = []
@@ -293,7 +405,7 @@ def format_snapshot_compare_diff_text(
     older_snapshot: dict[str, Any] | None,
     newer_snapshot: dict[str, Any] | None,
 ) -> str:
-    """Authoritative OLD→NEW feature/dimension diffs (prevents cross-symbol dim merges)."""
+    """Authoritative OLD→NEW feature/dimension/BOM diffs (prevents cross-symbol dim merges)."""
     older = older_snapshot if isinstance(older_snapshot, dict) else {}
     newer = newer_snapshot if isinstance(newer_snapshot, dict) else {}
 
@@ -307,6 +419,24 @@ def format_snapshot_compare_diff_text(
             feat_removed.extend([label] * (-delta))
         elif delta > 0:
             feat_added.extend([label] * delta)
+
+    older_comps = _bom_member_qty_map(_bom_nodes(older))
+    newer_comps = _bom_member_qty_map(_bom_nodes(newer))
+    comp_removed: list[str] = []
+    comp_added: list[str] = []
+    comp_qty_changed: list[str] = []
+    for key in sorted(set(older_comps) | set(newer_comps), key=str.lower):
+        old_entry = older_comps.get(key)
+        new_entry = newer_comps.get(key)
+        if old_entry is not None and new_entry is None:
+            comp_removed.append(_component_outline_label(old_entry[0], old_entry[1]))
+        elif old_entry is None and new_entry is not None:
+            comp_added.append(_component_outline_label(new_entry[0], new_entry[1]))
+        elif old_entry is not None and new_entry is not None:
+            old_qty, new_qty = old_entry[1], new_entry[1]
+            if old_qty != new_qty:
+                display = new_entry[0] or old_entry[0]
+                comp_qty_changed.append(f"{display}: × {old_qty} → × {new_qty}")
 
     older_dims = {
         str(d.get("symbol") or "").strip(): d
@@ -344,16 +474,29 @@ def format_snapshot_compare_diff_text(
             return [f"{title}: (none)"]
         return [f"{title}:", *[f"- {item}" for item in items]]
 
+    has_structure = bool(older_comps or newer_comps)
     lines = [
         "=== Computed differences (authoritative) ===",
         "Match dimensions by symbol only. Never treat two different symbols as one value change.",
         "Use singular wording when only one feature or dimension is listed.",
-        *_bullet_block("Features removed", feat_removed),
-        *_bullet_block("Features added", feat_added),
-        *_bullet_block("Dimensions removed", dim_removed),
-        *_bullet_block("Dimensions changed (same symbol)", dim_changed),
-        *_bullet_block("Dimensions added", dim_added),
     ]
+    if has_structure:
+        lines.append(
+            "For assemblies, trust Structure/BOM for components — feature lists omit "
+            "FEATTYPE_COMPONENT members."
+        )
+        lines.extend(_bullet_block("Components removed", comp_removed))
+        lines.extend(_bullet_block("Components added", comp_added))
+        lines.extend(_bullet_block("Components quantity changed", comp_qty_changed))
+    lines.extend(
+        [
+            *_bullet_block("Features removed", feat_removed),
+            *_bullet_block("Features added", feat_added),
+            *_bullet_block("Dimensions removed", dim_removed),
+            *_bullet_block("Dimensions changed (same symbol)", dim_changed),
+            *_bullet_block("Dimensions added", dim_added),
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -451,6 +594,9 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
                 "pattern_member_count": f.get("pattern_member_count"),
             }
             out["features"].append({k: v for k, v in row.items() if v is not None})
+    bom_nodes = _bom_nodes(snapshot)
+    if bom_nodes:
+        out["bom"] = _slim_bom_nodes(bom_nodes)
     dimensions = snapshot.get("dimensions")
     if isinstance(dimensions, list):
         out["dimensions"] = [
@@ -587,7 +733,16 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
             lines.append("Other features:")
             lines.extend(f"- {_feature_display_name(f)}" for f in other)
     else:
-        lines.append("Features:")
+        bom_nodes = _bom_nodes(snapshot)
+        is_asm = _is_assembly_snapshot(snapshot, identity) or bool(bom_nodes)
+        if bom_nodes:
+            # Same tree as Details → Structure (components live here, not Features).
+            lines.append("Structure:")
+            lines.extend(_format_bom_outline_lines(bom_nodes))
+        if is_asm and bom_nodes:
+            lines.append("Assembly features (non-component):")
+        else:
+            lines.append("Features:")
         if features:
             pattern_i = 0
             for feat in features:
@@ -689,9 +844,12 @@ def build_snapshot_compare_user_prompt(
         f"{diff_text}\n\n"
         f"Summarize only what changed from OLD ({older_label}) to NEW ({newer_label}), "
         f"following your instructions. Prefer the Computed differences block above — "
-        f"it already matched dimensions by symbol. Never invent a value change by "
+        f"it already matched dimensions by symbol and assembly Structure/BOM components. "
+        f"Never invent a value change by "
         f"pairing two different symbols (e.g. do not turn removed d248 = 7 and "
         f"removed d255 = 6 into “reduced d248 from 7 to 6”). "
+        f"For assemblies, prefer Components removed/added/quantity changed over the "
+        f"incomplete non-component feature list. "
         f"Treat the block under \"=== OLD snapshot ===\" as the previous state and "
         f"\"=== NEW snapshot ===\" as the current state. "
         f"Never claim a revision is missing when both revision outlines are present above."

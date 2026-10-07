@@ -52,6 +52,27 @@ def _display_revision(version: ObjectVersion) -> str:
     return f"{rev}.{int(version.iteration or 0)}"
 
 
+def _snapshot_with_bom_fallback(
+    snapshot: dict[str, Any] | None,
+    version: ObjectVersion,
+) -> dict[str, Any] | None:
+    """
+    Older AI snapshots omit Structure/BOM (Features skip components).
+    Fall back to the version's bom_json so Compare Revisions can trust Structure.
+    """
+    if not isinstance(snapshot, dict):
+        return snapshot
+    bom = snapshot.get("bom")
+    if isinstance(bom, list) and bom:
+        return snapshot
+    fallback = _loads(getattr(version, "bom_json", None))
+    if not isinstance(fallback, list) or not fallback:
+        return snapshot
+    merged = dict(snapshot)
+    merged["bom"] = fallback
+    return merged
+
+
 class AiSnapshotService:
     def __init__(self, objects: ObjectService) -> None:
         self._objects = objects
@@ -110,6 +131,8 @@ class AiSnapshotService:
         snapshot = _loads(row.snapshot_json)
         if not isinstance(snapshot, dict):
             snapshot = {"raw": snapshot} if snapshot is not None else None
+        if isinstance(snapshot, dict):
+            snapshot = _snapshot_with_bom_fallback(snapshot, version)
         outline = (
             format_snapshot_compare_text(snapshot)
             if isinstance(snapshot, dict)

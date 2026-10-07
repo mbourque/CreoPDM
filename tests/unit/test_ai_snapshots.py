@@ -14,7 +14,11 @@ from creopdm.ai_prompts import (
     slim_snapshot_for_compare,
 )
 from creopdm.exceptions import ValidationAppError
-from creopdm.services.ai_snapshot_service import AI_SNAPSHOT_SCHEMA_VERSION, AiSnapshotService
+from creopdm.services.ai_snapshot_service import (
+    AI_SNAPSHOT_SCHEMA_VERSION,
+    AiSnapshotService,
+    _snapshot_with_bom_fallback,
+)
 from tests.conftest import requires_git
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +37,9 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "function creoFeatureIsVisibleForSnapshot(" in text
     assert "function creoEnrichAiSnapshotFromMetadata(" in text
     assert "creoEnrichAiSnapshotFromMetadata(ai_snapshot," in text
+    # Assemblies: Structure/BOM must enrich the AI snapshot (Features skip COMPONENT).
+    assert "snapshot.bom = m.bom" in text
+    assert "bom: bom" in text
     # Configurator path: model.ListItems(ITEM_DIMENSION) + ListItems(ITEM_FEATURE).
     assert "ListItems(ITEM_DIMENSION)" in text or "ListItems(types[t])" in text
     assert "creoGatherModelLevelDimensions(solid, errors)" in text
@@ -131,6 +138,10 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "materials: ai.materials" in script
     assert "units: ai.units" in script
     assert "family_table: ai.family_table" in script
+    assert "Prefer snapshot.bom" in script or "gatherSnapshot?.bom" in script
+    assert "bom," in script.split("function aiSnapshotBodyFromGather(", 1)[1].split(
+        "function objectAiSnapshotTipIsStale(", 1
+    )[0]
     # Defaults: NEW = latest snap, OLD = one prior; dropdowns cannot invert order.
     assert "NEW = latest snap, OLD = one prior" in script
     assert "function fillAiSnapshotOrderedSelects(" in script
@@ -235,6 +246,8 @@ def test_snapshot_tab_template_and_docs():
     assert "OLD" in docs and "NEW" in docs
     assert "light green" in docs and "light blue" in docs
     assert "yellow" in docs
+    assert "Structure/BOM" in docs
+    assert "FEATTYPE_COMPONENT" in docs
     assert "Ask AI what changed" in docs
     assert "outline" in docs.lower()
     assert "not raw JSON" in docs or "not JSON" in docs
@@ -612,6 +625,108 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "Computed differences (authoritative)" in plate_prompt
     assert "pairing two different symbols" in plate_prompt
     assert "PATTERN 3" in plate_diff
+
+    # Assemblies: Structure/BOM drives component add/remove (Features omit COMPONENT).
+    asm_old = {
+        "identity": {"filename": "conveyor.asm", "model_type": "ASSEMBLY"},
+        "features": [
+            {"name": "ACS2", "type": "COORDINATE SYSTEM"},
+            {"name": "DEFAULT_CSYS", "type": "COORDINATE SYSTEM"},
+        ],
+        "bom": [
+            {
+                "filename": "conveyor.asm",
+                "quantity": 1,
+                "dependency_type": "ASSEMBLY_ROOT",
+                "children": [
+                    {
+                        "filename": "PLATE_3.prt",
+                        "quantity": 1,
+                        "dependency_type": "ASSEMBLY_MEMBER",
+                        "children": [],
+                    },
+                    {
+                        "filename": "SQUARE_TUBE_1.prt",
+                        "quantity": 2,
+                        "dependency_type": "ASSEMBLY_MEMBER",
+                        "children": [],
+                    },
+                    {
+                        "filename": "HEXBOLT-1-8X6_75.prt",
+                        "quantity": 50,
+                        "dependency_type": "ASSEMBLY_MEMBER",
+                        "children": [],
+                    },
+                ],
+            }
+        ],
+    }
+    asm_new = {
+        "identity": {"filename": "conveyor.asm", "model_type": "ASSEMBLY"},
+        "features": [
+            {"name": "ACS2", "type": "COORDINATE SYSTEM"},
+            {"name": "DEFAULT_CSYS", "type": "COORDINATE SYSTEM"},
+        ],
+        "bom": [
+            {
+                "filename": "conveyor.asm",
+                "quantity": 1,
+                "dependency_type": "ASSEMBLY_ROOT",
+                "children": [
+                    {
+                        "filename": "SQUARE_TUBE_1.prt",
+                        "quantity": 1,
+                        "dependency_type": "ASSEMBLY_MEMBER",
+                        "children": [],
+                    },
+                    {
+                        "filename": "HEXBOLT-1-8X6_75.prt",
+                        "quantity": 50,
+                        "dependency_type": "ASSEMBLY_MEMBER",
+                        "children": [],
+                    },
+                ],
+            }
+        ],
+    }
+    asm_outline = format_snapshot_compare_text(asm_old)
+    assert "Structure:" in asm_outline
+    assert "PLATE_3.prt" in asm_outline
+    assert "SQUARE_TUBE_1.prt × 2" in asm_outline
+    assert "Assembly features (non-component):" in asm_outline
+    asm_diff = format_snapshot_compare_diff_text(asm_old, asm_new)
+    assert "Components removed:" in asm_diff
+    assert "PLATE_3.prt" in asm_diff
+    assert "Components quantity changed:" in asm_diff
+    assert "SQUARE_TUBE_1.prt: × 2 → × 1" in asm_diff
+    assert "trust Structure/BOM" in asm_diff
+    asm_prompt = build_snapshot_compare_user_prompt(
+        older_snapshot=asm_old,
+        newer_snapshot=asm_new,
+        older_revision="A.1",
+        newer_revision="A.2",
+    )
+    assert "Prefer Components removed/added" in asm_prompt
+    slim_asm = slim_snapshot_for_compare(asm_old)
+    assert slim_asm.get("bom")
+    assert slim_asm["bom"][0]["filename"] == "conveyor.asm"
+
+    # Old snapshots without bom still outline Structure via version.bom_json.
+    class _Ver:
+        bom_json = (
+            '[{"filename":"conveyor.asm","quantity":1,'
+            '"dependency_type":"ASSEMBLY_ROOT","children":'
+            '[{"filename":"GONE.prt","quantity":1,'
+            '"dependency_type":"ASSEMBLY_MEMBER","children":[]}]}]'
+        )
+
+    merged = _snapshot_with_bom_fallback(
+        {"identity": {"filename": "conveyor.asm", "model_type": "ASSEMBLY"}, "features": []},
+        _Ver(),  # type: ignore[arg-type]
+    )
+    assert merged is not None
+    assert merged.get("bom")
+    assert "GONE.prt" in format_snapshot_compare_text(merged)
 
 
 @requires_git

@@ -6781,6 +6781,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       : null;
     if (!ai || typeof ai !== "object") return null;
     const capture = ai.capture && typeof ai.capture === "object" ? ai.capture : {};
+    // Prefer snapshot.bom (enriched); fall back to gather Structure tree.
+    const bom = Array.isArray(ai.bom)
+      ? ai.bom
+      : (Array.isArray(gatherSnapshot?.bom) ? gatherSnapshot.bom : null);
     return {
       schema_version: Number(ai.schema_version) || 1,
       identity: ai.identity || null,
@@ -6790,6 +6794,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       materials: ai.materials && typeof ai.materials === "object" ? ai.materials : null,
       units: ai.units && typeof ai.units === "object" ? ai.units : null,
       family_table: ai.family_table && typeof ai.family_table === "object" ? ai.family_table : null,
+      bom,
       capture,
     };
   }
