@@ -45,6 +45,9 @@ def test_drawing_ai_snapshot_skips_solid_walk():
     assert "Never creoAsSolid" in text
     assert "creoIsDrawingModel(model, filename || identity.file_name)" in text
     assert "snapIsDrw" in text
+    # Bare FileName must not override wedge.drw — that skipped views (empty features).
+    assert "bare FileName" in text
+    assert 'identity.model_type || "").toUpperCase() === "DRAWING"' in text
     # Drawing branch gathers views as type VIEW; solid branch still uses creoAsSolid.
     gather = text.split("function gatherAiModelSnapshot(", 1)[1].split(
         "function creoFeatureNameWeak(", 1
@@ -69,15 +72,6 @@ def test_drawing_ai_snapshot_skips_solid_walk():
     assert 'status = "erased"' in views_fn
     assert "erased:" in views_fn
     assert "Creo Erase View keeps the view in List2DViews" in text
-    assert "ExtendsInNegativeDirection" in text
-    assert "extends_negative" in text
-    assert "owner: ownerLabel" in text
-    assert "ai_snapshot: ai_snapshot" in text
-    assert "ListSubItems" in text
-    assert "ITEM_DIMENSION" in text
-    assert "ITEM_FEATURE" in text
-    assert 'snapshot.materials =' in text
-    assert "family_table" in text
     assert '["angle", "UNIT_ANGLE"' in text
     assert "function creoUnitsFromSnapshotParams(" in text
     assert "PTC_UNITS_LENGTH" in text

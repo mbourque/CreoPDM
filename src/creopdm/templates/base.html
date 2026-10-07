@@ -2262,22 +2262,40 @@ function creoListFeaturesForSnapshot(solid, errors) {
     return items;
 }
 function creoIsDrawingModel(model, filename) {
+    /**
+     * Prefer Type / .drw name. Do not let a bare FileName (e.g. "WEDGE") overwrite
+     * a good "wedge.drw" argument — that skipped List2DViews and walked solids.
+     */
     try {
         if (typeof pfcModelType !== "undefined" && model
             && model.Type === pfcModelType.MDL_DRAWING) {
             return true;
         }
     } catch (errType) {}
-    var name = String(filename || "");
     try {
-        if (model && model.FileName) name = String(model.FileName);
+        if (model && model.Type != null
+            && String(creoModelTypeLabel(model.Type) || "").toUpperCase() === "DRAWING") {
+            return true;
+        }
+    } catch (errType2) {}
+    var candidates = [];
+    if (filename) candidates.push(String(filename));
+    try {
+        if (model && model.FileName) candidates.push(String(model.FileName));
     } catch (errFn) {}
-    name = String(name || "").toLowerCase();
     try {
-        var logical = creoLogicalFileName(name);
-        if (logical) name = String(logical).toLowerCase();
-    } catch (errLog) {}
-    return /\.drw(\.|$)/.test(name);
+        if (model && model.FullName) candidates.push(String(model.FullName));
+    } catch (errFull) {}
+    for (var i = 0; i < candidates.length; i++) {
+        var name = String(candidates[i] || "").toLowerCase();
+        if (!name) continue;
+        try {
+            var logical = creoLogicalFileName(name);
+            if (logical) name = String(logical).toLowerCase();
+        } catch (errLog) {}
+        if (/\.drw(\.|$)/.test(name)) return true;
+    }
+    return false;
 }
 function creoView2DIsErased(view) {
     /**
@@ -2527,7 +2545,9 @@ function gatherAiModelSnapshot(model, session, filename, options) {
     } catch (errIdent) {
         errors.push("identity: " + creoToolkitErr(errIdent));
     }
-    var isDrawing = creoIsDrawingModel(model, identity.filename || filename);
+    // Trust GatherIdentity model_type too — FileName-only checks missed drawings.
+    var isDrawing = creoIsDrawingModel(model, identity.filename || filename)
+        || String(identity.model_type || "").toUpperCase() === "DRAWING";
     if (isDrawing && String(identity.model_type || "").toUpperCase() !== "DRAWING") {
         identity.model_type = "DRAWING";
     }
