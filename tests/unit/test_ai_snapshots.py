@@ -39,6 +39,8 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "function creoUnitsFromSnapshotParams(" in text
     assert "PTC_UNITS_LENGTH" in text
     assert "creoUnitsFromSnapshotParams(" in text
+    assert 'dim.units = angleUnit || "deg"' in text
+    assert "Never assign length units to ANGULAR" in text
 
 
 def test_app_js_posts_ai_snapshot_soft_fail():

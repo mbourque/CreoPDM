@@ -2569,6 +2569,7 @@ function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
         }
     }
     // Dim units from principal length/angle when Creo left Units unbound.
+    // Never assign length units to ANGULAR dims (that produced angle: "mm").
     if (snapshot.units && Array.isArray(snapshot.dimensions)) {
         var lengthUnit = String(snapshot.units.length || "").trim() || null;
         var angleUnit = String(snapshot.units.angle || "").trim() || null;
@@ -2577,7 +2578,7 @@ function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
             if (!dim || (dim.units != null && String(dim.units).trim())) continue;
             var dt = String(dim.dim_type || "").toUpperCase();
             if (dt.indexOf("ANGULAR") >= 0 || dt === "ANGLE") {
-                dim.units = angleUnit || lengthUnit;
+                dim.units = angleUnit || "deg";
             } else {
                 dim.units = lengthUnit;
             }
