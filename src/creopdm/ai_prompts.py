@@ -348,8 +348,6 @@ def format_snapshot_compare_diff_text(
         "=== Computed differences (authoritative) ===",
         "Match dimensions by symbol only. Never treat two different symbols as one value change.",
         "Use singular wording when only one feature or dimension is listed.",
-        "When Features added / Features removed lists a feature, always mention that feature "
-        "(do not summarize only its dimensions).",
         *_bullet_block("Features removed", feat_removed),
         *_bullet_block("Features added", feat_added),
         *_bullet_block("Dimensions removed", dim_removed),
@@ -694,8 +692,6 @@ def build_snapshot_compare_user_prompt(
         f"it already matched dimensions by symbol. Never invent a value change by "
         f"pairing two different symbols (e.g. do not turn removed d248 = 7 and "
         f"removed d255 = 6 into “reduced d248 from 7 to 6”). "
-        f"When Features added lists a feature (e.g. Extrude), always name that feature; "
-        f"do not report only the new dimensions. "
         f"Treat the block under \"=== OLD snapshot ===\" as the previous state and "
         f"\"=== NEW snapshot ===\" as the current state. "
         f"Never claim a revision is missing when both revision outlines are present above."

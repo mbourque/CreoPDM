@@ -611,8 +611,6 @@ def test_snapshot_compare_prompt_requires_saved_text():
     )
     assert "Computed differences (authoritative)" in plate_prompt
     assert "pairing two different symbols" in plate_prompt
-    assert "always name that feature" in plate_prompt
-    assert "do not summarize only its dimensions" in plate_diff
     assert "PATTERN 3" in plate_diff
 
 
