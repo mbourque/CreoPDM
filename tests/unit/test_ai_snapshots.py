@@ -122,9 +122,8 @@ def test_snapshot_compare_prompt_seed_and_user_message():
     assert "change notice" in seed
     assert "Prefer named dims" in seed
     assert "bilateral ± tolerance" in seed
-    assert "Never say there is no previous state" in seed
-    assert "Good (write like this):" in seed
-    assert "if both a chamfer and a round were removed, say both" in seed
+    assert "If both a chamfer and a round were removed, say both" in seed
+    assert "Diff the features arrays" in seed
     assert resolve_snapshot_compare_prompt("") == seed.strip()
     assert resolve_snapshot_compare_prompt("  Custom prompt.  ") == "Custom prompt."
     user = build_snapshot_compare_user_prompt(
