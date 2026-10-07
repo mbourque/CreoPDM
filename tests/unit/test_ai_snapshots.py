@@ -10,6 +10,7 @@ from creopdm.ai_prompts import (
     build_snapshot_compare_user_prompt,
     format_snapshot_compare_diff_text,
     format_snapshot_compare_text,
+    prepare_snapshot_for_compare,
     resolve_snapshot_compare_prompt,
     slim_snapshot_for_compare,
 )
@@ -170,6 +171,9 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "ai-snapshot-ai-answer-body" in script
     assert "async function askAiCheckinComment(" in script
     assert "/ai-snapshot/compare-pending" in script
+    # Check In Ask AI must use the same gather body + server compare path as Compare.
+    assert "Same body as postAiSnapshotFromGather" in script
+    assert "prepare_snapshot_for_compare" in script
     assert 'withBusy("Collecting modified model…"' in script
     assert "function syncCheckinAiAskRow(" in script
     assert "function aiFeaturesEnabled(" in script
@@ -250,6 +254,8 @@ def test_snapshot_tab_template_and_docs():
     assert "yellow" in docs
     assert "Structure/BOM" in docs
     assert "FEATTYPE_COMPONENT" in docs
+    assert "prepare_snapshot_for_compare" in docs
+    assert "parts, assemblies, and drawings" in docs
     assert "Ask AI what changed" in docs
     assert "outline" in docs.lower()
     assert "not raw JSON" in docs or "not JSON" in docs
@@ -776,6 +782,55 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "Features removed: (none)" in skel_diff
     assert "ACS0" not in skel_diff
     assert "do not invent feature removes" in skel_diff
+
+    # Check In + Compare share prepare → outline/diff for parts and drawings too.
+    assert "def prepare_snapshot_for_compare(" in (
+        ROOT / "src" / "creopdm" / "ai_prompts.py"
+    ).read_text(encoding="utf-8")
+    part_a = {
+        "identity": {"filename": "plate_3.prt", "model_type": "PART"},
+        "features": [{"name": "Extrude", "type": "PROTRUSION"}],
+        "dimensions": [{"symbol": "d1", "value": 10, "units": "in"}],
+    }
+    part_b = {
+        "identity": {"filename": "plate_3.prt", "model_type": "PART"},
+        "features": [{"name": "Extrude", "type": "PROTRUSION"}],
+        "dimensions": [{"symbol": "d1", "value": 12, "units": "in"}],
+    }
+    part_prompt = build_snapshot_compare_user_prompt(
+        older_snapshot=part_a,
+        newer_snapshot=part_b,
+        older_revision="A.1",
+        newer_revision="pending",
+    )
+    assert "d1" in part_prompt and "10" in part_prompt and "12" in part_prompt
+    drw_a = {
+        "identity": {"filename": "plate_3.drw", "model_type": "DRAWING"},
+        "features": [
+            {"name": "VIEW_1", "type": "VIEW"},
+            {"name": "VIEW_2", "type": "VIEW"},
+        ],
+        "capture": {"sheet_count": 1},
+    }
+    drw_b = {
+        "identity": {"filename": "plate_3.drw", "model_type": "DRAWING"},
+        "features": [{"name": "VIEW_1", "type": "VIEW"}],
+        "capture": {"sheet_count": 1},
+    }
+    drw_prompt = build_snapshot_compare_user_prompt(
+        older_snapshot=drw_a,
+        newer_snapshot=drw_b,
+        older_revision="A.1",
+        newer_revision="pending",
+    )
+    assert "Views:" in drw_prompt
+    assert "VIEW_2" in drw_prompt
+    assert prepare_snapshot_for_compare(part_a)["identity"]["filename"] == "plate_3.prt"
+    svc = (
+        ROOT / "src" / "creopdm" / "services" / "ai_snapshot_service.py"
+    ).read_text(encoding="utf-8")
+    assert "prepare_snapshot_for_compare" in svc
+    assert "Same Ask AI path as compare_with_ollama" in svc
 
     # Old snapshots without bom still outline Structure via version.bom_json.
     class _Ver:

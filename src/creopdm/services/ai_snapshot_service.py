@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from creopdm.ai_prompts import (
     build_snapshot_compare_user_prompt,
     format_snapshot_compare_text,
+    prepare_snapshot_for_compare,
     resolve_snapshot_compare_prompt,
 )
 from creopdm.config import AppSettings
@@ -133,6 +134,8 @@ class AiSnapshotService:
             snapshot = {"raw": snapshot} if snapshot is not None else None
         if isinstance(snapshot, dict):
             snapshot = _snapshot_with_bom_fallback(snapshot, version)
+            # Same prep Compare panes + Check In Ask AI use (parts/asm/drawings).
+            snapshot = prepare_snapshot_for_compare(snapshot)
         outline = (
             format_snapshot_compare_text(snapshot)
             if isinstance(snapshot, dict)
@@ -319,6 +322,8 @@ class AiSnapshotService:
             raise ValidationAppError(
                 "No Ollama model selected. Open Administration → AI, Refresh models, choose a model, and Save."
             )
+        # One prompt path for Compare Revisions Ask AI and Check In Ask AI
+        # (parts, assemblies, drawings) — prepare lives inside build_*.
         system_prompt = resolve_snapshot_compare_prompt(settings.ai.snapshot_compare_prompt)
         user_prompt = build_snapshot_compare_user_prompt(
             older_snapshot=older_snapshot,
@@ -395,7 +400,8 @@ class AiSnapshotService:
         older_version_id: str | None = None,
         newer_display_revision: str = "pending",
     ) -> AiSnapshotCompareResponse:
-        """Compare tip (or chosen) saved snapshot to a gathered not-yet-checked-in snapshot."""
+        """Check In Ask AI: tip snapshot vs pending gather — same ``_chat_compare``
+        as Compare Revisions (parts, assemblies, drawings)."""
         if not isinstance(newer_snapshot, dict) or not newer_snapshot:
             raise ValidationAppError("Newer snapshot JSON is required.")
         older_id = (older_version_id or "").strip() or None
@@ -409,6 +415,8 @@ class AiSnapshotService:
                 details={"version_id": older.version_id},
             )
         newer_label = (newer_display_revision or "").strip() or "pending"
+        # Same Ask AI path as compare_with_ollama → _chat_compare →
+        # prepare_snapshot_for_compare + build_snapshot_compare_user_prompt.
         return self._chat_compare(
             object_uuid=object_uuid,
             older_snapshot=older.snapshot,

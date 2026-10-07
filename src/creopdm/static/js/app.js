@@ -10082,6 +10082,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               + "(or Save so it is in the local workspace), then try again."
           );
         }
+        // Same body as postAiSnapshotFromGather (what Compare Revisions stores).
+        // Server runs prepare_snapshot_for_compare + the same Ask AI prompt for
+        // parts, assemblies, and drawings as Compare Revisions Ask AI.
         const newerSnapshot = aiSnapshotBodyFromGather(snapshot);
         if (!newerSnapshot) {
           throw new Error(

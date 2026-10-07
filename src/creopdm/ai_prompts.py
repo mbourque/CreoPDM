@@ -293,6 +293,30 @@ def _slim_bom_nodes(nodes: list[Any]) -> list[dict[str, Any]]:
     return out
 
 
+def prepare_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    Canonical snapshot for Compare Revisions panes / Ask AI / Check In comment.
+
+    Parts, assemblies, and drawings all go through this before outline + diff
+    text is built — Check In Ask AI must not use a rawer gather than Compare.
+    """
+    if not isinstance(snapshot, dict):
+        return {}
+    out = dict(snapshot)
+    identity = out.get("identity")
+    if isinstance(identity, dict):
+        id_row = dict(identity)
+        raw_fn = str(id_row.get("filename") or "").strip()
+        if raw_fn:
+            tip = normalize_bom_compare_filename(raw_fn) or raw_fn
+            id_row["filename"] = tip
+        out["identity"] = id_row
+    bom = out.get("bom")
+    if isinstance(bom, list) and bom:
+        out["bom"] = _slim_bom_nodes(bom)
+    return out
+
+
 def _view_display_line(feat: dict[str, Any]) -> str:
     name = str(feat.get("name") or "").strip() or "unnamed view"
     extras: list[str] = []
@@ -844,16 +868,22 @@ def build_snapshot_compare_user_prompt(
     older_revision: str = "",
     newer_revision: str = "",
 ) -> str:
-    """User message: OLD then NEW plain-language outlines (settings hold instructions)."""
+    """User message: OLD then NEW plain-language outlines (settings hold instructions).
+
+    Compare Revisions Ask AI and Check In Ask AI for comment both use this —
+    parts, assemblies, and drawings share prepare → outline → computed diff.
+    """
     older_label = (older_revision or "").strip()
     newer_label = (newer_revision or "").strip()
     if not older_label or older_label in {"—", "-"}:
         older_label = "older"
     if not newer_label or newer_label in {"—", "-"}:
         newer_label = "newer"
-    older_text = format_snapshot_compare_text(older_snapshot)
-    newer_text = format_snapshot_compare_text(newer_snapshot)
-    diff_text = format_snapshot_compare_diff_text(older_snapshot, newer_snapshot)
+    older_prepared = prepare_snapshot_for_compare(older_snapshot)
+    newer_prepared = prepare_snapshot_for_compare(newer_snapshot)
+    older_text = format_snapshot_compare_text(older_prepared)
+    newer_text = format_snapshot_compare_text(newer_prepared)
+    diff_text = format_snapshot_compare_diff_text(older_prepared, newer_prepared)
     return (
         f"Two snapshots follow. The first is OLD (already checked in); "
         f"the second is NEW (the revision being compared / checked in). "
