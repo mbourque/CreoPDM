@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from creopdm.exceptions import ValidationAppError
+from creopdm.utils.bom_match import normalize_bom_compare_filename
 
 # Creo pattern members often land as "Feature 15775" / IFX_ID_* with empty type.
 # Sending hundreds of those to Ollama blew the context so Ask AI said "no changes"
@@ -204,7 +205,8 @@ def _format_bom_outline_lines(
     """Plain Structure tree (same qty rules as Details Structure tab)."""
     lines: list[str] = []
     for node in nodes:
-        name = str(node.get("filename") or "").strip() or "—"
+        raw = str(node.get("filename") or "").strip()
+        name = normalize_bom_compare_filename(raw) or raw or "—"
         qty = _bom_qty(node.get("quantity"))
         indent = "  " * depth
         if qty != 1:
@@ -225,10 +227,14 @@ def _bom_member_qty_map(
     Path-keyed member quantities (skip ASSEMBLY_ROOT itself).
     key = lowercased path like 'square_tube_1.prt' or 'sub.asm/child.prt'
     value = (display_name_with_path, qty)
+
+    Filenames are normalized so session FullName ``skel<<ASM>.prt`` matches the
+    tip Structure name ``skel.prt`` (Check In Ask AI vs Compare Revisions).
     """
     out: dict[str, tuple[str, int]] = {}
     for node in nodes:
-        name = str(node.get("filename") or "").strip()
+        raw = str(node.get("filename") or "").strip()
+        name = normalize_bom_compare_filename(raw) or raw
         if not name:
             continue
         name_l = name.lower()
@@ -270,8 +276,9 @@ def _slim_bom_nodes(nodes: list[Any]) -> list[dict[str, Any]]:
         name = str(node.get("filename") or "").strip()
         if not name:
             continue
+        tip_name = normalize_bom_compare_filename(name) or name
         row: dict[str, Any] = {
-            "filename": name,
+            "filename": tip_name,
             "quantity": _bom_qty(node.get("quantity")),
         }
         dep = str(node.get("dependency_type") or "").strip()
@@ -474,7 +481,15 @@ def format_snapshot_compare_diff_text(
             return [f"{title}: (none)"]
         return [f"{title}:", *[f"- {item}" for item in items]]
 
+    # Both sides have Structure → same path as Compare Revisions: BOM is
+    # authoritative. Pending Check In gathers often differ on non-component
+    # features (ACS*/datums) even when Structure is unchanged — omit those.
+    both_have_structure = bool(older_comps) and bool(newer_comps)
     has_structure = bool(older_comps or newer_comps)
+    if both_have_structure:
+        feat_removed = []
+        feat_added = []
+
     lines = [
         "=== Computed differences (authoritative) ===",
         "Match dimensions by symbol only. Never treat two different symbols as one value change.",
@@ -483,8 +498,14 @@ def format_snapshot_compare_diff_text(
     if has_structure:
         lines.append(
             "For assemblies, trust Structure/BOM for components — feature lists omit "
-            "FEATTYPE_COMPONENT members."
+            "FEATTYPE_COMPONENT members. Family-table FullName brackets "
+            "(name<<instance>>) match the tip Structure name."
         )
+        if both_have_structure:
+            lines.append(
+                "Both revisions have Structure — report component qty/add/remove only; "
+                "do not invent feature removes from the non-component feature list."
+            )
         lines.extend(_bullet_block("Components removed", comp_removed))
         lines.extend(_bullet_block("Components added", comp_added))
         lines.extend(_bullet_block("Components quantity changed", comp_qty_changed))

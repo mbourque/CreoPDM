@@ -102,6 +102,29 @@ def bom_generic_label(filename: str) -> str | None:
     return generic
 
 
+# Session FullName often uses <<INSTANCE>>; Structure / tip BOM use the tip name.
+_CREO_FT_DOUBLE = re.compile(r"<<[^>]*>>")
+_CREO_FT_DOUBLE_LOOSE = re.compile(r"<<[^>]*>")  # malformed single closing '>'
+
+
+def normalize_bom_compare_filename(filename: str) -> str:
+    """
+    Canonical Structure name for AI compare (Check In gather vs saved tip).
+
+    ``CONVEYOR_SKEL<<CONVEYOR>>.prt`` / ``CONVEYOR_SKEL<<CONVEYOR>.prt`` →
+    ``CONVEYOR_SKEL.prt`` so pending gathers do not look like remove+add.
+
+    Single-bracket ``INSTALLED<GENERIC>.prt`` is left alone (product matching
+    still uses :func:`bom_lookup_keys`).
+    """
+    name = CreoFileManager.logical_filename(str(filename or "")).strip()
+    if not name:
+        return ""
+    stripped = _CREO_FT_DOUBLE.sub("", name)
+    stripped = _CREO_FT_DOUBLE_LOOSE.sub("", stripped)
+    return stripped.strip()
+
+
 def filenames_refer_to_same_model(left: str, right: str) -> bool:
     """True when two Creo filenames likely refer to the same product object."""
     left_keys = set(bom_where_used_keys(left))

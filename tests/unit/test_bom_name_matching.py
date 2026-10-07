@@ -7,6 +7,7 @@ from creopdm.utils.bom_match import (
     bom_where_used_keys,
     filenames_refer_to_same_model,
     format_bom_qty,
+    normalize_bom_compare_filename,
 )
 
 
@@ -26,6 +27,24 @@ def test_bom_lookup_keys_icrps_instance():
 def test_bom_generic_label():
     assert bom_generic_label("INSTALLED<SPLIT-RIVET>.prt") == "SPLIT-RIVET.prt"
     assert bom_generic_label("TOP-BACK.prt") is None
+
+
+def test_normalize_bom_compare_filename_strips_family_fullname_brackets():
+    """Check In session FullName must match tip Structure for AI compare."""
+    assert (
+        normalize_bom_compare_filename("CONVEYOR_SKEL<<CONVEYOR>>.prt")
+        == "CONVEYOR_SKEL.prt"
+    )
+    assert (
+        normalize_bom_compare_filename("CONVEYOR_SKEL<<CONVEYOR>.prt")
+        == "CONVEYOR_SKEL.prt"
+    )
+    assert normalize_bom_compare_filename("CONVEYOR_SKEL.prt") == "CONVEYOR_SKEL.prt"
+    # Single-bracket form unchanged here (bom_lookup_keys handles generics).
+    assert (
+        normalize_bom_compare_filename("INSTALLED<SPLIT-RIVET>.prt")
+        == "INSTALLED<SPLIT-RIVET>.prt"
+    )
 
 
 def test_bom_lookup_keys_extensionless_creo_descriptor():

@@ -40,6 +40,8 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     # Assemblies: Structure/BOM must enrich the AI snapshot (Features skip COMPONENT).
     assert "snapshot.bom = m.bom" in text
     assert "bom: bom" in text
+    assert "function creoBomTipFileName(" in text
+    assert "replace(/<<[^>]*>>/g" in text
     # Configurator path: model.ListItems(ITEM_DIMENSION) + ListItems(ITEM_FEATURE).
     assert "ListItems(ITEM_DIMENSION)" in text or "ListItems(types[t])" in text
     assert "creoGatherModelLevelDimensions(solid, errors)" in text
@@ -710,6 +712,70 @@ def test_snapshot_compare_prompt_requires_saved_text():
     slim_asm = slim_snapshot_for_compare(asm_old)
     assert slim_asm.get("bom")
     assert slim_asm["bom"][0]["filename"] == "conveyor.asm"
+
+    # Check In gather FullName vs tip Structure name — not remove+add.
+    skel_old = {
+        "identity": {"filename": "conveyor.asm", "model_type": "ASSEMBLY"},
+        "features": [
+            {"name": "ACS0", "type": "COORDINATE SYSTEM"},
+            {"name": "ACS1", "type": "COORDINATE SYSTEM"},
+        ],
+        "bom": [
+            {
+                "filename": "conveyor.asm",
+                "quantity": 1,
+                "dependency_type": "ASSEMBLY_ROOT",
+                "children": [
+                    {
+                        "filename": "CONVEYOR_SKEL<<CONVEYOR>.prt",
+                        "quantity": 1,
+                        "dependency_type": "ASSEMBLY_MEMBER",
+                        "children": [],
+                    },
+                    {
+                        "filename": "ENDCAP_SQUARE_2.prt",
+                        "quantity": 6,
+                        "dependency_type": "ASSEMBLY_MEMBER",
+                        "children": [],
+                    },
+                ],
+            }
+        ],
+    }
+    skel_new = {
+        "identity": {"filename": "conveyor.asm", "model_type": "ASSEMBLY"},
+        "features": [],  # pending gather often thinner — must not invent feature removes
+        "bom": [
+            {
+                "filename": "conveyor.asm",
+                "quantity": 1,
+                "dependency_type": "ASSEMBLY_ROOT",
+                "children": [
+                    {
+                        "filename": "CONVEYOR_SKEL.prt",
+                        "quantity": 1,
+                        "dependency_type": "ASSEMBLY_MEMBER",
+                        "children": [],
+                    },
+                    {
+                        "filename": "ENDCAP_SQUARE_2.prt",
+                        "quantity": 5,
+                        "dependency_type": "ASSEMBLY_MEMBER",
+                        "children": [],
+                    },
+                ],
+            }
+        ],
+    }
+    skel_diff = format_snapshot_compare_diff_text(skel_old, skel_new)
+    assert "CONVEYOR_SKEL" in format_snapshot_compare_text(skel_old)
+    assert "<<" not in format_snapshot_compare_text(skel_old)
+    assert "Components removed: (none)" in skel_diff
+    assert "Components added: (none)" in skel_diff
+    assert "ENDCAP_SQUARE_2.prt: × 6 → × 5" in skel_diff
+    assert "Features removed: (none)" in skel_diff
+    assert "ACS0" not in skel_diff
+    assert "do not invent feature removes" in skel_diff
 
     # Old snapshots without bom still outline Structure via version.bom_json.
     class _Ver:

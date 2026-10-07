@@ -1481,23 +1481,37 @@ function creoGatherDependencies(model) {
     } catch (err) {}
     return rows;
 }
+function creoBomTipFileName(rawName) {
+    /**
+     * Structure / AI compare tip name. Strip Creo family-table FullName brackets
+     * so session ``CONVEYOR_SKEL<<CONVEYOR>.prt`` matches saved ``CONVEYOR_SKEL.prt``.
+     */
+    var name = creoLogicalFileName(rawName || "");
+    name = name.replace(/<<[^>]*>>/g, "");
+    name = name.replace(/<<[^>]*>/g, "");
+    return name;
+}
 function creoComponentModelName(feature) {
+    var raw = "";
     try {
         if (typeof feature.ModelDescr !== "undefined" && feature.ModelDescr) {
             var descr = feature.ModelDescr;
             if (typeof descr.GetFileName === "function") {
-                return String(descr.GetFileName() || "");
+                raw = String(descr.GetFileName() || "");
+            } else {
+                raw = String(descr.FileName || "");
             }
-            return String(descr.FileName || "");
         }
     } catch (errDescr) {}
-    try {
-        if (typeof feature.GetModel === "function") {
-            var child = feature.GetModel();
-            if (child) return String(child.FileName || child.FullName || "");
-        }
-    } catch (errModel) {}
-    return "";
+    if (!raw) {
+        try {
+            if (typeof feature.GetModel === "function") {
+                var child = feature.GetModel();
+                if (child) raw = String(child.FileName || child.FullName || "");
+            }
+        } catch (errModel) {}
+    }
+    return creoBomTipFileName(raw);
 }
 function creoToolkitErr(err) {
     try {
@@ -3168,7 +3182,7 @@ function creoGatherBom(model, depth, visited, session) {
         var order = [];
         for (var i = 0; i < features.length; i++) {
             var feat = features[i];
-            var name = creoLogicalFileName(creoComponentModelName(feat));
+            var name = creoBomTipFileName(creoComponentModelName(feat));
             if (!name) continue;
             var key = name.toLowerCase();
             if (!qtyByName[key]) {
