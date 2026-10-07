@@ -11733,11 +11733,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
 
   let aiSnapshotListCache = null;
-  const aiSnapshotJsonByVersion = new Map();
+  const aiSnapshotOutlineByVersion = new Map();
 
   function clearAiSnapshotClientCache() {
     aiSnapshotListCache = null;
-    aiSnapshotJsonByVersion.clear();
+    aiSnapshotOutlineByVersion.clear();
   }
 
   function aiSnapshotEmptyMessage(displayRevision) {
@@ -11749,9 +11749,28 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     );
   }
 
-  async function fetchAiSnapshotJson(objectId, versionId) {
+  function aiSnapshotPaneRole(pane) {
+    const compare = $("#ai-snapshot-compare");
+    const mode = String(compare?.dataset?.mode || "single");
+    if (mode !== "compare") return "Snapshot";
+    return pane === "b" ? "NEW" : "OLD";
+  }
+
+  function formatAiSnapshotOutlineDisplay(role, displayRevision, outline) {
+    const rev = String(displayRevision || "").trim() || "—";
+    const text = String(outline || "").trim();
+    if (!text) return "";
+    if (role === "OLD" || role === "NEW") {
+      return `=== ${role} snapshot (${rev}) ===\n${text}`;
+    }
+    return `=== Snapshot (${rev}) ===\n${text}`;
+  }
+
+  async function fetchAiSnapshotOutline(objectId, versionId) {
     const key = String(versionId || "");
-    if (aiSnapshotJsonByVersion.has(key)) return aiSnapshotJsonByVersion.get(key);
+    if (aiSnapshotOutlineByVersion.has(key)) {
+      return aiSnapshotOutlineByVersion.get(key);
+    }
     const response = await fetch(
       `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot?version=${encodeURIComponent(key)}`
     );
@@ -11759,10 +11778,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       throw new Error(await readError(response));
     }
     const body = await response.json();
-    const payload = body?.has_snapshot && body.snapshot
-      ? JSON.stringify(body.snapshot, null, 2)
+    const payload = body?.has_snapshot
+      ? {
+          outline: String(body.outline || "").trim(),
+          displayRevision: String(body.display_revision || "").trim(),
+        }
       : null;
-    aiSnapshotJsonByVersion.set(key, payload);
+    aiSnapshotOutlineByVersion.set(key, payload);
     return payload;
   }
 
@@ -11781,16 +11803,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     body.textContent = "Loading…";
     if (copyBtn) copyBtn.disabled = true;
     try {
-      const json = await fetchAiSnapshotJson(objectId, versionId);
-      if (!json) {
+      const row = await fetchAiSnapshotOutline(objectId, versionId);
+      if (!row || !row.outline) {
         body.textContent = aiSnapshotEmptyMessage(label);
         if (copyBtn) copyBtn.disabled = true;
         return;
       }
-      body.textContent = json;
+      const role = aiSnapshotPaneRole(pane);
+      const text = formatAiSnapshotOutlineDisplay(
+        role,
+        row.displayRevision || label,
+        row.outline
+      );
+      body.textContent = text;
       if (copyBtn) {
         copyBtn.disabled = false;
-        copyBtn.dataset.copyText = json;
+        copyBtn.dataset.copyText = text;
       }
     } catch (err) {
       body.textContent = `Could not load snapshot (${err?.message || "error"}).`;
@@ -11810,7 +11838,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const labelA = $("#ai-snapshot-label-a");
     if (!selectA || !selectB) return;
     try {
-      // Always refresh list + JSON when opening Snapshot (Collect / Check In
+      // Always refresh list + outlines when opening Snapshot (Collect / Check In
       // may have rewritten tip; in-memory cache must not show stale twins).
       clearAiSnapshotClientCache();
       {
@@ -11837,13 +11865,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const answer = $("#ai-snapshot-ai-answer");
         if (answer) answer.hidden = true;
       }
-      if (labelA) labelA.textContent = canCompare ? "Older" : "Revision";
-      if (labelB) labelB.textContent = "Newer";
+      if (labelA) labelA.textContent = canCompare ? "OLD" : "Revision";
+      if (labelB) labelB.textContent = "NEW";
       selectA.setAttribute(
         "aria-label",
-        canCompare ? "Older snapshot revision" : "Snapshot revision"
+        canCompare ? "OLD snapshot revision" : "Snapshot revision"
       );
-      selectB.setAttribute("aria-label", "Newer snapshot revision");
+      selectB.setAttribute("aria-label", "NEW snapshot revision");
       const tipVersion = String(panel.dataset.tipVersion || "").trim();
       const fillSelect = (select, preferredVersionId) => {
         const previous = String(select.value || "");

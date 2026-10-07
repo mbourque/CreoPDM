@@ -125,7 +125,11 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "left = older, right = newer" in script
     assert "fillSelect(selectA, olderSnap?.version_id)" in script
     assert "fillSelect(selectB, newerSnap?.version_id)" in script
-    assert 'labelA.textContent = canCompare ? "Older" : "Revision"' in script
+    assert 'labelA.textContent = canCompare ? "OLD" : "Revision"' in script
+    assert 'labelB.textContent = "NEW"' in script
+    assert "function formatAiSnapshotOutlineDisplay(" in script
+    assert "async function fetchAiSnapshotOutline(" in script
+    assert "=== ${role} snapshot (${rev}) ===" in script
     assert "async function askAiSnapshotCompare(" in script
     assert "/ai-snapshot/compare" in script
     assert 'withBusy("Asking AI what changed…"' in script
@@ -179,14 +183,16 @@ def test_snapshot_tab_template_and_docs():
     assert 'id="ai-snapshot-ai-answer"' in html
     assert 'id="ai-snapshot-ask-row" hidden' in html
     assert 'data-pane="b" hidden' in html
-    assert "left = older, right = newer" in html
+    assert "left = OLD, right = NEW" in html
+    assert "plain text, not JSON" in html
     assert "Open **Snapshot**" in docs
     assert "experimental tab" in docs.lower()
     assert "two or more" in docs.lower() and "snapshot" in docs.lower()
-    assert "Older" in docs and "Newer" in docs
+    assert "OLD" in docs and "NEW" in docs
     assert "A.1 left, A.2 right" in docs
     assert "Ask AI what changed" in docs
-    assert "above** the two JSON panes" in docs or "above the two JSON panes" in docs
+    assert "outline" in docs.lower()
+    assert "not raw JSON" in docs or "not JSON" in docs
     assert "Ask AI for comment" in docs
     assert (
         "fresh gather of the model open in Creo" in docs
@@ -554,6 +560,16 @@ def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_pat
     assert body["capture_status"] == "partial"
     assert body["snapshot"]["features"][0]["id"] == 12
     assert body["snapshot"]["item"]["version_uuid"] == version_id
+    assert "Features:" in (body.get("outline") or "")
+    assert "Extrude 1" in (body.get("outline") or "")
+    assert "d0 = 6" in (body.get("outline") or "")
+    assert '"id":' not in (body.get("outline") or "")
+
+    got_get = client.get(
+        f"/api/objects/{object_id}/ai-snapshot?version={version_id}"
+    )
+    assert got_get.status_code == 200, got_get.text
+    assert "Extrude 1" in (got_get.json().get("outline") or "")
 
     listed = client.get(f"/api/objects/{object_id}/ai-snapshots")
     assert listed.status_code == 200, listed.text

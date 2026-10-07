@@ -871,6 +871,8 @@ class AiSnapshotResponse(BaseModel):
     capture_status: str | None = None
     capture_errors: list[str] = Field(default_factory=list)
     snapshot: dict[str, Any] | None = None
+    # Plain-language outline shown on Snapshot tab / sent to Ask AI (not raw JSON).
+    outline: str | None = None
 
 
 class AiSnapshotListItem(BaseModel):

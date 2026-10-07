@@ -485,15 +485,16 @@
            data-object-id="{{ object.uuid }}"
            data-tip-version="{{ object.current_version.uuid if object.current_version else '' }}">
     <p class="muted small">
-      Experimental per-revision model snapshot (features, dimensions, parameters, materials, units) for AI change summaries.
+      Experimental per-revision model outline for AI change summaries
+      (features or drawing views, dimensions, parameters, materials, units — plain text, not JSON).
       Collect metadata in Creo while a version is tip to create or refresh it.
       Check In can also Ask AI for a comment from tip vs the modified model.
       Side-by-side compare appears only when two or more revisions have snapshots
-      (left = older, right = newer). Configure Ollama under Administration → AI.
+      (left = OLD, right = NEW — same labels Ask AI uses). Configure Ollama under Administration → AI.
     </p>
     <div class="ai-snapshot-ask-row" id="ai-snapshot-ask-row" hidden>
       <button type="button" class="btn btn-primary" id="ai-snapshot-ask-ai"
-              title="Send both snapshots and the compare prompt to the configured Ollama model">
+              title="Send both OLD and NEW outlines and the compare prompt to the configured Ollama model">
         Ask AI what changed
       </button>
     </div>
@@ -511,17 +512,17 @@
             <span class="muted small" id="ai-snapshot-label-a">Revision</span>
             <select id="ai-snapshot-rev-a" class="ai-snapshot-rev" aria-label="Snapshot revision"></select>
           </label>
-          <button type="button" class="btn" id="ai-snapshot-copy-a" disabled title="Copy snapshot JSON to the clipboard">Copy</button>
+          <button type="button" class="btn" id="ai-snapshot-copy-a" disabled title="Copy snapshot outline to the clipboard">Copy</button>
         </div>
         <pre class="ai-snapshot-body mono" id="ai-snapshot-body-a" tabindex="0">Loading…</pre>
       </div>
       <div class="ai-snapshot-pane" data-pane="b" hidden>
         <div class="ai-snapshot-toolbar">
           <label class="ai-snapshot-rev-label">
-            <span class="muted small" id="ai-snapshot-label-b">Newer</span>
-            <select id="ai-snapshot-rev-b" class="ai-snapshot-rev" aria-label="Newer snapshot revision"></select>
+            <span class="muted small" id="ai-snapshot-label-b">NEW</span>
+            <select id="ai-snapshot-rev-b" class="ai-snapshot-rev" aria-label="NEW snapshot revision"></select>
           </label>
-          <button type="button" class="btn" id="ai-snapshot-copy-b" disabled title="Copy newer snapshot JSON to the clipboard">Copy</button>
+          <button type="button" class="btn" id="ai-snapshot-copy-b" disabled title="Copy NEW snapshot outline to the clipboard">Copy</button>
         </div>
         <pre class="ai-snapshot-body mono" id="ai-snapshot-body-b" tabindex="0">Loading…</pre>
       </div>

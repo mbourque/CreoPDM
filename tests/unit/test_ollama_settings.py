@@ -115,7 +115,9 @@ def test_chat_ollama_posts_messages(monkeypatch):
             assert url.endswith("/api/chat")
             assert json["model"] == "gemma4:latest"
             assert json["stream"] is False
+            assert json["think"] is False
             assert json["options"]["temperature"] == 0
+            assert json["options"]["num_predict"] == 256
             assert json["messages"][0]["role"] == "system"
             return FakeResponse()
 

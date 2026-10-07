@@ -99,8 +99,10 @@ def chat_ollama(
         "model": model_name,
         "messages": messages,
         "stream": False,
+        # Check-in comments need a short answer, not a long think chain.
+        "think": False,
         # Keep change notices factual; higher temperature drifts into generic fluff.
-        "options": {"temperature": 0},
+        "options": {"temperature": 0, "num_predict": 256},
     }
     timeout = httpx.Timeout(
         connect=min(30.0, float(timeout_s)),

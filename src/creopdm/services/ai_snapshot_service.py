@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from creopdm.ai_prompts import (
     build_snapshot_compare_user_prompt,
+    format_snapshot_compare_text,
     resolve_snapshot_compare_prompt,
 )
 from creopdm.config import AppSettings
@@ -101,6 +102,7 @@ class AiSnapshotService:
                 capture_status=None,
                 capture_errors=[],
                 snapshot=None,
+                outline=None,
             )
         errors = _loads(row.capture_errors)
         if not isinstance(errors, list):
@@ -108,6 +110,11 @@ class AiSnapshotService:
         snapshot = _loads(row.snapshot_json)
         if not isinstance(snapshot, dict):
             snapshot = {"raw": snapshot} if snapshot is not None else None
+        outline = (
+            format_snapshot_compare_text(snapshot)
+            if isinstance(snapshot, dict)
+            else None
+        )
         return AiSnapshotResponse(
             object_id=obj.uuid,
             version_id=version.uuid,
@@ -119,6 +126,7 @@ class AiSnapshotService:
             capture_status=row.capture_status,
             capture_errors=[str(item) for item in errors],
             snapshot=snapshot,
+            outline=outline,
         )
 
     def save(
