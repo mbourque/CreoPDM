@@ -57,6 +57,12 @@ def test_drawing_ai_snapshot_skips_solid_walk():
     solid_idx = gather.find("creoAsSolid(session, model, solidDbg)")
     assert drawing_idx >= 0
     assert solid_idx > drawing_idx
+    views_fn = text.split("function creoGatherDrawingViews(", 1)[1].split(
+        "function creoGatherDrawingSheetCount(", 1
+    )[0]
+    assert 'stableId = name ? ("view:" + name)' in views_fn
+    assert "scale:" in views_fn
+    assert "model:" in views_fn
     assert "ExtendsInNegativeDirection" in text
     assert "extends_negative" in text
     assert "owner: ownerLabel" in text
@@ -86,6 +92,12 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "/ai-snapshot" in script
     assert "await postAiSnapshotFromGather(" in script
     assert "Soft-fail — AI snapshot must not block Creo metadata save" in script
+    # Modified Collect must not poison tip snapshot (A.1/A.2 identical after view delete).
+    assert "function objectAiSnapshotTipIsStale(" in script
+    assert "objectAiSnapshotTipIsStale(objectUuid)" in script
+    assert "force: true" in script
+    assert "function clearAiSnapshotClientCache(" in script
+    assert "clearAiSnapshotClientCache()" in script
     assert "async function loadAiSnapshotTab(" in script
     assert "async function copyTextToClipboard(" in script
     assert "navigator.clipboard.writeText" in script

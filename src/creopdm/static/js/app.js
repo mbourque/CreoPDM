@@ -6790,10 +6790,43 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     };
   }
 
-  async function postAiSnapshotFromGather(objectUuid, versionId, gatherSnapshot) {
+  function objectAiSnapshotTipIsStale(objectUuid) {
+    /**
+     * Modified local workspace must not overwrite the tip AI snapshot.
+     * Otherwise delete-view → Collect → Check In stores the same gather on
+     * A.1 and A.2 and Ask AI reports "no changes".
+     */
+    const id = String(objectUuid || "").trim();
+    if (!id) return false;
+    let row = null;
+    try {
+      row = document.querySelector(`tr.object-row[data-uuid="${CSS.escape(id)}"]`);
+    } catch {
+      row = document.querySelector(`tr.object-row[data-uuid="${id}"]`);
+    }
+    if (row) {
+      if (row.getAttribute("data-modified-locally") === "1") return true;
+      const st = String(
+        row.querySelector(".state")?.getAttribute("data-state") || ""
+      ).toUpperCase();
+      if (st === "MODIFIED") return true;
+    }
+    const detail = document.querySelector(
+      `[data-object-id="${id}"], [data-uuid="${id}"]`
+    );
+    if (detail?.getAttribute?.("data-modified-locally") === "1") return true;
+    return false;
+  }
+
+  async function postAiSnapshotFromGather(objectUuid, versionId, gatherSnapshot, options) {
     // Soft-fail — AI snapshot must not block Creo metadata save.
+    const opts = options && typeof options === "object" ? options : {};
     const snapshot = aiSnapshotBodyFromGather(gatherSnapshot);
     if (!objectUuid || !snapshot) return false;
+    // Check In / forced tip match may pass force:true. Collect on Modified skips.
+    if (!opts.force && objectAiSnapshotTipIsStale(objectUuid)) {
+      return false;
+    }
     const capture = snapshot.capture && typeof snapshot.capture === "object" ? snapshot.capture : {};
     const body = {
       version_id: versionId || null,
@@ -6811,6 +6844,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           body: JSON.stringify(body),
         }
       );
+      if (response.ok) {
+        clearAiSnapshotClientCache();
+      }
       return response.ok;
     } catch {
       return false;
@@ -6897,7 +6933,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         );
         if (response.ok) {
           saved += 1;
-          await postAiSnapshotFromGather(target.uuid, target.versionId || null, snapshot);
+          // Check In / Open tip capture — force so Modified row paint cannot skip.
+          await postAiSnapshotFromGather(target.uuid, target.versionId || null, snapshot, {
+            force: true,
+          });
         }
       } catch {
         /* soft-fail — metadata is best-effort */
@@ -11587,6 +11626,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   let aiSnapshotListCache = null;
   const aiSnapshotJsonByVersion = new Map();
 
+  function clearAiSnapshotClientCache() {
+    aiSnapshotListCache = null;
+    aiSnapshotJsonByVersion.clear();
+  }
+
   function aiSnapshotEmptyMessage(displayRevision) {
     const rev = String(displayRevision || "").trim() || "this revision";
     return (
@@ -11657,7 +11701,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const labelA = $("#ai-snapshot-label-a");
     if (!selectA || !selectB) return;
     try {
-      if (!aiSnapshotListCache) {
+      // Always refresh list + JSON when opening Snapshot (Collect / Check In
+      // may have rewritten tip; in-memory cache must not show stale twins).
+      clearAiSnapshotClientCache();
+      {
         const response = await fetch(
           `/api/objects/${encodeURIComponent(objectId)}/ai-snapshots`
         );

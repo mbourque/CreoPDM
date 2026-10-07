@@ -2283,6 +2283,7 @@ function creoGatherDrawingViews(drawing, errors) {
     /**
      * Drawing views for AI compare — never walk the solid via creoAsSolid.
      * Rows go into snapshot.features as type VIEW so the compare prompt sees them.
+     * Stable id = view Name (Creo View2D has no numeric Id).
      */
     var views = [];
     if (!drawing) return views;
@@ -2300,11 +2301,6 @@ function creoGatherDrawingViews(drawing, errors) {
             try {
                 var view = items[i];
                 if (!view) continue;
-                var id = null;
-                try {
-                    if (typeof view.Id !== "undefined") id = view.Id;
-                    else if (typeof view.GetId === "function") id = view.GetId();
-                } catch (errId) { id = null; }
                 var name = "";
                 try {
                     if (typeof view.Name !== "undefined") name = String(view.Name || "");
@@ -2319,8 +2315,32 @@ function creoGatherDrawingViews(drawing, errors) {
                     if (typeof view.GetSheetNumber === "function") sheet = view.GetSheetNumber();
                     else if (typeof view.SheetNumber !== "undefined") sheet = view.SheetNumber;
                 } catch (errSh) {}
+                var scale = null;
+                try {
+                    if (typeof view.Scale !== "undefined") scale = view.Scale;
+                    else if (typeof view.GetScale === "function") scale = view.GetScale();
+                } catch (errSc) {}
+                var modelName = "";
+                try {
+                    var vm = null;
+                    if (creoHasCallable(view, "GetModel") || typeof view.GetModel !== "undefined") {
+                        vm = view.GetModel();
+                    }
+                    if (vm) {
+                        try {
+                            modelName = String(creoGatherIdentity(vm).file_name || "");
+                        } catch (errVmId) {
+                            try { modelName = String(vm.FileName || ""); } catch (errVmFn) {}
+                        }
+                    }
+                } catch (errVm) {}
+                var isBg = null;
+                try {
+                    if (typeof view.IsBackground !== "undefined") isBg = !!view.IsBackground;
+                } catch (errBg) {}
+                var stableId = name ? ("view:" + name) : ("view:" + i);
                 views.push({
-                    id: id != null ? id : ("view:" + i),
+                    id: stableId,
                     name: name || ("View " + (i + 1)),
                     type: "VIEW",
                     subtype: viewType || "",
@@ -2329,7 +2349,10 @@ function creoGatherDrawingViews(drawing, errors) {
                     parent_ids: [],
                     group_id: null,
                     pattern_id: null,
-                    sheet: sheet
+                    sheet: sheet,
+                    scale: scale,
+                    model: modelName || null,
+                    is_background: isBg
                 });
             } catch (errView) {
                 errors.push("view[" + i + "]: " + creoToolkitErr(errView));
