@@ -484,14 +484,6 @@
   <section class="tab-panel" id="panel-compare-revisions" hidden
            data-object-id="{{ object.uuid }}"
            data-tip-version="{{ object.current_version.uuid if object.current_version else '' }}">
-    <p class="muted small">
-      Side-by-side outlines for two revisions with saved snapshots
-      (features or drawing views, dimensions, parameters, materials, units — plain text, not JSON).
-      Defaults to the latest snapshot on the right (NEW) and the one before it on the left (OLD).
-      Each dropdown only offers revisions that keep OLD older than NEW.
-      Matching lines are light green, removed light red, changed yellow, and new light blue.
-      Two text panes with one scrollbar between them. Configure Ollama under Administration → AI for Ask AI.
-    </p>
     <div class="ai-snapshot-ask-row" id="ai-snapshot-ask-row" hidden>
       <button type="button" class="btn btn-primary" id="ai-snapshot-ask-ai"
               title="Send both OLD and NEW outlines and the compare prompt to the configured Ollama model">

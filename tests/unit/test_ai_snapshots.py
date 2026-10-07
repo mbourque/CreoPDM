@@ -228,8 +228,8 @@ def test_snapshot_tab_template_and_docs():
     assert "Ask AI what changed" in html
     assert 'id="ai-snapshot-ai-answer"' in html
     assert 'id="ai-snapshot-ask-row" hidden' in html
-    assert "plain text, not JSON" in html
-    assert "light green" in html and "light blue" in html
+    assert "Side-by-side outlines for two revisions" not in html
+    assert "plain text, not JSON" not in html
     assert "Compare Revisions" in docs
     assert "two or more" in docs.lower() and "snapshot" in docs.lower()
     assert "OLD" in docs and "NEW" in docs
