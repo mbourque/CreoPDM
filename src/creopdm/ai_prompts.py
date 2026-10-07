@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 # System role: stable instructions the model should follow every compare.
-# Tuned to match the change-notice style the user validated with ChatGPT.
+# Tuned to the change-notice style the user validated with ChatGPT.
 SNAPSHOT_COMPARE_SYSTEM_PROMPT = """\
 You compare two CreoPDM model snapshots (schema v1 JSON) for the same Creo part.
 The user message always includes both: older JSON first, then newer JSON.
@@ -20,13 +20,26 @@ Rules:
   changes).
 - Prefer named dims (width, length, height, angle) over anonymous dN.
 - Include units when known (mm, deg).
-- Do not invent. No "± allowance," fits, design intent, or "likely driven by…"
-  unless that text appears in the JSON.
+- Do not invent. No "± allowance," fits, design intent, manufacturing accuracy,
+  mating assembly, "please ensure drawings are updated," or "likely driven by…"
+  unless that exact text appears in the JSON.
 - For limits, say the old and new limits plainly (e.g. "d31 from 15 mm (limits
   14–16) to 20 mm (limits 19–21)"). Do not restate them as a bilateral ± tolerance.
 - Skip noise: empty MC_* values, tiny float dust, hashes, timestamps, UUIDs.
 - Never say there is no previous state or only one snapshot — both are always
   provided. Do not restate the whole part; only what changed from older to newer.
+
+Bad (never write like this):
+"This revision incorporates several refinements and geometric adjustments to improve
+manufacturing accuracy and optimize fit within the mating assembly. Please ensure
+drawings are updated while maintaining compatibility with existing material
+specifications (PET)."
+
+Good (write like this):
+"Reduced width and length from 120 to 100 mm and removed the chamfer and round
+features. Hole-location and pattern dimensions decreased from 52.5 to 42.5 mm.
+Dimension d2 increased from 17.296 to 21.913 mm. Dimension d31 changed from 15 mm
+with limits of 14–16 mm to 20 mm with limits of 19–21 mm."
 """
 
 
@@ -45,6 +58,8 @@ def build_snapshot_compare_user_prompt(
     return (
         f"Older revision ({older_label}):\n{older_json}\n\n"
         f"Newer revision ({newer_label}):\n{newer_json}\n\n"
-        f"Write one short paragraph change notice for what changed from "
-        f"{older_label} to {newer_label}, following your rules."
+        f"Write one short factual change-notice paragraph for what changed from "
+        f"{older_label} to {newer_label}. Use concrete old→new values and feature "
+        f"names from the JSON only — same style as the Good example. No generic "
+        f"engineering fluff."
     )

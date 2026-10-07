@@ -121,6 +121,10 @@ def test_snapshot_compare_prompt_forbids_invented_tolerances():
     assert "Prefer named dims" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
     assert "bilateral ± tolerance" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
     assert "Never say there is no previous state" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
+    assert "Good (write like this):" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
+    assert "Bad (never write like this):" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
+    assert "Reduced width and length from 120 to 100 mm" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
+    assert "manufacturing accuracy" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
     user = build_snapshot_compare_user_prompt(
         older_snapshot={"dimensions": [{"symbol": "d0", "value": 6}]},
         newer_snapshot={"dimensions": [{"symbol": "d0", "value": 8}]},
@@ -129,7 +133,7 @@ def test_snapshot_compare_prompt_forbids_invented_tolerances():
     )
     assert "Older revision (A.1):" in user
     assert "Newer revision (A.2):" in user
-    assert "one short paragraph change notice" in user
+    assert "No generic engineering fluff" in user
     assert '"value": 6' in user
     assert '"value": 8' in user
 
@@ -341,15 +345,13 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
         captured["model"] = model
         captured["messages"] = messages
         assert 'No "± allowance"' in messages[0]["content"]
-        assert "change notice" in messages[0]["content"]
+        assert "Good (write like this):" in messages[0]["content"]
         assert "Older revision" in messages[1]["content"]
         assert "Newer revision" in messages[1]["content"]
-        assert "one short paragraph change notice" in messages[1]["content"]
+        assert "No generic engineering fluff" in messages[1]["content"]
         assert "5.0" in messages[1]["content"]
         assert "7.5" in messages[1]["content"]
-        return (
-            "Dimension d0 increased from 5 mm to 7.5 mm."
-        )
+        return "Dimension d0 increased from 5 mm to 7.5 mm."
 
     monkeypatch.setattr(
         "creopdm.services.ai_snapshot_service.chat_ollama",
