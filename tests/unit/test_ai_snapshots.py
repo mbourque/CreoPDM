@@ -201,19 +201,26 @@ def test_snapshot_compare_prompt_requires_saved_text():
         resolve_snapshot_compare_prompt("")
     assert "No snapshot compare prompt is saved" in str(exc.value)
     assert resolve_snapshot_compare_prompt("  Custom prompt.  ") == "Custom prompt."
+    from creopdm.ai_prompts import format_snapshot_compare_text
+
     user = build_snapshot_compare_user_prompt(
         older_snapshot={"dimensions": [{"symbol": "d0", "value": 6}]},
         newer_snapshot={"dimensions": [{"symbol": "d0", "value": 8}]},
         older_revision="A.1",
         newer_revision="A.2",
     )
-    assert "Both revisions below are required" in user
-    assert "Older revision (A.1):" in user
-    assert "Newer revision (A.2):" in user
+    assert "Do not swap them" in user
+    assert "=== OLD snapshot (A.1) ===" in user
+    assert "=== NEW snapshot (A.2) ===" in user
     assert "following your instructions" in user
     assert "Never claim a revision is missing" in user
-    assert '"value":6' in user or '"value": 6' in user
-    assert '"value":8' in user or '"value": 8' in user
+    assert "revision outlines" in user
+    assert user.index("=== OLD snapshot (A.1) ===") < user.index(
+        "=== NEW snapshot (A.2) ==="
+    )
+    assert "d0 = 6" in user
+    assert "d0 = 8" in user
+    assert '"value":' not in user
     import creopdm.ai_prompts as ai_prompts
 
     assert not hasattr(ai_prompts, "DEFAULT_SNAPSHOT_COMPARE_PROMPT")
@@ -222,16 +229,28 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "± allowance" not in src
     assert "change notice" not in src
     assert "slim_snapshot_for_compare" in src
-    # View outlines must not go to Ollama (they hung check-in Ask AI).
+    assert "format_snapshot_compare_text" in src
+    # Drawing views + sheets + referenced models; never view outline floats.
     bulky = {
+        "identity": {"filename": "plate.drw", "model_type": "DRAWING"},
         "features": [
             {
                 "name": "VIEW_TEMPLATE_1",
                 "type": "VIEW",
+                "sheet": 1,
+                "scale": 0.5,
+                "model": "plate_3.prt",
                 "outline": [[1.23456789, 2.0, 3.0], [4.0, 5.0, 6.0]],
                 "parent_ids": [],
                 "erased": None,
-            }
+            },
+            {
+                "name": "FRONT",
+                "type": "VIEW",
+                "sheet": 1,
+                "status": "erased",
+                "erased": True,
+            },
         ],
         "parameters": [
             {
@@ -242,21 +261,43 @@ def test_snapshot_compare_prompt_requires_saved_text():
             },
             {
                 "name": "NUMBER_OF_VIEWS",
-                "value": 4,
+                "value": 2,
                 "data_type": "INTEGER",
                 "owner": "model",
             },
+            {
+                "name": "DESCRIPTION",
+                "value": "Plate drawing",
+                "owner": "model",
+                "data_type": "STRING",
+            },
         ],
         "item": {"display_revision": "A.1"},
-        "capture": {"captured_at": "2026-01-01T00:00:00Z", "status": "ok"},
+        "capture": {
+            "captured_at": "2026-01-01T00:00:00Z",
+            "status": "ok",
+            "sheet_count": 2,
+            "drawing_models": [{"filename": "plate_3.prt", "model_type": "PART"}],
+        },
     }
     slim = slim_snapshot_for_compare(bulky)
     assert "outline" not in slim["features"][0]
     assert "item" not in slim
     assert "captured_at" not in slim.get("capture", {})
-    assert slim["capture"]["status"] == "ok"
-    assert all(p["name"] != "MC_VOLUME" for p in slim["parameters"])
-    assert any(p["name"] == "NUMBER_OF_VIEWS" for p in slim["parameters"])
+    assert slim["capture"]["sheet_count"] == 2
+    assert all(p["name"] != "MC_VOLUME" for p in slim.get("parameters", []))
+    assert all(p["name"] != "NUMBER_OF_VIEWS" for p in slim.get("parameters", []))
+    drw_text = format_snapshot_compare_text(bulky)
+    assert "Views:" in drw_text
+    assert "VIEW_TEMPLATE_1" in drw_text
+    assert "sheet 1" in drw_text
+    assert "scale 0.5" in drw_text
+    assert "erased" in drw_text
+    assert "Sheets: 2" in drw_text
+    assert "Referenced models:" in drw_text
+    assert "plate_3.prt" in drw_text
+    assert "1.23456789" not in drw_text
+    assert "NUMBER_OF_VIEWS" not in drw_text
     noisy = {
         "parameters": [
             {
@@ -282,17 +323,22 @@ def test_snapshot_compare_prompt_requires_saved_text():
         older_revision="A.1",
         newer_revision="—",
     )
-    assert "Newer revision (newer):" in dash_prompt
-    assert "Newer revision (—):" not in dash_prompt
+    assert "=== NEW snapshot (newer) ===" in dash_prompt
+    assert "=== NEW snapshot (—) ===" not in dash_prompt
     prompt = build_snapshot_compare_user_prompt(
         older_snapshot=bulky,
-        newer_snapshot={"features": [{"name": "A", "type": "VIEW"}]},
+        newer_snapshot={
+            "identity": {"filename": "plate.drw", "model_type": "DRAWING"},
+            "features": [{"name": "A", "type": "VIEW", "sheet": 1}],
+            "capture": {"sheet_count": 1, "drawing_models": []},
+        },
         older_revision="A.1",
         newer_revision="pending",
     )
     assert "outline" not in prompt
     assert "1.23456789" not in prompt
     assert "VIEW_TEMPLATE_1" in prompt
+    assert "Views:" in prompt
     # Large solids must keep BOTH revision labels (context overflow looked like "no A.1").
     fat_features = [
         {
@@ -316,7 +362,9 @@ def test_snapshot_compare_prompt_requires_saved_text():
         older_revision="A.1",
         newer_revision="A.2",
     )
-    assert fat_prompt.index("Older revision (A.1):") < fat_prompt.index("Newer revision (A.2):")
+    assert fat_prompt.index("=== OLD snapshot (A.1) ===") < fat_prompt.index(
+        "=== NEW snapshot (A.2) ==="
+    )
     # Pattern-member shells ("Feature 15775", IFX_ID_*) must collapse so Ollama
     # still sees a deleted PATTERN head (false "No model changes" on plate_3).
     pattern_head = {
@@ -372,6 +420,7 @@ def test_snapshot_compare_prompt_requires_saved_text():
                 "feature_id": 15775,
             },
         ],
+        "materials": {"current": "STEEL_LOW_ALLOY", "names": ["STEEL_LOW_ALLOY"]},
     }
     newer_pat = {
         "identity": {"filename": "plate_3.prt", "model_type": "PART"},
@@ -384,16 +433,14 @@ def test_snapshot_compare_prompt_requires_saved_text():
         "dimensions": [
             {"id": 221, "symbol": "T", "value": 0.5, "units": "in"},
         ],
+        "materials": {"current": "STEEL_LOW_ALLOY", "names": ["STEEL_LOW_ALLOY"]},
     }
     slim_older = slim_snapshot_for_compare(older_pat)
     slim_newer = slim_snapshot_for_compare(newer_pat)
-    assert "feature_summary" not in slim_older
-    assert "feature_summary" not in slim_newer
     older_patterns = [f for f in slim_older["features"] if f.get("name") == "PATTERN"]
     newer_patterns = [f for f in slim_newer["features"] if f.get("name") == "PATTERN"]
     assert len(older_patterns) == 2
     assert len(newer_patterns) == 1
-    assert any(f.get("has_pattern_members") for f in older_patterns)
     assert not any("id" in f for f in slim_older["features"])
     assert not any(
         str(f.get("name") or "").startswith("Feature ") for f in slim_older["features"]
@@ -402,20 +449,22 @@ def test_snapshot_compare_prompt_requires_saved_text():
         str(f.get("name") or "").startswith("IFX_ID_") for f in slim_older["features"]
     )
     assert all(d.get("symbol") != "d253" for d in slim_older["dimensions"])
-    assert not any("feature_id" in d for d in slim_older["dimensions"])
     pat_prompt = build_snapshot_compare_user_prompt(
         older_snapshot=older_pat,
         newer_snapshot=newer_pat,
         older_revision="A.1",
         newer_revision="A.2",
     )
-    assert "pattern_member_total" not in pat_prompt
-    assert "pattern_count" not in pat_prompt
+    assert "Features:" in pat_prompt
+    assert "PATTERN" in pat_prompt
+    assert pat_prompt.split("=== NEW snapshot (A.2) ===", 1)[0].count("- PATTERN") == 2
+    assert pat_prompt.split("=== NEW snapshot (A.2) ===", 1)[1].count("- PATTERN") == 1
     assert "Feature 15780" not in pat_prompt
     assert "15775" not in pat_prompt
     assert "d253" not in pat_prompt
-    # Older has two PATTERN heads; newer one — signal without meta totals.
-    assert pat_prompt.count('"name":"PATTERN"') >= 3
+    assert "T = 0.5 in" in pat_prompt
+    assert "Material: STEEL_LOW_ALLOY" in pat_prompt
+    assert "{" not in pat_prompt
     assert "FEAT_1" in fat_prompt
     assert "outline" not in fat_prompt
 
@@ -584,7 +633,7 @@ def test_ai_snapshot_rejects_part_json_on_drawing_object(client, repo_parent, tm
 
 @requires_git
 def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeypatch):
-    """Compare endpoint loads both snapshots, sends prompt + JSON to Ollama, returns summary."""
+    """Compare endpoint loads both snapshots, sends prompt + outlines to Ollama, returns summary."""
     product = client.post(
         "/api/products",
         json={"name": "Snap Compare", "number": "SNAP-CMP"},
@@ -674,11 +723,12 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
         captured["model"] = model
         captured["messages"] = messages
         assert messages[0]["content"] == "Use only facts from the JSON."
-        assert "Older revision" in messages[1]["content"]
-        assert "Newer revision" in messages[1]["content"]
+        assert "=== OLD snapshot" in messages[1]["content"]
+        assert "=== NEW snapshot" in messages[1]["content"]
+        assert "Do not swap them" in messages[1]["content"]
         assert "following your instructions" in messages[1]["content"]
-        assert "5.0" in messages[1]["content"]
-        assert "7.5" in messages[1]["content"]
+        assert "d0 = 5 mm" in messages[1]["content"]
+        assert "d0 = 7.5 mm" in messages[1]["content"]
         return "Dimension d0 increased from 5 mm to 7.5 mm."
 
     monkeypatch.setattr(
@@ -763,8 +813,9 @@ def test_ai_snapshot_compare_pending_uses_tip_and_client_newer(
     def fake_chat(base_url, model, messages, *, timeout_s=300.0):
         assert model == "qwen3-8b-64k:latest"
         assert messages[0]["content"] == "Facts only."
-        assert "Older revision" in messages[1]["content"]
-        assert "Newer revision (A.2)" in messages[1]["content"]
+        assert "=== OLD snapshot" in messages[1]["content"]
+        assert "=== NEW snapshot (A.2) ===" in messages[1]["content"]
+        assert "Do not swap them" in messages[1]["content"]
         assert "120" in messages[1]["content"]
         assert "100" in messages[1]["content"]
         assert "ROUND" in messages[1]["content"]
