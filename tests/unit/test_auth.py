@@ -713,6 +713,56 @@ def test_admin_utilities_status_and_gate(auth_client, auth_ctx):
     assert denied_rebuild.status_code == 403
 
 
+def test_utilities_health_without_logs_hides_logs_links(auth_client, auth_ctx):
+    """Health-only role: open Health, but Logs paths are not links and Logs is 403."""
+    from creopdm.auth_constants import PERMISSION_UTILITIES_HEALTH
+
+    _setup_admin_and_users(auth_client, auth_ctx)
+    _login(auth_client, "admin", "AdminPass1")
+    role = auth_client.post(
+        "/admin/roles/new",
+        data={
+            "name": "Health Only",
+            "description": "Health without Logs",
+            "permission": [PERMISSION_UTILITIES_HEALTH],
+        },
+        follow_redirects=False,
+    )
+    assert role.status_code == 303, role.text
+    user = auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "Health Viewer",
+            "username": "healthonly",
+            "email": "healthonly@example.com",
+            "role": "Health Only",
+            "status": UserStatus.ACTIVE.value,
+            "password": "HealthPass1",
+            "password_confirm": "HealthPass1",
+        },
+        follow_redirects=False,
+    )
+    assert user.status_code == 303, user.text
+    with auth_ctx.session_factory() as db:
+        row = db.scalar(select(User).where(User.username == "healthonly"))
+        assert row is not None
+        row.must_change_password = False
+        db.commit()
+
+    _login(auth_client, "healthonly", "HealthPass1")
+    hub = auth_client.get("/admin/utilities")
+    assert hub.status_code == 200
+    assert 'href="/admin/utilities/health"' in hub.text
+    assert 'href="/admin/utilities/logs"' not in hub.text
+
+    health = auth_client.get("/admin/utilities/health")
+    assert health.status_code == 200
+    assert "System health" in health.text
+    assert 'href="/admin/utilities/logs"' not in health.text
+
+    assert auth_client.get("/admin/utilities/logs", follow_redirects=False).status_code == 403
+
+
 def test_utilities_audit_only_role_gates_other_tools(auth_client, auth_ctx):
     """Role with only utilities.audit can open Audit; Compact and Health return 403."""
     from creopdm.auth_constants import (

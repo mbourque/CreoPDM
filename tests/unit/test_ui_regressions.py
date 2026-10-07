@@ -2318,6 +2318,10 @@ def test_admin_hub_panel_fills_full_width():
     assert "<strong>System</strong>" in health
     assert 'href="/admin/utilities/logs"' in health
     assert "can_utilities_logs" in health
+    assert "row.label == 'Logs' and can_utilities_logs" in health or (
+        'row.label == "Logs" and can_utilities_logs' in health
+    )
+    assert "{% if can_utilities_logs %}" in health
     assert "row.label == 'Logs'" in health or 'row.label == "Logs"' in health
     logs_tmpl = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities_logs.html").read_text(
         encoding="utf-8"
