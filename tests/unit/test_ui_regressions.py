@@ -1313,6 +1313,9 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert "is_top_level_assembly" in overview
     assert "ASSEMBLY (Top Level)" in overview
     assert "(Top Level)" in detail
+    # No redundant "PART · plate_3.prt" under the filename (Top Level stays on Model type).
+    assert "object.type_label }} · {{ object.relative_path" not in detail
+    assert "type · path line under the file name" in docs
     assert "Top Level" in docs
     assert "identity.model_role" in overview
     assert "Model type" in docs and "**Subtype**" in docs

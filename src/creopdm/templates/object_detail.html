@@ -85,7 +85,6 @@
                 data-owned="{% if object.owned_by_me %}1{% else %}0{% endif %}"
                 title="Open this file in Creo or its Windows associated program.">Open…</button>
       </div>
-      <p class="muted">{{ object.type_label }} · {{ object.relative_path }}{% if is_top_level_assembly %} (Top Level){% endif %}</p>
     </div>
     <div class="detail-meta">
       <span class="state" data-state="{{ object.lifecycle_state }}">{{ object.lifecycle_state.replace('_', ' ').title() }}</span>
