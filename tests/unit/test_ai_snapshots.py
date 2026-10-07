@@ -125,6 +125,8 @@ def test_snapshot_compare_prompt_forbids_invented_tolerances():
     assert "Bad (never write like this):" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
     assert "Reduced width and length from 120 to 100 mm" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
     assert "manufacturing accuracy" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
+    assert "if both a chamfer and a round were removed, say both" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
+    assert "Compare the features arrays carefully" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
     user = build_snapshot_compare_user_prompt(
         older_snapshot={"dimensions": [{"symbol": "d0", "value": 6}]},
         newer_snapshot={"dimensions": [{"symbol": "d0", "value": 8}]},
@@ -133,9 +135,16 @@ def test_snapshot_compare_prompt_forbids_invented_tolerances():
     )
     assert "Older revision (A.1):" in user
     assert "Newer revision (A.2):" in user
+    assert "Diff the features arrays" in user
+    assert "chamfer and round if both are gone" in user
     assert "No generic engineering fluff" in user
     assert '"value": 6' in user
     assert '"value": 8' in user
+    # Prompt-only path — no precomputed feature diff block.
+    assert "PRECOMPUTED DIFF" not in user
+    import creopdm.ai_prompts as ai_prompts
+
+    assert not hasattr(ai_prompts, "build_snapshot_diff_hints")
 
 
 @requires_git
@@ -345,10 +354,11 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
         captured["model"] = model
         captured["messages"] = messages
         assert 'No "± allowance"' in messages[0]["content"]
-        assert "Good (write like this):" in messages[0]["content"]
+        assert "if both a chamfer and a round were removed, say both" in messages[0]["content"]
         assert "Older revision" in messages[1]["content"]
         assert "Newer revision" in messages[1]["content"]
-        assert "No generic engineering fluff" in messages[1]["content"]
+        assert "Diff the features arrays" in messages[1]["content"]
+        assert "PRECOMPUTED DIFF" not in messages[1]["content"]
         assert "5.0" in messages[1]["content"]
         assert "7.5" in messages[1]["content"]
         return "Dimension d0 increased from 5 mm to 7.5 mm."

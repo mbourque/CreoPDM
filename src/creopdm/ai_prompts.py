@@ -18,6 +18,10 @@ Rules:
 - Report only facts present in the snapshots (feature add/remove/rename; dimension
   value changes; tolerance upper/lower when those fields change; material/parameter
   changes).
+- Compare the features arrays carefully: name every feature type present in older
+  but missing in newer (removed), and every feature type present in newer but
+  missing in older (added). Do not stop after the first removal — if both a
+  chamfer and a round were removed, say both.
 - Prefer named dims (width, length, height, angle) over anonymous dN.
 - Include units when known (mm, deg).
 - Do not invent. No "± allowance," fits, design intent, manufacturing accuracy,
@@ -59,7 +63,8 @@ def build_snapshot_compare_user_prompt(
         f"Older revision ({older_label}):\n{older_json}\n\n"
         f"Newer revision ({newer_label}):\n{newer_json}\n\n"
         f"Write one short factual change-notice paragraph for what changed from "
-        f"{older_label} to {newer_label}. Use concrete old→new values and feature "
-        f"names from the JSON only — same style as the Good example. No generic "
-        f"engineering fluff."
+        f"{older_label} to {newer_label}. Diff the features arrays and name every "
+        f"removed feature type (e.g. chamfer and round if both are gone), plus "
+        f"concrete old→new dimension values — same style as the Good example. "
+        f"No generic engineering fluff."
     )
