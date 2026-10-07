@@ -380,6 +380,25 @@ class EmailConfig(BaseModel):
         return host, int(self.smtp_port or 25), bool(self.smtp_use_tls), bool(self.smtp_use_auth)
 
 
+class AiConfig(BaseModel):
+    """Local Ollama connection for snapshot compare and related AI help."""
+
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = ""
+
+    @field_validator("ollama_base_url")
+    @classmethod
+    def normalize_ollama_base_url(cls, value: object) -> str:
+        from creopdm.services.ollama_service import normalize_ollama_base_url
+
+        return normalize_ollama_base_url(value)
+
+    @field_validator("ollama_model")
+    @classmethod
+    def strip_model(cls, value: object) -> str:
+        return str(value or "").strip()
+
+
 class AppSettings(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
@@ -390,6 +409,7 @@ class AppSettings(BaseModel):
     cad: CadConfig = Field(default_factory=CadConfig)
     ignore: IgnoreConfig = Field(default_factory=IgnoreConfig)
     email: EmailConfig = Field(default_factory=EmailConfig)
+    ai: AiConfig = Field(default_factory=AiConfig)
 
 
 _ADDED_DEFAULT_TYPE_LABELS = (

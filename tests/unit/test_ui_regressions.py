@@ -2146,11 +2146,13 @@ def test_admin_hub_panel_fills_full_width():
     assert ">Settings</a>" not in admin
     assert ">Utilities</a>" in admin
     assert 'href="/admin/utilities"' in admin
-    assert 'class="admin-tile is-disabled"' in admin
+    assert 'class="admin-tile is-disabled"' not in admin
     assert ">Audit</span>" not in admin
     assert "Coming soon: review sign-ins" not in admin
-    assert ">AI</span>" in admin
-    assert "Coming soon: configure AI help" in admin
+    assert 'href="/settings/ai"' in admin
+    assert ">AI</a>" in admin
+    assert "Coming soon: configure AI help" not in admin
+    assert "Ollama host URL and model" in admin
     assert "Audit log" in admin
     assert ".admin-tile.is-disabled" in css
     utilities = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities.html").read_text(
@@ -2438,8 +2440,17 @@ def test_admin_hub_panel_fills_full_width():
     hub = (ROOT / "src" / "creopdm" / "settings_hub.py").read_text(encoding="utf-8")
     assert 'slug="availability"' not in hub
     assert 'slug="database"' in hub
+    assert 'slug="ai"' in hub
     assert hub.index('slug="open"') < hub.index('slug="vault"')
     assert hub.index('slug="types"') < hub.index('slug="ignored-files"')
+    assert hub.index('slug="database"') < hub.index('slug="ai"')
+    ai_partial = (
+        ROOT / "src" / "creopdm" / "templates" / "settings_partials" / "ai.html"
+    ).read_text(encoding="utf-8")
+    assert 'name="ollama_base_url"' in ai_partial
+    assert 'name="ollama_model"' in ai_partial
+    assert 'id="ollama-refresh-models"' in ai_partial
+    assert "Custom instructions are not configured yet" in ai_partial
     section = (ROOT / "src" / "creopdm" / "templates" / "settings_section.html").read_text(
         encoding="utf-8"
     )
@@ -2467,6 +2478,9 @@ def test_admin_hub_panel_fills_full_width():
     script = _app_js()
     assert "Hub section pages only send fields present" in script
     assert 'settingsForm.querySelector(\'[name="site_availability"]\')' in script
+    assert 'settingsForm.querySelector(\'[name="ollama_base_url"]\')' in script
+    assert "refreshOllamaModels" in script
+    assert "/api/settings/ai/ollama/models" in script
 
 
 def test_workspace_poll_pauses_after_idle_setting():

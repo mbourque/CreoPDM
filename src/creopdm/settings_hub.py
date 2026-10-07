@@ -96,6 +96,12 @@ SETTINGS_HUB_TILES: tuple[SettingsHubTile, ...] = (
         blurb="Local SQLite by default, or a Postgres URL.",
         partial="database.html",
     ),
+    SettingsHubTile(
+        slug="ai",
+        title="AI",
+        blurb="Ollama host URL and model for snapshot compare and other AI help.",
+        partial="ai.html",
+    ),
 )
 
 

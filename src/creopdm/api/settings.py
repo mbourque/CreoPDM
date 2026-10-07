@@ -26,7 +26,8 @@ from creopdm.constants import (
 from creopdm.context import AppContext
 from creopdm.creo.connector_factory import create_creo_connector
 from creopdm.exceptions import PathValidationError, PermissionDeniedError
-from creopdm.schemas.common import SettingsResponse, SettingsUpdateRequest
+from creopdm.schemas.common import OllamaModelsResponse, SettingsResponse, SettingsUpdateRequest
+from creopdm.services.ollama_service import list_ollama_models, normalize_ollama_base_url
 from creopdm.site_availability import (
     DEFAULT_SITE_UNAVAILABLE_MESSAGE,
     SITE_UNAVAILABLE,
@@ -99,6 +100,8 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         site_availability=settings.ui.site_availability,
         site_unavailable_message=site_unavailable_message(settings),
         default_site_unavailable_message=DEFAULT_SITE_UNAVAILABLE_MESSAGE,
+        ollama_base_url=settings.ai.ollama_base_url,
+        ollama_model=settings.ai.ollama_model or "",
     )
 
 
@@ -245,6 +248,10 @@ def update_settings(
         current.ui.site_availability = payload.site_availability
     if payload.site_unavailable_message is not None:
         current.ui.site_unavailable_message = payload.site_unavailable_message
+    if payload.ollama_base_url is not None:
+        current.ai.ollama_base_url = payload.ollama_base_url
+    if payload.ollama_model is not None:
+        current.ai.ollama_model = payload.ollama_model
     # Turning unavailable on with the stock message → append pretty “Since …” date.
     if current.ui.site_availability == SITE_UNAVAILABLE:
         current.ui.site_unavailable_message = message_for_unavailable_save(
@@ -299,7 +306,28 @@ def _settings_audit_snapshot(settings: AppSettings) -> dict:
         "workspace_poll_idle_minutes": settings.ui.workspace_poll_idle_minutes,
         "site_availability": settings.ui.site_availability,
         "site_unavailable_message": settings.ui.site_unavailable_message or "",
+        "ollama_base_url": settings.ai.ollama_base_url,
+        "ollama_model": settings.ai.ollama_model or "",
         "email_enabled": bool(email.enabled),
         "email_transport": email.transport,
         "smtp_password": bool(email.smtp_password),  # presence only; redacted by key name
     }
+
+
+@router.get("/api/settings/ai/ollama/models", response_model=OllamaModelsResponse)
+def get_ollama_models(
+    request: Request,
+    base_url: str | None = None,
+    ctx: AppContext = Depends(get_context),
+) -> OllamaModelsResponse:
+    """Probe Ollama /api/tags so the AI settings model dropdown can fill."""
+    _require_settings_manage(request, ctx)
+    raw = (base_url or "").strip() or ctx.settings.ai.ollama_base_url
+    try:
+        root = normalize_ollama_base_url(raw)
+    except ValueError as exc:
+        from creopdm.exceptions import ValidationAppError
+
+        raise ValidationAppError(str(exc)) from exc
+    models = list_ollama_models(root)
+    return OllamaModelsResponse(ok=True, base_url=root, models=models)

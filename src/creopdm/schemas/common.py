@@ -558,6 +558,14 @@ class SettingsResponse(BaseModel):
     site_availability: str = "available"
     site_unavailable_message: str = ""
     default_site_unavailable_message: str = ""
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = ""
+
+
+class OllamaModelsResponse(BaseModel):
+    ok: bool = True
+    base_url: str
+    models: list[str] = Field(default_factory=list)
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -584,6 +592,8 @@ class SettingsUpdateRequest(BaseModel):
     workspace_poll_idle_minutes: int | None = None
     site_availability: str | None = None
     site_unavailable_message: str | None = None
+    ollama_base_url: str | None = None
+    ollama_model: str | None = None
 
     @field_validator("creo_open_mode")
     @classmethod
@@ -736,6 +746,22 @@ class SettingsUpdateRequest(BaseModel):
         if "://" not in text:
             raise ValueError("Agent base URL must include a scheme, e.g. http://127.0.0.1:8766")
         return text
+
+    @field_validator("ollama_base_url")
+    @classmethod
+    def valid_ollama_base_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        from creopdm.services.ollama_service import normalize_ollama_base_url
+
+        return normalize_ollama_base_url(value)
+
+    @field_validator("ollama_model")
+    @classmethod
+    def valid_ollama_model(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip()
 
     @field_validator("workspace_poll_interval_ms")
     @classmethod

@@ -11935,6 +11935,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         10
       );
     }
+    if (settingsForm.querySelector('[name="ollama_base_url"]')) {
+      body.ollama_base_url = String(data.get("ollama_base_url") || "").trim();
+      body.ollama_model = String(data.get("ollama_model") || "").trim();
+    }
     const response = await fetch("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -12027,6 +12031,83 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     if (ok) ok.hidden = false;
   });
+
+  const ollamaSettings = $("#ai-ollama-settings");
+  const ollamaUrlInput = $("#ollama-base-url");
+  const ollamaModelSelect = $("#ollama-model");
+  const ollamaStatus = $("#ollama-status");
+  const ollamaRefreshBtn = $("#ollama-refresh-models");
+  async function refreshOllamaModels() {
+    if (!ollamaModelSelect || !ollamaUrlInput) return;
+    const baseUrl = String(ollamaUrlInput.value || "").trim();
+    const saved = String(ollamaModelSelect.dataset.savedModel || "").trim();
+    const previous = String(ollamaModelSelect.value || "").trim() || saved;
+    if (ollamaStatus) {
+      ollamaStatus.textContent = "Contacting Ollama…";
+      ollamaStatus.classList.remove("error");
+    }
+    if (ollamaRefreshBtn) ollamaRefreshBtn.disabled = true;
+    try {
+      const qs = baseUrl
+        ? `?base_url=${encodeURIComponent(baseUrl)}`
+        : "";
+      const response = await fetch(`/api/settings/ai/ollama/models${qs}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const message = await readError(response);
+        if (ollamaStatus) {
+          ollamaStatus.textContent = message || "Could not reach Ollama.";
+          ollamaStatus.classList.add("error");
+        }
+        return;
+      }
+      const payload = await response.json();
+      const models = Array.isArray(payload?.models) ? payload.models.map(String) : [];
+      ollamaModelSelect.replaceChildren();
+      if (!models.length) {
+        const empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "No models found — pull one in Ollama first";
+        ollamaModelSelect.appendChild(empty);
+        if (ollamaStatus) {
+          ollamaStatus.textContent = `Reached ${payload?.base_url || baseUrl}, but no models are installed.`;
+        }
+        return;
+      }
+      for (const name of models) {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name === previous ? `${name} (current)` : name;
+        if (name === previous) option.selected = true;
+        ollamaModelSelect.appendChild(option);
+      }
+      if (previous && !models.includes(previous)) {
+        const keep = document.createElement("option");
+        keep.value = previous;
+        keep.textContent = `${previous} (saved — not on server)`;
+        keep.selected = true;
+        ollamaModelSelect.insertBefore(keep, ollamaModelSelect.firstChild);
+      }
+      if (ollamaStatus) {
+        ollamaStatus.textContent = `Connected to ${payload?.base_url || baseUrl} — ${models.length} model${models.length === 1 ? "" : "s"}.`;
+      }
+    } catch (err) {
+      if (ollamaStatus) {
+        ollamaStatus.textContent = String(err?.message || err || "Could not reach Ollama.");
+        ollamaStatus.classList.add("error");
+      }
+    } finally {
+      if (ollamaRefreshBtn) ollamaRefreshBtn.disabled = false;
+    }
+  }
+  ollamaRefreshBtn?.addEventListener("click", () => {
+    void refreshOllamaModels();
+  });
+  if (ollamaSettings) {
+    void refreshOllamaModels();
+  }
 
   heartbeat.ids = rows()
     .filter((row) => row.dataset.owned === "1")
