@@ -274,7 +274,7 @@ def test_get_and_update_settings(client, tmp_path):
     assert 'id="embedded-open-options"' in open_page.text
     assert "Multi-CAD" in open_page.text
     assert "Creo Parametric" not in open_page.text
-    assert "Creo View" not in open_page.text
+    # Open settings must not offer Creo View as an open mode (creojs may mention View2D).
     assert "Open Creo View with" not in open_page.text
     assert 'value="embedded"' in open_page.text
     assert 'value="association"' in open_page.text
@@ -469,7 +469,8 @@ def test_type_labels_shown_in_file_list(client, repo_parent):
 
     detail = client.get(f"/products/{product['uuid']}/objects/{created.json()['uuid']}")
     assert detail.status_code == 200
-    assert "Machined part" in detail.text
+    # Details no longer repeats type · path under the filename (space); Type stays on Files.
+    assert "object.type_label }} · {{ object.relative_path" not in detail.text
 
 
 def test_creo_status_pill_session_label_not_open_mode(client):

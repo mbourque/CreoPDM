@@ -80,12 +80,16 @@ def test_drawing_ai_snapshot_skips_solid_walk():
     )[0]
     assert "creoModelMatchesRequestedFile(item, shortName)" in find_fn
     assert "creoModelMatchesRequestedFile(model, shortName)" in find_fn
-    # Drawing branch gathers views as type VIEW; solid branch still uses creoAsSolid.
+    # Drawing views are type VIEW (helper); solid branch still uses creoAsSolid.
+    views_gather = text.split("function creoGatherDrawingViews(", 1)[1].split(
+        "function creoGatherDrawingSheetCount(", 1
+    )[0]
+    assert 'type: "VIEW"' in views_gather
     gather = text.split("function gatherAiModelSnapshot(", 1)[1].split(
         "function creoFeatureNameWeak(", 1
     )[0]
-    assert 'type: "VIEW"' in gather or "type: \"VIEW\"" in gather
     assert "isDrawing" in gather
+    assert "creoGatherDrawingViews(" in gather
     assert "creoAsSolid(session, model, solidDbg)" in gather
     # Solid walk only in the else (part/asm) branch after the drawing early path.
     drawing_idx = gather.find("if (isDrawing)")
@@ -265,11 +269,8 @@ def test_snapshot_tab_template_and_docs():
     assert "outline" in docs.lower()
     assert "not raw JSON" in docs or "not JSON" in docs
     assert "Ask AI for comment" in docs
-    assert (
-        "fresh gather of the model open in Creo" in docs
-        or "fresh gather of the local modified tip" in docs
-        or "Collect metadata on the modified" in docs
-    )
+    assert "fresh gather" in docs
+    assert "prepare_snapshot_for_compare" in docs
     assert 'id="checkin-ask-ai"' in html
 
 
@@ -412,7 +413,8 @@ def test_snapshot_compare_prompt_requires_saved_text():
         older_revision="A.1",
         newer_revision="pending",
     )
-    assert "outline" not in prompt
+    # Must not dump raw feature outline coordinates (footer may say "outlines").
+    assert '"outline"' not in prompt
     assert "1.23456789" not in prompt
     assert "VIEW_TEMPLATE_1" in prompt
     assert "Views:" in prompt
@@ -555,7 +557,8 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "Material: STEEL_LOW_ALLOY" in pat_prompt
     assert "{" not in pat_prompt
     assert "FEAT_1" in fat_prompt
-    assert "outline" not in fat_prompt
+    assert '"outline"' not in fat_prompt
+    assert "1.0, 2.0, 3.0" not in fat_prompt
 
     # Pattern-owned unnamed DATUM PLANE is internal — not a user plane delete.
     ghost_plane_snap = {

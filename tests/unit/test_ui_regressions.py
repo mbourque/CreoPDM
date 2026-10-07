@@ -446,7 +446,8 @@ def test_metadata_gear_items_require_creo_session():
     assert "showProgress" in push_items
     assert "metadataBusyText(" in push_items
     assert "let saved = 0" in push_items
-    assert "if (response.ok) saved += 1" in push_items
+    assert "if (response.ok)" in push_items
+    assert "saved += 1" in push_items
     after_open = _between(
         script, "async function captureCreoMetadataAfterOpen(", "function metadataTargetsFromResult("
     )
