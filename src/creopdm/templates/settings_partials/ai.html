@@ -1,5 +1,5 @@
 <section class="settings-card" id="ai-ollama-settings">
-  <p class="muted small">Point CreoPDM at your Ollama server (host name or IP and port). The CreoPDM server must be able to reach that URL. After it connects, choose a model from the list, then Save.</p>
+  <p class="muted small">Point CreoPDM at your Ollama server (host name or IP and port). <strong>Refresh models</strong> asks the CreoPDM server first, then falls back to this browser if the server cannot reach Ollama (common when Ollama runs on your Creo PC and CreoPDM runs on another host).</p>
   <label>Ollama host URL
     <input
       id="ollama-base-url"
@@ -10,11 +10,11 @@
       autocomplete="off"
     >
   </label>
-  <p class="muted small">Example: <code>http://127.0.0.1:11434</code> or <code>http://michael-desktop:11434</code>. Include the scheme and port (default Ollama port is 11434).</p>
+  <p class="muted small">Example: <code>http://127.0.0.1:11434</code> (Ollama on this PC) or <code>http://michael-desktop:11434</code>. Include the scheme and port (default Ollama port is 11434).</p>
   <div class="form-actions" style="margin-top: 0.5rem;">
     <button type="button" class="btn" id="ollama-refresh-models">Refresh models</button>
   </div>
-  <p class="muted small" id="ollama-status" role="status"></p>
+  <p class="muted small" id="ollama-status" role="status" aria-live="polite">Click Refresh models to list installed models.</p>
   <label>Model
     <select id="ollama-model" name="ollama_model" data-saved-model="{{ settings.ollama_model }}">
       {% if settings.ollama_model %}

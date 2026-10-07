@@ -2451,6 +2451,8 @@ def test_admin_hub_panel_fills_full_width():
     assert 'name="ollama_model"' in ai_partial
     assert 'id="ollama-refresh-models"' in ai_partial
     assert "Custom instructions are not configured yet" in ai_partial
+    assert "falls back to this browser" in ai_partial
+    assert "Click Refresh models to list installed models" in ai_partial
     section = (ROOT / "src" / "creopdm" / "templates" / "settings_section.html").read_text(
         encoding="utf-8"
     )
@@ -2481,6 +2483,8 @@ def test_admin_hub_panel_fills_full_width():
     assert 'settingsForm.querySelector(\'[name="ollama_base_url"]\')' in script
     assert "refreshOllamaModels" in script
     assert "/api/settings/ai/ollama/models" in script
+    assert "listOllamaModelsFromBrowser" in script
+    assert "/api/tags" in script
 
 
 def test_workspace_poll_pauses_after_idle_setting():

@@ -12033,76 +12033,133 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
 
   const ollamaSettings = $("#ai-ollama-settings");
-  const ollamaUrlInput = $("#ollama-base-url");
-  const ollamaModelSelect = $("#ollama-model");
-  const ollamaStatus = $("#ollama-status");
-  const ollamaRefreshBtn = $("#ollama-refresh-models");
-  async function refreshOllamaModels() {
-    if (!ollamaModelSelect || !ollamaUrlInput) return;
-    const baseUrl = String(ollamaUrlInput.value || "").trim();
-    const saved = String(ollamaModelSelect.dataset.savedModel || "").trim();
-    const previous = String(ollamaModelSelect.value || "").trim() || saved;
-    if (ollamaStatus) {
-      ollamaStatus.textContent = "Contacting Ollama…";
-      ollamaStatus.classList.remove("error");
+  function normalizeOllamaRoot(raw) {
+    let text = String(raw || "").trim().replace(/\/+$/, "");
+    if (!text) text = "http://127.0.0.1:11434";
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(text)) text = `http://${text}`;
+    return text;
+  }
+  function applyOllamaModelOptions(select, models, previous, statusEl, note) {
+    select.replaceChildren();
+    if (!models.length) {
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = "No models found — pull one in Ollama first";
+      select.appendChild(empty);
+      if (statusEl) statusEl.textContent = note || "Reached Ollama, but no models are installed.";
+      return;
     }
-    if (ollamaRefreshBtn) ollamaRefreshBtn.disabled = true;
+    for (const name of models) {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name === previous ? `${name} (current)` : name;
+      if (name === previous) option.selected = true;
+      select.appendChild(option);
+    }
+    if (previous && !models.includes(previous)) {
+      const keep = document.createElement("option");
+      keep.value = previous;
+      keep.textContent = `${previous} (saved — not on server)`;
+      keep.selected = true;
+      select.insertBefore(keep, select.firstChild);
+    }
+    if (statusEl) {
+      statusEl.textContent =
+        note ||
+        `Connected — ${models.length} model${models.length === 1 ? "" : "s"}.`;
+    }
+  }
+  async function listOllamaModelsFromBrowser(baseUrl) {
+    // Ollama on the Creo PC is often reachable from this browser even when the
+    // CreoPDM Linux host cannot resolve/route to that hostname.
+    const root = normalizeOllamaRoot(baseUrl);
+    const response = await fetch(`${root}/api/tags`, {
+      cache: "no-store",
+      mode: "cors",
+    });
+    if (!response.ok) {
+      throw new Error(`Ollama returned HTTP ${response.status} for ${root}/api/tags`);
+    }
+    const payload = await response.json();
+    const models = Array.isArray(payload?.models) ? payload.models : [];
+    const names = [];
+    const seen = new Set();
+    for (const item of models) {
+      const name = String(item?.name || item?.model || "").trim();
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      names.push(name);
+    }
+    names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    return { base_url: root, models: names };
+  }
+  async function refreshOllamaModels() {
+    const urlInput = $("#ollama-base-url");
+    const modelSelect = $("#ollama-model");
+    const statusEl = $("#ollama-status");
+    const refreshBtn = $("#ollama-refresh-models");
+    if (!modelSelect || !urlInput) return;
+    const baseUrl = String(urlInput.value || "").trim();
+    const saved = String(modelSelect.dataset.savedModel || "").trim();
+    const previous = String(modelSelect.value || "").trim() || saved;
+    showError($("#settings-error"), "");
+    if (statusEl) {
+      statusEl.textContent = "Contacting Ollama via CreoPDM server…";
+      statusEl.classList.remove("error");
+    }
+    if (refreshBtn) refreshBtn.disabled = true;
+    let serverMessage = "";
     try {
-      const qs = baseUrl
-        ? `?base_url=${encodeURIComponent(baseUrl)}`
-        : "";
+      const qs = baseUrl ? `?base_url=${encodeURIComponent(baseUrl)}` : "";
       const response = await fetch(`/api/settings/ai/ollama/models${qs}`, {
         credentials: "same-origin",
         cache: "no-store",
       });
-      if (!response.ok) {
-        const message = await readError(response);
-        if (ollamaStatus) {
-          ollamaStatus.textContent = message || "Could not reach Ollama.";
-          ollamaStatus.classList.add("error");
-        }
+      if (response.ok) {
+        const payload = await response.json();
+        const models = Array.isArray(payload?.models) ? payload.models.map(String) : [];
+        applyOllamaModelOptions(
+          modelSelect,
+          models,
+          previous,
+          statusEl,
+          `Server reached ${payload?.base_url || baseUrl} — ${models.length} model${models.length === 1 ? "" : "s"}.`
+        );
         return;
       }
-      const payload = await response.json();
-      const models = Array.isArray(payload?.models) ? payload.models.map(String) : [];
-      ollamaModelSelect.replaceChildren();
-      if (!models.length) {
-        const empty = document.createElement("option");
-        empty.value = "";
-        empty.textContent = "No models found — pull one in Ollama first";
-        ollamaModelSelect.appendChild(empty);
-        if (ollamaStatus) {
-          ollamaStatus.textContent = `Reached ${payload?.base_url || baseUrl}, but no models are installed.`;
-        }
-        return;
-      }
-      for (const name of models) {
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = name === previous ? `${name} (current)` : name;
-        if (name === previous) option.selected = true;
-        ollamaModelSelect.appendChild(option);
-      }
-      if (previous && !models.includes(previous)) {
-        const keep = document.createElement("option");
-        keep.value = previous;
-        keep.textContent = `${previous} (saved — not on server)`;
-        keep.selected = true;
-        ollamaModelSelect.insertBefore(keep, ollamaModelSelect.firstChild);
-      }
-      if (ollamaStatus) {
-        ollamaStatus.textContent = `Connected to ${payload?.base_url || baseUrl} — ${models.length} model${models.length === 1 ? "" : "s"}.`;
-      }
+      serverMessage = (await readError(response)) || `Server probe failed (HTTP ${response.status}).`;
     } catch (err) {
-      if (ollamaStatus) {
-        ollamaStatus.textContent = String(err?.message || err || "Could not reach Ollama.");
-        ollamaStatus.classList.add("error");
+      serverMessage = String(err?.message || err || "Server probe failed.");
+    }
+    if (statusEl) {
+      statusEl.textContent = `${serverMessage} Trying this browser…`;
+      statusEl.classList.remove("error");
+    }
+    try {
+      const payload = await listOllamaModelsFromBrowser(baseUrl);
+      applyOllamaModelOptions(
+        modelSelect,
+        payload.models,
+        previous,
+        statusEl,
+        `Browser reached ${payload.base_url} — ${payload.models.length} model${payload.models.length === 1 ? "" : "s"} (CreoPDM server could not). Save still stores the URL for later server-side use.`
+      );
+    } catch (err) {
+      const browserMessage = String(err?.message || err || "Browser could not reach Ollama.");
+      const combined =
+        `${serverMessage} Browser fallback also failed: ${browserMessage}. ` +
+        "On the CreoPDM host, test: curl -sS -m 5 http://michael-desktop:11434/api/tags — " +
+        "and on this PC: curl.exe -sS http://127.0.0.1:11434/api/tags";
+      if (statusEl) {
+        statusEl.textContent = combined;
+        statusEl.classList.add("error");
       }
+      showError($("#settings-error"), combined);
     } finally {
-      if (ollamaRefreshBtn) ollamaRefreshBtn.disabled = false;
+      if (refreshBtn) refreshBtn.disabled = false;
     }
   }
-  ollamaRefreshBtn?.addEventListener("click", () => {
+  $("#ollama-refresh-models")?.addEventListener("click", () => {
     void refreshOllamaModels();
   });
   if (ollamaSettings) {
