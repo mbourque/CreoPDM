@@ -98,10 +98,10 @@ def test_home_page(client):
     assert "push169" not in text
     assert "export3" not in text
     assert "compact-busy" not in text
-    assert "/client/app.js?v=" in text and "settings-hub" in text
+    assert "/client/app.js?v=" in text and "compare-hl" in text
     assert 'id="creo-connecting-overlay"' in text
     assert "Connecting to Creo…" in text
-    assert "/static/css/app.css?v=" in text and "creo-connecting" in text
+    assert "/static/css/app.css?v=" in text and "compare-hl" in text
     assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "folder | urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read()

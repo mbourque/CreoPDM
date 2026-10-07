@@ -1726,16 +1726,48 @@ body.is-file-drag #file-drop-overlay {
 .ai-snapshot-body {
   display: block;
   margin: 0;
-  padding: 0.75rem;
+  padding: 0;
   overflow: visible !important;
   max-height: none !important;
-  white-space: pre-wrap;
+  white-space: normal;
   word-break: break-word;
   background: transparent;
   border: 0;
   border-radius: 0;
   font-size: 0.8rem;
   line-height: 1.35;
+}
+/* GitHub-style side-by-side: match / removed / changed / added (new). */
+.ai-snapshot-line {
+  display: block;
+  margin: 0;
+  padding: 0 0.75rem;
+  min-height: 1.35em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-sizing: border-box;
+}
+.ai-snapshot-line--same {
+  background: #e6ffec; /* light green — matching lines */
+}
+.ai-snapshot-line--removed {
+  background: #ffebe9; /* light red — removed on OLD */
+}
+.ai-snapshot-line--changed {
+  background: #fff8c5; /* yellow — line changed */
+}
+.ai-snapshot-line--added {
+  background: #ddf4ff; /* light blue — new on NEW */
+}
+.ai-snapshot-line--empty {
+  background: #f6f8fa; /* spacer opposite a remove/add */
+  color: transparent;
+}
+.ai-snapshot-line--plain {
+  background: transparent;
+  padding: 0.75rem;
+  color: inherit;
+  white-space: pre-wrap;
 }
 .detail .kv {
   display: grid;

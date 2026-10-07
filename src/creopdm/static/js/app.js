@@ -11841,6 +11841,146 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return `=== ${role} snapshot (${rev}) ===\n${text}`;
   }
 
+  function splitAiSnapshotLines(text) {
+    return String(text || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n");
+  }
+
+  function buildAiSnapshotLineDiff(oldLines, newLines) {
+    /**
+     * Side-by-side line ops (GitHub-style):
+     * same | removed | added | changed (paired delete+insert).
+     */
+    const a = Array.isArray(oldLines) ? oldLines : [];
+    const b = Array.isArray(newLines) ? newLines : [];
+    const m = a.length;
+    const n = b.length;
+    const ops = [];
+    if (m * n > 250_000) {
+      const limit = Math.max(m, n);
+      for (let i = 0; i < limit; i += 1) {
+        const left = i < m ? a[i] : null;
+        const right = i < n ? b[i] : null;
+        if (left !== null && right !== null) {
+          ops.push(
+            left === right
+              ? { type: "same", oldText: left, newText: right }
+              : { type: "changed", oldText: left, newText: right }
+          );
+        } else if (left !== null) {
+          ops.push({ type: "removed", oldText: left, newText: "" });
+        } else {
+          ops.push({ type: "added", oldText: "", newText: right });
+        }
+      }
+      return ops;
+    }
+    const dp = Array.from({ length: m + 1 }, () => new Uint32Array(n + 1));
+    for (let i = m - 1; i >= 0; i -= 1) {
+      for (let j = n - 1; j >= 0; j -= 1) {
+        dp[i][j] =
+          a[i] === b[j]
+            ? dp[i + 1][j + 1] + 1
+            : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    let i = 0;
+    let j = 0;
+    while (i < m && j < n) {
+      if (a[i] === b[j]) {
+        ops.push({ type: "same", oldText: a[i], newText: b[j] });
+        i += 1;
+        j += 1;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        ops.push({ type: "removed", oldText: a[i], newText: "" });
+        i += 1;
+      } else {
+        ops.push({ type: "added", oldText: "", newText: b[j] });
+        j += 1;
+      }
+    }
+    while (i < m) {
+      ops.push({ type: "removed", oldText: a[i], newText: "" });
+      i += 1;
+    }
+    while (j < n) {
+      ops.push({ type: "added", oldText: "", newText: b[j] });
+      j += 1;
+    }
+    // Pair adjacent removed+added runs into yellow "changed" rows.
+    const merged = [];
+    let k = 0;
+    while (k < ops.length) {
+      if (ops[k].type === "removed") {
+        const removed = [];
+        while (k < ops.length && ops[k].type === "removed") {
+          removed.push(ops[k]);
+          k += 1;
+        }
+        const added = [];
+        while (k < ops.length && ops[k].type === "added") {
+          added.push(ops[k]);
+          k += 1;
+        }
+        const pairs = Math.min(removed.length, added.length);
+        for (let p = 0; p < pairs; p += 1) {
+          merged.push({
+            type: "changed",
+            oldText: removed[p].oldText,
+            newText: added[p].newText,
+          });
+        }
+        for (let p = pairs; p < removed.length; p += 1) merged.push(removed[p]);
+        for (let p = pairs; p < added.length; p += 1) merged.push(added[p]);
+        continue;
+      }
+      merged.push(ops[k]);
+      k += 1;
+    }
+    return merged;
+  }
+
+  function paintAiSnapshotLine(el, kind, text) {
+    el.className = `ai-snapshot-line ai-snapshot-line--${kind}`;
+    const value = text == null || text === "" ? "\u00a0" : String(text);
+    el.textContent = value;
+  }
+
+  function renderAiSnapshotDiffBodies(textA, textB) {
+    const bodyA = $("#ai-snapshot-body-a");
+    const bodyB = $("#ai-snapshot-body-b");
+    if (!bodyA || !bodyB) return;
+    const rows = buildAiSnapshotLineDiff(
+      splitAiSnapshotLines(textA),
+      splitAiSnapshotLines(textB)
+    );
+    const fragA = document.createDocumentFragment();
+    const fragB = document.createDocumentFragment();
+    rows.forEach((row) => {
+      const elA = document.createElement("div");
+      const elB = document.createElement("div");
+      if (row.type === "same") {
+        paintAiSnapshotLine(elA, "same", row.oldText);
+        paintAiSnapshotLine(elB, "same", row.newText);
+      } else if (row.type === "removed") {
+        paintAiSnapshotLine(elA, "removed", row.oldText);
+        paintAiSnapshotLine(elB, "empty", "");
+      } else if (row.type === "added") {
+        paintAiSnapshotLine(elA, "empty", "");
+        paintAiSnapshotLine(elB, "added", row.newText);
+      } else {
+        paintAiSnapshotLine(elA, "changed", row.oldText);
+        paintAiSnapshotLine(elB, "changed", row.newText);
+      }
+      fragA.appendChild(elA);
+      fragB.appendChild(elB);
+    });
+    bodyA.replaceChildren(fragA);
+    bodyB.replaceChildren(fragB);
+  }
+
   function syncAiSnapshotScrollLayout() {
     const rail = $("#ai-snapshot-scroll");
     const spacer = $("#ai-snapshot-scroll-spacer");
@@ -11896,41 +12036,95 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return payload;
   }
 
-  async function renderAiSnapshotPane(pane, objectId) {
-    const select = $(`#ai-snapshot-rev-${pane}`);
-    const body = $(`#ai-snapshot-body-${pane}`);
-    const copyBtn = $(`#ai-snapshot-copy-${pane}`);
-    if (!select || !body) return;
-    const versionId = String(select.value || "").trim();
-    const label = select.selectedOptions?.[0]?.textContent || versionId;
-    if (!versionId) {
-      body.textContent = "No revisions yet.";
-      if (copyBtn) copyBtn.disabled = true;
+  async function renderAiSnapshotCompare(objectId) {
+    const selectA = $("#ai-snapshot-rev-a");
+    const selectB = $("#ai-snapshot-rev-b");
+    const bodyA = $("#ai-snapshot-body-a");
+    const bodyB = $("#ai-snapshot-body-b");
+    const copyA = $("#ai-snapshot-copy-a");
+    const copyB = $("#ai-snapshot-copy-b");
+    if (!selectA || !selectB || !bodyA || !bodyB) return;
+
+    const versionA = String(selectA.value || "").trim();
+    const versionB = String(selectB.value || "").trim();
+    const labelA = selectA.selectedOptions?.[0]?.textContent || versionA;
+    const labelB = selectB.selectedOptions?.[0]?.textContent || versionB;
+
+    const setPlain = (body, copyBtn, text, copyable) => {
+      body.replaceChildren();
+      const el = document.createElement("div");
+      el.className = "ai-snapshot-line ai-snapshot-line--plain";
+      el.textContent = text;
+      body.appendChild(el);
+      if (copyBtn) {
+        copyBtn.disabled = !copyable;
+        if (copyable) copyBtn.dataset.copyText = text;
+        else delete copyBtn.dataset.copyText;
+      }
+    };
+
+    if (!versionA || !versionB) {
+      setPlain(bodyA, copyA, versionA ? "Loading…" : "No revisions yet.", false);
+      setPlain(bodyB, copyB, versionB ? "Loading…" : "No revisions yet.", false);
       return;
     }
-    body.textContent = "Loading…";
-    if (copyBtn) copyBtn.disabled = true;
-    try {
-      const row = await fetchAiSnapshotOutline(objectId, versionId);
-      if (!row || !row.outline) {
-        body.textContent = aiSnapshotEmptyMessage(label);
-        if (copyBtn) copyBtn.disabled = true;
-        return;
-      }
-      const role = aiSnapshotPaneRole(pane);
-      const text = formatAiSnapshotOutlineDisplay(
-        role,
-        row.displayRevision || label,
-        row.outline
+
+    setPlain(bodyA, copyA, "Loading…", false);
+    setPlain(bodyB, copyB, "Loading…", false);
+
+    const [resA, resB] = await Promise.allSettled([
+      fetchAiSnapshotOutline(objectId, versionA),
+      fetchAiSnapshotOutline(objectId, versionB),
+    ]);
+    const rowA = resA.status === "fulfilled" ? resA.value : null;
+    const rowB = resB.status === "fulfilled" ? resB.value : null;
+    const errA = resA.status === "rejected" ? resA.reason : null;
+    const errB = resB.status === "rejected" ? resB.reason : null;
+
+    if (errA) {
+      setPlain(
+        bodyA,
+        copyA,
+        `Could not load snapshot (${errA?.message || "error"}).`,
+        false
       );
-      body.textContent = text;
-      if (copyBtn) {
-        copyBtn.disabled = false;
-        copyBtn.dataset.copyText = text;
-      }
-    } catch (err) {
-      body.textContent = `Could not load snapshot (${err?.message || "error"}).`;
-      if (copyBtn) copyBtn.disabled = true;
+    }
+    if (errB) {
+      setPlain(
+        bodyB,
+        copyB,
+        `Could not load snapshot (${errB?.message || "error"}).`,
+        false
+      );
+    }
+    if (errA || errB) return;
+
+    if (!rowA || !rowA.outline) {
+      setPlain(bodyA, copyA, aiSnapshotEmptyMessage(labelA), false);
+    }
+    if (!rowB || !rowB.outline) {
+      setPlain(bodyB, copyB, aiSnapshotEmptyMessage(labelB), false);
+    }
+    if (!rowA?.outline || !rowB?.outline) return;
+
+    const textA = formatAiSnapshotOutlineDisplay(
+      "OLD",
+      rowA.displayRevision || labelA,
+      rowA.outline
+    );
+    const textB = formatAiSnapshotOutlineDisplay(
+      "NEW",
+      rowB.displayRevision || labelB,
+      rowB.outline
+    );
+    renderAiSnapshotDiffBodies(textA, textB);
+    if (copyA) {
+      copyA.disabled = false;
+      copyA.dataset.copyText = textA;
+    }
+    if (copyB) {
+      copyB.disabled = false;
+      copyB.dataset.copyText = textB;
     }
   }
 
@@ -11986,10 +12180,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         aiSnapshotCompareVersions[0]?.version_id,
         null
       );
-      await Promise.all([
-        renderAiSnapshotPane("a", objectId),
-        renderAiSnapshotPane("b", objectId),
-      ]);
+      await renderAiSnapshotCompare(objectId);
       resetAiSnapshotScroll();
     } catch (err) {
       const body = $("#ai-snapshot-body-a");
@@ -12133,10 +12324,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           selectB?.value,
           pane === "a" ? "old" : "new"
         );
-        void Promise.all([
-          renderAiSnapshotPane("a", objectId),
-          renderAiSnapshotPane("b", objectId),
-        ]).then(() => resetAiSnapshotScroll());
+        void renderAiSnapshotCompare(objectId).then(() => resetAiSnapshotScroll());
       });
       $(`#ai-snapshot-copy-${pane}`)?.addEventListener("click", async () => {
         const btn = $(`#ai-snapshot-copy-${pane}`);

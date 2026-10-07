@@ -139,6 +139,13 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert 'labelA.textContent = "OLD"' in script
     assert 'labelB.textContent = "NEW"' in script
     assert "function formatAiSnapshotOutlineDisplay(" in script
+    assert "function buildAiSnapshotLineDiff(" in script
+    assert "function renderAiSnapshotDiffBodies(" in script
+    assert "async function renderAiSnapshotCompare(" in script
+    assert 'type: "same"' in script
+    assert 'type: "removed"' in script
+    assert 'type: "added"' in script
+    assert 'type: "changed"' in script
     assert "async function fetchAiSnapshotOutline(" in script
     assert "=== ${role} snapshot (${rev}) ===" in script
     assert "function syncAiSnapshotScrollLayout(" in script
@@ -203,6 +210,14 @@ def test_snapshot_tab_template_and_docs():
     assert "flex-direction: row" in css
     assert "flex: 0 0 16px" in css
     assert "IDE-style diff" in css
+    assert ".ai-snapshot-line--same" in css
+    assert ".ai-snapshot-line--removed" in css
+    assert ".ai-snapshot-line--changed" in css
+    assert ".ai-snapshot-line--added" in css
+    assert "#e6ffec" in css  # match
+    assert "#ffebe9" in css  # removed
+    assert "#fff8c5" in css  # changed
+    assert "#ddf4ff" in css  # new/added
     assert 'id="ai-snapshot-rev-a"' in html
     assert 'id="ai-snapshot-rev-b"' in html
     assert 'id="ai-snapshot-label-a"' in html
@@ -214,9 +229,12 @@ def test_snapshot_tab_template_and_docs():
     assert 'id="ai-snapshot-ai-answer"' in html
     assert 'id="ai-snapshot-ask-row" hidden' in html
     assert "plain text, not JSON" in html
+    assert "light green" in html and "light blue" in html
     assert "Compare Revisions" in docs
     assert "two or more" in docs.lower() and "snapshot" in docs.lower()
     assert "OLD" in docs and "NEW" in docs
+    assert "light green" in docs and "light blue" in docs
+    assert "yellow" in docs
     assert "Ask AI what changed" in docs
     assert "outline" in docs.lower()
     assert "not raw JSON" in docs or "not JSON" in docs
