@@ -11751,10 +11751,74 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   let aiSnapshotListCache = null;
   const aiSnapshotOutlineByVersion = new Map();
+  /** Newest-first revisions that have snapshots (Compare Revisions dropdowns). */
+  let aiSnapshotCompareVersions = [];
 
   function clearAiSnapshotClientCache() {
     aiSnapshotListCache = null;
     aiSnapshotOutlineByVersion.clear();
+    aiSnapshotCompareVersions = [];
+  }
+
+  function aiSnapshotCompareIndex(versionId) {
+    const id = String(versionId || "").trim();
+    if (!id) return -1;
+    return aiSnapshotCompareVersions.findIndex(
+      (item) => String(item.version_id || "") === id
+    );
+  }
+
+  function fillAiSnapshotOrderedSelects(preferOldId, preferNewId, changed) {
+    /**
+     * API list is newest-first, so smaller index = newer revision.
+     * OLD may only pick indexes > NEW; NEW may only pick indexes < OLD.
+     */
+    const selectA = $("#ai-snapshot-rev-a");
+    const selectB = $("#ai-snapshot-rev-b");
+    const n = aiSnapshotCompareVersions.length;
+    if (!selectA || !selectB || n < 2) return;
+
+    let newIdx = aiSnapshotCompareIndex(preferNewId);
+    let oldIdx = aiSnapshotCompareIndex(preferOldId);
+    if (newIdx < 0) newIdx = 0;
+    if (oldIdx < 0) oldIdx = Math.min(1, n - 1);
+
+    if (newIdx >= oldIdx) {
+      if (changed === "new") {
+        oldIdx = Math.min(newIdx + 1, n - 1);
+      } else if (changed === "old") {
+        newIdx = Math.max(oldIdx - 1, 0);
+      } else {
+        newIdx = 0;
+        oldIdx = 1;
+      }
+    }
+    if (newIdx >= oldIdx) {
+      newIdx = 0;
+      oldIdx = 1;
+    }
+
+    const fill = (select, allowedIndexes, selectedIdx) => {
+      select.replaceChildren();
+      allowedIndexes.forEach((idx) => {
+        const item = aiSnapshotCompareVersions[idx];
+        if (!item) return;
+        const option = document.createElement("option");
+        option.value = String(item.version_id || "");
+        option.textContent = String(item.display_revision || option.value);
+        select.appendChild(option);
+      });
+      const selected = aiSnapshotCompareVersions[selectedIdx];
+      if (selected) select.value = String(selected.version_id || "");
+    };
+
+    const oldAllowed = [];
+    for (let i = newIdx + 1; i < n; i += 1) oldAllowed.push(i);
+    const newAllowed = [];
+    for (let i = 0; i < oldIdx; i += 1) newAllowed.push(i);
+
+    fill(selectA, oldAllowed, oldIdx);
+    fill(selectB, newAllowed, newIdx);
   }
 
   function aiSnapshotEmptyMessage(displayRevision) {
@@ -11895,10 +11959,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         ? aiSnapshotListCache.items
         : [];
       // API lists newest-first. Defaults: NEW = latest snap, OLD = one prior.
-      const withSnap = items.filter((item) => item && item.has_snapshot);
-      const canCompare = withSnap.length >= 2;
-      const newerSnap = withSnap[0] || null;
-      const olderSnap = withSnap.length >= 2 ? withSnap[1] : null;
+      // OLD dropdown never lists a revision newer than NEW (and vice versa).
+      aiSnapshotCompareVersions = items.filter((item) => item && item.has_snapshot);
+      const canCompare = aiSnapshotCompareVersions.length >= 2;
       if (compare) compare.dataset.mode = "compare";
       const askRow = $("#ai-snapshot-ask-row");
       if (askRow) askRow.hidden = !canCompare || !aiFeaturesEnabled();
@@ -11918,26 +11981,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (labelB) labelB.textContent = "NEW";
       selectA.setAttribute("aria-label", "OLD snapshot revision");
       selectB.setAttribute("aria-label", "NEW snapshot revision");
-      const fillSelect = (select, preferredVersionId) => {
-        select.replaceChildren();
-        items.forEach((item) => {
-          const option = document.createElement("option");
-          option.value = String(item.version_id || "");
-          const rev = String(item.display_revision || option.value);
-          option.textContent = item.has_snapshot ? rev : `${rev} (no snapshot)`;
-          select.appendChild(option);
-        });
-        delete select.dataset.userPicked;
-        const prefer = String(preferredVersionId || "").trim();
-        if (prefer && items.some((item) => String(item.version_id) === prefer)) {
-          select.value = prefer;
-          return;
-        }
-        select.value = String(items[0].version_id || "");
-      };
-      // Always useful defaults: NEW = newest snapshot, OLD = previous snapshot.
-      fillSelect(selectA, olderSnap?.version_id);
-      fillSelect(selectB, newerSnap?.version_id);
+      fillAiSnapshotOrderedSelects(
+        aiSnapshotCompareVersions[1]?.version_id,
+        aiSnapshotCompareVersions[0]?.version_id,
+        null
+      );
       await Promise.all([
         renderAiSnapshotPane("a", objectId),
         renderAiSnapshotPane("b", objectId),
@@ -12078,9 +12126,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const objectId = String(panel.dataset.objectId || "").trim();
     ["a", "b"].forEach((pane) => {
       $(`#ai-snapshot-rev-${pane}`)?.addEventListener("change", () => {
-        const select = $(`#ai-snapshot-rev-${pane}`);
-        if (select) select.dataset.userPicked = "1";
-        void renderAiSnapshotPane(pane, objectId).then(() => resetAiSnapshotScroll());
+        const selectA = $("#ai-snapshot-rev-a");
+        const selectB = $("#ai-snapshot-rev-b");
+        fillAiSnapshotOrderedSelects(
+          selectA?.value,
+          selectB?.value,
+          pane === "a" ? "old" : "new"
+        );
+        void Promise.all([
+          renderAiSnapshotPane("a", objectId),
+          renderAiSnapshotPane("b", objectId),
+        ]).then(() => resetAiSnapshotScroll());
       });
       $(`#ai-snapshot-copy-${pane}`)?.addEventListener("click", async () => {
         const btn = $(`#ai-snapshot-copy-${pane}`);

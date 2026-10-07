@@ -123,7 +123,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert 'document.execCommand("copy")' in script
     assert "Creo's embedded browser often lacks navigator.clipboard" in script
     assert 'name === "compare-revisions"' in script
-    assert "withSnap.length >= 2" in script
+    assert "aiSnapshotCompareVersions.length >= 2" in script
     assert 'dataset.mode = "compare"' in script
     assert "await copyTextToClipboard(text)" in script
     # Must not bail out silently when Clipboard API is missing (Creo embedded).
@@ -131,10 +131,11 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "materials: ai.materials" in script
     assert "units: ai.units" in script
     assert "family_table: ai.family_table" in script
-    # Defaults: NEW = latest snap, OLD = one prior.
+    # Defaults: NEW = latest snap, OLD = one prior; dropdowns cannot invert order.
     assert "NEW = latest snap, OLD = one prior" in script
-    assert "fillSelect(selectA, olderSnap?.version_id)" in script
-    assert "fillSelect(selectB, newerSnap?.version_id)" in script
+    assert "function fillAiSnapshotOrderedSelects(" in script
+    assert "OLD may only pick indexes > NEW" in script
+    assert 'pane === "a" ? "old" : "new"' in script
     assert 'labelA.textContent = "OLD"' in script
     assert 'labelB.textContent = "NEW"' in script
     assert "function formatAiSnapshotOutlineDisplay(" in script
