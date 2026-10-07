@@ -2215,7 +2215,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     try {
       let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
       if (!filePath) {
-        filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
+        filePath = (await prepareLocalPathForMetadata(target.uuid, target.filename)) || "";
       }
       if (!filePath) {
         return { ok: false, reason: "materialize_failed" };
@@ -2350,6 +2350,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     let shouldRefreshList = false;
     const pendingErase = [];
     try {
+      // Fresh runs: parts/asms before drawings so companions land before .drw Retrieve.
+      // Do not re-order mid-resume (index would point at the wrong file).
+      if (index === 0 && targets.length > 1) {
+        const sorted = sortMetadataCollectTargets(targets);
+        targets.splice(0, targets.length, ...sorted);
+        state.targets = targets;
+      }
       if (state.productId) {
         setBusyMessage("Checking local workspace tips…");
         await attachCollectLocalPaths(state.productId, targets);
@@ -2472,15 +2479,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     const rows = await ensureProductObjects(productId, { force: true });
-    const targets = (Array.isArray(rows) ? rows : [])
-      .map((row) => ({
-        uuid: String(row.uuid || "").trim(),
-        filename: String(row.filename || "").trim(),
-        path: "",
-        relativePath: String(row.relative_path || "").trim(),
-        versionId: String(row.current_version?.uuid || row.version_id || "").trim(),
-      }))
-      .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename));
+    const targets = sortMetadataCollectTargets(
+      (Array.isArray(rows) ? rows : [])
+        .map((row) => ({
+          uuid: String(row.uuid || "").trim(),
+          filename: String(row.filename || "").trim(),
+          path: "",
+          relativePath: String(row.relative_path || "").trim(),
+          versionId: String(row.current_version?.uuid || row.version_id || "").trim(),
+        }))
+        .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename))
+    );
     if (!targets.length) {
       showOk("No Creo parts, assemblies, or drawings to capture.");
       return;
@@ -6625,23 +6634,59 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return /\.(prt|asm|drw|frm|mfg|lay|sec|dgm|rep)$/i.test(logical);
   }
 
+  function metadataCollectLogicalName(filename) {
+    return String(filename || "")
+      .trim()
+      .replace(/\.(\d+)$/i, "")
+      .toLowerCase();
+  }
+
+  function metadataCollectRank(filename) {
+    // Parts first, assemblies next, drawings last — Creo Retrieve of a .drw
+    // needs referenced .prt/.asm already in the workspace folder (otherwise
+    // "Model X.PRT is not in this directory").
+    const logical = metadataCollectLogicalName(filename);
+    if (logical.endsWith(".drw") || logical.endsWith(".frm")) return 2;
+    if (logical.endsWith(".asm")) return 1;
+    return 0;
+  }
+
+  function metadataNeedsOpenDependencies(filename) {
+    const logical = metadataCollectLogicalName(filename);
+    return logical.endsWith(".drw") || logical.endsWith(".frm");
+  }
+
+  function sortMetadataCollectTargets(targets) {
+    const list = Array.isArray(targets) ? targets.slice() : [];
+    list.sort((a, b) => {
+      const rankDiff = metadataCollectRank(a?.filename) - metadataCollectRank(b?.filename);
+      if (rankDiff !== 0) return rankDiff;
+      return String(a?.filename || "").localeCompare(String(b?.filename || ""), undefined, {
+        sensitivity: "base",
+      });
+    });
+    return list;
+  }
+
   function looksLikeLocalWindowsPath(path) {
     const text = String(path || "").trim();
     return /^[a-zA-Z]:[\\/]/.test(text) || text.startsWith("\\\\");
   }
 
-  async function prepareLocalPathForMetadata(objectId) {
+  async function prepareLocalPathForMetadata(objectId, filename) {
     if (!objectId) return null;
     try {
-      // Tip only — Collect must not walk/materialize the full Where Used tree
-      // for every file (that made 900+ Collect runs feel stuck).
+      // Tip-only for parts/assemblies — Collect must not walk/materialize the
+      // full Where Used tree for every file (that made 900+ Collects feel stuck).
+      // Drawings still need referenced models beside them in the workspace.
+      const includeDependencies = metadataNeedsOpenDependencies(filename);
       const response = await fetch("/api/creo/open", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           object_id: objectId,
           launch: false,
-          include_dependencies: false,
+          include_dependencies: includeDependencies,
         }),
       });
       if (!response.ok) return null;
@@ -6769,14 +6814,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const sessionWaitMs = Math.max(50, Number(opts.sessionWaitMs) || 500);
     const featureNames = opts.featureNames !== false;
     const showProgress = opts.progress !== false;
-    const targets = (items || [])
-      .map((item) => ({
-        uuid: String(item?.uuid || item?.object_id || "").trim(),
-        filename: String(item?.filename || "").trim(),
-        path: String(item?.path || "").trim(),
-        versionId: String(item?.version_id || item?.current_version?.uuid || "").trim(),
-      }))
-      .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename));
+    const targets = sortMetadataCollectTargets(
+      (items || [])
+        .map((item) => ({
+          uuid: String(item?.uuid || item?.object_id || "").trim(),
+          filename: String(item?.filename || "").trim(),
+          path: String(item?.path || "").trim(),
+          versionId: String(item?.version_id || item?.current_version?.uuid || "").trim(),
+        }))
+        .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename))
+    );
     let saved = 0;
     if (!targets.length || !canGatherCreoMetadata()) return saved;
     for (let i = 0; i < targets.length; i += 1) {
@@ -6802,7 +6849,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       if (!snapshot && !sessionOnly) {
         let filePath = looksLikeLocalWindowsPath(target.path) ? target.path : "";
         if (!filePath) {
-          filePath = (await prepareLocalPathForMetadata(target.uuid)) || "";
+          filePath = (await prepareLocalPathForMetadata(target.uuid, target.filename)) || "";
         }
         if (!filePath) continue;
         snapshot = await gatherCreoMetadataForFilename(target.filename, filePath, {

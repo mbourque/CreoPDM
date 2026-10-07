@@ -388,9 +388,10 @@ def test_metadata_gear_items_require_creo_session():
     assert "No per-file JS timeout" in push
     assert "Promise.race" not in push
     assert "timedOut" not in loop
-    # Collect: tip-only prepare, warm-path skip, batched erase, refresh once at end.
+    # Collect: tip-only prepare for parts/asms, drawings get companions; parts before
+    # drawings (avoids Creo "Model X.PRT is not in this directory"); batched erase.
     assert 'gatherCreoMetadataForFilename(target.filename, "")' not in push
-    assert "prepareLocalPathForMetadata(target.uuid)" in push
+    assert "prepareLocalPathForMetadata(target.uuid, target.filename)" in push
     assert "featureNames: true" in loop
     assert "deferErase: true" in loop
     assert "attachCollectLocalPaths" in loop or "function attachCollectLocalPaths" in script
@@ -398,11 +399,19 @@ def test_metadata_gear_items_require_creo_session():
     assert "shouldRefreshList = captured > 0" in loop
     assert 'await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" })' in loop
     assert loop.index("metadataCollectJob.running = false") < loop.index("await reloadPage(")
+    assert "function sortMetadataCollectTargets(" in script
+    assert "function metadataCollectRank(" in script
+    assert "sortMetadataCollectTargets(" in loop
+    assert "parts first, assemblies next, drawings last" in docs
     prepare_meta = _between(
         script, "async function prepareLocalPathForMetadata(", "async function gatherCreoMetadataForFilename("
     )
-    assert "include_dependencies: false" in prepare_meta
+    assert "metadataNeedsOpenDependencies(filename)" in prepare_meta
+    assert "include_dependencies: includeDependencies" in prepare_meta
+    assert "include_dependencies: false" not in prepare_meta
     assert "include_dependencies: true" not in prepare_meta
+    assert 'logical.endsWith(".drw")' in script
+    assert "not in this directory" in script
     gather_meta = _between(
         script, "async function gatherCreoMetadataForFilename(", "async function pushCreoMetadataForItems("
     )
@@ -428,6 +437,8 @@ def test_metadata_gear_items_require_creo_session():
     push_items = _between(
         script, "async function pushCreoMetadataForItems(", "function metadataItemsFromOpenResult("
     )
+    assert "sortMetadataCollectTargets(" in push_items
+    assert "prepareLocalPathForMetadata(target.uuid, target.filename)" in push_items
     assert 'gatherCreoMetadataForFilename(target.filename, "", {' in push_items
     assert "featureNames," in push_items
     assert "Session first" in push_items
