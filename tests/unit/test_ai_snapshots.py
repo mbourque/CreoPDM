@@ -20,6 +20,8 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "function creoGatherFeatureDimensions(" in text
     assert "function creoGatherModelLevelDimensions(" in text
     assert "function creoListFeaturesForSnapshot(" in text
+    assert "function creoEnrichAiSnapshotFromMetadata(" in text
+    assert "creoEnrichAiSnapshotFromMetadata(ai_snapshot," in text
     # Configurator path: model.ListItems(ITEM_DIMENSION) + ListItems(ITEM_FEATURE).
     assert "ListItems(ITEM_DIMENSION)" in text or "ListItems(types[t])" in text
     assert "creoGatherModelLevelDimensions(solid, errors)" in text
@@ -31,6 +33,9 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "ListSubItems" in text
     assert "ITEM_DIMENSION" in text
     assert "ITEM_FEATURE" in text
+    assert 'snapshot.materials =' in text
+    assert "family_table" in text
+    assert '["angle", "UNIT_ANGLE"' in text
 
 
 def test_app_js_posts_ai_snapshot_soft_fail():
@@ -51,6 +56,9 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "await copyTextToClipboard(text)" in script
     # Must not bail out silently when Clipboard API is missing (Creo embedded).
     assert "!navigator.clipboard?.writeText" not in script
+    assert "materials: ai.materials" in script
+    assert "units: ai.units" in script
+    assert "family_table: ai.family_table" in script
 
 
 def test_snapshot_tab_template_and_docs():

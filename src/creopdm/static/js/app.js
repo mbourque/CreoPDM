@@ -6789,6 +6789,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         features: Array.isArray(ai.features) ? ai.features : [],
         dimensions: Array.isArray(ai.dimensions) ? ai.dimensions : [],
         parameters: Array.isArray(ai.parameters) ? ai.parameters : [],
+        materials: ai.materials && typeof ai.materials === "object" ? ai.materials : null,
+        units: ai.units && typeof ai.units === "object" ? ai.units : null,
+        family_table: ai.family_table && typeof ai.family_table === "object" ? ai.family_table : null,
         capture,
       },
     };

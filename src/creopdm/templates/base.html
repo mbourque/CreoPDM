@@ -1718,7 +1718,7 @@ function creoUnitName(unit) {
     return "";
 }
 function creoGatherUnits(model, dbg, session) {
-    var units = { system_name: "", length: "", mass: "", time: "", temperature: "" };
+    var units = { system_name: "", length: "", mass: "", time: "", temperature: "", angle: "" };
     try {
         var solidDbg = dbg ? (dbg.solid = dbg.solid || {}) : null;
         var solid = creoAsSolid(session, model, solidDbg);
@@ -1748,7 +1748,8 @@ function creoGatherUnits(model, dbg, session) {
             ["length", "UNIT_LENGTH", 0],
             ["mass", "UNIT_MASS", 1],
             ["time", "UNIT_TIME", 2],
-            ["temperature", "UNIT_TEMPERATURE", 3]
+            ["temperature", "UNIT_TEMPERATURE", 3],
+            ["angle", "UNIT_ANGLE", 4]
         ];
         for (var i = 0; i < typeKeys.length; i++) {
             var field = typeKeys[i][0];
@@ -2411,12 +2412,137 @@ function gatherAiModelSnapshot(model, session, filename, options) {
         features: features,
         dimensions: dimensions,
         parameters: parameters,
+        materials: null,
+        units: null,
+        family_table: null,
         capture: {
             status: status,
             errors: errors,
             assembly_context: null
         }
     };
+}
+function creoFeatureNameWeak(name) {
+    var text = String(name || "").trim();
+    if (!text) return true;
+    var lower = text.toLowerCase();
+    return lower === "no_name" || lower === "unnamed" || creoFeatureGenericLabel(text);
+}
+function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
+    /**
+     * Attach Overview/Materials/Parameters/Features-tab data the snapshot walk
+     * does not already own (materials, units, family table; better feature names).
+     */
+    if (!snapshot || typeof snapshot !== "object") return snapshot;
+    var m = meta && typeof meta === "object" ? meta : {};
+    if (m.materials && typeof m.materials === "object") {
+        snapshot.materials = {
+            current: m.materials.current != null ? m.materials.current : null,
+            names: Array.isArray(m.materials.names) ? m.materials.names.slice() : []
+        };
+    }
+    if (m.units && typeof m.units === "object") {
+        snapshot.units = m.units;
+        if (!snapshot.identity || typeof snapshot.identity !== "object") {
+            snapshot.identity = {};
+        }
+        var iu = snapshot.identity.units;
+        var emptyUnits = !iu
+            || (!String(iu.system_name || "").trim()
+                && !String(iu.length || "").trim()
+                && !String(iu.mass || "").trim());
+        if (emptyUnits) snapshot.identity.units = m.units;
+    }
+    if (m.family_table && typeof m.family_table === "object") {
+        snapshot.family_table = m.family_table;
+    }
+    // Merge Features-tab names/types into snapshot rows (same ids Creo assigns).
+    if (Array.isArray(m.features) && m.features.length) {
+        var byId = {};
+        var i;
+        for (i = 0; i < m.features.length; i++) {
+            var mf = m.features[i];
+            if (!mf || mf.id == null) continue;
+            byId[String(mf.id)] = mf;
+        }
+        if (!Array.isArray(snapshot.features)) snapshot.features = [];
+        var seenFeat = {};
+        for (i = 0; i < snapshot.features.length; i++) {
+            var sf = snapshot.features[i];
+            if (!sf || sf.id == null) continue;
+            seenFeat[String(sf.id)] = true;
+            var fromMeta = byId[String(sf.id)];
+            if (!fromMeta) continue;
+            if (creoFeatureNameWeak(sf.name) && fromMeta.name) {
+                sf.name = String(fromMeta.name);
+            }
+            if (!sf.type && fromMeta.type) sf.type = String(fromMeta.type);
+            if (!sf.subtype && fromMeta.subtype) sf.subtype = String(fromMeta.subtype);
+        }
+        for (i = 0; i < m.features.length; i++) {
+            var add = m.features[i];
+            if (!add || add.id == null || seenFeat[String(add.id)]) continue;
+            snapshot.features.push({
+                id: add.id,
+                name: String(add.name || ""),
+                type: String(add.type || ""),
+                subtype: String(add.subtype || ""),
+                status: null,
+                regen_order: null,
+                parent_ids: [],
+                group_id: null,
+                pattern_id: null
+            });
+        }
+    }
+    // Merge Parameters-tab model rows (owner=model) when snapshot missed a value.
+    if (Array.isArray(m.parameters) && m.parameters.length) {
+        if (!Array.isArray(snapshot.parameters)) snapshot.parameters = [];
+        var paramKey = {};
+        var p;
+        for (p = 0; p < snapshot.parameters.length; p++) {
+            var sp = snapshot.parameters[p];
+            if (!sp || !sp.name) continue;
+            paramKey[String(sp.owner || "model") + "\0" + String(sp.name).toUpperCase()] = sp;
+        }
+        for (p = 0; p < m.parameters.length; p++) {
+            var mp = m.parameters[p];
+            if (!mp || !mp.name) continue;
+            var key = "model\0" + String(mp.name).toUpperCase();
+            var existing = paramKey[key];
+            if (existing) {
+                if ((existing.value === "" || existing.value == null)
+                    && mp.value !== "" && mp.value != null) {
+                    existing.value = mp.value;
+                }
+                continue;
+            }
+            snapshot.parameters.push({
+                name: String(mp.name),
+                value: mp.value,
+                data_type: mp.data_type || null,
+                units: mp.units != null ? mp.units : null,
+                description: mp.description != null ? mp.description : null,
+                owner: "model"
+            });
+        }
+    }
+    // Dim units from principal length/angle when Creo left Units unbound.
+    if (snapshot.units && Array.isArray(snapshot.dimensions)) {
+        var lengthUnit = String(snapshot.units.length || "").trim() || null;
+        var angleUnit = String(snapshot.units.angle || "").trim() || null;
+        for (var di = 0; di < snapshot.dimensions.length; di++) {
+            var dim = snapshot.dimensions[di];
+            if (!dim || (dim.units != null && String(dim.units).trim())) continue;
+            var dt = String(dim.dim_type || "").toUpperCase();
+            if (dt.indexOf("ANGULAR") >= 0 || dt === "ANGLE") {
+                dim.units = angleUnit || lengthUnit;
+            } else {
+                dim.units = lengthUnit;
+            }
+        }
+    }
+    return snapshot;
 }
 function creoGatherFamilyTable(model) {
     var table = { columns: [], rows: [] };
@@ -2845,12 +2971,34 @@ function gatherModelMetadata(filename, filePath, options) {
                 features: [],
                 dimensions: [],
                 parameters: [],
+                materials: null,
+                units: null,
+                family_table: null,
                 capture: {
                     status: "error",
                     errors: ["gatherAiModelSnapshot: " + creoToolkitErr(errAi)],
                     assembly_context: null
                 }
             };
+        }
+        try {
+            // Materials / units / family table / Features-tab names come from the
+            // same metadata gathers as Overview — not re-walked for the snapshot.
+            ai_snapshot = creoEnrichAiSnapshotFromMetadata(ai_snapshot, {
+                features: features,
+                materials: materials,
+                parameters: parameters,
+                units: units,
+                family_table: family_table
+            });
+        } catch (errEnrich) {
+            try {
+                if (ai_snapshot && ai_snapshot.capture && Array.isArray(ai_snapshot.capture.errors)) {
+                    ai_snapshot.capture.errors.push(
+                        "enrich metadata: " + creoToolkitErr(errEnrich)
+                    );
+                }
+            } catch (errPush) {}
         }
         var eraseKeys = [];
         if (weRetrieved) {
