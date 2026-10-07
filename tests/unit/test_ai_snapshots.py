@@ -36,6 +36,9 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert 'snapshot.materials =' in text
     assert "family_table" in text
     assert '["angle", "UNIT_ANGLE"' in text
+    assert "function creoUnitsFromSnapshotParams(" in text
+    assert "PTC_UNITS_LENGTH" in text
+    assert "creoUnitsFromSnapshotParams(" in text
 
 
 def test_app_js_posts_ai_snapshot_soft_fail():

@@ -2428,6 +2428,41 @@ function creoFeatureNameWeak(name) {
     var lower = text.toLowerCase();
     return lower === "no_name" || lower === "unnamed" || creoFeatureGenericLabel(text);
 }
+function creoUnitsFromSnapshotParams(units, metaParams, snapParams) {
+    /** Fill empty principal-unit fields from PTC_UNITS_* parameters (Overview already has these). */
+    var out = units && typeof units === "object"
+        ? {
+            system_name: String(units.system_name || ""),
+            length: String(units.length || ""),
+            mass: String(units.mass || ""),
+            time: String(units.time || ""),
+            temperature: String(units.temperature || ""),
+            angle: String(units.angle || "")
+        }
+        : { system_name: "", length: "", mass: "", time: "", temperature: "", angle: "" };
+    var map = {
+        PTC_UNITS_LENGTH: "length",
+        PTC_UNITS_MASS: "mass",
+        PTC_UNITS_TIME: "time",
+        PTC_UNITS_TEMPERATURE: "temperature",
+        PTC_UNITS_SYSTEM_TYPE: "system_name"
+    };
+    function applyList(list) {
+        if (!Array.isArray(list)) return;
+        for (var i = 0; i < list.length; i++) {
+            var row = list[i];
+            if (!row || !row.name) continue;
+            var field = map[String(row.name).toUpperCase()];
+            if (!field || String(out[field] || "").trim()) continue;
+            var val = row.value;
+            if (val === "" || val == null) continue;
+            out[field] = String(val);
+        }
+    }
+    applyList(metaParams);
+    applyList(snapParams);
+    return out;
+}
 function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
     /**
      * Attach Overview/Materials/Parameters/Features-tab data the snapshot walk
@@ -2443,16 +2478,22 @@ function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
     }
     if (m.units && typeof m.units === "object") {
         snapshot.units = m.units;
-        if (!snapshot.identity || typeof snapshot.identity !== "object") {
-            snapshot.identity = {};
-        }
-        var iu = snapshot.identity.units;
-        var emptyUnits = !iu
-            || (!String(iu.system_name || "").trim()
-                && !String(iu.length || "").trim()
-                && !String(iu.mass || "").trim());
-        if (emptyUnits) snapshot.identity.units = m.units;
     }
+    // Silent Collect often leaves GetPrincipalUnits unbound — fall back to PTC_UNITS_*.
+    snapshot.units = creoUnitsFromSnapshotParams(
+        snapshot.units,
+        Array.isArray(m.parameters) ? m.parameters : null,
+        Array.isArray(snapshot.parameters) ? snapshot.parameters : null
+    );
+    if (!snapshot.identity || typeof snapshot.identity !== "object") {
+        snapshot.identity = {};
+    }
+    var iu = snapshot.identity.units;
+    var emptyUnits = !iu
+        || (!String(iu.system_name || "").trim()
+            && !String(iu.length || "").trim()
+            && !String(iu.mass || "").trim());
+    if (emptyUnits && snapshot.units) snapshot.identity.units = snapshot.units;
     if (m.family_table && typeof m.family_table === "object") {
         snapshot.family_table = m.family_table;
     }
