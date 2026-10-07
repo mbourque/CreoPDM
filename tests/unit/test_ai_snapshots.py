@@ -256,6 +256,8 @@ def test_snapshot_tab_template_and_docs():
     assert "FEATTYPE_COMPONENT" in docs
     assert "prepare_snapshot_for_compare" in docs
     assert "parts, assemblies, and drawings" in docs
+    assert "d258 = 95.461 in (Extrude)" in docs
+    assert "never the Creo feature id" in docs
     assert "Ask AI what changed" in docs
     assert "outline" in docs.lower()
     assert "not raw JSON" in docs or "not JSON" in docs
@@ -513,7 +515,8 @@ def test_snapshot_compare_prompt_requires_saved_text():
     newer_patterns = [f for f in slim_newer["features"] if f.get("name") == "PATTERN"]
     assert len(older_patterns) == 2
     assert len(newer_patterns) == 1
-    assert not any("id" in f for f in slim_older["features"])
+    # Keep feature id so dimension lines can show the owner **name**.
+    assert any(f.get("id") is not None for f in slim_older["features"])
     assert not any(
         str(f.get("name") or "").startswith("Feature ") for f in slim_older["features"]
     )
@@ -633,6 +636,53 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "Computed differences (authoritative)" in plate_prompt
     assert "pairing two different symbols" in plate_prompt
     assert "PATTERN 3" in plate_diff
+
+    # Dimension lines show owning feature **name**, never the Creo feature id.
+    dim_owner_snap = {
+        "identity": {"filename": "plate_3.prt", "model_type": "PART"},
+        "features": [
+            {"id": 4460, "name": "Extrude", "type": "PROTRUSION", "subtype": "Extrude"},
+            {"id": 5000, "name": "Hole 1", "type": "HOLE"},
+        ],
+        "dimensions": [
+            {
+                "symbol": "d258",
+                "value": 95.461,
+                "units": "in",
+                "feature_id": 4460,
+            },
+            {
+                "symbol": "d259",
+                "value": 21.7,
+                "units": "in",
+                "feature_id": 4460,
+            },
+            {
+                "symbol": "d300",
+                "value": 1,
+                "units": "in",
+                "feature_id": 5000,
+            },
+        ],
+    }
+    dim_owner_text = format_snapshot_compare_text(dim_owner_snap)
+    assert "d258 = 95.461 in (Extrude)" in dim_owner_text
+    assert "d259 = 21.7 in (Extrude)" in dim_owner_text
+    assert "d300 = 1 in (Hole 1)" in dim_owner_text
+    assert "(4460)" not in dim_owner_text
+    assert "feature_id" not in dim_owner_text
+    dim_owner_diff = format_snapshot_compare_diff_text(
+        dim_owner_snap,
+        {
+            **dim_owner_snap,
+            "dimensions": [
+                {"symbol": "d258", "value": 95.461, "units": "in", "feature_id": 4460},
+                {"symbol": "d259", "value": 21.7, "units": "in", "feature_id": 4460},
+            ],
+        },
+    )
+    assert "d300 = 1 in (Hole 1)" in dim_owner_diff
+    assert "(5000)" not in dim_owner_diff
 
     # Assemblies: Structure/BOM drives component add/remove (Features omit COMPONENT).
     asm_old = {

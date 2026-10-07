@@ -372,7 +372,83 @@ def _format_dim_value(value: Any) -> str:
     return str(value).strip()
 
 
-def _dimension_outline_line(dim: dict[str, Any]) -> str:
+def _norm_feature_id(value: Any) -> str | None:
+    if value is None or value == "":
+        return None
+    try:
+        return str(int(value))
+    except (TypeError, ValueError):
+        text = str(value).strip()
+        return text or None
+
+
+def _feature_id_label_map(snapshot: dict[str, Any]) -> dict[str, str]:
+    """Map Creo feature id → outline label for dimension owner parentheses."""
+    features_raw = (
+        snapshot.get("features") if isinstance(snapshot.get("features"), list) else []
+    )
+    labels: dict[str, str] = {}
+    features = _iter_compare_features(features_raw)
+    pattern_i = 0
+    for feat in features:
+        fid = _norm_feature_id(feat.get("id"))
+        if not fid:
+            continue
+        if _is_pattern_feature(feat):
+            pattern_i += 1
+            labels[fid] = _feature_display_name(feat, pattern_index=pattern_i)
+        else:
+            labels[fid] = _feature_display_name(feat)
+    # Dims on filtered members: inherit PATTERN / parent label when possible.
+    for feat in features_raw:
+        if not isinstance(feat, dict):
+            continue
+        fid = _norm_feature_id(feat.get("id"))
+        if not fid or fid in labels:
+            continue
+        parent = _norm_feature_id(feat.get("pattern_id"))
+        if parent and parent in labels:
+            labels[fid] = labels[parent]
+        else:
+            labels[fid] = _feature_display_name(feat)
+    return labels
+
+
+def _is_usable_feature_owner_label(label: str) -> bool:
+    """True for a human feature name — never a bare Creo feature id."""
+    text = str(label or "").strip()
+    if not text:
+        return False
+    if text.isdigit():
+        return False
+    if _PLACEHOLDER_FEATURE_NAME.match(text):
+        return False
+    return True
+
+
+def _dimension_owner_label(
+    dim: dict[str, Any],
+    feature_labels: dict[str, str] | None,
+) -> str:
+    """Resolve owning feature **name** (lookup by feature_id; never print the id)."""
+    if feature_labels:
+        fid = _norm_feature_id(dim.get("feature_id"))
+        if fid:
+            mapped = str(feature_labels.get(fid) or "").strip()
+            if _is_usable_feature_owner_label(mapped):
+                return mapped
+    for key in ("feature_name", "owner_name"):
+        text = str(dim.get(key) or "").strip()
+        if _is_usable_feature_owner_label(text):
+            return text
+    return ""
+
+
+def _dimension_outline_line(
+    dim: dict[str, Any],
+    *,
+    feature_labels: dict[str, str] | None = None,
+) -> str:
     symbol = str(dim.get("symbol") or "").strip()
     value = _format_dim_value(dim.get("value"))
     unit = str(dim.get("units") or "").strip()
@@ -385,6 +461,9 @@ def _dimension_outline_line(dim: dict[str, Any]) -> str:
         hi = limits.get("upper", limits.get("max"))
         if lo is not None and hi is not None:
             piece += f" (limits {_format_dim_value(lo)}–{_format_dim_value(hi)})"
+    owner = _dimension_owner_label(dim, feature_labels)
+    if owner:
+        piece += f" ({owner})"
     return piece
 
 
@@ -469,6 +548,8 @@ def format_snapshot_compare_diff_text(
                 display = new_entry[0] or old_entry[0]
                 comp_qty_changed.append(f"{display}: × {old_qty} → × {new_qty}")
 
+    older_feat_labels = _feature_id_label_map(older)
+    newer_feat_labels = _feature_id_label_map(newer)
     older_dims = {
         str(d.get("symbol") or "").strip(): d
         for d in _iter_compare_dimensions(
@@ -490,14 +571,19 @@ def format_snapshot_compare_diff_text(
         old_dim = older_dims.get(symbol)
         new_dim = newer_dims.get(symbol)
         if old_dim is not None and new_dim is None:
-            dim_removed.append(_dimension_outline_line(old_dim))
+            dim_removed.append(
+                _dimension_outline_line(old_dim, feature_labels=older_feat_labels)
+            )
         elif old_dim is None and new_dim is not None:
-            dim_added.append(_dimension_outline_line(new_dim))
+            dim_added.append(
+                _dimension_outline_line(new_dim, feature_labels=newer_feat_labels)
+            )
         elif old_dim is not None and new_dim is not None:
             if _dimension_compare_key(old_dim) != _dimension_compare_key(new_dim):
                 dim_changed.append(
-                    f"{symbol}: {_dimension_outline_line(old_dim).split(' = ', 1)[-1]} → "
-                    f"{_dimension_outline_line(new_dim).split(' = ', 1)[-1]}"
+                    f"{symbol}: "
+                    f"{_dimension_outline_line(old_dim, feature_labels=older_feat_labels).split(' = ', 1)[-1]} → "
+                    f"{_dimension_outline_line(new_dim, feature_labels=newer_feat_labels).split(' = ', 1)[-1]}"
                 )
 
     def _bullet_block(title: str, items: list[str]) -> list[str]:
@@ -627,6 +713,7 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
         out["features"] = []
         for f in _iter_compare_features(features):
             row = {
+                "id": f.get("id"),
                 "name": str(f.get("name") or "").strip() or None,
                 "type": str(f.get("type") or "").strip() or None,
                 "subtype": str(f.get("subtype") or "").strip() or None,
@@ -644,14 +731,15 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
         out["bom"] = _slim_bom_nodes(bom_nodes)
     dimensions = snapshot.get("dimensions")
     if isinstance(dimensions, list):
-        out["dimensions"] = [
-            {
+        out["dimensions"] = []
+        for d in _iter_compare_dimensions(dimensions):
+            row = {
                 "symbol": d.get("symbol"),
                 "value": d.get("value"),
                 "units": d.get("units"),
+                "feature_id": d.get("feature_id"),
             }
-            for d in _iter_compare_dimensions(dimensions)
-        ]
+            out["dimensions"].append({k: v for k, v in row.items() if v is not None})
     parameters = snapshot.get("parameters")
     if isinstance(parameters, list):
         out["parameters"] = [
@@ -803,23 +891,11 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
 
     dimensions = snapshot.get("dimensions")
     if isinstance(dimensions, list):
-        dim_lines: list[str] = []
-        for dim in _iter_compare_dimensions(dimensions):
-            symbol = str(dim.get("symbol") or "").strip()
-            value = _format_dim_value(dim.get("value"))
-            unit = str(dim.get("units") or "").strip()
-            piece = f"- {symbol} = {value}"
-            if unit:
-                piece += f" {unit}"
-            limits = dim.get("tolerance_limits")
-            if isinstance(limits, dict) and limits:
-                lo = limits.get("lower", limits.get("min"))
-                hi = limits.get("upper", limits.get("max"))
-                if lo is not None and hi is not None:
-                    piece += (
-                        f" (limits {_format_dim_value(lo)}–{_format_dim_value(hi)})"
-                    )
-            dim_lines.append(piece)
+        feat_labels = _feature_id_label_map(snapshot)
+        dim_lines = [
+            f"- {_dimension_outline_line(dim, feature_labels=feat_labels)}"
+            for dim in _iter_compare_dimensions(dimensions)
+        ]
         lines.append("Dimensions:")
         lines.extend(dim_lines or ["- (none)"])
 
