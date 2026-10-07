@@ -270,6 +270,10 @@ class AiSnapshotService:
             )
         return AiSnapshotListResponse(object_id=obj.uuid, items=items)
 
+    def count_with_snapshot(self, session: Session, object_uuid: str) -> int:
+        """How many History revisions have a saved AI snapshot (for Compare Revisions tab)."""
+        return sum(1 for item in self.list_for_object(session, object_uuid).items if item.has_snapshot)
+
     def _chat_compare(
         self,
         *,

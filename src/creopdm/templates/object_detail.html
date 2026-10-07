@@ -122,8 +122,8 @@
     {% if show_where_used %}
     <button type="button" class="tab" data-tab="where-used">Where Used</button>
     {% endif %}
-    {% if is_creo %}
-    <button type="button" class="tab" data-tab="snapshot">Snapshot</button>
+    {% if show_compare_revisions_tab %}
+    <button type="button" class="tab" data-tab="compare-revisions">Compare Revisions</button>
     {% endif %}
     <button type="button" class="tab" data-tab="history">History{% if workspace_pending %} · unsaved{% endif %}</button>
   </div>
@@ -480,17 +480,15 @@
   </section>
   {% endif %}
 
-  {% if is_creo %}
-  <section class="tab-panel" id="panel-snapshot" hidden
+  {% if show_compare_revisions_tab %}
+  <section class="tab-panel" id="panel-compare-revisions" hidden
            data-object-id="{{ object.uuid }}"
            data-tip-version="{{ object.current_version.uuid if object.current_version else '' }}">
     <p class="muted small">
-      Experimental per-revision model outline for AI change summaries
+      Side-by-side outlines for two revisions with saved snapshots
       (features or drawing views, dimensions, parameters, materials, units — plain text, not JSON).
-      Collect metadata in Creo while a version is tip to create or refresh it.
-      Check In can also Ask AI for a comment from tip vs the modified model.
-      Side-by-side compare appears only when two or more revisions have snapshots
-      (left = OLD, right = NEW — same labels Ask AI uses). Configure Ollama under Administration → AI.
+      Defaults to the latest snapshot on the right (NEW) and the one before it on the left (OLD).
+      One scrollbar scrolls both panes. Configure Ollama under Administration → AI for Ask AI.
     </p>
     <div class="ai-snapshot-ask-row" id="ai-snapshot-ask-row" hidden>
       <button type="button" class="btn btn-primary" id="ai-snapshot-ask-ai"
@@ -505,26 +503,43 @@
       </div>
       <div class="ai-snapshot-ai-answer-body" id="ai-snapshot-ai-answer-body" tabindex="0"></div>
     </div>
-    <div class="ai-snapshot-compare" id="ai-snapshot-compare" data-mode="single">
-      <div class="ai-snapshot-pane" data-pane="a">
-        <div class="ai-snapshot-toolbar">
+    <div class="ai-snapshot-compare" id="ai-snapshot-compare" data-mode="compare">
+      <div class="ai-snapshot-toolbars">
+        <div class="ai-snapshot-toolbar" data-pane="a">
           <label class="ai-snapshot-rev-label">
-            <span class="muted small" id="ai-snapshot-label-a">Revision</span>
-            <select id="ai-snapshot-rev-a" class="ai-snapshot-rev" aria-label="Snapshot revision"></select>
+            <span class="muted small" id="ai-snapshot-label-a">OLD</span>
+            <select id="ai-snapshot-rev-a" class="ai-snapshot-rev" aria-label="OLD snapshot revision"></select>
           </label>
-          <button type="button" class="btn" id="ai-snapshot-copy-a" disabled title="Copy snapshot outline to the clipboard">Copy</button>
+          <button type="button" class="btn" id="ai-snapshot-copy-a" disabled title="Copy OLD snapshot outline to the clipboard">Copy</button>
         </div>
-        <pre class="ai-snapshot-body mono" id="ai-snapshot-body-a" tabindex="0">Loading…</pre>
-      </div>
-      <div class="ai-snapshot-pane" data-pane="b" hidden>
-        <div class="ai-snapshot-toolbar">
+        <div class="ai-snapshot-toolbar" data-pane="b">
           <label class="ai-snapshot-rev-label">
             <span class="muted small" id="ai-snapshot-label-b">NEW</span>
             <select id="ai-snapshot-rev-b" class="ai-snapshot-rev" aria-label="NEW snapshot revision"></select>
           </label>
           <button type="button" class="btn" id="ai-snapshot-copy-b" disabled title="Copy NEW snapshot outline to the clipboard">Copy</button>
         </div>
-        <pre class="ai-snapshot-body mono" id="ai-snapshot-body-b" tabindex="0">Loading…</pre>
+      </div>
+      <div class="ai-snapshot-scroll-row" id="ai-snapshot-scroll-row">
+        <div class="ai-snapshot-pane" data-pane="a">
+          <div class="ai-snapshot-clip">
+            <pre class="ai-snapshot-body mono" id="ai-snapshot-body-a">Loading…</pre>
+          </div>
+        </div>
+        <div
+          class="ai-snapshot-scroll-rail"
+          id="ai-snapshot-scroll"
+          tabindex="0"
+          aria-label="Scroll both revisions"
+          title="Scroll both panes"
+        >
+          <div class="ai-snapshot-scroll-spacer" id="ai-snapshot-scroll-spacer"></div>
+        </div>
+        <div class="ai-snapshot-pane" data-pane="b">
+          <div class="ai-snapshot-clip">
+            <pre class="ai-snapshot-body mono" id="ai-snapshot-body-b">Loading…</pre>
+          </div>
+        </div>
       </div>
     </div>
   </section>

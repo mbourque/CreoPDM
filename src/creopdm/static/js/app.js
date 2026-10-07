@@ -11736,7 +11736,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       else if (name === "modified") void loadModifiedTab();
       else if (name === "checked-out") void loadCheckedOutTab();
       else if (name === "where-used") void loadWhereUsedTab();
-      else if (name === "snapshot") void loadAiSnapshotTab();
+      else if (name === "compare-revisions" || name === "snapshot") {
+        void loadAiSnapshotTab();
+      }
       else refreshTabMetrics();
       syncSearchFormVisibility();
       syncDetailToolbar();
@@ -11765,9 +11767,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function aiSnapshotPaneRole(pane) {
-    const compare = $("#ai-snapshot-compare");
-    const mode = String(compare?.dataset?.mode || "single");
-    if (mode !== "compare") return "Snapshot";
     return pane === "b" ? "NEW" : "OLD";
   }
 
@@ -11775,10 +11774,39 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const rev = String(displayRevision || "").trim() || "—";
     const text = String(outline || "").trim();
     if (!text) return "";
-    if (role === "OLD" || role === "NEW") {
-      return `=== ${role} snapshot (${rev}) ===\n${text}`;
-    }
-    return `=== Snapshot (${rev}) ===\n${text}`;
+    return `=== ${role} snapshot (${rev}) ===\n${text}`;
+  }
+
+  function syncAiSnapshotScrollLayout() {
+    const rail = $("#ai-snapshot-scroll");
+    const spacer = $("#ai-snapshot-scroll-spacer");
+    const bodyA = $("#ai-snapshot-body-a");
+    const bodyB = $("#ai-snapshot-body-b");
+    const clip = document.querySelector("#ai-snapshot-scroll-row .ai-snapshot-clip");
+    if (!rail || !spacer || !bodyA || !bodyB) return;
+    const viewH = clip?.clientHeight || rail.clientHeight || 0;
+    const contentH = Math.max(
+      bodyA.scrollHeight || 0,
+      bodyB.scrollHeight || 0,
+      viewH
+    );
+    spacer.style.height = `${contentH}px`;
+    applyAiSnapshotScrollOffset(rail.scrollTop || 0);
+  }
+
+  function applyAiSnapshotScrollOffset(top) {
+    const y = -Math.max(0, Number(top) || 0);
+    const bodyA = $("#ai-snapshot-body-a");
+    const bodyB = $("#ai-snapshot-body-b");
+    if (bodyA) bodyA.style.transform = `translateY(${y}px)`;
+    if (bodyB) bodyB.style.transform = `translateY(${y}px)`;
+  }
+
+  function resetAiSnapshotScroll() {
+    const rail = $("#ai-snapshot-scroll");
+    if (rail) rail.scrollTop = 0;
+    applyAiSnapshotScrollOffset(0);
+    syncAiSnapshotScrollLayout();
   }
 
   async function fetchAiSnapshotOutline(objectId, versionId) {
@@ -11842,19 +11870,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function loadAiSnapshotTab() {
-    const panel = $("#panel-snapshot");
+    const panel = $("#panel-compare-revisions") || $("#panel-snapshot");
     if (!panel) return;
     const objectId = String(panel.dataset.objectId || "").trim();
     if (!objectId) return;
     const selectA = $("#ai-snapshot-rev-a");
     const selectB = $("#ai-snapshot-rev-b");
     const compare = $("#ai-snapshot-compare");
-    const paneB = panel.querySelector('.ai-snapshot-pane[data-pane="b"]');
     const labelA = $("#ai-snapshot-label-a");
+    const labelB = $("#ai-snapshot-label-b");
     if (!selectA || !selectB) return;
     try {
-      // Always refresh list + outlines when opening Snapshot (Collect / Check In
-      // may have rewritten tip; in-memory cache must not show stale twins).
+      // Always refresh list + outlines when opening Compare Revisions.
       clearAiSnapshotClientCache();
       {
         const response = await fetch(
@@ -11866,30 +11893,31 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const items = Array.isArray(aiSnapshotListCache?.items)
         ? aiSnapshotListCache.items
         : [];
-      // API lists newest-first. Compare defaults: left = older, right = newer.
+      // API lists newest-first. Defaults: NEW = latest snap, OLD = one prior.
       const withSnap = items.filter((item) => item && item.has_snapshot);
       const canCompare = withSnap.length >= 2;
       const newerSnap = withSnap[0] || null;
       const olderSnap = withSnap.length >= 2 ? withSnap[1] : null;
-      const labelB = $("#ai-snapshot-label-b");
-      if (compare) compare.dataset.mode = canCompare ? "compare" : "single";
-      if (paneB) paneB.hidden = !canCompare;
+      if (compare) compare.dataset.mode = "compare";
       const askRow = $("#ai-snapshot-ask-row");
       if (askRow) askRow.hidden = !canCompare || !aiFeaturesEnabled();
       if (!canCompare) {
         const answer = $("#ai-snapshot-ai-answer");
         if (answer) answer.hidden = true;
+        const bodyA = $("#ai-snapshot-body-a");
+        const bodyB = $("#ai-snapshot-body-b");
+        const msg =
+          "Compare Revisions needs two revisions with snapshots. "
+          + "Collect metadata (or Check In with Creo Connected) on another version, then reopen Details.";
+        if (bodyA) bodyA.textContent = msg;
+        if (bodyB) bodyB.textContent = "";
+        return;
       }
-      if (labelA) labelA.textContent = canCompare ? "OLD" : "Revision";
+      if (labelA) labelA.textContent = "OLD";
       if (labelB) labelB.textContent = "NEW";
-      selectA.setAttribute(
-        "aria-label",
-        canCompare ? "OLD snapshot revision" : "Snapshot revision"
-      );
+      selectA.setAttribute("aria-label", "OLD snapshot revision");
       selectB.setAttribute("aria-label", "NEW snapshot revision");
-      const tipVersion = String(panel.dataset.tipVersion || "").trim();
       const fillSelect = (select, preferredVersionId) => {
-        const previous = String(select.value || "");
         select.replaceChildren();
         items.forEach((item) => {
           const option = document.createElement("option");
@@ -11898,41 +11926,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           option.textContent = item.has_snapshot ? rev : `${rev} (no snapshot)`;
           select.appendChild(option);
         });
-        if (!items.length) return;
-        // Keep a user pick only when both panes already had values (re-render).
-        if (
-          previous
-          && select.dataset.userPicked === "1"
-          && items.some((item) => String(item.version_id) === previous)
-        ) {
-          select.value = previous;
-          return;
-        }
+        delete select.dataset.userPicked;
         const prefer = String(preferredVersionId || "").trim();
         if (prefer && items.some((item) => String(item.version_id) === prefer)) {
           select.value = prefer;
           return;
         }
-        if (
-          tipVersion
-          && items.some((item) => String(item.version_id) === tipVersion)
-        ) {
-          select.value = tipVersion;
-          return;
-        }
         select.value = String(items[0].version_id || "");
       };
-      if (canCompare) {
-        fillSelect(selectA, olderSnap?.version_id);
-        fillSelect(selectB, newerSnap?.version_id);
-        await Promise.all([
-          renderAiSnapshotPane("a", objectId),
-          renderAiSnapshotPane("b", objectId),
-        ]);
-      } else {
-        fillSelect(selectA, newerSnap?.version_id || tipVersion);
-        await renderAiSnapshotPane("a", objectId);
-      }
+      // Always useful defaults: NEW = newest snapshot, OLD = previous snapshot.
+      fillSelect(selectA, olderSnap?.version_id);
+      fillSelect(selectB, newerSnap?.version_id);
+      await Promise.all([
+        renderAiSnapshotPane("a", objectId),
+        renderAiSnapshotPane("b", objectId),
+      ]);
+      resetAiSnapshotScroll();
     } catch (err) {
       const body = $("#ai-snapshot-body-a");
       if (body) {
@@ -11972,7 +11981,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function askAiSnapshotCompare() {
-    const panel = $("#panel-snapshot");
+    const panel = $("#panel-compare-revisions") || $("#panel-snapshot");
     const objectId = String(panel?.dataset.objectId || "").trim();
     const compare = $("#ai-snapshot-compare");
     const answerBox = $("#ai-snapshot-ai-answer");
@@ -12062,7 +12071,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function bindAiSnapshotControls() {
-    const panel = $("#panel-snapshot");
+    const panel = $("#panel-compare-revisions") || $("#panel-snapshot");
     if (!panel || panel.dataset.aiSnapshotBound === "1") return;
     panel.dataset.aiSnapshotBound = "1";
     const objectId = String(panel.dataset.objectId || "").trim();
@@ -12070,16 +12079,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       $(`#ai-snapshot-rev-${pane}`)?.addEventListener("change", () => {
         const select = $(`#ai-snapshot-rev-${pane}`);
         if (select) select.dataset.userPicked = "1";
-        void renderAiSnapshotPane(pane, objectId);
+        void renderAiSnapshotPane(pane, objectId).then(() => resetAiSnapshotScroll());
       });
       $(`#ai-snapshot-copy-${pane}`)?.addEventListener("click", async () => {
         const btn = $(`#ai-snapshot-copy-${pane}`);
         const body = $(`#ai-snapshot-body-${pane}`);
         let text = String(btn?.dataset.copyText || "").trim();
-        // Fallback: copy the visible JSON if dataset was cleared / too large.
         if (!text && body) {
-          const visible = String(body.textContent || "").trim();
-          if (visible.startsWith("{")) text = visible;
+          text = String(body.textContent || "").trim();
         }
         if (!text) {
           showError($("#toolbar-error"), "Nothing to copy yet.");
@@ -12089,18 +12096,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (!ok) {
           showError(
             $("#toolbar-error"),
-            "Could not copy snapshot JSON. Select the text and use Ctrl+C."
+            "Could not copy outline. Select the text and use Ctrl+C."
           );
           return;
         }
-        const mode = $("#ai-snapshot-compare")?.dataset.mode;
-        const label = mode !== "compare"
-          ? "snapshot"
-          : pane === "a"
-            ? "older snapshot"
-            : "newer snapshot";
-        showOk(`Copied ${label} JSON.`);
+        const label = pane === "a" ? "OLD outline" : "NEW outline";
+        showOk(`Copied ${label}.`);
       });
+    });
+    const rail = $("#ai-snapshot-scroll");
+    const row = $("#ai-snapshot-scroll-row");
+    rail?.addEventListener("scroll", () => {
+      applyAiSnapshotScrollOffset(rail.scrollTop || 0);
+    });
+    // Wheel over either pane drives the center rail (one scrollbar).
+    row?.addEventListener(
+      "wheel",
+      (event) => {
+        if (!rail || rail.style.display === "none") return;
+        if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+        event.preventDefault();
+        rail.scrollTop += event.deltaY;
+      },
+      { passive: false }
+    );
+    window.addEventListener("resize", () => {
+      syncAiSnapshotScrollLayout();
     });
     $("#ai-snapshot-ask-ai")?.addEventListener("click", () => {
       void askAiSnapshotCompare();

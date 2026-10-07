@@ -122,25 +122,26 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "navigator.clipboard.writeText" in script
     assert 'document.execCommand("copy")' in script
     assert "Creo's embedded browser often lacks navigator.clipboard" in script
-    assert 'name === "snapshot"' in script
+    assert 'name === "compare-revisions"' in script
     assert "withSnap.length >= 2" in script
-    assert 'dataset.mode = canCompare ? "compare" : "single"' in script
-    assert "paneB.hidden = !canCompare" in script
+    assert 'dataset.mode = "compare"' in script
     assert "await copyTextToClipboard(text)" in script
     # Must not bail out silently when Clipboard API is missing (Creo embedded).
     assert "!navigator.clipboard?.writeText" not in script
     assert "materials: ai.materials" in script
     assert "units: ai.units" in script
     assert "family_table: ai.family_table" in script
-    # Compare defaults: left = older (withSnap[1]), right = newer (withSnap[0]).
-    assert "left = older, right = newer" in script
+    # Defaults: NEW = latest snap, OLD = one prior.
+    assert "NEW = latest snap, OLD = one prior" in script
     assert "fillSelect(selectA, olderSnap?.version_id)" in script
     assert "fillSelect(selectB, newerSnap?.version_id)" in script
-    assert 'labelA.textContent = canCompare ? "OLD" : "Revision"' in script
+    assert 'labelA.textContent = "OLD"' in script
     assert 'labelB.textContent = "NEW"' in script
     assert "function formatAiSnapshotOutlineDisplay(" in script
     assert "async function fetchAiSnapshotOutline(" in script
     assert "=== ${role} snapshot (${rev}) ===" in script
+    assert "function syncAiSnapshotScrollLayout(" in script
+    assert "ai-snapshot-scroll-rail" in script or "ai-snapshot-scroll" in script
     assert "async function askAiSnapshotCompare(" in script
     assert "/ai-snapshot/compare" in script
     assert 'withBusy("Asking AI what changed…"' in script
@@ -182,10 +183,15 @@ def test_app_js_posts_ai_snapshot_soft_fail():
 def test_snapshot_tab_template_and_docs():
     html = DETAIL_HTML.read_text(encoding="utf-8")
     docs = DOCS.read_text(encoding="utf-8")
-    assert 'data-tab="snapshot"' in html
-    assert 'id="panel-snapshot"' in html
+    assert 'data-tab="compare-revisions"' in html
+    assert "Compare Revisions" in html
+    assert "show_compare_revisions_tab" in html
+    assert 'id="panel-compare-revisions"' in html
     assert 'id="ai-snapshot-compare"' in html
-    assert 'data-mode="single"' in html
+    assert 'data-mode="compare"' in html
+    assert 'id="ai-snapshot-scroll"' in html
+    assert 'id="ai-snapshot-scroll-row"' in html
+    assert "ai-snapshot-scroll-rail" in html
     assert 'id="ai-snapshot-rev-a"' in html
     assert 'id="ai-snapshot-rev-b"' in html
     assert 'id="ai-snapshot-label-a"' in html
@@ -196,14 +202,10 @@ def test_snapshot_tab_template_and_docs():
     assert "Ask AI what changed" in html
     assert 'id="ai-snapshot-ai-answer"' in html
     assert 'id="ai-snapshot-ask-row" hidden' in html
-    assert 'data-pane="b" hidden' in html
-    assert "left = OLD, right = NEW" in html
     assert "plain text, not JSON" in html
-    assert "Open **Snapshot**" in docs
-    assert "experimental tab" in docs.lower()
+    assert "Compare Revisions" in docs
     assert "two or more" in docs.lower() and "snapshot" in docs.lower()
     assert "OLD" in docs and "NEW" in docs
-    assert "A.1 left, A.2 right" in docs
     assert "Ask AI what changed" in docs
     assert "outline" in docs.lower()
     assert "not raw JSON" in docs or "not JSON" in docs
@@ -585,7 +587,7 @@ def test_snapshot_compare_prompt_requires_saved_text():
 
 @requires_git
 def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_path):
-    """POST tip snapshot, list by rev, GET returns JSON; Detail page shows Snapshot tab."""
+    """POST tip snapshot, list by rev, GET returns JSON; one snap hides Compare Revisions tab."""
     product = client.post(
         "/api/products",
         json={"name": "Snap Product", "number": "SNAP-1"},
@@ -696,8 +698,9 @@ def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_pat
 
     detail = client.get(f"/products/{product_id}/objects/{object_id}")
     assert detail.status_code == 200, detail.text
-    assert 'data-tab="snapshot"' in detail.text
-    assert 'id="panel-snapshot"' in detail.text
+    # One snapshot only — Compare Revisions tab stays hidden until a second exists.
+    assert 'data-tab="compare-revisions"' not in detail.text
+    assert 'id="panel-compare-revisions"' not in detail.text
 
     ctx = client.app.state.ctx
     with ctx.session_factory() as db:
@@ -707,6 +710,7 @@ def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_pat
         assert got.snapshot["dimensions"][0]["value"] == 8.0
         listed_svc = svc.list_for_object(db, object_id)
         assert any(item.has_snapshot for item in listed_svc.items)
+        assert svc.count_with_snapshot(db, object_id) == 1
 
 
 @requires_git
@@ -828,6 +832,13 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
         },
     }
     assert client.post(f"/api/objects/{object_id}/ai-snapshot", json=newer_snap).status_code == 200
+
+    detail_two = client.get(f"/products/{product_id}/objects/{object_id}")
+    assert detail_two.status_code == 200, detail_two.text
+    assert 'data-tab="compare-revisions"' in detail_two.text
+    assert "Compare Revisions" in detail_two.text
+    assert 'id="panel-compare-revisions"' in detail_two.text
+    assert 'id="ai-snapshot-scroll"' in detail_two.text
 
     # Persist Ollama settings used by compare.
     saved = client.put(

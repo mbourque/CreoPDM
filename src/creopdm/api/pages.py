@@ -577,6 +577,10 @@ def object_detail(
     # Features = Creo feature list; Structure = assembly model tree (separate tabs).
     show_features_tab = bool(features)
     show_structure_tab = bool(is_assembly)
+    # Compare Revisions only when two or more revisions have AI snapshots.
+    show_compare_revisions_tab = bool(
+        is_creo and ctx.ai_snapshots.count_with_snapshot(db, object_id) >= 2
+    )
     checkout_count = ctx.checkouts.count_for_product(db, product.id)
     checkoutable_count = ctx.checkouts.count_checkoutable_for_product(db, product.id)
     siblings = ctx.objects.list_objects(db, product.id)
@@ -609,6 +613,7 @@ def object_detail(
             "show_family_tab": show_family_tab,
             "show_features_tab": show_features_tab,
             "show_structure_tab": show_structure_tab,
+            "show_compare_revisions_tab": show_compare_revisions_tab,
             "bom": bom,
             "show_where_used": show_where_used,
             "where_used": where_used.items if where_used is not None else [],
