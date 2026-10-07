@@ -135,14 +135,12 @@ def test_chat_ollama_requires_model():
 
 
 def test_settings_api_persists_ollama_fields(client):
-    from creopdm.ai_prompts import DEFAULT_SNAPSHOT_COMPARE_PROMPT
-
     before = client.get("/api/settings")
     assert before.status_code == 200
     assert before.json()["ollama_base_url"] == "http://127.0.0.1:11434"
     assert before.json()["ollama_model"] == ""
-    assert before.json()["snapshot_compare_prompt"] == DEFAULT_SNAPSHOT_COMPARE_PROMPT.strip()
-    assert before.json()["default_snapshot_compare_prompt"] == DEFAULT_SNAPSHOT_COMPARE_PROMPT.strip()
+    assert before.json()["snapshot_compare_prompt"] == ""
+    assert "default_snapshot_compare_prompt" not in before.json()
 
     custom = "Compare older then newer. One short paragraph. No fluff."
     saved = client.put(
@@ -190,5 +188,6 @@ def test_ai_settings_page_renders(client):
     assert 'id="ollama-refresh-models"' in page.text
     assert 'name="snapshot_compare_prompt"' in page.text
     assert "Snapshot compare prompt" in page.text
-    assert 'id="snapshot-compare-prompt-reset"' in page.text
+    assert "snapshot-compare-prompt-reset" not in page.text
     assert "Ask AI what changed" in page.text
+    assert "Stored only in server settings" in page.text

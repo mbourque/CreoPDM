@@ -1,33 +1,22 @@
-"""Defaults and helpers for CreoPDM AI prompts (editable copy lives in AI settings)."""
+"""Helpers for CreoPDM AI prompts (instructions live only in AI settings)."""
 
 from __future__ import annotations
 
 import json
 from typing import Any
 
-# Seed text for Administration → AI → Snapshot compare prompt (persisted in settings).
-# Compare uses the saved setting, not this constant, once the admin has saved.
-DEFAULT_SNAPSHOT_COMPARE_PROMPT = """\
-You compare two CreoPDM model snapshots (schema v1 JSON) for the same Creo part.
-The user message includes older JSON first, then newer JSON.
-
-Write one short paragraph suitable as a change notice / check-in comment. Plain language only — no tables, bullets, headings, or JSON.
-
-Rules:
-- Report only facts present in the snapshots (feature add/remove/rename; dimension value changes; tolerance upper/lower when those fields change; material/parameter changes).
-- Diff the features arrays: name every feature type removed (older only) and added (newer only). If both a chamfer and a round were removed, say both.
-- Prefer named dims (width, length, height, angle) over anonymous dN.
-- Include units when known (mm, deg).
-- Do not invent. No "± allowance," fits, design intent, or "likely driven by…" unless that text appears in the JSON.
-- For limits, say the old and new limits plainly (e.g. "d31 from 15 mm (limits 14–16) to 20 mm (limits 19–21)"). Do not restate them as a bilateral ± tolerance.
-- Skip noise: empty MC_* values, tiny float dust, hashes, timestamps, UUIDs.
-"""
+from creopdm.exceptions import ValidationAppError
 
 
 def resolve_snapshot_compare_prompt(saved: str | None) -> str:
-    """Use the AI-settings prompt when set; otherwise the seed default."""
+    """Require the Administration → AI snapshot compare prompt (no code fallback)."""
     text = str(saved or "").strip()
-    return text or DEFAULT_SNAPSHOT_COMPARE_PROMPT.strip()
+    if not text:
+        raise ValidationAppError(
+            "No snapshot compare prompt is saved. Open Administration → AI, "
+            "paste your prompt, and Save."
+        )
+    return text
 
 
 def build_snapshot_compare_user_prompt(

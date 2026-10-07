@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from creopdm.ai_prompts import (
-    DEFAULT_SNAPSHOT_COMPARE_PROMPT,
     build_snapshot_compare_user_prompt,
     resolve_snapshot_compare_prompt,
 )
+from creopdm.exceptions import ValidationAppError
 from creopdm.services.ai_snapshot_service import AI_SNAPSHOT_SCHEMA_VERSION, AiSnapshotService
 from tests.conftest import requires_git
 
@@ -115,16 +117,10 @@ def test_snapshot_tab_template_and_docs():
     assert "above** the two JSON panes" in docs or "above the two JSON panes" in docs
 
 
-def test_snapshot_compare_prompt_seed_and_user_message():
-    seed = DEFAULT_SNAPSHOT_COMPARE_PROMPT
-    assert 'No "± allowance"' in seed
-    assert "one short paragraph" in seed
-    assert "change notice" in seed
-    assert "Prefer named dims" in seed
-    assert "bilateral ± tolerance" in seed
-    assert "If both a chamfer and a round were removed, say both" in seed
-    assert "Diff the features arrays" in seed
-    assert resolve_snapshot_compare_prompt("") == seed.strip()
+def test_snapshot_compare_prompt_requires_saved_text():
+    with pytest.raises(ValidationAppError) as exc:
+        resolve_snapshot_compare_prompt("")
+    assert "No snapshot compare prompt is saved" in str(exc.value)
     assert resolve_snapshot_compare_prompt("  Custom prompt.  ") == "Custom prompt."
     user = build_snapshot_compare_user_prompt(
         older_snapshot={"dimensions": [{"symbol": "d0", "value": 6}]},
@@ -137,12 +133,13 @@ def test_snapshot_compare_prompt_seed_and_user_message():
     assert "following your instructions" in user
     assert '"value": 6' in user
     assert '"value": 8' in user
-    assert "PRECOMPUTED DIFF" not in user
-    # Compare instructions are the AI-settings field; no hard-coded system constant.
     import creopdm.ai_prompts as ai_prompts
 
+    assert not hasattr(ai_prompts, "DEFAULT_SNAPSHOT_COMPARE_PROMPT")
     assert not hasattr(ai_prompts, "SNAPSHOT_COMPARE_SYSTEM_PROMPT")
-    assert hasattr(ai_prompts, "DEFAULT_SNAPSHOT_COMPARE_PROMPT")
+    src = Path(ai_prompts.__file__).read_text(encoding="utf-8")
+    assert "± allowance" not in src
+    assert "change notice" not in src
 
 
 @requires_git

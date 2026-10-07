@@ -26,7 +26,6 @@ from creopdm.constants import (
 from creopdm.context import AppContext
 from creopdm.creo.connector_factory import create_creo_connector
 from creopdm.exceptions import PathValidationError, PermissionDeniedError
-from creopdm.ai_prompts import DEFAULT_SNAPSHOT_COMPARE_PROMPT
 from creopdm.schemas.common import OllamaModelsResponse, SettingsResponse, SettingsUpdateRequest
 from creopdm.services.ollama_service import list_ollama_models, normalize_ollama_base_url
 from creopdm.site_availability import (
@@ -104,7 +103,6 @@ def settings_to_response(ctx: AppContext) -> SettingsResponse:
         ollama_base_url=settings.ai.ollama_base_url,
         ollama_model=settings.ai.ollama_model or "",
         snapshot_compare_prompt=settings.ai.snapshot_compare_prompt or "",
-        default_snapshot_compare_prompt=DEFAULT_SNAPSHOT_COMPARE_PROMPT.strip(),
     )
 
 

@@ -2451,7 +2451,9 @@ def test_admin_hub_panel_fills_full_width():
     assert 'name="ollama_model"' in ai_partial
     assert 'name="snapshot_compare_prompt"' in ai_partial
     assert 'id="snapshot-compare-prompt"' in ai_partial
-    assert 'id="snapshot-compare-prompt-reset"' in ai_partial
+    assert "snapshot-compare-prompt-reset" not in ai_partial
+    assert "Reset prompt to default" not in ai_partial
+    assert "Stored only in server settings" in ai_partial
     assert "Ask AI what changed" in ai_partial
     assert 'id="ollama-refresh-models"' in ai_partial
     assert "Custom instructions are not configured yet" not in ai_partial
@@ -2486,7 +2488,7 @@ def test_admin_hub_panel_fills_full_width():
     assert 'settingsForm.querySelector(\'[name="site_availability"]\')' in script
     assert 'settingsForm.querySelector(\'[name="ollama_base_url"]\')' in script
     assert 'settingsForm.querySelector(\'[name="snapshot_compare_prompt"]\')' in script
-    assert "snapshot-compare-prompt-reset" in script
+    assert "snapshot-compare-prompt-reset" not in script
     assert "refreshOllamaModels" in script
     assert "/api/settings/ai/ollama/models" in script
     assert "listOllamaModelsFromBrowser" in script

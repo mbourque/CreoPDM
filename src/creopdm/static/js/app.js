@@ -12244,13 +12244,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   $("#ollama-refresh-models")?.addEventListener("click", () => {
     void refreshOllamaModels();
   });
-  $("#snapshot-compare-prompt-reset")?.addEventListener("click", () => {
-    const ta = $("#snapshot-compare-prompt");
-    const tpl = $("#snapshot-compare-prompt-default");
-    if (!ta || !tpl) return;
-    ta.value = String(tpl.content?.textContent || tpl.textContent || "").trim();
-    ta.focus();
-  });
   if (ollamaSettings) {
     void refreshOllamaModels();
   }

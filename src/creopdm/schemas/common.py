@@ -561,7 +561,6 @@ class SettingsResponse(BaseModel):
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = ""
     snapshot_compare_prompt: str = ""
-    default_snapshot_compare_prompt: str = ""
 
 
 class OllamaModelsResponse(BaseModel):
@@ -771,10 +770,7 @@ class SettingsUpdateRequest(BaseModel):
     def valid_snapshot_compare_prompt(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        from creopdm.ai_prompts import DEFAULT_SNAPSHOT_COMPARE_PROMPT
-
-        text = value.strip()
-        return text or DEFAULT_SNAPSHOT_COMPARE_PROMPT.strip()
+        return value.strip()
 
     @field_validator("workspace_poll_interval_ms")
     @classmethod
