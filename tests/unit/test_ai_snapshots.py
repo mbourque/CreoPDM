@@ -115,17 +115,21 @@ def test_snapshot_tab_template_and_docs():
 
 
 def test_snapshot_compare_prompt_forbids_invented_tolerances():
-    assert "Never invent a ± allowance" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
-    assert "paragraph" in SNAPSHOT_COMPARE_SYSTEM_PROMPT.lower()
-    assert "bullet lists" in SNAPSHOT_COMPARE_SYSTEM_PROMPT.lower()
+    assert 'No "± allowance"' in SNAPSHOT_COMPARE_SYSTEM_PROMPT
+    assert "one short paragraph" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
+    assert "change notice" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
+    assert "Prefer named dims" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
+    assert "bilateral ± tolerance" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
+    assert "Never say there is no previous state" in SNAPSHOT_COMPARE_SYSTEM_PROMPT
     user = build_snapshot_compare_user_prompt(
         older_snapshot={"dimensions": [{"symbol": "d0", "value": 6}]},
         newer_snapshot={"dimensions": [{"symbol": "d0", "value": 8}]},
         older_revision="A.1",
         newer_revision="A.2",
     )
-    assert "OLDER revision (A.1)" in user
-    assert "NEWER revision (A.2)" in user
+    assert "Older revision (A.1):" in user
+    assert "Newer revision (A.2):" in user
+    assert "one short paragraph change notice" in user
     assert '"value": 6' in user
     assert '"value": 8' in user
 
@@ -336,12 +340,16 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
         captured["base_url"] = base_url
         captured["model"] = model
         captured["messages"] = messages
-        assert "Never invent a ± allowance" in messages[0]["content"]
-        assert "OLDER revision" in messages[1]["content"]
-        assert "NEWER revision" in messages[1]["content"]
+        assert 'No "± allowance"' in messages[0]["content"]
+        assert "change notice" in messages[0]["content"]
+        assert "Older revision" in messages[1]["content"]
+        assert "Newer revision" in messages[1]["content"]
+        assert "one short paragraph change notice" in messages[1]["content"]
         assert "5.0" in messages[1]["content"]
         assert "7.5" in messages[1]["content"]
-        return "The diameter grew from 5 mm to 7.5 mm."
+        return (
+            "Dimension d0 increased from 5 mm to 7.5 mm."
+        )
 
     monkeypatch.setattr(
         "creopdm.services.ai_snapshot_service.chat_ollama",
@@ -357,7 +365,7 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
     )
     assert compared.status_code == 200, compared.text
     body = compared.json()
-    assert body["summary"] == "The diameter grew from 5 mm to 7.5 mm."
+    assert body["summary"] == "Dimension d0 increased from 5 mm to 7.5 mm."
     assert body["model"] == "gemma4:latest"
     assert body["older_version_id"] == older_version_id
     assert body["newer_version_id"] == newer_version_id
