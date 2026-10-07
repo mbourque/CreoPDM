@@ -591,8 +591,10 @@ def test_snapshot_compare_prompt_requires_saved_text():
     ghost_text = format_snapshot_compare_text(ghost_plane_snap)
     assert "PATTERN 1" in ghost_text
     assert "PATTERN 2" in ghost_text
-    assert "ATTACH_PLANE" in ghost_text
-    assert ghost_text.count("DATUM PLANE") == 0
+    assert "ATTACH_PLANE (DATUM PLANE)" in ghost_text
+    # Unnamed pattern-owned planes stay out; type on ATTACH_PLANE is fine.
+    assert "- DATUM PLANE" not in ghost_text
+    assert ghost_text.count("DATUM PLANE") == 1
     ghost_diff = format_snapshot_compare_diff_text(
         ghost_plane_snap,
         {
