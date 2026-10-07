@@ -40,11 +40,17 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "await postAiSnapshotFromGather(" in script
     assert "Soft-fail — AI snapshot must not block Creo metadata save" in script
     assert "async function loadAiSnapshotTab(" in script
+    assert "async function copyTextToClipboard(" in script
     assert "navigator.clipboard.writeText" in script
+    assert 'document.execCommand("copy")' in script
+    assert "Creo's embedded browser often lacks navigator.clipboard" in script
     assert 'name === "snapshot"' in script
     assert "withSnap.length >= 2" in script
     assert 'dataset.mode = canCompare ? "compare" : "single"' in script
     assert "paneB.hidden = !canCompare" in script
+    assert "await copyTextToClipboard(text)" in script
+    # Must not bail out silently when Clipboard API is missing (Creo embedded).
+    assert "!navigator.clipboard?.writeText" not in script
 
 
 def test_snapshot_tab_template_and_docs():

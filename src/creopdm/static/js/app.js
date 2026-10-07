@@ -11572,6 +11572,36 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  async function copyTextToClipboard(text) {
+    // Creo's embedded browser often lacks navigator.clipboard (or blocks it).
+    // Prefer the Clipboard API, then execCommand('copy') via a temporary textarea.
+    const value = String(text || "");
+    if (!value) return false;
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      try {
+        await navigator.clipboard.writeText(value);
+        return true;
+      } catch {
+        /* fall through to execCommand */
+      }
+    }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = value;
+      ta.setAttribute("readonly", "");
+      ta.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0;";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, value.length);
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return Boolean(ok);
+    } catch {
+      return false;
+    }
+  }
+
   function bindAiSnapshotControls() {
     const panel = $("#panel-snapshot");
     if (!panel || panel.dataset.aiSnapshotBound === "1") return;
@@ -11583,17 +11613,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       });
       $(`#ai-snapshot-copy-${pane}`)?.addEventListener("click", async () => {
         const btn = $(`#ai-snapshot-copy-${pane}`);
-        const text = String(btn?.dataset.copyText || "").trim();
-        if (!text || !navigator.clipboard?.writeText) return;
-        try {
-          await navigator.clipboard.writeText(text);
-          const label = pane === "a" && $("#ai-snapshot-compare")?.dataset.mode !== "compare"
-            ? "snapshot"
-            : `Rev ${pane.toUpperCase()} snapshot`;
-          showOk(`Copied ${label} JSON.`);
-        } catch {
-          showError($("#toolbar-error"), "Could not copy snapshot JSON.");
+        const body = $(`#ai-snapshot-body-${pane}`);
+        let text = String(btn?.dataset.copyText || "").trim();
+        // Fallback: copy the visible JSON if dataset was cleared / too large.
+        if (!text && body) {
+          const visible = String(body.textContent || "").trim();
+          if (visible.startsWith("{")) text = visible;
         }
+        if (!text) {
+          showError($("#toolbar-error"), "Nothing to copy yet.");
+          return;
+        }
+        const ok = await copyTextToClipboard(text);
+        if (!ok) {
+          showError(
+            $("#toolbar-error"),
+            "Could not copy snapshot JSON. Select the text and use Ctrl+C."
+          );
+          return;
+        }
+        const label = pane === "a" && $("#ai-snapshot-compare")?.dataset.mode !== "compare"
+          ? "snapshot"
+          : `Rev ${pane.toUpperCase()} snapshot`;
+        showOk(`Copied ${label} JSON.`);
       });
     });
   }
