@@ -539,12 +539,29 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert len(newer_patterns) == 1
     # Keep feature id so dimension lines can show the owner **name**.
     assert any(f.get("id") is not None for f in slim_older["features"])
+    # Member shells after a PATTERN head stay collapsed (not listed as Feature N).
     assert not any(
         str(f.get("name") or "").startswith("Feature ") for f in slim_older["features"]
     )
     assert not any(
         str(f.get("name") or "").startswith("IFX_ID_") for f in slim_older["features"]
     )
+
+    # Standalone Feature 189 (empty type, no PATTERN head) must NOT become a
+    # fake "PATTERN 1 (1 members)" — Features tab shows Feature 189.
+    lone_placeholder = format_snapshot_compare_text(
+        {
+            "identity": {"filename": "block.prt", "model_type": "PART"},
+            "features": [
+                {"id": 40, "name": "Extrude", "type": "PROTRUSION", "subtype": "Extrude"},
+                {"id": 146, "name": "ROUND", "type": "ROUND"},
+                {"id": 167, "name": "ROUND", "type": "ROUND"},
+                {"id": 189, "name": "Feature 189", "type": "", "subtype": ""},
+            ],
+        }
+    )
+    assert "Feature 189" in lone_placeholder
+    assert "PATTERN" not in lone_placeholder
     assert all(d.get("symbol") != "d253" for d in slim_older["dimensions"])
     pat_prompt = build_snapshot_compare_user_prompt(
         older_snapshot=older_pat,

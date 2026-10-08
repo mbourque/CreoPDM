@@ -102,9 +102,14 @@ def _is_invisible_or_pattern_internal_feature(feat: dict[str, Any]) -> bool:
 
 
 def _iter_compare_features(features: list[Any]) -> list[dict[str, Any]]:
-    """Real features only; pattern-member shells collapsed onto PATTERN heads."""
+    """Real features only; pattern-member shells collapsed onto PATTERN heads.
+
+    Standalone ``Feature 189`` / empty-type rows (no PATTERN head) stay as
+    themselves — matching the Features tab. Do **not** invent a synthetic
+    PATTERN from those orphans (that made Ask AI claim a pattern add when the
+    tree only had an unnamed feature).
+    """
     out: list[dict[str, Any]] = []
-    orphan_placeholders = 0
     i = 0
     n = len(features)
     while i < n:
@@ -113,10 +118,6 @@ def _iter_compare_features(features: list[Any]) -> list[dict[str, Any]]:
             i += 1
             continue
         if _is_invisible_or_pattern_internal_feature(feat):
-            i += 1
-            continue
-        if _is_pattern_placeholder_feature(feat):
-            orphan_placeholders += 1
             i += 1
             continue
         if _is_pattern_feature(feat):
@@ -133,16 +134,9 @@ def _iter_compare_features(features: list[Any]) -> list[dict[str, Any]]:
             out.append(head)
             i = j
             continue
+        # Keep standalone Feature NNNN / IFX_ID_* (Features tab shows them).
         out.append(feat)
         i += 1
-    if orphan_placeholders:
-        out.append(
-            {
-                "name": "PATTERN",
-                "type": "PATTERN",
-                "pattern_member_count": orphan_placeholders,
-            }
-        )
     return out
 
 
