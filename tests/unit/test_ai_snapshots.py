@@ -303,12 +303,13 @@ def test_snapshot_compare_prompt_requires_saved_text():
         older_revision="A.1",
         newer_revision="A.2",
     )
-    assert "Do not swap them" in user
     assert "=== OLD snapshot (A.1) ===" in user
     assert "=== NEW snapshot (A.2) ===" in user
-    assert "following your instructions" in user
-    assert "Never claim a revision is missing" in user
-    assert "revision outlines" in user
+    assert "=== Computed differences ===" in user
+    # Narrative rules belong in Administration → AI prompt, not this user message.
+    assert "Do not swap them" not in user
+    assert "following your instructions" not in user
+    assert "Never claim a revision is missing" not in user
     assert user.index("=== OLD snapshot (A.1) ===") < user.index(
         "=== NEW snapshot (A.2) ==="
     )
@@ -554,7 +555,7 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "Features:" in pat_prompt
     older_half, after_old = pat_prompt.split("=== NEW snapshot (A.2) ===", 1)
     newer_half, _, diff_half = after_old.partition(
-        "=== Computed differences (authoritative) ==="
+        "=== Computed differences ==="
     )
     # Number PATTERNs in tree order so Ask AI can say "deleted PATTERN 2", not
     # "deleted pattern instances" when only one PATTERN line disappears.
@@ -657,8 +658,8 @@ def test_snapshot_compare_prompt_requires_saved_text():
         older_revision="A.1",
         newer_revision="A.2",
     )
-    assert "Computed differences (authoritative)" in plate_prompt
-    assert "pairing two different symbols" in plate_prompt
+    assert "Computed differences" in plate_prompt
+    assert "pairing two different symbols" not in plate_prompt
     assert "PATTERN 3" in plate_diff
 
     # Dimension lines show owning feature **name**, never the Creo feature id.
@@ -797,14 +798,16 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "PLATE_3.prt" in asm_diff
     assert "Components quantity changed:" in asm_diff
     assert "SQUARE_TUBE_1.prt: × 2 → × 1" in asm_diff
-    assert "trust Structure/BOM" in asm_diff
+    assert "Components removed:" in asm_diff
+    assert "trust Structure/BOM" not in asm_diff
     asm_prompt = build_snapshot_compare_user_prompt(
         older_snapshot=asm_old,
         newer_snapshot=asm_new,
         older_revision="A.1",
         newer_revision="A.2",
     )
-    assert "prefer components removed/added" in asm_prompt.lower()
+    assert "=== Computed differences ===" in asm_prompt
+    assert "prefer components removed/added" not in asm_prompt.lower()
     slim_asm = slim_snapshot_for_compare(asm_old)
     assert slim_asm.get("bom")
     assert slim_asm["bom"][0]["filename"] == "conveyor.asm"
@@ -1027,7 +1030,7 @@ def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_pat
     assert body["snapshot"]["item"]["version_uuid"] == version_id
     assert "Features:" in (body.get("outline") or "")
     assert "Extrude 1" in (body.get("outline") or "")
-    assert "d0 (Extrude 1) = 6" in (body.get("outline") or "")
+    assert "d0 (Extrude 1) = 6 mm" in (body.get("outline") or "")
     assert '"id":' not in (body.get("outline") or "")
 
     got_get = client.get(
@@ -1215,8 +1218,9 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
         assert messages[0]["content"] == "Use only facts from the JSON."
         assert "=== OLD snapshot" in messages[1]["content"]
         assert "=== NEW snapshot" in messages[1]["content"]
-        assert "Do not swap them" in messages[1]["content"]
-        assert "following your instructions" in messages[1]["content"]
+        assert "=== Computed differences ===" in messages[1]["content"]
+        assert "Do not swap them" not in messages[1]["content"]
+        assert "following your instructions" not in messages[1]["content"]
         assert "d0 = 5 mm" in messages[1]["content"]
         assert "d0 = 7.5 mm" in messages[1]["content"]
         return "Dimension d0 increased from 5 mm to 7.5 mm."
@@ -1305,7 +1309,8 @@ def test_ai_snapshot_compare_pending_uses_tip_and_client_newer(
         assert messages[0]["content"] == "Facts only."
         assert "=== OLD snapshot" in messages[1]["content"]
         assert "=== NEW snapshot (A.2) ===" in messages[1]["content"]
-        assert "Do not swap them" in messages[1]["content"]
+        assert "=== Computed differences ===" in messages[1]["content"]
+        assert "Do not swap them" not in messages[1]["content"]
         assert "120" in messages[1]["content"]
         assert "100" in messages[1]["content"]
         assert "ROUND" in messages[1]["content"]

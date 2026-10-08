@@ -616,22 +616,9 @@ def format_snapshot_compare_diff_text(
         feat_removed = []
         feat_added = []
 
-    lines = [
-        "=== Computed differences (authoritative) ===",
-        "Match dimensions by symbol only. Never treat two different symbols as one value change.",
-        "Use singular wording when only one feature or dimension is listed.",
-    ]
+    # Diff facts only — narrative instructions live in Administration → AI prompt.
+    lines = ["=== Computed differences ==="]
     if has_structure:
-        lines.append(
-            "For assemblies, trust Structure/BOM for components — feature lists omit "
-            "FEATTYPE_COMPONENT members. Family-table FullName brackets "
-            "(name<<instance>>) match the tip Structure name."
-        )
-        if both_have_structure:
-            lines.append(
-                "Both revisions have Structure — report component qty/add/remove only; "
-                "do not invent feature removes from the non-component feature list."
-            )
         lines.extend(_bullet_block("Components removed", comp_removed))
         lines.extend(_bullet_block("Components added", comp_added))
         lines.extend(_bullet_block("Components quantity changed", comp_qty_changed))
@@ -977,24 +964,12 @@ def build_snapshot_compare_user_prompt(
     older_text = format_snapshot_compare_text(older_prepared)
     newer_text = format_snapshot_compare_text(newer_prepared)
     diff_text = format_snapshot_compare_diff_text(older_prepared, newer_prepared)
+    # Labeled facts only. All narrative / cite rules live in the saved
+    # Administration → AI snapshot compare prompt (system message).
     return (
-        f"Two snapshots follow. The first is OLD (already checked in); "
-        f"the second is NEW (the revision being compared / checked in). "
-        f"Do not swap them. Compare OLD ({older_label}) → NEW ({newer_label}).\n\n"
         f"=== OLD snapshot ({older_label}) ===\n"
         f"{older_text}\n\n"
         f"=== NEW snapshot ({newer_label}) ===\n"
         f"{newer_text}\n\n"
-        f"{diff_text}\n\n"
-        f"Summarize only what changed from OLD ({older_label}) to NEW ({newer_label}), "
-        f"following your instructions. Prefer the Computed differences block above — "
-        f"it already matched dimensions by symbol and assembly Structure/BOM components. "
-        f"Never invent a value change by "
-        f"pairing two different symbols (e.g. do not turn removed d248 = 7 and "
-        f"removed d255 = 6 into “reduced d248 from 7 to 6”). "
-        f"For assemblies, prefer Components removed/added/quantity changed over the "
-        f"incomplete non-component feature list. "
-        f"Treat the block under \"=== OLD snapshot ===\" as the previous state and "
-        f"\"=== NEW snapshot ===\" as the current state. "
-        f"Never claim a revision is missing when both revision outlines are present above."
+        f"{diff_text}"
     )
