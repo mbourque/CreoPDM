@@ -1915,19 +1915,40 @@ function creoFeatureTypeLabelFromFeatType(ft) {
      * Creo.JS FeatType is an enum object. Prefer .string() (FEATTYPE_HOLE),
      * not String(ft) which becomes "[object Object]" and blanks the Type column.
      *   feature.FeatType.string().replace(/^FEATTYPE_/, "").replace(/_/g, " ")
+     * Bridge often hides .string from typeof===function — use creoHasCallable.
      */
     if (ft == null) return "";
     try {
+        // Direct HOLE check via .value() (AI diagnostic path).
+        if (typeof pfcFeatureType !== "undefined" && pfcFeatureType.FEATTYPE_HOLE != null) {
+            var ftVal = creoEnumValue(ft);
+            var holeVal = creoEnumValue(pfcFeatureType.FEATTYPE_HOLE);
+            if (ftVal != null && holeVal != null && ftVal === holeVal) return "HOLE";
+            try {
+                if (ft === pfcFeatureType.FEATTYPE_HOLE || ft == pfcFeatureType.FEATTYPE_HOLE) {
+                    return "HOLE";
+                }
+            } catch (errEq) {}
+        }
         var raw = "";
-        if (typeof ft.string === "function") {
-            raw = String(ft.string() || "").trim();
+        try {
+            if (creoHasCallable(ft, "string") || typeof ft.string === "function") {
+                raw = String(ft.string() || "").trim();
+            }
+        } catch (errStr) {}
+        if (!raw || raw === "[object Object]") {
+            try {
+                if (ft.string != null && typeof ft.string !== "function") {
+                    raw = String(ft.string).trim();
+                }
+            } catch (errProp) {}
         }
         if (!raw || raw === "[object Object]") {
             raw = String(creoEnumName(ft) || "").trim();
         }
         if (!raw || raw === "[object Object]") return "";
         var label = String(raw)
-            .replace(/^FEATTYPE_/i, "")
+            .replace(/^FEATTYPE_/, "")
             .replace(/_/g, " ")
             .trim();
         if (!label || /^\d+$/.test(label)) return "";
@@ -1935,6 +1956,51 @@ function creoFeatureTypeLabelFromFeatType(ft) {
     } catch (errLab) {
         return "";
     }
+}
+function creoFeatureIdsByTypedList(solid, enumVal) {
+    /** Ids from ListFeaturesByType(…, FEATTYPE_*) — labels holes when FeatType is blank. */
+    var ids = {};
+    if (!solid || enumVal == null) return ids;
+    var attempts = [
+        function () { return solid.ListFeaturesByType(true, enumVal); },
+        function () { return solid.ListFeaturesByType(false, enumVal); },
+        function () { return solid.ListFeaturesByType(enumVal, true); },
+        function () { return solid.ListFeaturesByType(enumVal, false); }
+    ];
+    var listed = null;
+    for (var a = 0; a < attempts.length; a++) {
+        try {
+            listed = attempts[a]();
+            if (listed) break;
+        } catch (errTry) { listed = null; }
+    }
+    var items = creoFeatureItems(listed);
+    for (var i = 0; i < items.length; i++) {
+        try {
+            var item = items[i];
+            var id = creoFeatureNumericId(item);
+            if (id == null) {
+                try { id = creoFeatureNumericId(creoAsFeature(item)); } catch (errCast) {}
+            }
+            if (id == null) continue;
+            ids[String(id)] = true;
+        } catch (errId) {}
+    }
+    return ids;
+}
+function creoHoleFeatureIdSet(solid) {
+    var ids = {};
+    if (!solid || typeof pfcFeatureType === "undefined") return ids;
+    var keys = ["FEATTYPE_HOLE", "FEATTYPE_HULL_HOLE", "FEATTYPE_SMM_HOLE"];
+    for (var k = 0; k < keys.length; k++) {
+        var enumVal = pfcFeatureType[keys[k]];
+        if (enumVal == null) continue;
+        var part = creoFeatureIdsByTypedList(solid, enumVal);
+        for (var id in part) {
+            if (Object.prototype.hasOwnProperty.call(part, id)) ids[id] = true;
+        }
+    }
+    return ids;
 }
 function creoFeatureIsComponentType(feat) {
     if (!feat || typeof pfcFeatureType === "undefined" || pfcFeatureType.FEATTYPE_COMPONENT == null) {
@@ -2086,26 +2152,29 @@ function creoGatherFeatures(model, dbg, session, options) {
         }
         var features = creoFeatureItems(listed);
         if (dbg) dbg.listed_count = features.length;
+        // Hole FeatType/FeatTypeName often blank on list handles — typed HOLE list
+        // is authoritative (same idea as Structure’s FEATTYPE_COMPONENT list).
+        var holeIds = creoHoleFeatureIdSet(solid);
+        if (dbg) dbg.hole_typed_count = Object.keys(holeIds).length;
         for (var i = 0; i < features.length; i++) {
             try {
-                // ListFeaturesByType(true, null) item — rebind via GetFeatureById
-                // when FeatType is sparse (Hole showed as Feature 189 with blank Type).
                 var feat = features[i];
                 if (!feat) continue;
                 var id = creoFeatureNumericId(feat);
-                var typeName = creoFeatureTypeName(feat);
-                if (!typeName && id != null) {
+                // Always rebind — AI path: model.GetFeatureById(id).FeatType.string()
+                if (id != null) {
                     var byId = creoFeatureById(solid, id);
-                    if (byId) {
-                        feat = byId;
-                        typeName = creoFeatureTypeName(feat);
-                    }
+                    if (byId) feat = byId;
                 }
                 try {
                     if (typeof feat.IsVisible !== "undefined" && feat.IsVisible === false) continue;
                 } catch (errVis) {}
                 // Skip assembly component features here — those belong in BOM/structure.
                 if (creoFeatureIsComponentType(feat)) continue;
+                var typeName = creoFeatureTypeName(feat);
+                if (!typeName && id != null && holeIds[String(id)]) {
+                    typeName = "HOLE";
+                }
                 var subType = "";
                 try { subType = String(feat.FeatSubType || "").trim(); } catch (errS) { subType = ""; }
                 if (!subType) {
@@ -2128,7 +2197,9 @@ function creoGatherFeatures(model, dbg, session, options) {
                     name = "";
                 }
                 if (name && creoFeatureGenericLabel(name)) name = "";
-                if (!name) name = creoFeatureFallbackName(typeName, subType);
+                if (!name || creoFeatureIsInventedIdName(name, id)) {
+                    name = creoFeatureFallbackName(typeName, subType);
+                }
                 if (!name && !typeName && id == null) continue;
                 rows.push({
                     id: id,
@@ -2543,7 +2614,7 @@ function creoEnumName(value) {
     // Creo.JS enums: use .string() — String(enum) is often "[object Object]".
     if (value == null) return "";
     try {
-        if (typeof value.string === "function") {
+        if (creoHasCallable(value, "string") || typeof value.string === "function") {
             var viaString = String(value.string() || "").trim();
             if (viaString && viaString !== "[object Object]") return viaString;
         }
@@ -3222,25 +3293,26 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                 } catch (errPass1) {}
             }
             var labelByFeatId = {};
+            var holeIdsSnap = creoHoleFeatureIdSet(solid);
             for (var i = 0; i < featItems.length; i++) {
                 try {
                     // Same ListFeaturesByType(true, null) items as Features tab.
                     var feat = featItems[i];
                     if (!feat) continue;
                     var id = creoFeatureNumericId(feat);
-                    var typeName = creoFeatureTypeName(feat);
-                    if (!typeName && id != null) {
+                    if (id != null) {
                         var byIdSnap = creoFeatureById(solid, id);
-                        if (byIdSnap) {
-                            feat = byIdSnap;
-                            typeName = creoFeatureTypeName(feat);
-                        }
+                        if (byIdSnap) feat = byIdSnap;
                     }
                     // Invisible / internal construction features (e.g. unnamed
                     // DATUM PLANE owned by a hole pattern) are not in the model
                     // tree — including them made Ask AI report fake plane deletes.
                     if (!creoFeatureIsVisibleForSnapshot(feat)) continue;
                     if (creoFeatureIsComponentType(feat)) continue;
+                    var typeName = creoFeatureTypeName(feat);
+                    if (!typeName && id != null && holeIdsSnap[String(id)]) {
+                        typeName = "HOLE";
+                    }
                     var subType = "";
                     try { subType = String(feat.FeatSubType || "").trim(); } catch (errS) {}
                     var name = "";
@@ -3251,7 +3323,9 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                         name = "";
                     }
                     if (name && creoFeatureGenericLabel(name)) name = "";
-                    if (!name) name = creoFeatureFallbackName(typeName, subType);
+                    if (!name || creoFeatureIsInventedIdName(name, id)) {
+                        name = creoFeatureFallbackName(typeName, subType);
+                    }
                     var regenOrder = null;
                     try {
                         if (typeof feat.Number !== "undefined") regenOrder = feat.Number;

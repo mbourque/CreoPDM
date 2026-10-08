@@ -289,20 +289,22 @@ def test_home_page(client):
     assert "function creoFeatureTypeLabelFromFeatType(" in text
     assert "function creoFeatureById(" in text
     assert "function creoEnumValue(" in text
+    assert "function creoHoleFeatureIdSet(" in text
     # Creo.JS Features list: ListFeaturesByType(true, null) = public features, every type.
     assert "ListFeaturesByType(true, null)" in text
     assert "VisibleOnly" in text
     assert "public features only" in text
-    # FeatType is an enum object — .string() / .value(), not String(ft) or a lookup map.
-    assert "FeatType.string()" in text or "ft.string()" in text
-    assert 'replace(/^FEATTYPE_/' in text or ".replace(/^FEATTYPE_/" in text
+    # FeatType is an enum object — .string() / .value(), not String(ft).
+    assert "ft.string()" in text
+    assert ".replace(/^FEATTYPE_/" in text
     assert "GetFeatureById" in text
-    assert "Hole showed as Feature 189" in text
     gather_fn = text.split("function creoGatherFeatures(", 1)[1].split(
         "function creoFeatureStatusLabel(", 1
     )[0]
     assert "ListFeaturesByType(true, null)" in gather_fn
     assert "creoFeatureById(solid, id)" in gather_fn
+    assert "creoHoleFeatureIdSet(solid)" in gather_fn
+    assert 'typeName = "HOLE"' in gather_fn
     assert "pwlFeatureInfoGetByID" not in gather_fn
     assert "creoFeatureTypeEnrichmentMap" not in text
     assert "creoEnrichSparseFeatureFields" not in text
@@ -320,9 +322,8 @@ def test_home_page(client):
     assert "pwlFeatureInfoGetByID" not in text
     assert "pwlMdlFeaturesGet" not in text
     assert 'typeName + " " + regenNum' not in text
-    # Read list-item properties before cast; rebind when FeatType sparse.
     assert "Raw list item first" in text
-    assert "GetFeatureById" in gather_fn
+    assert "FEATTYPE_HOLE" in text
     assert "errFeat" in text
     assert "errFeatGather" in text
     assert "Do not RetrieveModel here" in text
