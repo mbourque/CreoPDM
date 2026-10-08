@@ -121,9 +121,11 @@ def test_feature_probe_and_inventory_omit_pattern_members():
     feat = (INV_DIR / "features.creojs").read_text(encoding="utf-8")
     for body, label in ((probe, "feature_probe"), (feat, "creo_inventory/features")):
         assert "staircase" in body, label
-        assert "function isPatternCopyFeature(" in body, label
-        assert "Contiguous IFX/HOLE/UDF shells after a PATTERN" in body, label
+        assert "function endsPatternMemberRun(" in body, label
+        assert "drop the whole member run" in body, label
+        assert "No ListChildren" in body, label
         assert "Pattern members are omitted from the list" in body, label
+        assert "Unnamed GROUP_HEAD shells are IFX UDF" in body, label
         assert 'typeName === "HOLE"' in body, label
         claim_break = (
             "if (isGroupHeadFeature(next.feat)) {\n"
