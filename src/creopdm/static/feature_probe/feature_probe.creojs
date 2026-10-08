@@ -239,13 +239,45 @@ function featureIsPatternNestParent(feat) {
 /** Local group / GROUP_HEAD container in the model tree (nested groups allowed). */
 function isGroupHeadFeature(feat) {
   if (!feat) return false;
+  // IFX / UDF hole instances often report GroupStatus or FEATTYPE_GROUP_HEAD
+  // while FeatTypeName is still HOLE — treating those as group heads made the
+  // contiguous fallback build a thousand-deep GROUP (n) → GROUP (n+1) staircase.
+  var storedEarly = "";
+  try {
+    storedEarly = String(featureStoredName(feat) || "").toUpperCase();
+  } catch (eStored) {
+    storedEarly = "";
+  }
+  if (/^IFX_ID_/.test(storedEarly)) return false;
+  var typeName = "";
+  try {
+    typeName = String(feat.FeatTypeName || "").toUpperCase();
+  } catch (eType) {
+    typeName = "";
+  }
+  if (
+    typeName === "HOLE" ||
+    typeName === "PROTRUSION" ||
+    typeName === "CUT" ||
+    typeName === "ROUND" ||
+    typeName === "CHAMFER" ||
+    typeName === "RIB" ||
+    typeName === "DRAFT" ||
+    typeName === "SHELL" ||
+    typeName.indexOf("DATUM") >= 0 ||
+    typeName.indexOf("COORDINATE") >= 0 ||
+    typeName.indexOf("CURVE") >= 0 ||
+    typeName === "PATTERN"
+  ) {
+    return false;
+  }
   try {
     if (typeof pfcFeatureType !== "undefined") {
       if (feat.FeatType === pfcFeatureType.FEATTYPE_GROUP_HEAD) return true;
       if (feat.FeatType === pfcFeatureType.FEATTYPE_GROUP) return true;
     }
   } catch (e) {}
-  var stored = String(featureStoredName(feat) || "").toUpperCase();
+  var stored = storedEarly;
   if (stored === "LOCAL_GROUP" || /^GROUP(\s|$|_)/.test(stored)) return true;
   var t = featureTypeHints(feat);
   return (
@@ -1079,8 +1111,10 @@ function orderFeaturesWithNesting(entries) {
     groupMemberOrder[pgsid] = pgorder;
   }
 
-  // Contiguous fallback: when a group still has no members, take following rows
-  // until the next group head (claim that head as a nested group, then stop).
+  // Contiguous fallback: when a group still has no members, take following
+  // non-group rows until the next group head. Do NOT claim that next group
+  // head — inventing group-in-group here turned IFX hole patterns into a
+  // staircase (GROUP 10777 → 10778 → … → level 1000+).
   for (ei = 0; ei < entries.length; ei++) {
     var ge2 = entries[ei];
     if (!ge2 || !isGroupHeadFeature(ge2.feat) || ge2.id == null) continue;
@@ -1093,7 +1127,6 @@ function orderFeaturesWithNesting(entries) {
       var nid = String(next.id);
       if (nestedUnderGroup[nid]) continue;
       if (isGroupHeadFeature(next.feat)) {
-        claimGroupMember(gsid2, next, gorder2);
         break;
       }
       claimGroupMember(gsid2, next, gorder2);

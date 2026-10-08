@@ -432,6 +432,38 @@ function isStructureMemberFeature(feat) {
 /** Local group / GROUP_HEAD container in the model tree. */
 function isGroupHeadFeature(feat) {
   if (!feat) return false;
+  // Solid feature types / IFX holes are never nestable group containers
+  // (same anti-staircase rule as feature_probe; MFG still nests via ListMembers
+  // + contiguous claim of real GROUP heads).
+  var storedEarly = "";
+  try {
+    storedEarly = String(featureStoredName(feat) || "").toUpperCase();
+  } catch (eStored) {
+    storedEarly = "";
+  }
+  if (/^IFX_ID_/.test(storedEarly)) return false;
+  var typeName = "";
+  try {
+    typeName = String(feat.FeatTypeName || "").toUpperCase();
+  } catch (eType) {
+    typeName = "";
+  }
+  if (
+    typeName === "HOLE" ||
+    typeName === "PROTRUSION" ||
+    typeName === "CUT" ||
+    typeName === "ROUND" ||
+    typeName === "CHAMFER" ||
+    typeName === "RIB" ||
+    typeName === "DRAFT" ||
+    typeName === "SHELL" ||
+    typeName.indexOf("DATUM") >= 0 ||
+    typeName.indexOf("COORDINATE") >= 0 ||
+    typeName.indexOf("CURVE") >= 0 ||
+    typeName === "PATTERN"
+  ) {
+    return false;
+  }
   try {
     if (typeof pfcFeatureType !== "undefined") {
       if (feat.FeatType === pfcFeatureType.FEATTYPE_GROUP_HEAD) return true;

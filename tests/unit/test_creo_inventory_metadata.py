@@ -109,6 +109,39 @@ def test_creo_inventory_wrapped_files_exist():
     assert "function listDrawingStructureForModel(" in drw
 
 
+def test_feature_probe_avoids_ifx_group_staircase():
+    """plate_3.prt: IFX hole patterns must not nest GROUP→GROUP to level 1000+.
+
+    Contiguous fallback must stop at the next group head without claiming it,
+    and HOLE / IFX_ID_* must not count as group heads.
+    """
+    probe = (
+        ROOT / "src" / "creopdm" / "static" / "feature_probe" / "feature_probe.creojs"
+    ).read_text(encoding="utf-8")
+    assert "staircase" in probe
+    assert "/^IFX_ID_/" in probe
+    assert 'typeName === "HOLE"' in probe
+    # Contiguous: break on next group head without claimGroupMember of that head.
+    idx = probe.find("Contiguous fallback:")
+    assert idx >= 0
+    block = probe[idx : idx + 900]
+    assert "Do NOT claim that next group" in block or "do not claim" in block.lower()
+    claim_break = (
+        "if (isGroupHeadFeature(next.feat)) {\n"
+        "        claimGroupMember(gsid2, next, gorder2);\n"
+        "        break;\n"
+        "      }"
+    )
+    assert claim_break not in probe
+    assert "if (isGroupHeadFeature(next.feat)) {\n        break;\n      }" in probe
+
+    # Wrapped inventory must stay in sync after wrap_creo_inventory.py.
+    feat = (INV_DIR / "features.creojs").read_text(encoding="utf-8")
+    assert 'typeName === "HOLE"' in feat
+    assert claim_break not in feat
+    assert "if (isGroupHeadFeature(next.feat)) {\n        break;\n      }" in feat
+
+
 def test_compare_outline_uses_drawing_inventory():
     text = format_snapshot_compare_text(
         {
