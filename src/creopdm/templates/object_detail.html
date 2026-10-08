@@ -142,124 +142,81 @@
     {% set show_generic = id_generic and _norm(id_generic) != _norm(id_number) and _norm(id_generic) != _norm(id_name)
          and _norm(id_generic) != _norm(id_instance) and _norm(id_generic) != _norm(id_full) %}
     <div class="detail-sections">
-      <section class="detail-section">
-        <h3 class="detail-section-title">Identity</h3>
-        <div class="table-wrap">
-        <table class="grid inventory-table">
-          <thead><tr><th>Field</th><th>Value</th></tr></thead>
-          <tbody>
-            <tr><td>Name</td><td>{{ id_number or id_name or "—" }}</td></tr>
-            {% if show_name %}
-            <tr><td>File name</td><td>{{ id_name }}</td></tr>
-            {% endif %}
-            {% if show_common %}
-            <tr><td>Common name</td><td>{{ id_common }}</td></tr>
-            {% endif %}
-            {% if show_full %}
-            <tr><td>Full name</td><td>{{ id_full }}</td></tr>
-            {% endif %}
-            {% if show_instance %}
-            <tr><td>Instance</td><td>{{ id_instance }}</td></tr>
-            {% endif %}
-            {% if show_generic %}
-            <tr><td>Generic</td><td>{{ id_generic }}</td></tr>
-            {% endif %}
-            {% if identity.model_type %}
-            <tr><td>Model type</td><td>{{ identity.model_type }}{% if is_top_level_assembly %} (Top Level){% endif %}</td></tr>
-            {% elif is_top_level_assembly %}
-            <tr><td>Model type</td><td>ASSEMBLY (Top Level)</td></tr>
-            {% endif %}
-            {% if identity.model_role %}
-            <tr><td>Subtype</td><td>{{ identity.model_role }}</td></tr>
-            {% endif %}
-            {% if object.creo_release %}
-            <tr><td>Creo</td><td>{{ object.creo_release }}</td></tr>
-            {% endif %}
-            <tr>
-              <td>Date created</td>
-              <td>{% if object.created_at %}<span title="{{ local_time_pretty(object.created_at) }}">{{ local_time(object.created_at) }}</span>{% else %}—{% endif %}</td>
-            </tr>
-            {% if object.updated_at and (not object.created_at or local_time(object.updated_at) != local_time(object.created_at)) %}
-            <tr>
-              <td>Date modified</td>
-              <td><span title="{{ local_time_pretty(object.updated_at) }}">{{ local_time(object.updated_at) }}</span></td>
-            </tr>
-            {% endif %}
-            <tr><td>Size</td><td>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</td></tr>
-          </tbody>
-        </table>
-        </div>
-      </section>
-
-      {% if object.checkout_user %}
-      <section class="detail-section">
-        <h3 class="detail-section-title">Checkout</h3>
-        <div class="table-wrap">
-        <table class="grid inventory-table">
-          <thead><tr><th>Field</th><th>Value</th></tr></thead>
-          <tbody>
-            <tr>
-              <td>Checked out by</td>
-              <td>{{ object.checkout_user }}{% if object.owned_by_me %} (you){% endif %}</td>
-            </tr>
-            {% if object.checkout_since %}
-            <tr>
-              <td>Checked out</td>
-              <td><span title="{{ local_time_pretty(object.checkout_since) }}">{{ local_time(object.checkout_since) }}</span></td>
-            </tr>
-            {% endif %}
-          </tbody>
-        </table>
-        </div>
-      </section>
-      {% endif %}
-
-      {% if units.system_name or units.length or units.mass %}
-      <section class="detail-section">
-        <h3 class="detail-section-title">Units</h3>
-        <div class="table-wrap">
-        <table class="grid inventory-table">
-          <thead><tr><th>Field</th><th>Value</th></tr></thead>
-          <tbody>
-            {% if units.system_name %}<tr><td>System</td><td>{{ units.system_name }}</td></tr>{% endif %}
-            {% if units.length %}<tr><td>Length</td><td>{{ units.length }}</td></tr>{% endif %}
-            {% if units.mass %}<tr><td>Mass</td><td>{{ units.mass }}</td></tr>{% endif %}
-            {% if units.time %}<tr><td>Time</td><td>{{ units.time }}</td></tr>{% endif %}
-            {% if units.temperature %}<tr><td>Temperature</td><td>{{ units.temperature }}</td></tr>{% endif %}
-          </tbody>
-        </table>
-        </div>
-      </section>
-      {% endif %}
-
-      {% if materials.current or (mass and mass.mass is not none) %}
-      <section class="detail-section">
-        <h3 class="detail-section-title">Summary</h3>
-        <div class="table-wrap">
-        <table class="grid inventory-table">
-          <thead><tr><th>Field</th><th>Value</th></tr></thead>
-          <tbody>
-            {% if materials.current %}
-            <tr><td>Material</td><td>{{ materials.current }}</td></tr>
-            {% endif %}
-            {% if mass and mass.mass is not none %}
-            <tr><td>Mass</td><td>{{ mass.mass }}{% if units.mass %} {{ units.mass }}{% endif %}</td></tr>
-            {% endif %}
-            {% if mass and mass.volume is not none %}
-            <tr><td>Volume</td><td>{{ mass.volume }}</td></tr>
-            {% endif %}
-            {% if mass and mass.density is not none %}
-            <tr><td>Density</td><td>{{ mass.density }}</td></tr>
-            {% endif %}
-          </tbody>
-        </table>
-        </div>
-      </section>
-      {% endif %}
+      <div class="table-wrap">
+      <table class="grid inventory-table">
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Name</td><td>{{ id_number or id_name or "—" }}</td></tr>
+          {% if show_name %}
+          <tr><td>File name</td><td>{{ id_name }}</td></tr>
+          {% endif %}
+          {% if show_common %}
+          <tr><td>Common name</td><td>{{ id_common }}</td></tr>
+          {% endif %}
+          {% if show_full %}
+          <tr><td>Full name</td><td>{{ id_full }}</td></tr>
+          {% endif %}
+          {% if show_instance %}
+          <tr><td>Instance</td><td>{{ id_instance }}</td></tr>
+          {% endif %}
+          {% if show_generic %}
+          <tr><td>Generic</td><td>{{ id_generic }}</td></tr>
+          {% endif %}
+          {% if identity.model_type %}
+          <tr><td>Model type</td><td>{{ identity.model_type }}{% if is_top_level_assembly %} (Top Level){% endif %}</td></tr>
+          {% elif is_top_level_assembly %}
+          <tr><td>Model type</td><td>ASSEMBLY (Top Level)</td></tr>
+          {% endif %}
+          {% if identity.model_role %}
+          <tr><td>Subtype</td><td>{{ identity.model_role }}</td></tr>
+          {% endif %}
+          {% if object.creo_release %}
+          <tr><td>Creo</td><td>{{ object.creo_release }}</td></tr>
+          {% endif %}
+          <tr>
+            <td>Date created</td>
+            <td>{% if object.created_at %}<span title="{{ local_time_pretty(object.created_at) }}">{{ local_time(object.created_at) }}</span>{% else %}—{% endif %}</td>
+          </tr>
+          {% if object.updated_at and (not object.created_at or local_time(object.updated_at) != local_time(object.created_at)) %}
+          <tr>
+            <td>Date modified</td>
+            <td><span title="{{ local_time_pretty(object.updated_at) }}">{{ local_time(object.updated_at) }}</span></td>
+          </tr>
+          {% endif %}
+          <tr><td>Size</td><td>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</td></tr>
+          {% if object.checkout_user %}
+          <tr>
+            <td>Checked out by</td>
+            <td>{{ object.checkout_user }}{% if object.owned_by_me %} (you){% endif %}</td>
+          </tr>
+          {% if object.checkout_since %}
+          <tr>
+            <td>Checked out</td>
+            <td><span title="{{ local_time_pretty(object.checkout_since) }}">{{ local_time(object.checkout_since) }}</span></td>
+          </tr>
+          {% endif %}
+          {% endif %}
+          {% if units.system_name %}<tr><td>System</td><td>{{ units.system_name }}</td></tr>{% endif %}
+          {% if units.length %}<tr><td>Length</td><td>{{ units.length }}</td></tr>{% endif %}
+          {% if units.mass %}<tr><td>Mass unit</td><td>{{ units.mass }}</td></tr>{% endif %}
+          {% if units.time %}<tr><td>Time</td><td>{{ units.time }}</td></tr>{% endif %}
+          {% if units.temperature %}<tr><td>Temperature</td><td>{{ units.temperature }}</td></tr>{% endif %}
+          {% if materials.current %}
+          <tr><td>Material</td><td>{{ materials.current }}</td></tr>
+          {% endif %}
+          {% if mass and mass.mass is not none %}
+          <tr><td>Mass</td><td>{{ mass.mass }}{% if units.mass %} {{ units.mass }}{% endif %}</td></tr>
+          {% endif %}
+          {% if mass and mass.volume is not none %}
+          <tr><td>Volume</td><td>{{ mass.volume }}</td></tr>
+          {% endif %}
+          {% if mass and mass.density is not none %}
+          <tr><td>Density</td><td>{{ mass.density }}</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+      </div>
     </div>
-    {% if is_creo and not metadata.captured %}
-    <p class="muted small meta-empty">Creo metadata not captured yet. Open the model in Creo, then Add or Check In while it is in session.</p>
-    {% endif %}
   </section>
 
   {% if is_creo %}
@@ -383,11 +340,6 @@
 
   {% if show_features_tab %}
   <section class="tab-panel" id="panel-features" hidden>
-    {% if is_drawing %}
-    <p class="muted small">Drawing inventory (sheets, views, notes, dimensions, tables) from Creo metadata.</p>
-    {% else %}
-    <p class="muted small">Visible Creo features (nested level and status). Assembly components are under Structure.</p>
-    {% endif %}
     {% set features_show_sheet = namespace(any=false) %}
     {% for feat in features %}
       {% if feat.sheet is defined and feat.sheet is not none and feat.sheet != "" %}
@@ -430,7 +382,6 @@
   {% if show_structure_tab %}
   <section class="tab-panel" id="panel-structure" hidden>
     {% if structure %}
-    <p class="muted small">Assembly structure from Creo (nested components and groups; session-only depth).</p>
     <div class="table-wrap">
     <table class="grid inventory-table">
       <thead>
@@ -459,11 +410,6 @@
     </table>
     </div>
     {% elif bom %}
-    <p class="muted small">Model tree — top assembly first, subassemblies and parts indented.</p>
-    <p class="muted small bom-legend">
-      <span class="bom-legend-in">Linked names</span> are in this product (click to open).
-      <span class="bom-legend-out">Plain names</span> are not in the product yet.
-    </p>
     <ul class="bom-tree bom-tree-root">{{ bom_tree(bom) }}</ul>
     {% else %}
     <p class="muted">No structure captured yet. Open the model in Creo and Check In / Add while it is in session.</p>
@@ -474,11 +420,6 @@
   {% if is_assembly %}
   <section class="tab-panel" id="panel-bom" hidden>
     {% if bom %}
-    <p class="muted small">Indented BOM with quantity at each level (same hierarchy as Structure).</p>
-    <p class="muted small bom-legend">
-      <span class="bom-legend-in">Linked names</span> are in this product (click to open).
-      <span class="bom-legend-out">Plain names</span> are not in the product yet.
-    </p>
     <div class="table-wrap">
     <table class="grid inventory-table">
       <thead>

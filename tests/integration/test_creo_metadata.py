@@ -276,8 +276,9 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert "SHAFT_LONG" in shaft_detail.text
     assert "1.25" in shaft_detail.text
     assert "Extrude 1" in shaft_detail.text
-    assert "Visible Creo features" in shaft_detail.text
+    assert "Visible Creo features" not in shaft_detail.text
     assert 'id="panel-features"' in shaft_detail.text
+    assert "inventory-table" in shaft_detail.text
 
 
 @requires_git

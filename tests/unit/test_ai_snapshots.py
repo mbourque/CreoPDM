@@ -643,7 +643,9 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "Features removed" in diff_half
     assert "members)" in older_half
     assert "Feature 15780" not in pat_prompt
-    assert "15775" not in pat_prompt
+    # Outline lines end with Creo feature id (compare aligns on id); must not
+    # resurrect dropped pattern-item dims that only cited that id.
+    assert "(15775)" in older_half
     assert "d253" not in pat_prompt
     assert "T = 0.5 in" in pat_prompt
     assert "Material: STEEL_LOW_ALLOY" in pat_prompt
@@ -737,7 +739,8 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "pairing two different symbols" not in plate_prompt
     assert "PATTERN 3" in plate_diff
 
-    # Dimension lines show owning feature **name**, never the Creo feature id.
+    # Dimension lines show owning feature **name**, never the Creo feature id
+    # in the owner slot (feature list lines may still end with (4460)).
     dim_owner_snap = {
         "identity": {"filename": "plate_3.prt", "model_type": "PART"},
         "features": [
@@ -769,7 +772,10 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "d258 (Extrude) = 95.461 in" in dim_owner_text
     assert "d259 (Extrude) = 21.7 in" in dim_owner_text
     assert "d300 (Hole 1) = 1 in" in dim_owner_text
-    assert "(4460)" not in dim_owner_text
+    assert "Extrude (4460)" in dim_owner_text  # feature row id suffix
+    assert "d258 (4460)" not in dim_owner_text
+    assert "d259 (4460)" not in dim_owner_text
+    assert "d300 (5000)" not in dim_owner_text
     assert "feature_id" not in dim_owner_text
     # feature_name alone (no id lookup) also works after gather stamp.
     named_only = format_snapshot_compare_text(
@@ -798,7 +804,7 @@ def test_snapshot_compare_prompt_requires_saved_text():
         },
     )
     assert "d300 (Hole 1) = 1 in" in dim_owner_diff
-    assert "(5000)" not in dim_owner_diff
+    assert "d300 (5000)" not in dim_owner_diff
 
     # Assemblies: Structure/BOM drives component add/remove (Features omit COMPONENT).
     asm_old = {

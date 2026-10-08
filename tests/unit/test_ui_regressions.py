@@ -1401,13 +1401,18 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     # must keep white text (`.detail a` alone would force ink).
     assert ".detail a.btn-primary" in css
     assert "color: #fff" in _between(css, ".detail a.btn-primary", ".detail a.btn-danger")
-    assert ".detail .bom-legend-in" in css
-    # Overview uses inventory Field/Value tables (same chrome as Features).
+    # Overview uses inventory Field/Value tables (same chrome as Features); no tab blurbs.
     assert "inventory-table" in overview and "table-wrap" in overview
     assert "<dl" not in overview and 'class="kv"' not in overview
+    assert "detail-section-title" not in overview
+    assert "Visible Creo features" not in detail
+    assert "Assembly structure from Creo" not in detail
+    assert "Indented BOM with quantity" not in detail
+    assert "bom-legend" not in detail
     assert "font-size: inherit" in _between(css, ".detail .grid {", "/* Inventory chrome")
     assert ".detail .inventory-table th" in css
     assert "**Overview**" in docs and "Field/Value" in docs
+    assert "no intro blurbs" in docs or "without intro blurbs" in docs
     # Detail tables no longer force mono class on every value cell.
     assert 'td class="mono"' not in detail
     assert 'th class="mono"' not in detail
