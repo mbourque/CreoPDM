@@ -109,37 +109,32 @@ def test_creo_inventory_wrapped_files_exist():
     assert "function listDrawingStructureForModel(" in drw
 
 
-def test_feature_probe_avoids_ifx_group_staircase():
-    """plate_3.prt: IFX hole patterns must not nest GROUP→GROUP to level 1000+.
+def test_feature_probe_and_inventory_omit_pattern_members():
+    """Probe + app inventory stay in sync: no IFX staircase, no pattern copies.
 
-    Contiguous fallback must stop at the next group head without claiming it,
-    and HOLE / IFX_ID_* must not count as group heads.
+    plate_3.prt: contiguous group fallback must not nest GROUP→GROUP; pattern
+    IFX/HOLE copies are omitted (skippedPatternMemberCount), not listed.
     """
     probe = (
         ROOT / "src" / "creopdm" / "static" / "feature_probe" / "feature_probe.creojs"
     ).read_text(encoding="utf-8")
-    assert "staircase" in probe
-    assert "/^IFX_ID_/" in probe
-    assert 'typeName === "HOLE"' in probe
-    # Contiguous: break on next group head without claimGroupMember of that head.
-    idx = probe.find("Contiguous fallback:")
-    assert idx >= 0
-    block = probe[idx : idx + 900]
-    assert "Do NOT claim that next group" in block or "do not claim" in block.lower()
-    claim_break = (
-        "if (isGroupHeadFeature(next.feat)) {\n"
-        "        claimGroupMember(gsid2, next, gorder2);\n"
-        "        break;\n"
-        "      }"
-    )
-    assert claim_break not in probe
-    assert "if (isGroupHeadFeature(next.feat)) {\n        break;\n      }" in probe
-
-    # Wrapped inventory must stay in sync after wrap_creo_inventory.py.
     feat = (INV_DIR / "features.creojs").read_text(encoding="utf-8")
-    assert 'typeName === "HOLE"' in feat
-    assert claim_break not in feat
-    assert "if (isGroupHeadFeature(next.feat)) {\n        break;\n      }" in feat
+    for body, label in ((probe, "feature_probe"), (feat, "creo_inventory/features")):
+        assert "staircase" in body, label
+        assert "function isPatternCopyFeature(" in body, label
+        assert "Contiguous IFX/HOLE/UDF shells after a PATTERN" in body, label
+        assert "Pattern members are omitted from the list" in body, label
+        assert 'typeName === "HOLE"' in body, label
+        claim_break = (
+            "if (isGroupHeadFeature(next.feat)) {\n"
+            "        claimGroupMember(gsid2, next, gorder2);\n"
+            "        break;\n"
+            "      }"
+        )
+        assert claim_break not in body, label
+        assert "if (isGroupHeadFeature(next.feat)) {\n        break;\n      }" in body, label
+        # Must not re-emit pattern children under the PATTERN head.
+        assert "emitEntry(pcs[pi], level + 1)" not in body, label
 
 
 def test_compare_outline_uses_drawing_inventory():

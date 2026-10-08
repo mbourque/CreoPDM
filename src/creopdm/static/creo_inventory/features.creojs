@@ -268,6 +268,15 @@ function isGroupHeadFeature(feat) {
     return false;
   }
   try {
+    if (
+      typeof pfcFeatureType !== "undefined" &&
+      pfcFeatureType.FEATTYPE_HOLE != null &&
+      feat.FeatType === pfcFeatureType.FEATTYPE_HOLE
+    ) {
+      return false;
+    }
+  } catch (eHoleType) {}
+  try {
     if (typeof pfcFeatureType !== "undefined") {
       if (feat.FeatType === pfcFeatureType.FEATTYPE_GROUP_HEAD) return true;
       if (feat.FeatType === pfcFeatureType.FEATTYPE_GROUP) return true;
@@ -488,59 +497,120 @@ function featureHasApiType(feat) {
 }
 
 /**
+ * IFX / hole pattern instance — keep PATTERN heads; drop the copies so Features
+ * / Ask AI stay readable (plate_3 had ~1000 flat GROUP/HOLE rows).
+ */
+function isPatternCopyFeature(feat) {
+  if (!feat) return false;
+  var name = "";
+  try {
+    name = String(featureStoredName(feat) || "").toUpperCase();
+  } catch (eName) {
+    name = "";
+  }
+  // IFX leaders still report PatternStatus LEADER — omit them with the copies.
+  if (/^IFX_ID_/.test(name)) return true;
+  if (featureIsPatternNestParent(feat)) return false;
+  var st = featurePatternStatus(feat);
+  if (st.indexOf("MEMBER") >= 0 && st.indexOf("LEADER") < 0) return true;
+  var typeName = "";
+  try {
+    typeName = String(feat.FeatTypeName || "").toUpperCase();
+  } catch (eType) {
+    typeName = "";
+  }
+  if (typeName === "HOLE") return true;
+  try {
+    if (
+      typeof pfcFeatureType !== "undefined" &&
+      pfcFeatureType.FEATTYPE_HOLE != null &&
+      feat.FeatType === pfcFeatureType.FEATTYPE_HOLE
+    ) {
+      return true;
+    }
+  } catch (eHole) {}
+  // Empty-name UDF / GROUP_HEAD shells wrapping IFX hole instances.
+  if (!name || /^GROUP(\s|$|\()/.test(name)) {
+    var t = featureTypeHints(feat);
+    if (
+      t.indexOf("HOLE") >= 0 ||
+      t.indexOf("GROUP_HEAD") >= 0 ||
+      (t.indexOf("GROUP") >= 0 && t.indexOf("PATTERN") < 0)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * IDs to omit entirely (not nested under a parent):
+ * - PatternStatus MEMBER copies
+ * - ListChildren of PATTERN heads
+ * - Contiguous IFX/HOLE/UDF shells after a PATTERN until the next PATTERN
  * - unnamed sparse hole-param ghosts
- * - sparse IFX_ID_* leaders when real pattern/IFX members exist
- * Pattern copies stay in the list and nest under the pattern head.
- * PATTERN_HEAD / standalone IFX (no members) stay.
+ * PATTERN heads stay; standalone IFX with no pattern stay.
  */
 function collectOmitFeatureIds(list) {
   var omitIds = {};
-  var hasMembers = false;
   var i;
+
+  function markOmit(feat, raw) {
+    var id = featureIdOf(feat);
+    if (id == null) id = featureIdOf(raw);
+    if (id == null) return;
+    var sid = String(id);
+    var nm = "";
+    try {
+      nm = String(featureStoredName(feat) || "").toUpperCase();
+    } catch (eNm) {
+      nm = "";
+    }
+    // Keep PATTERN heads; IFX_* leaders are still omitted as pattern copies.
+    if (featureIsPatternHead(feat)) return;
+    if (featureIsPatternNestParent(feat) && !/^IFX_ID_/.test(nm)) return;
+    omitIds[sid] = true;
+  }
+
   for (i = 0; i < list.length; i++) {
-    var f0 = featureHandle(list[i]);
-    var st = featurePatternStatus(f0);
-    if (st.indexOf("MEMBER") >= 0 && st.indexOf("LEADER") < 0) {
-      hasMembers = true;
+    var fMem = featureHandle(list[i]);
+    var stMem = featurePatternStatus(fMem);
+    if (stMem.indexOf("MEMBER") >= 0 && stMem.indexOf("LEADER") < 0) {
+      markOmit(fMem, list[i]);
     }
   }
+
   for (i = 0; i < list.length; i++) {
-    var f1 = featureHandle(list[i]);
-    var name = featureStoredName(f1);
-    var isHead = featureIsPatternNestParent(f1);
-    var isIfxNamed = /^IFX_ID_/i.test(name);
-    if (!isHead && !isIfxNamed) continue;
-    var kids = collectChildFeatureIds(f1);
-    for (var kid in kids) {
-      if (Object.prototype.hasOwnProperty.call(kids, kid)) hasMembers = true;
+    var fHead = featureHandle(list[i]);
+    if (!featureIsPatternNestParent(fHead)) continue;
+    var kids = collectChildFeatureIds(fHead);
+    var kid;
+    for (kid in kids) {
+      if (!Object.prototype.hasOwnProperty.call(kids, kid)) continue;
+      omitIds[kid] = true;
+    }
+    // ListChildren is often empty for IFX patterns — take following copies.
+    for (var j = i + 1; j < list.length; j++) {
+      var fNext = featureHandle(list[j]);
+      // Stop at the next PATTERN head only (IFX LEADER is still a copy).
+      if (featureIsPatternHead(fNext)) break;
+      if (!isPatternCopyFeature(fNext)) break;
+      markOmit(fNext, list[j]);
     }
   }
+
   for (i = 0; i < list.length; i++) {
     var f2 = featureHandle(list[i]);
     var id2 = featureIdOf(f2);
     if (id2 == null) id2 = featureIdOf(list[i]);
     if (id2 == null) continue;
     var sid = String(id2);
+    if (omitIds[sid]) continue;
     if (featureIsPatternNestParent(f2)) continue;
     if (isGroupHeadFeature(f2)) continue;
     if (featureStoredName(f2)) continue;
     if (featureHasApiType(f2)) continue;
     if (featureHasHoleParams(f2)) omitIds[sid] = true;
-  }
-  if (hasMembers) {
-    for (i = 0; i < list.length; i++) {
-      var f3 = featureHandle(list[i]);
-      var id3 = featureIdOf(f3);
-      if (id3 == null) id3 = featureIdOf(list[i]);
-      if (id3 == null) continue;
-      var sid3 = String(id3);
-      if (omitIds[sid3]) continue;
-      if (featureIsPatternNestParent(f3)) continue;
-      if (!/^IFX_ID_/i.test(featureStoredName(f3))) continue;
-      if (featureHasApiType(f3)) continue;
-      omitIds[sid3] = true;
-    }
   }
   return omitIds;
 }
@@ -1177,12 +1247,8 @@ function orderFeaturesWithNesting(entries) {
         emitEntry(gms[gi], level + 1);
       }
     }
-    if (sid && patternChildOrder[sid]) {
-      var pcs = patternChildOrder[sid];
-      for (var pi = 0; pi < pcs.length; pi++) {
-        emitEntry(pcs[pi], level + 1);
-      }
-    }
+    // Pattern members are omitted from the list (skippedPatternMemberCount),
+    // not indented under the PATTERN head.
   }
 
   for (ei = 0; ei < entries.length; ei++) {
