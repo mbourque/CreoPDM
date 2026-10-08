@@ -1296,6 +1296,7 @@ def test_details_data_tabs_use_inventory_table_chrome():
         encoding="utf-8"
     )
     for panel in (
+        'id="panel-overview"',
         'id="panel-parameters"',
         'id="panel-materials"',
         'id="panel-family"',
@@ -1306,8 +1307,14 @@ def test_details_data_tabs_use_inventory_table_chrome():
         'id="panel-structure"',
     ):
         assert panel in detail, panel
-    assert detail.count("inventory-table") >= 6
-    assert detail.count('class="table-wrap"') >= 6
+    overview_chunk = detail.split('id="panel-overview"', 1)[1].split('id="panel-parameters"', 1)[0]
+    assert "inventory-table" in overview_chunk
+    assert "table-wrap" in overview_chunk
+    assert "<th>Field</th>" in overview_chunk and "<th>Value</th>" in overview_chunk
+    assert "<td>Name</td>" in overview_chunk
+    assert "class=\"kv\"" not in overview_chunk and "<dl" not in overview_chunk
+    assert detail.count("inventory-table") >= 7
+    assert detail.count('class="table-wrap"') >= 7
     assert 'id="history-files-table"' in detail
     hist = _between(detail, 'id="panel-history"', "</article>")
     assert "table-wrap" in hist
@@ -1337,10 +1344,10 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
     overview = _between(detail, 'id="panel-overview"', 'id="panel-parameters"')
-    assert "<dt>Revision</dt>" not in overview
-    assert "<dt>Lifecycle</dt>" not in overview
-    assert "<dt>Checked out by</dt>" in overview
-    assert "<dt>Checked out</dt>" in overview
+    assert "<td>Revision</td>" not in overview
+    assert "<td>Lifecycle</td>" not in overview
+    assert "<td>Checked out by</td>" in overview
+    assert "<td>Checked out</td>" in overview
     assert "object.checkout_since" in overview
     assert 'local_time_pretty(object.checkout_since)' in detail
     assert 'title="Checked out {{ local_time_pretty(object.checkout_since) }}"' in detail
@@ -1349,11 +1356,11 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert "show_full" in overview
     assert "show_instance" in overview
     assert 'class="mono"' not in overview
-    assert "<dt>Origin</dt>" not in overview
+    assert "<td>Origin</td>" not in overview
     assert "identity.origin" not in overview
     assert "Content hash" not in overview
     assert "h[:12]" not in overview
-    assert "<dt>Date created</dt>" in overview
+    assert "<td>Date created</td>" in overview
     assert "local_time_pretty(object.created_at)" in overview
     assert "local_time(object.updated_at) != local_time(object.created_at)" in overview
     assert "omits content hash" in docs
@@ -1365,11 +1372,11 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert ".detail .filename-cell" in css
     assert "font-family: inherit" in css
     assert "text-transform: uppercase" in css
-    assert "<dt>Number</dt>" not in overview
-    assert "<dt>Name</dt>" in overview
-    assert "<dt>Model type</dt>" in overview
-    assert "<dt>Subtype</dt>" in overview
-    assert "<dt>Model role</dt>" not in overview
+    assert "<td>Number</td>" not in overview
+    assert "<td>Name</td>" in overview
+    assert "<td>Model type</td>" in overview
+    assert "<td>Subtype</td>" in overview
+    assert "<td>Model role</td>" not in overview
     assert "identity.model_type" in overview
     assert "is_top_level_assembly" in overview
     assert "ASSEMBLY (Top Level)" in overview
@@ -1395,10 +1402,12 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert ".detail a.btn-primary" in css
     assert "color: #fff" in _between(css, ".detail a.btn-primary", ".detail a.btn-danger")
     assert ".detail .bom-legend-in" in css
-    # One content size on Details — kv inherit; inventory tables share Features chrome.
-    assert ".detail .kv" in css and "font-size: inherit" in _between(css, ".detail .kv {", ".detail .kv dt")
+    # Overview uses inventory Field/Value tables (same chrome as Features).
+    assert "inventory-table" in overview and "table-wrap" in overview
+    assert "<dl" not in overview and 'class="kv"' not in overview
     assert "font-size: inherit" in _between(css, ".detail .grid {", "/* Inventory chrome")
     assert ".detail .inventory-table th" in css
+    assert "**Overview**" in docs and "Field/Value" in docs
     # Detail tables no longer force mono class on every value cell.
     assert 'td class="mono"' not in detail
     assert 'th class="mono"' not in detail

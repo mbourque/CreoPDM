@@ -191,10 +191,11 @@ def test_details_shows_checkout_who_and_when_for_other_user(client, repo_parent,
     page = client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
     assert page.status_code == 200, page.text
     assert "Checked out by Alice" in page.text
-    assert "<dt>Checked out by</dt>" in page.text
-    assert "<dt>Checked out</dt>" in page.text
+    assert "<td>Checked out by</td>" in page.text
+    assert "<td>Checked out</td>" in page.text
     assert 'title="Checked out ' in page.text
     assert "(you)" not in page.text
+    assert "inventory-table" in page.text
 
 
 @requires_git

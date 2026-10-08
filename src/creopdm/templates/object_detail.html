@@ -144,88 +144,116 @@
     <div class="detail-sections">
       <section class="detail-section">
         <h3 class="detail-section-title">Identity</h3>
-        <dl class="kv">
-          <dt>Name</dt><dd>{{ id_number or id_name or "—" }}</dd>
-          {% if show_name %}
-          <dt>File name</dt><dd>{{ id_name }}</dd>
-          {% endif %}
-          {% if show_common %}
-          <dt>Common name</dt><dd>{{ id_common }}</dd>
-          {% endif %}
-          {% if show_full %}
-          <dt>Full name</dt><dd>{{ id_full }}</dd>
-          {% endif %}
-          {% if show_instance %}
-          <dt>Instance</dt><dd>{{ id_instance }}</dd>
-          {% endif %}
-          {% if show_generic %}
-          <dt>Generic</dt><dd>{{ id_generic }}</dd>
-          {% endif %}
-          {% if identity.model_type %}
-          <dt>Model type</dt><dd>{{ identity.model_type }}{% if is_top_level_assembly %} (Top Level){% endif %}</dd>
-          {% elif is_top_level_assembly %}
-          <dt>Model type</dt><dd>ASSEMBLY (Top Level)</dd>
-          {% endif %}
-          {% if identity.model_role %}
-          <dt>Subtype</dt><dd>{{ identity.model_role }}</dd>
-          {% endif %}
-          {% if object.creo_release %}
-          <dt>Creo</dt><dd>{{ object.creo_release }}</dd>
-          {% endif %}
-          <dt>Date created</dt>
-          <dd>{% if object.created_at %}<span title="{{ local_time_pretty(object.created_at) }}">{{ local_time(object.created_at) }}</span>{% else %}—{% endif %}</dd>
-          {% if object.updated_at and (not object.created_at or local_time(object.updated_at) != local_time(object.created_at)) %}
-          <dt>Date modified</dt>
-          <dd><span title="{{ local_time_pretty(object.updated_at) }}">{{ local_time(object.updated_at) }}</span></dd>
-          {% endif %}
-          <dt>Size</dt><dd>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</dd>
-        </dl>
+        <div class="table-wrap">
+        <table class="grid inventory-table">
+          <thead><tr><th>Field</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Name</td><td>{{ id_number or id_name or "—" }}</td></tr>
+            {% if show_name %}
+            <tr><td>File name</td><td>{{ id_name }}</td></tr>
+            {% endif %}
+            {% if show_common %}
+            <tr><td>Common name</td><td>{{ id_common }}</td></tr>
+            {% endif %}
+            {% if show_full %}
+            <tr><td>Full name</td><td>{{ id_full }}</td></tr>
+            {% endif %}
+            {% if show_instance %}
+            <tr><td>Instance</td><td>{{ id_instance }}</td></tr>
+            {% endif %}
+            {% if show_generic %}
+            <tr><td>Generic</td><td>{{ id_generic }}</td></tr>
+            {% endif %}
+            {% if identity.model_type %}
+            <tr><td>Model type</td><td>{{ identity.model_type }}{% if is_top_level_assembly %} (Top Level){% endif %}</td></tr>
+            {% elif is_top_level_assembly %}
+            <tr><td>Model type</td><td>ASSEMBLY (Top Level)</td></tr>
+            {% endif %}
+            {% if identity.model_role %}
+            <tr><td>Subtype</td><td>{{ identity.model_role }}</td></tr>
+            {% endif %}
+            {% if object.creo_release %}
+            <tr><td>Creo</td><td>{{ object.creo_release }}</td></tr>
+            {% endif %}
+            <tr>
+              <td>Date created</td>
+              <td>{% if object.created_at %}<span title="{{ local_time_pretty(object.created_at) }}">{{ local_time(object.created_at) }}</span>{% else %}—{% endif %}</td>
+            </tr>
+            {% if object.updated_at and (not object.created_at or local_time(object.updated_at) != local_time(object.created_at)) %}
+            <tr>
+              <td>Date modified</td>
+              <td><span title="{{ local_time_pretty(object.updated_at) }}">{{ local_time(object.updated_at) }}</span></td>
+            </tr>
+            {% endif %}
+            <tr><td>Size</td><td>{% if object.current_version %}{{ object.current_version.file_size | byte_size }}{% else %}—{% endif %}</td></tr>
+          </tbody>
+        </table>
+        </div>
       </section>
 
       {% if object.checkout_user %}
       <section class="detail-section">
         <h3 class="detail-section-title">Checkout</h3>
-        <dl class="kv">
-          <dt>Checked out by</dt>
-          <dd>{{ object.checkout_user }}{% if object.owned_by_me %} (you){% endif %}</dd>
-          {% if object.checkout_since %}
-          <dt>Checked out</dt>
-          <dd><span title="{{ local_time_pretty(object.checkout_since) }}">{{ local_time(object.checkout_since) }}</span></dd>
-          {% endif %}
-        </dl>
+        <div class="table-wrap">
+        <table class="grid inventory-table">
+          <thead><tr><th>Field</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Checked out by</td>
+              <td>{{ object.checkout_user }}{% if object.owned_by_me %} (you){% endif %}</td>
+            </tr>
+            {% if object.checkout_since %}
+            <tr>
+              <td>Checked out</td>
+              <td><span title="{{ local_time_pretty(object.checkout_since) }}">{{ local_time(object.checkout_since) }}</span></td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+        </div>
       </section>
       {% endif %}
 
       {% if units.system_name or units.length or units.mass %}
       <section class="detail-section">
         <h3 class="detail-section-title">Units</h3>
-        <dl class="kv">
-          {% if units.system_name %}<dt>System</dt><dd>{{ units.system_name }}</dd>{% endif %}
-          {% if units.length %}<dt>Length</dt><dd>{{ units.length }}</dd>{% endif %}
-          {% if units.mass %}<dt>Mass</dt><dd>{{ units.mass }}</dd>{% endif %}
-          {% if units.time %}<dt>Time</dt><dd>{{ units.time }}</dd>{% endif %}
-          {% if units.temperature %}<dt>Temperature</dt><dd>{{ units.temperature }}</dd>{% endif %}
-        </dl>
+        <div class="table-wrap">
+        <table class="grid inventory-table">
+          <thead><tr><th>Field</th><th>Value</th></tr></thead>
+          <tbody>
+            {% if units.system_name %}<tr><td>System</td><td>{{ units.system_name }}</td></tr>{% endif %}
+            {% if units.length %}<tr><td>Length</td><td>{{ units.length }}</td></tr>{% endif %}
+            {% if units.mass %}<tr><td>Mass</td><td>{{ units.mass }}</td></tr>{% endif %}
+            {% if units.time %}<tr><td>Time</td><td>{{ units.time }}</td></tr>{% endif %}
+            {% if units.temperature %}<tr><td>Temperature</td><td>{{ units.temperature }}</td></tr>{% endif %}
+          </tbody>
+        </table>
+        </div>
       </section>
       {% endif %}
 
       {% if materials.current or (mass and mass.mass is not none) %}
       <section class="detail-section">
         <h3 class="detail-section-title">Summary</h3>
-        <dl class="kv">
-          {% if materials.current %}
-          <dt>Material</dt><dd>{{ materials.current }}</dd>
-          {% endif %}
-          {% if mass and mass.mass is not none %}
-          <dt>Mass</dt><dd>{{ mass.mass }}{% if units.mass %} {{ units.mass }}{% endif %}</dd>
-          {% endif %}
-          {% if mass and mass.volume is not none %}
-          <dt>Volume</dt><dd>{{ mass.volume }}</dd>
-          {% endif %}
-          {% if mass and mass.density is not none %}
-          <dt>Density</dt><dd>{{ mass.density }}</dd>
-          {% endif %}
-        </dl>
+        <div class="table-wrap">
+        <table class="grid inventory-table">
+          <thead><tr><th>Field</th><th>Value</th></tr></thead>
+          <tbody>
+            {% if materials.current %}
+            <tr><td>Material</td><td>{{ materials.current }}</td></tr>
+            {% endif %}
+            {% if mass and mass.mass is not none %}
+            <tr><td>Mass</td><td>{{ mass.mass }}{% if units.mass %} {{ units.mass }}{% endif %}</td></tr>
+            {% endif %}
+            {% if mass and mass.volume is not none %}
+            <tr><td>Volume</td><td>{{ mass.volume }}</td></tr>
+            {% endif %}
+            {% if mass and mass.density is not none %}
+            <tr><td>Density</td><td>{{ mass.density }}</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+        </div>
       </section>
       {% endif %}
     </div>
@@ -301,20 +329,23 @@
   {% if show_mass_tab %}
   <section class="tab-panel" id="panel-mass" hidden>
     {% if mass %}
-    <dl class="kv">
-      {% if mass.mass is not none %}<dt>Mass</dt><dd>{{ mass.mass }}{% if units.mass %} {{ units.mass }}{% endif %}</dd>{% endif %}
-      {% if mass.volume is not none %}<dt>Volume</dt><dd>{{ mass.volume }}</dd>{% endif %}
-      {% if mass.surface_area is not none %}<dt>Surface area</dt><dd>{{ mass.surface_area }}</dd>{% endif %}
-      {% if mass.density is not none %}<dt>Density</dt><dd>{{ mass.density }}</dd>{% endif %}
-      {% if mass.gravity_center %}
-      <dt>Center of gravity</dt>
-      <dd>{{ mass.gravity_center[0] }}, {{ mass.gravity_center[1] }}, {{ mass.gravity_center[2] }}</dd>
-      {% endif %}
-      {% if mass.principal_moments %}
-      <dt>Principal moments</dt>
-      <dd>{{ mass.principal_moments[0] }}, {{ mass.principal_moments[1] }}, {{ mass.principal_moments[2] }}</dd>
-      {% endif %}
-    </dl>
+    <div class="table-wrap">
+    <table class="grid inventory-table">
+      <thead><tr><th>Field</th><th>Value</th></tr></thead>
+      <tbody>
+        {% if mass.mass is not none %}<tr><td>Mass</td><td>{{ mass.mass }}{% if units.mass %} {{ units.mass }}{% endif %}</td></tr>{% endif %}
+        {% if mass.volume is not none %}<tr><td>Volume</td><td>{{ mass.volume }}</td></tr>{% endif %}
+        {% if mass.surface_area is not none %}<tr><td>Surface area</td><td>{{ mass.surface_area }}</td></tr>{% endif %}
+        {% if mass.density is not none %}<tr><td>Density</td><td>{{ mass.density }}</td></tr>{% endif %}
+        {% if mass.gravity_center %}
+        <tr><td>Center of gravity</td><td>{{ mass.gravity_center[0] }}, {{ mass.gravity_center[1] }}, {{ mass.gravity_center[2] }}</td></tr>
+        {% endif %}
+        {% if mass.principal_moments %}
+        <tr><td>Principal moments</td><td>{{ mass.principal_moments[0] }}, {{ mass.principal_moments[1] }}, {{ mass.principal_moments[2] }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+    </div>
     {% else %}
     <p class="muted">Mass properties are not collected by Collect metadata (Creo.JS limitation).</p>
     {% endif %}
