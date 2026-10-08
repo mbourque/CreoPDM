@@ -29,6 +29,42 @@ DETAIL_HTML = ROOT / "src" / "creopdm" / "templates" / "object_detail.html"
 DOCS = ROOT / "docs" / "user-interactions.md"
 
 
+def test_feature_outline_lines_include_creo_id():
+    """Compare outlines always carry Creo feature id so the UI can align by id."""
+    text = format_snapshot_compare_text(
+        {
+            "identity": {"filename": "1234.prt", "model_type": "PART"},
+            "features": [
+                {"id": 95, "name": "CUT", "type": "CUT"},
+                {"id": 146, "name": "ROUND", "type": "ROUND"},
+                {"id": 39, "name": "RIGHT", "type": "DATUM PLANE"},
+                {"id": 40, "name": "PROTRUSION (40)", "type": "PROTRUSION"},
+            ],
+        }
+    )
+    assert "- CUT (95)" in text
+    assert "- ROUND (146)" in text
+    assert "- RIGHT (DATUM PLANE) (39)" in text
+    assert "- PROTRUSION (40)" in text
+    assert "(40) (40)" not in text
+    diff = format_snapshot_compare_diff_text(
+        {
+            "identity": {"filename": "1234.prt", "model_type": "PART"},
+            "features": [{"id": 95, "name": "CUT", "type": "CUT"}],
+        },
+        {
+            "identity": {"filename": "1234.prt", "model_type": "PART"},
+            "features": [
+                {"id": 146, "name": "ROUND", "type": "ROUND"},
+                {"id": 168, "name": "CHAMFER", "type": "CHAMFER"},
+            ],
+        },
+    )
+    assert "CUT (95)" in diff
+    assert "ROUND (146)" in diff
+    assert "CHAMFER (168)" in diff
+
+
 def test_gather_ai_snapshot_contract_in_creo_js():
     text = BASE_HTML.read_text(encoding="utf-8")
     assert "function gatherAiModelSnapshot(" in text
@@ -188,15 +224,17 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "function formatAiSnapshotOutlineDisplay(" in script
     assert "function buildAiSnapshotLineDiff(" in script
     assert "function aiSnapshotLineIdentity(" in script
+    assert "function aiSnapshotLinesAlign(" in script
     assert "function renderAiSnapshotDiffBodies(" in script
     assert "async function renderAiSnapshotCompare(" in script
     assert 'type: "same"' in script
     assert 'type: "removed"' in script
     assert 'type: "added"' in script
     assert 'type: "changed"' in script
-    # Regression: new ROUND (146) must not yellow-pair with removed CUT (95).
-    assert "CUT (95) removed + ROUND (146) added stay red/blue" in script
-    assert 'return `feat:${featId[1]}`' in script
+    # Regression: align/highlight by Creo id — not list position.
+    assert "aligned by Creo id" in script
+    assert "CUT (95) vs ROUND (146) stay red/blue" in script
+    assert "return `feat:${last}`" in script
     assert "async function fetchAiSnapshotOutline(" in script
     assert "=== ${role} snapshot (${rev}) ===" in script
     assert "function syncAiSnapshotScrollLayout(" in script
@@ -633,7 +671,7 @@ def test_snapshot_compare_prompt_requires_saved_text():
     ghost_text = format_snapshot_compare_text(ghost_plane_snap)
     assert "PATTERN 1" in ghost_text
     assert "PATTERN 2" in ghost_text
-    assert "ATTACH_PLANE (DATUM PLANE)" in ghost_text
+    assert "ATTACH_PLANE (DATUM PLANE) (50)" in ghost_text
     # Unnamed pattern-owned planes stay out; type on ATTACH_PLANE is fine.
     assert "- DATUM PLANE" not in ghost_text
     assert ghost_text.count("DATUM PLANE") == 1

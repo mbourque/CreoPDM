@@ -15,6 +15,8 @@ _PLACEHOLDER_FEATURE_NAME = re.compile(
     r"^(?:feature\s+\d+|ifx_id_\d+|no_name)$",
     re.IGNORECASE,
 )
+# Trailing Creo feature id on outline lines: "CUT (95)" / "RIGHT (DATUM PLANE) (39)".
+_OUTLINE_FEATURE_ID_SUFFIX = re.compile(r"\((\d+)\)\s*$")
 
 _DROP_PARAM_NAMES = frozenset(
     {
@@ -102,6 +104,24 @@ def _inventory_level(row: dict[str, Any]) -> int:
     return level if level > 0 else 1
 
 
+def _append_creo_feature_id(label: str, feat: dict[str, Any] | None) -> str:
+    """Ensure outline text ends with Creo feature id when known (compare matches on id)."""
+    text = str(label or "")
+    if not text.strip() or not isinstance(feat, dict):
+        return text
+    fid = _norm_feature_id(feat.get("id"))
+    if not fid:
+        return text
+    # Keep leading indent (structure / drawing inventory nesting).
+    core = text.rstrip()
+    match = _OUTLINE_FEATURE_ID_SUFFIX.search(core)
+    if match:
+        if match.group(1) == fid:
+            return core
+        return _OUTLINE_FEATURE_ID_SUFFIX.sub(f"({fid})", core)
+    return f"{core} ({fid})"
+
+
 def _inventory_outline_line(row: dict[str, Any]) -> str:
     """Indented inventory line (same nesting idea as Details inventory tables)."""
     name = str(row.get("name") or "").strip() or "—"
@@ -123,7 +143,7 @@ def _inventory_outline_line(row: dict[str, Any]) -> str:
         short = detail if len(detail) <= 80 else detail[:77] + "…"
         extras.append(short)
     suffix = f" ({', '.join(extras)})" if extras else ""
-    return f"{indent}- {nest}{name}{suffix}"
+    return _append_creo_feature_id(f"{indent}- {nest}{name}{suffix}", row)
 
 
 def _structure_nodes(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
@@ -427,6 +447,7 @@ def _view_display_line(feat: dict[str, Any]) -> str:
 
 
 def _feature_display_name(feat: dict[str, Any], *, pattern_index: int | None = None) -> str:
+    """Human label only (no forced id) — dim owner parentheses use this."""
     if _is_view_feature(feat):
         return _view_display_line(feat).lstrip("- ").strip()
     if _is_pattern_feature(feat):
@@ -447,6 +468,13 @@ def _feature_display_name(feat: dict[str, Any], *, pattern_index: int | None = N
     if ftype and ftype.upper() not in name.upper():
         return f"{name} ({ftype})"
     return name
+
+
+def _feature_outline_label(feat: dict[str, Any], *, pattern_index: int | None = None) -> str:
+    """Feature list / Ask AI outline line — always ends with Creo id when known."""
+    return _append_creo_feature_id(
+        _feature_display_name(feat, pattern_index=pattern_index), feat
+    )
 
 
 def _format_dim_value(value: Any) -> str:
@@ -597,9 +625,9 @@ def _feature_outline_labels(snapshot: dict[str, Any]) -> list[str]:
     for feat in features:
         if _is_pattern_feature(feat):
             pattern_i += 1
-            labels.append(_feature_display_name(feat, pattern_index=pattern_i))
+            labels.append(_feature_outline_label(feat, pattern_index=pattern_i))
         else:
-            labels.append(_feature_display_name(feat))
+            labels.append(_feature_outline_label(feat))
     return labels
 
 
@@ -1036,10 +1064,10 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
                 if _is_pattern_feature(feat):
                     pattern_i += 1
                     lines.append(
-                        f"- {_feature_display_name(feat, pattern_index=pattern_i)}"
+                        f"- {_feature_outline_label(feat, pattern_index=pattern_i)}"
                     )
                 else:
-                    lines.append(f"- {_feature_display_name(feat)}")
+                    lines.append(f"- {_feature_outline_label(feat)}")
         else:
             lines.append("- (none)")
 

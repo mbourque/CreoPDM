@@ -11864,25 +11864,39 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function aiSnapshotLineIdentity(line) {
     /**
-     * Stable key for yellow "changed" only — never pair unrelated lines just
-     * because a remove sits next to an add (CUT (95) vs new ROUND (146)).
-     * Prefer Creo feature id `(146)`, else dim symbol `d12`, else param name.
+     * Compare / highlight key — Creo id wins.
+     * Dim lines use dN (never the owning feature id in parentheses).
+     * Feature / structure lines use the trailing `(146)` Creo feature id.
      */
     const text = String(line || "").trim();
     if (!text) return "";
     const dim = text.match(/^-\s*(d\d+)\b/i);
     if (dim) return `dim:${String(dim[1]).toLowerCase()}`;
-    const featId = text.match(/\((\d+)\)\s*$/);
-    if (featId) return `feat:${featId[1]}`;
     const param = text.match(/^-\s*([A-Za-z_][\w.]*)\s*=/);
     if (param) return `param:${String(param[1]).toUpperCase()}`;
+    const ids = text.match(/\((\d+)\)/g);
+    if (ids && ids.length) {
+      const last = ids[ids.length - 1].replace(/\D/g, "");
+      if (last) return `feat:${last}`;
+    }
     return "";
+  }
+
+  function aiSnapshotLinesAlign(left, right) {
+    if (left === right) return true;
+    const key = aiSnapshotLineIdentity(left);
+    return Boolean(key) && key === aiSnapshotLineIdentity(right);
+  }
+
+  function aiSnapshotAlignedOp(left, right) {
+    if (left === right) return { type: "same", oldText: left, newText: right };
+    return { type: "changed", oldText: left, newText: right };
   }
 
   function buildAiSnapshotLineDiff(oldLines, newLines) {
     /**
-     * Side-by-side line ops (GitHub-style):
-     * same | removed | added | changed (same identity, different text).
+     * Side-by-side line ops (GitHub-style), aligned by Creo id / dim / param:
+     * same | removed | added | changed (same id, different text).
      */
     const a = Array.isArray(oldLines) ? oldLines : [];
     const b = Array.isArray(newLines) ? newLines : [];
@@ -11895,16 +11909,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const left = i < m ? a[i] : null;
         const right = i < n ? b[i] : null;
         if (left !== null && right !== null) {
-          if (left === right) {
-            ops.push({ type: "same", oldText: left, newText: right });
+          if (aiSnapshotLinesAlign(left, right)) {
+            ops.push(aiSnapshotAlignedOp(left, right));
           } else {
-            const key = aiSnapshotLineIdentity(left);
-            if (key && key === aiSnapshotLineIdentity(right)) {
-              ops.push({ type: "changed", oldText: left, newText: right });
-            } else {
-              ops.push({ type: "removed", oldText: left, newText: "" });
-              ops.push({ type: "added", oldText: "", newText: right });
-            }
+            ops.push({ type: "removed", oldText: left, newText: "" });
+            ops.push({ type: "added", oldText: "", newText: right });
           }
         } else if (left !== null) {
           ops.push({ type: "removed", oldText: left, newText: "" });
@@ -11917,17 +11926,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const dp = Array.from({ length: m + 1 }, () => new Uint32Array(n + 1));
     for (let i = m - 1; i >= 0; i -= 1) {
       for (let j = n - 1; j >= 0; j -= 1) {
-        dp[i][j] =
-          a[i] === b[j]
-            ? dp[i + 1][j + 1] + 1
-            : Math.max(dp[i + 1][j], dp[i][j + 1]);
+        dp[i][j] = aiSnapshotLinesAlign(a[i], b[j])
+          ? dp[i + 1][j + 1] + 1
+          : Math.max(dp[i + 1][j], dp[i][j + 1]);
       }
     }
     let i = 0;
     let j = 0;
     while (i < m && j < n) {
-      if (a[i] === b[j]) {
-        ops.push({ type: "same", oldText: a[i], newText: b[j] });
+      if (aiSnapshotLinesAlign(a[i], b[j])) {
+        ops.push(aiSnapshotAlignedOp(a[i], b[j]));
         i += 1;
         j += 1;
       } else if (dp[i + 1][j] >= dp[i][j + 1]) {
@@ -11946,8 +11954,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       ops.push({ type: "added", oldText: "", newText: b[j] });
       j += 1;
     }
-    // Yellow only when the same feature id / dim / param changed text.
-    // CUT (95) removed + ROUND (146) added stay red/blue — not a rename.
+    // Safety: same Creo id / dim / param in a remove+add run → yellow changed.
+    // CUT (95) vs ROUND (146) stay red/blue — different ids.
     const merged = [];
     let k = 0;
     while (k < ops.length) {
@@ -11977,11 +11985,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           }
           if (match >= 0) {
             usedAdded.add(match);
-            merged.push({
-              type: "changed",
-              oldText: removed[r].oldText,
-              newText: added[match].newText,
-            });
+            merged.push(
+              aiSnapshotAlignedOp(removed[r].oldText, added[match].newText)
+            );
           } else {
             merged.push(removed[r]);
           }
