@@ -379,7 +379,7 @@
         {# Missing level on legacy feature rows must not crash Details (Jinja Undefined). #}
         {% set lvl = feat.level|default(1)|int %}
         <tr>
-          <td class="inv-name" style="padding-left: {{ (lvl - 1) * 1.25 }}rem;">{% if lvl > 1 %}└ {% endif %}{{ feat.name }}</td>
+          <td class="inv-name" style="--inv-depth: {{ lvl - 1 }};">{% if lvl > 1 %}└ {% endif %}{{ feat.name }}</td>
           <td>{{ feat.id|default("", true) }}</td>
           <td>{{ feat.type|default("", true) }}</td>
           <td>{{ feat.subtype|default("", true) }}</td>
@@ -414,7 +414,7 @@
         {% for row in structure %}
         {% set lvl = row.level|default(1)|int %}
         <tr>
-          <td class="inv-name" style="padding-left: {{ (lvl - 1) * 1.25 }}rem;">{% if lvl > 1 %}└ {% endif %}{{ row.name }}</td>
+          <td class="inv-name" style="--inv-depth: {{ lvl - 1 }};">{% if lvl > 1 %}└ {% endif %}{{ row.name }}</td>
           <td>{{ row.id|default("", true) }}</td>
           <td>{{ row.type|default("", true) }}</td>
           <td>{{ row.subtype|default(row.subType|default("", true), true) }}</td>

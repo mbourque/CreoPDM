@@ -883,7 +883,15 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .table-wrap { background: white; border: 1px solid var(--line); border-radius: 6px; overflow: auto; }
 .content .table-wrap { flex: 1 1 auto; min-height: 0; }
 .grid { width: 100%; border-collapse: collapse; }
-.inventory-table .inv-name { white-space: nowrap; max-width: 28rem; overflow: hidden; text-overflow: ellipsis; }
+/* Nest indent stacks on .grid td left padding (0.65rem) — never set padding-left: 0
+   on level-1 Name cells or they drift left of the column header. */
+.inventory-table .inv-name {
+  white-space: nowrap;
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: calc(0.65rem + (var(--inv-depth, 0) * 1.25rem));
+}
 .inventory-table td, .inventory-table th { vertical-align: top; }
 .grid th, .grid td {
   text-align: left;

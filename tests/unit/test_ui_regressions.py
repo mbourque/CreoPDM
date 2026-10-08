@@ -1269,6 +1269,21 @@ def test_mobile_browse_css_is_minimal():
     assert "Rotate the phone" in docs
 
 
+def test_inventory_name_column_keeps_grid_left_padding():
+    """Level-1 Name cells must not use padding-left: 0 (misaligns under the header)."""
+    detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(
+        encoding="utf-8"
+    )
+    css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    assert 'style="--inv-depth: {{ lvl - 1 }};"' in detail
+    assert detail.count('style="--inv-depth: {{ lvl - 1 }};"') >= 2  # Features + Structure
+    assert "padding-left: {{ (lvl - 1) * 1.25 }}rem" not in detail
+    assert "padding-left: calc(0.65rem + (var(--inv-depth, 0) * 1.25rem))" in css
+    assert "never set padding-left: 0" in css
+
+
 def test_details_overview_dedupes_identity_and_unifies_fonts():
     """Overview drops header duplicates and Details tabs share one UI font."""
     detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(
