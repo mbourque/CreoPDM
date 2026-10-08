@@ -561,7 +561,11 @@ def object_detail(
     features = normalize_feature_rows(
         metadata.features if isinstance(metadata.features, list) else []
     )
+    structure = (
+        metadata.structure if isinstance(metadata.structure, list) else []
+    )
     bom = metadata.bom if isinstance(metadata.bom, list) else []
+    is_drawing = obj.object_type == ObjectType.CREO_DRAWING.value
     bom = _enrich_bom_tree(bom, _product_bom_index(ctx, db, product.id))
     show_mass_tab = bool(
         mass
@@ -574,7 +578,7 @@ def object_detail(
     show_family_tab = bool(
         family_table.get("columns") or family_table.get("rows")
     )
-    # Features = Creo feature list; Structure = assembly model tree (separate tabs).
+    # Features = Creo inventory list; Structure = assembly component tree (separate tabs).
     show_features_tab = bool(features)
     show_structure_tab = bool(is_assembly)
     # Compare Revisions only when two or more revisions have AI snapshots.
@@ -609,6 +613,8 @@ def object_detail(
             "mass": mass,
             "family_table": family_table,
             "features": features,
+            "structure": structure,
+            "is_drawing": is_drawing,
             "show_mass_tab": show_mass_tab,
             "show_family_tab": show_family_tab,
             "show_features_tab": show_features_tab,

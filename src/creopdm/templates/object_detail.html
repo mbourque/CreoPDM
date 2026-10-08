@@ -350,33 +350,82 @@
 
   {% if show_features_tab %}
   <section class="tab-panel" id="panel-features" hidden>
-    <p class="muted small">Visible Creo features for this model (components are listed under Structure / BOM).</p>
-    <table class="grid">
+    {% if is_drawing %}
+    <p class="muted small">Drawing inventory (sheets, views, notes, dimensions, tables) from Creo metadata.</p>
+    {% else %}
+    <p class="muted small">Visible Creo features (nested level and status). Assembly components are under Structure.</p>
+    {% endif %}
+    {% set features_show_sheet = namespace(any=false) %}
+    {% for feat in features %}
+      {% if feat.sheet is defined and feat.sheet is not none and feat.sheet != "" %}
+        {% set features_show_sheet.any = true %}
+      {% endif %}
+    {% endfor %}
+    <div class="table-wrap">
+    <table class="grid inventory-table">
       <thead>
         <tr>
-          <th>#</th>
           <th>Name</th>
+          <th>Id</th>
           <th>Type</th>
           <th>Subtype</th>
+          <th>Level</th>
+          <th>Status</th>
+          {% if features_show_sheet.any %}<th>Sheet</th>{% endif %}
         </tr>
       </thead>
       <tbody>
         {% for feat in features %}
+        {# Missing level on legacy feature rows must not crash Details (Jinja Undefined). #}
+        {% set lvl = feat.level|default(1)|int %}
         <tr>
-          <td>{{ feat.id if feat.id is not none else loop.index }}</td>
-          <td>{{ feat.name }}</td>
-          <td>{{ feat.type or "" }}</td>
-          <td>{{ feat.subtype or "" }}</td>
+          <td class="inv-name" style="padding-left: {{ (lvl - 1) * 1.25 }}rem;">{% if lvl > 1 %}└ {% endif %}{{ feat.name }}</td>
+          <td>{{ feat.id|default("", true) }}</td>
+          <td>{{ feat.type|default("", true) }}</td>
+          <td>{{ feat.subtype|default("", true) }}</td>
+          <td>{{ feat.level|default("", true) }}</td>
+          <td>{{ feat.status|default("", true) }}</td>
+          {% if features_show_sheet.any %}<td>{{ feat.sheet|default("", true) }}</td>{% endif %}
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </section>
   {% endif %}
 
   {% if show_structure_tab %}
   <section class="tab-panel" id="panel-structure" hidden>
-    {% if bom %}
+    {% if structure %}
+    <p class="muted small">Assembly structure from Creo (nested components and groups; session-only depth).</p>
+    <div class="table-wrap">
+    <table class="grid inventory-table">
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Feat ID</th>
+          <th>Type</th>
+          <th>Sub Type</th>
+          <th>Level</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in structure %}
+        {% set lvl = row.level|default(1)|int %}
+        <tr>
+          <td class="inv-name" style="padding-left: {{ (lvl - 1) * 1.25 }}rem;">{% if lvl > 1 %}└ {% endif %}{{ row.name }}</td>
+          <td>{{ row.id|default("", true) }}</td>
+          <td>{{ row.type|default("", true) }}</td>
+          <td>{{ row.subtype|default(row.subType|default("", true), true) }}</td>
+          <td>{{ row.level|default("", true) }}</td>
+          <td>{{ row.status|default("", true) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% elif bom %}
     <p class="muted small">Model tree — top assembly first, subassemblies and parts indented.</p>
     <p class="muted small bom-legend">
       <span class="bom-legend-in">Linked names</span> are in this product (click to open).

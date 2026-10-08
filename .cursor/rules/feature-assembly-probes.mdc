@@ -1,0 +1,10 @@
+# Feature / assembly / drawing probes are experimental
+
+`src/creopdm/static/feature_probe/`, `assembly_probe/`, and `drawing_probe/` are throwaway Creo.JS experiments.
+
+## Do not
+
+- Add or restore unit/contract tests for these pages (`test_*probe*`, or any pytest under `tests/` that reads those static folders)
+- Treat probe regressions as requiring the “bug → unit test” rule
+
+Iterate by editing the probe files and trying them in Creo. Lessons roll into the app later with normal app tests.

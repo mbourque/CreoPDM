@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>Drawing inventory</title>
+  <script src="../vendor/creojs.js"></script>
+  <script type="text/creojs" src="../feature_probe/browser.creojs"></script>
+  <script type="text/creojs" src="../feature_probe/weblink.legacy.creojs"></script>
+  <script type="text/creojs" id="creo-api" src="drawing_probe.creojs"></script>
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --panel: #fff;
+      --ink: #1a1d23;
+      --line: #d8dde3;
+      --accent: #0b6e4f;
+      --warn: #8a4b08;
+      --bad: #9b1c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    header {
+      padding: 1rem 1.25rem;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    h1 { margin: 0; font-size: 1.25rem; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin-top: 0.75rem;
+    }
+    button {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 6px;
+      padding: 0.4rem 0.75rem;
+      cursor: pointer;
+      font: inherit;
+    }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    main { padding: 1rem 1.25rem 2rem; }
+    .status {
+      white-space: pre-wrap;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+    }
+    .status.warn { border-color: #e0b070; color: var(--warn); }
+    .status.err { border-color: #e0a0a0; color: var(--bad); }
+    .status.ok { border-color: #9bc9b0; }
+    .meta {
+      font-size: 12px;
+      color: #555;
+      margin: 0 0 0.75rem;
+    }
+    .scroll {
+      overflow: auto;
+      width: max-content;
+      max-width: 100%;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    table {
+      border-collapse: collapse;
+      width: max-content;
+      font-size: 12px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+      padding: 0.25rem 0.5rem;
+      text-align: left;
+      vertical-align: top;
+      font-family: Consolas, "Courier New", monospace;
+      white-space: nowrap;
+    }
+    th:last-child, td:last-child { border-right: none; }
+    td.detail {
+      max-width: 42rem;
+      white-space: normal;
+      word-break: break-word;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: #eef1f4;
+      z-index: 1;
+      font-family: inherit;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body onload="startDrawingProbe()">
+  <header>
+    <h1>Drawing inventory</h1>
+    <div class="toolbar">
+      <button type="button" class="primary" id="btn-list">List drawing</button>
+      <button type="button" id="btn-copy" disabled>Copy JSON</button>
+    </div>
+  </header>
+  <main>
+    <p id="status" class="status warn" role="status">Waiting for Creo.</p>
+    <p id="meta" class="meta" hidden></p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Sub Type</th>
+            <th>Id</th>
+            <th>Sheet</th>
+            <th>Scale / Size</th>
+            <th>Model</th>
+            <th>Detail</th>
+            <th>Level</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </main>
+  <script src="probe.js"></script>
+</body>
+</html>

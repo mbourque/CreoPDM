@@ -32,6 +32,8 @@ DOCS = ROOT / "docs" / "user-interactions.md"
 def test_gather_ai_snapshot_contract_in_creo_js():
     text = BASE_HTML.read_text(encoding="utf-8")
     assert "function gatherAiModelSnapshot(" in text
+    assert "listFeaturesForModel" in text
+    assert "creoInventoryFeatureRows" in text
     assert "function creoGatherFeatureDimensions(" in text
     assert "function creoGatherModelLevelDimensions(" in text
     assert "function creoListFeaturesForSnapshot(" in text
@@ -105,7 +107,12 @@ def test_drawing_ai_snapshot_skips_solid_walk():
         "function creoFeatureNameWeak(", 1
     )[0]
     assert "isDrawing" in gather
-    assert "creoGatherDrawingViews(" in gather
+    assert "listDrawingStructureForModel" in gather
+    assert "creoInventoryDrawingFeatureRows" in gather
+    assert (
+        "listDrawingStructureForModel(model, session)" in gather
+        or "creoGatherDrawingViews(" in gather
+    )
     assert "creoAsSolid(session, model, solidDbg)" in gather
     # Solid walk only in the else (part/asm) branch after the drawing early path.
     drawing_idx = gather.find("if (isDrawing)")
@@ -165,9 +172,12 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "units: ai.units" in script
     assert "family_table: ai.family_table" in script
     assert "Prefer snapshot.bom" in script or "gatherSnapshot?.bom" in script
-    assert "bom," in script.split("function aiSnapshotBodyFromGather(", 1)[1].split(
+    body_fn = script.split("function aiSnapshotBodyFromGather(", 1)[1].split(
         "function objectAiSnapshotTipIsStale(", 1
     )[0]
+    assert "bom," in body_fn
+    assert "structure" in body_fn
+    assert "gatherSnapshot?.structure" in body_fn
     # Defaults: NEW = latest snap, OLD = one prior; dropdowns cannot invert order.
     assert "NEW = latest snap, OLD = one prior" in script
     assert "function fillAiSnapshotOrderedSelects(" in script
@@ -889,9 +899,9 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "Components removed: (none)" in skel_diff
     assert "Components added: (none)" in skel_diff
     assert "ENDCAP_SQUARE_2.prt: × 6 → × 5" in skel_diff
+    # Both sides have Structure → do not invent feature removes from thinner pending.
     assert "Features removed: (none)" in skel_diff
     assert "ACS0" not in skel_diff
-    assert "do not invent feature removes" in skel_diff
 
     # Check In + Compare share prepare → outline/diff for parts and drawings too.
     assert "def prepare_snapshot_for_compare(" in (

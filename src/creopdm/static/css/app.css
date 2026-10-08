@@ -883,6 +883,8 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .table-wrap { background: white; border: 1px solid var(--line); border-radius: 6px; overflow: auto; }
 .content .table-wrap { flex: 1 1 auto; min-height: 0; }
 .grid { width: 100%; border-collapse: collapse; }
+.inventory-table .inv-name { white-space: nowrap; max-width: 28rem; overflow: hidden; text-overflow: ellipsis; }
+.inventory-table td, .inventory-table th { vertical-align: top; }
 .grid th, .grid td {
   text-align: left;
   padding: 0.38rem 0.65rem;

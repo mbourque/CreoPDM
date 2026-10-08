@@ -146,6 +146,9 @@
   <div id="file-drop-overlay" hidden>
     <p>Drop files, folders, or file links to add them</p>
   </div>
+  <script type="text/creojs" id="creo-inventory-features.creojs" src="/static/creo_inventory/features.creojs?v={{ app_version }}"></script>
+  <script type="text/creojs" id="creo-inventory-assembly.creojs" src="/static/creo_inventory/assembly.creojs?v={{ app_version }}"></script>
+  <script type="text/creojs" id="creo-inventory-drawing.creojs" src="/static/creo_inventory/drawing.creojs?v={{ app_version }}"></script>
   <script type="text/creojs" id="creopdm-open.creojs">
 function creoLogicalFileName(filename) {
     var base = String(filename || "");
@@ -1895,6 +1898,88 @@ function creoFeatureFallbackName(typeName, subType) {
     if (!creoFeatureGenericLabel(typeName)) return String(typeName).trim();
     return String(subType || typeName || "").trim();
 }
+function creoInventoryFeatureTypeIsComponent(typeName) {
+    var t = String(typeName || "").toUpperCase();
+    return t === "COMPONENT" || t.indexOf("FEATTYPE_COMPONENT") >= 0;
+}
+function creoInventoryFeatureRows(result) {
+    var rows = [];
+    if (!result || result.ok === false) return rows;
+    var list = result.features || [];
+    for (var i = 0; i < list.length; i++) {
+        var r = list[i];
+        if (!r) continue;
+        var type = String(r.FeatTypeName || r.type || "").trim();
+        if (creoInventoryFeatureTypeIsComponent(type)) continue;
+        var sub = String(r.FeatSubType || r.subtype || "").trim();
+        var name = String(r.displayName || r.GetName || r.Name || r.name || "").trim();
+        if (!name) {
+            if (type && r.id != null) name = type + " (" + r.id + ")";
+            else name = type || sub;
+        }
+        rows.push({
+            id: r.id != null ? r.id : null,
+            name: name,
+            type: type,
+            subtype: sub,
+            level: r.level != null ? r.level : null,
+            status: String(r.Status || r.status || "").trim(),
+            suppressed: !!r.suppressed
+        });
+    }
+    return rows;
+}
+function creoInventoryStructureRows(result) {
+    var rows = [];
+    if (!result || result.ok === false) return rows;
+    var list = result.components || [];
+    for (var i = 0; i < list.length; i++) {
+        var r = list[i];
+        if (!r) continue;
+        rows.push({
+            id: r.id != null ? r.id : null,
+            name: String(r.name || "").trim(),
+            type: String(r.type || "").trim(),
+            subtype: String(r.subType || r.subtype || "").trim(),
+            level: r.level != null ? r.level : null,
+            status: String(r.status || "").trim(),
+            suppressed: !!r.suppressed,
+            path: r.path != null ? String(r.path) : null
+        });
+    }
+    return rows;
+}
+function creoInventoryDrawingFeatureRows(result) {
+    var rows = [];
+    if (!result || result.ok === false) return rows;
+    var list = result.components || [];
+    for (var i = 0; i < list.length; i++) {
+        var r = list[i];
+        if (!r) continue;
+        var type = String(r.type || "").trim();
+        var sub = String(r.subType || r.subtype || "").trim();
+        var name = String(r.name || "").trim();
+        if (!name && type && r.id != null) name = type + " (" + r.id + ")";
+        var status = String(r.status || "").trim();
+        var erased = r.erased === true
+            || status.toUpperCase().indexOf("ERASE") >= 0;
+        rows.push({
+            id: r.id != null ? r.id : null,
+            name: name,
+            type: type,
+            subtype: sub,
+            level: r.level != null ? r.level : null,
+            status: status,
+            suppressed: !!r.suppressed,
+            erased: erased,
+            sheet: r.sheet != null ? r.sheet : null,
+            detail: r.detail != null ? String(r.detail) : null,
+            model: r.model != null ? String(r.model) : null,
+            scale: r.scale != null ? r.scale : null
+        });
+    }
+    return rows;
+}
 function creoGatherFeatures(model, dbg, session, options) {
     var opts = options && typeof options === "object" ? options : {};
     // Default on — Collect + Open need model-tree names (RIGHT, DEFAULT_CS, …).
@@ -2971,15 +3056,44 @@ function gatherAiModelSnapshot(model, session, filename, options) {
         // Drawings: capture views / sheets / drawing dims on the .drw handle.
         // Never creoAsSolid — that walks the referenced PART and poisons tip compare.
         try {
-            features = creoGatherDrawingViews(model, errors);
-            sheetCount = creoGatherDrawingSheetCount(model, errors);
+            var drwInvPack = null;
+            if (typeof listDrawingStructureForModel === "function") {
+                try {
+                    drwInvPack = listDrawingStructureForModel(model, session);
+                    features = creoInventoryDrawingFeatureRows(drwInvPack);
+                } catch (errDrwInv) {
+                    drwInvPack = null;
+                }
+            }
+            if (!features.length) {
+                features = creoGatherDrawingViews(model, errors);
+            }
+            if (drwInvPack && drwInvPack.sheetCount != null) {
+                sheetCount = drwInvPack.sheetCount;
+            } else {
+                sheetCount = creoGatherDrawingSheetCount(model, errors);
+            }
             drawingModels = creoGatherDrawingModels(model, errors);
-            var viewTotal = features.length;
+            if (drwInvPack && Array.isArray(drwInvPack.models) && drwInvPack.models.length) {
+                drawingModels = drwInvPack.models;
+            }
+            // Inventory mixes sheets/views/notes/dims/tables — count VIEW rows only.
+            var usedDrwInventory = !!(drwInvPack && drwInvPack.ok !== false && features.length);
+            var viewTotal = 0;
             var viewVisible = 0;
             var viewErased = 0;
+            var viewNames = [];
             for (var vi = 0; vi < features.length; vi++) {
-                if (features[vi] && features[vi].erased === true) viewErased += 1;
+                var vrow = features[vi];
+                if (!vrow) continue;
+                var vtype = String(vrow.type || "").toUpperCase();
+                if (usedDrwInventory && vtype !== "VIEW") continue;
+                viewTotal += 1;
+                var erasedView = vrow.erased === true
+                    || String(vrow.status || "").toUpperCase().indexOf("ERASE") >= 0;
+                if (erasedView) viewErased += 1;
                 else viewVisible += 1;
+                if (vrow.name) viewNames.push(String(vrow.name));
             }
             parameters.push({
                 data_type: "INTEGER",
@@ -3005,12 +3119,6 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                 units: null,
                 value: viewErased
             });
-            var viewNames = [];
-            for (var vn = 0; vn < features.length; vn++) {
-                if (features[vn] && features[vn].name) {
-                    viewNames.push(String(features[vn].name));
-                }
-            }
             viewNames.sort();
             parameters.push({
                 data_type: "STRING",
@@ -3052,6 +3160,17 @@ function gatherAiModelSnapshot(model, session, filename, options) {
         try {
             var solidDbg = {};
             var solid = creoAsSolid(session, model, solidDbg) || model;
+            var usedInventoryFeatures = false;
+            if (typeof listFeaturesForModel === "function") {
+                try {
+                    var invPack = listFeaturesForModel(solid, session);
+                    var invRows = creoInventoryFeatureRows(invPack);
+                    if (invRows.length) {
+                        features = invRows;
+                        usedInventoryFeatures = true;
+                    }
+                } catch (errInvFeat) {}
+            }
             // Prefer the same ListItems owners the configurator uses (active Part).
             var featItems = creoListFeaturesForSnapshot(solid, errors);
             var patternLabelById = {};
@@ -3153,18 +3272,20 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                             : (name || typeName || subType || "")
                     ).trim();
                     if (id != null && ownerLabel) labelByFeatId[String(id)] = ownerLabel;
-                    features.push({
-                        id: id,
-                        name: isPatternHead ? "PATTERN" : (name || typeName || ("Feature " + (id != null ? id : (i + 1)))),
-                        type: typeName,
-                        subtype: subType,
-                        status: creoFeatureStatusLabel(feat),
-                        visible: true,
-                        regen_order: regenOrder,
-                        parent_ids: parentIds,
-                        group_id: groupId,
-                        pattern_id: patternId
-                    });
+                    if (!usedInventoryFeatures) {
+                        features.push({
+                            id: id,
+                            name: isPatternHead ? "PATTERN" : (name || typeName || ("Feature " + (id != null ? id : (i + 1)))),
+                            type: typeName,
+                            subtype: subType,
+                            status: creoFeatureStatusLabel(feat),
+                            visible: true,
+                            regen_order: regenOrder,
+                            parent_ids: parentIds,
+                            group_id: groupId,
+                            pattern_id: patternId
+                        });
+                    }
                     if (id != null) {
                         try {
                             parameters = parameters.concat(
@@ -3303,8 +3424,11 @@ function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
     if (Array.isArray(m.bom) && m.bom.length) {
         snapshot.bom = m.bom;
     }
-    // Merge Features-tab names/types into snapshot rows (same ids Creo assigns).
-    // Skip for drawings — Features tab is empty / solid-only; do not inject PART rows.
+    if (Array.isArray(m.structure) && m.structure.length) {
+        snapshot.structure = m.structure;
+    }
+    // Merge Features-tab / inventory rows into snapshot (Compare + Ask AI).
+    // Drawings: prefer metadata drawing inventory when present (same as Details).
     var snapIsDrw = false;
     try {
         var sn = String(
@@ -3315,7 +3439,9 @@ function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
         ).toUpperCase();
         snapIsDrw = st === "DRAWING" || /\.drw(\.|$)/.test(sn);
     } catch (errDrwCheck) {}
-    if (!snapIsDrw && Array.isArray(m.features) && m.features.length) {
+    if (snapIsDrw && Array.isArray(m.features) && m.features.length) {
+        snapshot.features = m.features.slice();
+    } else if (!snapIsDrw && Array.isArray(m.features) && m.features.length) {
         var byId = {};
         var i;
         for (i = 0; i < m.features.length; i++) {
@@ -3336,6 +3462,8 @@ function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
             }
             if (!sf.type && fromMeta.type) sf.type = String(fromMeta.type);
             if (!sf.subtype && fromMeta.subtype) sf.subtype = String(fromMeta.subtype);
+            if (fromMeta.level != null) sf.level = fromMeta.level;
+            if (fromMeta.status) sf.status = String(fromMeta.status);
         }
         for (i = 0; i < m.features.length; i++) {
             var add = m.features[i];
@@ -3345,7 +3473,8 @@ function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
                 name: String(add.name || ""),
                 type: String(add.type || ""),
                 subtype: String(add.subtype || ""),
-                status: null,
+                status: add.status != null ? String(add.status) : null,
+                level: add.level != null ? add.level : null,
                 regen_order: null,
                 parent_ids: [],
                 group_id: null,
@@ -3791,18 +3920,23 @@ function gatherModelMetadata(filename, filePath, options) {
         var mass = null;
         var family_table = creoGatherFamilyTable(model);
         var features = [];
+        var structure = null;
         var bom = [];
         try {
             var type = model.Type;
             var isAsm = false;
             var isPart = false;
+            var isDrwMeta = creoIsDrawingModel(model, filename || identity.file_name)
+                || String(identity.model_type || "").toUpperCase() === "DRAWING";
             if (typeof pfcModelType !== "undefined") {
                 isAsm = type === pfcModelType.MDL_ASSEMBLY;
                 isPart = type === pfcModelType.MDL_PART;
+                if (type === pfcModelType.MDL_DRAWING) isDrwMeta = true;
             } else {
                 var lowerName = String(identity.file_name || filename).toLowerCase();
                 isAsm = lowerName.indexOf(".asm") >= 0;
                 isPart = lowerName.indexOf(".prt") >= 0;
+                if (lowerName.indexOf(".drw") >= 0) isDrwMeta = true;
             }
             if (isAsm) {
                 bom = creoGatherBomTree(solidModel, session);
@@ -3816,12 +3950,34 @@ function gatherModelMetadata(filename, filePath, options) {
                         });
                     }
                 }
-            }
-            if (isAsm || isPart) {
                 try {
-                    features = creoGatherFeatures(solidModel, null, session, {
-                        featureNames: wantFeatureNames,
-                    });
+                    if (typeof listAssemblyStructureForModel === "function") {
+                        var structPack = listAssemblyStructureForModel(model, session);
+                        var structRows = creoInventoryStructureRows(structPack);
+                        if (structRows.length) structure = structRows;
+                    }
+                } catch (errStruct) {}
+            }
+            if (isDrwMeta) {
+                try {
+                    if (typeof listDrawingStructureForModel === "function") {
+                        var drwPack = listDrawingStructureForModel(model, session);
+                        features = creoInventoryDrawingFeatureRows(drwPack);
+                    }
+                } catch (errDrwFeat) {
+                    features = [];
+                }
+            } else if (isAsm || isPart) {
+                try {
+                    if (typeof listFeaturesForModel === "function") {
+                        var featPack = listFeaturesForModel(solidModel || model, session);
+                        features = creoInventoryFeatureRows(featPack);
+                    }
+                    if (!features.length) {
+                        features = creoGatherFeatures(solidModel, null, session, {
+                            featureNames: wantFeatureNames,
+                        });
+                    }
                 } catch (errFeatGather) {
                     features = [];
                 }
@@ -3871,6 +4027,7 @@ function gatherModelMetadata(filename, filePath, options) {
             // same metadata gathers as Overview — not re-walked for the snapshot.
             ai_snapshot = creoEnrichAiSnapshotFromMetadata(ai_snapshot, {
                 features: features,
+                structure: structure,
                 materials: materials,
                 parameters: parameters,
                 units: units,
@@ -3904,6 +4061,7 @@ function gatherModelMetadata(filename, filePath, options) {
             mass: mass,
             family_table: family_table,
             features: features,
+            structure: structure || null,
             ai_snapshot: ai_snapshot,
             // Consumed by app.js on a later Creo.JS turn (Erase is deferred by PTC).
             _pdm_erase_keys: eraseKeys

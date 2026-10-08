@@ -1,0 +1,195 @@
+function pfcCreate (name) {
+	if (typeof name === 'string') {
+		function wrapMember (target, name) {
+			const value = target [name]
+			if (typeof value === 'function') {
+				return value.bind (target)
+			}
+			return value
+		}
+		switch (name) {
+			case 'anyseq':
+			case 'intseq':
+			case 'boolseq':
+			case 'realseq':
+			case 'stringseq': {
+				return asSequence ([])
+			}
+		}
+		if (pfcCreate.WEB_LINK_SEQS && pfcCreate.WEB_LINK_SEQS [name])
+		{
+			return asSequence ([])
+		}
+		if (name === 'MpfcCOMGlobal') {
+			return new Proxy ({}, {
+				get (target, name) {
+					if (name === 'GetProESession') return function () {return pfcGetCurrentSession ()}
+					if (name === 'GetProEArguments') return function () {return pfcGetProEArguments ()}
+					if (name === 'GetProEBuildCode') return function () {return pfcGetProEBuildCode ()}
+					if (name === 'GetProEVersion') return function () {return pfcGetProEVersion ()}
+					if (name === 'GetScript') return function () {throw "Unsupported API"}
+					return undefined
+				}
+			})
+		}
+		if (name.startsWith ('Mpfc')) {
+			return new Proxy ({}, {
+				get (target, name) {
+					return pfcCreate ('pfc' + name)
+				}
+			})
+		}
+		else {
+			try {
+				const global = eval (name)
+				if (name.startsWith ('pfc')) {
+					if (global && (typeof global.values === 'function')) {
+						return new Proxy (global, {
+								get (global, name) {
+									const value = global [name]
+									return value
+								}
+							})
+					}
+				}
+				if (typeof global === 'function') {
+					const isArrayType = pfcCreate.isWebLinkArray (global)
+					if (isArrayType) {
+						return new isArrayType ()
+					}
+					return new Proxy (function (...args) {return global (...args)}, {
+							get (target, name) {
+								return wrapMember (global, name)
+							}
+						})
+				}
+				return global 
+			}
+			catch (ex) {
+				pfcCreate.addWebLinkSequence (name)
+				return asSequence ([])
+			}
+		}
+	}
+	return undefined
+}
+
+pfcCreate.ARRAY_TYPES = new Map ()
+
+pfcCreate.addWebLinkSequence = function (name) {
+	if (!pfcCreate.WEB_LINK_SEQS) {
+		pfcCreate.WEB_LINK_SEQS = {}
+	}
+	pfcCreate.WEB_LINK_SEQS [name] = true
+}
+
+function isFunction (fobj) {return typeof fobj === 'function'}
+
+pfcCreate.isWebLinkArray = function (arrayConstructor) {
+	if (!isFunction (arrayConstructor)) return null
+	if (pfcCreate.WEB_LINK_ARRAYS) {
+		const webLinkArray = pfcCreate.WEB_LINK_ARRAYS.get (arrayConstructor)
+		if (webLinkArray !== undefined) return webLinkArray
+	}
+	if (!pfcCreate.WEB_LINK_ARRAYS) {
+		pfcCreate.WEB_LINK_ARRAYS = new Map ()
+	}
+	const prototype = arrayConstructor.prototype
+	if (isFunction (prototype.Item) && isFunction (prototype.set) && !('Set' in prototype)) {
+		prototype.Set = function (...args) {return this.set (...args)}
+		if (isFunction (prototype.dims)) {
+			prototype.__set = prototype.set
+			prototype.set = function (arg0, ...args) {
+				if (Array.isArray (arg0)) {
+					const indices = []
+					const dims = this.dims ()
+					const depth = dims.length - 1
+					function assign (obj, array, level) {
+						if (Array.isArray (array)) {
+							indices.push (0)
+							const size = Math.min (dims [level], array.length)
+							for (let i = 0; i < size; i++) {
+								indices [level] = i
+								if (level < depth) {
+									assign (obj, array [i], level+1)
+								}
+								else {		
+									obj.set (...indices, array [i])
+								}
+							}
+							indices.pop()
+						}
+					}
+					assign (this, arg0, 0)
+				}
+				else {
+					this.__set (arg0, ...args)
+				}
+			}
+		}
+		pfcCreate.WEB_LINK_ARRAYS.set (arrayConstructor, arrayConstructor)
+		return arrayConstructor
+	}
+	else {
+		pfcCreate.WEB_LINK_ARRAYS.set (arrayConstructor, null)
+		return null
+	}
+}
+
+function asArray (arr) {
+	if (arr && isFunction (arr.get) && !('Item' in arr)) {
+		arr.Item = idx => arr.get (idx)
+	}
+	return arr
+}
+
+function asSequence (arr) {
+	if (!arr || (('Array' in arr) && Array.isArray (arr.Array))) return arr
+	if (Array.isArray (arr)) {
+		const wrapper = {
+			toString () {return arr.toString ()},
+			get Count () {return arr.length},
+			get Array () {return arr},
+			Item (idx) {return arr[idx]},
+			Set (idx, item) {return arr[idx] = item},
+			Remove (fromIdx, toIdx) {return arr.splice (fromIdx, toIdx-fromIdx)},
+			Append (item) {arr.push (item)},
+			Clear (fromIdx, toIdx) {arr.splice (fromIdx, toIdx-fromIdx)},
+			Insert (idx, item) {arr.splice (idx, 0, item)},
+			InsertSeq (idx, seq) {
+				if (seq) {
+					if (Array.isArray (seq)) {
+						arr.splice (idx, 0, ...seq)
+					}
+					else {
+						if ('Array' in seq) {
+							this.InsertSeq (idx, seq.Array)
+						}
+						else {
+							throw new Error ('sequence or array expected')
+						}
+					}
+				}
+			}
+		}
+		return new Proxy (arr, {
+			get (target, name) {
+				if (name in wrapper) {
+					const value = wrapper [name];
+					return (typeof value === 'function') ? value.bind (wrapper) : value
+				} 
+				return target [name]
+			},
+			has (target, name) {
+				return (name in wrapper) || (name in target)
+			},
+			apply (target, thisArg, argumentsList) {
+				return arr [argumentsList[0]];
+			}
+  		})
+	}
+	throw new Error ('sequence or array expected')
+}
+
+setCIPSequenceHandler (asSequence)
+//setCIPSequenceHandler (null)

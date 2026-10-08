@@ -1,0 +1,83 @@
+const Browser = (function () {
+    let callCounter = 0;
+    const calls = {}
+    function caller (name) {
+        function browserCall(...args) {
+            const id = '' + callCounter++
+            const packedArgs = JSON.stringify (args, argsS11n)
+            if (CreoJS.resultEval) {
+                var code = CreoJS.resultEval.replace ('%o', `{browser: {id: '${id}', name: '${name}', args: ${JSON.stringify (packedArgs)}}}`)
+                $CALLBROWSER (code)
+            }
+            else {
+                $CALLBROWSER (`if (typeof CreoJS !== 'undefined') CreoJS.$CALLBROWSER ('${id}', function () {
+                    var obj = ${name}
+                    return (typeof obj === 'function') ? obj.apply (null, JSON.parse (${JSON.stringify (packedArgs)}, CreoJS.$CALLFUNC)) : obj
+                })`)
+            }
+            return new Promise ((resolve, reject) => calls [id] = {resolve, reject})
+        }
+        return new Proxy (browserCall, {
+            get (receiver, member) {
+                return caller (`${name}[${JSON.stringify (member)}]`)
+            }
+        })
+    }
+    function argsS11n (key, value)
+    {
+        switch (typeof value) {
+            case 'function': return {'CreoJS.$CALLFUNC': String (value)}
+            default: return value
+        }
+    }
+    function evaluator (value) {
+        switch (typeof value) {
+            case 'function': return caller ('eval') (`(${value}) ()`)
+            case 'object': return caller ('eval') (value)
+            default: return caller (String (value)) ()
+        }
+    }
+    var browser = function (...args) {
+        switch (args.length) {
+            case 0: return Promise.resolve ()
+            case 1: return evaluator (args [0])
+            default: return Promise.all (args.map (arg => evaluator (arg)))
+        }
+    }
+    browser (function () {
+        CreoJS.$CALLFUNC = function (k,v) {
+            if (v && (typeof v === 'object') && ('CreoJS.$CALLFUNC' in v)) {
+                return eval ('(' + v ['CreoJS.$CALLFUNC'] + ') ()')
+            }
+            return v
+        }
+    })
+    browser.$ONRETURN = function (data) {
+        const handler = calls [data.id]
+        if (handler) {
+            delete calls [data.id]
+            if (data.exception) {
+                handler.reject (data.exception)
+            }
+            else if (data.error) {
+                handler.reject (new Error (data.error))
+            }
+            else {
+                handler.resolve (data.value)
+            }
+        }
+    }
+    return new Proxy (browser, {
+        get (receiver, member) {
+            if (! (member in receiver)) {
+                return caller (member)
+            }
+            else {
+                const value = receiver [member]
+                return (typeof value == 'function') ? value.bind (receiver) : value
+            }
+        }
+    })
+}) ()
+
+function alert (msg) {Browser.alert (msg)}

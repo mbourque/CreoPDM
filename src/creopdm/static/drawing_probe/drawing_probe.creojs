@@ -1,0 +1,1450 @@
+/*
+ * Creo.JS drawing inventory probe.
+ * Sheet-organized: sheets (size/format/scale), views, notes, dimensions, tables.
+ * Item IDs retained for tracing back to Creo. No RetrieveModel / solid walk.
+ */
+
+function describeError(error) {
+  if (error == null) return "Unknown Creo error";
+  if (typeof error === "string") return error;
+  var parts = [];
+  if (error.message) parts.push(String(error.message));
+  if (error.Message && error.Message !== error.message) parts.push(String(error.Message));
+  if (!parts.length) {
+    try {
+      parts.push(String(error));
+    } catch (e) {
+      parts.push("Unknown Creo error");
+    }
+  }
+  return parts.join(" ");
+}
+
+function enumString(ft) {
+  if (ft == null) return "";
+  try {
+    if (typeof ft.string === "function") return String(ft.string() || "");
+  } catch (e) {}
+  try {
+    if (ft.string != null && typeof ft.string !== "function") return String(ft.string);
+  } catch (e2) {}
+  try {
+    if (typeof ft.GetName === "function") {
+      var gn = ft.GetName();
+      if (gn) return String(gn);
+    }
+  } catch (e3) {}
+  try {
+    if (ft.Name != null && String(ft.Name) !== "" && String(ft.Name) !== "[object Object]") {
+      return String(ft.Name);
+    }
+  } catch (e4) {}
+  try {
+    var s = String(ft);
+    if (s && s !== "[object Object]") return s;
+  } catch (e5) {}
+  return "";
+}
+
+/** Avoid "[object Object]" in sheet/unit labels. */
+function labelOf(value) {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  var es = enumString(value);
+  if (es && es !== "[object Object]") return es;
+  return "";
+}
+
+function sequenceCount(sequence) {
+  if (sequence == null) return 0;
+  if (typeof sequence.Count === "number") return sequence.Count;
+  if (typeof sequence.getCount === "function") {
+    try {
+      return sequence.getCount();
+    } catch (e) {}
+  }
+  if (typeof sequence.length === "number") return sequence.length;
+  return 0;
+}
+
+function sequenceItem(sequence, index) {
+  if (sequence != null && typeof sequence.Item === "function") return sequence.Item(index);
+  return sequence[index];
+}
+
+function featureItems(listed) {
+  var out = [];
+  var count = sequenceCount(listed);
+  for (var i = 0; i < count; i++) {
+    try {
+      var item = sequenceItem(listed, i);
+      if (item) out.push(item);
+    } catch (e) {}
+  }
+  return out;
+}
+
+function logicalFileName(filename) {
+  var name = String(filename || "").replace(/\\/g, "/");
+  var slash = name.lastIndexOf("/");
+  if (slash >= 0) name = name.substring(slash + 1);
+  name = name.replace(/(\.[a-z0-9]+)\.\d+$/i, "$1");
+  name = name.replace(/<<[^>]*>>/g, "");
+  name = name.replace(/<<[^>]*>/g, "");
+  return name;
+}
+
+function modelFileNameOf(model) {
+  try {
+    return String(model.FileName || "");
+  } catch (e) {
+    return "";
+  }
+}
+
+function itemIdOf(obj) {
+  try {
+    if (typeof obj.Id !== "undefined" && obj.Id != null) return obj.Id;
+  } catch (e) {}
+  try {
+    if (typeof obj.GetId === "function") return obj.GetId();
+  } catch (e2) {}
+  return null;
+}
+
+function isDrawingModel(model, filename) {
+  try {
+    if (typeof pfcModelType !== "undefined" && model && model.Type === pfcModelType.MDL_DRAWING) {
+      return true;
+    }
+  } catch (e) {}
+  var candidates = [filename, modelFileNameOf(model)];
+  for (var i = 0; i < candidates.length; i++) {
+    var n = String(candidates[i] || "").toLowerCase();
+    if (/\.drw(\.|$)/.test(n)) return true;
+  }
+  return false;
+}
+
+function asDrawing(model) {
+  if (!model) return null;
+  try {
+    if (typeof pfcDrawing !== "undefined" && typeof pfcDrawing.cast === "function") {
+      var casted = pfcDrawing.cast(model);
+      if (casted) return casted;
+    }
+  } catch (e) {}
+  try {
+    if (typeof model.isInstanceOf === "function" && model.isInstanceOf("pfcDrawing")) {
+      return model;
+    }
+  } catch (e2) {}
+  return model;
+}
+
+function modelFromCurrentWindow(session) {
+  if (!session) return null;
+  var win = null;
+  try {
+    if (typeof session.GetCurrentWindow === "function") win = session.GetCurrentWindow();
+  } catch (e) {}
+  if (!win) {
+    try {
+      if (session.CurrentWindow != null) win = session.CurrentWindow;
+    } catch (e2) {}
+  }
+  if (!win) return null;
+  try {
+    if (typeof win.GetModel === "function") {
+      var m = win.GetModel();
+      if (m) return m;
+    }
+  } catch (e3) {}
+  try {
+    if (win.Model != null) return win.Model;
+  } catch (e4) {}
+  return null;
+}
+
+function modelFromSessionList(session) {
+  if (!session || typeof session.ListModels !== "function") return null;
+  var listed = null;
+  try {
+    listed = session.ListModels();
+  } catch (e) {
+    return null;
+  }
+  var items = featureItems(listed);
+  var drw = null;
+  var any = null;
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if (!item) continue;
+    if (isDrawingModel(item, modelFileNameOf(item))) {
+      if (!drw) drw = item;
+      continue;
+    }
+    if (!any) any = item;
+  }
+  return drw || any;
+}
+
+function activeModel() {
+  var session = pfcGetCurrentSession();
+  if (session == null) return { error: "Creo did not return a session." };
+  var model = null;
+  try {
+    if (typeof session.GetActiveModel === "function") model = session.GetActiveModel();
+  } catch (e) {
+    model = null;
+  }
+  if (!model) {
+    try {
+      model = session.CurrentModel;
+    } catch (e2) {
+      model = null;
+    }
+  }
+  if (!model) model = modelFromCurrentWindow(session);
+  if (!model) model = modelFromSessionList(session);
+  if (model == null) {
+    return { error: "No active model. Open a drawing (.drw) in Creo first." };
+  }
+  return { session: session, model: model };
+}
+
+function viewIsErased(view) {
+  if (!view) return null;
+  try {
+    if (typeof view.IsErased === "boolean") return view.IsErased;
+  } catch (e) {}
+  try {
+    if (typeof view.IsErased === "function") return !!view.IsErased();
+  } catch (e2) {}
+  try {
+    if (typeof view.GetIsErased === "function") return !!view.GetIsErased();
+  } catch (e3) {}
+  try {
+    if (typeof wfcWView2D !== "undefined" && typeof wfcWView2D.cast === "function") {
+      var wv = wfcWView2D.cast(view);
+      if (wv) {
+        if (typeof wv.IsErased === "function") return !!wv.IsErased();
+        if (typeof wv.IsErased === "boolean") return wv.IsErased;
+      }
+    }
+  } catch (e4) {}
+  return null;
+}
+
+function viewNameOf(view, index) {
+  try {
+    if (typeof view.Name !== "undefined" && view.Name != null && String(view.Name) !== "") {
+      return String(view.Name);
+    }
+  } catch (e) {}
+  try {
+    if (typeof view.GetName === "function") {
+      var n = view.GetName();
+      if (n) return String(n);
+    }
+  } catch (e2) {}
+  return "View " + (index + 1);
+}
+
+function viewSheetNumber(view) {
+  try {
+    if (typeof view.GetSheetNumber === "function") {
+      var s = view.GetSheetNumber();
+      if (s != null) return s;
+    }
+  } catch (e) {}
+  try {
+    if (typeof view.SheetNumber !== "undefined" && view.SheetNumber != null) {
+      return view.SheetNumber;
+    }
+  } catch (e2) {}
+  try {
+    if (typeof wfcWView2D !== "undefined" && typeof wfcWView2D.cast === "function") {
+      var wv = wfcWView2D.cast(view);
+      if (wv && typeof wv.GetErasedViewSheet === "function") {
+        return wv.GetErasedViewSheet();
+      }
+    }
+  } catch (e3) {}
+  return null;
+}
+
+function viewScaleOf(view) {
+  try {
+    if (typeof view.Scale !== "undefined" && view.Scale != null) return view.Scale;
+  } catch (e) {}
+  try {
+    if (typeof view.GetScale === "function") return view.GetScale();
+  } catch (e2) {}
+  return null;
+}
+
+function viewModelName(view) {
+  try {
+    var vm = null;
+    if (typeof view.GetModel === "function") vm = view.GetModel();
+    else if (view.Model != null) vm = view.Model;
+    if (vm) return logicalFileName(modelFileNameOf(vm)) || modelFileNameOf(vm);
+  } catch (e) {}
+  return "";
+}
+
+function viewTypeLabel(view) {
+  try {
+    var t = enumString(view.Type != null ? view.Type : null);
+    if (t) return String(t).replace(/^DWGVIEW_/, "").replace(/^VIEW_/, "");
+  } catch (e) {}
+  try {
+    if (typeof view.GetType === "function") {
+      var t2 = enumString(view.GetType());
+      if (t2) return String(t2).replace(/^DWGVIEW_/, "").replace(/^VIEW_/, "");
+    }
+  } catch (e2) {}
+  return "VIEW";
+}
+
+function asWView2D(view) {
+  if (!view) return null;
+  try {
+    if (typeof wfcWView2D !== "undefined" && typeof wfcWView2D.cast === "function") {
+      return wfcWView2D.cast(view);
+    }
+  } catch (e) {}
+  return null;
+}
+
+/** Strip VIEW_ / DRAWING_VIEW_ prefixes from section/view enums. */
+function cleanViewEnum(raw) {
+  var s = labelOf(raw);
+  if (!s) return "";
+  return String(s)
+    .replace(/^DRAWING_VIEW_/, "")
+    .replace(/^DWGVIEW_/, "")
+    .replace(/^VIEW_/, "");
+}
+
+/**
+ * Drawing section-view info (wfcWView2D). pfcView2D has no cross-section link.
+ * Returns null when the view is not sectioned (VIEW_NO_SECTION / unavailable).
+ * Creo.JS host methods often fail typeof==="function" — invoke in try/catch.
+ */
+function viewSectionInfo(view) {
+  var wv = asWView2D(view) || view;
+  if (!wv) return null;
+  var sectionType = "";
+  try {
+    var stRaw =
+      wv.GetDrawingViewSectionType != null
+        ? typeof wv.GetDrawingViewSectionType === "function"
+          ? wv.GetDrawingViewSectionType()
+          : wv.GetDrawingViewSectionType
+        : wv.DrawingViewSectionType;
+    sectionType = cleanViewEnum(stRaw);
+  } catch (eT) {}
+  if (!sectionType || /^NO_SECTION$/i.test(sectionType)) return null;
+
+  var sectionName = "";
+  var areaType = "";
+  var arrowView = "";
+
+  try {
+    var instrSeq =
+      typeof wv.GetSection2DInstructions === "function"
+        ? wv.GetSection2DInstructions()
+        : wv.GetSection2DInstructions != null
+          ? wv.GetSection2DInstructions
+          : null;
+    var instrs = featureItems(instrSeq);
+    for (var i = 0; i < instrs.length; i++) {
+      var instr = instrs[i];
+      if (!instr) continue;
+      try {
+        var sn =
+          typeof instr.GetSectionName === "function"
+            ? instr.GetSectionName()
+            : instr.SectionName != null
+              ? instr.SectionName
+              : instr.GetSectionName;
+        if (sn && !sectionName) sectionName = String(sn);
+      } catch (eN) {}
+      try {
+        var at =
+          typeof instr.GetSectionAreaType === "function"
+            ? instr.GetSectionAreaType()
+            : instr.SectionAreaType;
+        var atLab = cleanViewEnum(at).replace(/^SECTION_AREA_/, "");
+        if (atLab && !areaType) areaType = atLab;
+      } catch (eA) {}
+      try {
+        var av =
+          typeof instr.GetArrowDisplayView === "function"
+            ? instr.GetArrowDisplayView()
+            : instr.ArrowDisplayView;
+        if (av && !arrowView) arrowView = viewNameOf(av, 0);
+      } catch (eAv) {}
+    }
+  } catch (e2) {}
+
+  try {
+    if (!sectionName) {
+      var n3 =
+        typeof wv.Get3DSectionName === "function"
+          ? wv.Get3DSectionName()
+          : wv.Get3DSectionName != null
+            ? wv.Get3DSectionName
+            : null;
+      if (n3) sectionName = String(n3);
+    }
+  } catch (e3) {}
+
+  var bits = [];
+  bits.push("section " + (sectionName || "?"));
+  bits.push(sectionType);
+  if (areaType) bits.push(areaType);
+  if (arrowView) bits.push("arrows on " + arrowView);
+
+  return {
+    sectionType: sectionType,
+    sectionName: sectionName,
+    areaType: areaType,
+    arrowView: arrowView,
+    detail: bits.join("; ")
+  };
+}
+
+
+function drawingSheetCount(drawing) {
+  try {
+    if (typeof drawing.GetNumberOfSheets === "function") return drawing.GetNumberOfSheets();
+  } catch (e) {}
+  try {
+    if (typeof drawing.NumberOfSheets !== "undefined") return drawing.NumberOfSheets;
+  } catch (e2) {}
+  return null;
+}
+
+function drawingCurrentSheet(drawing) {
+  try {
+    if (typeof drawing.CurrentSheetNumber !== "undefined") return drawing.CurrentSheetNumber;
+  } catch (e) {}
+  try {
+    if (typeof drawing.GetCurrentSheetNumber === "function") return drawing.GetCurrentSheetNumber();
+  } catch (e2) {}
+  return null;
+}
+
+function sheetInfoSummary(drawing, sheetNum) {
+  var info = {
+    sheet: sheetNum,
+    width: null,
+    height: null,
+    orientation: "",
+    sheetSize: "",
+    units: "",
+    scale: null,
+    format: ""
+  };
+  try {
+    if (typeof drawing.GetSheetInfo === "function") {
+      var si = drawing.GetSheetInfo(sheetNum);
+      if (si) {
+        try {
+          if (si.Width != null) info.width = si.Width;
+        } catch (eW) {}
+        try {
+          if (si.Height != null) info.height = si.Height;
+        } catch (eH) {}
+        try {
+          info.orientation = labelOf(si.Orientation);
+        } catch (eO) {}
+        try {
+          info.sheetSize = labelOf(si.SheetSize);
+        } catch (eS) {}
+        try {
+          info.units = labelOf(si.Units);
+        } catch (eU) {}
+      }
+    }
+  } catch (e) {}
+  try {
+    if (!info.units && typeof drawing.GetSheetUnits === "function") {
+      info.units = labelOf(drawing.GetSheetUnits(sheetNum));
+    }
+  } catch (eU2) {}
+  try {
+    if (typeof drawing.GetSheetScale === "function") {
+      info.scale = drawing.GetSheetScale(sheetNum);
+    }
+  } catch (e2) {}
+  try {
+    if (typeof drawing.GetSheetFormatDescr === "function") {
+      var descr = drawing.GetSheetFormatDescr(sheetNum);
+      if (descr) {
+        try {
+          if (typeof descr.GetFileName === "function") info.format = String(descr.GetFileName() || "");
+          else info.format = String(descr.FileName || "");
+        } catch (eF) {}
+        info.format = logicalFileName(info.format) || info.format;
+      }
+    }
+  } catch (e3) {}
+  try {
+    if (!info.format && typeof drawing.GetSheetFormat === "function") {
+      var fmt = drawing.GetSheetFormat(sheetNum);
+      if (fmt) info.format = logicalFileName(modelFileNameOf(fmt)) || modelFileNameOf(fmt);
+    }
+  } catch (e4) {}
+  return info;
+}
+
+function sheetDetailText(info) {
+  var bits = [];
+  if (info.sheetSize) bits.push(labelOf(info.sheetSize).replace(/^LETTERSIZE_|^PLOTSIZE_|^SIZE_/, ""));
+  if (info.width != null && info.height != null) bits.push(info.width + "×" + info.height);
+  if (info.orientation) bits.push(labelOf(info.orientation).replace(/^ORIENT_/, ""));
+  if (info.units) bits.push(labelOf(info.units));
+  if (info.scale != null) bits.push("scale " + info.scale);
+  if (info.format) bits.push("fmt " + info.format);
+  return bits.join("; ");
+}
+
+function listDrawingModels(drawing) {
+  var out = [];
+  try {
+    if (typeof drawing.ListModels !== "function") return out;
+    var items = featureItems(drawing.ListModels());
+    for (var i = 0; i < items.length; i++) {
+      var m = items[i];
+      if (!m) continue;
+      var fn = logicalFileName(modelFileNameOf(m)) || modelFileNameOf(m);
+      var mt = "";
+      try {
+        if (typeof pfcModelType !== "undefined" && m.Type != null) {
+          if (m.Type === pfcModelType.MDL_PART) mt = "PART";
+          else if (m.Type === pfcModelType.MDL_ASSEMBLY) mt = "ASSEMBLY";
+          else if (m.Type === pfcModelType.MDL_MFG) mt = "MFG";
+          else if (m.Type === pfcModelType.MDL_DRAWING) mt = "DRAWING";
+        }
+      } catch (e) {}
+      if (fn) out.push({ filename: fn, modelType: mt });
+    }
+  } catch (e2) {}
+  return out;
+}
+
+function listDrawingViews(drawing) {
+  var out = [];
+  if (!drawing || typeof drawing.List2DViews !== "function") return out;
+  var items = [];
+  try {
+    items = featureItems(drawing.List2DViews());
+  } catch (e) {
+    return out;
+  }
+  for (var i = 0; i < items.length; i++) {
+    var view = items[i];
+    if (!view) continue;
+    var name = viewNameOf(view, i);
+    var erased = viewIsErased(view);
+    var sec = viewSectionInfo(view);
+    var sub = viewTypeLabel(view);
+    var detail = "";
+    var sectionName = "";
+    if (sec) {
+      sub = "SECTION/" + (sec.sectionType || "SECTION");
+      detail = sec.detail || "";
+      sectionName = sec.sectionName || "";
+    }
+    out.push({
+      name: name,
+      id: name ? "view:" + name : "view:" + i,
+      type: "VIEW",
+      subType: sub,
+      sheet: viewSheetNumber(view),
+      scale: viewScaleOf(view),
+      model: viewModelName(view),
+      status: erased === true ? "ERASED" : "ACTIVE",
+      detail: detail,
+      erased: erased === true,
+      sectionName: sectionName
+    });
+  }
+  // Background views per sheet
+  var sheetCount = drawingSheetCount(drawing);
+  if (sheetCount != null) {
+    for (var s = 1; s <= sheetCount; s++) {
+      try {
+        if (typeof drawing.GetSheetBackgroundView !== "function") break;
+        var bg = drawing.GetSheetBackgroundView(s);
+        if (!bg) continue;
+        var bgName = viewNameOf(bg, 0) || ("Background " + s);
+        out.push({
+          name: bgName,
+          id: "bgview:" + s,
+          type: "VIEW",
+          subType: "BACKGROUND",
+          sheet: s,
+          scale: viewScaleOf(bg),
+          model: viewModelName(bg),
+          status: "ACTIVE",
+          detail: "background",
+          erased: false
+        });
+      } catch (eBg) {}
+    }
+  }
+  return out;
+}
+
+function detailTypeEnums() {
+  var types = [];
+  try {
+    if (typeof pfcDetailType !== "undefined") {
+      if (pfcDetailType.DETAIL_NOTE != null) types.push({ kind: "NOTE", val: pfcDetailType.DETAIL_NOTE });
+      if (pfcDetailType.DETAIL_ENTITY != null) types.push({ kind: "ENTITY", val: pfcDetailType.DETAIL_ENTITY });
+      if (pfcDetailType.DETAIL_GROUP != null) types.push({ kind: "GROUP", val: pfcDetailType.DETAIL_GROUP });
+      if (pfcDetailType.DETAIL_SYM_INSTANCE != null) {
+        types.push({ kind: "SYMBOL", val: pfcDetailType.DETAIL_SYM_INSTANCE });
+      }
+      if (pfcDetailType.DETAIL_OLE_OBJECT != null) {
+        types.push({ kind: "OLE", val: pfcDetailType.DETAIL_OLE_OBJECT });
+      }
+    }
+  } catch (e) {}
+  return types;
+}
+
+function textLinesFromInstructions(instr) {
+  var lines = [];
+  if (!instr) return lines;
+  var textLines = null;
+  try {
+    if (instr.TextLines != null) textLines = instr.TextLines;
+    else if (typeof instr.GetTextLines === "function") textLines = instr.GetTextLines();
+  } catch (eTL) {}
+  var tls = featureItems(textLines);
+  for (var i = 0; i < tls.length; i++) {
+    var tl = tls[i];
+    if (!tl) continue;
+    var texts = null;
+    try {
+      if (tl.Texts != null) texts = tl.Texts;
+      else if (typeof tl.GetTexts === "function") texts = tl.GetTexts();
+    } catch (eT) {}
+    var segs = featureItems(texts);
+    var line = [];
+    for (var s = 0; s < segs.length; s++) {
+      try {
+        var seg = segs[s];
+        if (!seg) continue;
+        if (seg.Text != null) line.push(String(seg.Text));
+        else if (typeof seg.GetText === "function") line.push(String(seg.GetText() || ""));
+      } catch (eSeg) {}
+    }
+    if (line.length) lines.push(line.join(""));
+  }
+  return lines;
+}
+
+/** Prefer displayed text (GetInstructions(false)); fall back to symbolic. */
+function noteTextOf(note) {
+  var lines = [];
+  try {
+    if (typeof note.GetInstructions === "function") {
+      try {
+        lines = textLinesFromInstructions(note.GetInstructions(false));
+      } catch (eDisp) {}
+      if (!lines.length) {
+        try {
+          lines = textLinesFromInstructions(note.GetInstructions(true));
+        } catch (eSym) {}
+      }
+      if (!lines.length) {
+        try {
+          lines = textLinesFromInstructions(note.GetInstructions());
+        } catch (eBare) {}
+      }
+    }
+  } catch (e) {}
+  try {
+    if (!lines.length && typeof note.GetTextLines === "function") {
+      var opt = null;
+      try {
+        if (typeof pfcDetailTextDisplayOption !== "undefined") {
+          opt = pfcDetailTextDisplayOption.DETAIL_TEXT_DISPLAYED;
+          if (opt == null) opt = pfcDetailTextDisplayOption.TEXT_DISPLAY;
+        }
+      } catch (eO) {}
+      var tls = featureItems(opt != null ? note.GetTextLines(opt) : note.GetTextLines());
+      for (var i = 0; i < tls.length; i++) {
+        var tl = tls[i];
+        var texts = null;
+        try {
+          texts = tl.Texts || (typeof tl.GetTexts === "function" ? tl.GetTexts() : null);
+        } catch (eT) {}
+        var segs = featureItems(texts);
+        var line = [];
+        for (var s = 0; s < segs.length; s++) {
+          try {
+            if (segs[s] && segs[s].Text != null) line.push(String(segs[s].Text));
+          } catch (eSeg) {}
+        }
+        if (line.length) lines.push(line.join(""));
+      }
+    }
+  } catch (e2) {}
+  try {
+    if (!lines.length && typeof note.GetText === "function") {
+      var t = note.GetText();
+      if (t) lines.push(String(t));
+    }
+  } catch (e3) {}
+  return lines.join(" / ");
+}
+
+function viewSheetLookup(views) {
+  var map = {};
+  for (var i = 0; i < (views || []).length; i++) {
+    var v = views[i];
+    if (!v || !v.name || v.sheet == null) continue;
+    map[String(v.name).toLowerCase()] = v.sheet;
+  }
+  return map;
+}
+
+function listDetailItems(drawing, sheetCount, notesOut) {
+  var out = [];
+  var seen = {};
+  var types = detailTypeEnums();
+
+  function addItem(raw, kind, sheetHint) {
+    if (!raw) return;
+    var id = itemIdOf(raw);
+    var key = kind + ":" + (id != null ? id : "");
+    if (key !== kind + ":" && seen[key]) {
+      // Fill sheet if we learned it later.
+      if (sheetHint != null) {
+        for (var oi = 0; oi < out.length; oi++) {
+          if (out[oi].id === key.toLowerCase() || out[oi].id === kind.toLowerCase() + ":" + id) {
+            if (out[oi].sheet == null) out[oi].sheet = sheetHint;
+          }
+        }
+      }
+      return;
+    }
+    var name = "";
+    try {
+      if (raw.Name != null) name = String(raw.Name);
+      else if (typeof raw.GetName === "function") name = String(raw.GetName() || "");
+    } catch (eN) {}
+    var detail = "";
+    if (kind === "NOTE") detail = noteTextOf(raw);
+    if (!name) name = kind + (id != null ? " (" + id + ")" : "");
+    var rowId = kind.toLowerCase() + ":" + (id != null ? id : name);
+    if (seen[rowId]) return;
+    seen[rowId] = true;
+    if (key !== kind + ":") seen[key] = true;
+    out.push({
+      name: name,
+      id: rowId,
+      creoId: id,
+      type: kind,
+      subType: "",
+      sheet: sheetHint,
+      scale: null,
+      model: "",
+      status: "ACTIVE",
+      detail: detail
+    });
+  }
+
+  function listForSheet(typeVal, kind, sheetNum) {
+    try {
+      var listed = featureItems(drawing.ListDetailItems(typeVal, sheetNum));
+      for (var i = 0; i < listed.length; i++) addItem(listed[i], kind, sheetNum);
+    } catch (e) {}
+  }
+
+  if (typeof drawing.ListDetailItems === "function") {
+    var sheets = [];
+    if (sheetCount != null && sheetCount > 0) {
+      for (var s = 1; s <= sheetCount; s++) sheets.push(s);
+    } else {
+      sheets.push(null);
+    }
+    if (!types.length) {
+      for (var si = 0; si < sheets.length; si++) {
+        try {
+          var all = featureItems(drawing.ListDetailItems(null, sheets[si]));
+          for (var a = 0; a < all.length; a++) addItem(all[a], "DETAIL", sheets[si]);
+        } catch (eAll) {
+          if (notesOut && si === 0) notesOut.push("ListDetailItems: " + describeError(eAll));
+        }
+      }
+    } else {
+      for (var t = 0; t < types.length; t++) {
+        for (var sj = 0; sj < sheets.length; sj++) {
+          listForSheet(types[t].val, types[t].kind, sheets[sj]);
+        }
+        // Catch items with no sheet assignment.
+        listForSheet(types[t].val, types[t].kind, null);
+      }
+    }
+  } else if (notesOut) {
+    notesOut.push("ListDetailItems unavailable");
+  }
+
+  return out;
+}
+
+function asSolidModel(model) {
+  if (!model) return null;
+  try {
+    if (typeof pfcSolid !== "undefined" && typeof pfcSolid.cast === "function") {
+      var s = pfcSolid.cast(model);
+      if (s) return s;
+    }
+  } catch (e) {}
+  try {
+    if (typeof pfcPart !== "undefined" && typeof pfcPart.cast === "function") {
+      var p = pfcPart.cast(model);
+      if (p) return p;
+    }
+  } catch (e2) {}
+  try {
+    if (typeof pfcAssembly !== "undefined" && typeof pfcAssembly.cast === "function") {
+      var a = pfcAssembly.cast(model);
+      if (a) return a;
+    }
+  } catch (e3) {}
+  return model;
+}
+
+function listDrawingSolidModels(drawing) {
+  var out = [];
+  var seen = {};
+  function push(m) {
+    if (!m) return;
+    var fn = logicalFileName(modelFileNameOf(m)) || modelFileNameOf(m) || "";
+    var key = String(fn).toLowerCase();
+    if (key && seen[key]) return;
+    if (key) seen[key] = true;
+    out.push(m);
+  }
+  try {
+    if (typeof drawing.ListModels === "function") {
+      var items = featureItems(drawing.ListModels());
+      for (var i = 0; i < items.length; i++) push(items[i]);
+    }
+  } catch (e) {}
+  try {
+    if (typeof drawing.GetCurrentSolid === "function") push(drawing.GetCurrentSolid());
+  } catch (e2) {}
+  return out;
+}
+
+function dimensionViewName(drawing, dim) {
+  try {
+    if (drawing && typeof drawing.GetViewDisplaying === "function") {
+      var v = drawing.GetViewDisplaying(dim);
+      if (v) return viewNameOf(v, 0);
+    }
+  } catch (e) {}
+  try {
+    if (typeof dim.GetView === "function") {
+      var dv = dim.GetView();
+      if (dv) return viewNameOf(dv, 0);
+    } else if (dim.View) return viewNameOf(dim.View, 0);
+  } catch (e2) {}
+  return "";
+}
+
+function readDimensionRow(drawing, dim, source, solidName, viewSheetMap, keyPrefix) {
+  if (!dim) return null;
+  var id = itemIdOf(dim);
+  var symbol = "";
+  try {
+    symbol = String(dim.Name || dim.Symbol || "");
+  } catch (eS) {}
+  var value = null;
+  try {
+    if (typeof dim.GetDimValue === "function") value = dim.GetDimValue();
+    else if (dim.DimValue != null) value = dim.DimValue;
+    else if (dim.Value != null) value = dim.Value;
+  } catch (eV) {}
+  var dimType = "";
+  try {
+    dimType = enumString(dim.DimType) || enumString(dim.Type) || "";
+    if (dimType.indexOf("DIM_") === 0) dimType = dimType.substring(4);
+  } catch (eT) {}
+  var viewName = dimensionViewName(drawing, dim);
+  var sheet = null;
+  if (viewName && viewSheetMap) {
+    var hit = viewSheetMap[String(viewName).toLowerCase()];
+    if (hit != null) sheet = hit;
+  }
+  var detail = [];
+  if (source) detail.push(source);
+  if (solidName) detail.push(solidName);
+  if (symbol) detail.push(symbol);
+  if (value != null) detail.push(String(value));
+  if (viewName) detail.push("view " + viewName);
+  var sub = dimType || "";
+  if (source === "MODEL") sub = (sub ? sub + "/" : "") + "SHOWN";
+  if (source === "MODEL_REF") sub = (sub ? sub + "/" : "") + "SHOWN_REF";
+  if (source === "DRAWING") sub = (sub ? sub + "/" : "") + "DRAWING";
+  return {
+    name: symbol || (dimType ? dimType + " (" + id + ")" : "DIM (" + id + ")"),
+    id: (keyPrefix || "dim:") + (id != null ? id : symbol || "x"),
+    creoId: id,
+    type: "DIMENSION",
+    subType: sub,
+    sheet: sheet,
+    scale: null,
+    model: viewName || solidName || "",
+    status: "ACTIVE",
+    detail: detail.join("; ")
+  };
+}
+
+/**
+ * Drawing-created dims (ListItems) + CAD dims shown on the drawing
+ * (CollectShownDimensions / CollectShownRefDimensions per solid).
+ */
+function listDrawingDimensions(drawing, viewSheetMap, notesOut) {
+  var out = [];
+  var seen = {};
+
+  function addRow(row) {
+    if (!row) return;
+    // row.id is already namespaced (dim: / mdim: / mrdim:). Drawing and
+    // model dims reuse the same integer ids (e.g. add5 vs chamfer d5) — do
+    // not dedupe on raw creoId or shown CAD dims get dropped.
+    var key = row.id || (row.creoId != null ? String(row.creoId) : "");
+    if (!key || seen[key]) return;
+    seen[key] = true;
+    out.push(row);
+  }
+
+  // 1) Drawing-owned dimensions
+  var types = [];
+  try {
+    if (typeof pfcModelItemType !== "undefined") {
+      if (pfcModelItemType.ITEM_DIMENSION != null) types.push(pfcModelItemType.ITEM_DIMENSION);
+      if (pfcModelItemType.ITEM_REF_DIMENSION != null) types.push(pfcModelItemType.ITEM_REF_DIMENSION);
+    }
+  } catch (e) {}
+  if (typeof drawing.ListItems === "function" && types.length) {
+    for (var t = 0; t < types.length; t++) {
+      try {
+        var items = featureItems(drawing.ListItems(types[t]));
+        for (var i = 0; i < items.length; i++) {
+          addRow(
+            readDimensionRow(drawing, items[i], "DRAWING", "", viewSheetMap, "dim:")
+          );
+        }
+      } catch (eList) {
+        if (notesOut) notesOut.push("ListItems(dim): " + describeError(eList));
+      }
+    }
+  } else if (notesOut && !types.length) {
+    notesOut.push("ITEM_DIMENSION unavailable for drawing-owned dims");
+  }
+
+  // 2) Model dimensions shown on the drawing (per solid)
+  var solids = listDrawingSolidModels(drawing);
+  if (!solids.length && notesOut) {
+    notesOut.push("No drawing models for CollectShownDimensions");
+  }
+  for (var s = 0; s < solids.length; s++) {
+    var solidRaw = solids[s];
+    var solid = asSolidModel(solidRaw);
+    var solidName = logicalFileName(modelFileNameOf(solidRaw)) || modelFileNameOf(solidRaw) || "";
+
+    if (typeof drawing.CollectShownDimensions === "function") {
+      try {
+        var shown = drawing.CollectShownDimensions(solid);
+        var shownItems = featureItems(shown);
+        for (var si = 0; si < shownItems.length; si++) {
+          addRow(
+            readDimensionRow(
+              drawing,
+              shownItems[si],
+              "MODEL",
+              solidName,
+              viewSheetMap,
+              "mdim:"
+            )
+          );
+        }
+      } catch (eShown) {
+        var msg = describeError(eShown);
+        // NotFound = none shown (ok). License must surface.
+        if (/nolicense|no_license|license/i.test(msg)) {
+          if (notesOut) notesOut.push("CollectShownDimensions LICENSE: " + msg);
+        } else if (!/notfound|not_found|no model dimensions/i.test(msg)) {
+          if (notesOut) notesOut.push("CollectShownDimensions(" + solidName + "): " + msg);
+        }
+      }
+    } else if (notesOut && s === 0) {
+      notesOut.push("CollectShownDimensions unavailable");
+    }
+
+    if (typeof drawing.CollectShownRefDimensions === "function") {
+      try {
+        var shownRef = drawing.CollectShownRefDimensions(solid);
+        var refItems = featureItems(shownRef);
+        for (var ri = 0; ri < refItems.length; ri++) {
+          addRow(
+            readDimensionRow(
+              drawing,
+              refItems[ri],
+              "MODEL_REF",
+              solidName,
+              viewSheetMap,
+              "mrdim:"
+            )
+          );
+        }
+      } catch (eRef) {
+        var msgR = describeError(eRef);
+        if (/nolicense|no_license|license/i.test(msgR)) {
+          if (notesOut) notesOut.push("CollectShownRefDimensions LICENSE: " + msgR);
+        } else if (!/notfound|not_found|no model dimensions/i.test(msgR)) {
+          if (notesOut) notesOut.push("CollectShownRefDimensions(" + solidName + "): " + msgR);
+        }
+      }
+    }
+  }
+
+  return out;
+}
+
+function tableCellText(table, row, col, mode) {
+  try {
+    if (typeof table.GetText !== "function") return "";
+    var cell = makeTableCell(row, col);
+    var texts = table.GetText(cell, mode);
+    var parts = featureItems(texts);
+    if (!parts.length && texts != null) {
+      try {
+        if (typeof texts === "string") return texts;
+      } catch (eS) {}
+    }
+    var line = [];
+    for (var i = 0; i < parts.length; i++) {
+      try {
+        line.push(String(parts[i] == null ? "" : parts[i]));
+      } catch (eP) {}
+    }
+    return line.join("");
+  } catch (e) {
+    return "";
+  }
+}
+
+function makeTableCell(row, col) {
+  try {
+    if (typeof pfcTableCell !== "undefined" && typeof pfcTableCell.Create === "function") {
+      return pfcTableCell.Create(row, col);
+    }
+  } catch (e) {}
+  return { Row: row, Column: col };
+}
+
+function tableSheetOf(table, drawing, sheetCount, cellNoteIds) {
+  try {
+    if (typeof table.GetSheetNumber === "function") {
+      var s = table.GetSheetNumber();
+      if (s != null) return s;
+    }
+  } catch (e) {}
+  try {
+    if (table.SheetNumber != null) return table.SheetNumber;
+  } catch (e2) {}
+  // Format tables: CheckIfIsFromFormat(sheet) is true on the owning sheet.
+  if (sheetCount != null && typeof table.CheckIfIsFromFormat === "function") {
+    for (var sn = 1; sn <= sheetCount; sn++) {
+      try {
+        if (table.CheckIfIsFromFormat(sn)) return sn;
+      } catch (e3) {}
+    }
+  }
+  // Fall back: sheet of any cell note we already listed.
+  if (cellNoteIds && cellNoteIds.sheet != null) return cellNoteIds.sheet;
+  return null;
+}
+
+/**
+ * Collect GetCellNote ids for this table; also vote a sheet from noteSheetById.
+ */
+function tableCellNoteInfo(table, rows, cols, noteSheetById) {
+  var ids = {};
+  var sheetVotes = {};
+  var maxR = Math.min(rows || 0, 12);
+  var maxC = Math.min(cols || 0, 12);
+  for (var r = 1; r <= maxR; r++) {
+    for (var c = 1; c <= maxC; c++) {
+      try {
+        if (typeof table.GetCellNote !== "function") continue;
+        var note = table.GetCellNote(makeTableCell(r, c));
+        if (!note) continue;
+        var nid = itemIdOf(note);
+        if (nid == null) continue;
+        ids[String(nid)] = true;
+        if (noteSheetById && noteSheetById[String(nid)] != null) {
+          var sh = String(noteSheetById[String(nid)]);
+          sheetVotes[sh] = (sheetVotes[sh] || 0) + 1;
+        }
+      } catch (e) {}
+    }
+  }
+  var bestSheet = null;
+  var bestN = 0;
+  for (var k in sheetVotes) {
+    if (!Object.prototype.hasOwnProperty.call(sheetVotes, k)) continue;
+    if (sheetVotes[k] > bestN) {
+      bestN = sheetVotes[k];
+      bestSheet = Number(k) || k;
+    }
+  }
+  return { ids: ids, sheet: bestSheet };
+}
+
+function listDrawingTables(drawing, sheetCount, noteSheetById, notesOut) {
+  var out = [];
+  var tables = [];
+  var cellNoteIdsAll = {};
+  try {
+    if (typeof drawing.ListTables === "function") tables = featureItems(drawing.ListTables());
+  } catch (e) {
+    if (notesOut) notesOut.push("ListTables: " + describeError(e));
+    return { tables: out, cellNoteIds: cellNoteIdsAll };
+  }
+  var modeNormal = null;
+  var modeFull = null;
+  try {
+    if (typeof pfcParamMode !== "undefined") {
+      modeNormal = pfcParamMode.DWGTABLE_NORMAL;
+      modeFull = pfcParamMode.DWGTABLE_FULL;
+    }
+  } catch (eM) {}
+
+  for (var i = 0; i < tables.length; i++) {
+    var table = tables[i];
+    if (!table) continue;
+    var id = itemIdOf(table);
+    var rows = null;
+    var cols = null;
+    try {
+      if (typeof table.GetRowCount === "function") rows = table.GetRowCount();
+      else if (table.RowCount != null) rows = table.RowCount;
+    } catch (eR) {}
+    try {
+      if (typeof table.GetColumnCount === "function") cols = table.GetColumnCount();
+      else if (table.ColumnCount != null) cols = table.ColumnCount;
+    } catch (eC) {}
+
+    var cellInfo = tableCellNoteInfo(table, rows, cols, noteSheetById);
+    for (var cid in cellInfo.ids) {
+      if (Object.prototype.hasOwnProperty.call(cellInfo.ids, cid)) cellNoteIdsAll[cid] = true;
+    }
+
+    var fromFormat = null;
+    var sheet = tableSheetOf(table, drawing, sheetCount, cellInfo);
+    try {
+      if (typeof table.CheckIfIsFromFormat === "function") {
+        if (sheet != null) {
+          try {
+            fromFormat = !!table.CheckIfIsFromFormat(sheet);
+          } catch (eFs) {
+            fromFormat = !!table.CheckIfIsFromFormat();
+          }
+        } else {
+          fromFormat = !!table.CheckIfIsFromFormat();
+        }
+      }
+    } catch (eF) {}
+
+    var preview = [];
+    var maxR = Math.min(rows || 0, 4);
+    var maxC = Math.min(cols || 0, 4);
+    for (var r = 1; r <= maxR; r++) {
+      for (var c = 1; c <= maxC; c++) {
+        var normal = modeNormal != null ? tableCellText(table, r, c, modeNormal) : "";
+        var full = modeFull != null ? tableCellText(table, r, c, modeFull) : "";
+        if (!normal && !full) continue;
+        if (full && full !== normal) preview.push("[" + r + "," + c + "] " + normal + " ⟨" + full + "⟩");
+        else preview.push("[" + r + "," + c + "] " + (normal || full));
+      }
+    }
+
+    out.push({
+      name: "Table" + (id != null ? " (" + id + ")" : " " + (i + 1)),
+      id: "table:" + (id != null ? id : i),
+      creoId: id,
+      type: "TABLE",
+      subType: fromFormat ? "FROM_FORMAT" : "",
+      sheet: sheet,
+      scale: null,
+      model: rows != null && cols != null ? rows + "×" + cols : "",
+      status: "ACTIVE",
+      detail: preview.join(" · ")
+    });
+  }
+  return { tables: out, cellNoteIds: cellNoteIdsAll };
+}
+
+function inventoryRow(row, level, pathPrefix) {
+  var path = pathPrefix ? pathPrefix + "/" + row.id : row.id;
+  return {
+    name: row.name || "",
+    id: row.id,
+    creoId: row.creoId != null ? row.creoId : null,
+    type: row.type || "",
+    subType: row.subType || "",
+    sheet: row.sheet == null ? null : row.sheet,
+    scale: row.scale == null ? null : row.scale,
+    model: row.model || "",
+    status: row.status || "",
+    detail: row.detail || "",
+    level: level,
+    path: path
+  };
+}
+
+/**
+ * Sheet containers with nested views / notes / dims / tables.
+ * Items without a sheet go under a Drawing root section.
+ */
+function buildDrawingInventory(drawing, views, details, dims, tables, sheetCount, currentSheet) {
+  var flat = [];
+  var treeChildren = [];
+
+  function pushRow(row, level, pathPrefix, parentChildren) {
+    var out = inventoryRow(row, level, pathPrefix);
+    flat.push(out);
+    parentChildren.push({
+      name: out.name,
+      id: out.id,
+      type: out.type,
+      subType: out.subType,
+      sheet: out.sheet,
+      status: out.status,
+      detail: out.detail,
+      children: []
+    });
+  }
+
+  function bucketBySheet(list) {
+    var map = {};
+    var none = [];
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      if (item.sheet == null || item.sheet === "") {
+        none.push(item);
+        continue;
+      }
+      var key = String(item.sheet);
+      if (!map[key]) map[key] = [];
+      map[key].push(item);
+    }
+    return { map: map, none: none };
+  }
+
+  var viewB = bucketBySheet(views);
+  var detailB = bucketBySheet(details);
+  var dimB = bucketBySheet(dims);
+  var tableB = bucketBySheet(tables);
+
+  var sheetNums = [];
+  if (sheetCount != null && sheetCount > 0) {
+    for (var s = 1; s <= sheetCount; s++) sheetNums.push(String(s));
+  }
+  function ensureSheets(bucket) {
+    for (var k in bucket.map) {
+      if (!Object.prototype.hasOwnProperty.call(bucket.map, k)) continue;
+      if (sheetNums.indexOf(k) < 0) sheetNums.push(k);
+    }
+  }
+  ensureSheets(viewB);
+  ensureSheets(detailB);
+  ensureSheets(dimB);
+  ensureSheets(tableB);
+  sheetNums.sort(function (a, b) {
+    return Number(a) - Number(b);
+  });
+
+  for (var si = 0; si < sheetNums.length; si++) {
+    var sn = sheetNums[si];
+    var sheetNum = Number(sn) || sn;
+    var info = sheetInfoSummary(drawing, sheetNum);
+    var sheetPath = "sheet:" + sn;
+    var sheetRow = {
+      name: "Sheet " + sn + (currentSheet != null && String(currentSheet) === sn ? " (current)" : ""),
+      id: sheetPath,
+      creoId: sheetNum,
+      type: "SHEET",
+      subType: info.sheetSize || "",
+      sheet: sheetNum,
+      scale: info.scale,
+      model: info.format || "",
+      status: "ACTIVE",
+      detail: sheetDetailText(info)
+    };
+    var outSheet = inventoryRow(sheetRow, 1, "");
+    flat.push(outSheet);
+    var snode = {
+      name: outSheet.name,
+      id: outSheet.id,
+      type: "SHEET",
+      status: "ACTIVE",
+      detail: outSheet.detail,
+      children: []
+    };
+    treeChildren.push(snode);
+
+    function emitList(list) {
+      for (var i = 0; i < list.length; i++) pushRow(list[i], 2, sheetPath, snode.children);
+    }
+    emitList(viewB.map[sn] || []);
+    emitList(detailB.map[sn] || []);
+    emitList(dimB.map[sn] || []);
+    emitList(tableB.map[sn] || []);
+  }
+
+  var unassigned =
+    viewB.none.length + detailB.none.length + dimB.none.length + tableB.none.length;
+  if (unassigned > 0) {
+    var uPath = "sheet:unassigned";
+    var uRow = inventoryRow(
+      {
+        name: "Unassigned sheet",
+        id: uPath,
+        type: "SHEET",
+        subType: "",
+        sheet: null,
+        status: "ACTIVE",
+        detail: "items with no sheet number"
+      },
+      1,
+      ""
+    );
+    flat.push(uRow);
+    var unode = {
+      name: uRow.name,
+      id: uRow.id,
+      type: "SHEET",
+      status: "ACTIVE",
+      children: []
+    };
+    treeChildren.push(unode);
+    var uLists = [viewB.none, detailB.none, dimB.none, tableB.none];
+    for (var ui = 0; ui < uLists.length; ui++) {
+      for (var uj = 0; uj < uLists[ui].length; uj++) {
+        pushRow(uLists[ui][uj], 2, uPath, unode.children);
+      }
+    }
+  }
+
+  return { flat: flat, treeChildren: treeChildren };
+}
+
+function listSessionDrawingStructure() {
+  var am = activeModel();
+  if (am.error) return { ok: false, error: am.error };
+  var model = am.model;
+  var fileName = logicalFileName(modelFileNameOf(model)) || modelFileNameOf(model);
+
+  if (!isDrawingModel(model, fileName)) {
+    return {
+      ok: false,
+      error: "Active model is not a drawing. Open a .drw in Creo first.",
+      fileName: fileName
+    };
+  }
+
+  var drawing = asDrawing(model);
+  var notes = [];
+  var sheetCount = drawingSheetCount(drawing);
+  var currentSheet = drawingCurrentSheet(drawing);
+  var models = listDrawingModels(drawing);
+  var views = listDrawingViews(drawing);
+  var viewSheets = viewSheetLookup(views);
+  var details = listDetailItems(drawing, sheetCount, notes);
+  var dims = listDrawingDimensions(drawing, viewSheets, notes);
+
+  var noteSheetById = {};
+  for (var di = 0; di < details.length; di++) {
+    if (details[di].type === "NOTE" && details[di].creoId != null && details[di].sheet != null) {
+      noteSheetById[String(details[di].creoId)] = details[di].sheet;
+    }
+  }
+  var tablePack = listDrawingTables(drawing, sheetCount, noteSheetById, notes);
+  var tables = tablePack.tables || [];
+  var cellNoteIds = tablePack.cellNoteIds || {};
+  // Table cells also appear as DetailNotes — drop duplicates (keep the TABLE row).
+  var filteredDetails = [];
+  for (var fd = 0; fd < details.length; fd++) {
+    var drow = details[fd];
+    if (
+      drow.type === "NOTE" &&
+      drow.creoId != null &&
+      cellNoteIds[String(drow.creoId)]
+    ) {
+      continue;
+    }
+    filteredDetails.push(drow);
+  }
+  details = filteredDetails;
+
+  if (!views.length) notes.push("List2DViews returned no views");
+  if (sheetCount == null) notes.push("sheet count unavailable");
+
+  var built = buildDrawingInventory(
+    drawing,
+    views,
+    details,
+    dims,
+    tables,
+    sheetCount,
+    currentSheet
+  );
+
+  var tree = [
+    {
+      name: fileName || "drawing",
+      id: null,
+      type: "DRAWING",
+      status: "ACTIVE",
+      suppressed: false,
+      children: built.treeChildren
+    }
+  ];
+
+  return {
+    ok: true,
+    fileName: fileName,
+    sheetCount: sheetCount,
+    currentSheet: currentSheet,
+    viewCount: views.length,
+    noteCount: details.filter(function (d) {
+      return d && d.type === "NOTE";
+    }).length,
+    dimensionCount: dims.length,
+    tableCount: tables.length,
+    modelCount: models.length,
+    models: models,
+    notes: notes,
+    componentCount: built.flat.length,
+    components: built.flat,
+    tree: tree
+  };
+}

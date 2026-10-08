@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
+import sys
 import time
 from collections import Counter
 from pathlib import Path
@@ -21,6 +23,15 @@ PYTEST_LAST_LOG = "pytest-last.log"
 def pytest_configure(config):
     """Keep pytest temps in the repo. Windows often locks %TEMP%\\pytest-of-*."""
     root = Path(config.rootpath)
+    inv_dir = root / "src" / "creopdm" / "static" / "creo_inventory"
+    inv_marker = inv_dir / "features.creojs"
+    wrap_script = root / "scripts" / "wrap_creo_inventory.py"
+    if wrap_script.is_file() and not inv_marker.is_file():
+        subprocess.run(
+            [sys.executable, str(wrap_script)],
+            cwd=str(root),
+            check=True,
+        )
     # Always scrub leftovers before any test collection/run. Locked Windows DBs
     # may survive one attempt; the next pytest run retries.
     cleanup_stale_pytest_tmp(root)

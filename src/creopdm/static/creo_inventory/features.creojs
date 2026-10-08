@@ -1,0 +1,1396 @@
+/* CreoPDM inventory — promoted from feature_probe */
+var __creoInvFeatures = (function () {
+function describeError(error) {
+  if (error == null) return "Unknown Creo error";
+  if (typeof error === "string") return error;
+  var parts = [];
+  if (error.message) parts.push(String(error.message));
+  if (error.Message && error.Message !== error.message) parts.push(String(error.Message));
+  if (!parts.length) {
+    try {
+      parts.push(String(error));
+    } catch (e) {
+      parts.push("Unknown Creo error");
+    }
+  }
+  return parts.join(" ");
+}
+
+function enumString(ft) {
+  if (ft == null) return "";
+  try {
+    if (typeof ft.string === "function") return String(ft.string() || "");
+  } catch (e) {}
+  try {
+    if (ft.string != null && typeof ft.string !== "function") return String(ft.string);
+  } catch (e2) {}
+  try {
+    var s = String(ft);
+    if (s && s !== "[object Object]") return s;
+  } catch (e3) {}
+  return "";
+}
+
+function enumValue(ft) {
+  if (ft == null) return null;
+  try {
+    if (typeof ft.value === "function") {
+      var v = ft.value();
+      return typeof v === "number" ? v : null;
+    }
+  } catch (e) {}
+  try {
+    if (typeof ft === "number") return ft;
+  } catch (e2) {}
+  return null;
+}
+
+function sequenceCount(sequence) {
+  if (sequence == null) return 0;
+  if (typeof sequence.Count === "number") return sequence.Count;
+  if (typeof sequence.getCount === "function") {
+    try {
+      return sequence.getCount();
+    } catch (e) {}
+  }
+  if (typeof sequence.length === "number") return sequence.length;
+  return 0;
+}
+
+function sequenceItem(sequence, index) {
+  if (sequence != null && typeof sequence.Item === "function") return sequence.Item(index);
+  return sequence[index];
+}
+
+function featureItems(listed) {
+  var out = [];
+  var count = sequenceCount(listed);
+  for (var i = 0; i < count; i++) {
+    try {
+      var item = sequenceItem(listed, i);
+      if (item) out.push(item);
+    } catch (e) {}
+  }
+  return out;
+}
+
+function featureIdOf(feat) {
+  try {
+    if (typeof feat.Id !== "undefined" && feat.Id != null) return feat.Id;
+  } catch (e) {}
+  try {
+    if (typeof feat.GetId === "function") return feat.GetId();
+  } catch (e2) {}
+  return null;
+}
+
+function featureIsVisible(feat) {
+  if (!feat) return false;
+  try {
+    if (typeof feat.IsVisible !== "undefined" && feat.IsVisible === false) return false;
+  } catch (e) {}
+  try {
+    if (typeof feat.GetIsVisible === "function" && feat.GetIsVisible() === false) return false;
+  } catch (e2) {}
+  return true;
+}
+
+/** Status string + suppressed flag (FEAT_SUPPRESSED / family-table / program). */
+function featureStatusInfo(feat) {
+  var info = { status: "", statusValue: null, suppressed: false };
+  if (!feat) return info;
+  var st = null;
+  try {
+    if (feat.Status != null) st = feat.Status;
+  } catch (e) {}
+  if (st == null) {
+    try {
+      if (typeof feat.GetStatus === "function") st = feat.GetStatus();
+    } catch (e2) {}
+  }
+  var s = enumString(st);
+  var v = enumValue(st);
+  if (s) info.status = s.indexOf("FEAT_") === 0 ? s.substring(5) : s;
+  if (v != null) info.statusValue = v;
+  var u = String(s || "").toUpperCase();
+  if (u.indexOf("SUPPRESS") >= 0) info.suppressed = true;
+  try {
+    if (typeof pfcFeatureStatus !== "undefined" && st != null) {
+      if (
+        st === pfcFeatureStatus.FEAT_SUPPRESSED ||
+        st === pfcFeatureStatus.FEAT_FAMILY_TABLE_SUPPRESSED ||
+        st === pfcFeatureStatus.FEAT_PROGRAM_SUPPRESSED
+      ) {
+        info.suppressed = true;
+      }
+    }
+  } catch (e3) {}
+  return info;
+}
+
+/** Stored GetName / Name only — never invent Model Tree ordinals like "Hole 1". */
+function featureStoredName(feat) {
+  if (!feat) return "";
+  try {
+    if (typeof feat.GetName === "function") {
+      var gn = feat.GetName();
+      if (gn != null && String(gn) !== "") return String(gn);
+    }
+  } catch (e) {}
+  try {
+    if (feat.Name != null && String(feat.Name) !== "") return String(feat.Name);
+  } catch (e2) {}
+  return "";
+}
+
+/**
+ * Display label for Features UI / Compare.
+ * Prefer stored name; when empty use "TYPE (id)" e.g. "HOLE (216)".
+ */
+function featureDisplayName(storedName, typeName, featureId) {
+  var stored = String(storedName == null ? "" : storedName).trim();
+  if (stored) return stored;
+  var type = String(typeName == null ? "" : typeName).trim();
+  var idStr = featureId == null || featureId === "" ? "" : String(featureId);
+  if (type && idStr) return type + " (" + idStr + ")";
+  if (type) return type;
+  if (idStr) return "(" + idStr + ")";
+  return "";
+}
+
+function featureStoredNameFromRow(row) {
+  if (!row) return "";
+  var candidates = [row.GetName, row.Name, row.name, row.exportFeatName];
+  for (var i = 0; i < candidates.length; i++) {
+    var s = String(candidates[i] == null ? "" : candidates[i]).trim();
+    if (s) return s;
+  }
+  return "";
+}
+
+function applyFeatureDisplayNames(features) {
+  var list = features || [];
+  for (var i = 0; i < list.length; i++) {
+    var row = list[i];
+    if (!row) continue;
+    var stored = featureStoredNameFromRow(row);
+    var type = String(row.FeatTypeName || row.type || "").trim();
+    row.displayName = featureDisplayName(stored, type, row.id);
+  }
+  return list;
+}
+
+function featureTypeHints(feat) {
+  var bits = [];
+  if (!feat) return "";
+  try {
+    if (feat.FeatTypeName != null) bits.push(String(feat.FeatTypeName));
+  } catch (e) {}
+  try {
+    if (feat.FeatSubType != null) bits.push(String(feat.FeatSubType));
+  } catch (e2) {}
+  try {
+    if (feat.FeatType != null) {
+      var es = enumString(feat.FeatType);
+      var ev = enumValue(feat.FeatType);
+      if (es) bits.push(es);
+      if (ev != null) bits.push(String(ev));
+    }
+  } catch (e3) {}
+  return bits.join(" ").toUpperCase();
+}
+
+function featureIsPatternHead(feat) {
+  var t = featureTypeHints(feat);
+  return t.indexOf("PATTERN") >= 0 || t.indexOf("PATTERN_HEAD") >= 0;
+}
+
+function featurePatternStatus(feat) {
+  if (!feat) return "";
+  try {
+    if (feat.PatternStatus != null) {
+      var s = enumString(feat.PatternStatus);
+      if (s) return String(s).toUpperCase();
+      var v = enumValue(feat.PatternStatus);
+      if (v != null) return String(v);
+    }
+  } catch (e) {}
+  try {
+    if (typeof feat.GetPatternStatus === "function") {
+      var ps = feat.GetPatternStatus();
+      var s2 = enumString(ps);
+      if (s2) return String(s2).toUpperCase();
+    }
+  } catch (e2) {}
+  return "";
+}
+
+/** Pattern head / leader — children nest underneath when shown. */
+function featureIsPatternNestParent(feat) {
+  if (featureIsPatternHead(feat)) return true;
+  var st = featurePatternStatus(feat);
+  return st.indexOf("LEADER") >= 0;
+}
+
+/** Local group / GROUP_HEAD container in the model tree (nested groups allowed). */
+function isGroupHeadFeature(feat) {
+  if (!feat) return false;
+  try {
+    if (typeof pfcFeatureType !== "undefined") {
+      if (feat.FeatType === pfcFeatureType.FEATTYPE_GROUP_HEAD) return true;
+      if (feat.FeatType === pfcFeatureType.FEATTYPE_GROUP) return true;
+    }
+  } catch (e) {}
+  var stored = String(featureStoredName(feat) || "").toUpperCase();
+  if (stored === "LOCAL_GROUP" || /^GROUP(\s|$|_)/.test(stored)) return true;
+  var t = featureTypeHints(feat);
+  return (
+    t.indexOf("GROUP_HEAD") >= 0 ||
+    (t.indexOf("GROUP") >= 0 && t.indexOf("PATTERN") < 0 && t.indexOf("COMPONENT") < 0)
+  );
+}
+
+function featureGroupStatus(feat) {
+  if (!feat) return "";
+  try {
+    if (feat.GroupStatus != null) {
+      var s = enumString(feat.GroupStatus);
+      if (s) return String(s).toUpperCase();
+    }
+  } catch (e) {}
+  try {
+    if (typeof feat.GetGroupStatus === "function") {
+      var gs = feat.GetGroupStatus();
+      var s2 = enumString(gs);
+      if (s2) return String(s2).toUpperCase();
+    }
+  } catch (e2) {}
+  return "";
+}
+
+function isGroupedMemberFeature(feat) {
+  if (isGroupHeadFeature(feat)) return false;
+  var st = featureGroupStatus(feat);
+  return st.indexOf("MEMBER") >= 0 && st.indexOf("HEAD") < 0;
+}
+
+function resolveFeatureGroup(feat) {
+  if (!feat) return null;
+  try {
+    if (typeof pfcFeatureGroup !== "undefined" && typeof pfcFeatureGroup.cast === "function") {
+      var casted = pfcFeatureGroup.cast(feat);
+      if (casted) return casted;
+    }
+  } catch (e) {}
+  try {
+    if (feat.Group != null) return feat.Group;
+  } catch (e2) {}
+  try {
+    if (typeof feat.GetGroup === "function") {
+      var g = feat.GetGroup();
+      if (g) return g;
+    }
+  } catch (e3) {}
+  return feat;
+}
+
+function groupNameOf(group) {
+  try {
+    if (group && group.GroupName != null && String(group.GroupName) !== "") {
+      return String(group.GroupName);
+    }
+  } catch (e) {}
+  try {
+    if (group && typeof group.GetGroupName === "function") {
+      var n = group.GetGroupName();
+      if (n) return String(n);
+    }
+  } catch (e2) {}
+  return "";
+}
+
+function groupDisplayName(group, headFeat) {
+  var gn = groupNameOf(group);
+  if (gn) return gn;
+  try {
+    if (headFeat && typeof headFeat.GetName === "function") {
+      var hn = headFeat.GetName();
+      if (hn) return String(hn);
+    }
+  } catch (e3) {}
+  try {
+    if (headFeat && headFeat.Name != null && String(headFeat.Name) !== "") {
+      return String(headFeat.Name);
+    }
+  } catch (e4) {}
+  var id = featureIdOf(headFeat);
+  return id != null ? "GROUP (" + id + ")" : "GROUP";
+}
+
+/**
+ * Direct members of a local group (includes nested group heads).
+ * Must use featureHandle — feature probe asFeature() returns {feat:…}.
+ */
+function listGroupMemberFeatures(headFeat) {
+  var group = resolveFeatureGroup(headFeat);
+  var members = [];
+  try {
+    if (group && typeof group.ListMembers === "function") {
+      members = featureItems(group.ListMembers());
+    }
+  } catch (e) {}
+  if (!members.length) {
+    try {
+      if (headFeat && typeof headFeat.ListMembers === "function") {
+        members = featureItems(headFeat.ListMembers());
+      }
+    } catch (e2) {}
+  }
+  if (!members.length) {
+    try {
+      if (headFeat && typeof headFeat.ListChildren === "function") {
+        members = featureItems(headFeat.ListChildren());
+      }
+    } catch (e3) {}
+  }
+  var out = [];
+  var seen = {};
+  var headId = featureIdOf(headFeat);
+  for (var i = 0; i < members.length; i++) {
+    var m = featureHandle(members[i]);
+    if (!m || !featureIsVisible(m)) continue;
+    var mid = featureIdOf(m);
+    if (headId != null && mid != null && String(mid) === String(headId)) continue;
+    var key = mid != null ? String(mid) : "";
+    if (key && seen[key]) continue;
+    if (key) seen[key] = true;
+    out.push(m);
+  }
+  return out;
+}
+
+/** True when feat's GetGroup matches this group head. */
+function featureBelongsToGroupHead(feat, headFeat) {
+  if (!feat || !headFeat) return false;
+  var headId = featureIdOf(headFeat);
+  var fid = featureIdOf(feat);
+  if (headId != null && fid != null && String(headId) === String(fid)) return false;
+  var headGroup = resolveFeatureGroup(headFeat);
+  var headName = groupNameOf(headGroup) || featureStoredName(headFeat);
+  try {
+    var g = null;
+    if (typeof feat.GetGroup === "function") g = feat.GetGroup();
+    else if (feat.Group != null) g = feat.Group;
+    if (g) {
+      if (headGroup && g === headGroup) return true;
+      var gn = groupNameOf(g);
+      if (gn && headName && String(gn) === String(headName)) return true;
+      var gid = featureIdOf(g);
+      if (headId != null && gid != null && String(gid) === String(headId)) return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+function collectChildFeatureIds(feat) {
+  var ids = {};
+  if (!feat) return ids;
+  var lists = [];
+  try {
+    if (typeof feat.ListChildren === "function") lists.push(feat.ListChildren());
+  } catch (e) {}
+  try {
+    if (feat.Children != null) lists.push(feat.Children);
+  } catch (e2) {}
+  for (var li = 0; li < lists.length; li++) {
+    var items = featureItems(lists[li]);
+    for (var i = 0; i < items.length; i++) {
+      var id = featureIdOf(items[i]);
+      if (id != null) ids[String(id)] = true;
+    }
+  }
+  return ids;
+}
+
+function featureHasHoleParams(feat) {
+  if (!feat || typeof feat.ListParams !== "function") return false;
+  var want = {
+    BUW_TYPE: true,
+    THREAD_SERIES: true,
+    SCREW_SIZE: true,
+    DRILL_DIAMETER: true,
+    BUW_HOLE_TYPE: true
+  };
+  try {
+    var params = featureItems(feat.ListParams());
+    for (var i = 0; i < params.length; i++) {
+      var p = params[i];
+      var n = "";
+      try {
+        if (typeof p.GetName === "function") n = String(p.GetName() || "");
+        else if (p.Name != null) n = String(p.Name);
+      } catch (e) {}
+      if (n && want[n.toUpperCase()]) return true;
+    }
+  } catch (e2) {}
+  return false;
+}
+
+/** Unwrap asFeature({feat}) — never treat the wrapper as the feature. */
+function featureHandle(raw) {
+  if (!raw) return null;
+  try {
+    var cast = asFeature(raw);
+    if (cast && cast.feat) return cast.feat;
+  } catch (e) {}
+  return raw;
+}
+
+function featureHasApiType(feat) {
+  if (!feat) return false;
+  try {
+    return !!(feat.FeatTypeName || feat.FeatType || feat.FeatSubType);
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * IDs to omit entirely (not nested under a parent):
+ * - unnamed sparse hole-param ghosts
+ * - sparse IFX_ID_* leaders when real pattern/IFX members exist
+ * Pattern copies stay in the list and nest under the pattern head.
+ * PATTERN_HEAD / standalone IFX (no members) stay.
+ */
+function collectOmitFeatureIds(list) {
+  var omitIds = {};
+  var hasMembers = false;
+  var i;
+  for (i = 0; i < list.length; i++) {
+    var f0 = featureHandle(list[i]);
+    var st = featurePatternStatus(f0);
+    if (st.indexOf("MEMBER") >= 0 && st.indexOf("LEADER") < 0) {
+      hasMembers = true;
+    }
+  }
+  for (i = 0; i < list.length; i++) {
+    var f1 = featureHandle(list[i]);
+    var name = featureStoredName(f1);
+    var isHead = featureIsPatternNestParent(f1);
+    var isIfxNamed = /^IFX_ID_/i.test(name);
+    if (!isHead && !isIfxNamed) continue;
+    var kids = collectChildFeatureIds(f1);
+    for (var kid in kids) {
+      if (Object.prototype.hasOwnProperty.call(kids, kid)) hasMembers = true;
+    }
+  }
+  for (i = 0; i < list.length; i++) {
+    var f2 = featureHandle(list[i]);
+    var id2 = featureIdOf(f2);
+    if (id2 == null) id2 = featureIdOf(list[i]);
+    if (id2 == null) continue;
+    var sid = String(id2);
+    if (featureIsPatternNestParent(f2)) continue;
+    if (isGroupHeadFeature(f2)) continue;
+    if (featureStoredName(f2)) continue;
+    if (featureHasApiType(f2)) continue;
+    if (featureHasHoleParams(f2)) omitIds[sid] = true;
+  }
+  if (hasMembers) {
+    for (i = 0; i < list.length; i++) {
+      var f3 = featureHandle(list[i]);
+      var id3 = featureIdOf(f3);
+      if (id3 == null) id3 = featureIdOf(list[i]);
+      if (id3 == null) continue;
+      var sid3 = String(id3);
+      if (omitIds[sid3]) continue;
+      if (featureIsPatternNestParent(f3)) continue;
+      if (!/^IFX_ID_/i.test(featureStoredName(f3))) continue;
+      if (featureHasApiType(f3)) continue;
+      omitIds[sid3] = true;
+    }
+  }
+  return omitIds;
+}
+
+function isOmittableFeature(feat, omitIds) {
+  if (!feat || !omitIds) return false;
+  var id = featureIdOf(feat);
+  if (id == null) return false;
+  return !!omitIds[String(id)];
+}
+
+function tryCast(caster, obj) {
+  if (!caster || typeof caster !== "function") return null;
+  try {
+    return caster(obj) || null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function logicalFileName(filename) {
+  var name = String(filename || "").replace(/\\/g, "/");
+  var slash = name.lastIndexOf("/");
+  if (slash >= 0) name = name.substring(slash + 1);
+  name = name.replace(/(\.[a-z0-9]+)\.\d+$/i, "$1");
+  name = name.replace(/<<[^>]*>>/g, "");
+  name = name.replace(/<<[^>]*>/g, "");
+  return name;
+}
+
+function modelRootName(filename) {
+  var name = logicalFileName(filename);
+  var dot = name.lastIndexOf(".");
+  return dot > 0 ? name.substring(0, dot) : name;
+}
+
+/** MFG features live on pfcMFG.GetSolid(), not the MFG handle. */
+function mfgStorageSolid(model) {
+  if (!model) return null;
+  var mfg = null;
+  try {
+    if (typeof pfcMFG !== "undefined" && typeof pfcMFG.cast === "function") {
+      mfg = pfcMFG.cast(model);
+    }
+  } catch (e) {}
+  if (!mfg) {
+    try {
+      if (typeof model.isInstanceOf === "function" && model.isInstanceOf("pfcMFG")) mfg = model;
+    } catch (e2) {}
+  }
+  if (!mfg) {
+    try {
+      if (typeof pfcModelType !== "undefined" && model.Type === pfcModelType.MDL_MFG) mfg = model;
+    } catch (e3) {}
+  }
+  if (!mfg) return null;
+  try {
+    if (typeof mfg.GetSolid === "function") {
+      var solid = mfg.GetSolid();
+      if (solid) return solid;
+    }
+  } catch (e4) {}
+  try {
+    if (mfg.Solid != null) return mfg.Solid;
+  } catch (e5) {}
+  return null;
+}
+
+function castSolidHandle(model) {
+  if (!model) return null;
+  var candidates = [];
+  if (typeof wfcWSolid !== "undefined") candidates.push(wfcWSolid.cast);
+  if (typeof pfcAssembly !== "undefined") candidates.push(pfcAssembly.cast);
+  if (typeof pfcPart !== "undefined") candidates.push(pfcPart.cast);
+  if (typeof pfcSolid !== "undefined") candidates.push(pfcSolid.cast);
+  var best = model;
+  for (var ci = 0; ci < candidates.length; ci++) {
+    var casted = tryCast(candidates[ci], model);
+    if (!casted) continue;
+    if (typeof casted.ListFeaturesByType === "function") return casted;
+    if (typeof casted.ListItems === "function") best = casted;
+  }
+  return best;
+}
+
+/**
+ * Same solid resolution as assembly probe: GetSolid, then same-name asm/prt
+ * in session (mill MFG often stores features on a nested solid).
+ */
+function resolveFeatureSolid(model, session) {
+  var candidates = [];
+  function push(m) {
+    if (!m) return;
+    for (var i = 0; i < candidates.length; i++) {
+      if (candidates[i] === m) return;
+    }
+    candidates.push(m);
+  }
+  push(mfgStorageSolid(model));
+  push(model);
+  try {
+    var fn = String(model.FileName || "");
+    var root = modelRootName(fn);
+    if (session && root && typeof session.GetModel === "function" && typeof pfcModelType !== "undefined") {
+      try {
+        push(session.GetModel(root, pfcModelType.MDL_ASSEMBLY));
+      } catch (eA) {}
+      try {
+        push(session.GetModel(root, pfcModelType.MDL_PART));
+      } catch (eP) {}
+      try {
+        push(session.GetModel(root, pfcModelType.MDL_MFG));
+      } catch (eM) {}
+      var storage = mfgStorageSolid(model);
+      if (storage) {
+        var sfn = "";
+        try {
+          sfn = String(storage.FileName || "");
+        } catch (eS) {}
+        var sroot = modelRootName(sfn);
+        if (sroot && sroot.toLowerCase() !== root.toLowerCase()) {
+          try {
+            push(session.GetModel(sroot, pfcModelType.MDL_ASSEMBLY));
+          } catch (eSA) {}
+          try {
+            push(session.GetModel(sroot, pfcModelType.MDL_PART));
+          } catch (eSP) {}
+        }
+      }
+    }
+  } catch (e) {}
+
+  var best = null;
+  var bestScore = -1;
+  for (var c = 0; c < candidates.length; c++) {
+    var handle = castSolidHandle(candidates[c]);
+    if (!handle) continue;
+    var score = 0;
+    try {
+      if (typeof handle.ListFeaturesByType === "function") score += 10;
+    } catch (eB) {}
+    var feats = listFeaturesOnSolid(handle);
+    score += feats.length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = handle;
+    }
+  }
+  return best || castSolidHandle(model) || model;
+}
+
+function asSolid(model) {
+  return castSolidHandle(mfgStorageSolid(model) || model);
+}
+
+function asFeature(feat) {
+  var candidates = [];
+  if (typeof wfcWFeature !== "undefined") candidates.push(wfcWFeature.cast);
+  if (typeof pfcFeature !== "undefined") candidates.push(pfcFeature.cast);
+  var best = feat;
+  for (var ci = 0; ci < candidates.length; ci++) {
+    var casted = tryCast(candidates[ci], feat);
+    if (!casted) continue;
+    var typeName = "";
+    try {
+      typeName = String(casted.FeatTypeName || "");
+    } catch (e) {}
+    var ft = null;
+    try {
+      ft = casted.FeatType;
+    } catch (e2) {}
+    if (typeName || enumString(ft) || enumValue(ft) != null) {
+      return { feat: casted };
+    }
+    best = casted;
+  }
+  return { feat: best };
+}
+
+function listFeaturesOnSolid(solid) {
+  var tryFns = [
+    function () {
+      return solid.ListFeaturesByType(true, null);
+    },
+    function () {
+      return solid.ListFeaturesByType(true);
+    },
+    function () {
+      return solid.ListFeaturesByType(false, null);
+    },
+    function () {
+      return solid.ListFeaturesByType(false);
+    }
+  ];
+  for (var t = 0; t < tryFns.length; t++) {
+    try {
+      var items = featureItems(tryFns[t]());
+      if (items.length) return items;
+    } catch (err) {}
+  }
+  try {
+    if (typeof pfcModelItemType !== "undefined" && pfcModelItemType.ITEM_FEATURE != null) {
+      return featureItems(solid.ListItems(pfcModelItemType.ITEM_FEATURE));
+    }
+  } catch (errItems) {}
+  return [];
+}
+
+function lookupFeatureById(solid, id) {
+  var tryFns = [
+    function () {
+      return solid.GetFeatureById(id);
+    },
+    function () {
+      return solid.GetFeatureByID(id);
+    },
+    function () {
+      return solid.GetItemById(pfcModelItemType.ITEM_FEATURE, id);
+    }
+  ];
+  for (var t = 0; t < tryFns.length; t++) {
+    try {
+      var got = tryFns[t]();
+      if (got) return got;
+    } catch (err) {}
+  }
+  return null;
+}
+
+function readOneFeature(rawFeat, solid) {
+  var castInfo = asFeature(rawFeat);
+  var feat = castInfo.feat;
+  var id = featureIdOf(feat);
+  if (id == null) id = featureIdOf(rawFeat);
+
+  var getName = featureStoredName(feat);
+  var typeName = "";
+  try {
+    typeName = String(feat.FeatTypeName || "");
+  } catch (e) {
+    typeName = "";
+  }
+  var subType = "";
+  try {
+    subType = String(feat.FeatSubType || "");
+  } catch (e2) {
+    subType = "";
+  }
+  var ft = null;
+  try {
+    ft = feat.FeatType;
+  } catch (e3) {
+    ft = null;
+  }
+  var ftString = enumString(ft);
+  var ftValue = enumValue(ft);
+
+  var sparse = !typeName && !ftString && ftValue == null;
+  var statusFeat = feat;
+  if (sparse && id != null) {
+    var byId = lookupFeatureById(solid, id);
+    if (byId) {
+      byId = asFeature(byId).feat || byId;
+      statusFeat = byId;
+      try {
+        if (!typeName) typeName = String(byId.FeatTypeName || "");
+      } catch (e4) {}
+      try {
+        if (!subType) subType = String(byId.FeatSubType || "");
+      } catch (e5) {}
+      try {
+        if (!ftString) {
+          ft = byId.FeatType;
+          ftString = enumString(ft);
+          ftValue = enumValue(ft);
+        }
+      } catch (e6) {}
+      if (!getName) getName = featureStoredName(byId);
+      sparse = !typeName && !ftString && ftValue == null;
+    }
+  }
+
+  var statusInfo = featureStatusInfo(feat);
+  if (!statusInfo.status && statusFeat && statusFeat !== feat) {
+    try {
+      statusInfo = featureStatusInfo(statusFeat);
+    } catch (eSt) {}
+  }
+
+  return {
+    id: id,
+    GetName: getName,
+    FeatTypeName: typeName,
+    FeatSubType: subType,
+    Status: statusInfo.status,
+    suppressed: statusInfo.suppressed,
+    sparse: sparse
+  };
+}
+
+function modelFileNameOf(model) {
+  try {
+    return String(model.FileName || "");
+  } catch (e) {
+    return "";
+  }
+}
+
+function isMfgModel(model, filename) {
+  try {
+    if (typeof pfcModelType !== "undefined" && model && model.Type === pfcModelType.MDL_MFG) {
+      return true;
+    }
+  } catch (e) {}
+  return /\.mfg$/i.test(String(filename || ""));
+}
+
+/** Current window model — GetActiveModel is often null for MDL_MFG. */
+function modelFromCurrentWindow(session) {
+  if (!session) return null;
+  var win = null;
+  try {
+    if (typeof session.GetCurrentWindow === "function") win = session.GetCurrentWindow();
+  } catch (e) {}
+  if (!win) {
+    try {
+      if (session.CurrentWindow != null) win = session.CurrentWindow;
+    } catch (e2) {}
+  }
+  if (!win) return null;
+  try {
+    if (typeof win.GetModel === "function") {
+      var m = win.GetModel();
+      if (m) return m;
+    }
+  } catch (e3) {}
+  try {
+    if (win.Model != null) return win.Model;
+  } catch (e4) {}
+  return null;
+}
+
+function modelFromSessionList(session) {
+  if (!session || typeof session.ListModels !== "function") return null;
+  var listed = null;
+  try {
+    listed = session.ListModels();
+  } catch (e) {
+    return null;
+  }
+  var items = featureItems(listed);
+  var mfg = null;
+  var any = null;
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if (!item) continue;
+    if (isMfgModel(item, modelFileNameOf(item))) {
+      if (!mfg) mfg = item;
+      continue;
+    }
+    if (!any) any = item;
+  }
+  return mfg || any;
+}
+
+function activeModel() {
+  var session = pfcGetCurrentSession();
+  if (session == null) return { error: "Creo did not return a session." };
+  var model = null;
+  try {
+    if (typeof session.GetActiveModel === "function") model = session.GetActiveModel();
+  } catch (e) {
+    model = null;
+  }
+  if (!model) {
+    try {
+      model = session.CurrentModel;
+    } catch (e2) {
+      model = null;
+    }
+  }
+  if (!model) model = modelFromCurrentWindow(session);
+  if (!model) model = modelFromSessionList(session);
+  if (model == null) {
+    return {
+      error: "No active model. Open a part, assembly, or manufacturing model in Creo first."
+    };
+  }
+  return { session: session, model: model };
+}
+
+/**
+ * Browser calls after listSessionFeatures so Export cannot blank the list.
+ * featIds: optional sparse ids for FeatInfo; always writes Model Info.
+ */
+function exportSessionInfo(featIds) {
+  var am = activeModel();
+  if (am.error) return { ok: false, error: am.error };
+  var session = am.session;
+  var model = am.model;
+  var out = {
+    ok: true,
+    modelInfoFile: null,
+    modelInfoPath: null,
+    featFiles: {},
+    wd: ""
+  };
+  try {
+    if (session && typeof session.GetCurrentDirectory === "function") {
+      out.wd = String(session.GetCurrentDirectory() || "");
+    }
+  } catch (eWd) {}
+
+  function joinWd(name) {
+    if (!out.wd) return name;
+    var sep = out.wd.indexOf("\\") >= 0 ? "\\" : "/";
+    var base = out.wd;
+    if (base.slice(-1) === "/" || base.slice(-1) === "\\") return base + name;
+    return base + sep + name;
+  }
+
+  function callCreate(ctor, arg) {
+    if (ctor == null) return null;
+    try {
+      if (typeof ctor.Create === "function") {
+        return arg === undefined ? ctor.Create() : ctor.Create(arg);
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function makeModelInfoInstr() {
+    if (typeof pfcModelInfoExportInstructions !== "undefined") {
+      var instr = callCreate(pfcModelInfoExportInstructions);
+      if (instr) return instr;
+    }
+    if (typeof pfcCreate === "function") {
+      try {
+        var c = pfcCreate("pfcModelInfoExportInstructions");
+        var created = callCreate(c);
+        if (created) return created;
+        if (c && typeof c !== "function") return c;
+      } catch (e2) {}
+    }
+    return null;
+  }
+
+  function makeFeatInfoInstr(featId) {
+    if (typeof pfcFeatInfoExportInstructions !== "undefined") {
+      var instr = callCreate(pfcFeatInfoExportInstructions, featId);
+      if (instr) return instr;
+    }
+    if (typeof pfcCreate === "function") {
+      try {
+        var c = pfcCreate("pfcFeatInfoExportInstructions");
+        return callCreate(c, featId);
+      } catch (e2) {}
+    }
+    return null;
+  }
+
+  function doExport(fileName, instr) {
+    if (!instr || typeof model.Export !== "function") return null;
+    try {
+      model.Export(fileName, instr);
+      return fileName;
+    } catch (err1) {
+      try {
+        model.Export(instr, fileName);
+        return fileName;
+      } catch (err2) {
+        return null;
+      }
+    }
+  }
+
+  var modelFile = "creopdm_probe_model_info.txt";
+  if (doExport(modelFile, makeModelInfoInstr())) {
+    out.modelInfoFile = modelFile;
+    out.modelInfoPath = joinWd(modelFile);
+  }
+
+  var ids = featIds && featIds.length ? featIds : [];
+  for (var s = 0; s < ids.length; s++) {
+    var id = ids[s];
+    var featFile = "creopdm_probe_feat_" + id + ".txt";
+    if (doExport(featFile, makeFeatInfoInstr(id))) {
+      out.featFiles[String(id)] = { file: featFile, path: joinWd(featFile) };
+    }
+  }
+  return out;
+}
+
+/**
+ * Flatten kept features with group / pattern nesting (level 1 = root).
+ * Groups nest recursively (group in group); pattern children indent under heads.
+ */
+function orderFeaturesWithNesting(entries) {
+  var byId = {};
+  var ei;
+  for (ei = 0; ei < entries.length; ei++) {
+    var e0 = entries[ei];
+    if (e0 && e0.id != null) byId[String(e0.id)] = e0;
+  }
+
+  var nestedUnderGroup = {};
+  var groupMemberOrder = {};
+
+  function claimGroupMember(gsid, child, gorder) {
+    if (!child || child.id == null) return;
+    var cid = String(child.id);
+    if (cid === gsid) return;
+    if (nestedUnderGroup[cid]) return;
+    nestedUnderGroup[cid] = gsid;
+    gorder.push(child);
+  }
+
+  // Inner groups claim first so group-in-group nests correctly.
+  for (ei = entries.length - 1; ei >= 0; ei--) {
+    var ge = entries[ei];
+    if (!ge || !isGroupHeadFeature(ge.feat)) continue;
+    var gsid = ge.id != null ? String(ge.id) : null;
+    if (!gsid) continue;
+    var gorder = groupMemberOrder[gsid] || [];
+    var gmembers = listGroupMemberFeatures(ge.feat);
+    var gm;
+    for (gm = 0; gm < gmembers.length; gm++) {
+      var gmid = featureIdOf(gmembers[gm]);
+      if (gmid == null) continue;
+      claimGroupMember(gsid, byId[String(gmid)], gorder);
+    }
+    // Fallback: GetGroup / GroupName match (ListMembers can be empty in Creo.JS).
+    for (gm = 0; gm < entries.length; gm++) {
+      var cand = entries[gm];
+      if (!cand || cand.id == null) continue;
+      if (String(cand.id) === gsid) continue;
+      if (featureBelongsToGroupHead(cand.feat, ge.feat)) {
+        claimGroupMember(gsid, cand, gorder);
+      }
+    }
+    groupMemberOrder[gsid] = gorder;
+  }
+
+  // GroupStatus MEMBER with no GetGroup match → nearest preceding group head.
+  for (ei = 0; ei < entries.length; ei++) {
+    var me = entries[ei];
+    if (!me || me.id == null || !me.feat) continue;
+    var mid = String(me.id);
+    if (nestedUnderGroup[mid]) continue;
+    if (!isGroupedMemberFeature(me.feat)) continue;
+    if (isGroupHeadFeature(me.feat)) continue;
+    var prevGroup = null;
+    for (var pj = ei - 1; pj >= 0; pj--) {
+      var prev = entries[pj];
+      if (prev && isGroupHeadFeature(prev.feat) && prev.id != null) {
+        prevGroup = prev;
+        break;
+      }
+    }
+    if (!prevGroup) continue;
+    var pgsid = String(prevGroup.id);
+    var pgorder = groupMemberOrder[pgsid] || [];
+    claimGroupMember(pgsid, me, pgorder);
+    groupMemberOrder[pgsid] = pgorder;
+  }
+
+  // Contiguous fallback: when a group still has no members, take following rows
+  // until the next group head (claim that head as a nested group, then stop).
+  for (ei = 0; ei < entries.length; ei++) {
+    var ge2 = entries[ei];
+    if (!ge2 || !isGroupHeadFeature(ge2.feat) || ge2.id == null) continue;
+    var gsid2 = String(ge2.id);
+    var gorder2 = groupMemberOrder[gsid2] || [];
+    if (gorder2.length) continue;
+    for (var nj = ei + 1; nj < entries.length; nj++) {
+      var next = entries[nj];
+      if (!next || next.id == null) continue;
+      var nid = String(next.id);
+      if (nestedUnderGroup[nid]) continue;
+      if (isGroupHeadFeature(next.feat)) {
+        claimGroupMember(gsid2, next, gorder2);
+        break;
+      }
+      claimGroupMember(gsid2, next, gorder2);
+    }
+    groupMemberOrder[gsid2] = gorder2;
+  }
+
+  var nestedUnderPattern = {};
+  var patternChildOrder = {};
+  for (ei = 0; ei < entries.length; ei++) {
+    var pe = entries[ei];
+    if (!pe || !featureIsPatternNestParent(pe.feat)) continue;
+    var psid = pe.id != null ? String(pe.id) : null;
+    if (!psid) continue;
+    var kids = collectChildFeatureIds(pe.feat);
+    var porder = [];
+    for (var pk = 0; pk < entries.length; pk++) {
+      var child = entries[pk];
+      if (!child || child.id == null) continue;
+      var cid = String(child.id);
+      if (cid === psid) continue;
+      if (!kids[cid]) continue;
+      // Group nesting wins over pattern when both apply.
+      if (nestedUnderGroup[cid]) continue;
+      nestedUnderPattern[cid] = psid;
+      porder.push(child);
+    }
+    patternChildOrder[psid] = porder;
+  }
+
+  var emitted = {};
+  var features = [];
+
+  function emitEntry(entry, level) {
+    if (!entry) return;
+    var sid = entry.id != null ? String(entry.id) : null;
+    if (sid && emitted[sid]) return;
+    if (sid) emitted[sid] = true;
+
+    var row = entry.row;
+    if (isGroupHeadFeature(entry.feat)) {
+      var group = resolveFeatureGroup(entry.feat);
+      row.GetName = groupDisplayName(group, entry.feat);
+      row.FeatTypeName = "GROUP";
+    }
+    row.level = level;
+    features.push(row);
+
+    if (sid && groupMemberOrder[sid]) {
+      var gms = groupMemberOrder[sid];
+      for (var gi = 0; gi < gms.length; gi++) {
+        emitEntry(gms[gi], level + 1);
+      }
+    }
+    if (sid && patternChildOrder[sid]) {
+      var pcs = patternChildOrder[sid];
+      for (var pi = 0; pi < pcs.length; pi++) {
+        emitEntry(pcs[pi], level + 1);
+      }
+    }
+  }
+
+  for (ei = 0; ei < entries.length; ei++) {
+    var entry = entries[ei];
+    if (!entry) continue;
+    var topId = entry.id != null ? String(entry.id) : null;
+    if (topId && emitted[topId]) continue;
+    if (topId && nestedUnderGroup[topId]) continue;
+    if (topId && nestedUnderPattern[topId]) continue;
+    emitEntry(entry, 1);
+  }
+
+  return features;
+}
+
+function isCrossSectionFeature(feat) {
+  if (!feat) return false;
+  try {
+    if (
+      typeof pfcFeatureType !== "undefined" &&
+      pfcFeatureType.FEATTYPE_CROSS_SECTION != null &&
+      feat.FeatType === pfcFeatureType.FEATTYPE_CROSS_SECTION
+    ) {
+      return true;
+    }
+  } catch (e) {}
+  var lab = "";
+  try {
+    lab = String(feat.FeatTypeName || "");
+  } catch (e2) {}
+  if (!lab) {
+    try {
+      lab = enumString(feat.FeatType) || "";
+    } catch (e3) {}
+  }
+  lab = String(lab).toUpperCase().replace(/[\s\-]+/g, "_");
+  return /CROSS_?SEC|X_?SEC|XSECTION/.test(lab);
+}
+
+/** Model cross-sections for end-of-list GROUP (only when any exist). */
+function listModelCrossSections(solid) {
+  var out = [];
+  var seen = {};
+  if (!solid) return out;
+
+  function pushRow(name, id, xsecType) {
+    if (!name) return;
+    var key = String(name).toLowerCase();
+    if (seen[key]) return;
+    seen[key] = true;
+    out.push({
+      name: String(name),
+      id: id != null ? id : null,
+      xsecType: xsecType || "Cross Section"
+    });
+  }
+
+  try {
+    var listed = null;
+    if (typeof solid.ListCrossSections === "function") {
+      listed = solid.ListCrossSections();
+    } else if (solid.ListCrossSections != null) {
+      listed = solid.ListCrossSections;
+    }
+    if (listed != null) {
+      var xsItems = featureItems(listed);
+      for (var xi = 0; xi < xsItems.length; xi++) {
+        var xs = xsItems[xi];
+        if (!xs) continue;
+        var xn = "";
+        try {
+          if (typeof xs.GetName === "function") xn = String(xs.GetName() || "");
+          else if (xs.Name != null) xn = String(xs.Name);
+        } catch (eN) {}
+        pushRow(xn, featureIdOf(xs), "Cross Section");
+      }
+      if (out.length) return out;
+    }
+  } catch (eList) {}
+
+  var feats = [];
+  try {
+    if (
+      typeof solid.ListFeaturesByType === "function" &&
+      typeof pfcFeatureType !== "undefined" &&
+      pfcFeatureType.FEATTYPE_CROSS_SECTION != null
+    ) {
+      try {
+        feats = featureItems(solid.ListFeaturesByType(false, pfcFeatureType.FEATTYPE_CROSS_SECTION));
+      } catch (e1) {
+        try {
+          feats = featureItems(solid.ListFeaturesByType(pfcFeatureType.FEATTYPE_CROSS_SECTION));
+        } catch (e2) {}
+      }
+    }
+  } catch (eT) {}
+  if (!feats.length) {
+    try {
+      feats = listFeaturesOnSolid(solid);
+    } catch (eF) {}
+  }
+  for (var fi = 0; fi < feats.length; fi++) {
+    var f = asFeature(feats[fi]).feat || feats[fi];
+    if (!isCrossSectionFeature(f)) continue;
+    var fn = featureStoredName(f);
+    if (!fn) {
+      try {
+        fn = String(f.Name || "");
+      } catch (eNm) {}
+    }
+    var ftype = "";
+    try {
+      ftype = String(f.FeatTypeName || "") || "Cross Section";
+    } catch (eFt) {
+      ftype = "Cross Section";
+    }
+    pushRow(fn, featureIdOf(f), ftype);
+  }
+  return out;
+}
+
+function appendCrossSectionFeatureRows(features, solid) {
+  var xsecs = listModelCrossSections(solid);
+  if (!xsecs.length) return features;
+  var list = features || [];
+  list.push({
+    id: null,
+    GetName: "Model cross-sections",
+    FeatTypeName: "GROUP",
+    FeatSubType: "CROSS_SECTION",
+    Status: "ACTIVE",
+    suppressed: false,
+    sparse: false,
+    level: 1
+  });
+  for (var i = 0; i < xsecs.length; i++) {
+    var xs = xsecs[i];
+    list.push({
+      id: xs.id,
+      GetName: xs.name,
+      FeatTypeName: "CROSS_SECTION",
+      FeatSubType: xs.xsecType || "Cross Section",
+      Status: "ACTIVE",
+      suppressed: false,
+      sparse: false,
+      level: 2
+    });
+  }
+  return list;
+}
+
+function listFeaturesForModel(model, session) {
+  var fileName = "";
+  try {
+    fileName = String(model.FileName || "");
+  } catch (e) {
+    fileName = "";
+  }
+  fileName = logicalFileName(fileName) || fileName;
+
+  var solid = resolveFeatureSolid(model, session);
+  var items = listFeaturesOnSolid(solid);
+  if (!items.length) {
+    return {
+      ok: false,
+      error: "No features from ListFeaturesByType / ListItems.",
+      fileName: fileName
+    };
+  }
+
+  var entries = [];
+  var hiddenInternal = 0;
+  var skippedPatternMembers = 0;
+  var omitIds = collectOmitFeatureIds(items);
+  for (var i = 0; i < items.length; i++) {
+    try {
+      var raw = items[i];
+      var castFeat = asFeature(raw).feat || raw;
+      if (!featureIsVisible(castFeat) && !featureIsVisible(raw)) {
+        hiddenInternal += 1;
+        continue;
+      }
+      // Cross-sections appear once in the trailing GROUP, not in the feature walk.
+      if (isCrossSectionFeature(castFeat) || isCrossSectionFeature(raw)) {
+        continue;
+      }
+      if (isOmittableFeature(castFeat, omitIds) || isOmittableFeature(raw, omitIds)) {
+        skippedPatternMembers += 1;
+        continue;
+      }
+      var row = readOneFeature(raw, solid);
+      var id = row.id;
+      entries.push({
+        id: id,
+        raw: raw,
+        feat: castFeat,
+        row: row
+      });
+    } catch (errItem) {
+      entries.push({
+        id: null,
+        raw: null,
+        feat: null,
+        row: {
+          id: null,
+          GetName: "",
+          FeatTypeName: "",
+          FeatSubType: "",
+          Status: "",
+          suppressed: false,
+          sparse: true,
+          level: 1
+        }
+      });
+    }
+  }
+
+  var features = orderFeaturesWithNesting(entries);
+  features = appendCrossSectionFeatureRows(features, solid);
+  applyFeatureDisplayNames(features);
+  return {
+    ok: true,
+    fileName: fileName,
+    featureCount: features.length,
+    hiddenInternalCount: hiddenInternal,
+    skippedPatternMemberCount: skippedPatternMembers,
+    features: features
+  };
+}
+function listSessionFeatures() {
+  var am = activeModel();
+  if (am.error) return { ok: false, error: am.error };
+  return listFeaturesForModel(am.model, am.session);
+}
+
+  return {
+    listForModel: listFeaturesForModel,
+    listSession: listSessionFeatures,
+    exportSessionInfo: exportSessionInfo,
+  };
+})();
+function listFeaturesForModel(model, session) { return __creoInvFeatures.listForModel(model, session); }
+function listSessionFeatures() { return __creoInvFeatures.listSession(); }
+function exportSessionInfo(featIds) { return __creoInvFeatures.exportSessionInfo(featIds); }

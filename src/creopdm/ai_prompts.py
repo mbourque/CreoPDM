@@ -72,6 +72,77 @@ def _is_view_feature(feat: dict[str, Any]) -> bool:
     return _feature_type_label(feat) == "VIEW"
 
 
+# Drawing inventory rows that are containers / already covered by Dimensions:.
+_DRAWING_INVENTORY_SKIP_COMPARE = frozenset(
+    {"SHEET", "DRAWING", "DIMENSION", "DIM", "ITEM_DIMENSION"}
+)
+
+
+def _is_drawing_inventory_compare_feature(feat: dict[str, Any]) -> bool:
+    """Views / notes / tables / detail items — not sheet shells or dim duplicates."""
+    if not isinstance(feat, dict):
+        return False
+    return _feature_type_label(feat) not in _DRAWING_INVENTORY_SKIP_COMPARE
+
+
+def _drawing_has_rich_inventory(features: list[dict[str, Any]]) -> bool:
+    """True when snapshot features include inventory beyond legacy VIEW-only rows."""
+    for feat in features:
+        typ = _feature_type_label(feat)
+        if typ and typ not in {"VIEW", ""}:
+            return True
+    return False
+
+
+def _inventory_level(row: dict[str, Any]) -> int:
+    try:
+        level = int(row.get("level")) if row.get("level") is not None else 1
+    except (TypeError, ValueError):
+        level = 1
+    return level if level > 0 else 1
+
+
+def _inventory_outline_line(row: dict[str, Any]) -> str:
+    """Indented inventory line (same nesting idea as Details inventory tables)."""
+    name = str(row.get("name") or "").strip() or "—"
+    typ = str(row.get("type") or "").strip()
+    status = str(row.get("status") or "").strip()
+    level = _inventory_level(row)
+    indent = "  " * max(0, level - 1)
+    nest = "└ " if level > 1 else ""
+    extras: list[str] = []
+    if typ and typ.upper() not in name.upper():
+        extras.append(typ)
+    if status and status.upper() not in {"ACTIVE", ""}:
+        extras.append(status)
+    sheet = row.get("sheet")
+    if sheet not in (None, "") and typ.upper() != "SHEET":
+        extras.append(f"sheet {sheet}")
+    detail = str(row.get("detail") or "").strip()
+    if detail and typ.upper() == "NOTE":
+        short = detail if len(detail) <= 80 else detail[:77] + "…"
+        extras.append(short)
+    suffix = f" ({', '.join(extras)})" if extras else ""
+    return f"{indent}- {nest}{name}{suffix}"
+
+
+def _structure_nodes(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    structure = snapshot.get("structure")
+    if not isinstance(structure, list):
+        return []
+    return [row for row in structure if isinstance(row, dict) and str(row.get("name") or "").strip()]
+
+
+def _structure_compare_label(row: dict[str, Any]) -> str:
+    name = str(row.get("name") or "").strip() or "—"
+    typ = str(row.get("type") or "").strip()
+    path = str(row.get("path") or "").strip()
+    key = path or name
+    if typ and typ.upper() not in {"COMPONENT", ""}:
+        return f"{key} ({typ})"
+    return key
+
+
 def _is_pattern_placeholder_feature(feat: dict[str, Any]) -> bool:
     """True for Creo pattern-member shells that drown solid compares."""
     if not isinstance(feat, dict):
@@ -308,6 +379,9 @@ def prepare_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, A
     bom = out.get("bom")
     if isinstance(bom, list) and bom:
         out["bom"] = _slim_bom_nodes(bom)
+    structure = out.get("structure")
+    if isinstance(structure, list) and structure:
+        out["structure"] = [dict(row) for row in structure if isinstance(row, dict)]
     # Stamp feature_name onto dims from feature id → name (for older snaps /
     # gathers that only stored feature_id).
     labels = _feature_id_label_map(out)
@@ -361,8 +435,13 @@ def _feature_display_name(feat: dict[str, Any], *, pattern_index: int | None = N
     name = str(feat.get("name") or "").strip()
     ftype = str(feat.get("type") or "").strip()
     subtype = str(feat.get("subtype") or "").strip()
-    if not name or _PLACEHOLDER_FEATURE_NAME.match(name):
+    if not name:
         name = subtype or ftype or "unnamed feature"
+    elif _PLACEHOLDER_FEATURE_NAME.match(name):
+        # Prefer real type/subtype; keep Feature N / IFX_ID_* when that is all
+        # Creo gave (standalone orphan — Features tab shows the same label).
+        if subtype or ftype:
+            name = subtype or ftype
     if name.upper() in {"EXTRUDE"} or name.upper() == ftype.upper():
         return name
     if ftype and ftype.upper() not in name.upper():
@@ -499,10 +578,20 @@ def _feature_outline_labels(snapshot: dict[str, Any]) -> list[str]:
     labels: list[str] = []
     if drawing:
         for feat in features:
+            if not _is_drawing_inventory_compare_feature(feat):
+                continue
             if _is_view_feature(feat):
                 labels.append(_view_display_line(feat).lstrip("- ").strip())
-            else:
-                labels.append(_feature_display_name(feat))
+                continue
+            typ = _feature_type_label(feat)
+            name = str(feat.get("name") or "").strip() or typ or "item"
+            if typ == "NOTE":
+                detail = str(feat.get("detail") or "").strip()
+                if detail:
+                    short = detail if len(detail) <= 40 else detail[:37] + "…"
+                    labels.append(f"{name}: {short}")
+                    continue
+            labels.append(f"{name} ({typ})" if typ and typ not in name.upper() else name)
         return labels
     pattern_i = 0
     for feat in features:
@@ -512,6 +601,10 @@ def _feature_outline_labels(snapshot: dict[str, Any]) -> list[str]:
         else:
             labels.append(_feature_display_name(feat))
     return labels
+
+
+def _structure_outline_labels(snapshot: dict[str, Any]) -> list[str]:
+    return [_structure_compare_label(row) for row in _structure_nodes(snapshot)]
 
 
 def _count_labels(labels: list[str]) -> dict[str, int]:
@@ -558,6 +651,17 @@ def format_snapshot_compare_diff_text(
                 display = new_entry[0] or old_entry[0]
                 comp_qty_changed.append(f"{display}: × {old_qty} → × {new_qty}")
 
+    # When BOM is absent, compare assembly inventory structure labels.
+    if not older_comps and not newer_comps:
+        older_struct = _count_labels(_structure_outline_labels(older))
+        newer_struct = _count_labels(_structure_outline_labels(newer))
+        for label in sorted(set(older_struct) | set(newer_struct), key=str.lower):
+            delta = newer_struct.get(label, 0) - older_struct.get(label, 0)
+            if delta < 0:
+                comp_removed.extend([label] * (-delta))
+            elif delta > 0:
+                comp_added.extend([label] * delta)
+
     older_feat_labels = _feature_id_label_map(older)
     newer_feat_labels = _feature_id_label_map(newer)
     older_dims = {
@@ -601,11 +705,13 @@ def format_snapshot_compare_diff_text(
             return [f"{title}: (none)"]
         return [f"{title}:", *[f"- {item}" for item in items]]
 
-    # Both sides have Structure → same path as Compare Revisions: BOM is
-    # authoritative. Pending Check In gathers often differ on non-component
-    # features (ACS*/datums) even when Structure is unchanged — omit those.
-    both_have_structure = bool(older_comps) and bool(newer_comps)
-    has_structure = bool(older_comps or newer_comps)
+    # Both sides have Structure (BOM or inventory) → BOM/structure is
+    # authoritative for assemblies. Pending Check In gathers often differ on
+    # non-component features (ACS*/datums) even when Structure is unchanged.
+    older_has_struct = bool(older_comps) or bool(_structure_nodes(older))
+    newer_has_struct = bool(newer_comps) or bool(_structure_nodes(newer))
+    both_have_structure = older_has_struct and newer_has_struct
+    has_structure = older_has_struct or newer_has_struct
     if both_have_structure:
         feat_removed = []
         feat_added = []
@@ -719,6 +825,8 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
                 "sheet": f.get("sheet"),
                 "scale": f.get("scale"),
                 "model": f.get("model"),
+                "detail": f.get("detail"),
+                "level": f.get("level"),
                 "is_background": f.get("is_background"),
                 "pattern_member_count": f.get("pattern_member_count"),
             }
@@ -726,6 +834,22 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
     bom_nodes = _bom_nodes(snapshot)
     if bom_nodes:
         out["bom"] = _slim_bom_nodes(bom_nodes)
+    structure_rows = _structure_nodes(snapshot)
+    if structure_rows:
+        slim_struct: list[dict[str, Any]] = []
+        for row in structure_rows:
+            item = {
+                "id": row.get("id"),
+                "name": str(row.get("name") or "").strip() or None,
+                "type": str(row.get("type") or "").strip() or None,
+                "subtype": str(row.get("subtype") or row.get("subType") or "").strip()
+                or None,
+                "level": row.get("level"),
+                "status": row.get("status"),
+                "path": row.get("path"),
+            }
+            slim_struct.append({k: v for k, v in item.items() if v is not None})
+        out["structure"] = slim_struct
     dimensions = snapshot.get("dimensions")
     if isinstance(dimensions, list):
         out["dimensions"] = []
@@ -827,50 +951,82 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
             lines.extend(model_lines)
 
         views = [f for f in features if _is_view_feature(f)]
-        other = [f for f in features if not _is_view_feature(f)]
-        lines.append("Views:")
-        if views:
-            lines.extend(_view_display_line(v) for v in views)
-            visible = sum(
-                1
-                for v in views
-                if not (
-                    v.get("erased") is True
-                    or str(v.get("status") or "").lower() == "erased"
-                )
-            )
-            erased = len(views) - visible
-            lines.append(f"View count: {len(views)} total, {visible} visible, {erased} erased")
-        else:
-            # Fallback when views were not gathered as features.
-            view_names = str(_param_lookup(parameters, "VIEW_NAMES") or "").strip()
-            n_total = _param_lookup(parameters, "NUMBER_OF_VIEWS")
-            n_vis = _param_lookup(parameters, "NUMBER_OF_VISIBLE_VIEWS")
-            n_er = _param_lookup(parameters, "NUMBER_OF_ERASED_VIEWS")
-            if view_names:
-                for part in [p.strip() for p in view_names.split(",") if p.strip()]:
-                    lines.append(f"- {part}")
+        if _drawing_has_rich_inventory(features):
+            # Full drawing inventory (sheets / views / notes / tables / …).
+            lines.append("Drawing inventory:")
+            inv_rows = [
+                f
+                for f in features
+                if _feature_type_label(f) not in {"DRAWING", "DIMENSION", "DIM"}
+            ]
+            if inv_rows:
+                lines.extend(_inventory_outline_line(f) for f in inv_rows)
             else:
                 lines.append("- (none)")
-            if n_total is not None:
-                bits = [f"{n_total} total"]
-                if n_vis is not None:
-                    bits.append(f"{n_vis} visible")
-                if n_er is not None:
-                    bits.append(f"{n_er} erased")
-                lines.append("View count: " + ", ".join(bits))
-
-        if other:
-            lines.append("Other features:")
-            lines.extend(f"- {_feature_display_name(f)}" for f in other)
+            if views:
+                visible = sum(
+                    1
+                    for v in views
+                    if not (
+                        v.get("erased") is True
+                        or "ERASE" in str(v.get("status") or "").upper()
+                    )
+                )
+                erased = len(views) - visible
+                lines.append(
+                    f"View count: {len(views)} total, {visible} visible, {erased} erased"
+                )
+        else:
+            lines.append("Views:")
+            if views:
+                lines.extend(_view_display_line(v) for v in views)
+                visible = sum(
+                    1
+                    for v in views
+                    if not (
+                        v.get("erased") is True
+                        or str(v.get("status") or "").lower() == "erased"
+                    )
+                )
+                erased = len(views) - visible
+                lines.append(
+                    f"View count: {len(views)} total, {visible} visible, {erased} erased"
+                )
+            else:
+                # Fallback when views were not gathered as features.
+                view_names = str(_param_lookup(parameters, "VIEW_NAMES") or "").strip()
+                n_total = _param_lookup(parameters, "NUMBER_OF_VIEWS")
+                n_vis = _param_lookup(parameters, "NUMBER_OF_VISIBLE_VIEWS")
+                n_er = _param_lookup(parameters, "NUMBER_OF_ERASED_VIEWS")
+                if view_names:
+                    for part in [p.strip() for p in view_names.split(",") if p.strip()]:
+                        lines.append(f"- {part}")
+                else:
+                    lines.append("- (none)")
+                if n_total is not None:
+                    bits = [f"{n_total} total"]
+                    if n_vis is not None:
+                        bits.append(f"{n_vis} visible")
+                    if n_er is not None:
+                        bits.append(f"{n_er} erased")
+                    lines.append("View count: " + ", ".join(bits))
     else:
+        struct_rows = _structure_nodes(snapshot)
         bom_nodes = _bom_nodes(snapshot)
-        is_asm = _is_assembly_snapshot(snapshot, identity) or bool(bom_nodes)
-        if bom_nodes:
-            # Same tree as Details → Structure (components live here, not Features).
+        is_asm = (
+            _is_assembly_snapshot(snapshot, identity)
+            or bool(bom_nodes)
+            or bool(struct_rows)
+        )
+        if struct_rows:
+            # Assembly inventory (groups / components / status) — same as Details.
+            lines.append("Structure:")
+            lines.extend(_inventory_outline_line(row) for row in struct_rows)
+        elif bom_nodes:
+            # Legacy BOM tree when inventory structure was not captured.
             lines.append("Structure:")
             lines.extend(_format_bom_outline_lines(bom_nodes))
-        if is_asm and bom_nodes:
+        if is_asm and (bom_nodes or struct_rows):
             lines.append("Assembly features (non-component):")
         else:
             lines.append("Features:")

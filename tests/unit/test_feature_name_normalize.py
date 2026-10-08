@@ -27,6 +27,14 @@ def test_normalize_feature_rows_keeps_creo_name_as_is():
     assert rows[0]["name"] == "Round 3"
 
 
+def test_normalize_feature_rows_preserves_level_and_status():
+    rows = normalize_feature_rows(
+        [{"id": 1, "name": "CUT", "type": "CUT", "level": 2, "status": "SUPRESSED"}]
+    )
+    assert rows[0]["level"] == 2
+    assert rows[0]["status"] == "SUPRESSED"
+
+
 def test_normalize_feature_rows_ignores_non_dicts():
     assert normalize_feature_rows(None) == []
     assert normalize_feature_rows([None, "x", {"name": "DEFAULT_CS", "type": "COORDINATE SYSTEM"}]) == [

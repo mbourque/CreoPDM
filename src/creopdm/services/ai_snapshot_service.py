@@ -59,19 +59,28 @@ def _snapshot_with_bom_fallback(
 ) -> dict[str, Any] | None:
     """
     Older AI snapshots omit Structure/BOM (Features skip components).
-    Fall back to the version's bom_json so Compare Revisions can trust Structure.
+    Fall back to the version's bom_json / features_json structure so Compare
+    Revisions can trust Structure.
     """
     if not isinstance(snapshot, dict):
         return snapshot
-    bom = snapshot.get("bom")
-    if isinstance(bom, list) and bom:
-        return snapshot
-    fallback = _loads(getattr(version, "bom_json", None))
-    if not isinstance(fallback, list) or not fallback:
-        return snapshot
     merged = dict(snapshot)
-    merged["bom"] = fallback
-    return merged
+    changed = False
+    bom = merged.get("bom")
+    if not (isinstance(bom, list) and bom):
+        fallback = _loads(getattr(version, "bom_json", None))
+        if isinstance(fallback, list) and fallback:
+            merged["bom"] = fallback
+            changed = True
+    structure = merged.get("structure")
+    if not (isinstance(structure, list) and structure):
+        from creopdm.services.metadata_service import unpack_features_json
+
+        _feats, struct = unpack_features_json(_loads(getattr(version, "features_json", None)))
+        if isinstance(struct, list) and struct:
+            merged["structure"] = struct
+            changed = True
+    return merged if changed else snapshot
 
 
 class AiSnapshotService:

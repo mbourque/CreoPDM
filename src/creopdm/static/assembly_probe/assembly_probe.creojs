@@ -1,0 +1,1274 @@
+/*
+ * Creo.JS assembly structure list for the active model.
+ * Walks FEATTYPE_COMPONENT features (same approach as app Structure/BOM).
+ * Does not RetrieveModel missing deps — only nests children already in session.
+ */
+
+function describeError(error) {
+  if (error == null) return "Unknown Creo error";
+  if (typeof error === "string") return error;
+  var parts = [];
+  if (error.message) parts.push(String(error.message));
+  if (error.Message && error.Message !== error.message) parts.push(String(error.Message));
+  if (!parts.length) {
+    try {
+      parts.push(String(error));
+    } catch (e) {
+      parts.push("Unknown Creo error");
+    }
+  }
+  return parts.join(" ");
+}
+
+function enumString(ft) {
+  if (ft == null) return "";
+  try {
+    if (typeof ft.string === "function") return String(ft.string() || "");
+  } catch (e) {}
+  try {
+    if (ft.string != null && typeof ft.string !== "function") return String(ft.string);
+  } catch (e2) {}
+  try {
+    var s = String(ft);
+    if (s && s !== "[object Object]") return s;
+  } catch (e3) {}
+  return "";
+}
+
+function enumValue(ft) {
+  if (ft == null) return null;
+  try {
+    if (typeof ft.value === "function") {
+      var v = ft.value();
+      return typeof v === "number" ? v : null;
+    }
+  } catch (e) {}
+  try {
+    if (typeof ft === "number") return ft;
+  } catch (e2) {}
+  return null;
+}
+
+function sequenceCount(sequence) {
+  if (sequence == null) return 0;
+  if (typeof sequence.Count === "number") return sequence.Count;
+  if (typeof sequence.getCount === "function") {
+    try {
+      return sequence.getCount();
+    } catch (e) {}
+  }
+  if (typeof sequence.length === "number") return sequence.length;
+  return 0;
+}
+
+function sequenceItem(sequence, index) {
+  if (sequence != null && typeof sequence.Item === "function") return sequence.Item(index);
+  return sequence[index];
+}
+
+function featureItems(listed) {
+  var out = [];
+  var count = sequenceCount(listed);
+  for (var i = 0; i < count; i++) {
+    try {
+      var item = sequenceItem(listed, i);
+      if (item) out.push(item);
+    } catch (e) {}
+  }
+  return out;
+}
+
+function featureIdOf(feat) {
+  try {
+    if (typeof feat.Id !== "undefined" && feat.Id != null) return feat.Id;
+  } catch (e) {}
+  try {
+    if (typeof feat.GetId === "function") return feat.GetId();
+  } catch (e2) {}
+  return null;
+}
+
+function featureIsVisible(feat) {
+  if (!feat) return false;
+  try {
+    if (typeof feat.IsVisible !== "undefined" && feat.IsVisible === false) return false;
+  } catch (e) {}
+  try {
+    if (typeof feat.GetIsVisible === "function" && feat.GetIsVisible() === false) return false;
+  } catch (e2) {}
+  return true;
+}
+
+function featureStatusInfo(feat) {
+  var info = { status: "", suppressed: false };
+  if (!feat) return info;
+  var st = null;
+  try {
+    if (feat.Status != null) st = feat.Status;
+  } catch (e) {}
+  if (st == null) {
+    try {
+      if (typeof feat.GetStatus === "function") st = feat.GetStatus();
+    } catch (e2) {}
+  }
+  var s = enumString(st);
+  if (s) info.status = s.indexOf("FEAT_") === 0 ? s.substring(5) : s;
+  var u = String(s || "").toUpperCase();
+  if (u.indexOf("SUPPRESS") >= 0) info.suppressed = true;
+  try {
+    if (typeof pfcFeatureStatus !== "undefined" && st != null) {
+      if (
+        st === pfcFeatureStatus.FEAT_SUPPRESSED ||
+        st === pfcFeatureStatus.FEAT_FAMILY_TABLE_SUPPRESSED ||
+        st === pfcFeatureStatus.FEAT_PROGRAM_SUPPRESSED
+      ) {
+        info.suppressed = true;
+      }
+    }
+  } catch (e3) {}
+  return info;
+}
+
+function tryCast(caster, obj) {
+  if (!caster || typeof caster !== "function") return null;
+  try {
+    return caster(obj) || null;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Manufacturing models (MDL_MFG / .mfg) store features on a nested solid —
+ * pfcMFG.GetSolid() — not on the MFG handle itself.
+ */
+function mfgStorageSolid(model) {
+  if (!model) return null;
+  var mfg = null;
+  try {
+    if (typeof pfcMFG !== "undefined" && typeof pfcMFG.cast === "function") {
+      mfg = pfcMFG.cast(model);
+    }
+  } catch (e) {}
+  if (!mfg) {
+    try {
+      if (typeof model.isInstanceOf === "function" && model.isInstanceOf("pfcMFG")) {
+        mfg = model;
+      }
+    } catch (e2) {}
+  }
+  if (!mfg) {
+    try {
+      if (typeof pfcModelType !== "undefined" && model.Type === pfcModelType.MDL_MFG) {
+        mfg = model;
+      }
+    } catch (e3) {}
+  }
+  if (!mfg) return null;
+  try {
+    if (typeof mfg.GetSolid === "function") {
+      var solid = mfg.GetSolid();
+      if (solid) return solid;
+    }
+  } catch (e4) {}
+  try {
+    if (mfg.Solid != null) return mfg.Solid;
+  } catch (e5) {}
+  return null;
+}
+
+function modelRootName(filename) {
+  var name = logicalFileName(filename);
+  var dot = name.lastIndexOf(".");
+  return dot > 0 ? name.substring(0, dot) : name;
+}
+
+function solidMethodsBound(model) {
+  if (!model) return false;
+  try {
+    if (typeof model.ListFeaturesByType === "function") return true;
+  } catch (e) {}
+  try {
+    if (typeof model.ListItems === "function") return true;
+  } catch (e2) {}
+  return false;
+}
+
+function castSolidHandle(model) {
+  if (!model) return null;
+  var candidates = [];
+  if (typeof wfcWSolid !== "undefined") candidates.push(wfcWSolid.cast);
+  if (typeof pfcAssembly !== "undefined") candidates.push(pfcAssembly.cast);
+  if (typeof pfcPart !== "undefined") candidates.push(pfcPart.cast);
+  if (typeof pfcSolid !== "undefined") candidates.push(pfcSolid.cast);
+  var best = model;
+  for (var ci = 0; ci < candidates.length; ci++) {
+    var casted = tryCast(candidates[ci], model);
+    if (!casted) continue;
+    if (typeof casted.ListFeaturesByType === "function") return casted;
+    if (typeof casted.ListItems === "function") best = casted;
+  }
+  return best;
+}
+
+/**
+ * Prefer a handle that can list features. MFG → GetSolid, then same-name
+ * assembly/part in session (mill models often share the storage asm name).
+ */
+function resolveStructureSolid(model, session) {
+  var candidates = [];
+  function push(m) {
+    if (!m) return;
+    for (var i = 0; i < candidates.length; i++) {
+      if (candidates[i] === m) return;
+    }
+    candidates.push(m);
+  }
+  push(mfgStorageSolid(model));
+  push(model);
+  try {
+    var fn = String(model.FileName || "");
+    var root = modelRootName(fn);
+    if (session && root && typeof session.GetModel === "function" && typeof pfcModelType !== "undefined") {
+      try {
+        push(session.GetModel(root, pfcModelType.MDL_ASSEMBLY));
+      } catch (eA) {}
+      try {
+        push(session.GetModel(root, pfcModelType.MDL_PART));
+      } catch (eP) {}
+      try {
+        push(session.GetModel(root, pfcModelType.MDL_MFG));
+      } catch (eM) {}
+      // Storage solid often has a different file name than the .mfg tip.
+      var storage = mfgStorageSolid(model);
+      if (storage) {
+        var sfn = "";
+        try {
+          sfn = String(storage.FileName || "");
+        } catch (eS) {}
+        var sroot = modelRootName(sfn);
+        if (sroot && sroot.toLowerCase() !== root.toLowerCase()) {
+          try {
+            push(session.GetModel(sroot, pfcModelType.MDL_ASSEMBLY));
+          } catch (eSA) {}
+          try {
+            push(session.GetModel(sroot, pfcModelType.MDL_PART));
+          } catch (eSP) {}
+        }
+      }
+    }
+  } catch (e) {}
+
+  var best = null;
+  var bestScore = -1;
+  for (var c = 0; c < candidates.length; c++) {
+    var handle = castSolidHandle(candidates[c]);
+    if (!handle) continue;
+    var score = 0;
+    if (solidMethodsBound(handle)) score += 10;
+    var feats = listStructureFeatures(handle, false);
+    score += feats.length * 2;
+    if (score > bestScore) {
+      bestScore = score;
+      best = handle;
+    }
+  }
+  return best || castSolidHandle(model) || model;
+}
+
+function asSolid(model) {
+  return castSolidHandle(mfgStorageSolid(model) || model);
+}
+
+function asFeature(feat) {
+  var candidates = [];
+  if (typeof wfcWFeature !== "undefined") candidates.push(wfcWFeature.cast);
+  if (typeof pfcFeature !== "undefined") candidates.push(pfcFeature.cast);
+  if (typeof pfcComponentFeat !== "undefined") candidates.push(pfcComponentFeat.cast);
+  var best = feat;
+  for (var ci = 0; ci < candidates.length; ci++) {
+    var casted = tryCast(candidates[ci], feat);
+    if (!casted) continue;
+    best = casted;
+    try {
+      if (casted.FeatType != null || casted.ModelDescr != null) return casted;
+    } catch (e) {}
+  }
+  return best;
+}
+
+function logicalFileName(filename) {
+  var name = String(filename || "").replace(/\\/g, "/");
+  var slash = name.lastIndexOf("/");
+  if (slash >= 0) name = name.substring(slash + 1);
+  // Strip Creo version suffix: part.prt.3 → part.prt
+  name = name.replace(/(\.[a-z0-9]+)\.\d+$/i, "$1");
+  name = name.replace(/<<[^>]*>>/g, "");
+  name = name.replace(/<<[^>]*>/g, "");
+  return name;
+}
+
+function componentModelName(feat) {
+  var raw = "";
+  try {
+    if (feat && feat.ModelDescr) {
+      var descr = feat.ModelDescr;
+      if (typeof descr.GetFileName === "function") raw = String(descr.GetFileName() || "");
+      else raw = String(descr.FileName || "");
+    }
+  } catch (e) {}
+  if (!raw) {
+    try {
+      if (feat && typeof feat.GetModel === "function") {
+        var child = feat.GetModel();
+        if (child) raw = String(child.FileName || child.FullName || "");
+      }
+    } catch (e2) {}
+  }
+  if (!raw) {
+    try {
+      if (feat && typeof feat.GetName === "function") raw = String(feat.GetName() || "");
+    } catch (e3) {}
+  }
+  return logicalFileName(raw);
+}
+
+function resolveComponentModel(session, feat, filename) {
+  try {
+    if (feat && typeof feat.GetModel === "function") {
+      var byMethod = feat.GetModel();
+      if (byMethod) return byMethod;
+    }
+  } catch (e) {}
+  try {
+    if (feat && feat.Model) return feat.Model;
+  } catch (e2) {}
+  var name = filename || componentModelName(feat);
+  if (!name || !session) return null;
+  try {
+    if (typeof session.GetModelFromFileName === "function") {
+      var byName = session.GetModelFromFileName(name);
+      if (byName) return byName;
+    }
+  } catch (e3) {}
+  return null;
+}
+
+/** Assembly or manufacturing model — both expose component features for structure. */
+function isAssemblyModel(model, filename) {
+  try {
+    if (typeof pfcModelType !== "undefined" && model && model.Type != null) {
+      if (model.Type === pfcModelType.MDL_ASSEMBLY) return true;
+      if (model.Type === pfcModelType.MDL_MFG) return true;
+    }
+  } catch (e) {}
+  var fn = String(filename || "");
+  return /\.asm$/i.test(fn) || /\.mfg$/i.test(fn);
+}
+
+function rootStructureType(model, filename) {
+  try {
+    if (typeof pfcModelType !== "undefined" && model && model.Type != null) {
+      if (model.Type === pfcModelType.MDL_MFG) return "MFG";
+    }
+  } catch (e) {}
+  if (/\.mfg$/i.test(String(filename || ""))) return "MFG";
+  return "ASSEMBLY";
+}
+
+function featureTypeHints(feat) {
+  var bits = [];
+  if (!feat) return "";
+  try {
+    if (feat.FeatTypeName != null) bits.push(String(feat.FeatTypeName));
+  } catch (e) {}
+  try {
+    bits.push(enumString(feat.FeatType));
+  } catch (e2) {}
+  return bits.join(" ").toUpperCase();
+}
+
+function isComponentFeature(feat) {
+  if (!feat) return false;
+  try {
+    if (typeof pfcFeatureType !== "undefined" && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
+      return true;
+    }
+  } catch (e) {}
+  var t = featureTypeHints(feat);
+  if (t.indexOf("COMPONENT") >= 0) return true;
+  if (t.indexOf("WORKPIECE") >= 0 || t.indexOf("FIXTURE") >= 0) return true;
+  try {
+    var ct = enumString(
+      feat.CompType || (typeof feat.GetCompType === "function" ? feat.GetCompType() : null)
+    );
+    if (ct) return true;
+  } catch (e2) {}
+  return false;
+}
+
+function featureHasRefModel(feat) {
+  if (!feat) return false;
+  try {
+    if (feat.ModelDescr != null) return true;
+  } catch (e) {}
+  try {
+    if (typeof feat.GetModelDescr === "function" && feat.GetModelDescr()) return true;
+  } catch (e2) {}
+  try {
+    if (typeof feat.GetModel === "function" && feat.GetModel()) return true;
+  } catch (e3) {}
+  return !!componentModelName(feat);
+}
+
+/** Component / workpiece / fixture / anything with a referenced model. */
+function isStructureMemberFeature(feat) {
+  if (!feat) return false;
+  if (isGroupHeadFeature(feat)) return true;
+  if (isComponentFeature(feat)) return true;
+  return featureHasRefModel(feat);
+}
+
+/** Local group / GROUP_HEAD container in the model tree. */
+function isGroupHeadFeature(feat) {
+  if (!feat) return false;
+  try {
+    if (typeof pfcFeatureType !== "undefined") {
+      if (feat.FeatType === pfcFeatureType.FEATTYPE_GROUP_HEAD) return true;
+      if (feat.FeatType === pfcFeatureType.FEATTYPE_GROUP) return true;
+    }
+  } catch (e) {}
+  var t = featureTypeHints(feat);
+  return (
+    t.indexOf("GROUP_HEAD") >= 0 ||
+    (t.indexOf("GROUP") >= 0 && t.indexOf("PATTERN") < 0 && t.indexOf("COMPONENT") < 0)
+  );
+}
+
+function featureGroupStatus(feat) {
+  if (!feat) return "";
+  try {
+    if (feat.GroupStatus != null) {
+      var s = enumString(feat.GroupStatus);
+      if (s) return String(s).toUpperCase();
+    }
+  } catch (e) {}
+  try {
+    if (typeof feat.GetGroupStatus === "function") {
+      var gs = feat.GetGroupStatus();
+      var s2 = enumString(gs);
+      if (s2) return String(s2).toUpperCase();
+    }
+  } catch (e2) {}
+  return "";
+}
+
+function isGroupedMemberFeature(feat) {
+  var st = featureGroupStatus(feat);
+  return st.indexOf("MEMBER") >= 0 && st.indexOf("HEAD") < 0;
+}
+
+function listFeaturesByTypeSafe(solid, featType, visibleOnly) {
+  if (!solid || typeof solid.ListFeaturesByType !== "function") return [];
+  var vis = visibleOnly !== false;
+  var tryFns = [
+    function () {
+      return solid.ListFeaturesByType(vis, featType);
+    },
+    function () {
+      return solid.ListFeaturesByType(featType, vis);
+    },
+    function () {
+      return solid.ListFeaturesByType(vis);
+    },
+    function () {
+      return solid.ListFeaturesByType(featType);
+    }
+  ];
+  for (var t = 0; t < tryFns.length; t++) {
+    try {
+      var items = featureItems(tryFns[t]());
+      if (items.length) return items;
+    } catch (e) {}
+  }
+  return [];
+}
+
+function listAllFeaturesOnSolid(solid) {
+  var out = [];
+  var seen = {};
+  function addRaw(raw) {
+    var feat = asFeature(raw);
+    if (!feat) return;
+    var id = featureIdOf(feat);
+    var key = id != null ? String(id) : "";
+    if (key && seen[key]) return;
+    if (key) seen[key] = true;
+    out.push(feat);
+  }
+  var batches = [];
+  batches.push(listFeaturesByTypeSafe(solid, null, true));
+  batches.push(listFeaturesByTypeSafe(solid, null, false));
+  if (typeof pfcFeatureType !== "undefined") {
+    try {
+      batches.push(listFeaturesByTypeSafe(solid, pfcFeatureType.FEATTYPE_COMPONENT, true));
+      batches.push(listFeaturesByTypeSafe(solid, pfcFeatureType.FEATTYPE_COMPONENT, false));
+    } catch (e) {}
+  }
+  try {
+    if (typeof pfcModelItemType !== "undefined" && pfcModelItemType.ITEM_FEATURE != null) {
+      batches.push(featureItems(solid.ListItems(pfcModelItemType.ITEM_FEATURE)));
+    }
+  } catch (e2) {}
+  for (var b = 0; b < batches.length; b++) {
+    var list = batches[b] || [];
+    for (var i = 0; i < list.length; i++) addRaw(list[i]);
+  }
+  return out;
+}
+
+/**
+ * Components + group heads (+ workpiece/fixture / ref-models).
+ * includeAllFallback: for MFG when no components, show all visible features.
+ */
+function listStructureFeatures(solid, includeAllFallback) {
+  var out = [];
+  var seen = {};
+  function add(feat, requireVisible) {
+    if (!feat) return;
+    if (requireVisible !== false && !featureIsVisible(feat) && !featureHasRefModel(feat)) return;
+    var id = featureIdOf(feat);
+    var key = id != null ? String(id) : "";
+    if (key && seen[key]) return;
+    if (key) seen[key] = true;
+    out.push(feat);
+  }
+
+  var all = listAllFeaturesOnSolid(solid);
+  var i;
+  for (i = 0; i < all.length; i++) {
+    if (isStructureMemberFeature(all[i])) add(all[i], true);
+  }
+
+  if (out.length) return out;
+
+  if (typeof pfcFeatureType !== "undefined") {
+    var comps = listFeaturesByTypeSafe(solid, pfcFeatureType.FEATTYPE_COMPONENT, false);
+    var groups = [];
+    try {
+      if (pfcFeatureType.FEATTYPE_GROUP_HEAD != null) {
+        groups = groups.concat(listFeaturesByTypeSafe(solid, pfcFeatureType.FEATTYPE_GROUP_HEAD, false));
+      }
+    } catch (e2) {}
+    try {
+      if (pfcFeatureType.FEATTYPE_GROUP != null) {
+        groups = groups.concat(listFeaturesByTypeSafe(solid, pfcFeatureType.FEATTYPE_GROUP, false));
+      }
+    } catch (e3) {}
+    for (var g = 0; g < groups.length; g++) add(asFeature(groups[g]), false);
+    for (var c = 0; c < comps.length; c++) add(asFeature(comps[c]), false);
+  }
+
+  if (!out.length && includeAllFallback) {
+    for (i = 0; i < all.length; i++) {
+      if (featureIsVisible(all[i])) add(all[i], false);
+    }
+  }
+  return out;
+}
+
+function resolveFeatureGroup(feat) {
+  if (!feat) return null;
+  try {
+    if (typeof pfcFeatureGroup !== "undefined" && typeof pfcFeatureGroup.cast === "function") {
+      var casted = pfcFeatureGroup.cast(feat);
+      if (casted) return casted;
+    }
+  } catch (e) {}
+  try {
+    if (feat.Group != null) return feat.Group;
+  } catch (e2) {}
+  try {
+    if (typeof feat.GetGroup === "function") {
+      var g = feat.GetGroup();
+      if (g) return g;
+    }
+  } catch (e3) {}
+  return feat;
+}
+
+function groupDisplayName(group, headFeat) {
+  try {
+    if (group && group.GroupName != null && String(group.GroupName) !== "") {
+      return String(group.GroupName);
+    }
+  } catch (e) {}
+  try {
+    if (group && typeof group.GetGroupName === "function") {
+      var n = group.GetGroupName();
+      if (n) return String(n);
+    }
+  } catch (e2) {}
+  try {
+    if (headFeat && typeof headFeat.GetName === "function") {
+      var gn = headFeat.GetName();
+      if (gn) return String(gn);
+    }
+  } catch (e3) {}
+  try {
+    if (headFeat && headFeat.Name != null && String(headFeat.Name) !== "") {
+      return String(headFeat.Name);
+    }
+  } catch (e4) {}
+  var id = featureIdOf(headFeat);
+  return id != null ? "GROUP (" + id + ")" : "GROUP";
+}
+
+function listGroupMemberFeatures(headFeat) {
+  var group = resolveFeatureGroup(headFeat);
+  var members = [];
+  try {
+    if (group && typeof group.ListMembers === "function") {
+      members = featureItems(group.ListMembers());
+    }
+  } catch (e) {}
+  if (!members.length) {
+    try {
+      if (headFeat && typeof headFeat.ListMembers === "function") {
+        members = featureItems(headFeat.ListMembers());
+      }
+    } catch (e2) {}
+  }
+  if (!members.length) {
+    try {
+      if (headFeat && typeof headFeat.ListChildren === "function") {
+        members = featureItems(headFeat.ListChildren());
+      }
+    } catch (e3) {}
+  }
+  var out = [];
+  var seen = {};
+  var headId = featureIdOf(headFeat);
+  for (var i = 0; i < members.length; i++) {
+    var m = asFeature(members[i]);
+    if (!m) continue;
+    if (!featureIsVisible(m) && !featureHasRefModel(m) && !isGroupHeadFeature(m)) continue;
+    var mid = featureIdOf(m);
+    if (headId != null && mid != null && String(mid) === String(headId)) continue;
+    // Nested group heads stay as members (group-in-group / MFG workcell→op).
+    var key = mid != null ? String(mid) : "";
+    if (key && seen[key]) continue;
+    if (key) seen[key] = true;
+    out.push(m);
+  }
+  return out;
+}
+
+/**
+ * Build group → members with ListMembers, then contiguous model-tree fallback
+ * (MFG workcells/ops often return empty ListMembers in Creo.JS).
+ * Inner groups claim first so nesting works.
+ */
+function buildGroupMemberMaps(features) {
+  var byId = {};
+  var i;
+  for (i = 0; i < features.length; i++) {
+    var f0 = asFeature(features[i]);
+    var id0 = featureIdOf(f0);
+    if (id0 != null) byId[String(id0)] = f0;
+  }
+
+  var nestedUnderGroup = {};
+  var groupMemberOrder = {};
+
+  function claim(gsid, child, gorder) {
+    if (!child) return;
+    var cid = featureIdOf(child);
+    if (cid == null) return;
+    var key = String(cid);
+    if (key === gsid) return;
+    if (nestedUnderGroup[key]) return;
+    nestedUnderGroup[key] = gsid;
+    gorder.push(child);
+  }
+
+  // Inner groups first.
+  for (i = features.length - 1; i >= 0; i--) {
+    var head = asFeature(features[i]);
+    if (!isGroupHeadFeature(head)) continue;
+    var gsid = featureIdOf(head);
+    if (gsid == null) continue;
+    gsid = String(gsid);
+    var gorder = groupMemberOrder[gsid] || [];
+    var apiMembers = listGroupMemberFeatures(head);
+    var mi;
+    for (mi = 0; mi < apiMembers.length; mi++) {
+      var mid = featureIdOf(apiMembers[mi]);
+      if (mid == null) continue;
+      claim(gsid, byId[String(mid)] || apiMembers[mi], gorder);
+    }
+    groupMemberOrder[gsid] = gorder;
+  }
+
+  // Contiguous fallback when ListMembers empty (typical for MFG groups).
+  for (i = 0; i < features.length; i++) {
+    var head2 = asFeature(features[i]);
+    if (!isGroupHeadFeature(head2)) continue;
+    var gsid2 = featureIdOf(head2);
+    if (gsid2 == null) continue;
+    gsid2 = String(gsid2);
+    var gorder2 = groupMemberOrder[gsid2] || [];
+    if (gorder2.length) continue;
+    for (var nj = i + 1; nj < features.length; nj++) {
+      var next = asFeature(features[nj]);
+      if (!next) continue;
+      var nid = featureIdOf(next);
+      if (nid == null) continue;
+      var nkey = String(nid);
+      if (nestedUnderGroup[nkey]) continue;
+      if (isGroupHeadFeature(next)) {
+        claim(gsid2, next, gorder2);
+        break;
+      }
+      claim(gsid2, next, gorder2);
+    }
+    groupMemberOrder[gsid2] = gorder2;
+  }
+
+  return { nestedUnderGroup: nestedUnderGroup, groupMemberOrder: groupMemberOrder };
+}
+
+function componentTypeLabel(feat, filename, childModel) {
+  try {
+    if (feat.IsBulkitem === true) return "BULK";
+    if (typeof feat.GetIsBulkitem === "function" && feat.GetIsBulkitem() === true) return "BULK";
+  } catch (e) {}
+  try {
+    if (feat.IsSkeleton === true) return "SKELETON";
+    if (typeof feat.GetIsSkeleton === "function" && feat.GetIsSkeleton() === true) return "SKELETON";
+  } catch (e2) {}
+  try {
+    if (childModel && typeof childModel.IsSkeleton !== "undefined" && childModel.IsSkeleton === true) {
+      return "SKELETON";
+    }
+  } catch (e3) {}
+  var compType = "";
+  try {
+    compType = enumString(feat.CompType || (typeof feat.GetCompType === "function" ? feat.GetCompType() : null));
+  } catch (e4) {}
+  var cu = String(compType || "").toUpperCase();
+  if (cu.indexOf("SKELETON") >= 0) return "SKELETON";
+  if (cu.indexOf("BULK") >= 0) return "BULK";
+  if (/\.mfg$/i.test(filename || "")) return "MFG";
+  try {
+    if (
+      childModel &&
+      typeof pfcModelType !== "undefined" &&
+      childModel.Type === pfcModelType.MDL_MFG
+    ) {
+      return "MFG";
+    }
+  } catch (e5) {}
+  if (isAssemblyModel(childModel, filename) || /\.asm$/i.test(filename || "")) return "ASSEMBLY";
+  if (/\.prt$/i.test(filename || "")) return "PART";
+  return compType ? compType.replace(/^COMP_/, "") : "COMPONENT";
+}
+
+function modelFileNameOf(model) {
+  try {
+    return String(model.FileName || "");
+  } catch (e) {
+    return "";
+  }
+}
+
+/** Current window model — GetActiveModel is often null for MDL_MFG. */
+function modelFromCurrentWindow(session) {
+  if (!session) return null;
+  var win = null;
+  try {
+    if (typeof session.GetCurrentWindow === "function") win = session.GetCurrentWindow();
+  } catch (e) {}
+  if (!win) {
+    try {
+      if (session.CurrentWindow != null) win = session.CurrentWindow;
+    } catch (e2) {}
+  }
+  if (!win) return null;
+  try {
+    if (typeof win.GetModel === "function") {
+      var m = win.GetModel();
+      if (m) return m;
+    }
+  } catch (e3) {}
+  try {
+    if (win.Model != null) return win.Model;
+  } catch (e4) {}
+  return null;
+}
+
+/**
+ * Prefer MFG / assembly from the session list when Active/Current are empty
+ * (common for manufacturing models in Creo.JS).
+ */
+function modelFromSessionList(session) {
+  if (!session || typeof session.ListModels !== "function") return null;
+  var listed = null;
+  try {
+    listed = session.ListModels();
+  } catch (e) {
+    return null;
+  }
+  var items = featureItems(listed);
+  var mfg = null;
+  var asm = null;
+  var any = null;
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if (!item) continue;
+    var fn = modelFileNameOf(item);
+    if (isAssemblyModel(item, fn)) {
+      try {
+        if (typeof pfcModelType !== "undefined" && item.Type === pfcModelType.MDL_MFG) {
+          if (!mfg) mfg = item;
+          continue;
+        }
+      } catch (e2) {}
+      if (/\.mfg$/i.test(fn)) {
+        if (!mfg) mfg = item;
+        continue;
+      }
+      if (!asm) asm = item;
+      continue;
+    }
+    if (!any) any = item;
+  }
+  return mfg || asm || any;
+}
+
+function activeModel() {
+  var session = pfcGetCurrentSession();
+  if (session == null) return { error: "Creo did not return a session." };
+  var model = null;
+  try {
+    if (typeof session.GetActiveModel === "function") model = session.GetActiveModel();
+  } catch (e) {
+    model = null;
+  }
+  if (!model) {
+    try {
+      model = session.CurrentModel;
+    } catch (e2) {
+      model = null;
+    }
+  }
+  if (!model) model = modelFromCurrentWindow(session);
+  if (!model) model = modelFromSessionList(session);
+  if (model == null) {
+    return {
+      error: "No active model. Open an assembly or manufacturing model in Creo first."
+    };
+  }
+  return { session: session, model: model };
+}
+
+/** Nesting ceiling (same order as Where Used BFS). Cycle guard is the real loop stop. */
+var MAX_STRUCTURE_DEPTH = 32;
+
+function copyVisited(visited) {
+  var next = {};
+  for (var k in visited) {
+    if (Object.prototype.hasOwnProperty.call(visited, k)) next[k] = true;
+  }
+  return next;
+}
+
+/**
+ * Emit one component (or nested assembly) under flat + tree.
+ * Returns the tree node.
+ */
+function featureStoredName(feat) {
+  if (!feat) return "";
+  try {
+    if (typeof feat.GetName === "function") {
+      var gn = feat.GetName();
+      if (gn != null && String(gn) !== "") return String(gn);
+    }
+  } catch (e) {}
+  try {
+    if (feat.Name != null && String(feat.Name) !== "") return String(feat.Name);
+  } catch (e2) {}
+  return "";
+}
+
+function emitComponentRow(
+  feat,
+  session,
+  level,
+  maxDepth,
+  pathPrefix,
+  visited,
+  flat,
+  treeChildren
+) {
+  var id = featureIdOf(feat);
+  var name = componentModelName(feat);
+  var childModel = name ? resolveComponentModel(session, feat, name) : null;
+  var type = "";
+  if (name || childModel) {
+    type = componentTypeLabel(feat, name, childModel);
+  } else {
+    try {
+      type = String(feat.FeatTypeName || "") || enumString(feat.FeatType) || "FEATURE";
+    } catch (eT) {
+      type = "FEATURE";
+    }
+    type = String(type || "FEATURE").replace(/^FEATTYPE_/, "");
+    name = featureStoredName(feat);
+    if (!name && id != null) name = type + " (" + id + ")";
+    if (!name && id == null) return null;
+  }
+  if (!name && id == null) return null;
+  var path = pathPrefix ? pathPrefix + "/" + String(id) : String(id == null ? "?" : id);
+  var statusInfo = featureStatusInfo(feat);
+  var row = {
+    name: name || ("COMPONENT (" + id + ")"),
+    id: id,
+    type: type,
+    level: level,
+    status: statusInfo.status,
+    suppressed: statusInfo.suppressed,
+    path: path
+  };
+  flat.push(row);
+  var node = {
+    name: row.name,
+    id: id,
+    type: type,
+    status: statusInfo.status,
+    suppressed: statusInfo.suppressed,
+    children: []
+  };
+  treeChildren.push(node);
+
+  var childKey = String(name || id || "").toLowerCase();
+  if (
+    level < maxDepth &&
+    childModel &&
+    (type === "ASSEMBLY" || type === "MFG") &&
+    childKey &&
+    !visited[childKey]
+  ) {
+    var nextSeen = copyVisited(visited);
+    nextSeen[childKey] = true;
+    walkAssemblyStructure(
+      childModel,
+      session,
+      level + 1,
+      maxDepth,
+      path,
+      nextSeen,
+      flat,
+      node.children
+    );
+  }
+  return node;
+}
+
+/**
+ * Flattened structure rows + nested tree.
+ * Groups nest recursively (workcell → op → sequences); members indent under parents.
+ */
+function walkAssemblyStructure(model, session, level, maxDepth, pathPrefix, visited, flat, treeChildren) {
+  if (level > maxDepth) return;
+  var solid = resolveStructureSolid(model, session);
+  var mfgRoot = false;
+  try {
+    mfgRoot =
+      (typeof pfcModelType !== "undefined" && model && model.Type === pfcModelType.MDL_MFG) ||
+      /\.mfg$/i.test(String((model && model.FileName) || ""));
+  } catch (eMfg) {
+    mfgRoot = /\.mfg$/i.test(String((model && model.FileName) || ""));
+  }
+  var features = listStructureFeatures(solid, mfgRoot);
+  var maps = buildGroupMemberMaps(features);
+  var nestedUnderGroup = maps.nestedUnderGroup;
+  var groupMemberOrder = maps.groupMemberOrder;
+  var emitted = {};
+
+  function emitFeat(feat, featLevel, featPathPrefix, parentChildren) {
+    if (!feat) return;
+    if (!featureIsVisible(feat) && !featureHasRefModel(feat) && !isGroupHeadFeature(feat)) return;
+    var sid = featureIdOf(feat);
+    var skey = sid != null ? String(sid) : null;
+    if (skey && emitted[skey]) return;
+    if (skey) emitted[skey] = true;
+
+    if (isGroupHeadFeature(feat)) {
+      var group = resolveFeatureGroup(feat);
+      var gname = groupDisplayName(group, feat);
+      var gpath = featPathPrefix
+        ? featPathPrefix + "/g" + String(sid)
+        : "g" + String(sid == null ? "?" : sid);
+      var gStatus = featureStatusInfo(feat);
+      flat.push({
+        name: gname,
+        id: sid,
+        type: "GROUP",
+        level: featLevel,
+        status: gStatus.status,
+        suppressed: gStatus.suppressed,
+        path: gpath
+      });
+      var gnode = {
+        name: gname,
+        id: sid,
+        type: "GROUP",
+        status: gStatus.status,
+        suppressed: gStatus.suppressed,
+        children: []
+      };
+      parentChildren.push(gnode);
+      var members = (skey && groupMemberOrder[skey]) || [];
+      for (var mi = 0; mi < members.length; mi++) {
+        emitFeat(members[mi], featLevel + 1, gpath, gnode.children);
+      }
+      return;
+    }
+
+    emitComponentRow(
+      feat,
+      session,
+      featLevel,
+      maxDepth,
+      featPathPrefix,
+      visited,
+      flat,
+      parentChildren
+    );
+  }
+
+  for (var fi = 0; fi < features.length; fi++) {
+    var feat = asFeature(features[fi]);
+    if (!feat) continue;
+    var cid = featureIdOf(feat);
+    var ckey = cid != null ? String(cid) : null;
+    if (ckey && nestedUnderGroup[ckey]) continue;
+    if (ckey && emitted[ckey]) continue;
+
+    if (isGroupHeadFeature(feat)) {
+      emitFeat(feat, level, pathPrefix, treeChildren);
+      continue;
+    }
+
+    if (!isStructureMemberFeature(feat) && !mfgRoot) continue;
+    if (!isComponentFeature(feat) && !featureHasRefModel(feat) && !mfgRoot) continue;
+    if (isGroupedMemberFeature(feat) && ckey && nestedUnderGroup[ckey]) continue;
+
+    emitFeat(feat, level, pathPrefix, treeChildren);
+  }
+}
+
+function isCrossSectionFeature(feat) {
+  if (!feat) return false;
+  try {
+    if (
+      typeof pfcFeatureType !== "undefined" &&
+      pfcFeatureType.FEATTYPE_CROSS_SECTION != null &&
+      feat.FeatType === pfcFeatureType.FEATTYPE_CROSS_SECTION
+    ) {
+      return true;
+    }
+  } catch (e) {}
+  var lab = "";
+  try {
+    lab = String(feat.FeatTypeName || "");
+  } catch (e2) {}
+  if (!lab) {
+    try {
+      lab = enumString(feat.FeatType) || "";
+    } catch (e3) {}
+  }
+  lab = String(lab).toUpperCase().replace(/[\s\-]+/g, "_");
+  return /CROSS_?SEC|X_?SEC|XSECTION/.test(lab);
+}
+
+/** Model cross-sections for end-of-list GROUP (only when any exist). */
+function listModelCrossSections(solid) {
+  var out = [];
+  var seen = {};
+  if (!solid) return out;
+
+  function pushRow(name, id, xsecType) {
+    if (!name) return;
+    var key = String(name).toLowerCase();
+    if (seen[key]) return;
+    seen[key] = true;
+    out.push({
+      name: String(name),
+      id: id != null ? id : null,
+      xsecType: xsecType || "Cross Section"
+    });
+  }
+
+  try {
+    var listed = null;
+    if (typeof solid.ListCrossSections === "function") {
+      listed = solid.ListCrossSections();
+    } else if (solid.ListCrossSections != null) {
+      listed = solid.ListCrossSections;
+    }
+    if (listed != null) {
+      var xsItems = featureItems(listed);
+      for (var xi = 0; xi < xsItems.length; xi++) {
+        var xs = xsItems[xi];
+        if (!xs) continue;
+        var xn = "";
+        try {
+          if (typeof xs.GetName === "function") xn = String(xs.GetName() || "");
+          else if (xs.Name != null) xn = String(xs.Name);
+        } catch (eN) {}
+        pushRow(xn, featureIdOf(xs), "Cross Section");
+      }
+      if (out.length) return out;
+    }
+  } catch (eList) {}
+
+  var feats = [];
+  try {
+    if (
+      typeof solid.ListFeaturesByType === "function" &&
+      typeof pfcFeatureType !== "undefined" &&
+      pfcFeatureType.FEATTYPE_CROSS_SECTION != null
+    ) {
+      try {
+        feats = featureItems(solid.ListFeaturesByType(false, pfcFeatureType.FEATTYPE_CROSS_SECTION));
+      } catch (e1) {
+        try {
+          feats = featureItems(solid.ListFeaturesByType(pfcFeatureType.FEATTYPE_CROSS_SECTION));
+        } catch (e2) {}
+      }
+    }
+  } catch (eT) {}
+  if (!feats.length) {
+    try {
+      feats = listStructureFeatures(solid, true);
+    } catch (eF) {}
+  }
+  for (var fi = 0; fi < feats.length; fi++) {
+    var f = asFeature(feats[fi]);
+    if (!isCrossSectionFeature(f)) continue;
+    var fn = featureStoredName(f);
+    if (!fn) {
+      try {
+        fn = String(f.Name || "");
+      } catch (eNm) {}
+    }
+    var ftype = "";
+    try {
+      ftype = String(f.FeatTypeName || "") || "Cross Section";
+    } catch (eFt) {
+      ftype = "Cross Section";
+    }
+    pushRow(fn, featureIdOf(f), ftype);
+  }
+  return out;
+}
+
+function appendCrossSectionStructureRows(flat, treeChildren, solid) {
+  var xsecs = listModelCrossSections(solid);
+  if (!xsecs.length) return;
+  flat.push({
+    name: "Model cross-sections",
+    id: null,
+    type: "GROUP",
+    level: 1,
+    status: "ACTIVE",
+    suppressed: false,
+    path: "xsec:root",
+    subType: "CROSS_SECTION"
+  });
+  var gnode = {
+    name: "Model cross-sections",
+    id: null,
+    type: "GROUP",
+    status: "ACTIVE",
+    suppressed: false,
+    children: []
+  };
+  treeChildren.push(gnode);
+  for (var i = 0; i < xsecs.length; i++) {
+    var xs = xsecs[i];
+    var path = "xsec:root/xsec:" + xs.name;
+    flat.push({
+      name: xs.name,
+      id: xs.id,
+      type: "CROSS_SECTION",
+      level: 2,
+      status: "ACTIVE",
+      suppressed: false,
+      path: path,
+      subType: xs.xsecType || "Cross Section"
+    });
+    gnode.children.push({
+      name: xs.name,
+      id: xs.id,
+      type: "CROSS_SECTION",
+      status: "ACTIVE",
+      suppressed: false,
+      children: []
+    });
+  }
+}
+
+function listSessionAssemblyStructure() {
+  var am = activeModel();
+  if (am.error) return { ok: false, error: am.error };
+  var session = am.session;
+  var model = am.model;
+  var fileName = "";
+  try {
+    fileName = String(model.FileName || "");
+  } catch (e) {
+    fileName = "";
+  }
+  fileName = logicalFileName(fileName) || fileName;
+
+  if (!isAssemblyModel(model, fileName)) {
+    return {
+      ok: false,
+      error: "Active model is not an assembly or manufacturing model. Open a .asm or .mfg in Creo first.",
+      fileName: fileName
+    };
+  }
+
+  var flat = [];
+  var treeChildren = [];
+  var rootKey = String(fileName || "").toLowerCase();
+  var visited = {};
+  if (rootKey) visited[rootKey] = true;
+  walkAssemblyStructure(model, session, 1, MAX_STRUCTURE_DEPTH, "", visited, flat, treeChildren);
+
+  var solid = resolveStructureSolid(model, session);
+  appendCrossSectionStructureRows(flat, treeChildren, solid);
+
+  var rootType = rootStructureType(model, fileName);
+  var tree = [
+    {
+      name: fileName || (rootType === "MFG" ? "manufacturing" : "assembly"),
+      id: null,
+      type: rootType,
+      status: "ACTIVE",
+      suppressed: false,
+      children: treeChildren
+    }
+  ];
+
+  return {
+    ok: true,
+    fileName: fileName,
+    componentCount: flat.length,
+    components: flat,
+    tree: tree
+  };
+}
