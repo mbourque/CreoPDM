@@ -12511,10 +12511,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           </tr>`;
         })
         .join("");
-      host.innerHTML = `<table class="grid" id="where-used-table">
+      host.innerHTML = `<div class="table-wrap"><table class="grid inventory-table" id="where-used-table">
         <thead><tr><th>Filename</th><th>Type</th><th>Rev</th><th>Qty</th><th>Relation</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table>`;
+      </table></div>`;
     } catch (err) {
       if (host) {
         host.innerHTML = `<p class="muted">Could not load Where Used (${escapeHtml(err?.message || "error")}).</p>`;

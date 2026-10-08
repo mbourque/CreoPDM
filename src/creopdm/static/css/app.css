@@ -1819,11 +1819,26 @@ body.is-file-drag #file-drop-overlay {
 .detail .grid {
   font-size: inherit;
 }
-.detail .grid th {
-  font-size: inherit;
-  font-weight: 650;
-  text-transform: none;
-  letter-spacing: normal;
+/* Inventory chrome (Features / Structure / History / …): keep probe-style headers. */
+.detail .inventory-table th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: #f3f6f8;
+}
+/* Sort glyphs sit in padding — do not push first-column labels off the header text. */
+.detail .inventory-table th[data-sort] {
+  position: relative;
+  padding-right: 1.35rem;
+}
+.detail .inventory-table th[data-sort]::after {
+  position: absolute;
+  right: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
 }
 .detail .muted,
 .detail .muted.small {

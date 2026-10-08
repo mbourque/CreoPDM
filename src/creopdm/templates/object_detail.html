@@ -49,10 +49,8 @@
 {% macro bom_table_rows(nodes, depth=0) %}
   {% for node in nodes %}
   <tr class="{% if node.dependency_type == 'ASSEMBLY_ROOT' %}is-root{% endif %}">
-    <td class="filename-cell">
-      <span class="bom-indent" style="padding-left: {{ depth * 1.15 }}rem">
-        {{ bom_name_link(node) }}
-      </span>
+    <td class="inv-name filename-cell" style="--inv-depth: {{ depth }};">
+      {{ bom_name_link(node) }}
     </td>
     <td>{% if node.dependency_type == 'ASSEMBLY_ROOT' %}—{% else %}{{ node.quantity|bom_qty }}{% endif %}</td>
     <td>{% if node.dependency_type == 'ASSEMBLY_ROOT' %}Assembly{% else %}{{ node.dependency_type }}{% endif %}</td>
@@ -239,7 +237,8 @@
   {% if is_creo %}
   <section class="tab-panel" id="panel-parameters" hidden>
     {% if metadata.parameters %}
-    <table class="grid">
+    <div class="table-wrap">
+    <table class="grid inventory-table">
       <thead>
         <tr>
           <th>Name</th>
@@ -261,6 +260,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}
     <p class="muted">No parameters captured yet. Open the model in Creo and Check In / Add while it is in session.</p>
     {% endif %}
@@ -272,7 +272,8 @@
     {% if materials.current or materials.names %}
     {% set assigned = (materials.current or "")|string %}
     {% set assigned_key = assigned|lower %}
-    <table class="grid">
+    <div class="table-wrap">
+    <table class="grid inventory-table">
       <thead><tr><th>Material</th></tr></thead>
       <tbody>
         {% set ns = namespace(found=false) %}
@@ -290,6 +291,7 @@
         {% endif %}
       </tbody>
     </table>
+    </div>
     {% else %}
     <p class="muted">No materials captured yet. Open the part in Creo and Check In / Add while it is in session.</p>
     {% endif %}
@@ -321,8 +323,8 @@
 
   {% if show_family_tab %}
   <section class="tab-panel" id="panel-family" hidden>
-    <div class="table-scroll">
-      <table class="grid family-table">
+    <div class="table-wrap">
+      <table class="grid inventory-table family-table">
         <thead>
           <tr>
             <th>Instance</th>
@@ -446,7 +448,8 @@
       <span class="bom-legend-in">Linked names</span> are in this product (click to open).
       <span class="bom-legend-out">Plain names</span> are not in the product yet.
     </p>
-    <table class="grid">
+    <div class="table-wrap">
+    <table class="grid inventory-table">
       <thead>
         <tr>
           <th>Filename</th>
@@ -458,8 +461,10 @@
         {{ bom_table_rows(bom) }}
       </tbody>
     </table>
+    </div>
     {% elif metadata.dependencies %}
-    <table class="grid">
+    <div class="table-wrap">
+    <table class="grid inventory-table">
       <thead>
         <tr>
           <th>Filename</th>
@@ -477,6 +482,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}
     <p class="muted">No BOM captured yet. Open the assembly in Creo and Check In / Add while it is in session.</p>
     {% endif %}
@@ -491,7 +497,8 @@
            data-lazy-where-used="1">
     <div id="where-used-host">
     {% if where_used %}
-    <table class="grid" id="where-used-table">
+    <div class="table-wrap">
+    <table class="grid inventory-table" id="where-used-table">
       <thead>
         <tr>
           <th>Filename</th>
@@ -518,6 +525,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     <p class="muted small" id="where-used-scan-hint">Scanning vault for more parents…</p>
     {% elif is_top_level_assembly %}
     <p class="muted" id="where-used-empty">No parent assemblies (Top Level).</p>
@@ -594,8 +602,8 @@
       {% endif %}
     </p>
     {% endif %}
-    <div class="table-scroll">
-      <table class="grid" id="history-files-table">
+    <div class="table-wrap">
+      <table class="grid inventory-table" id="history-files-table">
         <thead>
           <tr>
             <th data-sort="rev" aria-sort="none" title="Sort by revision. Click again to reverse.">Rev</th>

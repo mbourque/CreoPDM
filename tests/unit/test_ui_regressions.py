@@ -1284,6 +1284,51 @@ def test_inventory_name_column_keeps_grid_left_padding():
     assert "never set padding-left: 0" in css
 
 
+def test_details_data_tabs_use_inventory_table_chrome():
+    """Parameters/History/BOM/… share Features/Structure table-wrap + inventory-table."""
+    detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(
+        encoding="utf-8"
+    )
+    css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    script = (ROOT / "src" / "creopdm" / "static" / "js" / "app.js").read_text(
+        encoding="utf-8"
+    )
+    for panel in (
+        'id="panel-parameters"',
+        'id="panel-materials"',
+        'id="panel-family"',
+        'id="panel-bom"',
+        'id="panel-where-used"',
+        'id="panel-history"',
+        'id="panel-features"',
+        'id="panel-structure"',
+    ):
+        assert panel in detail, panel
+    assert detail.count("inventory-table") >= 6
+    assert detail.count('class="table-wrap"') >= 6
+    assert 'id="history-files-table"' in detail
+    hist = _between(detail, 'id="panel-history"', "</article>")
+    assert "table-wrap" in hist
+    assert "inventory-table" in hist
+    assert 'id="history-files-table"' in hist
+    assert "table-scroll" not in hist
+    params_chunk = detail.split('id="panel-parameters"', 1)[1].split("</section>", 1)[0]
+    assert "table-wrap" in params_chunk and "inventory-table" in params_chunk
+    assert ".detail .inventory-table th" in css
+    assert "text-transform: uppercase" in _between(
+        css, ".detail .inventory-table th {", ".detail .inventory-table th[data-sort]"
+    )
+    assert "position: absolute" in _between(
+        css,
+        ".detail .inventory-table th[data-sort]::after {",
+        ".detail .muted",
+    )
+    assert 'grid inventory-table" id="where-used-table"' in script
+    assert "<div class=\"table-wrap\">" in script or "<div class='table-wrap'>" in script or "table-wrap" in script
+
+
 def test_details_overview_dedupes_identity_and_unifies_fonts():
     """Overview drops header duplicates and Details tabs share one UI font."""
     detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(
@@ -1350,9 +1395,10 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert ".detail a.btn-primary" in css
     assert "color: #fff" in _between(css, ".detail a.btn-primary", ".detail a.btn-danger")
     assert ".detail .bom-legend-in" in css
-    # One content size on Details — kv/grid inherit, not a smaller rem.
+    # One content size on Details — kv inherit; inventory tables share Features chrome.
     assert ".detail .kv" in css and "font-size: inherit" in _between(css, ".detail .kv {", ".detail .kv dt")
-    assert "font-size: inherit" in _between(css, ".detail .grid {", ".detail .grid th")
+    assert "font-size: inherit" in _between(css, ".detail .grid {", "/* Inventory chrome")
+    assert ".detail .inventory-table th" in css
     # Detail tables no longer force mono class on every value cell.
     assert 'td class="mono"' not in detail
     assert 'th class="mono"' not in detail
