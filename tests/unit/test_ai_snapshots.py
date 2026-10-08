@@ -29,6 +29,39 @@ DETAIL_HTML = ROOT / "src" / "creopdm" / "templates" / "object_detail.html"
 DOCS = ROOT / "docs" / "user-interactions.md"
 
 
+def test_compare_outline_never_leaves_bare_dimension_value():
+    """Unitless dims must not look like bare numbers (Ask AI invents deg)."""
+    from creopdm.ai_prompts import format_snapshot_compare_text, prepare_snapshot_for_compare
+
+    prepared = prepare_snapshot_for_compare(
+        {
+            "identity": {"filename": "wedge.drw", "model_type": "DRAWING"},
+            "dimensions": [
+                {"symbol": "add2", "value": 13, "units": "deg", "dim_type": "ANGULAR"},
+                {"symbol": "add6", "value": 90, "units": "", "dim_type": "LINEAR"},
+            ],
+            "parameters": [{"name": "PTC_UNITS_LENGTH", "value": "in"}],
+        }
+    )
+    text = format_snapshot_compare_text(prepared)
+    assert "add2 = 13 deg" in text
+    assert "add6 = 90 in" in text
+    bare = format_snapshot_compare_text(
+        prepare_snapshot_for_compare(
+            {
+                "identity": {"filename": "wedge.drw", "model_type": "DRAWING"},
+                "dimensions": [
+                    {"symbol": "add9", "value": 90, "units": "", "dim_type": ""},
+                ],
+            }
+        )
+    )
+    assert "add9 = 90 [unit unknown]" in bare
+    assert "Never leave a bare number" in (
+        ROOT / "src" / "creopdm" / "ai_prompts.py"
+    ).read_text(encoding="utf-8")
+
+
 def test_feature_outline_lines_include_creo_id():
     """Compare outlines always carry Creo feature id so the UI can align by id."""
     text = format_snapshot_compare_text(
@@ -173,6 +206,8 @@ def test_drawing_ai_snapshot_skips_solid_walk():
     assert "creoUnitsFromSnapshotParams(" in text
     assert 'dim.units = angleUnit || "deg"' in text
     assert "Never assign length units to ANGULAR" in text
+    assert "Drawings often have null snapshot.units" in text
+    assert "else if (lengthUnit)" in text
     read_dim = text.split("function creoReadDimensionRow(", 1)[1].split(
         "function creoGatherFeatureDimensions(", 1
     )[0]

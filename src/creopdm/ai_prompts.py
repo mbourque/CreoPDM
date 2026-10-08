@@ -419,6 +419,8 @@ def prepare_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, A
                     row["feature_name"] = owner
             stamped.append(row)
         out["dimensions"] = stamped
+    # Drawings / older snaps often store dims with empty units — fill before outline.
+    _fill_missing_dimension_units(out)
     return out
 
 
@@ -562,6 +564,62 @@ def _dimension_owner_label(
     return ""
 
 
+def _principal_length_angle_units(snapshot: dict[str, Any]) -> tuple[str, str]:
+    """Length / angle unit names from identity or PTC_UNITS_* (drawings often lack units)."""
+    length = ""
+    angle = ""
+    for src in (
+        snapshot.get("units"),
+        (snapshot.get("identity") or {}).get("units")
+        if isinstance(snapshot.get("identity"), dict)
+        else None,
+    ):
+        if not isinstance(src, dict):
+            continue
+        if not length:
+            length = str(src.get("length") or "").strip()
+        if not angle:
+            angle = str(src.get("angle") or "").strip()
+    params = snapshot.get("parameters")
+    if isinstance(params, list):
+        for param in params:
+            if not isinstance(param, dict):
+                continue
+            name = str(param.get("name") or "").strip().upper()
+            val = str(param.get("value") or "").strip()
+            if not val:
+                continue
+            if name == "PTC_UNITS_LENGTH" and not length:
+                length = val
+            elif name in {"PTC_UNITS_ANGLE", "PTC_UNIT_ANGLE"} and not angle:
+                angle = val
+    return length, angle
+
+
+def _fill_missing_dimension_units(snapshot: dict[str, Any]) -> None:
+    """Backfill empty dim.units so Compare/Ask AI never shows a bare number."""
+    dims = snapshot.get("dimensions")
+    if not isinstance(dims, list) or not dims:
+        return
+    length, angle = _principal_length_angle_units(snapshot)
+    filled: list[Any] = []
+    for dim in dims:
+        if not isinstance(dim, dict):
+            filled.append(dim)
+            continue
+        row = dict(dim)
+        if str(row.get("units") or "").strip():
+            filled.append(row)
+            continue
+        dt = str(row.get("dim_type") or "").strip().upper()
+        if "ANGULAR" in dt or dt == "ANGLE":
+            row["units"] = angle or "deg"
+        elif length:
+            row["units"] = length
+        filled.append(row)
+    snapshot["dimensions"] = filled
+
+
 def _dimension_outline_line(
     dim: dict[str, Any],
     *,
@@ -575,6 +633,13 @@ def _dimension_outline_line(
     piece = f"{symbol} ({owner}) = {value}" if owner else f"{symbol} = {value}"
     if unit:
         piece += f" {unit}"
+    else:
+        # Never leave a bare number — Ask AI invents "deg" from neighboring angles.
+        dt = str(dim.get("dim_type") or "").strip()
+        if dt:
+            piece += f" [{dt}]"
+        else:
+            piece += " [unit unknown]"
     limits = dim.get("tolerance_limits")
     if isinstance(limits, dict) and limits:
         lo = limits.get("lower", limits.get("min"))

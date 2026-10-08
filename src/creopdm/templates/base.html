@@ -3520,18 +3520,32 @@ function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
     }
     // Dim units from principal length/angle when Creo left Units unbound.
     // Never assign length units to ANGULAR dims (that produced angle: "mm").
-    if (snapshot.units && Array.isArray(snapshot.dimensions)) {
-        var lengthUnit = String(snapshot.units.length || "").trim() || null;
-        var angleUnit = String(snapshot.units.angle || "").trim() || null;
+    // Drawings often have null snapshot.units — still fill from identity / PTC_UNITS_*.
+    if (Array.isArray(snapshot.dimensions) && snapshot.dimensions.length) {
+        var unitSrc = snapshot.units;
+        if (!unitSrc || typeof unitSrc !== "object") {
+            unitSrc = (snapshot.identity && snapshot.identity.units) || null;
+        }
+        unitSrc = creoUnitsFromSnapshotParams(
+            unitSrc,
+            null,
+            snapshot.parameters
+        );
+        var lengthUnit = String(unitSrc.length || "").trim() || null;
+        var angleUnit = String(unitSrc.angle || "").trim() || null;
+        if (!snapshot.units || typeof snapshot.units !== "object") {
+            snapshot.units = unitSrc;
+        }
         for (var di = 0; di < snapshot.dimensions.length; di++) {
             var dim = snapshot.dimensions[di];
             if (!dim || (dim.units != null && String(dim.units).trim())) continue;
             var dt = String(dim.dim_type || "").toUpperCase();
             if (dt.indexOf("ANGULAR") >= 0 || dt === "ANGLE") {
                 dim.units = angleUnit || "deg";
-            } else {
+            } else if (lengthUnit) {
                 dim.units = lengthUnit;
             }
+            // else leave empty — Compare outline tags [dim_type] / [unit unknown]
         }
     }
     return snapshot;
