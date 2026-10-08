@@ -289,12 +289,20 @@ def test_home_page(client):
     assert "function creoFeatureById(" in text
     assert "function creoFeatureTypeEnrichmentMap(" in text
     assert "function creoEnrichSparseFeatureFields(" in text
+    assert "function creoPwlFeatureEnrichmentMap(" in text
+    assert "function creoMergeFeatureEnrichmentMaps(" in text
+    assert "function creoFeatTypeNumeric(" in text
+    assert "function creoListFeaturesByTypeTyped(" in text
     assert "FEATTYPE_HOLE" in text
     assert "GetFeatureById" in text
     # Hole 1 showed as Feature 189 — typed ListFeaturesByType + GetFeatureById.
     assert "Hole 1 is not left as Feature 189" in text
     assert "pwlFeatureInfoGetByID" in text
+    assert "pwlMdlFeaturesGet" in text
     assert "creoFeatureTypeEnrichmentMap(solid)" in text
+    assert "creoPwlFeatureEnrichmentMap" in text
+    assert "wfcWFeature.cast can blank Hole" in text
+    assert "911" in text  # PRO_FEAT_HOLE
     assert "number: regenNum" not in text
     assert "wantFeatureNames = opts.featureNames !== false" in text
     assert "wantNames = opts.featureNames !== false" in text
