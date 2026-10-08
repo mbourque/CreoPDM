@@ -308,29 +308,90 @@ function logicalFileName(filename) {
   return name;
 }
 
+/** Creo often returns the literal "no_name" for unnamed IFX assemble features. */
+function usableComponentLabel(raw) {
+  var text = String(raw == null ? "" : raw).trim();
+  if (!text) return "";
+  var lower = text.toLowerCase();
+  if (lower === "no_name" || lower === "unnamed") return "";
+  return text;
+}
+
+function descrFileName(descr) {
+  if (!descr) return "";
+  var raw = "";
+  try {
+    if (typeof descr.GetFileName === "function") raw = String(descr.GetFileName() || "");
+  } catch (e) {}
+  if (!usableComponentLabel(raw)) {
+    try {
+      raw = String(descr.FileName || "");
+    } catch (e2) {
+      raw = "";
+    }
+  }
+  if (!usableComponentLabel(raw)) {
+    try {
+      var base = "";
+      if (typeof descr.GetBaseName === "function") base = String(descr.GetBaseName() || "");
+      else if (descr.BaseName != null) base = String(descr.BaseName);
+      if (usableComponentLabel(base)) raw = base;
+    } catch (e3) {}
+  }
+  return usableComponentLabel(logicalFileName(raw));
+}
+
+/**
+ * Prefer referenced model tip for COMPONENT rows.
+ * IFX assemble features often GetName() === "no_name" while ModelDescr/GetModel
+ * carry the real .prt/.asm tip — never surface the literal placeholder.
+ */
 function componentModelName(feat) {
   var raw = "";
   try {
-    if (feat && feat.ModelDescr) {
-      var descr = feat.ModelDescr;
-      if (typeof descr.GetFileName === "function") raw = String(descr.GetFileName() || "");
-      else raw = String(descr.FileName || "");
-    }
+    if (feat && feat.ModelDescr) raw = descrFileName(feat.ModelDescr);
   } catch (e) {}
   if (!raw) {
     try {
-      if (feat && typeof feat.GetModel === "function") {
-        var child = feat.GetModel();
-        if (child) raw = String(child.FileName || child.FullName || "");
+      if (feat && typeof feat.GetModelDescr === "function") {
+        raw = descrFileName(feat.GetModelDescr());
       }
     } catch (e2) {}
   }
   if (!raw) {
     try {
-      if (feat && typeof feat.GetName === "function") raw = String(feat.GetName() || "");
+      if (feat && typeof feat.GetModel === "function") {
+        var child = feat.GetModel();
+        if (child) {
+          raw = usableComponentLabel(
+            logicalFileName(String(child.FileName || child.FullName || ""))
+          );
+        }
+      }
     } catch (e3) {}
   }
-  return logicalFileName(raw);
+  if (!raw) {
+    try {
+      if (feat && feat.Model) {
+        raw = usableComponentLabel(
+          logicalFileName(String(feat.Model.FileName || feat.Model.FullName || ""))
+        );
+      }
+    } catch (e4) {}
+  }
+  if (!raw) {
+    try {
+      if (feat && typeof feat.GetName === "function") {
+        raw = usableComponentLabel(feat.GetName());
+      }
+    } catch (e5) {}
+  }
+  if (!raw) {
+    try {
+      if (feat && feat.Name != null) raw = usableComponentLabel(feat.Name);
+    } catch (e6) {}
+  }
+  return raw ? logicalFileName(raw) : "";
 }
 
 function resolveComponentModel(session, feat, filename) {
@@ -767,6 +828,36 @@ function buildGroupMemberMaps(features) {
     groupMemberOrder[gsid2] = gorder2;
   }
 
+  // IFX groups often ListMembers the UDF solids but leave Assemble COMPONENT
+  // features as unclaimed siblings (GetName "no_name") — fold those under the IFX head.
+  for (i = 0; i < features.length; i++) {
+    var head3 = asFeature(features[i]);
+    if (!isGroupHeadFeature(head3)) continue;
+    var gsid3 = featureIdOf(head3);
+    if (gsid3 == null) continue;
+    gsid3 = String(gsid3);
+    var gstored = "";
+    try {
+      gstored = String(featureStoredName(head3) || "").toUpperCase();
+    } catch (eIfx) {
+      gstored = "";
+    }
+    if (!/^IFX_/.test(gstored)) continue;
+    var gorder3 = groupMemberOrder[gsid3] || [];
+    for (var nj3 = i + 1; nj3 < features.length; nj3++) {
+      var next3 = asFeature(features[nj3]);
+      if (!next3) continue;
+      var nid3 = featureIdOf(next3);
+      if (nid3 == null) continue;
+      var nkey3 = String(nid3);
+      if (nestedUnderGroup[nkey3]) continue;
+      if (isGroupHeadFeature(next3)) break;
+      if (!isComponentFeature(next3) && !featureHasRefModel(next3)) break;
+      claim(gsid3, next3, gorder3);
+    }
+    groupMemberOrder[gsid3] = gorder3;
+  }
+
   return { nestedUnderGroup: nestedUnderGroup, groupMemberOrder: groupMemberOrder };
 }
 
@@ -923,12 +1014,15 @@ function featureStoredName(feat) {
   if (!feat) return "";
   try {
     if (typeof feat.GetName === "function") {
-      var gn = feat.GetName();
-      if (gn != null && String(gn) !== "") return String(gn);
+      var gn = usableComponentLabel(feat.GetName());
+      if (gn) return gn;
     }
   } catch (e) {}
   try {
-    if (feat.Name != null && String(feat.Name) !== "") return String(feat.Name);
+    if (feat.Name != null) {
+      var sn = usableComponentLabel(feat.Name);
+      if (sn) return sn;
+    }
   } catch (e2) {}
   return "";
 }
@@ -945,7 +1039,16 @@ function emitComponentRow(
 ) {
   var id = featureIdOf(feat);
   var name = componentModelName(feat);
-  var childModel = name ? resolveComponentModel(session, feat, name) : null;
+  var childModel = resolveComponentModel(session, feat, name);
+  if (!name && childModel) {
+    try {
+      name = usableComponentLabel(
+        logicalFileName(String(childModel.FileName || childModel.FullName || ""))
+      );
+    } catch (eChildNm) {
+      name = "";
+    }
+  }
   var type = "";
   if (name || childModel) {
     type = componentTypeLabel(feat, name, childModel);

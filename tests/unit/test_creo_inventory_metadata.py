@@ -139,6 +139,29 @@ def test_feature_probe_and_inventory_omit_pattern_members():
         assert "emitEntry(pcs[pi], level + 1)" not in body, label
 
 
+def test_assembly_probe_and_inventory_prefer_ref_model_over_no_name():
+    """Probe + app inventory stay in sync: never label structure rows no_name.
+
+    IFX assemble COMPONENTs often GetName() === 'no_name'; labels must prefer
+    ModelDescr/GetModel tip, and unclaimed IFX assemble siblings nest under IFX_*.
+    """
+    probe = (
+        ROOT / "src" / "creopdm" / "static" / "assembly_probe" / "assembly_probe.creojs"
+    ).read_text(encoding="utf-8")
+    asm = (INV_DIR / "assembly.creojs").read_text(encoding="utf-8")
+    for body, label in ((probe, "assembly_probe"), (asm, "creo_inventory/assembly")):
+        assert "function usableComponentLabel(" in body, label
+        assert 'lower === "no_name"' in body, label
+        assert "function descrFileName(" in body, label
+        assert "GetModelDescr" in body, label
+        assert "never surface the literal placeholder" in body, label
+        assert "leave Assemble COMPONENT" in body, label
+        assert 'if (!/^IFX_/.test(gstored)) continue;' in body, label
+        # Must resolve child tip even when componentModelName was empty.
+        assert "if (!name && childModel)" in body, label
+        assert "usableComponentLabel(feat.GetName())" in body, label
+
+
 def test_compare_outline_uses_drawing_inventory():
     text = format_snapshot_compare_text(
         {
