@@ -1747,7 +1747,8 @@ body.is-file-drag #file-drop-overlay {
   font-size: 0.8rem;
   line-height: 1.35;
 }
-/* GitHub-style side-by-side: match / removed / changed / added (new). */
+/* GitHub-style side-by-side: match / removed / changed / added (new).
+   Lines use git unified markers (space / - / +) via formatAiSnapshotDiffLine. */
 .ai-snapshot-line {
   display: block;
   margin: 0;
@@ -1756,6 +1757,7 @@ body.is-file-drag #file-drop-overlay {
   white-space: pre-wrap;
   word-break: break-word;
   box-sizing: border-box;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 .ai-snapshot-line--same {
   background: #e6ffec; /* light green — matching lines */

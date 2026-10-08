@@ -225,6 +225,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "function buildAiSnapshotLineDiff(" in script
     assert "function aiSnapshotLineIdentity(" in script
     assert "function aiSnapshotLinesAlign(" in script
+    assert "function formatAiSnapshotDiffLine(" in script
     assert "function renderAiSnapshotDiffBodies(" in script
     assert "async function renderAiSnapshotCompare(" in script
     assert 'type: "same"' in script
@@ -235,6 +236,9 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "aligned by Creo id" in script
     assert "CUT (95) vs ROUND (146) stay red/blue" in script
     assert "return `feat:${last}`" in script
+    # Git unified markers: - removed, + added, space same (not outline bullets).
+    assert "Git unified-diff markers" in script
+    assert 'marker = side === "new" ? "+" : "-"' in script
     assert "async function fetchAiSnapshotOutline(" in script
     assert "=== ${role} snapshot (${rev}) ===" in script
     assert "function syncAiSnapshotScrollLayout(" in script
@@ -327,6 +331,8 @@ def test_snapshot_tab_template_and_docs():
     assert "OLD" in docs and "NEW" in docs
     assert "light green" in docs and "light blue" in docs
     assert "yellow" in docs
+    assert "git unified" in docs.lower()
+    assert "**`+`**" in docs and "**`-`**" in docs
     assert "Structure/BOM" in docs
     assert "FEATTYPE_COMPONENT" in docs
     assert "prepare_snapshot_for_compare" in docs

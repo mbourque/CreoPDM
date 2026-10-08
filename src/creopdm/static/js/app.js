@@ -12003,10 +12003,31 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return merged;
   }
 
-  function paintAiSnapshotLine(el, kind, text) {
+  function formatAiSnapshotDiffLine(kind, text, side) {
+    /**
+     * Git unified-diff markers (not outline bullets):
+     *   " " context/same · "-" removed/old · "+" added/new
+     * Changed (same id, different text): "-" on OLD, "+" on NEW.
+     */
+    const raw = text == null ? "" : String(text);
+    if (kind === "empty" || raw === "") return "\u00a0";
+    let marker = " ";
+    if (kind === "removed") marker = "-";
+    else if (kind === "added") marker = "+";
+    else if (kind === "changed") marker = side === "new" ? "+" : "-";
+    // Outline list lines: "- body" / "  - └ body" → swap bullet for marker.
+    const list = raw.match(/^(\s*)-\s(.*)$/);
+    if (list) return `${list[1]}${marker} ${list[2]}`;
+    // Already a diff marker (re-paint / copy round-trip).
+    const prior = raw.match(/^(\s*)([+\-])\s(.*)$/);
+    if (prior) return `${prior[1]}${marker} ${prior[3]}`;
+    if (kind === "same" || kind === "plain") return raw;
+    return `${marker} ${raw}`;
+  }
+
+  function paintAiSnapshotLine(el, kind, text, side) {
     el.className = `ai-snapshot-line ai-snapshot-line--${kind}`;
-    const value = text == null || text === "" ? "\u00a0" : String(text);
-    el.textContent = value;
+    el.textContent = formatAiSnapshotDiffLine(kind, text, side);
   }
 
   function renderAiSnapshotDiffBodies(textA, textB) {
@@ -12023,17 +12044,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const elA = document.createElement("div");
       const elB = document.createElement("div");
       if (row.type === "same") {
-        paintAiSnapshotLine(elA, "same", row.oldText);
-        paintAiSnapshotLine(elB, "same", row.newText);
+        paintAiSnapshotLine(elA, "same", row.oldText, "old");
+        paintAiSnapshotLine(elB, "same", row.newText, "new");
       } else if (row.type === "removed") {
-        paintAiSnapshotLine(elA, "removed", row.oldText);
-        paintAiSnapshotLine(elB, "empty", "");
+        paintAiSnapshotLine(elA, "removed", row.oldText, "old");
+        paintAiSnapshotLine(elB, "empty", "", "new");
       } else if (row.type === "added") {
-        paintAiSnapshotLine(elA, "empty", "");
-        paintAiSnapshotLine(elB, "added", row.newText);
+        paintAiSnapshotLine(elA, "empty", "", "old");
+        paintAiSnapshotLine(elB, "added", row.newText, "new");
       } else {
-        paintAiSnapshotLine(elA, "changed", row.oldText);
-        paintAiSnapshotLine(elB, "changed", row.newText);
+        paintAiSnapshotLine(elA, "changed", row.oldText, "old");
+        paintAiSnapshotLine(elB, "changed", row.newText, "new");
       }
       fragA.appendChild(elA);
       fragB.appendChild(elB);
