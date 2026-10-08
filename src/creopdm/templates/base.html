@@ -1892,48 +1892,99 @@ function creoFeatureAssignedName(feat) {
     }
     return "";
 }
+function creoEnumValue(value) {
+    /** Creo.JS enum .value() — compare FEATTYPE_HOLE via ints, not === on objects. */
+    if (value == null) return null;
+    try {
+        if (typeof value.value === "function") {
+            var v = value.value();
+            if (typeof v === "number" && isFinite(v)) return v;
+        }
+    } catch (errV) {}
+    try {
+        if (typeof value === "number" && isFinite(value)) return value;
+    } catch (errN) {}
+    try {
+        var asNum = +value;
+        if (typeof asNum === "number" && isFinite(asNum)) return asNum;
+    } catch (errPlus) {}
+    return null;
+}
+function creoFeatureTypeLabelFromFeatType(ft) {
+    /**
+     * Creo.JS FeatType is an enum object. Prefer .string() (FEATTYPE_HOLE),
+     * not String(ft) which becomes "[object Object]" and blanks the Type column.
+     *   feature.FeatType.string().replace(/^FEATTYPE_/, "").replace(/_/g, " ")
+     */
+    if (ft == null) return "";
+    try {
+        var raw = "";
+        if (typeof ft.string === "function") {
+            raw = String(ft.string() || "").trim();
+        }
+        if (!raw || raw === "[object Object]") {
+            raw = String(creoEnumName(ft) || "").trim();
+        }
+        if (!raw || raw === "[object Object]") return "";
+        var label = String(raw)
+            .replace(/^FEATTYPE_/i, "")
+            .replace(/_/g, " ")
+            .trim();
+        if (!label || /^\d+$/.test(label)) return "";
+        return label.toUpperCase();
+    } catch (errLab) {
+        return "";
+    }
+}
+function creoFeatureIsComponentType(feat) {
+    if (!feat || typeof pfcFeatureType === "undefined" || pfcFeatureType.FEATTYPE_COMPONENT == null) {
+        return false;
+    }
+    try {
+        var ft = feat.FeatType;
+        if (ft == null) return false;
+        if (ft === pfcFeatureType.FEATTYPE_COMPONENT || ft == pfcFeatureType.FEATTYPE_COMPONENT) {
+            return true;
+        }
+        var a = creoEnumValue(ft);
+        var b = creoEnumValue(pfcFeatureType.FEATTYPE_COMPONENT);
+        return a != null && b != null && a === b;
+    } catch (errComp) {
+        return false;
+    }
+}
+function creoFeatureById(solid, featureId) {
+    /** Bound handle — ListFeaturesByType items can lack FeatType until GetFeatureById. */
+    if (!solid || featureId == null) return null;
+    try {
+        var fid = parseInt(featureId, 10);
+        if (isNaN(fid)) return null;
+        var got = null;
+        if (creoHasCallable(solid, "GetFeatureById") || typeof solid.GetFeatureById !== "undefined") {
+            got = solid.GetFeatureById(fid);
+        }
+        if (!got && (creoHasCallable(solid, "GetFeatureByID") || typeof solid.GetFeatureByID !== "undefined")) {
+            got = solid.GetFeatureByID(fid);
+        }
+        return got || null;
+    } catch (errById) {
+        return null;
+    }
+}
 function creoFeatureTypeFromEnum(feat) {
-    /** Map FeatType when FeatTypeName is empty. */
+    /** Type column from FeatType.string() when FeatTypeName is empty (Hole → HOLE). */
     if (!feat) return "";
     try {
         var ft = feat.FeatType;
         if (ft == null) return "";
-        if (typeof pfcFeatureType !== "undefined") {
-            var map = [
-                ["FEATTYPE_HOLE", "HOLE"],
-                ["FEATTYPE_ROUND", "ROUND"],
-                ["FEATTYPE_CHAMFER", "CHAMFER"],
-                ["FEATTYPE_SHELL", "SHELL"],
-                ["FEATTYPE_PATTERN", "PATTERN"],
-                ["FEATTYPE_PROTRUSION", "PROTRUSION"],
-                ["FEATTYPE_CUT", "CUT"],
-                ["FEATTYPE_DATUM_PLANE", "DATUM PLANE"],
-                ["FEATTYPE_COORD_SYS", "COORDINATE SYSTEM"],
-                ["FEATTYPE_CURVE", "CURVE"],
-                ["FEATTYPE_COMPONENT", "COMPONENT"]
-            ];
-            for (var m = 0; m < map.length; m++) {
-                var key = map[m][0];
-                if (pfcFeatureType[key] != null && (ft === pfcFeatureType[key] || ft == pfcFeatureType[key])) {
-                    return map[m][1];
-                }
-            }
-        }
-        var enumName = creoEnumName(ft);
-        if (enumName) {
-            var u = String(enumName).toUpperCase();
-            if (u.indexOf("FEATTYPE_") === 0) u = u.substring(9);
-            if (u && u !== "[OBJECT OBJECT]" && !/^\d+$/.test(u)) {
-                return u.replace(/_/g, " ");
-            }
-        }
+        return creoFeatureTypeLabelFromFeatType(ft);
     } catch (errFt) {}
     return "";
 }
 function creoFeatureTypeName(feat) {
     /**
-     * Read FeatTypeName from the ListFeaturesByType item (raw first).
-     * Fall back to GetFeatTypeName / FeatType enum (Hole → HOLE).
+     * FeatTypeName when set; else FeatType.string() (Creo.JS enum — not a lookup map).
+     * ListFeaturesByType items may need GetFeatureById before FeatType is readable.
      */
     if (!feat) return "";
     var casted = null;
@@ -2037,21 +2088,24 @@ function creoGatherFeatures(model, dbg, session, options) {
         if (dbg) dbg.listed_count = features.length;
         for (var i = 0; i < features.length; i++) {
             try {
-                // Use the list item as returned — read name/type on it directly.
+                // ListFeaturesByType(true, null) item — rebind via GetFeatureById
+                // when FeatType is sparse (Hole showed as Feature 189 with blank Type).
                 var feat = features[i];
                 if (!feat) continue;
+                var id = creoFeatureNumericId(feat);
+                var typeName = creoFeatureTypeName(feat);
+                if (!typeName && id != null) {
+                    var byId = creoFeatureById(solid, id);
+                    if (byId) {
+                        feat = byId;
+                        typeName = creoFeatureTypeName(feat);
+                    }
+                }
                 try {
                     if (typeof feat.IsVisible !== "undefined" && feat.IsVisible === false) continue;
                 } catch (errVis) {}
                 // Skip assembly component features here — those belong in BOM/structure.
-                try {
-                    if (typeof pfcFeatureType !== "undefined"
-                        && (feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT
-                            || feat.FeatType == pfcFeatureType.FEATTYPE_COMPONENT)) {
-                        continue;
-                    }
-                } catch (errComp) {}
-                var typeName = creoFeatureTypeName(feat);
+                if (creoFeatureIsComponentType(feat)) continue;
                 var subType = "";
                 try { subType = String(feat.FeatSubType || "").trim(); } catch (errS) { subType = ""; }
                 if (!subType) {
@@ -2060,7 +2114,6 @@ function creoGatherFeatures(model, dbg, session, options) {
                         if (casted) subType = String(casted.FeatSubType || "").trim();
                     } catch (errSubCast) {}
                 }
-                var id = creoFeatureNumericId(feat);
                 var name = "";
                 if (wantNames) {
                     try {
@@ -2487,11 +2540,19 @@ function creoBuildDimensionOwnerIndex(solid, patternLabelById, errors) {
     return { byDimId: byDimId, bySymbol: bySymbol, labelByFeatId: labelByFeatId };
 }
 function creoEnumName(value) {
+    // Creo.JS enums: use .string() — String(enum) is often "[object Object]".
     if (value == null) return "";
     try {
-        if (typeof value.string === "function") return String(value.string() || "");
+        if (typeof value.string === "function") {
+            var viaString = String(value.string() || "").trim();
+            if (viaString && viaString !== "[object Object]") return viaString;
+        }
     } catch (errS) {}
-    try { return String(value); } catch (errT) { return ""; }
+    try {
+        var text = String(value);
+        if (text && text !== "[object Object]") return text;
+    } catch (errT) {}
+    return "";
 }
 function creoOwnerFeatureHandle(dim) {
     /**
@@ -3145,14 +3206,8 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                 try {
                     var pfeat = featItems[pi];
                     if (!pfeat || !creoFeatureIsVisibleForSnapshot(pfeat)) continue;
-                    try {
-                        if (typeof pfcFeatureType !== "undefined"
-                            && pfeat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
-                            continue;
-                        }
-                    } catch (errPc) {}
-                    var pType = "";
-                    try { pType = String(pfeat.FeatTypeName || "").toUpperCase(); } catch (errPt) {}
+                    if (creoFeatureIsComponentType(pfeat)) continue;
+                    var pType = String(creoFeatureTypeName(pfeat) || "").toUpperCase();
                     var pName = "";
                     try { pName = String(creoFeatureAssignedName(pfeat) || "").toUpperCase(); } catch (errPn) {}
                     if (pType !== "PATTERN" && pName !== "PATTERN") continue;
@@ -3172,21 +3227,22 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                     // Same ListFeaturesByType(true, null) items as Features tab.
                     var feat = featItems[i];
                     if (!feat) continue;
+                    var id = creoFeatureNumericId(feat);
+                    var typeName = creoFeatureTypeName(feat);
+                    if (!typeName && id != null) {
+                        var byIdSnap = creoFeatureById(solid, id);
+                        if (byIdSnap) {
+                            feat = byIdSnap;
+                            typeName = creoFeatureTypeName(feat);
+                        }
+                    }
                     // Invisible / internal construction features (e.g. unnamed
                     // DATUM PLANE owned by a hole pattern) are not in the model
                     // tree — including them made Ask AI report fake plane deletes.
                     if (!creoFeatureIsVisibleForSnapshot(feat)) continue;
-                    try {
-                        if (typeof pfcFeatureType !== "undefined"
-                            && (feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT
-                                || feat.FeatType == pfcFeatureType.FEATTYPE_COMPONENT)) {
-                            continue;
-                        }
-                    } catch (errComp) {}
-                    var typeName = creoFeatureTypeName(feat);
+                    if (creoFeatureIsComponentType(feat)) continue;
                     var subType = "";
                     try { subType = String(feat.FeatSubType || "").trim(); } catch (errS) {}
-                    var id = creoFeatureNumericId(feat);
                     var name = "";
                     if (wantNames) {
                         try { name = creoFeatureAssignedName(feat); } catch (errNm) { name = ""; }

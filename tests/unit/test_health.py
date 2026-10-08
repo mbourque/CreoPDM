@@ -286,19 +286,27 @@ def test_home_page(client):
     assert "creoFeatureFallbackName(typeName, subType)" in text
     assert "function creoFeatureTypeName(" in text
     assert "function creoFeatureTypeFromEnum(" in text
+    assert "function creoFeatureTypeLabelFromFeatType(" in text
+    assert "function creoFeatureById(" in text
+    assert "function creoEnumValue(" in text
     # Creo.JS Features list: ListFeaturesByType(true, null) = public features, every type.
     assert "ListFeaturesByType(true, null)" in text
     assert "VisibleOnly" in text
     assert "public features only" in text
+    # FeatType is an enum object — .string() / .value(), not String(ft) or a lookup map.
+    assert "FeatType.string()" in text or "ft.string()" in text
+    assert 'replace(/^FEATTYPE_/' in text or ".replace(/^FEATTYPE_/" in text
+    assert "GetFeatureById" in text
+    assert "Hole showed as Feature 189" in text
     gather_fn = text.split("function creoGatherFeatures(", 1)[1].split(
         "function creoFeatureStatusLabel(", 1
     )[0]
     assert "ListFeaturesByType(true, null)" in gather_fn
+    assert "creoFeatureById(solid, id)" in gather_fn
     assert "pwlFeatureInfoGetByID" not in gather_fn
     assert "creoFeatureTypeEnrichmentMap" not in text
     assert "creoEnrichSparseFeatureFields" not in text
     assert "creoPwlFeatureEnrichmentMap" not in text
-    assert "FEATTYPE_HOLE" in text
     assert "number: regenNum" not in text
     assert "wantFeatureNames = opts.featureNames !== false" in text
     assert "wantNames = opts.featureNames !== false" in text
@@ -312,9 +320,9 @@ def test_home_page(client):
     assert "pwlFeatureInfoGetByID" not in text
     assert "pwlMdlFeaturesGet" not in text
     assert 'typeName + " " + regenNum' not in text
-    # Read list-item properties before cast.
+    # Read list-item properties before cast; rebind when FeatType sparse.
     assert "Raw list item first" in text
-    assert "Use the list item as returned" in text
+    assert "GetFeatureById" in gather_fn
     assert "errFeat" in text
     assert "errFeatGather" in text
     assert "Do not RetrieveModel here" in text
