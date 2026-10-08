@@ -285,24 +285,20 @@ def test_home_page(client):
     assert "name.toLowerCase() === String(subType).trim().toLowerCase()" in text
     assert "creoFeatureFallbackName(typeName, subType)" in text
     assert "function creoFeatureTypeName(" in text
-    assert "function creoFeatureInfoFromScript(" in text
-    assert "function creoFeatureById(" in text
-    assert "function creoFeatureTypeEnrichmentMap(" in text
-    assert "function creoEnrichSparseFeatureFields(" in text
-    assert "function creoPwlFeatureEnrichmentMap(" in text
-    assert "function creoMergeFeatureEnrichmentMaps(" in text
-    assert "function creoFeatTypeNumeric(" in text
-    assert "function creoListFeaturesByTypeTyped(" in text
+    assert "function creoFeatureTypeFromEnum(" in text
+    # Creo.JS Features list: ListFeaturesByType(true, null) = public features, every type.
+    assert "ListFeaturesByType(true, null)" in text
+    assert "VisibleOnly" in text
+    assert "public features only" in text
+    gather_fn = text.split("function creoGatherFeatures(", 1)[1].split(
+        "function creoFeatureStatusLabel(", 1
+    )[0]
+    assert "ListFeaturesByType(true, null)" in gather_fn
+    assert "pwlFeatureInfoGetByID" not in gather_fn
+    assert "creoFeatureTypeEnrichmentMap" not in text
+    assert "creoEnrichSparseFeatureFields" not in text
+    assert "creoPwlFeatureEnrichmentMap" not in text
     assert "FEATTYPE_HOLE" in text
-    assert "GetFeatureById" in text
-    # Hole 1 showed as Feature 189 — typed ListFeaturesByType + GetFeatureById.
-    assert "Hole 1 is not left as Feature 189" in text
-    assert "pwlFeatureInfoGetByID" in text
-    assert "pwlMdlFeaturesGet" in text
-    assert "creoFeatureTypeEnrichmentMap(solid)" in text
-    assert "creoPwlFeatureEnrichmentMap" in text
-    assert "wfcWFeature.cast can blank Hole" in text
-    assert "911" in text  # PRO_FEAT_HOLE
     assert "number: regenNum" not in text
     assert "wantFeatureNames = opts.featureNames !== false" in text
     assert "wantNames = opts.featureNames !== false" in text
@@ -313,7 +309,12 @@ def test_home_page(client):
     assert 'typeof value === "object"' not in name_text_fn
     assert "Do not reject typeof===\"object\"" in name_text_fn
     assert "pwlFeatureNameGetByID" not in text
+    assert "pwlFeatureInfoGetByID" not in text
+    assert "pwlMdlFeaturesGet" not in text
     assert 'typeName + " " + regenNum' not in text
+    # Read list-item properties before cast.
+    assert "Raw list item first" in text
+    assert "Use the list item as returned" in text
     assert "errFeat" in text
     assert "errFeatGather" in text
     assert "Do not RetrieveModel here" in text

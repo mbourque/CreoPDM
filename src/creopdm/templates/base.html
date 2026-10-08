@@ -1859,14 +1859,15 @@ function creoFeatureNameText(value) {
     }
 }
 function creoFeatureAssignedName(feat) {
-    // Prefer feature.name (Creo.JS / what works in session):
+    // Prefer feature.name on the ListFeaturesByType item (Creo.JS):
     //   const name = feature.name;
-    // Then GetName / Name. Cast first — ListFeaturesByType handles are often
-    // unbound until pfcFeature/wfcWFeature.cast (Hole 1 showed as Feature 189).
+    // Then GetName / Name. Raw list item first — cast can blank fields.
     // Never abort the whole lookup on the first throw.
     if (!feat) return "";
-    var handle = creoAsFeature(feat) || feat;
-    var sources = [handle, feat];
+    var casted = null;
+    try { casted = creoAsFeature(feat); } catch (errCast) { casted = null; }
+    var sources = [feat];
+    if (casted && casted !== feat) sources.push(casted);
     for (var s = 0; s < sources.length; s++) {
         var src = sources[s];
         if (!src) continue;
@@ -1891,70 +1892,15 @@ function creoFeatureAssignedName(feat) {
     }
     return "";
 }
-function creoFeatTypeNumeric(ft) {
-    /** Creo.JS enums are objects; ProToolkit / Web.Link use ints (HOLE=911). */
-    if (ft == null) return null;
-    try {
-        if (typeof ft === "number" && isFinite(ft)) return ft;
-    } catch (errN) {}
-    try {
-        if (typeof ft.value === "function") {
-            var viaValue = ft.value();
-            if (typeof viaValue === "number" && isFinite(viaValue)) return viaValue;
-        }
-    } catch (errV) {}
-    try {
-        var asNum = +ft;
-        if (typeof asNum === "number" && isFinite(asNum)) return asNum;
-    } catch (errPlus) {}
-    return null;
-}
-function creoFeatureTypeFromProFeatInt(code) {
-    /** ProFeatType.h / pwl FeatureType integers → label. */
-    var n = parseInt(code, 10);
-    if (isNaN(n)) return "";
-    // ProFeatType.h — only labels we show on Features / AI outlines.
-    var known = {
-        911: "HOLE",
-        912: "SHAFT",
-        913: "ROUND",
-        914: "CHAMFER",
-        915: "SLOT",
-        916: "CUT",
-        917: "PROTRUSION",
-        923: "DATUM PLANE",
-        928: "SHELL",
-        949: "CURVE",
-        979: "COORDINATE SYSTEM",
-        1000: "COMPONENT",
-        1126: "HOLE",
-        1212: "HOLE",
-        1232: "PATTERN"
-    };
-    return known[n] || "";
-}
 function creoFeatureTypeFromEnum(feat) {
-    /** Map FeatType when FeatTypeName is empty on unbound handles. */
+    /** Map FeatType when FeatTypeName is empty. */
     if (!feat) return "";
     try {
-        var ft = null;
-        try { ft = feat.FeatType; } catch (errFtProp) { ft = null; }
-        if (ft == null) {
-            try {
-                if (creoHasCallable(feat, "GetFeatType") || typeof feat.GetFeatType !== "undefined") {
-                    ft = feat.GetFeatType();
-                }
-            } catch (errGetFt) {}
-        }
+        var ft = feat.FeatType;
         if (ft == null) return "";
-        var ftNum = creoFeatTypeNumeric(ft);
-        var fromInt = creoFeatureTypeFromProFeatInt(ftNum);
-        if (fromInt) return fromInt;
         if (typeof pfcFeatureType !== "undefined") {
             var map = [
                 ["FEATTYPE_HOLE", "HOLE"],
-                ["FEATTYPE_HULL_HOLE", "HOLE"],
-                ["FEATTYPE_SMM_HOLE", "HOLE"],
                 ["FEATTYPE_ROUND", "ROUND"],
                 ["FEATTYPE_CHAMFER", "CHAMFER"],
                 ["FEATTYPE_SHELL", "SHELL"],
@@ -1962,60 +1908,41 @@ function creoFeatureTypeFromEnum(feat) {
                 ["FEATTYPE_PROTRUSION", "PROTRUSION"],
                 ["FEATTYPE_CUT", "CUT"],
                 ["FEATTYPE_DATUM_PLANE", "DATUM PLANE"],
-                ["FEATTYPE_DATUM", "DATUM PLANE"],
                 ["FEATTYPE_COORD_SYS", "COORDINATE SYSTEM"],
                 ["FEATTYPE_CURVE", "CURVE"],
                 ["FEATTYPE_COMPONENT", "COMPONENT"]
             ];
             for (var m = 0; m < map.length; m++) {
                 var key = map[m][0];
-                var enumVal = pfcFeatureType[key];
-                if (enumVal == null) continue;
-                // Strict === fails when FeatType is int 911 and enum is an object.
-                if (ft === enumVal || ft == enumVal) return map[m][1];
-                var enumNum = creoFeatTypeNumeric(enumVal);
-                if (ftNum != null && enumNum != null && ftNum === enumNum) return map[m][1];
+                if (pfcFeatureType[key] != null && (ft === pfcFeatureType[key] || ft == pfcFeatureType[key])) {
+                    return map[m][1];
+                }
             }
         }
         var enumName = creoEnumName(ft);
         if (enumName) {
             var u = String(enumName).toUpperCase();
-            if (u === "[OBJECT OBJECT]" || /^\d+$/.test(u)) {
-                // String(enum) sometimes yields the int; already tried numeric map.
-            } else {
-                if (u.indexOf("FEATTYPE_") === 0) u = u.substring(9);
+            if (u.indexOf("FEATTYPE_") === 0) u = u.substring(9);
+            if (u && u !== "[OBJECT OBJECT]" && !/^\d+$/.test(u)) {
                 return u.replace(/_/g, " ");
             }
         }
     } catch (errFt) {}
     return "";
 }
-function creoFeatureHandles(feat) {
-    /** Cast can strip Hole FeatTypeName — try casted and raw. */
-    var out = [];
-    var seen = {};
-    function push(h) {
-        if (!h) return;
-        var key;
-        try { key = String(h); } catch (errK) { key = "h" + out.length; }
-        if (seen[key]) return;
-        seen[key] = true;
-        out.push(h);
-    }
-    push(creoAsFeature(feat));
-    push(feat);
-    return out;
-}
 function creoFeatureTypeName(feat) {
     /**
-     * FeatTypeName is often empty on ListFeaturesByType items until cast.
+     * Read FeatTypeName from the ListFeaturesByType item (raw first).
      * Fall back to GetFeatTypeName / FeatType enum (Hole → HOLE).
-     * Try raw and casted — wfcWFeature.cast can blank Hole type fields.
      */
     if (!feat) return "";
-    var handles = creoFeatureHandles(feat);
-    for (var h = 0; h < handles.length; h++) {
-        var handle = handles[h];
+    var casted = null;
+    try { casted = creoAsFeature(feat); } catch (errCast) { casted = null; }
+    var sources = [feat];
+    if (casted && casted !== feat) sources.push(casted);
+    for (var s = 0; s < sources.length; s++) {
+        var handle = sources[s];
+        if (!handle) continue;
         try {
             var tn = String(handle.FeatTypeName || "").trim();
             if (tn && tn !== "[object Object]") return tn;
@@ -2031,394 +1958,6 @@ function creoFeatureTypeName(feat) {
         if (fromEnum) return fromEnum;
     }
     return "";
-}
-function creoModelFileNameCandidates(model) {
-    /** Names pwlFeatureInfoGetByID may accept (logical tip and numbered leaves). */
-    var out = [];
-    var seen = {};
-    function pushName(raw) {
-        var text = String(raw || "").trim();
-        if (!text) return;
-        var base = text.split(/[/\\]/).pop() || text;
-        var logical = creoLogicalFileName(base);
-        var variants = [base, logical];
-        if (base) variants.push(base.toUpperCase());
-        if (logical) variants.push(String(logical).toUpperCase());
-        for (var v = 0; v < variants.length; v++) {
-            var key = String(variants[v] || "").trim();
-            if (!key) continue;
-            var low = key.toLowerCase();
-            if (seen[low]) continue;
-            seen[low] = true;
-            out.push(key);
-        }
-    }
-    if (!model) return out;
-    try { pushName(model.FileName); } catch (errFn) {}
-    try { pushName(model.FullName); } catch (errFull) {}
-    try { pushName(model.InstanceName); } catch (errInst) {}
-    try {
-        if (typeof model.GetFileName === "function" || creoHasCallable(model, "GetFileName")) {
-            pushName(model.GetFileName());
-        }
-    } catch (errGfnModel) {}
-    try {
-        if (typeof model.GetDescr === "function" || creoHasCallable(model, "GetDescr")) {
-            var descr = model.GetDescr();
-            if (descr) {
-                try {
-                    if (typeof descr.GetFileName === "function") pushName(descr.GetFileName());
-                } catch (errGfn) {}
-                try { pushName(descr.FileName); } catch (errDfn) {}
-            }
-        }
-    } catch (errDescr) {}
-    return out;
-}
-function creoPwlReturnOk(info) {
-    if (!info) return false;
-    try {
-        if (typeof info.Status === "boolean") return info.Status;
-    } catch (errSt) {}
-    try {
-        if (typeof info.ErrorCode === "number") return info.ErrorCode === 0;
-    } catch (errEc) {}
-    return true;
-}
-function creoFeatureInfoFromScript(model, featureId) {
-    /**
-     * Last resort when cast still leaves name/type empty: pwlFeatureInfoGetByID
-     * returns FeatureName (Hole 1) and FeatTypeName (Hole).
-     */
-    if (featureId == null || !model) return null;
-    try {
-        if (typeof pfcScript === "undefined") return null;
-        if (!creoHasCallable(pfcScript, "pwlFeatureInfoGetByID")
-            && typeof pfcScript.pwlFeatureInfoGetByID === "undefined") {
-            return null;
-        }
-        var names = creoModelFileNameCandidates(model);
-        var fid = parseInt(featureId, 10);
-        if (isNaN(fid)) return null;
-        for (var n = 0; n < names.length; n++) {
-            try {
-                var info = pfcScript.pwlFeatureInfoGetByID(names[n], fid);
-                if (!info || !creoPwlReturnOk(info)) continue;
-                var fname = "";
-                var ftype = "";
-                try { fname = String(info.FeatureName || "").trim(); } catch (errN) {}
-                try { ftype = String(info.FeatTypeName || "").trim(); } catch (errT) {}
-                if (!ftype) {
-                    try { ftype = creoFeatureTypeFromProFeatInt(info.FeatureType); } catch (errFt) {}
-                }
-                if (fname || ftype) return { name: fname, type: ftype };
-            } catch (errOne) {}
-        }
-    } catch (errInfo) {}
-    return null;
-}
-function creoPwlFeatureEnrichmentMap(model) {
-    /**
-     * Web.Link path: pwlMdlFeaturesGet(-1) then pwlFeatureInfoGetByID per id.
-     * Survives when Creo.JS ListFeaturesByType hole handles have blank FeatTypeName.
-     */
-    var byId = {};
-    if (!model || typeof pfcScript === "undefined") return byId;
-    if (!creoHasCallable(pfcScript, "pwlFeatureInfoGetByID")
-        && typeof pfcScript.pwlFeatureInfoGetByID === "undefined") {
-        return byId;
-    }
-    var names = creoModelFileNameCandidates(model);
-    if (!names.length) return byId;
-    var ids = [];
-    var idSeen = {};
-    function pushId(raw) {
-        var n = parseInt(raw, 10);
-        if (isNaN(n)) return;
-        var key = String(n);
-        if (idSeen[key]) return;
-        idSeen[key] = true;
-        ids.push(n);
-    }
-    if (creoHasCallable(pfcScript, "pwlMdlFeaturesGet")
-        || typeof pfcScript.pwlMdlFeaturesGet !== "undefined") {
-        for (var n = 0; n < names.length && !ids.length; n++) {
-            try {
-                var listed = pfcScript.pwlMdlFeaturesGet(names[n], parseInt(-1, 10));
-                if (!listed || !creoPwlReturnOk(listed)) continue;
-                var featIds = listed.FeatureIDs;
-                if (!featIds) continue;
-                var count = null;
-                try {
-                    if (typeof listed.NumFeatures === "number") count = listed.NumFeatures;
-                    else if (typeof featIds.length === "number") count = featIds.length;
-                    else if (typeof featIds.Count === "number") count = featIds.Count;
-                } catch (errCnt) {}
-                if (count == null) continue;
-                for (var i = 0; i < count; i++) {
-                    var one = null;
-                    try {
-                        if (typeof featIds.Item === "function") one = featIds.Item(i);
-                        else one = featIds[i];
-                    } catch (errItem) { one = null; }
-                    pushId(one);
-                }
-            } catch (errList) {}
-        }
-    }
-    // Always try HOLE-typed list so a single hole is found even when -1 fails.
-    if (creoHasCallable(pfcScript, "pwlMdlFeaturesGet")
-        || typeof pfcScript.pwlMdlFeaturesGet !== "undefined") {
-        var holeTypes = [911, 1126, 1212];
-        for (var ht = 0; ht < holeTypes.length; ht++) {
-            for (var hn = 0; hn < names.length; hn++) {
-                try {
-                    var holes = pfcScript.pwlMdlFeaturesGet(names[hn], parseInt(holeTypes[ht], 10));
-                    if (!holes || !creoPwlReturnOk(holes)) continue;
-                    var hIds = holes.FeatureIDs;
-                    if (!hIds) continue;
-                    var hCount = null;
-                    try {
-                        if (typeof holes.NumFeatures === "number") hCount = holes.NumFeatures;
-                        else if (typeof hIds.length === "number") hCount = hIds.length;
-                        else if (typeof hIds.Count === "number") hCount = hIds.Count;
-                    } catch (errHc) {}
-                    if (hCount == null) continue;
-                    for (var hi = 0; hi < hCount; hi++) {
-                        var hid = null;
-                        try {
-                            if (typeof hIds.Item === "function") hid = hIds.Item(hi);
-                            else hid = hIds[hi];
-                        } catch (errHid) { hid = null; }
-                        pushId(hid);
-                    }
-                } catch (errHole) {}
-            }
-        }
-    }
-    for (var fi = 0; fi < ids.length; fi++) {
-        var fid = ids[fi];
-        var info = creoFeatureInfoFromScript(model, fid);
-        if (!info) continue;
-        byId[String(fid)] = {
-            name: info.name || "",
-            type: info.type || "",
-            subtype: ""
-        };
-    }
-    return byId;
-}
-function creoFeatureById(solid, featureId) {
-    /** Re-fetch a bound feature handle — ListFeaturesByType(null) items can be sparse. */
-    if (!solid || featureId == null) return null;
-    try {
-        var fid = parseInt(featureId, 10);
-        if (isNaN(fid)) return null;
-        var got = null;
-        if (creoHasCallable(solid, "GetFeatureById") || typeof solid.GetFeatureById !== "undefined") {
-            got = solid.GetFeatureById(fid);
-        }
-        if (!got && creoHasCallable(solid, "GetFeatureByID")) {
-            got = solid.GetFeatureByID(fid);
-        }
-        // Prefer raw handle — cast can blank Hole FeatTypeName.
-        return got || null;
-    } catch (errById) {
-        return null;
-    }
-}
-function creoListFeaturesByTypeTyped(solid, enumVal) {
-    /** Prefer (visibleOnly, type); also try (type, visibleOnly) for older bridges. */
-    if (!solid || enumVal == null) return null;
-    var attempts = [
-        function () { return solid.ListFeaturesByType(true, enumVal); },
-        function () { return solid.ListFeaturesByType(false, enumVal); },
-        function () { return solid.ListFeaturesByType(enumVal, true); },
-        function () { return solid.ListFeaturesByType(enumVal, false); }
-    ];
-    for (var a = 0; a < attempts.length; a++) {
-        try {
-            var listed = attempts[a]();
-            if (listed) return listed;
-        } catch (errTry) {}
-    }
-    return null;
-}
-function creoFeatureTypeEnrichmentMap(solid) {
-    /**
-     * Same idea as assembly Structure using ListFeaturesByType(…, COMPONENT):
-     * typed lists (HOLE, ROUND, …) return bound handles with name/type filled.
-     * Walk every FEATTYPE_* key — Hole sometimes uses hull/SMM enums.
-     */
-    var byId = {};
-    if (!solid || typeof pfcFeatureType === "undefined") return byId;
-    var typeKeys = [];
-    var preferred = [
-        "FEATTYPE_HOLE",
-        "FEATTYPE_HULL_HOLE",
-        "FEATTYPE_SMM_HOLE",
-        "FEATTYPE_ROUND",
-        "FEATTYPE_CHAMFER",
-        "FEATTYPE_SHELL",
-        "FEATTYPE_PATTERN",
-        "FEATTYPE_PROTRUSION",
-        "FEATTYPE_CUT",
-        "FEATTYPE_CURVE",
-        "FEATTYPE_DATUM_PLANE",
-        "FEATTYPE_COORD_SYS"
-    ];
-    var seenKey = {};
-    for (var p = 0; p < preferred.length; p++) {
-        seenKey[preferred[p]] = true;
-        typeKeys.push(preferred[p]);
-    }
-    try {
-        for (var k in pfcFeatureType) {
-            if (!Object.prototype.hasOwnProperty.call(pfcFeatureType, k)) continue;
-            if (String(k).indexOf("FEATTYPE_") !== 0) continue;
-            if (seenKey[k]) continue;
-            if (k === "FEATTYPE_COMPONENT") continue;
-            seenKey[k] = true;
-            typeKeys.push(k);
-        }
-    } catch (errKeys) {}
-    for (var t = 0; t < typeKeys.length; t++) {
-        var enumVal = pfcFeatureType[typeKeys[t]];
-        if (enumVal == null) continue;
-        var listed = creoListFeaturesByTypeTyped(solid, enumVal);
-        var items = creoFeatureItems(listed);
-        for (var i = 0; i < items.length; i++) {
-            try {
-                var rawItem = items[i];
-                if (!rawItem) continue;
-                var id = creoFeatureNumericId(rawItem);
-                if (id == null) {
-                    var casted = creoAsFeature(rawItem);
-                    id = creoFeatureNumericId(casted);
-                }
-                if (id == null) continue;
-                var key = String(id);
-                if (byId[key] && byId[key].name && byId[key].type) continue;
-                var typeName = creoFeatureTypeName(rawItem);
-                if (!typeName && typeKeys[t].indexOf("HOLE") >= 0) typeName = "HOLE";
-                if (!typeName) {
-                    var label = String(typeKeys[t]).replace(/^FEATTYPE_/, "").replace(/_/g, " ");
-                    if (label && label !== "COMPONENT") typeName = label;
-                }
-                var subType = "";
-                try { subType = String(rawItem.FeatSubType || ""); } catch (errS) {}
-                if (!subType) {
-                    try {
-                        var asFeat = creoAsFeature(rawItem);
-                        if (asFeat) subType = String(asFeat.FeatSubType || "");
-                    } catch (errS2) {}
-                }
-                var name = creoFeatureAssignedName(rawItem);
-                if (name && subType && name.toLowerCase() === String(subType).trim().toLowerCase()) {
-                    name = "";
-                }
-                if (name && creoFeatureGenericLabel(name)) name = "";
-                if (!name) name = creoFeatureFallbackName(typeName, subType);
-                byId[key] = {
-                    name: name || "",
-                    type: typeName || "",
-                    subtype: subType || ""
-                };
-            } catch (errItem) {}
-        }
-    }
-    return byId;
-}
-function creoMergeFeatureEnrichmentMaps(a, b) {
-    var out = {};
-    function absorb(src) {
-        if (!src) return;
-        for (var key in src) {
-            if (!Object.prototype.hasOwnProperty.call(src, key)) continue;
-            var hit = src[key];
-            if (!hit) continue;
-            if (!out[key]) {
-                out[key] = {
-                    name: hit.name || "",
-                    type: hit.type || "",
-                    subtype: hit.subtype || ""
-                };
-                continue;
-            }
-            if ((!out[key].name || creoFeatureIsInventedIdName(out[key].name, key))
-                && hit.name && !creoFeatureIsInventedIdName(hit.name, key)) {
-                out[key].name = hit.name;
-            }
-            if (!out[key].type && hit.type) out[key].type = hit.type;
-            if (!out[key].subtype && hit.subtype) out[key].subtype = hit.subtype;
-        }
-    }
-    absorb(a);
-    absorb(b);
-    return out;
-}
-function creoEnrichSparseFeatureFields(solid, model, fields, typeMap) {
-    /**
-     * Fill blank / Feature-N rows using GetFeatureById, typed ListFeaturesByType
-     * maps, then pwlFeatureInfoGetByID — so Hole 1 is not left as Feature 189.
-     */
-    if (!fields) return fields;
-    var id = fields.id;
-    var name = String(fields.name || "").trim();
-    var typeName = String(fields.type || "").trim();
-    var subType = String(fields.subtype || "").trim();
-    var needName = !name || creoFeatureIsInventedIdName(name, id);
-    var needType = !typeName;
-    if (!needName && !needType) return fields;
-    if (solid && id != null) {
-        var byId = creoFeatureById(solid, id);
-        if (byId) {
-            if (needName) {
-                var n2 = creoFeatureAssignedName(byId);
-                if (n2 && !creoFeatureIsInventedIdName(n2, id)) name = n2;
-            }
-            if (needType) {
-                var t2 = creoFeatureTypeName(byId);
-                if (t2) typeName = t2;
-            }
-            if (!subType) {
-                try { subType = String(byId.FeatSubType || ""); } catch (errS2) {}
-            }
-        }
-    }
-    needName = !name || creoFeatureIsInventedIdName(name, id);
-    needType = !typeName;
-    if ((needName || needType) && typeMap && id != null) {
-        var hit = typeMap[String(id)];
-        if (hit) {
-            if (needName && hit.name && !creoFeatureIsInventedIdName(hit.name, id)) {
-                name = hit.name;
-            }
-            if (needType && hit.type) typeName = hit.type;
-            if (!subType && hit.subtype) subType = hit.subtype;
-        }
-    }
-    needName = !name || creoFeatureIsInventedIdName(name, id);
-    needType = !typeName;
-    if ((needName || needType) && id != null) {
-        var scriptInfo = creoFeatureInfoFromScript(solid, id);
-        if (!scriptInfo) scriptInfo = creoFeatureInfoFromScript(model, id);
-        if (scriptInfo) {
-            if (needName && scriptInfo.name && !creoFeatureIsInventedIdName(scriptInfo.name, id)) {
-                name = scriptInfo.name;
-            } else if (needName && scriptInfo.name) {
-                name = scriptInfo.name;
-            }
-            if (needType && scriptInfo.type) typeName = scriptInfo.type;
-        }
-    }
-    if (!name || creoFeatureIsInventedIdName(name, id)) {
-        name = creoFeatureFallbackName(typeName, subType);
-    }
-    fields.name = name;
-    fields.type = typeName;
-    fields.subtype = subType;
-    return fields;
 }
 function creoFeatureGenericLabel(text) {
     // FeatSubType placeholders — not model-tree names (Round→ROUND, Chamfer→CHAMFER).
@@ -2453,7 +1992,9 @@ function creoGatherFeatures(model, dbg, session, options) {
             if (dbg) dbg.reason = "no_solid";
             return rows;
         }
-        // Do not gate on typeof===function — same Creo.JS quirk as GetMassProperty.
+        // Creo.JS: ListFeaturesByType(VisibleOnly, type).
+        // true + null = public features only (user-facing list); type null = every type.
+        // false + null = public + internal construction features.
         var listed = null;
         try {
             listed = solid.ListFeaturesByType(true, null);
@@ -2470,17 +2011,11 @@ function creoGatherFeatures(model, dbg, session, options) {
                     if (dbg) dbg.try_all_null = listed ? "ok" : "null";
                 } catch (errFalse) {
                     if (dbg) dbg.try_all_null = "threw:" + creoToolkitErr(errFalse);
-                    try {
-                        listed = solid.ListFeaturesByType(false);
-                        if (dbg) dbg.try_all_one = listed ? "ok" : "null";
-                    } catch (errLast) {
-                        if (dbg) dbg.try_all_one = "threw:" + creoToolkitErr(errLast);
-                        listed = null;
-                    }
+                    listed = null;
                 }
             }
         }
-        // Model-level fallback used by PTC samples when solid ListFeaturesByType is unbound.
+        // Model-level fallback when solid ListFeaturesByType is unbound.
         if (!listed) {
             try {
                 var itemType = null;
@@ -2500,31 +2035,31 @@ function creoGatherFeatures(model, dbg, session, options) {
         }
         var features = creoFeatureItems(listed);
         if (dbg) dbg.listed_count = features.length;
-        // Typed lists (like Structure’s FEATTYPE_COMPONENT) bind Hole/Round names.
-        // Merge Web.Link pwl map — Hole FeatTypeName is often blank on list handles.
-        var typeMap = creoMergeFeatureEnrichmentMaps(
-            creoFeatureTypeEnrichmentMap(solid),
-            creoPwlFeatureEnrichmentMap(solid)
-        );
-        typeMap = creoMergeFeatureEnrichmentMaps(typeMap, creoPwlFeatureEnrichmentMap(model));
-        if (dbg) dbg.typed_enrich_count = Object.keys(typeMap).length;
         for (var i = 0; i < features.length; i++) {
             try {
-                var rawFeat = features[i];
-                if (!rawFeat) continue;
-                var feat = creoAsFeature(rawFeat) || rawFeat;
+                // Use the list item as returned — read name/type on it directly.
+                var feat = features[i];
+                if (!feat) continue;
                 try {
                     if (typeof feat.IsVisible !== "undefined" && feat.IsVisible === false) continue;
                 } catch (errVis) {}
                 // Skip assembly component features here — those belong in BOM/structure.
                 try {
-                    if (typeof pfcFeatureType !== "undefined" && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
+                    if (typeof pfcFeatureType !== "undefined"
+                        && (feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT
+                            || feat.FeatType == pfcFeatureType.FEATTYPE_COMPONENT)) {
                         continue;
                     }
                 } catch (errComp) {}
                 var typeName = creoFeatureTypeName(feat);
                 var subType = "";
-                try { subType = String(feat.FeatSubType || ""); } catch (errS) { subType = ""; }
+                try { subType = String(feat.FeatSubType || "").trim(); } catch (errS) { subType = ""; }
+                if (!subType) {
+                    try {
+                        var casted = creoAsFeature(feat);
+                        if (casted) subType = String(casted.FeatSubType || "").trim();
+                    } catch (errSubCast) {}
+                }
                 var id = creoFeatureNumericId(feat);
                 var name = "";
                 if (wantNames) {
@@ -2540,16 +2075,7 @@ function creoGatherFeatures(model, dbg, session, options) {
                     name = "";
                 }
                 if (name && creoFeatureGenericLabel(name)) name = "";
-                var fields = {
-                    id: id,
-                    name: name,
-                    type: typeName,
-                    subtype: subType
-                };
-                creoEnrichSparseFeatureFields(solid, model, fields, typeMap);
-                name = fields.name;
-                typeName = fields.type;
-                subType = fields.subtype;
+                if (!name) name = creoFeatureFallbackName(typeName, subType);
                 if (!name && !typeName && id == null) continue;
                 rows.push({
                     id: id,
@@ -3641,32 +3167,25 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                 } catch (errPass1) {}
             }
             var labelByFeatId = {};
-            var snapTypeMap = creoMergeFeatureEnrichmentMaps(
-                creoFeatureTypeEnrichmentMap(solid),
-                creoPwlFeatureEnrichmentMap(solid)
-            );
-            snapTypeMap = creoMergeFeatureEnrichmentMaps(
-                snapTypeMap,
-                creoPwlFeatureEnrichmentMap(model)
-            );
             for (var i = 0; i < featItems.length; i++) {
                 try {
-                    var rawSnapFeat = featItems[i];
-                    if (!rawSnapFeat) continue;
-                    var feat = creoAsFeature(rawSnapFeat) || rawSnapFeat;
+                    // Same ListFeaturesByType(true, null) items as Features tab.
+                    var feat = featItems[i];
+                    if (!feat) continue;
                     // Invisible / internal construction features (e.g. unnamed
                     // DATUM PLANE owned by a hole pattern) are not in the model
                     // tree — including them made Ask AI report fake plane deletes.
                     if (!creoFeatureIsVisibleForSnapshot(feat)) continue;
                     try {
                         if (typeof pfcFeatureType !== "undefined"
-                            && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
+                            && (feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT
+                                || feat.FeatType == pfcFeatureType.FEATTYPE_COMPONENT)) {
                             continue;
                         }
                     } catch (errComp) {}
                     var typeName = creoFeatureTypeName(feat);
                     var subType = "";
-                    try { subType = String(feat.FeatSubType || ""); } catch (errS) {}
+                    try { subType = String(feat.FeatSubType || "").trim(); } catch (errS) {}
                     var id = creoFeatureNumericId(feat);
                     var name = "";
                     if (wantNames) {
@@ -3676,16 +3195,7 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                         name = "";
                     }
                     if (name && creoFeatureGenericLabel(name)) name = "";
-                    var snapFields = {
-                        id: id,
-                        name: name,
-                        type: typeName,
-                        subtype: subType
-                    };
-                    creoEnrichSparseFeatureFields(solid, model, snapFields, snapTypeMap);
-                    name = snapFields.name;
-                    typeName = snapFields.type;
-                    subType = snapFields.subtype;
+                    if (!name) name = creoFeatureFallbackName(typeName, subType);
                     var regenOrder = null;
                     try {
                         if (typeof feat.Number !== "undefined") regenOrder = feat.Number;
