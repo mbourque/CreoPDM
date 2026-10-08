@@ -286,10 +286,15 @@ def test_home_page(client):
     assert "creoFeatureFallbackName(typeName, subType)" in text
     assert "function creoFeatureTypeName(" in text
     assert "function creoFeatureInfoFromScript(" in text
+    assert "function creoFeatureById(" in text
+    assert "function creoFeatureTypeEnrichmentMap(" in text
+    assert "function creoEnrichSparseFeatureFields(" in text
     assert "FEATTYPE_HOLE" in text
-    # Hole 1 showed as Feature 189 — cast + pwlFeatureInfoGetByID fills name/type.
-    assert "Hole 1 showed as Feature 189" in text
+    assert "GetFeatureById" in text
+    # Hole 1 showed as Feature 189 — typed ListFeaturesByType + GetFeatureById.
+    assert "Hole 1 is not left as Feature 189" in text
     assert "pwlFeatureInfoGetByID" in text
+    assert "creoFeatureTypeEnrichmentMap(solid)" in text
     assert "number: regenNum" not in text
     assert "wantFeatureNames = opts.featureNames !== false" in text
     assert "wantNames = opts.featureNames !== false" in text
