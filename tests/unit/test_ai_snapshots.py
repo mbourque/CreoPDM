@@ -187,12 +187,16 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert 'labelB.textContent = "NEW"' in script
     assert "function formatAiSnapshotOutlineDisplay(" in script
     assert "function buildAiSnapshotLineDiff(" in script
+    assert "function aiSnapshotLineIdentity(" in script
     assert "function renderAiSnapshotDiffBodies(" in script
     assert "async function renderAiSnapshotCompare(" in script
     assert 'type: "same"' in script
     assert 'type: "removed"' in script
     assert 'type: "added"' in script
     assert 'type: "changed"' in script
+    # Regression: new ROUND (146) must not yellow-pair with removed CUT (95).
+    assert "CUT (95) removed + ROUND (146) added stay red/blue" in script
+    assert 'return `feat:${featId[1]}`' in script
     assert "async function fetchAiSnapshotOutline(" in script
     assert "=== ${role} snapshot (${rev}) ===" in script
     assert "function syncAiSnapshotScrollLayout(" in script

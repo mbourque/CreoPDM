@@ -11862,10 +11862,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       .split("\n");
   }
 
+  function aiSnapshotLineIdentity(line) {
+    /**
+     * Stable key for yellow "changed" only — never pair unrelated lines just
+     * because a remove sits next to an add (CUT (95) vs new ROUND (146)).
+     * Prefer Creo feature id `(146)`, else dim symbol `d12`, else param name.
+     */
+    const text = String(line || "").trim();
+    if (!text) return "";
+    const dim = text.match(/^-\s*(d\d+)\b/i);
+    if (dim) return `dim:${String(dim[1]).toLowerCase()}`;
+    const featId = text.match(/\((\d+)\)\s*$/);
+    if (featId) return `feat:${featId[1]}`;
+    const param = text.match(/^-\s*([A-Za-z_][\w.]*)\s*=/);
+    if (param) return `param:${String(param[1]).toUpperCase()}`;
+    return "";
+  }
+
   function buildAiSnapshotLineDiff(oldLines, newLines) {
     /**
      * Side-by-side line ops (GitHub-style):
-     * same | removed | added | changed (paired delete+insert).
+     * same | removed | added | changed (same identity, different text).
      */
     const a = Array.isArray(oldLines) ? oldLines : [];
     const b = Array.isArray(newLines) ? newLines : [];
@@ -11878,11 +11895,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const left = i < m ? a[i] : null;
         const right = i < n ? b[i] : null;
         if (left !== null && right !== null) {
-          ops.push(
-            left === right
-              ? { type: "same", oldText: left, newText: right }
-              : { type: "changed", oldText: left, newText: right }
-          );
+          if (left === right) {
+            ops.push({ type: "same", oldText: left, newText: right });
+          } else {
+            const key = aiSnapshotLineIdentity(left);
+            if (key && key === aiSnapshotLineIdentity(right)) {
+              ops.push({ type: "changed", oldText: left, newText: right });
+            } else {
+              ops.push({ type: "removed", oldText: left, newText: "" });
+              ops.push({ type: "added", oldText: "", newText: right });
+            }
+          }
         } else if (left !== null) {
           ops.push({ type: "removed", oldText: left, newText: "" });
         } else {
@@ -11923,7 +11946,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       ops.push({ type: "added", oldText: "", newText: b[j] });
       j += 1;
     }
-    // Pair adjacent removed+added runs into yellow "changed" rows.
+    // Yellow only when the same feature id / dim / param changed text.
+    // CUT (95) removed + ROUND (146) added stay red/blue — not a rename.
     const merged = [];
     let k = 0;
     while (k < ops.length) {
@@ -11938,16 +11962,33 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           added.push(ops[k]);
           k += 1;
         }
-        const pairs = Math.min(removed.length, added.length);
-        for (let p = 0; p < pairs; p += 1) {
-          merged.push({
-            type: "changed",
-            oldText: removed[p].oldText,
-            newText: added[p].newText,
-          });
+        const usedAdded = new Set();
+        for (let r = 0; r < removed.length; r += 1) {
+          const key = aiSnapshotLineIdentity(removed[r].oldText);
+          let match = -1;
+          if (key) {
+            for (let aIdx = 0; aIdx < added.length; aIdx += 1) {
+              if (usedAdded.has(aIdx)) continue;
+              if (aiSnapshotLineIdentity(added[aIdx].newText) === key) {
+                match = aIdx;
+                break;
+              }
+            }
+          }
+          if (match >= 0) {
+            usedAdded.add(match);
+            merged.push({
+              type: "changed",
+              oldText: removed[r].oldText,
+              newText: added[match].newText,
+            });
+          } else {
+            merged.push(removed[r]);
+          }
         }
-        for (let p = pairs; p < removed.length; p += 1) merged.push(removed[p]);
-        for (let p = pairs; p < added.length; p += 1) merged.push(added[p]);
+        for (let aIdx = 0; aIdx < added.length; aIdx += 1) {
+          if (!usedAdded.has(aIdx)) merged.push(added[aIdx]);
+        }
         continue;
       }
       merged.push(ops[k]);
