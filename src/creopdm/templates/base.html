@@ -1861,27 +1861,119 @@ function creoFeatureNameText(value) {
 function creoFeatureAssignedName(feat) {
     // Prefer feature.name (Creo.JS / what works in session):
     //   const name = feature.name;
-    // Then GetName / Name. Never abort the whole lookup on the first throw.
+    // Then GetName / Name. Cast first — ListFeaturesByType handles are often
+    // unbound until pfcFeature/wfcWFeature.cast (Hole 1 showed as Feature 189).
+    // Never abort the whole lookup on the first throw.
+    if (!feat) return "";
+    var handle = creoAsFeature(feat) || feat;
+    var sources = [handle, feat];
+    for (var s = 0; s < sources.length; s++) {
+        var src = sources[s];
+        if (!src) continue;
+        try {
+            var viaName = creoFeatureNameText(src.name);
+            if (viaName) return viaName;
+        } catch (errName) {}
+        try {
+            var viaGet = creoFeatureNameText(src.GetName);
+            if (viaGet) return viaGet;
+        } catch (errGet) {}
+        try {
+            if (typeof src.GetName === "function" || creoHasCallable(src, "GetName")) {
+                var viaCall = creoFeatureNameText(src.GetName());
+                if (viaCall) return viaCall;
+            }
+        } catch (errCall) {}
+        try {
+            var viaCap = creoFeatureNameText(src.Name);
+            if (viaCap) return viaCap;
+        } catch (errCap) {}
+    }
+    return "";
+}
+function creoFeatureTypeFromEnum(feat) {
+    /** Map FeatType when FeatTypeName is empty on unbound handles. */
     if (!feat) return "";
     try {
-        var viaName = creoFeatureNameText(feat.name);
-        if (viaName) return viaName;
-    } catch (errName) {}
-    try {
-        var viaGet = creoFeatureNameText(feat.GetName);
-        if (viaGet) return viaGet;
-    } catch (errGet) {}
-    try {
-        if (typeof feat.GetName === "function") {
-            var viaCall = creoFeatureNameText(feat.GetName());
-            if (viaCall) return viaCall;
+        var ft = feat.FeatType;
+        if (ft == null) return "";
+        if (typeof pfcFeatureType !== "undefined") {
+            var map = [
+                ["FEATTYPE_HOLE", "HOLE"],
+                ["FEATTYPE_ROUND", "ROUND"],
+                ["FEATTYPE_CHAMFER", "CHAMFER"],
+                ["FEATTYPE_SHELL", "SHELL"],
+                ["FEATTYPE_PATTERN", "PATTERN"],
+                ["FEATTYPE_PROTRUSION", "PROTRUSION"],
+                ["FEATTYPE_CUT", "CUT"],
+                ["FEATTYPE_DATUM_PLANE", "DATUM PLANE"],
+                ["FEATTYPE_COORD_SYS", "COORDINATE SYSTEM"],
+                ["FEATTYPE_CURVE", "CURVE"],
+                ["FEATTYPE_COMPONENT", "COMPONENT"]
+            ];
+            for (var m = 0; m < map.length; m++) {
+                var key = map[m][0];
+                if (pfcFeatureType[key] != null && ft === pfcFeatureType[key]) {
+                    return map[m][1];
+                }
+            }
         }
-    } catch (errCall) {}
-    try {
-        var viaCap = creoFeatureNameText(feat.Name);
-        if (viaCap) return viaCap;
-    } catch (errCap) {}
+        var enumName = creoEnumName(ft);
+        if (enumName) {
+            var u = String(enumName).toUpperCase();
+            if (u.indexOf("FEATTYPE_") === 0) u = u.substring(9);
+            return u.replace(/_/g, " ");
+        }
+    } catch (errFt) {}
     return "";
+}
+function creoFeatureTypeName(feat) {
+    /**
+     * FeatTypeName is often empty on ListFeaturesByType items until cast.
+     * Fall back to GetFeatTypeName / FeatType enum (Hole → HOLE).
+     */
+    if (!feat) return "";
+    var handle = creoAsFeature(feat) || feat;
+    try {
+        var tn = String(handle.FeatTypeName || "").trim();
+        if (tn && tn !== "[object Object]") return tn;
+    } catch (errT) {}
+    try {
+        if (creoHasCallable(handle, "GetFeatTypeName") || typeof handle.GetFeatTypeName !== "undefined") {
+            var got = handle.GetFeatTypeName();
+            var gs = String(got || "").trim();
+            if (gs && gs !== "[object Object]") return gs;
+        }
+    } catch (errG) {}
+    return creoFeatureTypeFromEnum(handle);
+}
+function creoFeatureInfoFromScript(model, featureId) {
+    /**
+     * Last resort when cast still leaves name/type empty: pwlFeatureInfoGetByID
+     * returns FeatureName (Hole 1) and FeatTypeName (Hole).
+     */
+    if (featureId == null || !model) return null;
+    try {
+        if (typeof pfcScript === "undefined") return null;
+        if (!creoHasCallable(pfcScript, "pwlFeatureInfoGetByID")
+            && typeof pfcScript.pwlFeatureInfoGetByID === "undefined") {
+            return null;
+        }
+        var mdlName = "";
+        try { mdlName = String(model.FileName || ""); } catch (errFn) { mdlName = ""; }
+        mdlName = creoLogicalFileName(mdlName);
+        if (!mdlName) return null;
+        var info = pfcScript.pwlFeatureInfoGetByID(mdlName, parseInt(featureId, 10));
+        if (!info) return null;
+        var fname = "";
+        var ftype = "";
+        try { fname = String(info.FeatureName || "").trim(); } catch (errN) {}
+        try { ftype = String(info.FeatTypeName || "").trim(); } catch (errT) {}
+        if (!fname && !ftype) return null;
+        return { name: fname, type: ftype };
+    } catch (errInfo) {
+        return null;
+    }
 }
 function creoFeatureGenericLabel(text) {
     // FeatSubType placeholders — not model-tree names (Round→ROUND, Chamfer→CHAMFER).
@@ -1894,6 +1986,15 @@ function creoFeatureFallbackName(typeName, subType) {
     if (!creoFeatureGenericLabel(subType)) return String(subType).trim();
     if (!creoFeatureGenericLabel(typeName)) return String(typeName).trim();
     return String(subType || typeName || "").trim();
+}
+function creoFeatureIsInventedIdName(name, featureId) {
+    var text = String(name || "").trim();
+    if (!text) return true;
+    if (/^feature\s+\d+$/i.test(text)) return true;
+    if (featureId != null && text.toLowerCase() === ("feature " + featureId).toLowerCase()) {
+        return true;
+    }
+    return false;
 }
 function creoGatherFeatures(model, dbg, session, options) {
     var opts = options && typeof options === "object" ? options : {};
@@ -1956,8 +2057,9 @@ function creoGatherFeatures(model, dbg, session, options) {
         if (dbg) dbg.listed_count = features.length;
         for (var i = 0; i < features.length; i++) {
             try {
-                var feat = features[i];
-                if (!feat) continue;
+                var rawFeat = features[i];
+                if (!rawFeat) continue;
+                var feat = creoAsFeature(rawFeat) || rawFeat;
                 try {
                     if (typeof feat.IsVisible !== "undefined" && feat.IsVisible === false) continue;
                 } catch (errVis) {}
@@ -1967,15 +2069,10 @@ function creoGatherFeatures(model, dbg, session, options) {
                         continue;
                     }
                 } catch (errComp) {}
-                var typeName = "";
-                try { typeName = String(feat.FeatTypeName || ""); } catch (errT) { typeName = ""; }
+                var typeName = creoFeatureTypeName(feat);
                 var subType = "";
                 try { subType = String(feat.FeatSubType || ""); } catch (errS) { subType = ""; }
-                var id = null;
-                try {
-                    if (typeof feat.Id !== "undefined") id = feat.Id;
-                    else if (typeof feat.GetId === "function") id = feat.GetId();
-                } catch (errId) { id = null; }
+                var id = creoFeatureNumericId(feat);
                 var name = "";
                 if (wantNames) {
                     try {
@@ -1990,6 +2087,17 @@ function creoGatherFeatures(model, dbg, session, options) {
                     name = "";
                 }
                 if (name && creoFeatureGenericLabel(name)) name = "";
+                // Hole 1 / type HOLE often empty until pwlFeatureInfoGetByID.
+                if ((!name || creoFeatureIsInventedIdName(name, id) || !typeName) && id != null) {
+                    var scriptInfo = creoFeatureInfoFromScript(solid, id);
+                    if (!scriptInfo) scriptInfo = creoFeatureInfoFromScript(model, id);
+                    if (scriptInfo) {
+                        if (scriptInfo.name && (!name || creoFeatureIsInventedIdName(name, id))) {
+                            name = scriptInfo.name;
+                        }
+                        if (scriptInfo.type && !typeName) typeName = scriptInfo.type;
+                    }
+                }
                 if (!name) {
                     name = creoFeatureFallbackName(typeName, subType);
                 }
@@ -3086,8 +3194,9 @@ function gatherAiModelSnapshot(model, session, filename, options) {
             var labelByFeatId = {};
             for (var i = 0; i < featItems.length; i++) {
                 try {
-                    var feat = featItems[i];
-                    if (!feat) continue;
+                    var rawSnapFeat = featItems[i];
+                    if (!rawSnapFeat) continue;
+                    var feat = creoAsFeature(rawSnapFeat) || rawSnapFeat;
                     // Invisible / internal construction features (e.g. unnamed
                     // DATUM PLANE owned by a hole pattern) are not in the model
                     // tree — including them made Ask AI report fake plane deletes.
@@ -3098,8 +3207,7 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                             continue;
                         }
                     } catch (errComp) {}
-                    var typeName = "";
-                    try { typeName = String(feat.FeatTypeName || ""); } catch (errT) {}
+                    var typeName = creoFeatureTypeName(feat);
                     var subType = "";
                     try { subType = String(feat.FeatSubType || ""); } catch (errS) {}
                     var id = creoFeatureNumericId(feat);
@@ -3111,6 +3219,16 @@ function gatherAiModelSnapshot(model, session, filename, options) {
                         name = "";
                     }
                     if (name && creoFeatureGenericLabel(name)) name = "";
+                    if ((!name || creoFeatureIsInventedIdName(name, id) || !typeName) && id != null) {
+                        var snapInfo = creoFeatureInfoFromScript(solid, id);
+                        if (!snapInfo) snapInfo = creoFeatureInfoFromScript(model, id);
+                        if (snapInfo) {
+                            if (snapInfo.name && (!name || creoFeatureIsInventedIdName(name, id))) {
+                                name = snapInfo.name;
+                            }
+                            if (snapInfo.type && !typeName) typeName = snapInfo.type;
+                        }
+                    }
                     if (!name) name = creoFeatureFallbackName(typeName, subType);
                     var regenOrder = null;
                     try {

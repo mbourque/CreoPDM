@@ -284,6 +284,12 @@ def test_home_page(client):
     assert 't === "edge"' in text
     assert "name.toLowerCase() === String(subType).trim().toLowerCase()" in text
     assert "creoFeatureFallbackName(typeName, subType)" in text
+    assert "function creoFeatureTypeName(" in text
+    assert "function creoFeatureInfoFromScript(" in text
+    assert "FEATTYPE_HOLE" in text
+    # Hole 1 showed as Feature 189 — cast + pwlFeatureInfoGetByID fills name/type.
+    assert "Hole 1 showed as Feature 189" in text
+    assert "pwlFeatureInfoGetByID" in text
     assert "number: regenNum" not in text
     assert "wantFeatureNames = opts.featureNames !== false" in text
     assert "wantNames = opts.featureNames !== false" in text
