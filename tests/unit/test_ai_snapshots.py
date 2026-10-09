@@ -281,10 +281,19 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "await refreshPendingCheckinIds(productId)" in mod_fn
     assert "resolveNewerLocalCacheSaves" in mod_fn
     assert "Same sources as Files → Modified" in script
-    assert "await refreshAiSnapshotPanelModifiedFlag(panel)" in script
+    # Pending Compare must try live gather even when Modified flags are wrong.
+    pending_fn = script.split("async function renderAiSnapshotPending(", 1)[1].split(
+        "async function renderAiSnapshotCompare(", 1
+    )[0]
+    assert "Always try gather first" in pending_fn
+    assert "await gatherLiveCompareNewSnapshot(panel)" in pending_fn
+    assert "if (!isModified)" not in pending_fn
+    assert "vaultFolder: panelVault" in script
     detail_html = DETAIL_HTML.read_text(encoding="utf-8")
     assert "data-product-id=" in detail_html
     assert "data-vault-folder=" in detail_html
+    base_html = BASE_HTML.read_text(encoding="utf-8")
+    assert "compare-live-new" in base_html
     assert 'type: "same"' in script
     assert 'type: "removed"' in script
     assert 'type: "added"' in script

@@ -10037,16 +10037,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     checkinDialog.dataset.aiPath = first ? String(first.path || "") : "";
   }
 
-  async function resolvePendingCheckinLocalPath(objectId, logicalFilename) {
+  async function resolvePendingCheckinLocalPath(objectId, logicalFilename, options) {
     /**
      * Local modified tip for Ask AI (tip snapshot A.n vs file being checked in).
      * Never materialize the vault tip — that compared A.1 to A.1 again.
      */
+    const opts = options && typeof options === "object" ? options : {};
     const id = String(objectId || "").trim();
-    const productId = currentProductId();
+    const productId =
+      String(opts.productId || "").trim() || currentProductId();
+    const vaultFolder =
+      String(opts.vaultFolder || "").trim() || currentVaultFolder();
     if (!id || !productId) return { path: "", diskName: "", logicalName: "" };
     let tipFilename = String(logicalFilename || "").trim();
-    let rel = String(checkinDialog?.dataset.aiPath || "").trim().replace(/\\/g, "/");
+    let rel = String(
+      opts.relativePath || checkinDialog?.dataset.aiPath || ""
+    )
+      .trim()
+      .replace(/\\/g, "/");
     try {
       const items = JSON.parse(checkinDialog?.dataset.pushItems || "[]");
       const hit = (Array.isArray(items) ? items : []).find(
@@ -10059,7 +10067,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     try {
       const [cacheFiles, objects] = await Promise.all([
-        listAgentCacheFiles(productId),
+        listAgentCacheFiles(productId, vaultFolder),
         ensureProductObjects(productId),
       ]);
       const newer = (await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)).find(
@@ -10085,7 +10093,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     } else if (!cacheRel && diskName) {
       cacheRel = diskName;
     }
-    const directory = await agentWorkdir(productId, currentVaultFolder()).catch(() => "");
+    const directory = await agentWorkdir(productId, vaultFolder).catch(() => "");
     const path = joinLocalWorkspacePath(directory, cacheRel);
     return {
       path: looksLikeLocalWindowsPath(path) ? path : "",
@@ -12452,9 +12460,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       .trim()
       .replace(/\\/g, "/");
     if (!objectId || !filename) return null;
-    // Ensure agent workdir uses this product’s vault folder on Details.
-    const openWs = $("#open-workspace-btn");
+    const productId = aiSnapshotPanelProductId(panel);
     const panelVault = aiSnapshotPanelVaultFolder(panel);
+    const openWs = $("#open-workspace-btn");
     if (openWs && panelVault) openWs.dataset.vaultFolder = panelVault;
     if (checkinDialog) {
       checkinDialog.dataset.aiObjectId = objectId;
@@ -12463,7 +12471,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       checkinDialog.dataset.aiNextDisplay =
         String(panel?.dataset.nextDisplay || "").trim() || "pending";
     }
-    const pending = await resolvePendingCheckinLocalPath(objectId, filename);
+    const pending = await resolvePendingCheckinLocalPath(objectId, filename, {
+      productId,
+      vaultFolder: panelVault,
+      relativePath,
+    });
     const gatherName =
       pending.logicalName || logicalUploadName(filename) || filename;
     let snapshot = await gatherCreoMetadataForFilename(gatherName, "", {
@@ -12602,7 +12614,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function renderAiSnapshotPending(objectId) {
-    /** Tip History snap (OLD) vs live Modified gather / placeholder (NEW). */
+    /**
+     * Tip History snap (OLD) vs live gather (NEW).
+     * Always try gather first — Modified flags were missing local tips and
+     * painted the clean placeholder incorrectly.
+     */
     const panel = aiSnapshotPanel();
     const selectA = $("#ai-snapshot-rev-a");
     const selectB = $("#ai-snapshot-rev-b");
@@ -12618,8 +12634,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     setAiSnapshotPlainBody(bodyA, copyA, "Loading…", false);
     setAiSnapshotPlainBody(bodyB, copyB, "Loading…", false);
 
-    // Agent Modified before painting the clean placeholder (SSR vault flag alone is not enough).
-    const isModified = await refreshAiSnapshotPanelModifiedFlag(panel);
+    // Kick Modified probe in parallel; do not gate gather on it.
+    const modifiedProbe = refreshAiSnapshotPanelModifiedFlag(panel);
     const labelB =
       String(selectB?.selectedOptions?.[0]?.textContent || "").trim()
       || String(panel?.dataset.nextDisplay || "").trim()
@@ -12656,54 +12672,31 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
 
-    if (!isModified) {
-      if (textA) setAiSnapshotPlainBody(bodyA, copyA, textA, true);
-      setAiSnapshotPendingPlaceholder(
-        bodyB,
-        copyB,
-        aiSnapshotPendingCleanPlaceholder()
-      );
-      return;
-    }
-
     try {
       const newer = await gatherLiveCompareNewSnapshot(panel);
-      if (!newer) {
-        if (textA) setAiSnapshotPlainBody(bodyA, copyA, textA, true);
-        setAiSnapshotPendingPlaceholder(
-          bodyB,
-          copyB,
-          aiSnapshotPendingGatherFailedPlaceholder()
-        );
-        return;
-      }
-      const rowB = await postAiSnapshotOutline(objectId, newer, labelB);
-      if (!rowB?.outline) {
-        if (textA) setAiSnapshotPlainBody(bodyA, copyA, textA, true);
-        setAiSnapshotPendingPlaceholder(
-          bodyB,
-          copyB,
-          aiSnapshotPendingGatherFailedPlaceholder()
-        );
-        return;
-      }
-      const textB = formatAiSnapshotOutlineDisplay(
-        "NEW",
-        rowB.displayRevision || labelB,
-        rowB.outline
-      );
-      if (!textA) {
-        setAiSnapshotPlainBody(bodyB, copyB, textB, true);
-        return;
-      }
-      renderAiSnapshotDiffBodies(textA, textB);
-      if (copyA) {
-        copyA.disabled = false;
-        copyA.dataset.copyText = textA;
-      }
-      if (copyB) {
-        copyB.disabled = false;
-        copyB.dataset.copyText = textB;
+      if (newer) {
+        const rowB = await postAiSnapshotOutline(objectId, newer, labelB);
+        if (rowB?.outline) {
+          const textB = formatAiSnapshotOutlineDisplay(
+            "NEW",
+            rowB.displayRevision || labelB,
+            rowB.outline
+          );
+          if (!textA) {
+            setAiSnapshotPlainBody(bodyB, copyB, textB, true);
+            return;
+          }
+          renderAiSnapshotDiffBodies(textA, textB);
+          if (copyA) {
+            copyA.disabled = false;
+            copyA.dataset.copyText = textA;
+          }
+          if (copyB) {
+            copyB.disabled = false;
+            copyB.dataset.copyText = textB;
+          }
+          return;
+        }
       }
     } catch (err) {
       if (textA) setAiSnapshotPlainBody(bodyA, copyA, textA, true);
@@ -12713,7 +12706,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         `Could not build live NEW outline (${err?.message || "error"}).\n\n`
           + "Keep the model open in Creo (Connected), or Save a local tip, then retry."
       );
+      return;
     }
+
+    if (textA) setAiSnapshotPlainBody(bodyA, copyA, textA, true);
+    let isModified = false;
+    try {
+      isModified = await modifiedProbe;
+    } catch {
+      isModified = false;
+    }
+    setAiSnapshotPendingPlaceholder(
+      bodyB,
+      copyB,
+      isModified
+        ? aiSnapshotPendingGatherFailedPlaceholder()
+        : aiSnapshotPendingCleanPlaceholder()
+    );
   }
 
   async function renderAiSnapshotCompare(objectId) {
