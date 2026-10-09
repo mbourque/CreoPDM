@@ -501,7 +501,8 @@ def test_compressed_data_add_requires_agent_and_busy_overlay():
     assert "/zip-import/jobs" in products
     assert "run_in_threadpool" in products
     assert "_zip_extract_and_import" in products
-    assert "ensure_product_mutable" in products
+    # Matrix checkin gate (same as Add); ensure_product_allows is the precise API.
+    assert 'ensure_product_allows(product, "checkin"' in products
     dialog = (ROOT / "src" / "creopdm" / "utils" / "native_dialog.py").read_text(encoding="utf-8")
     assert "def archive_dialog_filter_pairs(" in dialog
     assert '"*.zip"' in dialog
