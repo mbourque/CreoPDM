@@ -210,7 +210,9 @@ def test_add_paths_sends_purgeable_extensions():
     )
     assert "purgeable_extensions" in add_chunk
     assert "effectiveComment" in add_chunk
-    assert "`Add ${batchTotal} files`" in add_chunk
+    assert "defaultAddHistoryComment(" in add_chunk
+    assert "function defaultAddHistoryComment(" in script
+    assert "First check in:" in script
     assert "import_batch_id: importBatchId" in add_chunk
     assert "client_total: batchTotal" in add_chunk
     assert "offset === 0 ? commentOnce" not in add_chunk
@@ -221,6 +223,7 @@ def test_add_paths_sends_purgeable_extensions():
     assert "importExtensionSet" in script
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "Add 5 files` just because the agent uploaded in 5-file chunks" in docs
+    assert "First check in: Add 26 files" in docs
     assert "separate Audit row for every" in docs and "25-path" in docs
     # logicalUploadName must not strip .N from non-purgeable names (e.g. .snagx.1).
     logical = _between(script, "function logicalUploadName(", "function purgeableExtensionSet(")

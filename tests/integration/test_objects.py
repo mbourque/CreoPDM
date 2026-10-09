@@ -1488,7 +1488,9 @@ def test_batch_add_from_disk_one_commit(client, repo_parent, data_dir):
 
     vault = data_dir / "vaults" / product["uuid"]
     messages = [entry.message for entry in GitService().get_history(vault)]
-    assert [item for item in messages if item.startswith("Add")] == ["Add 2 files"]
+    assert [item for item in messages if "Add 2 files" in item] == [
+        "First check in: Add 2 files"
+    ]
 
 
 @requires_git

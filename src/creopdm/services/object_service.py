@@ -562,18 +562,22 @@ class ObjectService:
 
         git_plans = [item for item in plans if item.kind in {"new", "later"}]
         stage_plans = [item for item in plans if item.kind == "stage"]
+        # Before this import writes rows — empty product → "First check in: …".
+        first_check_in = len(index) == 0
         if git_plans:
             message = resolve_add_commit_message(
                 comment,
                 planned_count=len(git_plans),
                 batch_total=batch_total,
                 single_filename=git_plans[0].stored_name if len(git_plans) == 1 else None,
+                first_check_in=first_check_in,
             )
         else:
             message = resolve_add_commit_message(
                 comment,
                 planned_count=0,
                 batch_total=batch_total,
+                first_check_in=first_check_in,
             )
 
         created: list[Path] = []

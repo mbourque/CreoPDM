@@ -1207,6 +1207,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return productHasVaultFilesForExport();
   }
 
+  function isFirstProductCheckIn() {
+    return !productHasListedObjects();
+  }
+
+  function defaultAddHistoryComment({ count = 0, singleName = "" } = {}) {
+    /** Blank Add → History text; first vault content gets a "First check in:" prefix. */
+    const n = Math.max(0, Number(count) || 0);
+    const name = String(singleName || "").trim();
+    let base = "Add files";
+    if (n > 1) base = `Add ${n} files`;
+    else if (n === 1) base = name ? `Add ${name}` : "Add files";
+    return isFirstProductCheckIn() ? `First check in: ${base}` : base;
+  }
+
   function refreshTabMetrics() {
     applyMetricVisibility();
     applyMetricSelection();
@@ -4166,11 +4180,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         // Stable History comment for every chunk (blank → "Add 935 files", not "Add 5 files").
         const effectiveComment =
           String(commentOnce || "").trim()
-          || (batchTotal > 1
-            ? `Add ${batchTotal} files`
-            : total === 1
-              ? `Add ${basenameOf(list[0])}`
-              : "");
+          || defaultAddHistoryComment({
+            count: batchTotal,
+            singleName: total === 1 ? basenameOf(list[0]) : "",
+          });
         for (let offset = 0; offset < list.length; offset += chunkSize) {
           const chunk = list.slice(offset, offset + chunkSize);
           const done = Math.min(offset + chunk.length, total);
@@ -4263,7 +4276,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             batch.folder,
             // Prefer typed comment; else full multi-folder pick count (not this folder alone).
             comment
-              || (folderBatchTotal > 1 ? `Add ${folderBatchTotal} files` : ""),
+              || defaultAddHistoryComment({ count: folderBatchTotal }),
             { importBatchId: agentImportBatchId, batchTotal: folderBatchTotal }
           );
           if (!part) return combined.ok.length ? combined : null;
@@ -4298,7 +4311,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           const data = new FormData();
           const uploadComment =
             comment
-            || (total > 1 ? `Add ${total} files` : total === 1 ? `Add ${chunk[0]?.file?.name || "file"}` : "");
+            || defaultAddHistoryComment({
+              count: total,
+              singleName: total === 1 ? (chunk[0]?.file?.name || "file") : "",
+            });
           if (uploadComment) data.append("comment", uploadComment);
           data.append("batch_total", String(total));
           data.append("import_batch_id", importBatchId);
@@ -9654,7 +9670,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const objectValue = objectLabel.nextElementSibling;
       if (objectValue) objectValue.hidden = Boolean(addOnly);
     }
-    $("#checkin-comment").value = "";
+    const commentBoxEarly = $("#checkin-comment");
+    if (commentBoxEarly) commentBoxEarly.value = "";
     let productUndoIds = [];
     if (productScope && productId) {
       try {
@@ -9850,6 +9867,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         ? (data.new_files || []).map((item) => item.relative_path).filter(Boolean)
         : queued.map((row) => row.dataset.relativePath).filter(Boolean)
     );
+    // Add selected…: seed the required comment (first product content gets prefix).
+    if (commentBox && canSubmit && addOnly && !String(commentBox.value || "").trim()) {
+      const addList = [...selectedNew];
+      const single =
+        addList.length === 1
+          ? String(addList[0] || "").split(/[/\\]/).pop() || ""
+          : "";
+      commentBox.value = defaultAddHistoryComment({
+        count: addList.length,
+        singleName: single,
+      });
+    }
     if (checkinDialog) {
       checkinDialog.dataset.addPaths = JSON.stringify(
         addOnly ? [...selectedNew] : []
