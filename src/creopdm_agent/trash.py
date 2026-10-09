@@ -87,7 +87,13 @@ def clear_directory_contents(directory: Path) -> tuple[int, list[str]]:
         failed.extend(sweep_failed)
         return removed, failed
 
-    # Windows: one SHFileOperation for every top-level child (all names / types).
+    # Windows: one SHFileOperation for every top-level child (all names / types,
+    # including Hidden/System — clear those attrs first so Shell will take them).
+    for child in children:
+        _clear_windows_hidden_system(child)
+        if child.is_dir():
+            for nested in _iter_all_under(child):
+                _clear_windows_hidden_system(nested)
     try:
         _windows_recycle_bin_many(children)
     except OSError:
@@ -144,6 +150,46 @@ def _dedupe_failures(failed: list[str]) -> list[str]:
     return out
 
 
+def _clear_windows_hidden_system(path: Path) -> None:
+    """Drop Hidden/System attributes so delete/recycle can see the path."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        get_attrs = ctypes.windll.kernel32.GetFileAttributesW
+        set_attrs = ctypes.windll.kernel32.SetFileAttributesW
+        attrs = get_attrs(str(path))
+        if attrs == -1:
+            return
+        file_attribute_hidden = 0x2
+        file_attribute_system = 0x4
+        cleaned = attrs & ~(file_attribute_hidden | file_attribute_system)
+        if cleaned != attrs:
+            set_attrs(str(path), cleaned)
+    except OSError:
+        return
+    except Exception:
+        return
+
+
+def _iter_all_under(root: Path) -> list[Path]:
+    """Every file/dir under ``root`` (deepest first), including hidden/dot files.
+
+    ``Path.rglob('*')`` skips names starting with ``.`` — use ``os.walk`` instead.
+    """
+    if not root.is_dir():
+        return []
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root, topdown=False, followlinks=False):
+        base = Path(dirpath)
+        for name in filenames:
+            found.append(base / name)
+        for name in dirnames:
+            found.append(base / name)
+    return found
+
+
 def _hard_purge_remaining(root: Path) -> tuple[int, list[str]]:
     """Permanently delete every remaining file/dir under ``root`` (deepest first)."""
     import shutil
@@ -152,18 +198,14 @@ def _hard_purge_remaining(root: Path) -> tuple[int, list[str]]:
         return 0, []
     removed = 0
     failed: list[str] = []
-    leftovers = sorted(
-        (p for p in root.rglob("*")),
-        key=lambda p: len(p.parts),
-        reverse=True,
-    )
-    for path in leftovers:
+    for path in _iter_all_under(root):
         if not path.exists():
             continue
         try:
             rel = str(path.relative_to(root)).replace("\\", "/")
         except ValueError:
             rel = path.name
+        _clear_windows_hidden_system(path)
         try:
             if path.is_symlink() or path.is_file():
                 path.unlink()
@@ -182,11 +224,12 @@ def _hard_purge_remaining(root: Path) -> tuple[int, list[str]]:
             continue
         if path.exists():
             failed.append(f"{rel}: still present after delete")
-    # Top-level again in case rglob missed a stubborn child.
+    # Top-level again (iterdir includes hidden/dot names).
     for child in list(root.iterdir()):
         if not child.exists():
             continue
         label = child.name
+        _clear_windows_hidden_system(child)
         try:
             if child.is_dir():
                 shutil.rmtree(child)

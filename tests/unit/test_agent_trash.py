@@ -88,6 +88,11 @@ def test_clear_directory_contents_sweeps_nested_leftovers(tmp_path, monkeypatch)
     nested.mkdir()
     (nested / "extra.txt").write_text("extra", encoding="utf-8")
     (nested / "orphan.bin").write_bytes(b"x")
+    # Dotfiles nested under a folder — pathlib rglob('*') historically skips these.
+    (nested / ".hidden_meta").write_text("hidden", encoding="utf-8")
+    deep = nested / ".secret_dir"
+    deep.mkdir()
+    (deep / "inside.bin").write_bytes(b"z")
 
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     monkeypatch.setattr("creopdm_agent.trash.sys.platform", "win32")
@@ -103,4 +108,22 @@ def test_clear_directory_contents_sweeps_nested_leftovers(tmp_path, monkeypatch)
     assert failed == []
     assert removed >= 1
     assert root.is_dir()
+    assert list(root.iterdir()) == []
+
+
+def test_hard_purge_finds_dotfiles_rglob_skips(tmp_path, monkeypatch):
+    """Regression: os.walk must see '.hidden' that Path.rglob('*') can miss."""
+    from creopdm_agent.trash import _hard_purge_remaining, _iter_all_under
+
+    root = tmp_path / "cache"
+    root.mkdir()
+    nested = root / "sub"
+    nested.mkdir()
+    hidden = nested / ".hidden"
+    hidden.write_text("x", encoding="utf-8")
+    assert any(p.name == ".hidden" for p in _iter_all_under(root))
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "test_hard_purge_finds_dotfiles")
+    removed, failed = _hard_purge_remaining(root)
+    assert failed == []
+    assert removed >= 1
     assert list(root.iterdir()) == []
