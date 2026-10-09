@@ -233,9 +233,12 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "navigator.clipboard.writeText" in script
     assert 'document.execCommand("copy")' in script
     assert "Creo's embedded browser often lacks navigator.clipboard" in script
-    assert 'name === "compare-revisions"' in script
+    assert 'name === "snapshot"' in script
+    assert "function syncAiSnapshotTabChrome(" in script
+    assert "function fillAiSnapshotViewSelect(" in script
+    assert "function aiSnapshotPanel(" in script
+    assert 'mode === "view"' in script
     assert "aiSnapshotCompareVersions.length >= 2" in script
-    assert 'dataset.mode = "compare"' in script
     assert "await copyTextToClipboard(text)" in script
     # Must not bail out silently when Clipboard API is missing (Creo embedded).
     assert "!navigator.clipboard?.writeText" not in script
@@ -254,9 +257,9 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "function fillAiSnapshotOrderedSelects(" in script
     assert "OLD may only pick indexes > NEW" in script
     assert 'pane === "a" ? "old" : "new"' in script
-    assert 'labelA.textContent = "OLD"' in script
-    assert 'labelB.textContent = "NEW"' in script
+    assert 'labelA.textContent = resolved === "compare" ? "OLD" : "Revision"' in script
     assert "function formatAiSnapshotOutlineDisplay(" in script
+    assert "=== Snapshot (${rev}) ===" in script
     assert "function buildAiSnapshotLineDiff(" in script
     assert "function aiSnapshotLineIdentity(" in script
     assert "function aiSnapshotLinesAlign(" in script
@@ -281,7 +284,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "async function askAiSnapshotCompare(" in script
     assert "/ai-snapshot/compare" in script
     assert 'withBusy("Asking AI what changed…"' in script
-    assert "askRow.hidden = !canCompare" in script
+    assert 'askRow.hidden = resolved !== "compare"' in script
     assert "ai-snapshot-ai-answer-body" in script
     assert "async function askAiCheckinComment(" in script
     assert "async function askAiCheckinCommentForOne(" in script
@@ -340,12 +343,12 @@ def test_app_js_posts_ai_snapshot_soft_fail():
 def test_snapshot_tab_template_and_docs():
     html = DETAIL_HTML.read_text(encoding="utf-8")
     docs = DOCS.read_text(encoding="utf-8")
-    assert 'data-tab="compare-revisions"' in html
-    assert "Compare Revisions" in html
-    assert "show_compare_revisions_tab" in html
-    assert 'id="panel-compare-revisions"' in html
+    assert 'data-tab="snapshot"' in html
+    assert "snapshot_tab_label" in html
+    assert "show_snapshot_tab" in html
+    assert 'id="panel-snapshot"' in html
     assert 'id="ai-snapshot-compare"' in html
-    assert 'data-mode="compare"' in html
+    assert 'data-mode="{{ snapshot_tab_mode }}"' in html
     assert 'id="ai-snapshot-scroll"' in html
     assert 'id="ai-snapshot-diff-row"' in html
     assert "ai-snapshot-head-row" in html
@@ -356,6 +359,7 @@ def test_snapshot_tab_template_and_docs():
         encoding="utf-8"
     )
     assert ".ai-snapshot-diff-row" in css
+    assert 'data-mode="view"' in css
     assert "flex-direction: row" in css
     assert "flex: 0 0 16px" in css
     assert "IDE-style diff" in css
@@ -380,13 +384,15 @@ def test_snapshot_tab_template_and_docs():
     assert "Side-by-side outlines for two revisions" not in html
     assert "plain text, not JSON" not in html
     assert "Compare Revisions" in docs
-    assert "two or more" in docs.lower() and "snapshot" in docs.lower()
+    assert "**Snapshot**" in docs
+    assert "same tab" in docs.lower()
     assert "OLD" in docs and "NEW" in docs
     assert "light green" in docs and "light blue" in docs
     assert "yellow" in docs
-    assert "git unified" in docs.lower()
-    assert "**`+`**" in docs and "**`-`**" in docs
-    assert "Structure/BOM" in docs
+    pages = (ROOT / "src" / "creopdm" / "api" / "pages.py").read_text(encoding="utf-8")
+    assert "show_snapshot_tab" in pages
+    assert 'snapshot_count >= 1' in pages
+    assert 'snapshot_tab_mode = "compare" if snapshot_count >= 2 else "view"' in pages
     assert "FEATTYPE_COMPONENT" in docs
     assert "prepare_snapshot_for_compare" in docs
     assert "parts, assemblies, and drawings" in docs
@@ -1190,9 +1196,12 @@ def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_pat
 
     detail = client.get(f"/products/{product_id}/objects/{object_id}")
     assert detail.status_code == 200, detail.text
-    # One snapshot only — Compare Revisions tab stays hidden until a second exists.
-    assert 'data-tab="compare-revisions"' not in detail.text
-    assert 'id="panel-compare-revisions"' not in detail.text
+    # One snapshot — Snapshot tab (single outline); not Compare Revisions yet.
+    assert 'data-tab="snapshot"' in detail.text
+    assert 'data-tab="snapshot">Snapshot</button>' in detail.text
+    assert 'data-tab="snapshot">Compare Revisions</button>' not in detail.text
+    assert 'id="panel-snapshot"' in detail.text
+    assert 'data-mode="view"' in detail.text
 
     ctx = client.app.state.ctx
     with ctx.session_factory() as db:
@@ -1327,9 +1336,10 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
 
     detail_two = client.get(f"/products/{product_id}/objects/{object_id}")
     assert detail_two.status_code == 200, detail_two.text
-    assert 'data-tab="compare-revisions"' in detail_two.text
-    assert "Compare Revisions" in detail_two.text
-    assert 'id="panel-compare-revisions"' in detail_two.text
+    assert 'data-tab="snapshot">Compare Revisions</button>' in detail_two.text
+    assert 'data-tab="snapshot">Snapshot</button>' not in detail_two.text
+    assert 'id="panel-snapshot"' in detail_two.text
+    assert 'data-mode="compare"' in detail_two.text
     assert 'id="ai-snapshot-scroll"' in detail_two.text
 
     # Persist Ollama settings used by compare.

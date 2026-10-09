@@ -581,10 +581,15 @@ def object_detail(
     # Features = Creo inventory list; Structure = assembly component tree (separate tabs).
     show_features_tab = bool(features)
     show_structure_tab = bool(is_assembly)
-    # Compare Revisions only when two or more revisions have AI snapshots.
-    show_compare_revisions_tab = bool(
-        is_creo and ctx.ai_snapshots.count_with_snapshot(db, object_id) >= 2
+    # Snapshot tab (1 saved snap) → Compare Revisions (2+ snaps); same panel.
+    snapshot_count = (
+        ctx.ai_snapshots.count_with_snapshot(db, object_id) if is_creo else 0
     )
+    show_snapshot_tab = bool(is_creo and snapshot_count >= 1)
+    snapshot_tab_label = (
+        "Compare Revisions" if snapshot_count >= 2 else "Snapshot"
+    )
+    snapshot_tab_mode = "compare" if snapshot_count >= 2 else "view"
     checkout_count = ctx.checkouts.count_for_product(db, product.id)
     checkoutable_count = ctx.checkouts.count_checkoutable_for_product(db, product.id)
     siblings = ctx.objects.list_objects(db, product.id)
@@ -619,7 +624,9 @@ def object_detail(
             "show_family_tab": show_family_tab,
             "show_features_tab": show_features_tab,
             "show_structure_tab": show_structure_tab,
-            "show_compare_revisions_tab": show_compare_revisions_tab,
+            "show_snapshot_tab": show_snapshot_tab,
+            "snapshot_tab_label": snapshot_tab_label,
+            "snapshot_tab_mode": snapshot_tab_mode,
             "bom": bom,
             "show_where_used": show_where_used,
             "where_used": where_used.items if where_used is not None else [],

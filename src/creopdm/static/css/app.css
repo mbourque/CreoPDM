@@ -1650,8 +1650,8 @@ body.is-file-drag #file-drop-overlay {
  * Use nested flex rows (not CSS grid) — Creo’s embedded browser was stacking
  * grid columns into one column with a scrollbar per pane.
  */
-#panel-compare-revisions.ai-snapshot-host,
-#panel-compare-revisions {
+#panel-snapshot.ai-snapshot-host,
+#panel-snapshot {
   min-width: 0;
 }
 .ai-snapshot-compare {
@@ -1662,6 +1662,17 @@ body.is-file-drag #file-drop-overlay {
   min-width: 0;
   flex: 1 1 auto;
   min-height: 0;
+}
+/* Single-revision Snapshot: one outline pane (no NEW / scroll rail / colors). */
+.ai-snapshot-compare[data-mode="view"] .ai-snapshot-toolbar[data-pane="b"],
+.ai-snapshot-compare[data-mode="view"] #ai-snapshot-clip-b,
+.ai-snapshot-compare[data-mode="view"] #ai-snapshot-scroll {
+  display: none !important;
+}
+.ai-snapshot-compare[data-mode="view"] .ai-snapshot-head-row .ai-snapshot-toolbar[data-pane="a"],
+.ai-snapshot-compare[data-mode="view"] #ai-snapshot-clip-a {
+  flex: 1 1 auto;
+  width: auto;
 }
 .ai-snapshot-head-row {
   display: flex;
