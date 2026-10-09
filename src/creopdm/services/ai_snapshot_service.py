@@ -313,6 +313,20 @@ class AiSnapshotService:
         """How many History revisions have a saved AI snapshot (for Compare Revisions tab)."""
         return sum(1 for item in self.list_for_object(session, object_uuid).items if item.has_snapshot)
 
+    def outline_from_snapshot(
+        self,
+        snapshot: dict[str, Any],
+        *,
+        display_revision: str = "pending",
+    ) -> tuple[str, str]:
+        """Plain-language outline for a gathered (not yet saved) snapshot — same prep as Compare."""
+        if not isinstance(snapshot, dict) or not snapshot:
+            raise ValidationAppError("Snapshot JSON is required.")
+        prepared = prepare_snapshot_for_compare(snapshot)
+        text = format_snapshot_compare_text(prepared)
+        label = (display_revision or "").strip() or "pending"
+        return str(text or "").strip(), label
+
     def _chat_compare(
         self,
         *,

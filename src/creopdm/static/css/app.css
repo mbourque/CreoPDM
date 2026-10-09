@@ -1663,16 +1663,18 @@ body.is-file-drag #file-drop-overlay {
   flex: 1 1 auto;
   min-height: 0;
 }
-/* Single-revision Snapshot: one outline pane (no NEW / scroll rail / colors). */
-.ai-snapshot-compare[data-mode="view"] .ai-snapshot-toolbar[data-pane="b"],
-.ai-snapshot-compare[data-mode="view"] #ai-snapshot-clip-b,
-.ai-snapshot-compare[data-mode="view"] #ai-snapshot-scroll {
-  display: none !important;
-}
-.ai-snapshot-compare[data-mode="view"] .ai-snapshot-head-row .ai-snapshot-toolbar[data-pane="a"],
-.ai-snapshot-compare[data-mode="view"] #ai-snapshot-clip-a {
-  flex: 1 1 auto;
-  width: auto;
+/* Pending NEW: tip OLD vs live gather (or boxed placeholder). Same two-pane chrome as compare. */
+.ai-snapshot-placeholder {
+  margin: 1.25rem 1rem;
+  padding: 1.15rem 1rem;
+  border: 1px dashed var(--border, #c5ccd6);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: var(--muted, #5b6573);
+  text-align: center;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .ai-snapshot-head-row {
   display: flex;

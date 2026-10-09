@@ -511,7 +511,12 @@
   {% if show_snapshot_tab %}
   <section class="tab-panel" id="panel-snapshot" hidden
            data-object-id="{{ object.uuid }}"
-           data-tip-version="{{ object.current_version.uuid if object.current_version else '' }}">
+           data-tip-version="{{ object.current_version.uuid if object.current_version else '' }}"
+           data-filename="{{ object.filename }}"
+           data-relative-path="{{ object.relative_path or '' }}"
+           data-next-display="{% if workspace_pending %}{{ workspace_pending.next_display }}{% else %}{{ object.revision }}.{{ object.iteration + 1 }}{% endif %}"
+           data-workspace-pending="{% if workspace_pending %}1{% else %}0{% endif %}"
+           data-modified-locally="{% if workspace_pending %}1{% else %}0{% endif %}">
     <div class="ai-snapshot-ask-row" id="ai-snapshot-ask-row" hidden>
       <button type="button" class="btn btn-primary" id="ai-snapshot-ask-ai"
               title="Send both OLD and NEW outlines and the compare prompt to the configured Ollama model">
@@ -525,20 +530,20 @@
       </div>
       <div class="ai-snapshot-ai-answer-body" id="ai-snapshot-ai-answer-body" tabindex="0"></div>
     </div>
-    {# One path: data-mode=view (single outline) or compare (side-by-side + AI). #}
+    {# pending = tip OLD + live/placeholder NEW; compare = two History snaps + Ask AI. #}
     <div class="ai-snapshot-compare" id="ai-snapshot-compare" data-mode="{{ snapshot_tab_mode }}">
       <div class="ai-snapshot-head-row">
         <div class="ai-snapshot-toolbar" data-pane="a">
           <label class="ai-snapshot-rev-label">
-            <span class="muted small" id="ai-snapshot-label-a">{% if snapshot_tab_mode == "compare" %}OLD{% else %}Revision{% endif %}</span>
-            <select id="ai-snapshot-rev-a" class="ai-snapshot-rev" aria-label="{% if snapshot_tab_mode == "compare" %}OLD snapshot revision{% else %}Snapshot revision{% endif %}"{% if snapshot_tab_mode != "compare" %} disabled{% endif %}></select>
+            <span class="muted small" id="ai-snapshot-label-a">OLD</span>
+            <select id="ai-snapshot-rev-a" class="ai-snapshot-rev" aria-label="OLD snapshot revision"{% if snapshot_tab_mode != "compare" %} disabled{% endif %}></select>
           </label>
-          <button type="button" class="btn" id="ai-snapshot-copy-a" disabled title="Copy snapshot outline to the clipboard">Copy</button>
+          <button type="button" class="btn" id="ai-snapshot-copy-a" disabled title="Copy OLD snapshot outline to the clipboard">Copy</button>
         </div>
         <div class="ai-snapshot-toolbar" data-pane="b">
           <label class="ai-snapshot-rev-label">
             <span class="muted small" id="ai-snapshot-label-b">NEW</span>
-            <select id="ai-snapshot-rev-b" class="ai-snapshot-rev" aria-label="NEW snapshot revision"></select>
+            <select id="ai-snapshot-rev-b" class="ai-snapshot-rev" aria-label="NEW snapshot revision"{% if snapshot_tab_mode != "compare" %} disabled{% endif %}></select>
           </label>
           <button type="button" class="btn" id="ai-snapshot-copy-b" disabled title="Copy NEW snapshot outline to the clipboard">Copy</button>
         </div>

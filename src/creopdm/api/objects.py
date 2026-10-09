@@ -29,6 +29,8 @@ from creopdm.schemas.common import (
     AiSnapshotCompareRequest,
     AiSnapshotCompareResponse,
     AiSnapshotListResponse,
+    AiSnapshotOutlineRequest,
+    AiSnapshotOutlineResponse,
     AiSnapshotRequest,
     AiSnapshotResponse,
     BatchItemResult,
@@ -491,6 +493,28 @@ def post_ai_snapshot(
         result.schema_version,
     )
     return result
+
+
+@router.post(
+    "/api/objects/{object_id}/ai-snapshot/outline",
+    response_model=AiSnapshotOutlineResponse,
+)
+def outline_ai_snapshot(
+    object_id: str,
+    payload: AiSnapshotOutlineRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> AiSnapshotOutlineResponse:
+    """Format a gathered snapshot as Compare outline text (no save, no Ollama)."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    outline, display_revision = ctx.ai_snapshots.outline_from_snapshot(
+        payload.snapshot,
+        display_revision=payload.display_revision,
+    )
+    return AiSnapshotOutlineResponse(outline=outline, display_revision=display_revision)
 
 
 @router.post(

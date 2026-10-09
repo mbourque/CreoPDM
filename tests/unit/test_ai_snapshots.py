@@ -235,9 +235,9 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "Creo's embedded browser often lacks navigator.clipboard" in script
     assert 'name === "snapshot"' in script
     assert "function syncAiSnapshotTabChrome(" in script
-    assert "function fillAiSnapshotViewSelect(" in script
+    assert "function fillAiSnapshotPendingSelects(" in script
     assert "function aiSnapshotPanel(" in script
-    assert 'mode === "view"' in script
+    assert 'mode === "pending"' in script or '=== "pending"' in script
     assert "aiSnapshotCompareVersions.length >= 2" in script
     assert "await copyTextToClipboard(text)" in script
     # Must not bail out silently when Clipboard API is missing (Creo embedded).
@@ -257,15 +257,21 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "function fillAiSnapshotOrderedSelects(" in script
     assert "OLD may only pick indexes > NEW" in script
     assert 'pane === "a" ? "old" : "new"' in script
-    assert 'labelA.textContent = resolved === "compare" ? "OLD" : "Revision"' in script
+    assert 'labelA.textContent = "OLD"' in script
     assert "function formatAiSnapshotOutlineDisplay(" in script
-    assert "=== Snapshot (${rev}) ===" in script
+    assert "=== Snapshot (${rev}) ===" not in script
     assert "function buildAiSnapshotLineDiff(" in script
     assert "function aiSnapshotLineIdentity(" in script
     assert "function aiSnapshotLinesAlign(" in script
     assert "function formatAiSnapshotDiffLine(" in script
     assert "function renderAiSnapshotDiffBodies(" in script
     assert "async function renderAiSnapshotCompare(" in script
+    assert "async function renderAiSnapshotPending(" in script
+    assert "async function gatherLiveCompareNewSnapshot(" in script
+    assert "async function postAiSnapshotOutline(" in script
+    assert "/ai-snapshot/outline" in script
+    assert "function setAiSnapshotPendingPlaceholder(" in script
+    assert "aiSnapshotPendingCleanPlaceholder" in script
     assert 'type: "same"' in script
     assert 'type: "removed"' in script
     assert 'type: "added"' in script
@@ -278,7 +284,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "Git unified-diff markers" in script
     assert 'marker = side === "new" ? "+" : "-"' in script
     assert "async function fetchAiSnapshotOutline(" in script
-    assert "=== ${role} snapshot (${rev}) ===" in script
+    assert "=== ${roleLabel} snapshot (${rev}) ===" in script
     assert "function syncAiSnapshotScrollLayout(" in script
     assert "ai-snapshot-scroll-rail" in script or "ai-snapshot-scroll" in script
     assert "async function askAiSnapshotCompare(" in script
@@ -349,6 +355,8 @@ def test_snapshot_tab_template_and_docs():
     assert 'id="panel-snapshot"' in html
     assert 'id="ai-snapshot-compare"' in html
     assert 'data-mode="{{ snapshot_tab_mode }}"' in html
+    assert 'data-workspace-pending=' in html
+    assert 'data-next-display=' in html
     assert 'id="ai-snapshot-scroll"' in html
     assert 'id="ai-snapshot-diff-row"' in html
     assert "ai-snapshot-head-row" in html
@@ -359,7 +367,8 @@ def test_snapshot_tab_template_and_docs():
         encoding="utf-8"
     )
     assert ".ai-snapshot-diff-row" in css
-    assert 'data-mode="view"' in css
+    assert ".ai-snapshot-placeholder" in css
+    assert 'data-mode="view"' not in css
     assert "flex-direction: row" in css
     assert "flex: 0 0 16px" in css
     assert "IDE-style diff" in css
@@ -375,6 +384,7 @@ def test_snapshot_tab_template_and_docs():
     assert 'id="ai-snapshot-rev-b"' in html
     assert 'id="ai-snapshot-label-a"' in html
     assert 'id="ai-snapshot-label-b"' in html
+    assert ">OLD<" in html and ">NEW<" in html
     assert 'id="ai-snapshot-copy-a"' in html
     assert 'id="ai-snapshot-copy-b"' in html
     assert 'id="ai-snapshot-ask-ai"' in html
@@ -384,15 +394,17 @@ def test_snapshot_tab_template_and_docs():
     assert "Side-by-side outlines for two revisions" not in html
     assert "plain text, not JSON" not in html
     assert "Compare Revisions" in docs
-    assert "**Snapshot**" in docs
-    assert "same tab" in docs.lower()
+    assert "live" in docs.lower()
+    assert "boxed placeholder" in docs
+    assert "label the tab **Snapshot**" in docs
     assert "OLD" in docs and "NEW" in docs
     assert "light green" in docs and "light blue" in docs
     assert "yellow" in docs
     pages = (ROOT / "src" / "creopdm" / "api" / "pages.py").read_text(encoding="utf-8")
     assert "show_snapshot_tab" in pages
     assert 'snapshot_count >= 1' in pages
-    assert 'snapshot_tab_mode = "compare" if snapshot_count >= 2 else "view"' in pages
+    assert 'snapshot_tab_mode = "compare" if snapshot_count >= 2 else "pending"' in pages
+    assert 'snapshot_tab_label = "Compare Revisions"' in pages
     assert "FEATTYPE_COMPONENT" in docs
     assert "prepare_snapshot_for_compare" in docs
     assert "parts, assemblies, and drawings" in docs
@@ -1085,7 +1097,7 @@ def test_snapshot_compare_prompt_requires_saved_text():
 
 @requires_git
 def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_path):
-    """POST tip snapshot, list by rev, GET returns JSON; one snap hides Compare Revisions tab."""
+    """POST tip snapshot, list by rev, GET returns JSON; one snap → pending Compare Revisions."""
     product = client.post(
         "/api/products",
         json={"name": "Snap Product", "number": "SNAP-1"},
@@ -1196,12 +1208,13 @@ def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_pat
 
     detail = client.get(f"/products/{product_id}/objects/{object_id}")
     assert detail.status_code == 200, detail.text
-    # One snapshot — Snapshot tab (single outline); not Compare Revisions yet.
+    # One snapshot — Compare Revisions (pending NEW); not a "Snapshot" tab label.
     assert 'data-tab="snapshot"' in detail.text
-    assert 'data-tab="snapshot">Snapshot</button>' in detail.text
-    assert 'data-tab="snapshot">Compare Revisions</button>' not in detail.text
+    assert 'data-tab="snapshot">Compare Revisions</button>' in detail.text
+    assert 'data-tab="snapshot">Snapshot</button>' not in detail.text
     assert 'id="panel-snapshot"' in detail.text
-    assert 'data-mode="view"' in detail.text
+    assert 'data-mode="pending"' in detail.text
+    assert 'data-workspace-pending=' in detail.text
 
     ctx = client.app.state.ctx
     with ctx.session_factory() as db:
@@ -1498,6 +1511,52 @@ def test_ai_snapshot_compare_pending_uses_tip_and_client_newer(
     )
     assert blocked.status_code == 400, blocked.text
     assert "AI features are turned off" in blocked.text
+
+
+@requires_git
+def test_ai_snapshot_outline_formats_gathered_without_ollama(
+    client, repo_parent, tmp_path
+):
+    """Live NEW path: format client gather as outline text (no save, no Ollama)."""
+    product = client.post(
+        "/api/products",
+        json={"name": "Snap Outline", "number": "SNAP-OUT"},
+    )
+    assert product.status_code == 201, product.text
+    product_id = product.json()["uuid"]
+    prt = tmp_path / "plate.prt.1"
+    prt.write_bytes(b"FAKE CREO PART")
+    added = client.post(
+        f"/api/products/{product_id}/objects",
+        files={"file": ("plate.prt.1", prt.read_bytes(), "application/octet-stream")},
+        data={"comment": "v1"},
+    )
+    assert added.status_code == 201, added.text
+    object_id = added.json()["uuid"]
+
+    outlined = client.post(
+        f"/api/objects/{object_id}/ai-snapshot/outline",
+        json={
+            "display_revision": "A.2",
+            "snapshot": {
+                "identity": {"filename": "plate.prt", "model_type": "PART"},
+                "features": [{"id": 10, "name": "EXTRUDE", "type": "Extrude"}],
+                "dimensions": [{"symbol": "d0", "value": 42.0, "units": "mm"}],
+                "parameters": [],
+            },
+        },
+    )
+    assert outlined.status_code == 200, outlined.text
+    body = outlined.json()
+    assert body["display_revision"] == "A.2"
+    assert "EXTRUDE" in body["outline"]
+    assert "d0" in body["outline"] or "42" in body["outline"]
+
+    empty = client.post(
+        f"/api/objects/{object_id}/ai-snapshot/outline",
+        json={"display_revision": "A.2", "snapshot": {}},
+    )
+    assert empty.status_code == 422 or empty.status_code == 400
 
 
 def test_checkin_batch_comment_prompt_and_fallback():

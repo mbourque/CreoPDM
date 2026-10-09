@@ -908,6 +908,30 @@ class AiSnapshotCompareRequest(BaseModel):
         return text
 
 
+class AiSnapshotOutlineRequest(BaseModel):
+    """Format a client-gathered snapshot as the same plain-language outline Compare uses."""
+
+    snapshot: dict[str, Any] = Field(default_factory=dict)
+    display_revision: str = "pending"
+
+    @field_validator("snapshot")
+    @classmethod
+    def require_snapshot(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(value, dict) or not value:
+            raise ValueError("Snapshot JSON is required.")
+        return value
+
+    @field_validator("display_revision")
+    @classmethod
+    def strip_display_revision(cls, value: str) -> str:
+        return (value or "").strip() or "pending"
+
+
+class AiSnapshotOutlineResponse(BaseModel):
+    outline: str = ""
+    display_revision: str = ""
+
+
 class AiSnapshotComparePendingRequest(BaseModel):
     """Compare a saved tip snapshot to a client-gathered (not yet checked-in) snapshot."""
 

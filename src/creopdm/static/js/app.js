@@ -12056,12 +12056,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const rev = String(displayRevision || "").trim() || "—";
     const text = String(outline || "").trim();
     if (!text) return "";
-    const roleKey = String(role || "").trim().toUpperCase();
-    // Single-revision Snapshot tab (not a compare).
-    if (!roleKey || roleKey === "SNAPSHOT") {
-      return `=== Snapshot (${rev}) ===\n${text}`;
-    }
-    return `=== ${role} snapshot (${rev}) ===\n${text}`;
+    const roleLabel = String(role || "").trim().toUpperCase() || "OLD";
+    return `=== ${roleLabel} snapshot (${rev}) ===\n${text}`;
   }
 
   function aiSnapshotPanel() {
@@ -12070,10 +12066,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function syncAiSnapshotTabChrome(mode) {
     /**
-     * One panel: view = single outline; compare = OLD/NEW + Ask AI.
-     * Tab label flips Snapshot ↔ Compare Revisions with the same DOM.
+     * Always "Compare Revisions": compare = two History snaps + Ask AI;
+     * pending = tip OLD vs live Modified NEW (or boxed placeholder).
      */
-    const resolved = mode === "compare" ? "compare" : "view";
+    const resolved = mode === "compare" ? "compare" : "pending";
     const compare = $("#ai-snapshot-compare");
     if (compare) compare.dataset.mode = resolved;
     const tab =
@@ -12081,7 +12077,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       || document.querySelector('.tabs .tab[data-tab="compare-revisions"]');
     if (tab) {
       tab.dataset.tab = "snapshot";
-      tab.textContent = resolved === "compare" ? "Compare Revisions" : "Snapshot";
+      tab.textContent = "Compare Revisions";
     }
     const askRow = $("#ai-snapshot-ask-row");
     if (askRow) {
@@ -12095,24 +12091,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const labelB = $("#ai-snapshot-label-b");
     const selectA = $("#ai-snapshot-rev-a");
     const selectB = $("#ai-snapshot-rev-b");
-    if (labelA) labelA.textContent = resolved === "compare" ? "OLD" : "Revision";
+    if (labelA) labelA.textContent = "OLD";
     if (labelB) labelB.textContent = "NEW";
     if (selectA) {
       selectA.disabled = resolved !== "compare";
-      selectA.setAttribute(
-        "aria-label",
-        resolved === "compare" ? "OLD snapshot revision" : "Snapshot revision"
-      );
+      selectA.setAttribute("aria-label", "OLD snapshot revision");
     }
     if (selectB) {
+      selectB.disabled = resolved !== "compare";
       selectB.setAttribute("aria-label", "NEW snapshot revision");
     }
     const copyA = $("#ai-snapshot-copy-a");
     if (copyA) {
-      copyA.title =
-        resolved === "compare"
-          ? "Copy OLD snapshot outline to the clipboard"
-          : "Copy snapshot outline to the clipboard";
+      copyA.title = "Copy OLD snapshot outline to the clipboard";
+    }
+    const copyB = $("#ai-snapshot-copy-b");
+    if (copyB) {
+      copyB.title = "Copy NEW snapshot outline to the clipboard";
     }
   }
 
@@ -12393,65 +12388,262 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  function fillAiSnapshotViewSelect() {
+  function fillAiSnapshotPendingSelects() {
+    /** Tip snapshot on OLD; NEW = next pending revision label (not a History snap). */
     const selectA = $("#ai-snapshot-rev-a");
-    if (!selectA || !aiSnapshotCompareVersions.length) return;
+    const selectB = $("#ai-snapshot-rev-b");
+    const panel = aiSnapshotPanel();
+    if (!selectA || !selectB || !aiSnapshotCompareVersions.length) return;
     selectA.replaceChildren();
     const item = aiSnapshotCompareVersions[0];
-    const option = document.createElement("option");
-    option.value = String(item.version_id || "");
-    option.textContent = String(item.display_revision || option.value);
-    selectA.appendChild(option);
-    selectA.value = option.value;
+    const optionA = document.createElement("option");
+    optionA.value = String(item.version_id || "");
+    optionA.textContent = String(item.display_revision || optionA.value);
+    selectA.appendChild(optionA);
+    selectA.value = optionA.value;
+    selectB.replaceChildren();
+    const optionB = document.createElement("option");
+    optionB.value = "pending";
+    optionB.textContent =
+      String(panel?.dataset.nextDisplay || "").trim() || "pending";
+    selectB.appendChild(optionB);
+    selectB.value = "pending";
   }
 
-  async function renderAiSnapshotCompare(objectId) {
-    /** Shared renderer: view = one plain outline; compare = OLD/NEW diff panes. */
-    const compare = $("#ai-snapshot-compare");
-    const mode = String(compare?.dataset.mode || "compare") === "view" ? "view" : "compare";
+  function setAiSnapshotPendingPlaceholder(body, copyBtn, message) {
+    if (!body) return;
+    body.replaceChildren();
+    const box = document.createElement("div");
+    box.className = "ai-snapshot-placeholder";
+    box.textContent = String(message || "");
+    body.appendChild(box);
+    if (copyBtn) {
+      copyBtn.disabled = true;
+      delete copyBtn.dataset.copyText;
+    }
+  }
+
+  function aiSnapshotPendingCleanPlaceholder() {
+    return (
+      "No unchecked-in changes to compare.\n\n"
+      + "When this model is Modified, NEW shows a live outline from Creo "
+      + "(or the local tip) — the same gather Check In → Ask AI uses — "
+      + "without writing a History revision."
+    );
+  }
+
+  function aiSnapshotPendingGatherFailedPlaceholder() {
+    return (
+      "Could not gather a live NEW outline.\n\n"
+      + "Keep the model open in Creo (Connected), or Save so a local tip "
+      + "is in the workspace, then reopen this tab."
+    );
+  }
+
+  async function gatherLiveCompareNewSnapshot(panel) {
+    /**
+     * Same path as Check In → Ask AI: tip snap is OLD; fresh session/disk
+     * gather is NEW (not stored as a History revision).
+     */
+    const objectId = String(panel?.dataset.objectId || "").trim();
+    const filename = String(panel?.dataset.filename || "").trim();
+    const relativePath = String(panel?.dataset.relativePath || "")
+      .trim()
+      .replace(/\\/g, "/");
+    if (!objectId || !filename) return null;
+    if (checkinDialog) {
+      checkinDialog.dataset.aiObjectId = objectId;
+      checkinDialog.dataset.aiFilename = filename;
+      checkinDialog.dataset.aiPath = relativePath;
+      checkinDialog.dataset.aiNextDisplay =
+        String(panel?.dataset.nextDisplay || "").trim() || "pending";
+    }
+    const pending = await resolvePendingCheckinLocalPath(objectId, filename);
+    const gatherName =
+      pending.logicalName || logicalUploadName(filename) || filename;
+    let snapshot = await gatherCreoMetadataForFilename(gatherName, "", {
+      featureNames: true,
+    });
+    if (snapshot && snapshot.__error) snapshot = null;
+    let gatherSource = snapshot ? "session" : "";
+    if (!snapshot && pending.path) {
+      snapshot = await gatherCreoMetadataForFilename(gatherName, pending.path, {
+        featureNames: true,
+        preferDisk: true,
+      });
+      if (snapshot && snapshot.__error) snapshot = null;
+      if (snapshot) gatherSource = "disk";
+    }
+    if (!snapshot) return null;
+    const body = aiSnapshotBodyFromGather(snapshot);
+    if (!body) return null;
+    try {
+      if (!body.capture || typeof body.capture !== "object") body.capture = {};
+      body.capture.compare_source = gatherSource || "unknown";
+    } catch {
+      /* ignore */
+    }
+    return body;
+  }
+
+  async function postAiSnapshotOutline(objectId, snapshot, displayRevision) {
+    const response = await fetch(
+      `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/outline`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        cache: "no-store",
+        body: JSON.stringify({
+          snapshot,
+          display_revision: displayRevision || "pending",
+        }),
+      }
+    );
+    if (!response.ok) throw new Error(await readError(response));
+    const payload = await response.json();
+    return {
+      outline: String(payload?.outline || "").trim(),
+      displayRevision: String(payload?.display_revision || displayRevision || "").trim(),
+    };
+  }
+
+  async function renderAiSnapshotPending(objectId) {
+    /** Tip History snap (OLD) vs live Modified gather / placeholder (NEW). */
+    const panel = aiSnapshotPanel();
     const selectA = $("#ai-snapshot-rev-a");
     const selectB = $("#ai-snapshot-rev-b");
     const bodyA = $("#ai-snapshot-body-a");
     const bodyB = $("#ai-snapshot-body-b");
     const copyA = $("#ai-snapshot-copy-a");
     const copyB = $("#ai-snapshot-copy-b");
-    if (!selectA || !bodyA) return;
+    if (!selectA || !bodyA || !bodyB) return;
 
     const versionA = String(selectA.value || "").trim();
     const labelA = selectA.selectedOptions?.[0]?.textContent || versionA;
+    const labelB =
+      String(selectB?.selectedOptions?.[0]?.textContent || "").trim()
+      || String(panel?.dataset.nextDisplay || "").trim()
+      || "pending";
+    const isModified =
+      panel?.getAttribute("data-workspace-pending") === "1"
+      || panel?.getAttribute("data-modified-locally") === "1";
 
-    if (mode === "view") {
+    setAiSnapshotPlainBody(bodyA, copyA, "Loading…", false);
+    setAiSnapshotPlainBody(bodyB, copyB, "Loading…", false);
+
+    let textA = "";
+    try {
       if (!versionA) {
         setAiSnapshotPlainBody(bodyA, copyA, "No snapshot yet.", false);
-        return;
-      }
-      setAiSnapshotPlainBody(bodyA, copyA, "Loading…", false);
-      if (bodyB) bodyB.replaceChildren();
-      try {
+      } else {
         const rowA = await fetchAiSnapshotOutline(objectId, versionA);
         if (!rowA?.outline) {
           setAiSnapshotPlainBody(bodyA, copyA, aiSnapshotEmptyMessage(labelA), false);
-          return;
+        } else {
+          textA = formatAiSnapshotOutlineDisplay(
+            "OLD",
+            rowA.displayRevision || labelA,
+            rowA.outline
+          );
         }
-        const textA = formatAiSnapshotOutlineDisplay(
-          "Snapshot",
-          rowA.displayRevision || labelA,
-          rowA.outline
-        );
-        setAiSnapshotPlainBody(bodyA, copyA, textA, true);
-      } catch (err) {
-        setAiSnapshotPlainBody(
-          bodyA,
-          copyA,
-          `Could not load snapshot (${err?.message || "error"}).`,
-          false
-        );
       }
+    } catch (err) {
+      setAiSnapshotPlainBody(
+        bodyA,
+        copyA,
+        `Could not load snapshot (${err?.message || "error"}).`,
+        false
+      );
+      setAiSnapshotPendingPlaceholder(
+        bodyB,
+        copyB,
+        aiSnapshotPendingGatherFailedPlaceholder()
+      );
       return;
     }
 
-    if (!selectB || !bodyB) return;
+    if (!isModified) {
+      if (textA) setAiSnapshotPlainBody(bodyA, copyA, textA, true);
+      setAiSnapshotPendingPlaceholder(
+        bodyB,
+        copyB,
+        aiSnapshotPendingCleanPlaceholder()
+      );
+      return;
+    }
+
+    try {
+      const newer = await gatherLiveCompareNewSnapshot(panel);
+      if (!newer) {
+        if (textA) setAiSnapshotPlainBody(bodyA, copyA, textA, true);
+        setAiSnapshotPendingPlaceholder(
+          bodyB,
+          copyB,
+          aiSnapshotPendingGatherFailedPlaceholder()
+        );
+        return;
+      }
+      const rowB = await postAiSnapshotOutline(objectId, newer, labelB);
+      if (!rowB?.outline) {
+        if (textA) setAiSnapshotPlainBody(bodyA, copyA, textA, true);
+        setAiSnapshotPendingPlaceholder(
+          bodyB,
+          copyB,
+          aiSnapshotPendingGatherFailedPlaceholder()
+        );
+        return;
+      }
+      const textB = formatAiSnapshotOutlineDisplay(
+        "NEW",
+        rowB.displayRevision || labelB,
+        rowB.outline
+      );
+      if (!textA) {
+        setAiSnapshotPlainBody(bodyB, copyB, textB, true);
+        return;
+      }
+      renderAiSnapshotDiffBodies(textA, textB);
+      if (copyA) {
+        copyA.disabled = false;
+        copyA.dataset.copyText = textA;
+      }
+      if (copyB) {
+        copyB.disabled = false;
+        copyB.dataset.copyText = textB;
+      }
+    } catch (err) {
+      if (textA) setAiSnapshotPlainBody(bodyA, copyA, textA, true);
+      setAiSnapshotPendingPlaceholder(
+        bodyB,
+        copyB,
+        `Could not build live NEW outline (${err?.message || "error"}).\n\n`
+          + "Keep the model open in Creo (Connected), or Save a local tip, then retry."
+      );
+    }
+  }
+
+  async function renderAiSnapshotCompare(objectId) {
+    /** Shared renderer: pending = tip vs live NEW; compare = two History snaps. */
+    const compare = $("#ai-snapshot-compare");
+    const mode =
+      String(compare?.dataset.mode || "compare") === "pending" ? "pending" : "compare";
+    if (mode === "pending") {
+      await renderAiSnapshotPending(objectId);
+      return;
+    }
+
+    const selectA = $("#ai-snapshot-rev-a");
+    const selectB = $("#ai-snapshot-rev-b");
+    const bodyA = $("#ai-snapshot-body-a");
+    const bodyB = $("#ai-snapshot-body-b");
+    const copyA = $("#ai-snapshot-copy-a");
+    const copyB = $("#ai-snapshot-copy-b");
+    if (!selectA || !selectB || !bodyA || !bodyB) return;
+
+    const versionA = String(selectA.value || "").trim();
     const versionB = String(selectB.value || "").trim();
+    const labelA = selectA.selectedOptions?.[0]?.textContent || versionA;
     const labelB = selectB.selectedOptions?.[0]?.textContent || versionB;
 
     if (!versionA || !versionB) {
@@ -12528,7 +12720,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const selectB = $("#ai-snapshot-rev-b");
     if (!selectA || !selectB) return;
     try {
-      // Always refresh list + outlines when opening Snapshot / Compare Revisions.
+      // Always refresh list + outlines when opening Compare Revisions.
       clearAiSnapshotClientCache();
       {
         const response = await fetch(
@@ -12543,7 +12735,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // API lists newest-first. Defaults: NEW = latest snap, OLD = one prior.
       // OLD dropdown never lists a revision newer than NEW (and vice versa).
       aiSnapshotCompareVersions = items.filter((item) => item && item.has_snapshot);
-      const mode = aiSnapshotCompareVersions.length >= 2 ? "compare" : "view";
+      const mode = aiSnapshotCompareVersions.length >= 2 ? "compare" : "pending";
       syncAiSnapshotTabChrome(mode);
       if (!aiSnapshotCompareVersions.length) {
         setAiSnapshotPlainBody(
@@ -12552,10 +12744,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           "No snapshot yet. Collect metadata (or Check In / Open with Creo Connected) while this tip is current.",
           false
         );
+        setAiSnapshotPendingPlaceholder(
+          $("#ai-snapshot-body-b"),
+          $("#ai-snapshot-copy-b"),
+          aiSnapshotPendingCleanPlaceholder()
+        );
         return;
       }
-      if (mode === "view") {
-        fillAiSnapshotViewSelect();
+      if (mode === "pending") {
+        fillAiSnapshotPendingSelects();
       } else {
         fillAiSnapshotOrderedSelects(
           aiSnapshotCompareVersions[1]?.version_id,
