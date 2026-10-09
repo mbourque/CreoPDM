@@ -307,11 +307,20 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "resolveNewerLocalCacheSaves" in mod_fn
     assert "loadCheckinQueueParts" in mod_fn
     assert "checkinQueueHitForObject" in mod_fn
-    assert "probe=compare-mod-debug" in mod_fn
+    assert "probe=compare-mod-purgeable" in mod_fn
+    assert "purgeableHasPrt=" in mod_fn
     assert "return { modified:" in mod_fn or "modified: Boolean(modified)" in mod_fn
     assert "function checkinQueueHitForObject(" in script
     assert "function listAgentCacheFilesPreferringVault(" in script
     assert "function vaultTipSaveNumber(" in script
+    assert "function defaultPurgeableExtensionSet(" in script
+    # Details has no #metric-filters — body/defaults must still recognize .prt.2.
+    purge_fn = script.split("function purgeableExtensionSet(", 1)[1].split(
+        "function isPurgeableVersionedExtension(", 1
+    )[0]
+    assert "document.body?.dataset?.purgeable" in purge_fn
+    assert "defaultPurgeableExtensionSet()" in purge_fn
+    assert "Never return empty" in purge_fn
     # null from listAgentCacheFiles = offline/fail — not an empty workspace.
     assert "null = agent offline" in script.split(
         "async function listAgentCacheFiles(", 1
@@ -325,7 +334,8 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "data-product-id=" in detail_html
     assert "data-vault-folder=" in detail_html
     base_html = BASE_HTML.read_text(encoding="utf-8")
-    assert "compare-mod-debug" in base_html
+    assert "compare-mod-purgeable" in base_html
+    assert 'data-purgeable=' in base_html
     assert "function clearAiSnapshotPanelModified(" in script
     assert "function waitForCreoAgentReady(" in script
     assert "wasPending" in script.split(
@@ -1298,6 +1308,9 @@ def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_pat
     assert 'id="panel-snapshot"' in detail.text
     assert 'data-mode="pending"' in detail.text
     assert 'data-workspace-pending=' in detail.text
+    # Details has no #metric-filters — body data-purgeable keeps .prt.2 tip math alive.
+    assert 'data-purgeable=' in detail.text
+    assert ".prt" in detail.text.split('data-purgeable="', 1)[1].split('"', 1)[0]
 
     ctx = client.app.state.ctx
     with ctx.session_factory() as db:

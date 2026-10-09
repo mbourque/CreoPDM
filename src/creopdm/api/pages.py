@@ -179,6 +179,13 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
     settings = getattr(ctx, "settings", None) if ctx is not None else None
     unavailable = bool(settings and site_is_unavailable(settings))
     ai_enabled = True if settings is None else bool(getattr(settings.ai, "enabled", True))
+    # Details has no #metric-filters — body data-purgeable keeps Creo .ext.N tip math working.
+    purgeable = []
+    if ctx is not None and hasattr(ctx, "config"):
+        try:
+            purgeable = list(ctx.config.purgeable_cad_extensions() or [])
+        except Exception:
+            purgeable = []
     payload = {
         "request": request,
         **_PAGE_DEFAULTS,
@@ -190,6 +197,7 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
             site_unavailable_message(settings) if settings is not None else ""
         ),
         "ai_enabled": ai_enabled,
+        "purgeable_extensions": purgeable,
         **context,
     }
     # Role + product lock → one toolbar/gear flag set (see product_state.product_ui_capabilities).

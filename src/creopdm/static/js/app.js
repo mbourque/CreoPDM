@@ -3070,15 +3070,33 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return text;
   }
 
+  function defaultPurgeableExtensionSet() {
+    // Details / soft-nav without #metric-filters still must recognize Creo .ext.N
+    // (base-plate.prt.2). Keep in sync with DEFAULT_PURGEABLE_EXTENSIONS.
+    return new Set([
+      ".asm", ".dat", ".drw", ".err", ".frm", ".gph", ".inf", ".lsl", ".lst",
+      ".mat", ".mrd", ".ncl", ".neu", ".prt", ".sec", ".sym", ".tbl", ".tph",
+      ".txt", ".xml",
+    ]);
+  }
+
   function purgeableExtensionSet() {
-    const raw = document.getElementById("metric-filters")?.dataset?.purgeable || "";
-    return new Set(
-      raw
-        .split(/[\s,;]+/)
-        .map((item) => item.trim().toLowerCase())
-        .filter(Boolean)
-        .map((item) => (item.startsWith(".") ? item : `.${item}`))
-    );
+    /**
+     * Prefer Files metric-filters, then body (Details / all pages via base.html).
+     * Never return empty — creoSaveNumber / logicalUploadName would treat
+     * base-plate.prt.2 as save 0 and Compare would miss Newer local save.
+     */
+    const raw =
+      document.getElementById("metric-filters")?.dataset?.purgeable
+      || document.body?.dataset?.purgeable
+      || "";
+    const fromDom = raw
+      .split(/[\s,;]+/)
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean)
+      .map((item) => (item.startsWith(".") ? item : `.${item}`));
+    if (fromDom.length) return new Set(fromDom);
+    return defaultPurgeableExtensionSet();
   }
 
   function isPurgeableVersionedExtension(extension) {
@@ -12825,7 +12843,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
      * mismatch and vault checkin-queue. null from listAgentCacheFiles is not clean.
      * Returns { modified, debug } — debug lines go in the clean placeholder.
      */
-    const debug = ["probe=compare-mod-debug"];
+    const debug = ["probe=compare-mod-purgeable"];
     const done = (modified, reason) => {
       debug.push(`result=${modified ? "modified" : "clean"}`);
       if (reason) debug.push(`reason=${reason}`);
@@ -12841,6 +12859,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     debug.push(`panelRel=${panel.dataset.relativePath || ""}`);
     debug.push(
       `ssrPending=${panel.getAttribute("data-workspace-pending") || "0"}`
+    );
+    debug.push(
+      `purgeableHasPrt=${purgeableExtensionSet().has(".prt") ? "1" : "0"}`
+    );
+    debug.push(
+      `creoSavePrt2=${creoSaveNumber("base-plate.prt.2")}`
     );
     if (!productId) {
       clearAiSnapshotPanelModified(panel);
@@ -13059,7 +13083,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     } catch (err) {
       isModified = false;
       modDebug = [
-        "probe=compare-mod-debug",
+        "probe=compare-mod-purgeable",
         `result=clean`,
         `reason=probe-threw`,
         `error=${err?.message || err || "error"}`,
