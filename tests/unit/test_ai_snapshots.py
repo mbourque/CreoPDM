@@ -284,12 +284,21 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "askRow.hidden = !canCompare" in script
     assert "ai-snapshot-ai-answer-body" in script
     assert "async function askAiCheckinComment(" in script
+    assert "async function askAiCheckinCommentForOne(" in script
+    assert "async function synthesizeCheckinComment(" in script
+    assert "function formatCheckinBatchCommentFallback(" in script
     assert "/ai-snapshot/compare-pending" in script
+    assert "/ai/checkin-comment-synthesize" in script
     # Check In Ask AI must use the same gather body + server compare path as Compare.
     assert "Same body as postAiSnapshotFromGather" in script
     assert "prepare_snapshot_for_compare" in script
     assert 'withBusy("Collecting modified model…"' in script
+    assert "Summarizing check-in comment…" in script
     assert "function syncCheckinAiAskRow(" in script
+    assert "candidates.length > 0" in script.split("function syncCheckinAiAskRow(", 1)[1].split(
+        "async function resolvePendingCheckinLocalPath(", 1
+    )[0]
+    assert "dataset.aiCandidates" in script
     assert "function aiFeaturesEnabled(" in script
     assert "aiFeaturesEnabled()" in script
     assert "AI features are turned off" in script
@@ -298,9 +307,14 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "function resolvePendingCheckinLocalPath(" in script
     assert "never Erase" in script
     assert 'gatherSource = snapshot ? "session"' in script
-    assert "prepareLocalPathForMetadata(objectId, filename)" not in script.split(
-        "async function askAiCheckinComment(", 1
-    )[1].split("checkinBtn?.addEventListener", 1)[0]
+    ask_fn = script.split("async function askAiCheckinComment(", 1)[1].split(
+        "checkinBtn?.addEventListener", 1
+    )[0]
+    assert "prepareLocalPathForMetadata(objectId, filename)" not in ask_fn
+    # Multi-file: serial per-model gather/compare, then one shared comment (no carousel).
+    assert "askAiCheckinCommentForOne" in ask_fn
+    assert "synthesizeCheckinComment" in ask_fn
+    assert "carousel" not in ask_fn.lower()
     base_html = BASE_HTML.read_text(encoding="utf-8")
     assert "preferDisk" in base_html
     assert "Never Erase" in base_html
@@ -311,12 +325,16 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert 'nextDisplay !== "—"' in script
     assert "abortSignalAfter(120_000)" in script
     assert "Ollama timed out after 2 minutes" in script
-    assert 'id="checkin-ask-ai"' in (
-        ROOT / "src" / "creopdm" / "templates" / "app.html"
-    ).read_text(encoding="utf-8")
-    assert "Ask AI for comment" in (
-        ROOT / "src" / "creopdm" / "templates" / "app.html"
-    ).read_text(encoding="utf-8")
+    app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'id="checkin-ask-ai"' in app_html
+    assert "Ask AI for comment" in app_html
+    assert "Summarize modified Creo model(s)" in app_html
+    docs = DOCS.read_text(encoding="utf-8")
+    assert "one or more** modified Creo models" in docs
+    assert "synthesize one shared check-in comment" in docs
+    assert "per-file comment carousel" in docs
 
 
 def test_snapshot_tab_template_and_docs():
@@ -1466,6 +1484,141 @@ def test_ai_snapshot_compare_pending_uses_tip_and_client_newer(
                 "features": [],
                 "dimensions": [{"symbol": "width", "value": 100.0, "units": "mm"}],
             },
+        },
+    )
+    assert blocked.status_code == 400, blocked.text
+    assert "AI features are turned off" in blocked.text
+
+
+def test_checkin_batch_comment_prompt_and_fallback():
+    """Multi-file Ask AI builds one user prompt and a bullet fallback."""
+    from creopdm.ai_prompts import (
+        CHECKIN_BATCH_COMMENT_SYSTEM,
+        build_checkin_batch_comment_user_prompt,
+        format_checkin_batch_comment_fallback,
+    )
+
+    notes = [
+        {"filename": "shaft.prt.2", "summary": "Increased length d0 from 10 to 12."},
+        {"filename": "cover.prt.3", "summary": "Added ROUND feature."},
+    ]
+    prompt = build_checkin_batch_comment_user_prompt(notes)
+    assert "=== shaft.prt.2 ===" in prompt
+    assert "Increased length d0 from 10 to 12." in prompt
+    assert "=== cover.prt.3 ===" in prompt
+    assert "Added ROUND feature." in prompt
+    assert "one check-in comment" in prompt.lower()
+    assert "Reply with only the comment text" in CHECKIN_BATCH_COMMENT_SYSTEM
+
+    fallback = format_checkin_batch_comment_fallback(notes)
+    assert fallback.startswith("Check-in summary:")
+    assert "- shaft.prt.2: Increased length d0 from 10 to 12." in fallback
+    assert "- cover.prt.3: Added ROUND feature." in fallback
+
+    with pytest.raises(ValidationAppError):
+        build_checkin_batch_comment_user_prompt([])
+    with pytest.raises(ValidationAppError):
+        format_checkin_batch_comment_fallback([{"filename": "x.prt", "summary": ""}])
+
+
+@requires_git
+def test_checkin_comment_synthesize_api(client, monkeypatch):
+    """Product synthesize endpoint: single passthrough, multi Ollama, fallback, AI off."""
+    product = client.post(
+        "/api/products",
+        json={"name": "Batch Ask AI", "number": "BATCH-AI"},
+    )
+    assert product.status_code == 201, product.text
+    product_id = product.json()["uuid"]
+
+    saved = client.put(
+        "/api/settings",
+        json={
+            "ollama_base_url": "http://michael-desktop:11434",
+            "ollama_model": "gemma4:latest",
+            "ai_enabled": True,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    single = client.post(
+        f"/api/products/{product_id}/ai/checkin-comment-synthesize",
+        json={
+            "notes": [
+                {
+                    "filename": "only.prt.2",
+                    "summary": "Changed d0 from 1 to 2.",
+                }
+            ]
+        },
+    )
+    assert single.status_code == 200, single.text
+    assert single.json()["summary"] == "Changed d0 from 1 to 2."
+    assert single.json()["fallback"] is False
+
+    captured: dict = {}
+
+    def fake_chat(base_url, model, messages, *, timeout_s=300.0):
+        captured["messages"] = messages
+        return "Updated shaft length and added a round on the cover."
+
+    monkeypatch.setattr(
+        "creopdm.services.ai_snapshot_service.chat_ollama",
+        fake_chat,
+    )
+    multi = client.post(
+        f"/api/products/{product_id}/ai/checkin-comment-synthesize",
+        json={
+            "notes": [
+                {"filename": "shaft.prt.2", "summary": "Increased length."},
+                {"filename": "cover.prt.3", "summary": "Added ROUND."},
+            ]
+        },
+    )
+    assert multi.status_code == 200, multi.text
+    body = multi.json()
+    assert body["summary"] == "Updated shaft length and added a round on the cover."
+    assert body["fallback"] is False
+    assert body["model"] == "gemma4:latest"
+    assert captured["messages"][0]["content"].startswith("You write a single CreoPDM")
+    assert "=== shaft.prt.2 ===" in captured["messages"][1]["content"]
+
+    def boom(*_a, **_k):
+        raise RuntimeError("ollama down")
+
+    monkeypatch.setattr(
+        "creopdm.services.ai_snapshot_service.chat_ollama",
+        boom,
+    )
+    fell = client.post(
+        f"/api/products/{product_id}/ai/checkin-comment-synthesize",
+        json={
+            "notes": [
+                {"filename": "shaft.prt.2", "summary": "Increased length."},
+                {"filename": "cover.prt.3", "summary": "Added ROUND."},
+            ]
+        },
+    )
+    assert fell.status_code == 200, fell.text
+    fell_body = fell.json()
+    assert fell_body["fallback"] is True
+    assert fell_body["summary"].startswith("Check-in summary:")
+    assert "shaft.prt.2" in fell_body["summary"]
+
+    empty = client.post(
+        f"/api/products/{product_id}/ai/checkin-comment-synthesize",
+        json={"notes": []},
+    )
+    assert empty.status_code == 422, empty.text
+
+    assert client.put("/api/settings", json={"ai_enabled": False}).status_code == 200
+    blocked = client.post(
+        f"/api/products/{product_id}/ai/checkin-comment-synthesize",
+        json={
+            "notes": [
+                {"filename": "a.prt", "summary": "x"},
+                {"filename": "b.prt", "summary": "y"},
+            ]
         },
     )
     assert blocked.status_code == 400, blocked.text

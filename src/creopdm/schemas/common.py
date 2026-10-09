@@ -946,6 +946,42 @@ class AiSnapshotCompareResponse(BaseModel):
     summary: str = ""
 
 
+class AiCheckinFileNote(BaseModel):
+    """One per-file Ask AI note used to synthesize a batch check-in comment."""
+
+    filename: str = ""
+    summary: str = ""
+
+    @field_validator("filename", "summary")
+    @classmethod
+    def strip_note_fields(cls, value: str) -> str:
+        return (value or "").strip()
+
+
+class AiCheckinCommentSynthesizeRequest(BaseModel):
+    """Combine per-file change notes into one check-in comment."""
+
+    notes: list[AiCheckinFileNote] = Field(default_factory=list)
+
+    @field_validator("notes")
+    @classmethod
+    def require_notes(cls, value: list[AiCheckinFileNote]) -> list[AiCheckinFileNote]:
+        usable = [
+            note
+            for note in (value or [])
+            if str(note.summary or "").strip()
+        ]
+        if not usable:
+            raise ValueError("At least one per-file change note is required.")
+        return usable
+
+
+class AiCheckinCommentSynthesizeResponse(BaseModel):
+    summary: str = ""
+    model: str = ""
+    fallback: bool = False
+
+
 class WhereUsedItem(BaseModel):
     object_id: str
     filename: str

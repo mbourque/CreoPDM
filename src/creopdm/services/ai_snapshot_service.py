@@ -11,7 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from creopdm.ai_prompts import (
+    CHECKIN_BATCH_COMMENT_SYSTEM,
+    build_checkin_batch_comment_user_prompt,
     build_snapshot_compare_user_prompt,
+    format_checkin_batch_comment_fallback,
     format_snapshot_compare_text,
     prepare_snapshot_for_compare,
     resolve_snapshot_compare_prompt,
@@ -23,6 +26,7 @@ from creopdm.models.object import EngineeringObject
 from creopdm.models.version import ObjectVersion
 from creopdm.product_state import ensure_product_mutable
 from creopdm.schemas.common import (
+    AiCheckinCommentSynthesizeResponse,
     AiSnapshotCompareResponse,
     AiSnapshotListItem,
     AiSnapshotListResponse,
@@ -435,4 +439,67 @@ class AiSnapshotService:
             older_version_id=older.version_id,
             newer_version_id="",
             settings=settings,
+        )
+
+    def synthesize_checkin_comment(
+        self,
+        notes: list[dict[str, str]],
+        settings: AppSettings,
+    ) -> AiCheckinCommentSynthesizeResponse:
+        """Turn per-file Ask AI notes into one shared check-in comment."""
+        if not bool(settings.ai.enabled):
+            raise ValidationAppError(
+                "AI features are turned off. Open Administration → AI, "
+                "check Enable AI features, and Save."
+            )
+        model = str(settings.ai.ollama_model or "").strip()
+        if not model:
+            raise ValidationAppError(
+                "No Ollama model selected. Open Administration → AI, Refresh models, "
+                "choose a model, and Save."
+            )
+        cleaned: list[dict[str, str]] = []
+        for note in notes or []:
+            if not isinstance(note, dict):
+                continue
+            summary = str(note.get("summary") or "").strip()
+            if not summary:
+                continue
+            cleaned.append(
+                {
+                    "filename": str(note.get("filename") or "").strip(),
+                    "summary": summary,
+                }
+            )
+        if not cleaned:
+            raise ValidationAppError("No per-file change notes to summarize.")
+        if len(cleaned) == 1:
+            return AiCheckinCommentSynthesizeResponse(
+                summary=cleaned[0]["summary"],
+                model=model,
+                fallback=False,
+            )
+        user_prompt = build_checkin_batch_comment_user_prompt(cleaned)
+        try:
+            summary = chat_ollama(
+                settings.ai.ollama_base_url,
+                model,
+                [
+                    {"role": "system", "content": CHECKIN_BATCH_COMMENT_SYSTEM},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            text = str(summary or "").strip()
+            if text:
+                return AiCheckinCommentSynthesizeResponse(
+                    summary=text,
+                    model=model,
+                    fallback=False,
+                )
+        except Exception:
+            pass
+        return AiCheckinCommentSynthesizeResponse(
+            summary=format_checkin_batch_comment_fallback(cleaned),
+            model=model,
+            fallback=True,
         )

@@ -9903,19 +9903,40 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         syncNewFilePick();
       }
     }
+    const queueIds = useQueue
+      ? JSON.parse(checkinDialog?.dataset.objectIds || "[]")
+      : objectId
+        ? [objectId]
+        : [];
+    const pendingNamesForAi = data.pending_files || [];
+    const pendingIdsForAi = data.object_ids || [];
+    const aiCandidates = [];
+    for (const id of queueIds) {
+      const oid = String(id || "").trim();
+      if (!oid) continue;
+      const nameIdx = pendingIdsForAi.indexOf(oid);
+      const tipName = tipNameForCheckin(
+        oid,
+        nameIdx >= 0 ? pendingNamesForAi[nameIdx] : ""
+      );
+      if (!isCreoMetadataCandidate(tipName)) continue;
+      const rowEl = document.querySelector(`tr[data-uuid="${CSS.escape(oid)}"]`);
+      const rel = String(
+        rowEl?.dataset?.relativePath || rowEl?.dataset?.path || ""
+      ).trim();
+      aiCandidates.push({
+        objectId: oid,
+        filename: tipName,
+        path: rel,
+        nextDisplay: useQueue
+          ? "pending"
+          : String(data.next_display || "").trim() || "pending",
+      });
+    }
     syncCheckinAiAskRow({
       addOnly,
       canSubmit,
-      objectId: useQueue
-        ? (JSON.parse(checkinDialog?.dataset.objectIds || "[]")[0] || "")
-        : objectId,
-      objectIds: useQueue
-        ? JSON.parse(checkinDialog?.dataset.objectIds || "[]")
-        : objectId
-          ? [objectId]
-          : [],
-      filename: objectLabelText,
-      nextDisplay: String(data.next_display || "").trim(),
+      candidates: aiCandidates,
     });
     checkinDialog.showModal();
   }
@@ -9930,43 +9951,40 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!row || !btn || !checkinDialog) return;
     const addOnly = Boolean(opts?.addOnly);
     const canSubmit = Boolean(opts?.canSubmit);
-    const ids = Array.isArray(opts?.objectIds)
-      ? opts.objectIds.map(String).filter(Boolean)
+    const candidates = Array.isArray(opts?.candidates)
+      ? opts.candidates.filter(
+          (item) =>
+            item &&
+            String(item.objectId || "").trim() &&
+            String(item.filename || "").trim()
+        )
       : [];
-    const objectId = String(opts?.objectId || ids[0] || "").trim();
-    const filename = String(opts?.filename || "").trim();
     const aiOn = aiFeaturesEnabled();
-    const singleCreo =
-      aiOn &&
-      !addOnly &&
-      canSubmit &&
-      ids.length === 1 &&
-      objectId &&
-      filename &&
-      isCreoMetadataCandidate(filename);
-    row.hidden = !singleCreo;
-    btn.disabled = !singleCreo || !canGatherCreoMetadata();
+    const canAsk =
+      aiOn && !addOnly && canSubmit && candidates.length > 0;
+    row.hidden = !canAsk;
+    btn.disabled = !canAsk || !canGatherCreoMetadata();
+    const large = candidates.length > 8;
     btn.title = !aiOn
       ? "AI features are turned off under Administration → AI"
-      : !singleCreo
-        ? "Ask AI for comment works for one modified Creo model at a time"
+      : !canAsk
+        ? "Ask AI for comment needs at least one modified Creo model in this check-in"
         : !canGatherCreoMetadata()
           ? "Open this page in Creo’s embedded browser with Creo Connected to collect the modified model"
-          : "Collect metadata on the modified model, compare to the tip snapshot, and fill the comment";
-    checkinDialog.dataset.aiObjectId = singleCreo ? objectId : "";
-    checkinDialog.dataset.aiFilename = singleCreo ? filename : "";
-    checkinDialog.dataset.aiNextDisplay = singleCreo
-      ? String(opts?.nextDisplay || "").trim()
+          : large
+            ? `Summarize all ${candidates.length} modified Creo models into one check-in comment (may take several minutes)`
+            : candidates.length === 1
+              ? "Collect metadata on the modified model, compare to the tip snapshot, and fill the comment"
+              : `Summarize all ${candidates.length} modified Creo models into one check-in comment`;
+    checkinDialog.dataset.aiCandidates = canAsk ? JSON.stringify(candidates) : "[]";
+    // Legacy single-id fields kept for resolvePendingCheckinLocalPath defaults.
+    const first = canAsk ? candidates[0] : null;
+    checkinDialog.dataset.aiObjectId = first ? String(first.objectId) : "";
+    checkinDialog.dataset.aiFilename = first ? String(first.filename) : "";
+    checkinDialog.dataset.aiNextDisplay = first
+      ? String(first.nextDisplay || "pending")
       : "";
-    // Relative path from Files row — resolved to the modified workspace tip below.
-    let path = "";
-    if (singleCreo) {
-      const rowEl = document.querySelector(
-        `tr[data-uuid="${CSS.escape(objectId)}"]`
-      );
-      path = String(rowEl?.dataset?.relativePath || rowEl?.dataset?.path || "").trim();
-    }
-    checkinDialog.dataset.aiPath = path;
+    checkinDialog.dataset.aiPath = first ? String(first.path || "") : "";
   }
 
   async function resolvePendingCheckinLocalPath(objectId, logicalFilename) {
@@ -10026,10 +10044,177 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     };
   }
 
+  async function askAiCheckinCommentForOne(candidate, index, total) {
+    /**
+     * Tip snapshot (A.n) vs pending gather for one Creo model.
+     * Prefer session — never Erase. Disk path only if not in session.
+     */
+    const objectId = String(candidate?.objectId || "").trim();
+    const filename = String(candidate?.filename || "").trim();
+    const nextDisplay = String(candidate?.nextDisplay || "pending").trim();
+    if (!objectId || !filename) {
+      throw new Error("Missing Creo model for Ask AI.");
+    }
+    // Per-candidate path for resolvePendingCheckinLocalPath.
+    if (checkinDialog) {
+      checkinDialog.dataset.aiObjectId = objectId;
+      checkinDialog.dataset.aiFilename = filename;
+      checkinDialog.dataset.aiPath = String(candidate?.path || "").trim();
+      checkinDialog.dataset.aiNextDisplay = nextDisplay;
+    }
+    publishBusyMessage(
+      total > 1
+        ? `Collecting ${index} of ${total}: ${filename}…`
+        : "Collecting modified model…"
+    );
+    const pending = await resolvePendingCheckinLocalPath(objectId, filename);
+    const gatherName =
+      pending.logicalName || logicalUploadName(filename) || filename;
+    let snapshot = await gatherCreoMetadataForFilename(gatherName, "", {
+      featureNames: true,
+    });
+    if (snapshot && snapshot.__error) snapshot = null;
+    let gatherSource = snapshot ? "session" : "";
+    if (!snapshot && pending.path) {
+      snapshot = await gatherCreoMetadataForFilename(gatherName, pending.path, {
+        featureNames: true,
+        preferDisk: true,
+      });
+      if (snapshot && snapshot.__error) {
+        throw new Error(
+          String(
+            snapshot.__detail
+              || snapshot.__error
+              || `Could not gather metadata from ${filename}.`
+          )
+        );
+      }
+      gatherSource = "disk";
+    }
+    if (!snapshot) {
+      throw new Error(
+        `Could not find ${filename} in Creo. Keep it open `
+          + "(or Save so it is in the local workspace), then try again."
+      );
+    }
+    // Same body as postAiSnapshotFromGather (what Compare Revisions stores).
+    const newerSnapshot = aiSnapshotBodyFromGather(snapshot);
+    if (!newerSnapshot) {
+      throw new Error(
+        `Creo did not return an AI snapshot for ${filename}. `
+          + "Collect metadata on the tip while it is clean, then try again."
+      );
+    }
+    try {
+      if (!newerSnapshot.capture || typeof newerSnapshot.capture !== "object") {
+        newerSnapshot.capture = {};
+      }
+      newerSnapshot.capture.compare_source = gatherSource || "unknown";
+    } catch {
+      /* ignore */
+    }
+    publishBusyMessage(
+      total > 1
+        ? `Asking AI ${index} of ${total}: ${filename}…`
+        : "Asking AI for check-in comment…"
+    );
+    let response;
+    try {
+      response = await fetch(
+        `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare-pending`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: abortSignalAfter(120_000),
+          body: JSON.stringify({
+            newer_snapshot: newerSnapshot,
+            // Queue preview uses "—" for next_display — never send that to Ollama.
+            newer_display_revision:
+              nextDisplay && nextDisplay !== "—" ? nextDisplay : "pending",
+          }),
+        }
+      );
+    } catch (errFetch) {
+      const aborted =
+        errFetch?.name === "AbortError"
+        || /aborted|timeout/i.test(String(errFetch?.message || errFetch || ""));
+      throw new Error(
+        aborted
+          ? "Ollama timed out after 2 minutes. Is it running on the CreoPDM server and is the model loaded?"
+          : String(errFetch?.message || errFetch || "Could not reach CreoPDM for AI compare.")
+      );
+    }
+    if (!response.ok) throw new Error(await readError(response));
+    const payload = await response.json();
+    const text = String(payload?.summary || "").trim();
+    if (!text) throw new Error(`Ollama returned an empty summary for ${filename}.`);
+    return { filename, summary: text };
+  }
+
+  function formatCheckinBatchCommentFallback(notes) {
+    const bullets = [];
+    for (const note of notes || []) {
+      const name = String(note?.filename || "").trim() || "(unnamed)";
+      let one = String(note?.summary || "").trim().replace(/\s+/g, " ");
+      if (!one) continue;
+      if (one.length > 220) one = `${one.slice(0, 217).trim()}…`;
+      bullets.push(`- ${name}: ${one}`);
+    }
+    return bullets.length ? `Check-in summary:\n${bullets.join("\n")}` : "";
+  }
+
+  async function synthesizeCheckinComment(notes) {
+    const productId = currentProductId();
+    if (!productId || !notes?.length) {
+      return formatCheckinBatchCommentFallback(notes);
+    }
+    if (notes.length === 1) return String(notes[0].summary || "").trim();
+    publishBusyMessage("Summarizing check-in comment…");
+    try {
+      const response = await fetch(
+        `/api/products/${encodeURIComponent(productId)}/ai/checkin-comment-synthesize`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: abortSignalAfter(120_000),
+          body: JSON.stringify({ notes }),
+        }
+      );
+      if (!response.ok) throw new Error(await readError(response));
+      const payload = await response.json();
+      const text = String(payload?.summary || "").trim();
+      if (text) return text;
+    } catch {
+      /* fall through to bullets */
+    }
+    return formatCheckinBatchCommentFallback(notes);
+  }
+
   async function askAiCheckinComment() {
-    const objectId = String(checkinDialog?.dataset.aiObjectId || "").trim();
-    const filename = String(checkinDialog?.dataset.aiFilename || "").trim();
-    const nextDisplay = String(checkinDialog?.dataset.aiNextDisplay || "").trim();
+    let candidates = [];
+    try {
+      candidates = JSON.parse(checkinDialog?.dataset.aiCandidates || "[]");
+    } catch {
+      candidates = [];
+    }
+    if (!Array.isArray(candidates) || !candidates.length) {
+      const objectId = String(checkinDialog?.dataset.aiObjectId || "").trim();
+      const filename = String(checkinDialog?.dataset.aiFilename || "").trim();
+      if (objectId && filename) {
+        candidates = [
+          {
+            objectId,
+            filename,
+            path: String(checkinDialog?.dataset.aiPath || "").trim(),
+            nextDisplay: String(checkinDialog?.dataset.aiNextDisplay || "pending").trim(),
+          },
+        ];
+      }
+    }
     const commentBox = $("#checkin-comment");
     showError($("#checkin-error"), "");
     if (!aiFeaturesEnabled()) {
@@ -10039,10 +10224,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       );
       return;
     }
-    if (!objectId || !filename) {
+    if (!candidates.length) {
       showError(
         $("#checkin-error"),
-        "Ask AI for comment works for one modified Creo model at a time."
+        "Ask AI for comment needs at least one modified Creo model in this check-in."
       );
       return;
     }
@@ -10054,96 +10239,44 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     try {
-      const summary = await withBusy("Collecting modified model…", async () => {
-        // Older = saved tip snapshot (A.1). Newer = open modified model in Creo
-        // (what you are checking in). Prefer session — never Erase (that closed
-        // the drawing). Disk path only if the model is not in session.
-        const pending = await resolvePendingCheckinLocalPath(objectId, filename);
-        const gatherName =
-          pending.logicalName || logicalUploadName(filename) || filename;
-        let snapshot = await gatherCreoMetadataForFilename(gatherName, "", {
-          featureNames: true,
-        });
-        if (snapshot && snapshot.__error) snapshot = null;
-        let gatherSource = snapshot ? "session" : "";
-        if (!snapshot && pending.path) {
-          snapshot = await gatherCreoMetadataForFilename(gatherName, pending.path, {
-            featureNames: true,
-            preferDisk: true,
-          });
-          if (snapshot && snapshot.__error) {
+      const summary = await withBusy(
+        candidates.length > 1
+          ? `Collecting ${candidates.length} modified models…`
+          : "Collecting modified model…",
+        async () => {
+          const notes = [];
+          const failures = [];
+          for (let i = 0; i < candidates.length; i++) {
+            try {
+              notes.push(
+                await askAiCheckinCommentForOne(candidates[i], i + 1, candidates.length)
+              );
+            } catch (errOne) {
+              failures.push(
+                `${candidates[i]?.filename || "file"}: ${String(errOne?.message || errOne)}`
+              );
+            }
+          }
+          if (!notes.length) {
             throw new Error(
-              String(
-                snapshot.__detail
-                  || snapshot.__error
-                  || "Could not gather metadata from the modified file."
-              )
+              failures[0]
+                || "Could not gather any modified Creo models for Ask AI."
             );
           }
-          gatherSource = "disk";
+          const text = await synthesizeCheckinComment(notes);
+          if (!text) throw new Error("Ollama returned an empty summary.");
+          return { text, failures, used: notes.length };
         }
-        if (!snapshot) {
-          throw new Error(
-            "Could not find the modified model in Creo. Keep the drawing open "
-              + "(or Save so it is in the local workspace), then try again."
-          );
-        }
-        // Same body as postAiSnapshotFromGather (what Compare Revisions stores).
-        // Server runs prepare_snapshot_for_compare + the same Ask AI prompt for
-        // parts, assemblies, and drawings as Compare Revisions Ask AI.
-        const newerSnapshot = aiSnapshotBodyFromGather(snapshot);
-        if (!newerSnapshot) {
-          throw new Error(
-            "Creo did not return an AI snapshot for this model. "
-              + "Collect metadata on the tip while it is clean, then try again."
-          );
-        }
-        try {
-          if (!newerSnapshot.capture || typeof newerSnapshot.capture !== "object") {
-            newerSnapshot.capture = {};
-          }
-          newerSnapshot.capture.compare_source = gatherSource || "unknown";
-        } catch {
-          /* ignore */
-        }
-        publishBusyMessage("Asking AI for check-in comment…");
-        let response;
-        try {
-          response = await fetch(
-            `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare-pending`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              credentials: "same-origin",
-              cache: "no-store",
-              signal: abortSignalAfter(120_000),
-              body: JSON.stringify({
-                newer_snapshot: newerSnapshot,
-                // Queue preview uses "—" for next_display — never send that to Ollama.
-                newer_display_revision:
-                  nextDisplay && nextDisplay !== "—" ? nextDisplay : "pending",
-              }),
-            }
-          );
-        } catch (errFetch) {
-          const aborted =
-            errFetch?.name === "AbortError"
-            || /aborted|timeout/i.test(String(errFetch?.message || errFetch || ""));
-          throw new Error(
-            aborted
-              ? "Ollama timed out after 2 minutes. Is it running on the CreoPDM server and is the model loaded?"
-              : String(errFetch?.message || errFetch || "Could not reach CreoPDM for AI compare.")
-          );
-        }
-        if (!response.ok) throw new Error(await readError(response));
-        const payload = await response.json();
-        const text = String(payload?.summary || "").trim();
-        if (!text) throw new Error("Ollama returned an empty summary.");
-        return text;
-      });
+      );
       if (commentBox) {
-        commentBox.value = summary;
+        commentBox.value = summary.text;
         commentBox.focus();
+      }
+      if (summary.failures?.length) {
+        showError(
+          $("#checkin-error"),
+          `Comment filled from ${summary.used} model(s). Skipped: ${summary.failures.join("; ")}`
+        );
       }
     } catch (err) {
       showError(

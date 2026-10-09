@@ -43,6 +43,8 @@ from creopdm.creo.file_manager import CreoFileManager
 from creopdm.exceptions import CreoPDMError, PathValidationError, ValidationAppError
 from creopdm.logging_setup import get_logger
 from creopdm.schemas.common import (
+    AiCheckinCommentSynthesizeRequest,
+    AiCheckinCommentSynthesizeResponse,
     BatchItemResult,
     BatchOperationResponse,
     CreateFolderRequest,
@@ -460,6 +462,36 @@ def product_checkin_queue(
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.workspaces.vault_for(product))}
     )
+
+
+@router.post(
+    "/api/products/{product_id}/ai/checkin-comment-synthesize",
+    response_model=AiCheckinCommentSynthesizeResponse,
+)
+def synthesize_checkin_comment(
+    product_id: str,
+    payload: AiCheckinCommentSynthesizeRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> AiCheckinCommentSynthesizeResponse:
+    """Combine per-file Ask AI notes into one shared check-in comment."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    load_accessible_product(request, ctx, db, product_id)
+    notes = [
+        {"filename": note.filename, "summary": note.summary}
+        for note in payload.notes
+    ]
+    result = ctx.ai_snapshots.synthesize_checkin_comment(notes, ctx.settings)
+    logger.info(
+        "AI check-in comment synthesize for product %s: files=%s model=%s fallback=%s chars=%s",
+        product_id[:8],
+        len(notes),
+        result.model or "-",
+        result.fallback,
+        len(result.summary or ""),
+    )
+    return result
 
 
 @router.post(

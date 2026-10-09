@@ -1184,6 +1184,59 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
     return "\n".join(lines) if lines else "(empty snapshot)"
 
 
+CHECKIN_BATCH_COMMENT_SYSTEM = (
+    "You write a single CreoPDM check-in comment. "
+    "Input is one short change note per file already checked by CreoPDM. "
+    "Reply with only the comment text: concise, factual, past tense, no markdown "
+    "headings, no preamble (do not start with Comment: or Here is). "
+    "Cover every file that has a real change note; omit skipped/error-only lines "
+    "unless that is the only content. Prefer one short paragraph or a few bullets."
+)
+
+
+def build_checkin_batch_comment_user_prompt(
+    notes: list[dict[str, str]],
+) -> str:
+    """User message for synthesizing one check-in comment from per-file AI notes."""
+    lines: list[str] = [
+        "Write one check-in comment that summarizes these per-file change notes:",
+        "",
+    ]
+    for note in notes:
+        if not isinstance(note, dict):
+            continue
+        name = str(note.get("filename") or "").strip() or "(unnamed)"
+        summary = str(note.get("summary") or "").strip()
+        if not summary:
+            continue
+        lines.append(f"=== {name} ===")
+        lines.append(summary)
+        lines.append("")
+    if len(lines) <= 2:
+        raise ValidationAppError("No per-file change notes to summarize.")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def format_checkin_batch_comment_fallback(notes: list[dict[str, str]]) -> str:
+    """Plain bullet list when the synthesize Ollama call fails."""
+    bullets: list[str] = []
+    for note in notes:
+        if not isinstance(note, dict):
+            continue
+        name = str(note.get("filename") or "").strip() or "(unnamed)"
+        summary = str(note.get("summary") or "").strip()
+        if not summary:
+            continue
+        # Keep each file to one line when possible.
+        one = " ".join(summary.split())
+        if len(one) > 220:
+            one = one[:217].rstrip() + "…"
+        bullets.append(f"- {name}: {one}")
+    if not bullets:
+        raise ValidationAppError("No per-file change notes to summarize.")
+    return "Check-in summary:\n" + "\n".join(bullets)
+
+
 def build_snapshot_compare_user_prompt(
     *,
     older_snapshot: dict[str, Any],
