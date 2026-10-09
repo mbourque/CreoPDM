@@ -397,6 +397,26 @@ a.brand:hover { text-decoration: none; color: inherit; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Lifecycle permission matrix: vertical stripes so op columns stay readable. */
+.lifecycle-matrix th:nth-child(odd),
+.lifecycle-matrix td:nth-child(odd) {
+  background: #ffffff;
+}
+.lifecycle-matrix th:nth-child(even),
+.lifecycle-matrix td:nth-child(even) {
+  background: #e8eef4;
+}
+.lifecycle-matrix th.col-op,
+.lifecycle-matrix td.col-op {
+  text-align: center;
+  vertical-align: middle;
+}
+.lifecycle-matrix th.col-op {
+  font-size: 0.75rem;
+  line-height: 1.2;
+  max-width: 6.5rem;
+  white-space: normal;
+}
 .type-label-table { table-layout: fixed; }
 .type-label-table th:first-child,
 .type-label-table td:first-child { width: 38%; }

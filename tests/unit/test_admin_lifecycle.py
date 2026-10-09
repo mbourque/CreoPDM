@@ -30,6 +30,8 @@ def _reset_lifecycle_policy():
 
 
 def test_admin_lifecycle_page_lists_matrix(auth_client, auth_ctx):
+    from pathlib import Path
+
     _setup_admin_and_users(auth_client, auth_ctx)
     _login(auth_client, "admin", "AdminPass1")
     page = auth_client.get("/admin/lifecycle")
@@ -38,6 +40,16 @@ def test_admin_lifecycle_page_lists_matrix(auth_client, auth_ctx):
     assert "Permission matrix" in page.text
     assert "Pre-Work" in page.text
     assert "Check Out" in page.text
+    assert 'class="data-table lifecycle-matrix"' in page.text
+    css = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "creopdm"
+        / "static"
+        / "css"
+        / "app.css"
+    ).read_text(encoding="utf-8")
+    assert ".lifecycle-matrix th:nth-child(even)" in css
     hub = auth_client.get("/admin")
     assert hub.status_code == 200
     assert 'href="/admin/lifecycle"' in hub.text

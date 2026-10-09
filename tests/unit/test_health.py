@@ -104,7 +104,7 @@ def test_home_page(client):
     assert "/client/app.js?v=" in text and "no-product-readonly" in text
     assert 'id="creo-connecting-overlay"' in text
     assert "Connecting to Creo…" in text
-    assert "/static/css/app.css?v=" in text and "btn-link-height" in text
+    assert "/static/css/app.css?v=" in text and "lifecycle-matrix-cols" in text
     assert 'class="folder-open"' in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "<a class=\"folder-open\"" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "folder | urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read() or "urlencode" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
