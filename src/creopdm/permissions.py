@@ -27,6 +27,7 @@ from creopdm.auth_constants import (
     PERMISSION_PRODUCTS_VIEW,
     PERMISSION_ROLES_ASSIGN,
     PERMISSION_ROLES_MANAGE,
+    PERMISSION_SETTINGS_AI,
     PERMISSION_SETTINGS_MANAGE,
     PERMISSION_USERS_MANAGE,
     PERMISSION_USERS_PASSWORD,
@@ -54,6 +55,7 @@ class CapabilityFlags:
     can_assign_products: bool
     can_manage_roles: bool
     can_manage_settings: bool
+    can_manage_ai: bool
     can_manage_products: bool
     can_manage_email: bool
     can_access_utilities: bool
@@ -91,6 +93,7 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_assign_products=PERMISSION_PRODUCTS_ASSIGN in keys,
         can_manage_roles=PERMISSION_ROLES_MANAGE in keys,
         can_manage_settings=PERMISSION_SETTINGS_MANAGE in keys,
+        can_manage_ai=PERMISSION_SETTINGS_AI in keys,
         can_manage_products=PERMISSION_PRODUCTS_MANAGE in keys,
         can_manage_email=PERMISSION_EMAIL_MANAGE in keys,
         can_access_utilities=bool(keys & UTILITIES_PERMISSION_KEYS),
@@ -140,6 +143,7 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_assign_products = caps.can_assign_products
     request.state.can_manage_roles = caps.can_manage_roles
     request.state.can_manage_settings = caps.can_manage_settings
+    request.state.can_manage_ai = caps.can_manage_ai
     request.state.can_manage_products = caps.can_manage_products
     request.state.can_manage_email = caps.can_manage_email
     request.state.can_access_utilities = caps.can_access_utilities
@@ -176,6 +180,7 @@ def caps_dict(request: Request) -> dict:
         "can_assign_products": bool(getattr(request.state, "can_assign_products", False)),
         "can_manage_roles": bool(getattr(request.state, "can_manage_roles", False)),
         "can_manage_settings": bool(getattr(request.state, "can_manage_settings", False)),
+        "can_manage_ai": bool(getattr(request.state, "can_manage_ai", False)),
         "can_manage_products": bool(getattr(request.state, "can_manage_products", False)),
         "can_manage_email": bool(getattr(request.state, "can_manage_email", False)),
         "can_access_utilities": bool(getattr(request.state, "can_access_utilities", False)),
@@ -220,6 +225,7 @@ def caps_dict(request: Request) -> dict:
         or flags["can_assign_products"]
         or flags["can_manage_roles"]
         or flags["can_manage_settings"]
+        or flags["can_manage_ai"]
         or flags["can_manage_products"]
         or flags["can_manage_email"]
         or flags["can_access_utilities"]
@@ -235,6 +241,7 @@ def can_open_administration(caps: CapabilityFlags) -> bool:
         or caps.can_assign_products
         or caps.can_manage_roles
         or caps.can_manage_settings
+        or caps.can_manage_ai
         or caps.can_manage_products
         or caps.can_manage_email
         or caps.can_access_utilities

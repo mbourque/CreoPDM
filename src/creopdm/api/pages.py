@@ -407,6 +407,7 @@ def home(
                 getattr(request.state, "can_manage_users", False)
                 or getattr(request.state, "can_manage_roles", False)
                 or getattr(request.state, "can_manage_settings", False)
+                or getattr(request.state, "can_manage_ai", False)
                 or getattr(request.state, "can_manage_products", False)
                 or getattr(request.state, "can_manage_email", False)
                 or getattr(request.state, "can_access_utilities", False)
@@ -655,6 +656,15 @@ def _require_settings_page(request: Request, ctx: AppContext) -> HTMLResponse | 
     return None
 
 
+def _require_ai_settings_page(request: Request, ctx: AppContext) -> HTMLResponse | None:
+    if ctx.auth_enabled and not getattr(request.state, "can_manage_ai", False):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>AI settings access required (settings.ai).</p>",
+            status_code=403,
+        )
+    return None
+
+
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(
     request: Request,
@@ -665,6 +675,8 @@ def settings_page(
     blocked = _require_settings_page(request, ctx)
     if blocked is not None:
         return blocked
+    can_ai = not ctx.auth_enabled or bool(getattr(request.state, "can_manage_ai", False))
+    tiles = tuple(t for t in SETTINGS_HUB_TILES if t.slug != "ai" or can_ai)
     return render(
         request,
         "settings.html",
@@ -672,7 +684,7 @@ def settings_page(
             "app_name": APP_NAME,
             "app_version": APP_VERSION,
             **_creo_page(ctx),
-            "settings_tiles": SETTINGS_HUB_TILES,
+            "settings_tiles": tiles,
         },
     )
 
@@ -690,7 +702,11 @@ def settings_section_page(
     if (section or "").strip().lower() == "availability":
         return RedirectResponse("/admin/utilities/availability", status_code=303)
 
-    blocked = _require_settings_page(request, ctx)
+    slug = (section or "").strip().lower()
+    if slug == "ai":
+        blocked = _require_ai_settings_page(request, ctx)
+    else:
+        blocked = _require_settings_page(request, ctx)
     if blocked is not None:
         return blocked
     tile = settings_tile(section)

@@ -1105,6 +1105,67 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
     assert denied.status_code == 403
 
 
+def test_admin_ai_settings_gate(auth_client, auth_ctx):
+    """settings.ai opens AI settings; others get 403 on page and AI field PUT."""
+    auth_client.post(
+        "/setup",
+        data={
+            "display_name": "Admin",
+            "username": "admin",
+            "email": "admin@example.com",
+            "password": "AdminPass1",
+            "password_confirm": "AdminPass1",
+        },
+        follow_redirects=False,
+    )
+    page = auth_client.get("/settings/ai")
+    assert page.status_code == 200
+    assert "Enable AI features" in page.text
+    admin_hub = auth_client.get("/admin")
+    assert admin_hub.status_code == 200
+    assert 'href="/settings/ai"' in admin_hub.text
+
+    saved = auth_client.put(
+        "/api/settings",
+        json={"ai_enabled": False, "ollama_model": "gemma4:latest"},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["ai_enabled"] is False
+    assert saved.json()["ollama_model"] == "gemma4:latest"
+
+    # PDM Manager lacks settings.ai (and settings.manage).
+    auth_client.post(
+        "/admin/users/new",
+        data={
+            "display_name": "PDM",
+            "username": "pdm",
+            "email": "pdm@example.com",
+            "role": BuiltinRole.PDM_MANAGER.value,
+            "status": UserStatus.ACTIVE.value,
+            "password": "PdmPass1",
+            "password_confirm": "PdmPass1",
+        },
+        follow_redirects=False,
+    )
+    with auth_ctx.session_factory() as db:
+        pdm = db.scalar(select(User).where(User.username == "pdm"))
+        assert pdm is not None
+        pdm.must_change_password = False
+        db.commit()
+    auth_client.get("/logout")
+    auth_client.post(
+        "/login",
+        data={"username": "pdm", "password": "PdmPass1"},
+        follow_redirects=False,
+    )
+    denied_page = auth_client.get("/settings/ai", follow_redirects=False)
+    assert denied_page.status_code == 403
+    denied_put = auth_client.put("/api/settings", json={"ai_enabled": True})
+    assert denied_put.status_code == 403
+    denied_models = auth_client.get("/api/settings/ai/ollama/models")
+    assert denied_models.status_code == 403
+
+
 def test_admin_can_edit_user(auth_client, auth_ctx):
     auth_client.post(
         "/setup",
@@ -2300,6 +2361,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
     assert "CreoPDM Administration" in role_form.text
     assert "products.manage" in role_form.text
     assert "email.manage" in role_form.text
+    assert "settings.ai" in role_form.text
     assert "utilities.audit" in role_form.text
     assert "utilities.health" in role_form.text
     assert "utilities.logs" in role_form.text

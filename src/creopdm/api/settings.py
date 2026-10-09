@@ -40,9 +40,30 @@ from creopdm.utils.paths import validate_product_location
 router = APIRouter()
 
 
+_AI_SETTINGS_FIELDS = frozenset(
+    ("ai_enabled", "ollama_base_url", "ollama_model", "snapshot_compare_prompt")
+)
+
+
 def _require_settings_manage(request: Request, ctx: AppContext) -> None:
     if ctx.auth_enabled and not getattr(request.state, "can_manage_settings", False):
         raise PermissionDeniedError("Only administrators can change Settings.")
+
+
+def _require_settings_ai(request: Request, ctx: AppContext) -> None:
+    if ctx.auth_enabled and not getattr(request.state, "can_manage_ai", False):
+        raise PermissionDeniedError(
+            "AI settings access required (settings.ai)."
+        )
+
+
+def _payload_touches_ai(payload: SettingsUpdateRequest) -> bool:
+    return bool(payload.model_fields_set & _AI_SETTINGS_FIELDS)
+
+
+def _payload_touches_non_ai(payload: SettingsUpdateRequest) -> bool:
+    return bool(payload.model_fields_set - _AI_SETTINGS_FIELDS)
+
 
 def _resolved_creojs(ctx: AppContext) -> Path | None:
     from creopdm.api.pages import _creojs_library
@@ -137,7 +158,14 @@ def update_settings(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ) -> SettingsResponse:
-    _require_settings_manage(request, ctx)
+    touches_ai = _payload_touches_ai(payload)
+    touches_other = _payload_touches_non_ai(payload)
+    if touches_other:
+        _require_settings_manage(request, ctx)
+    if touches_ai:
+        _require_settings_ai(request, ctx)
+    if not touches_ai and not touches_other:
+        _require_settings_manage(request, ctx)
     current = ctx.settings.model_copy(deep=True)
     before = _settings_audit_snapshot(current)
     current.creo.connector = "auto"
@@ -329,7 +357,7 @@ def get_ollama_models(
     ctx: AppContext = Depends(get_context),
 ) -> OllamaModelsResponse:
     """Probe Ollama /api/tags so the AI settings model dropdown can fill."""
-    _require_settings_manage(request, ctx)
+    _require_settings_ai(request, ctx)
     raw = (base_url or "").strip() or ctx.settings.ai.ollama_base_url
     try:
         root = normalize_ollama_base_url(raw)

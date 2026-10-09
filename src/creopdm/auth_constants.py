@@ -29,6 +29,7 @@ PERMISSION_ROLES_MANAGE = "roles.manage"
 PERMISSION_PRODUCTS_ASSIGN = "products.assign"
 PERMISSION_PRODUCTS_MANAGE = "products.manage"
 PERMISSION_SETTINGS_MANAGE = "settings.manage"
+PERMISSION_SETTINGS_AI = "settings.ai"
 PERMISSION_EMAIL_MANAGE = "email.manage"
 PERMISSION_UTILITIES_AVAILABILITY = "utilities.availability"
 PERMISSION_UTILITIES_EMAIL_USERS = "utilities.email_users"
@@ -72,6 +73,7 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_PRODUCTS_ASSIGN, "Assign product membership (Administration → Membership)"),
     (PERMISSION_PRODUCTS_MANAGE, "Create, edit, and delete products in Administration"),
     (PERMISSION_SETTINGS_MANAGE, "Change global CreoPDM settings"),
+    (PERMISSION_SETTINGS_AI, "Configure AI settings (Ollama, snapshot compare prompt)"),
     (PERMISSION_EMAIL_MANAGE, "Configure email and notifications in Administration"),
     (PERMISSION_UTILITIES_AVAILABILITY, "Utilities → Availability (site maintenance message)"),
     (PERMISSION_UTILITIES_EMAIL_USERS, "Utilities → Email all users"),
@@ -111,6 +113,7 @@ ADMINISTRATION_PERMISSION_KEYS: frozenset[str] = frozenset(
         PERMISSION_PRODUCTS_ASSIGN,
         PERMISSION_PRODUCTS_MANAGE,
         PERMISSION_SETTINGS_MANAGE,
+        PERMISSION_SETTINGS_AI,
         PERMISSION_EMAIL_MANAGE,
         PERMISSION_UTILITIES_AVAILABILITY,
         PERMISSION_UTILITIES_EMAIL_USERS,
@@ -149,6 +152,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             PERMISSION_PRODUCTS_ASSIGN,
             PERMISSION_PRODUCTS_MANAGE,
             PERMISSION_SETTINGS_MANAGE,
+            PERMISSION_SETTINGS_AI,
             PERMISSION_EMAIL_MANAGE,
             PERMISSION_UTILITIES_AVAILABILITY,
             PERMISSION_UTILITIES_EMAIL_USERS,

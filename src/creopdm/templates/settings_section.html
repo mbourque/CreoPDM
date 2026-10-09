@@ -9,8 +9,10 @@
     {% endif %}
     <a href="/admin">Administration</a>
     <span>/</span>
+    {% if can_manage_settings %}
     <a href="/settings">System Settings</a>
     <span>/</span>
+    {% endif %}
     <span>{{ section.title }}</span>
   </nav>
   <h1>{{ section.title }}</h1>
@@ -22,7 +24,11 @@
     <p class="ok" id="settings-ok" hidden>Saved.</p>
     <div class="form-actions">
       <button type="submit" class="btn btn-primary">Save</button>
+      {% if can_manage_settings %}
       <a class="btn" href="/settings">Back to System Settings</a>
+      {% else %}
+      <a class="btn" href="/admin">Back to Administration</a>
+      {% endif %}
     </div>
   </form>
 </article>

@@ -33,6 +33,7 @@ from creopdm.auth_constants import (
     PERMISSION_ROLES_ASSIGN,
     PERMISSION_ROLES_MANAGE,
     PERMISSION_SETTINGS_MANAGE,
+    PERMISSION_SETTINGS_AI,
     PERMISSION_EMAIL_MANAGE,
     PERMISSION_USERS_MANAGE,
     PERMISSION_USERS_PASSWORD,
@@ -260,6 +261,9 @@ class UserService:
 
     def can_manage_settings(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_SETTINGS_MANAGE)
+
+    def can_manage_ai(self, user: User) -> bool:
+        return self.has_permission(user, PERMISSION_SETTINGS_AI)
 
     def can_manage_email(self, user: User) -> bool:
         return self.has_permission(user, PERMISSION_EMAIL_MANAGE)
@@ -568,8 +572,8 @@ class UserService:
                     "Cannot leave the system with no active user who has full "
                     "CreoPDM Administration "
                     "(users.manage, users.password, roles.assign, roles.manage, "
-                    "products.assign, products.manage, settings.manage, email.manage, "
-                    "and all utilities.* permissions)."
+                    "products.assign, products.manage, settings.manage, settings.ai, "
+                    "email.manage, and all utilities.* permissions)."
                 )
             db.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
             for perm_id in self._permission_ids_for_keys(db, keys):
@@ -876,8 +880,8 @@ class UserService:
                     "Cannot leave the system with no active user who has full "
                     "CreoPDM Administration "
                     "(users.manage, users.password, roles.assign, roles.manage, "
-                    "products.assign, products.manage, settings.manage, email.manage, "
-                    "and all utilities.* permissions)."
+                    "products.assign, products.manage, settings.manage, settings.ai, "
+                    "email.manage, and all utilities.* permissions)."
                 )
         if new_status is not None:
             user.status = new_status

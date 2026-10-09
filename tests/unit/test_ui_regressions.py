@@ -2254,6 +2254,7 @@ def test_admin_hub_panel_fills_full_width():
     assert "Coming soon: review sign-ins" not in admin
     assert 'href="/settings/ai"' in admin
     assert ">AI</a>" in admin
+    assert "can_manage_ai" in admin
     assert "Coming soon: configure AI help" not in admin
     assert "Ollama host URL and model" in admin
     assert "Audit log" in admin
