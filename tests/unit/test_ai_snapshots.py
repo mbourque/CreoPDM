@@ -297,14 +297,20 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     )[1].split("async function askAiCheckinCommentForOne(", 1)[0]
     assert "body.identity.filename = pending.diskName" in gather_fn
     assert "Workspace ·" in gather_fn or "Workspace · ${pending.diskName}" in gather_fn
-    # Local Modified must match Files via refreshPendingCheckinIds (+ agent fallback).
+    # Local Modified must match Files → Modified (checkin-queue + Newer local save).
     mod_fn = script.split("async function refreshAiSnapshotPanelModifiedFlag(", 1)[1].split(
         "async function renderAiSnapshotPending(", 1
     )[0]
-    assert "pendingCheckinIds.has(objectId)" in mod_fn
-    assert "await refreshPendingCheckinIds(productId)" in mod_fn
+    assert "await loadCheckinQueueParts(productId)" in mod_fn
+    assert "parts.newerLocal" in mod_fn
+    assert "checkinQueueHitForObject" in mod_fn
     assert "resolveNewerLocalCacheSaves" in mod_fn
-    assert "Same sources as Files → Modified" in script
+    assert "Same sources as Files → Modified tab" in script
+    assert "function checkinQueueHitForObject(" in script
+    # Empty agent [] must not count as proved clean (also returned when offline).
+    assert 'listAgentCacheFiles([]) as proved clean' in script or (
+        "await probeCreoAgent()" in mod_fn and "agentListed" in mod_fn
+    )
     pending_fn = script.split("async function renderAiSnapshotPending(", 1)[1].split(
         "async function renderAiSnapshotCompare(", 1
     )[0]
@@ -314,7 +320,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "data-product-id=" in detail_html
     assert "data-vault-folder=" in detail_html
     base_html = BASE_HTML.read_text(encoding="utf-8")
-    assert "compare-mod-probe" in base_html
+    assert "compare-mod-queue" in base_html
     assert "function clearAiSnapshotPanelModified(" in script
     assert "function waitForCreoAgentReady(" in script
     assert "wasPending" in script.split(

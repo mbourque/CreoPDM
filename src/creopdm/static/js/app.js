@@ -12717,11 +12717,37 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return false;
   }
 
+  function checkinQueueHitForObject(productId, objectId) {
+    /**
+     * Soft-nav from Files → Modified often still has the queue cache; Details
+     * has no Modified tab badge, so cachedCheckinQueueParts() would reject it.
+     */
+    const id = String(objectId || "").trim();
+    const pid = String(productId || "").trim();
+    if (!id || !pid) return null;
+    if (
+      String(checkinQueueCache.productId || "") !== pid
+      || !checkinQueueCache.at
+    ) {
+      return null;
+    }
+    const rows = [
+      ...(Array.isArray(checkinQueueCache.saves) ? checkinQueueCache.saves : []),
+      ...(Array.isArray(checkinQueueCache.newerLocal)
+        ? checkinQueueCache.newerLocal
+        : []),
+    ];
+    return (
+      rows.find((item) => String(item?.uuid || "") === id) || null
+    );
+  }
+
   async function refreshAiSnapshotPanelModifiedFlag(panel) {
     /**
-     * Same sources as Files → Modified (pending ids + checkin-preview + agent).
-     * Do not treat a flaky agent probe as "clean" when Files already knew Modified
-     * (refreshPendingCheckinIds replaces the set and can drop the id).
+     * Same sources as Files → Modified tab (loadCheckinQueueParts): vault
+     * checkin-queue saves + agent "Newer local save" (hash-verified .N).
+     * Do not treat listAgentCacheFiles([]) as proved clean — that is also
+     * returned when the agent is offline or /files fails.
      */
     if (!panel) return false;
     const objectId = String(panel.dataset.objectId || "").trim();
@@ -12734,43 +12760,47 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const openWs = $("#open-workspace-btn");
     const panelVault = aiSnapshotPanelVaultFolder(panel);
     if (openWs && panelVault) openWs.dataset.vaultFolder = panelVault;
-    // Soft-nav from Files often already has this tip in pendingCheckinIds.
     const wasPending = pendingCheckinIds.has(objectId);
-    await waitForCreoAgentReady();
-    try {
-      await refreshPendingCheckinIds(productId);
-    } catch {
-      /* preview/agent optional */
-    }
-    if (pendingCheckinIds.has(objectId)) {
-      markAiSnapshotPanelModified(panel);
+    const cachedHit = checkinQueueHitForObject(productId, objectId);
+    if (cachedHit) {
+      markAiSnapshotPanelModified(panel, cachedHit);
+      rememberPendingCheckinIds([objectId], { merge: true });
       return true;
     }
+    await waitForCreoAgentReady();
+    let queueLoaded = false;
     try {
-      const preview = await fetch(
-        `/api/products/${encodeURIComponent(productId)}/checkin-preview`,
-        { credentials: "same-origin", cache: "no-store" }
+      const parts = await loadCheckinQueueParts(productId);
+      queueLoaded = true;
+      const hit = [...(parts.saves || []), ...(parts.newerLocal || [])].find(
+        (item) => String(item?.uuid || "") === objectId
       );
-      if (preview.ok) {
-        const data = await preview.json().catch(() => null);
-        const ids = Array.isArray(data?.object_ids) ? data.object_ids : [];
-        if (ids.some((id) => String(id || "") === objectId)) {
-          markAiSnapshotPanelModified(panel);
-          return true;
-        }
+      if (hit) {
+        markAiSnapshotPanelModified(panel, hit);
+        rememberPendingCheckinIds([objectId], { merge: true });
+        return true;
       }
     } catch {
-      /* optional */
+      /* fall through — agent / queue optional */
     }
-    let agentReached = false;
+    if (queueLoaded) {
+      // Same list Files → Modified uses: this tip is not there → clean.
+      clearAiSnapshotPanelModified(panel);
+      return false;
+    }
+    // Queue load failed — direct agent probe (must see a live agent, not []).
+    let agentListed = false;
     let sawNewer = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       if (attempt) {
         await new Promise((resolve) => window.setTimeout(resolve, 400));
       }
       try {
+        const agent = await probeCreoAgent();
+        if (!agent) continue;
         const cacheFiles = await listAgentCacheFiles(productId, panelVault);
-        if (Array.isArray(cacheFiles)) agentReached = true;
+        // Only trust a successful /files response (probe already passed).
+        agentListed = true;
         const objects = await ensureProductObjects(productId, {
           force: attempt === 0,
         });
@@ -12786,21 +12816,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           sawNewer = newer;
           break;
         }
-        // Agent listed the workspace and this tip is not newer — proved clean.
-        if (agentReached) break;
+        break;
       } catch {
         /* retry */
       }
     }
     if (sawNewer) {
       markAiSnapshotPanelModified(panel, sawNewer);
+      rememberPendingCheckinIds([objectId], { merge: true });
       return true;
     }
-    if (agentReached) {
+    if (agentListed) {
       clearAiSnapshotPanelModified(panel);
       return false;
     }
-    // Agent never answered — keep prior Files Modified / vault SSR pending.
     if (wasPending || panel.getAttribute("data-workspace-pending") === "1") {
       markAiSnapshotPanelModified(panel);
       return true;
