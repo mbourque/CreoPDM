@@ -12508,6 +12508,51 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     };
   }
 
+  async function refreshAiSnapshotPanelModifiedFlag(panel) {
+    /**
+     * SSR data-workspace-pending only sees the vault host tip.
+     * Local Modified (Files / Check In) comes from creopdm-agent — probe that too.
+     */
+    if (!panel) return false;
+    if (
+      panel.getAttribute("data-workspace-pending") === "1"
+      || panel.getAttribute("data-modified-locally") === "1"
+    ) {
+      return true;
+    }
+    const objectId = String(panel.dataset.objectId || "").trim();
+    const productId = currentProductId();
+    if (!objectId || !productId) return false;
+    try {
+      const [cacheFiles, objects] = await Promise.all([
+        listAgentCacheFiles(productId),
+        ensureProductObjects(productId),
+      ]);
+      const newer = (
+        await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)
+      ).find((item) => String(item?.uuid || "") === objectId);
+      if (!newer) return false;
+      panel.setAttribute("data-modified-locally", "1");
+      if (newer.filename) {
+        panel.dataset.filename = String(newer.filename).trim();
+      }
+      if (newer.relative_path) {
+        panel.dataset.relativePath = String(newer.relative_path)
+          .trim()
+          .replace(/\\/g, "/");
+      }
+      const selectB = $("#ai-snapshot-rev-b");
+      const nextLabel =
+        String(panel.dataset.nextDisplay || "").trim() || "pending";
+      if (selectB && selectB.options.length) {
+        selectB.options[0].textContent = nextLabel;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function renderAiSnapshotPending(objectId) {
     /** Tip History snap (OLD) vs live Modified gather / placeholder (NEW). */
     const panel = aiSnapshotPanel();
@@ -12521,16 +12566,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
     const versionA = String(selectA.value || "").trim();
     const labelA = selectA.selectedOptions?.[0]?.textContent || versionA;
+
+    setAiSnapshotPlainBody(bodyA, copyA, "Loading…", false);
+    setAiSnapshotPlainBody(bodyB, copyB, "Loading…", false);
+
+    // Agent Modified before painting the clean placeholder (SSR vault flag alone is not enough).
+    const isModified = await refreshAiSnapshotPanelModifiedFlag(panel);
     const labelB =
       String(selectB?.selectedOptions?.[0]?.textContent || "").trim()
       || String(panel?.dataset.nextDisplay || "").trim()
       || "pending";
-    const isModified =
-      panel?.getAttribute("data-workspace-pending") === "1"
-      || panel?.getAttribute("data-modified-locally") === "1";
-
-    setAiSnapshotPlainBody(bodyA, copyA, "Loading…", false);
-    setAiSnapshotPlainBody(bodyB, copyB, "Loading…", false);
 
     let textA = "";
     try {

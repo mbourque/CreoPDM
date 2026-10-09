@@ -267,11 +267,18 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "function renderAiSnapshotDiffBodies(" in script
     assert "async function renderAiSnapshotCompare(" in script
     assert "async function renderAiSnapshotPending(" in script
+    assert "async function refreshAiSnapshotPanelModifiedFlag(" in script
     assert "async function gatherLiveCompareNewSnapshot(" in script
     assert "async function postAiSnapshotOutline(" in script
     assert "/ai-snapshot/outline" in script
     assert "function setAiSnapshotPendingPlaceholder(" in script
     assert "aiSnapshotPendingCleanPlaceholder" in script
+    # Local Modified is agent-side — do not trust vault SSR alone for live NEW.
+    assert "resolveNewerLocalCacheSaves" in script.split(
+        "async function refreshAiSnapshotPanelModifiedFlag(", 1
+    )[1].split("async function renderAiSnapshotPending(", 1)[0]
+    assert "SSR data-workspace-pending only sees the vault host tip" in script
+    assert "await refreshAiSnapshotPanelModifiedFlag(panel)" in script
     assert 'type: "same"' in script
     assert 'type: "removed"' in script
     assert 'type: "added"' in script
