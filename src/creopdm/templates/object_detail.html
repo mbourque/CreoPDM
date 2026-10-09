@@ -76,12 +76,14 @@
     <div>
       <div class="detail-title-row">
         <h1 class="detail-filename">{{ object.filename }}</h1>
+        {% if product_ui.show_open %}
         <button type="button" class="btn detail-open-btn" id="detail-open-btn"
                 data-uuid="{{ object.uuid }}"
                 data-filename="{{ object.filename }}"
                 data-can-checkout="{% if object.can_checkout %}1{% else %}0{% endif %}"
                 data-owned="{% if object.owned_by_me %}1{% else %}0{% endif %}"
                 title="Open this file in Creo or its Windows associated program.">Open…</button>
+        {% endif %}
       </div>
     </div>
     <div class="detail-meta">
@@ -644,6 +646,7 @@
     <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this product's local workspace on this PC.">
       <button type="button" class="btn" id="set-creo-dir-btn" data-workspace="{{ workspace_path }}" disabled hidden>Set Working Directory</button>
     </span>
+    {% if product_ui.show_open %}
     <div class="toolbar-menu" id="open-menu" hidden>
       <button type="button" class="btn toolbar-menu-toggle" id="open-menu-btn" hidden
               aria-haspopup="menu" aria-expanded="false"
@@ -657,6 +660,7 @@
                 title="Open this product’s local workspace on this PC. Requires creopdm-agent.">Open workspace</button>
       </div>
     </div>
+    {% endif %}
     {% if product_ui.show_checkout or product_ui.show_undo_checkout or product_ui.show_force_undo_checkout %}
     <div class="toolbar-menu" id="checkout-menu" hidden>
       <button type="button" class="btn toolbar-menu-toggle" id="checkout-menu-btn" hidden

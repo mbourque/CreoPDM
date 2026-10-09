@@ -45,12 +45,23 @@ def test_describe_read_only_not_available():
     assert view.can_checkout is False
 
 
-def test_describe_on_hold_not_available():
-    product = SimpleNamespace(uuid="p1", state=ProductState.ON_HOLD.value, read_only=False)
+def test_describe_in_review_not_available():
+    product = SimpleNamespace(uuid="p1", state=ProductState.IN_REVIEW.value, read_only=False)
     obj = SimpleNamespace(
         product=product,
         lifecycle_state=LifecycleState.IN_WORK.value,
     )
     view = _svc().describe(obj, None)
-    assert view.label == "On hold"
+    assert view.label == "In Review"
+    assert view.can_checkout is False
+
+
+def test_describe_locked_not_available():
+    product = SimpleNamespace(uuid="p1", state=ProductState.LOCKED.value, read_only=False)
+    obj = SimpleNamespace(
+        product=product,
+        lifecycle_state=LifecycleState.IN_WORK.value,
+    )
+    view = _svc().describe(obj, None)
+    assert view.label == "Locked"
     assert view.can_checkout is False

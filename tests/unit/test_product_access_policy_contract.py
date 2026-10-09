@@ -21,6 +21,14 @@ _MUTATION_MODULES = (
     SRC / "api" / "products.py",
 )
 
+# Open / download / export paths must call ensure_product_content_accessible.
+_CONTENT_MODULES = (
+    SRC / "api" / "objects.py",
+    SRC / "api" / "creo.py",
+    SRC / "api" / "products.py",
+    SRC / "api" / "checkout.py",
+)
+
 _APP_HTML = SRC / "templates" / "app.html"
 _DETAIL_HTML = SRC / "templates" / "object_detail.html"
 _APP_JS = SRC / "static" / "js" / "app.js"
@@ -37,10 +45,21 @@ def test_mutation_modules_call_ensure_product_gate():
         ), f"{path.relative_to(ROOT)} must call ensure_product_mutable/deletable"
 
 
+def test_content_modules_call_ensure_product_content_accessible():
+    for path in _CONTENT_MODULES:
+        text = path.read_text(encoding="utf-8")
+        assert path.is_file(), path
+        assert "ensure_product_content_accessible" in text, (
+            f"{path.relative_to(ROOT)} must call ensure_product_content_accessible"
+        )
+
+
 def test_pages_render_injects_product_ui():
     text = _PAGES.read_text(encoding="utf-8")
     assert "product_ui_capabilities" in text
     assert 'payload["product_ui"]' in text or "payload['product_ui']" in text
+    assert "can_view_objects=" in text
+    assert "can_export_product=" in text
 
 
 def test_templates_gate_toolbar_via_product_ui_only():
@@ -53,6 +72,10 @@ def test_templates_gate_toolbar_via_product_ui_only():
         "show_undo_checkout",
         "show_force_undo_checkout",
         "show_checkin",
+        "show_open",
+        "show_export_product",
+        "show_export_objects",
+        "show_copy_to_vault",
         "show_remove",
         "show_remove_vault",
         "show_remove_product",
@@ -63,12 +86,15 @@ def test_templates_gate_toolbar_via_product_ui_only():
     ):
         assert f"product_ui.{flag}" in app, f"app.html missing product_ui.{flag}"
     assert "product_ui.show_checkout and entry.object_ids" in app
+    assert "product_ui.show_open" in detail
     assert "product_ui.show_revert" in detail
     assert "product_ui.show_remove_vault" in detail
     assert "selected.allows_mutation" not in app
     assert "can_add_objects and" not in app
     assert "can_checkin and" not in app
     assert "can_update_metadata and" not in app
+    assert "{% if can_export_product" not in app
+    assert "{% if can_copy_to_vault %}" not in app
     assert "data-requires-mutation" not in app
 
 
@@ -80,6 +106,8 @@ def test_app_js_does_not_reencode_product_lock():
     sync = script.split("function syncToolbar(", 1)[1].split("function setCheckinQueueCounts(", 1)[0]
     assert "mutable &&" not in sync
     assert "allowsMutation" not in sync
+    assert "data-allows-content" in _APP_HTML.read_text(encoding="utf-8")
+    assert "productAllowsContent" in script
 
 
 def test_product_ui_capability_fields_stay_wired():
@@ -87,12 +115,18 @@ def test_product_ui_capability_fields_stay_wired():
     fields = {f.name for f in ProductUiCapabilities.__dataclass_fields__.values()}
     expected = {
         "allows_mutation",
+        "allows_content",
         "show_access_banner",
         "show_add",
         "show_checkout",
         "show_undo_checkout",
         "show_force_undo_checkout",
         "show_checkin",
+        "show_open",
+        "show_download",
+        "show_export_product",
+        "show_export_objects",
+        "show_copy_to_vault",
         "show_remove",
         "show_remove_vault",
         "show_remove_product",

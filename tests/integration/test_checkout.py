@@ -22,46 +22,49 @@ def _create_part(client, repo_parent: Path):
 
 
 @requires_git
-def test_checkout_blocked_when_product_on_hold(client, repo_parent):
-    """Minimum product lifecycle: ON_HOLD blocks checkout at the API and list flags."""
+def test_checkout_blocked_when_product_in_review(client, repo_parent):
+    """Minimum product lifecycle: In Review blocks checkout at the API and list flags."""
     product, obj, _location = _create_part(client, repo_parent)
     listed = client.get(f"/api/products/{product['uuid']}")
     assert listed.status_code == 200
     assert listed.json()["state"] == "IN_WORK"
     assert listed.json()["allows_mutation"] is True
+    assert listed.json()["allows_content"] is True
 
     ctx = client.app.state.ctx
     with ctx.session_factory() as db:
         loaded = ctx.products.get_product(db, product["uuid"])
-        loaded.state = "ON_HOLD"
+        loaded.state = "IN_REVIEW"
         db.commit()
 
     blocked = client.post(f"/api/objects/{obj['uuid']}/checkout")
     assert blocked.status_code == 400, blocked.text
     err = blocked.json()["error"]
     assert err["code"] == "VALIDATION_ERROR"
-    assert "On hold" in err["message"]
+    assert "In Review" in err["message"]
 
     again = client.get(f"/api/products/{product['uuid']}")
     assert again.json()["allows_mutation"] is False
+    assert again.json()["allows_content"] is True
 
     page = client.get(f"/?product={product['uuid']}")
     assert page.status_code == 200, page.text
     assert 'data-allows-mutation="0"' in page.text
+    assert 'data-allows-content="1"' in page.text
     assert "product-access-banner" in page.text
     assert "This product is" in page.text
     assert "are blocked" not in page.text
     assert 'id="product-state-badge"' in page.text
-    assert 'data-state="ON_HOLD"' in page.text
-    assert "On Hold" in page.text
+    assert 'data-state="IN_REVIEW"' in page.text
+    assert "In Review" in page.text
     assert 'id="add-menu"' not in page.text
     assert 'id="checkin-menu"' not in page.text
+    assert 'id="open-menu"' in page.text
     assert 'id="checkout-menu"' in page.text
     assert 'id="checkout-btn"' not in page.text
     assert 'id="checkout-product-btn"' not in page.text
     assert 'id="undo-btn"' in page.text
     assert 'data-state="locked"' in page.text
-    assert "On hold" in page.text
     # Role body flag may still be 1; list rows must not advertise checkout.
     assert page.text.count('data-can-checkout="1"') == 1
     assert 'data-can-checkout="0"' in page.text
@@ -72,7 +75,44 @@ def test_checkout_blocked_when_product_on_hold(client, repo_parent):
     assert detail.status_code == 200, detail.text
     assert detail.json()["can_checkout"] is False
     assert detail.json()["can_checkin"] is False
-    assert detail.json()["checkout_status"] == "On hold"
+    assert detail.json()["checkout_status"] == "In Review"
+
+
+@requires_git
+def test_locked_product_hides_open_and_blocks_download(client, repo_parent):
+    """Locked is list-only: no Open/Export toolbar; content APIs reject."""
+    product, obj, _location = _create_part(client, repo_parent)
+    ctx = client.app.state.ctx
+    with ctx.session_factory() as db:
+        loaded = ctx.products.get_product(db, product["uuid"])
+        loaded.state = "LOCKED"
+        db.commit()
+
+    page = client.get(f"/?product={product['uuid']}")
+    assert page.status_code == 200, page.text
+    assert 'data-allows-mutation="0"' in page.text
+    assert 'data-allows-content="0"' in page.text
+    assert 'data-state="LOCKED"' in page.text
+    assert "Locked" in page.text
+    assert 'id="open-menu"' not in page.text
+    assert 'id="export-menu"' not in page.text
+    assert 'id="add-menu"' not in page.text
+    assert 'id="checkin-menu"' not in page.text
+
+    content = client.get(f"/api/objects/{obj['uuid']}/content")
+    assert content.status_code == 400, content.text
+    assert "Locked" in content.json()["error"]["message"]
+
+    opened = client.post(
+        "/api/creo/open",
+        json={"object_id": obj["uuid"], "launch": False, "include_dependencies": False},
+    )
+    assert opened.status_code == 400, opened.text
+    assert "Locked" in opened.json()["error"]["message"]
+
+    exported = client.post(f"/api/products/{product['uuid']}/export", json={})
+    assert exported.status_code == 400, exported.text
+    assert "Locked" in exported.json()["error"]["message"]
 
 
 @requires_git

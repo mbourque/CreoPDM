@@ -29,6 +29,7 @@ from creopdm.auth_session import (
 from creopdm.constants import (
     APP_NAME,
     APP_VERSION,
+    PRODUCT_STATE_DESCRIPTIONS,
     PRODUCT_STATE_LABELS,
     ActivityAction,
     ProductState,
@@ -1952,6 +1953,7 @@ def admin_products(request: Request, ctx: AppContext = Depends(get_context), db:
             **_base_ctx(request, ctx, current_user=manager),
             "products": products,
             "product_state_labels": PRODUCT_STATE_LABELS,
+            "product_state_descriptions": PRODUCT_STATE_DESCRIPTIONS,
         },
     )
 
@@ -1972,6 +1974,7 @@ def admin_product_new(request: Request, ctx: AppContext = Depends(get_context), 
             "delete_error": None,
             "product_states": list(ProductState),
             "product_state_labels": PRODUCT_STATE_LABELS,
+            "product_state_descriptions": PRODUCT_STATE_DESCRIPTIONS,
         },
     )
 
@@ -2026,6 +2029,7 @@ def admin_product_create(
                 "delete_error": None,
                 "product_states": list(ProductState),
                 "product_state_labels": PRODUCT_STATE_LABELS,
+            "product_state_descriptions": PRODUCT_STATE_DESCRIPTIONS,
             },
             status_code=400,
         )
@@ -2066,6 +2070,7 @@ def admin_product_detail(
             "delete_error": None,
             "product_states": list(ProductState),
             "product_state_labels": PRODUCT_STATE_LABELS,
+            "product_state_descriptions": PRODUCT_STATE_DESCRIPTIONS,
         },
     )
 
@@ -2129,6 +2134,7 @@ def admin_product_update(
                 "delete_error": None,
                 "product_states": list(ProductState),
                 "product_state_labels": PRODUCT_STATE_LABELS,
+            "product_state_descriptions": PRODUCT_STATE_DESCRIPTIONS,
             },
             status_code=400,
         )

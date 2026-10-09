@@ -36,11 +36,12 @@
       <label>Lifecycle state
         <select name="state">
           {% for s in product_states %}
-          <option value="{{ s.value }}" {% if form.state == s.value %}selected{% endif %}>{{ product_state_labels.get(s.value, s.value) }}</option>
+          <option value="{{ s.value }}" {% if form.state == s.value %}selected{% endif %}
+                  title="{{ product_state_descriptions.get(s.value, '') }}">{{ product_state_labels.get(s.value, s.value) }}</option>
           {% endfor %}
         </select>
       </label>
-      <p class="muted small">Only <strong>In work</strong> allows add, checkout, and check-in (unless Read only is on).</p>
+      <p class="muted small"><strong>In Work</strong> and <strong>Under Change</strong> allow add, checkout, and check-in (unless Read only is on). <strong>Locked</strong> is list-only (no open or download).</p>
       <label class="choice">
         <input type="checkbox" name="read_only" value="1" {% if form.read_only %}checked{% endif %}>
         Read only — block modifications without changing lifecycle state
@@ -72,11 +73,12 @@
       <label>Lifecycle state
         <select name="state">
           {% for s in product_states %}
-          <option value="{{ s.value }}" {% if form.state == s.value %}selected{% endif %}>{{ product_state_labels.get(s.value, s.value) }}</option>
+          <option value="{{ s.value }}" {% if form.state == s.value %}selected{% endif %}
+                  title="{{ product_state_descriptions.get(s.value, '') }}">{{ product_state_labels.get(s.value, s.value) }}</option>
           {% endfor %}
         </select>
       </label>
-      <p class="muted small">Only <strong>In work</strong> allows add, checkout, and check-in (unless Read only is on). Other states are view-only for engineering changes in this first cut.</p>
+      <p class="muted small"><strong>In Work</strong> and <strong>Under Change</strong> allow add, checkout, and check-in (unless Read only is on). <strong>Locked</strong> is list-only (no open or download). Other states are view-only for engineering changes.</p>
       <label class="choice">
         <input type="checkbox" name="read_only" value="1" {% if form.read_only %}checked{% endif %}>
         Read only — block modifications without changing lifecycle state

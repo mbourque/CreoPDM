@@ -289,6 +289,9 @@ def agent_cache_archive(
     if len(product_ids) != 1:
         raise ValidationAppError("All files must belong to the same product.")
     product = objects[0].product
+    from creopdm.product_state import ensure_product_content_accessible
+
+    ensure_product_content_accessible(product, action="download files from this product")
     zip_path, count = build_agent_cache_zip(ctx.workspaces, product, objects)
     background_tasks.add_task(lambda path=zip_path: path.unlink(missing_ok=True))
     filename = f"creopdm-cache-{product.uuid[:8]}.zip"
@@ -314,9 +317,12 @@ def send_to_workspace(
 ) -> BatchOperationResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_COPY_TO_VAULT)
     pairs = []
+    from creopdm.product_state import ensure_product_content_accessible
+
     for object_uuid in payload.object_ids:
         obj = ctx.objects.get_object(db, object_uuid)
         require_product_access(request, ctx, obj.product)
+        ensure_product_content_accessible(obj.product, action="download files from this product")
         pairs.append((obj.product, obj))
     result = ctx.workspaces.materialize_many(pairs)
     return BatchOperationResponse.model_validate(

@@ -18,11 +18,11 @@ def _create_part(client, repo_parent: Path):
     return product, created.json()
 
 
-def _lock_on_hold(client, product_uuid: str) -> None:
+def _lock_in_review(client, product_uuid: str) -> None:
     ctx = client.app.state.ctx
     with ctx.session_factory() as db:
         loaded = ctx.products.get_product(db, product_uuid)
-        loaded.state = "ON_HOLD"
+        loaded.state = "IN_REVIEW"
         db.commit()
 
 
@@ -31,7 +31,7 @@ def _assert_locked(response, *, hint: str) -> None:
     body = response.json()["error"]
     assert body["code"] == "VALIDATION_ERROR", hint
     msg = body["message"].lower()
-    assert "on hold" in msg or "read-only" in msg or "cannot" in msg, f"{hint}: {body['message']}"
+    assert "in review" in msg or "read-only" in msg or "cannot" in msg, f"{hint}: {body['message']}"
 
 
 @requires_git
@@ -45,7 +45,7 @@ def test_locked_product_rejects_all_mutation_apis(client, repo_parent):
     checked = client.post(f"/api/objects/{oid}/checkout")
     assert checked.status_code == 200, checked.text
 
-    _lock_on_hold(client, pid)
+    _lock_in_review(client, pid)
 
     _assert_locked(
         client.post(
@@ -77,7 +77,7 @@ def test_locked_product_rejects_all_mutation_apis(client, repo_parent):
     assert body["ok"] == []
     assert body["failed"], "batch remove must fail when product is locked"
     assert body["failed"][0]["code"] == "VALIDATION_ERROR"
-    assert "on hold" in body["failed"][0]["message"].lower()
+    assert "in review" in body["failed"][0]["message"].lower()
 
     # Still checked out after failed batch remove (must not release locks on lock failure).
     still = client.get(f"/api/objects/{oid}")

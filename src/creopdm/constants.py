@@ -44,22 +44,60 @@ class LifecycleState(StrEnum):
 
 
 class ProductState(StrEnum):
-    """Product (project) lifecycle — separate from object LifecycleState."""
+    """Product (project) lifecycle — separate from object LifecycleState.
+
+    Order matches Administration → Products dropdown (common PDM set, then Locked).
+    """
 
     IN_WORK = "IN_WORK"
-    ON_HOLD = "ON_HOLD"
+    IN_REVIEW = "IN_REVIEW"
+    APPROVED = "APPROVED"
     RELEASED = "RELEASED"
-    CLOSED = "CLOSED"
+    UNDER_CHANGE = "UNDER_CHANGE"
+    OBSOLETE = "OBSOLETE"
     ARCHIVED = "ARCHIVED"
+    # List-only access: browse Files, no open/download/export/mutations.
+    LOCKED = "LOCKED"
 
 
 PRODUCT_STATE_LABELS: dict[str, str] = {
-    ProductState.IN_WORK.value: "In work",
-    ProductState.ON_HOLD.value: "On hold",
+    ProductState.IN_WORK.value: "In Work",
+    ProductState.IN_REVIEW.value: "In Review",
+    ProductState.APPROVED.value: "Approved",
     ProductState.RELEASED.value: "Released",
-    ProductState.CLOSED.value: "Closed",
+    ProductState.UNDER_CHANGE.value: "Under Change",
+    ProductState.OBSOLETE.value: "Obsolete",
     ProductState.ARCHIVED.value: "Archived",
+    ProductState.LOCKED.value: "Locked",
 }
+
+
+PRODUCT_STATE_DESCRIPTIONS: dict[str, str] = {
+    ProductState.IN_WORK.value: "Being created or modified. Not approved.",
+    ProductState.IN_REVIEW.value: "Submitted for engineering review.",
+    ProductState.APPROVED.value: "Reviewed and approved but not necessarily released.",
+    ProductState.RELEASED.value: "Official version approved for manufacturing or downstream use.",
+    ProductState.UNDER_CHANGE.value: "A modification is underway against a previously released design.",
+    ProductState.OBSOLETE.value: "No longer valid for new designs or production.",
+    ProductState.ARCHIVED.value: "Retained for historical reference.",
+    ProductState.LOCKED.value: "List files only — no open, download, export, add, or check-in.",
+}
+
+
+# Legacy values remapped on read / by migration 033.
+PRODUCT_STATE_LEGACY_ALIASES: dict[str, str] = {
+    "ON_HOLD": ProductState.IN_REVIEW.value,
+    "CLOSED": ProductState.OBSOLETE.value,
+}
+
+
+# Engineering mutations (add / checkout / check-in / …) when not read_only.
+PRODUCT_MUTABLE_STATES: frozenset[str] = frozenset(
+    {
+        ProductState.IN_WORK.value,
+        ProductState.UNDER_CHANGE.value,
+    }
+)
 
 
 class CheckoutStatus(StrEnum):

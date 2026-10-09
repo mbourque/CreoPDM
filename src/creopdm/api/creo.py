@@ -37,9 +37,12 @@ def open_in_creo(
     ctx: AppContext = Depends(get_context),
 ) -> CreoOpenResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    from creopdm.product_state import ensure_product_content_accessible
+
     if payload.object_id:
         obj = ctx.objects.get_object(db, payload.object_id)
         require_product_access(request, ctx, obj.product)
+        ensure_product_content_accessible(obj.product, action="open files from this product")
         result = ctx.creo_service.open_object(
             db,
             payload.object_id,
@@ -48,6 +51,7 @@ def open_in_creo(
         )
     else:
         product = load_accessible_product(request, ctx, db, payload.product_id or "")
+        ensure_product_content_accessible(product, action="open files from this product")
         result = ctx.creo_service.open_workspace_file(
             db,
             product,

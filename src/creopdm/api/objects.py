@@ -72,6 +72,9 @@ def object_content(
     obj = ctx.objects.get_object(db, object_id)
     require_product_access(request, ctx, obj.product)
     product = obj.product
+    from creopdm.product_state import ensure_product_content_accessible
+
+    ensure_product_content_accessible(product, action="download files from this product")
     try:
         path = ctx.workspaces.locate_content(product, obj)
     except PathValidationError:

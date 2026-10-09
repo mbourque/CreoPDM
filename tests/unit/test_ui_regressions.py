@@ -347,8 +347,9 @@ def test_product_state_badge_in_files_header():
     assert "Read only" in html
     assert html.index('id="product-state-badge"') < html.index('id="search-form"')
     assert ".title-row .product-state" in css
-    assert '.state[data-state="ON_HOLD"]::before' in css
-    assert '.state[data-state="CLOSED"]::before' in css
+    assert '.state[data-state="IN_REVIEW"]::before' in css
+    assert '.state[data-state="UNDER_CHANGE"]::before' in css
+    assert '.state[data-state="LOCKED"]::before' in css
     assert '.checkout-state[data-state="locked"]::before' in css
     assert "current product state" in docs.lower()
     assert "can_checkout %}available{% else %}locked" in html

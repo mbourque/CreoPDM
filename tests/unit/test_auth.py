@@ -1851,7 +1851,7 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
             "name": "Admin Hub Renamed",
             "number": "AH-2",
             "description": "Updated",
-            "state": "ON_HOLD",
+            "state": "IN_REVIEW",
             "read_only": "1",
         },
         follow_redirects=False,
@@ -1860,12 +1860,12 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     body = auth_client.get(f"/api/products/{product['uuid']}").json()
     assert body["name"] == "Admin Hub Renamed"
     assert body["vault_folder"] == original_vault
-    assert body["state"] == "ON_HOLD"
+    assert body["state"] == "IN_REVIEW"
     assert body["read_only"] is True
     assert body["allows_mutation"] is False
 
     listed = auth_client.get("/admin/products")
-    assert "On hold" in listed.text
+    assert "In Review" in listed.text
     assert "Read only" in listed.text
 
     # Regression: vault with untracked CAD leftover must not block state/read-only Save

@@ -849,13 +849,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (el.dataset.readOnly === "1") return "Read only";
     const key = String(el.dataset.productState || "").trim().toUpperCase();
     const labels = {
-      IN_WORK: "In work",
-      ON_HOLD: "On hold",
+      IN_WORK: "In Work",
+      IN_REVIEW: "In Review",
+      APPROVED: "Approved",
       RELEASED: "Released",
-      CLOSED: "Closed",
+      UNDER_CHANGE: "Under Change",
+      OBSOLETE: "Obsolete",
       ARCHIVED: "Archived",
+      LOCKED: "Locked",
     };
-    return labels[key] || "Locked";
+    return labels[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "Locked";
+  }
+
+  function productAllowsContent() {
+    const el = $("#metric-filters");
+    if (!el || el.dataset.allowsContent == null || el.dataset.allowsContent === "") {
+      return true;
+    }
+    return el.dataset.allowsContent === "1";
   }
 
   function applyUndoCheckoutOnRows(uuids) {
@@ -5403,13 +5414,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const canCheckinMenu = canCheckin || canCheckinProduct;
     setToolbarActionVisible(checkinMenuBtn, canCheckinMenu);
     if (!canCheckinMenu) closeCheckinMenu();
+    // Copy/Export menus omitted from the DOM when product_ui hides them (Locked / not mutable).
     setToolbarActionVisible(
       workspaceBtn,
-      document.body?.dataset?.canCopyToVault === "1" &&
+      Boolean(workspaceBtn) &&
+        document.body?.dataset?.canCopyToVault === "1" &&
         selected.some((row) => row.dataset.inWorkspace !== "1")
     );
-    const canExportProduct = document.body?.dataset?.canExportProduct === "1";
-    const canExportObjects = document.body?.dataset?.canExportObjects === "1";
+    const canExportProduct =
+      Boolean(exportProductBtn) && document.body?.dataset?.canExportProduct === "1";
+    const canExportObjects =
+      Boolean(exportSelectedBtn) && document.body?.dataset?.canExportObjects === "1";
     // Visual selection only — do not treat checkout/open fallback ids as an export selection.
     const exportHasSelection =
       selectedRows().flatMap(rowObjectIds).length > 0 || selectedFolderPaths().length > 0;
@@ -6066,8 +6081,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Modified "Newer local save" / New file (local) are already in the agent workspace.
     const alreadyLocal =
       selected.length > 0 && selected.every((row) => row.dataset.localCache === "1");
+    // Download/export: role caps ∩ product_ui (data-allows-content / Export DOM).
     const canDownload =
-      canViewObjects() && selectedDownloadIds().length > 0 && !alreadyLocal;
+      canViewObjects() &&
+      productAllowsContent() &&
+      selectedDownloadIds().length > 0 &&
+      !alreadyLocal;
     const canExportObjects = document.body?.dataset?.canExportObjects === "1";
     const exportHasSelection =
       selected.flatMap(rowObjectIds).length > 0 || selectedFolderPaths().length > 0;
@@ -6255,7 +6274,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function downloadSelectedToWorkspace() {
     closeFilesContextMenu();
-    if (!canViewObjects()) return;
+    if (!canViewObjects() || !productAllowsContent()) return;
     const ids = selectedDownloadIds();
     if (!ids.length) {
       showError($("#toolbar-error"), "Select one or more files to download.");

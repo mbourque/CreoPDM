@@ -581,7 +581,7 @@ def test_product_state_change_records_state_changed_audit(client, data_dir):
             name="State Audit Renamed",
             number=None,
             description=None,
-            state="ON_HOLD",
+            state="IN_REVIEW",
             read_only=True,
         )
 

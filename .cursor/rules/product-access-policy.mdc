@@ -5,15 +5,15 @@ alwaysApply: true
 
 # Product access policy (single source)
 
-`src/creopdm/product_state.py` owns product lifecycle lock (IN_WORK + not `read_only`) for **UI flags** and **API guards**.
+`src/creopdm/product_state.py` owns product lifecycle lock (In Work / Under Change + not `read_only`; **Locked** also blocks open/download) for **UI flags** and **API guards**.
 
 ## When adding or changing a product mutation
 
 Anything that changes vault/product content or locks (Add, Checkout, Check In, Remove from Vault/Product, Rename, Delete product, Collect/Rebuild metadata, Revert, create folder, …):
 
-1. **API / service** — call `ensure_product_mutable` or `ensure_product_deletable` (do not rely on hidden buttons).
+1. **API / service** — call `ensure_product_mutable`, `ensure_product_content_accessible` (open/download/export), or `ensure_product_deletable` (do not rely on hidden buttons).
 2. **Toolbar / gear** — add or reuse a flag on `ProductUiCapabilities` / `product_ui_capabilities()`; templates use `{% if product_ui.show_* %}` only.
-3. **`app.js`** — selection / agent / Creo visibility only. Do **not** re-check `read_only`, product `state`, or `data-allows-mutation` to hide mutation chrome.
+3. **`app.js`** — selection / agent / Creo visibility only. Do **not** re-check `read_only`, product `state`, or `data-allows-mutation` to hide mutation chrome (server-injected `data-allows-content` / omitted DOM is OK).
 4. **Tests** — extend `tests/unit/test_product_state.py` for the new flag; keep **`tests/unit/test_product_access_policy_contract.py`** green (modules must call `ensure_*`, templates use `product_ui`, no JS lock re-check); add/keep an API rejection in `tests/integration/test_product_lifecycle_lock.py` (or `test_checkout.py`) for the new endpoint.
 5. **Docs** — update the read-only / not In work rows in `docs/user-interactions.md` when UX changes (see `user-interactions.mdc`).
 

@@ -1206,9 +1206,11 @@ span.object-open:hover { text-decoration: underline; }
 .state[data-state="RELEASED"]::before { background: var(--ok); }
 .state[data-state="OBSOLETE"]::before { background: var(--idle); }
 /* Product lifecycle (project) — same .state chrome as file State column */
-.state[data-state="ON_HOLD"]::before { background: var(--warn); }
-.state[data-state="CLOSED"]::before { background: var(--idle); }
+.state[data-state="IN_REVIEW"]::before { background: var(--warn); }
+.state[data-state="APPROVED"]::before { background: var(--ok); }
+.state[data-state="UNDER_CHANGE"]::before { background: var(--accent-2); }
 .state[data-state="ARCHIVED"]::before { background: var(--idle); }
+.state[data-state="LOCKED"]::before { background: var(--idle); }
 
 .toolbar {
   flex-shrink: 0; display: flex; flex-direction: column; align-items: stretch;

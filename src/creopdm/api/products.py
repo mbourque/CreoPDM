@@ -326,6 +326,9 @@ def export_product_zip(
 ) -> FileResponse:
     """Zip vault tip files for download. Does not checkout or lock anything."""
     product = load_accessible_product(request, ctx, db, product_id)
+    from creopdm.product_state import ensure_product_content_accessible
+
+    ensure_product_content_accessible(product, action="export files from this product")
     selected = bool(payload.object_ids or payload.folder_paths)
     if selected:
         require_permission(request, ctx, PERMISSION_OBJECTS_EXPORT)
@@ -773,6 +776,9 @@ def open_workspace_folder(
 ) -> Response:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     product = load_accessible_product(request, ctx, db, product_id)
+    from creopdm.product_state import ensure_product_content_accessible
+
+    ensure_product_content_accessible(product, action="open the workspace for this product")
     opened = ctx.workspaces.explorer_directory(product, folder or "")
     try:
         open_windows_folder(opened)
@@ -825,6 +831,9 @@ def workspace_file_content(
 ) -> FileResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     product = load_accessible_product(request, ctx, db, product_id)
+    from creopdm.product_state import ensure_product_content_accessible
+
+    ensure_product_content_accessible(product, action="download files from this product")
     target = ctx.workspaces.file_path(product, path)
     if not target.is_file():
         raise PathValidationError(
