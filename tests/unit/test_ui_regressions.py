@@ -2109,7 +2109,13 @@ def test_agent_cache_matches_legacy_underscore_folder_paths():
     assert "agentCacheSafeRelativePath(path)" in mark
     body = _between(script, "function newerLocalCacheSaves(", "async function countLocalNewWorkspaceFiles(")
     assert "agentCacheSafeRelativePath(vaultRel)" in body
-    assert "agentCacheSafeRelativePath(rel)" in body
+    # Index also keys cache tips under the legacy-safe path (spaces → _).
+    index_fn = _between(
+        script,
+        "function indexLocalCacheTipsByLogical(",
+        "function latestLocalCacheTipForObject(",
+    )
+    assert "agentCacheSafeRelativePath(rel)" in index_fn
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "from_ptc" in docs
 

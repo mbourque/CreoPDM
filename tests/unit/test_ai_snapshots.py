@@ -238,7 +238,9 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "function fillAiSnapshotPendingSelects(" in script
     assert "function aiSnapshotPanel(" in script
     assert 'mode === "pending"' in script or '=== "pending"' in script
-    assert "aiSnapshotCompareVersions.length >= 2" in script
+    # Two History snaps, or one snap + live Modified → compare chrome.
+    assert "n >= 2 || (n >= 1 && isModified)" in script
+    assert "const n = aiSnapshotCompareVersions.length" in script
     assert "await copyTextToClipboard(text)" in script
     # Must not bail out silently when Clipboard API is missing (Creo embedded).
     assert "!navigator.clipboard?.writeText" not in script
@@ -360,7 +362,8 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "await refreshAiSnapshotPanelModifiedFlag(panel)" in pending_fn2
     assert "aiSnapshotPendingCleanPlaceholder()" in pending_fn2
     assert "if (!isModified)" in pending_fn2
-    assert "pinned tip History snap" in pending_fn2
+    assert "selected History snap" in pending_fn2
+    assert "tip by default" in pending_fn2
     assert "--- Compare Modified probe" not in script
     assert "ai-snapshot-placeholder-debug" not in script
     assert "ai-snapshot-placeholder-debug" not in (
@@ -400,8 +403,12 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "/ai/checkin-comment-synthesize" in script
     # Check In Ask AI must use the same gather body + server compare path as Compare.
     assert "Same body as postAiSnapshotFromGather" in script
-    assert "prepare_snapshot_for_compare" in script
-    assert 'withBusy("Collecting modified model…"' in script
+    assert "/ai-snapshot/compare-pending" in script
+    # Server formats via prepare_snapshot_for_compare (Python) — not referenced in app.js.
+    assert "def prepare_snapshot_for_compare(" in (
+        ROOT / "src" / "creopdm" / "ai_prompts.py"
+    ).read_text(encoding="utf-8")
+    assert "Collecting modified model…" in script
     assert "Summarizing check-in comment…" in script
     assert "function syncCheckinAiAskRow(" in script
     assert "candidates.length > 0" in script.split("function syncCheckinAiAskRow(", 1)[1].split(
@@ -449,6 +456,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
 def test_snapshot_tab_template_and_docs():
     html = DETAIL_HTML.read_text(encoding="utf-8")
     docs = DOCS.read_text(encoding="utf-8")
+    script = APP_JS.read_text(encoding="utf-8")
     assert 'data-tab="snapshot"' in html
     assert "snapshot_tab_label" in html
     assert "show_snapshot_tab" in html
