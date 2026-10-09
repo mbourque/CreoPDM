@@ -7796,11 +7796,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return response.json();
   }
 
-  async function listAgentCacheFiles(productId) {
+  async function listAgentCacheFiles(productId, vaultFolderOverride) {
     if (!productId) return [];
     const agent = await probeCreoAgent();
     if (!agent) return [];
-    const vaultFolder = currentVaultFolder();
+    const vaultFolder =
+      String(vaultFolderOverride || "").trim() || currentVaultFolder();
     const params = new URLSearchParams({ product_id: productId });
     if (vaultFolder) params.set("vault_folder", vaultFolder);
     const response = await fetch(
@@ -12451,6 +12452,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       .trim()
       .replace(/\\/g, "/");
     if (!objectId || !filename) return null;
+    // Ensure agent workdir uses this product’s vault folder on Details.
+    const openWs = $("#open-workspace-btn");
+    const panelVault = aiSnapshotPanelVaultFolder(panel);
+    if (openWs && panelVault) openWs.dataset.vaultFolder = panelVault;
     if (checkinDialog) {
       checkinDialog.dataset.aiObjectId = objectId;
       checkinDialog.dataset.aiFilename = filename;
@@ -12508,10 +12513,48 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     };
   }
 
+  function aiSnapshotPanelProductId(panel) {
+    return (
+      String(panel?.dataset.productId || "").trim()
+      || currentProductId()
+      || ""
+    );
+  }
+
+  function aiSnapshotPanelVaultFolder(panel) {
+    return (
+      String(panel?.dataset.vaultFolder || "").trim()
+      || currentVaultFolder()
+      || aiSnapshotPanelProductId(panel)
+    );
+  }
+
+  function markAiSnapshotPanelModified(panel, extras) {
+    if (!panel) return;
+    panel.setAttribute("data-modified-locally", "1");
+    const info = extras && typeof extras === "object" ? extras : {};
+    if (info.filename) {
+      panel.dataset.filename = String(info.filename).trim();
+    }
+    if (info.relative_path || info.relativePath) {
+      panel.dataset.relativePath = String(
+        info.relative_path || info.relativePath || ""
+      )
+        .trim()
+        .replace(/\\/g, "/");
+    }
+    const selectB = $("#ai-snapshot-rev-b");
+    const nextLabel =
+      String(panel.dataset.nextDisplay || "").trim() || "pending";
+    if (selectB && selectB.options.length) {
+      selectB.options[0].textContent = nextLabel;
+    }
+  }
+
   async function refreshAiSnapshotPanelModifiedFlag(panel) {
     /**
-     * SSR data-workspace-pending only sees the vault host tip.
-     * Local Modified (Files / Check In) comes from creopdm-agent — probe that too.
+     * Same sources as Files → Modified (refreshPendingCheckinIds):
+     * checkin-preview + creopdm-agent tips — not vault-host SSR alone.
      */
     if (!panel) return false;
     if (
@@ -12521,32 +12564,37 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return true;
     }
     const objectId = String(panel.dataset.objectId || "").trim();
-    const productId = currentProductId();
-    if (!objectId || !productId) return false;
+    if (!objectId) return false;
+    if (pendingCheckinIds.has(objectId)) {
+      markAiSnapshotPanelModified(panel);
+      return true;
+    }
+    const productId = aiSnapshotPanelProductId(panel);
+    if (!productId) return false;
+    // Seed vault folder so listAgentCacheFiles matches the Files page workspace.
+    const openWs = $("#open-workspace-btn");
+    const panelVault = aiSnapshotPanelVaultFolder(panel);
+    if (openWs && panelVault) openWs.dataset.vaultFolder = panelVault;
+    try {
+      await refreshPendingCheckinIds(productId);
+    } catch {
+      /* still try a direct agent lookup below */
+    }
+    if (pendingCheckinIds.has(objectId)) {
+      markAiSnapshotPanelModified(panel);
+      return true;
+    }
     try {
       const [cacheFiles, objects] = await Promise.all([
-        listAgentCacheFiles(productId),
+        listAgentCacheFiles(productId, panelVault),
         ensureProductObjects(productId),
       ]);
       const newer = (
         await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)
       ).find((item) => String(item?.uuid || "") === objectId);
       if (!newer) return false;
-      panel.setAttribute("data-modified-locally", "1");
-      if (newer.filename) {
-        panel.dataset.filename = String(newer.filename).trim();
-      }
-      if (newer.relative_path) {
-        panel.dataset.relativePath = String(newer.relative_path)
-          .trim()
-          .replace(/\\/g, "/");
-      }
-      const selectB = $("#ai-snapshot-rev-b");
-      const nextLabel =
-        String(panel.dataset.nextDisplay || "").trim() || "pending";
-      if (selectB && selectB.options.length) {
-        selectB.options[0].textContent = nextLabel;
-      }
+      // Files filters can_checkin === "1"; Details still wants live NEW for owned tips.
+      markAiSnapshotPanelModified(panel, newer);
       return true;
     } catch {
       return false;

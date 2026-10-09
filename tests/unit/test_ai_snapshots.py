@@ -273,12 +273,18 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "/ai-snapshot/outline" in script
     assert "function setAiSnapshotPendingPlaceholder(" in script
     assert "aiSnapshotPendingCleanPlaceholder" in script
-    # Local Modified is agent-side — do not trust vault SSR alone for live NEW.
-    assert "resolveNewerLocalCacheSaves" in script.split(
-        "async function refreshAiSnapshotPanelModifiedFlag(", 1
-    )[1].split("async function renderAiSnapshotPending(", 1)[0]
-    assert "SSR data-workspace-pending only sees the vault host tip" in script
+    # Local Modified must match Files via refreshPendingCheckinIds (+ agent fallback).
+    mod_fn = script.split("async function refreshAiSnapshotPanelModifiedFlag(", 1)[1].split(
+        "async function renderAiSnapshotPending(", 1
+    )[0]
+    assert "pendingCheckinIds.has(objectId)" in mod_fn
+    assert "await refreshPendingCheckinIds(productId)" in mod_fn
+    assert "resolveNewerLocalCacheSaves" in mod_fn
+    assert "Same sources as Files → Modified" in script
     assert "await refreshAiSnapshotPanelModifiedFlag(panel)" in script
+    detail_html = DETAIL_HTML.read_text(encoding="utf-8")
+    assert "data-product-id=" in detail_html
+    assert "data-vault-folder=" in detail_html
     assert 'type: "same"' in script
     assert 'type: "removed"' in script
     assert 'type: "added"' in script
