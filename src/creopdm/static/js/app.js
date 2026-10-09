@@ -12451,7 +12451,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return aiSnapshotOutlineByVersion.get(key);
     }
     const response = await fetch(
-      `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot?version=${encodeURIComponent(key)}`
+      `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot?version=${encodeURIComponent(key)}`,
+      { credentials: "same-origin", cache: "no-store" }
     );
     if (!response.ok) {
       throw new Error(await readError(response));
@@ -12482,12 +12483,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function fillAiSnapshotPendingSelects() {
-    /** Tip revision on left; right = Workspace (not a History A.n). */
+    /**
+     * Left = current tip History snap only (data-tip-version / A.1).
+     * Right = Workspace (not a History A.n). Never pick a newer snap for OLD.
+     */
     const selectA = $("#ai-snapshot-rev-a");
     const selectB = $("#ai-snapshot-rev-b");
+    const panel = aiSnapshotPanel();
     if (!selectA || !selectB || !aiSnapshotCompareVersions.length) return;
+    const tipId = String(panel?.dataset.tipVersion || "").trim();
+    // Pin to tip version when it has a snap; else newest snap (pending = usually one).
+    const item =
+      (tipId
+        && aiSnapshotCompareVersions.find(
+          (row) => String(row?.version_id || "") === tipId
+        ))
+      || aiSnapshotCompareVersions[0];
     selectA.replaceChildren();
-    const item = aiSnapshotCompareVersions[0];
     const optionA = document.createElement("option");
     optionA.value = String(item.version_id || "");
     optionA.textContent = String(item.display_revision || optionA.value);
@@ -12562,15 +12574,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       vaultFolder: panelVault,
       relativePath,
     });
-    if (pending.diskName || pending.relative_path) {
-      markAiSnapshotPanelModified(panel, {
-        filename: pending.diskName || filename,
-        relative_path: pending.relative_path || relativePath,
-      });
+    // Label the tip leaf only — do not mark Modified (clean rematerialize also has a .N).
+    if (pending.diskName) {
       const selectB = $("#ai-snapshot-rev-b");
-      if (selectB?.options?.length && pending.diskName) {
+      if (selectB?.options?.length) {
         selectB.options[0].textContent = `Workspace · ${pending.diskName}`;
       }
+      if (pending.relative_path) {
+        panel.dataset.relativePath = pending.relative_path;
+      }
+      panel.dataset.filename = pending.diskName;
     }
     const gatherName =
       pending.logicalName || logicalUploadName(filename) || filename;
@@ -12674,34 +12687,37 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  function clearAiSnapshotPanelModified(panel) {
+    if (!panel) return;
+    panel.setAttribute("data-modified-locally", "0");
+    panel.setAttribute("data-workspace-pending", "0");
+    const selectB = $("#ai-snapshot-rev-b");
+    if (selectB?.options?.length) {
+      selectB.options[0].textContent = "Workspace";
+    }
+  }
+
   async function refreshAiSnapshotPanelModifiedFlag(panel) {
     /**
-     * Same sources as Files → Modified (refreshPendingCheckinIds):
-     * checkin-preview + creopdm-agent tips — not vault-host SSR alone.
+     * Same sources as Files → Modified (refreshPendingCheckinIds + agent).
+     * Always re-probe — SSR data-workspace-pending sticks after a local clean
+     * until hard reload, and must not keep a stale live Compare on screen.
      */
     if (!panel) return false;
-    if (
-      panel.getAttribute("data-workspace-pending") === "1"
-      || panel.getAttribute("data-modified-locally") === "1"
-    ) {
-      return true;
-    }
     const objectId = String(panel.dataset.objectId || "").trim();
     if (!objectId) return false;
-    if (pendingCheckinIds.has(objectId)) {
-      markAiSnapshotPanelModified(panel);
-      return true;
-    }
     const productId = aiSnapshotPanelProductId(panel);
-    if (!productId) return false;
-    // Seed vault folder so listAgentCacheFiles matches the Files page workspace.
+    if (!productId) {
+      clearAiSnapshotPanelModified(panel);
+      return false;
+    }
     const openWs = $("#open-workspace-btn");
     const panelVault = aiSnapshotPanelVaultFolder(panel);
     if (openWs && panelVault) openWs.dataset.vaultFolder = panelVault;
     try {
       await refreshPendingCheckinIds(productId);
     } catch {
-      /* still try a direct agent lookup below */
+      /* agent/preview optional */
     }
     if (pendingCheckinIds.has(objectId)) {
       markAiSnapshotPanelModified(panel);
@@ -12715,21 +12731,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const newer = (
         await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)
       ).find((item) => String(item?.uuid || "") === objectId);
-      if (!newer) return false;
-      // Files filters can_checkin === "1"; Details still wants live NEW for owned tips.
-      markAiSnapshotPanelModified(panel, newer);
-      return true;
+      if (newer) {
+        markAiSnapshotPanelModified(panel, newer);
+        return true;
+      }
     } catch {
-      return false;
+      /* fall through — treat as clean */
     }
+    clearAiSnapshotPanelModified(panel);
+    return false;
   }
 
   async function renderAiSnapshotPending(objectId) {
     /**
-     * Checked-in tip vs live workspace gather.
-     * Outline headers stay === OLD/NEW snapshot (…) === (same as History compare).
-     * Toolbar says Checked in / Not checked in — never invent A.2 for workspace.
-     * Always try gather first; colors + Copy + Ask AI when both sides load.
+     * Left = pinned tip History snap (A.1) only — never a live gather.
+     * Right = live workspace gather only when Files would show Modified;
+     * clean workspace → boxed placeholder (Creo session alone is not enough).
      */
     const panel = aiSnapshotPanel();
     const selectA = $("#ai-snapshot-rev-a");
@@ -12739,16 +12756,28 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const copyB = $("#ai-snapshot-copy-b");
     if (!selectA || !bodyA || !bodyB) return;
 
-    const versionA = String(selectA.value || "").trim();
+    // Prefer data-tip-version so OLD stays on the checked-in tip snap.
+    const tipVersion = String(panel?.dataset.tipVersion || "").trim();
+    if (tipVersion && selectA.value !== tipVersion) {
+      const tipItem = aiSnapshotCompareVersions.find(
+        (row) => String(row?.version_id || "") === tipVersion
+      );
+      if (tipItem) {
+        selectA.replaceChildren();
+        const optionA = document.createElement("option");
+        optionA.value = String(tipItem.version_id || "");
+        optionA.textContent = String(tipItem.display_revision || optionA.value);
+        selectA.appendChild(optionA);
+        selectA.value = optionA.value;
+      }
+    }
+    const versionA = String(selectA.value || tipVersion || "").trim();
     const labelA = selectA.selectedOptions?.[0]?.textContent || versionA;
     aiSnapshotPendingGather = null;
     syncAiSnapshotAskVisibility(false);
 
     setAiSnapshotPlainBody(bodyA, copyA, "Loading…", false);
     setAiSnapshotPlainBody(bodyB, copyB, "Loading…", false);
-
-    // Kick Modified probe in parallel; do not gate gather on it.
-    const modifiedProbe = refreshAiSnapshotPanelModifiedFlag(panel);
 
     let textA = "";
     try {
@@ -12759,7 +12788,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (!rowA?.outline) {
           setAiSnapshotPlainBody(bodyA, copyA, aiSnapshotEmptyMessage(labelA), false);
         } else {
-          // Same header shape History compare uses (not === Snapshot … ===).
           textA = formatAiSnapshotOutlineDisplay(
             "OLD",
             rowA.displayRevision || labelA,
@@ -12782,10 +12810,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
 
+    // Re-probe Modified every open — sticky SSR / session gather must not fake dirtiness.
+    let isModified = false;
+    try {
+      isModified = await refreshAiSnapshotPanelModifiedFlag(panel);
+    } catch {
+      isModified = false;
+    }
+
+    if (!isModified) {
+      if (textA) setAiSnapshotPlainBody(bodyA, copyA, textA, true);
+      setAiSnapshotPendingPlaceholder(
+        bodyB,
+        copyB,
+        aiSnapshotPendingCleanPlaceholder()
+      );
+      return;
+    }
+
     try {
       const newer = await gatherLiveCompareNewSnapshot(panel);
       if (newer) {
-        // "pending" — not the next History A.n (that only exists after Check In).
         const rowB = await postAiSnapshotOutline(objectId, newer, "pending");
         if (rowB?.outline) {
           const textB = formatAiSnapshotOutlineDisplay(
@@ -12826,18 +12871,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
 
     if (textA) setAiSnapshotPlainBody(bodyA, copyA, textA, true);
-    let isModified = false;
-    try {
-      isModified = await modifiedProbe;
-    } catch {
-      isModified = false;
-    }
     setAiSnapshotPendingPlaceholder(
       bodyB,
       copyB,
-      isModified
-        ? aiSnapshotPendingGatherFailedPlaceholder()
-        : aiSnapshotPendingCleanPlaceholder()
+      aiSnapshotPendingGatherFailedPlaceholder()
     );
   }
 
