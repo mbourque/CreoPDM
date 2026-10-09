@@ -23,6 +23,7 @@ from creopdm.auth_constants import (
     PERMISSION_PRODUCTS_DELETE,
     PERMISSION_PRODUCTS_EDIT,
     PERMISSION_PRODUCTS_EXPORT,
+    PERMISSION_LIFECYCLE_STATES_MANAGE,
     PERMISSION_PRODUCTS_MANAGE,
     PERMISSION_PRODUCTS_VIEW,
     PERMISSION_ROLES_ASSIGN,
@@ -57,6 +58,7 @@ class CapabilityFlags:
     can_manage_settings: bool
     can_manage_ai: bool
     can_manage_products: bool
+    can_manage_lifecycle_states: bool
     can_manage_email: bool
     can_access_utilities: bool
     can_utilities_availability: bool
@@ -95,6 +97,7 @@ def caps_from_keys(keys: frozenset[str]) -> CapabilityFlags:
         can_manage_settings=PERMISSION_SETTINGS_MANAGE in keys,
         can_manage_ai=PERMISSION_SETTINGS_AI in keys,
         can_manage_products=PERMISSION_PRODUCTS_MANAGE in keys,
+        can_manage_lifecycle_states=PERMISSION_LIFECYCLE_STATES_MANAGE in keys,
         can_manage_email=PERMISSION_EMAIL_MANAGE in keys,
         can_access_utilities=bool(keys & UTILITIES_PERMISSION_KEYS),
         can_utilities_availability=PERMISSION_UTILITIES_AVAILABILITY in keys,
@@ -145,6 +148,7 @@ def apply_caps(request: Request, caps: CapabilityFlags) -> None:
     request.state.can_manage_settings = caps.can_manage_settings
     request.state.can_manage_ai = caps.can_manage_ai
     request.state.can_manage_products = caps.can_manage_products
+    request.state.can_manage_lifecycle_states = caps.can_manage_lifecycle_states
     request.state.can_manage_email = caps.can_manage_email
     request.state.can_access_utilities = caps.can_access_utilities
     request.state.can_utilities_availability = caps.can_utilities_availability
@@ -182,6 +186,9 @@ def caps_dict(request: Request) -> dict:
         "can_manage_settings": bool(getattr(request.state, "can_manage_settings", False)),
         "can_manage_ai": bool(getattr(request.state, "can_manage_ai", False)),
         "can_manage_products": bool(getattr(request.state, "can_manage_products", False)),
+        "can_manage_lifecycle_states": bool(
+            getattr(request.state, "can_manage_lifecycle_states", False)
+        ),
         "can_manage_email": bool(getattr(request.state, "can_manage_email", False)),
         "can_access_utilities": bool(getattr(request.state, "can_access_utilities", False)),
         "can_utilities_availability": bool(
@@ -227,6 +234,7 @@ def caps_dict(request: Request) -> dict:
         or flags["can_manage_settings"]
         or flags["can_manage_ai"]
         or flags["can_manage_products"]
+        or flags["can_manage_lifecycle_states"]
         or flags["can_manage_email"]
         or flags["can_access_utilities"]
     )
@@ -243,6 +251,7 @@ def can_open_administration(caps: CapabilityFlags) -> bool:
         or caps.can_manage_settings
         or caps.can_manage_ai
         or caps.can_manage_products
+        or caps.can_manage_lifecycle_states
         or caps.can_manage_email
         or caps.can_access_utilities
     )

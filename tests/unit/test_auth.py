@@ -2019,6 +2019,7 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
     """Migration/startup seed grants matrix keys (Viewer none; Engineer authoring)."""
     from creopdm.auth_constants import (
         PERMISSION_EMAIL_MANAGE,
+        PERMISSION_LIFECYCLE_STATES_MANAGE,
         PERMISSION_OBJECTS_CHECKOUT,
         PERMISSION_OBJECTS_COPY_TO_VAULT,
         PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT,
@@ -2071,10 +2072,12 @@ def test_builtin_role_permission_matrix_seeded(auth_ctx):
     assert PERMISSION_OBJECTS_FORCE_UNDO_CHECKOUT in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_PRODUCTS_DELETE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_PRODUCTS_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
+    assert PERMISSION_LIFECYCLE_STATES_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert PERMISSION_EMAIL_MANAGE not in keys_by_role[BuiltinRole.PDM_MANAGER.value]
     assert not (UTILITIES_PERMISSION_KEYS & keys_by_role[BuiltinRole.PDM_MANAGER.value])
     assert PERMISSION_USERS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_PRODUCTS_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
+    assert PERMISSION_LIFECYCLE_STATES_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_EMAIL_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert UTILITIES_PERMISSION_KEYS <= keys_by_role[BuiltinRole.ADMINISTRATOR.value]
     assert PERMISSION_ROLES_MANAGE in keys_by_role[BuiltinRole.ADMINISTRATOR.value]
@@ -2370,6 +2373,7 @@ def test_cannot_strip_last_full_administration(auth_client, auth_ctx):
     assert role_form.status_code == 200
     assert "CreoPDM Administration" in role_form.text
     assert "products.manage" in role_form.text
+    assert "lifecycle_states.manage" in role_form.text
     assert "email.manage" in role_form.text
     assert "settings.ai" in role_form.text
     assert "utilities.audit" in role_form.text
@@ -3069,6 +3073,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_PRODUCTS_DELETE,
         PERMISSION_PRODUCTS_EDIT,
         PERMISSION_PRODUCTS_EXPORT,
+        PERMISSION_LIFECYCLE_STATES_MANAGE,
         PERMISSION_PRODUCTS_MANAGE,
         PERMISSION_PRODUCTS_VIEW,
         PERMISSION_ROLES_MANAGE,
@@ -3235,6 +3240,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 or PERMISSION_SETTINGS_MANAGE in allowed
                 or PERMISSION_SETTINGS_AI in allowed
                 or PERMISSION_PRODUCTS_MANAGE in allowed
+                or PERMISSION_LIFECYCLE_STATES_MANAGE in allowed
                 or PERMISSION_EMAIL_MANAGE in allowed
                 or bool(allowed & UTILITIES_PERMISSION_KEYS)
                 or PERMISSION_PRODUCTS_ASSIGN in allowed
@@ -3261,6 +3267,9 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             PERMISSION_SETTINGS_MANAGE: auth_client.get("/api/settings", follow_redirects=False),
             PERMISSION_SETTINGS_AI: auth_client.get("/settings/ai", follow_redirects=False),
             PERMISSION_PRODUCTS_MANAGE: auth_client.get("/admin/products", follow_redirects=False),
+            PERMISSION_LIFECYCLE_STATES_MANAGE: auth_client.get(
+                "/admin/lifecycle", follow_redirects=False
+            ),
             PERMISSION_EMAIL_MANAGE: auth_client.get("/settings/email", follow_redirects=False),
             PERMISSION_UTILITIES_AVAILABILITY: auth_client.get(
                 "/admin/utilities/availability", follow_redirects=False

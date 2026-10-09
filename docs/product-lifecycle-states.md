@@ -2,7 +2,7 @@
 
 CreoPDM product (project) lifecycle — separate from object `lifecycle_state`.
 
-Configurable under **Administration → Lifecycle states** (stored in `settings.json` → `lifecycle`). Role permissions still apply on top (`state ∩ role`).
+Configurable under **Administration → Lifecycle states** (`lifecycle_states.manage`; stored in `settings.json` → `lifecycle`). Role permissions still apply on top (`state ∩ role`).
 
 ## Built-in states (default order)
 

@@ -41,7 +41,7 @@
           {% endfor %}
         </select>
       </label>
-      <p class="muted small">Default is <strong>In Work</strong>. Permissions per state are configured under <a href="/admin/lifecycle">Administration → Lifecycle states</a>.</p>
+      <p class="muted small">Default is <strong>In Work</strong>.{% if can_manage_lifecycle_states %} Permissions per state are configured under <a href="/admin/lifecycle">Administration → Lifecycle states</a>.{% else %} Permissions per state are configured under Administration → Lifecycle states.{% endif %}</p>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Create product</button>
         <a class="btn" href="/admin/products">Back to list</a>
@@ -74,7 +74,7 @@
           {% endfor %}
         </select>
       </label>
-      <p class="muted small">New products default to <strong>In Work</strong>. Edit the matrix under <a href="/admin/lifecycle">Administration → Lifecycle states</a>.</p>
+      <p class="muted small">New products default to <strong>In Work</strong>.{% if can_manage_lifecycle_states %} Edit the matrix under <a href="/admin/lifecycle">Administration → Lifecycle states</a>.{% endif %}</p>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Save</button>
         <a class="btn" href="/admin/products">Back to list</a>

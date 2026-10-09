@@ -28,6 +28,7 @@ PERMISSION_ROLES_ASSIGN = "roles.assign"
 PERMISSION_ROLES_MANAGE = "roles.manage"
 PERMISSION_PRODUCTS_ASSIGN = "products.assign"
 PERMISSION_PRODUCTS_MANAGE = "products.manage"
+PERMISSION_LIFECYCLE_STATES_MANAGE = "lifecycle_states.manage"
 PERMISSION_SETTINGS_MANAGE = "settings.manage"
 PERMISSION_SETTINGS_AI = "settings.ai"
 PERMISSION_EMAIL_MANAGE = "email.manage"
@@ -72,6 +73,10 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_ROLES_MANAGE, "Create, edit, and delete roles"),
     (PERMISSION_PRODUCTS_ASSIGN, "Assign product membership (Administration → Membership)"),
     (PERMISSION_PRODUCTS_MANAGE, "Create, edit, and delete products in Administration"),
+    (
+        PERMISSION_LIFECYCLE_STATES_MANAGE,
+        "Administration → Lifecycle states (product state matrix)",
+    ),
     (PERMISSION_SETTINGS_MANAGE, "Change global CreoPDM settings"),
     (PERMISSION_SETTINGS_AI, "Configure AI settings (Ollama, snapshot compare prompt)"),
     (PERMISSION_EMAIL_MANAGE, "Configure email and notifications in System Settings"),
@@ -112,6 +117,7 @@ ADMINISTRATION_PERMISSION_KEYS: frozenset[str] = frozenset(
         PERMISSION_ROLES_MANAGE,
         PERMISSION_PRODUCTS_ASSIGN,
         PERMISSION_PRODUCTS_MANAGE,
+        PERMISSION_LIFECYCLE_STATES_MANAGE,
         PERMISSION_SETTINGS_MANAGE,
         PERMISSION_SETTINGS_AI,
         PERMISSION_EMAIL_MANAGE,
@@ -151,6 +157,7 @@ PERMISSION_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             PERMISSION_ROLES_MANAGE,
             PERMISSION_PRODUCTS_ASSIGN,
             PERMISSION_PRODUCTS_MANAGE,
+            PERMISSION_LIFECYCLE_STATES_MANAGE,
             PERMISSION_SETTINGS_MANAGE,
             PERMISSION_SETTINGS_AI,
             PERMISSION_EMAIL_MANAGE,

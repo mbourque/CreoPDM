@@ -783,6 +783,22 @@ def _require_products_manager(
     return user
 
 
+def _require_lifecycle_manager(
+    request: Request, ctx: AppContext, db: Session
+) -> User | HTMLResponse | RedirectResponse:
+    user_uuid = request.session.get(SESSION_USER_KEY)
+    user = ctx.user_accounts.get_by_uuid(db, str(user_uuid)) if user_uuid else None
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not ctx.user_accounts.can_manage_lifecycle_states(user):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>Lifecycle states access required "
+            "(lifecycle_states.manage).</p>",
+            status_code=403,
+        )
+    return user
+
+
 def _require_membership_assign(
     request: Request, ctx: AppContext, db: Session
 ) -> User | HTMLResponse | RedirectResponse:
@@ -1968,7 +1984,7 @@ def admin_products(request: Request, ctx: AppContext = Depends(get_context), db:
 
 @router.get("/admin/lifecycle", response_class=HTMLResponse)
 def admin_lifecycle(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
-    manager = _require_products_manager(request, ctx, db)
+    manager = _require_lifecycle_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
     from creopdm.lifecycle_policy import LIFECYCLE_OPS, get_lifecycle_policy
@@ -2003,7 +2019,7 @@ async def admin_lifecycle_submit(
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
-    manager = _require_products_manager(request, ctx, db)
+    manager = _require_lifecycle_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
     from creopdm.config import LifecycleConfig
