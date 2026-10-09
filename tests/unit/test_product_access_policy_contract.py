@@ -78,6 +78,7 @@ def test_templates_gate_toolbar_via_product_ui_only():
         "show_export_product",
         "show_export_objects",
         "show_copy_to_vault",
+        "show_set_working_directory",
         "show_remove",
         "show_remove_vault",
         "show_remove_product",

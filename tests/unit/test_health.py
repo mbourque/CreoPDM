@@ -93,10 +93,12 @@ def test_home_page(client):
     assert "catch (errAll)" in text
     assert "creoOpenFailedMessage(filename, releaseCatch, \"\", detail)" in text
     assert "throw new Error" not in text.split("function openModel")[1].split("function setWorkingDirectory")[0]
-    assert 'id="set-creo-dir-btn"' in text
     assert 'id="add-files-btn"' in text
-    assert text.index('id="set-creo-dir-btn"') < text.index('id="add-files-btn"')
     assert 'id="add-menu"' in text
+    app_html = open("src/creopdm/templates/app.html", encoding="utf-8").read()
+    assert "product_ui.show_set_working_directory" in app_html
+    assert 'id="set-creo-dir-btn"' in app_html
+    assert app_html.index("show_set_working_directory") < app_html.index('id="add-files-btn"')
     assert 'src="/client/app.js' in text
     assert "push169" not in text
     assert "export3" not in text

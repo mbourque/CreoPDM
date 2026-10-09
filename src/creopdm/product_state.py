@@ -81,6 +81,7 @@ class ProductUiCapabilities:
     show_export_product: bool
     show_export_objects: bool
     show_copy_to_vault: bool
+    show_set_working_directory: bool
     show_remove: bool
     show_remove_vault: bool
     show_remove_product: bool
@@ -116,6 +117,8 @@ def product_ui_capabilities(
     can_meta_state = product_allows_op(product, "edit_metadata")
     can_rename_state = product_allows_op(product, "rename")
     has_product = product is not None
+    # Local workspace tools when download or a checkout/check-in cycle is allowed.
+    workspace_tools = content or can_checkout_state or can_checkin_state
     return ProductUiCapabilities(
         allows_mutation=mutable,
         allows_content=content,
@@ -131,7 +134,8 @@ def product_ui_capabilities(
         show_export_product=can_export_product and content,
         show_export_objects=can_export_objects and content,
         show_copy_to_vault=can_copy_to_vault and can_checkin_state,
-        show_remove=can_remove_objects,
+        show_set_working_directory=has_product and workspace_tools,
+        show_remove=can_remove_objects and (workspace_tools or can_remove_state),
         show_remove_vault=can_remove_objects and can_remove_state,
         show_remove_product=can_remove_objects and can_remove_state,
         show_rename=has_product and can_edit_product and can_rename_state,

@@ -643,9 +643,11 @@
 
 <footer class="toolbar" id="detail-toolbar">
   <div class="toolbar-actions">
+    {% if product_ui.show_set_working_directory %}
     <span class="toolbar-tip creo-session-only" hidden title="Set Creo's working directory to this product's local workspace on this PC.">
       <button type="button" class="btn" id="set-creo-dir-btn" data-workspace="{{ workspace_path }}" disabled hidden>Set Working Directory</button>
     </span>
+    {% endif %}
     {% if product_ui.show_open %}
     <div class="toolbar-menu" id="open-menu" hidden>
       <button type="button" class="btn toolbar-menu-toggle" id="open-menu-btn" hidden

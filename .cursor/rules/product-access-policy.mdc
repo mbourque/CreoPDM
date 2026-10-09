@@ -34,4 +34,4 @@ Anything that changes vault/product content or locks (Add, Checkout, Check In, R
 # ✅ GOOD — product_ui.show_add + ensure_product_mutable in the service + contract/API tests
 ```
 
-Undo / Force Undo Checkout follow the lifecycle matrix **Check Out** column (same as Checkout selected). **Delete product** / forget stays available on locked and **Archived** products (`show_delete_product` + `ensure_product_deletable` — password re-auth confirm; must purge vault + DB row). Local workspace discard/purge may stay under `show_remove` without vault/product remove.
+Undo / Force Undo Checkout follow the lifecycle matrix **Check Out** column (same as Checkout selected). **Delete product** / forget stays available on locked and **Archived** products (`show_delete_product` + `ensure_product_deletable` — password re-auth confirm; must purge vault + DB row). **Remove ▾** and **Set Working Directory** need download **or** a Check Out / Check In cycle (`show_remove` / `show_set_working_directory`) — hide on Locked when both are off.

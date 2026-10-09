@@ -169,6 +169,7 @@ def test_product_ui_in_work_shows_mutation_controls():
     assert ui.show_export_product is True
     assert ui.show_export_objects is True
     assert ui.show_copy_to_vault is True
+    assert ui.show_set_working_directory is True
     assert ui.show_remove is True
     assert ui.show_remove_vault is True
     assert ui.show_remove_product is True
@@ -192,6 +193,8 @@ def test_product_ui_in_review_hides_checkout_undo_and_keeps_open():
     assert ui.show_force_undo_checkout is False
     assert ui.show_open is True
     assert ui.show_download is True
+    # Download still allowed → Remove / Set Working Directory stay (local cleanup / view).
+    assert ui.show_set_working_directory is True
     assert ui.show_remove is True
     assert ui.show_remove_vault is False
     assert ui.show_remove_product is False
@@ -201,7 +204,7 @@ def test_product_ui_in_review_hides_checkout_undo_and_keeps_open():
     assert ui.show_revert is False
 
 
-def test_product_ui_locked_hides_open_download_and_undo():
+def test_product_ui_locked_hides_open_download_remove_and_wd():
     product = SimpleNamespace(uuid="p1", state=ProductState.LOCKED.value)
     ui = product_ui_capabilities(product, **_full_role_caps())
     assert ui.allows_mutation is False
@@ -217,6 +220,8 @@ def test_product_ui_locked_hides_open_download_and_undo():
     assert ui.show_checkout is False
     assert ui.show_undo_checkout is False
     assert ui.show_force_undo_checkout is False
+    assert ui.show_set_working_directory is False
+    assert ui.show_remove is False
     assert ui.show_delete_product is True
 
 

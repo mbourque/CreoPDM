@@ -64,6 +64,9 @@ def test_checkout_blocked_when_product_in_review(client, repo_parent):
     assert 'id="checkout-menu"' not in page.text
     assert 'id="undo-btn"' not in page.text
     assert 'id="force-undo-btn"' not in page.text
+    # Download still allowed → local Remove / Set WD remain.
+    assert 'id="remove-menu"' in page.text
+    assert 'id="set-creo-dir-btn"' in page.text
     assert 'data-state="locked"' in page.text
     # Role body flag may still be 1; list rows must not advertise checkout.
     assert page.text.count('data-can-checkout="1"') == 1
@@ -100,6 +103,8 @@ def test_locked_product_hides_open_and_blocks_download(client, repo_parent):
     assert 'id="checkin-menu"' not in page.text
     assert 'id="checkout-menu"' not in page.text
     assert 'id="undo-btn"' not in page.text
+    assert 'id="remove-menu"' not in page.text
+    assert 'id="set-creo-dir-btn"' not in page.text
 
     content = client.get(f"/api/objects/{obj['uuid']}/content")
     assert content.status_code == 400, content.text
@@ -146,9 +151,10 @@ def test_released_product_hides_mutation_toolbar_keeps_delete(client, repo_paren
     # Role body flag may still be 1; list rows must not advertise checkout.
     assert page.text.count('data-can-checkout="1"') == 1
     assert 'data-can-checkout="0"' in page.text
-    # Local workspace cleanup may remain under Remove.
+    # Download still allowed → local Remove / Set WD remain.
     assert 'id="remove-menu"' in page.text
     assert 'id="discard-local-btn"' in page.text
+    assert 'id="set-creo-dir-btn"' in page.text
 
     detail = client.get(f"/api/objects/{obj['uuid']}")
     assert detail.status_code == 200, detail.text
