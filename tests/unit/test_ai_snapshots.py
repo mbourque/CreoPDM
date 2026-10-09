@@ -332,7 +332,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "data-product-id=" in detail_html
     assert "data-vault-folder=" in detail_html
     base_html = BASE_HTML.read_text(encoding="utf-8")
-    assert "compare-mod-clean" in base_html
+    assert "modifications-tab" in base_html
     assert 'data-purgeable=' in base_html
     assert "function clearAiSnapshotPanelModified(" in script
     assert "function waitForCreoAgentReady(" in script
@@ -482,10 +482,13 @@ def test_snapshot_tab_template_and_docs():
     assert 'id="ai-snapshot-ask-row" hidden' in html
     assert "Side-by-side outlines for two revisions" not in html
     assert "plain text, not JSON" not in html
-    assert "Compare Revisions" in docs
+    assert "Modifications" in docs
     assert "live" in docs.lower()
     assert "boxed placeholder" in docs
     assert "label the tab **Snapshot**" in docs
+    assert "Compare Revisions" in docs  # must-not: old tab name
+    assert 'tab.textContent = "Modifications"' in script
+    assert 'tab.textContent = "Compare Revisions"' not in script
     assert "Checked in" in docs and "Not checked in" in docs
     assert "Workspace" in docs
     assert "highest local Creo" in docs or ".N" in docs
@@ -498,7 +501,7 @@ def test_snapshot_tab_template_and_docs():
     assert "show_snapshot_tab" in pages
     assert 'snapshot_count >= 1' in pages
     assert 'snapshot_tab_mode = "compare" if snapshot_count >= 2 else "pending"' in pages
-    assert 'snapshot_tab_label = "Compare Revisions"' in pages
+    assert 'snapshot_tab_label = "Modifications"' in pages
     assert "FEATTYPE_COMPONENT" in docs
     assert "prepare_snapshot_for_compare" in docs
     assert "parts, assemblies, and drawings" in docs
@@ -1191,7 +1194,7 @@ def test_snapshot_compare_prompt_requires_saved_text():
 
 @requires_git
 def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_path):
-    """POST tip snapshot, list by rev, GET returns JSON; one snap → pending Compare Revisions."""
+    """POST tip snapshot, list by rev, GET returns JSON; one snap → pending Modifications."""
     product = client.post(
         "/api/products",
         json={"name": "Snap Product", "number": "SNAP-1"},
@@ -1302,9 +1305,9 @@ def test_ai_snapshot_api_upsert_list_and_detail_tab(client, repo_parent, tmp_pat
 
     detail = client.get(f"/products/{product_id}/objects/{object_id}")
     assert detail.status_code == 200, detail.text
-    # One snapshot — Compare Revisions (pending NEW); not a "Snapshot" tab label.
+    # One snapshot — Modifications (pending NEW); not a "Snapshot" tab label.
     assert 'data-tab="snapshot"' in detail.text
-    assert 'data-tab="snapshot">Compare Revisions</button>' in detail.text
+    assert 'data-tab="snapshot">Modifications</button>' in detail.text
     assert 'data-tab="snapshot">Snapshot</button>' not in detail.text
     assert 'id="panel-snapshot"' in detail.text
     assert 'data-mode="pending"' in detail.text
@@ -1446,7 +1449,7 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
 
     detail_two = client.get(f"/products/{product_id}/objects/{object_id}")
     assert detail_two.status_code == 200, detail_two.text
-    assert 'data-tab="snapshot">Compare Revisions</button>' in detail_two.text
+    assert 'data-tab="snapshot">Modifications</button>' in detail_two.text
     assert 'data-tab="snapshot">Snapshot</button>' not in detail_two.text
     assert 'id="panel-snapshot"' in detail_two.text
     assert 'data-mode="compare"' in detail_two.text

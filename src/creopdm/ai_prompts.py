@@ -314,7 +314,7 @@ def _bom_member_qty_map(
     value = (display_name_with_path, qty)
 
     Filenames are normalized so session FullName ``skel<<ASM>.prt`` matches the
-    tip Structure name ``skel.prt`` (Check In Ask AI vs Compare Revisions).
+    tip Structure name ``skel.prt`` (Check In Ask AI vs Modifications).
     """
     out: dict[str, tuple[str, int]] = {}
     for node in nodes:
@@ -380,7 +380,7 @@ def _slim_bom_nodes(nodes: list[Any]) -> list[dict[str, Any]]:
 
 def prepare_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     """
-    Canonical snapshot for Compare Revisions panes / Ask AI / Check In comment.
+    Canonical snapshot for Modifications panes / Ask AI / Check In comment.
 
     Parts, assemblies, and drawings all go through this before outline + diff
     text is built — Check In Ask AI must not use a rawer gather than Compare.
@@ -1246,7 +1246,7 @@ def build_snapshot_compare_user_prompt(
 ) -> str:
     """User message: OLD then NEW plain-language outlines (settings hold instructions).
 
-    Compare Revisions Ask AI and Check In Ask AI for comment both use this —
+    Modifications Ask AI and Check In Ask AI for comment both use this —
     parts, assemblies, and drawings share prepare → outline → computed diff.
     """
     older_label = (older_revision or "").strip()

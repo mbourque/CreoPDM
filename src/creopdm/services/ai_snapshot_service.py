@@ -310,7 +310,7 @@ class AiSnapshotService:
         return AiSnapshotListResponse(object_id=obj.uuid, items=items)
 
     def count_with_snapshot(self, session: Session, object_uuid: str) -> int:
-        """How many History revisions have a saved AI snapshot (for Compare Revisions tab)."""
+        """How many History revisions have a saved AI snapshot (for Modifications tab)."""
         return sum(1 for item in self.list_for_object(session, object_uuid).items if item.has_snapshot)
 
     def outline_from_snapshot(
@@ -349,7 +349,7 @@ class AiSnapshotService:
             raise ValidationAppError(
                 "No Ollama model selected. Open Administration → AI, Refresh models, choose a model, and Save."
             )
-        # One prompt path for Compare Revisions Ask AI and Check In Ask AI
+        # One prompt path for Modifications Ask AI and Check In Ask AI
         # (parts, assemblies, drawings) — prepare lives inside build_*.
         system_prompt = resolve_snapshot_compare_prompt(settings.ai.snapshot_compare_prompt)
         user_prompt = build_snapshot_compare_user_prompt(
@@ -428,7 +428,7 @@ class AiSnapshotService:
         newer_display_revision: str = "pending",
     ) -> AiSnapshotCompareResponse:
         """Check In Ask AI: tip snapshot vs pending gather — same ``_chat_compare``
-        as Compare Revisions (parts, assemblies, drawings)."""
+        as Modifications (parts, assemblies, drawings)."""
         if not isinstance(newer_snapshot, dict) or not newer_snapshot:
             raise ValidationAppError("Newer snapshot JSON is required.")
         older_id = (older_version_id or "").strip() or None

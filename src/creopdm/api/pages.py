@@ -589,12 +589,12 @@ def object_detail(
     # Features = Creo inventory list; Structure = assembly component tree (separate tabs).
     show_features_tab = bool(features)
     show_structure_tab = bool(is_assembly)
-    # Compare Revisions when ≥1 saved snap: tip-only = pending NEW; 2+ = history compare.
+    # Modifications tab when ≥1 saved snap: tip-only = pending NEW; 2+ = history compare.
     snapshot_count = (
         ctx.ai_snapshots.count_with_snapshot(db, object_id) if is_creo else 0
     )
     show_snapshot_tab = bool(is_creo and snapshot_count >= 1)
-    snapshot_tab_label = "Compare Revisions"
+    snapshot_tab_label = "Modifications"
     snapshot_tab_mode = "compare" if snapshot_count >= 2 else "pending"
     checkout_count = ctx.checkouts.count_for_product(db, product.id)
     checkoutable_count = ctx.checkouts.count_checkoutable_for_product(db, product.id)

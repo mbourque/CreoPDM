@@ -3420,7 +3420,7 @@ function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
     if (m.family_table && typeof m.family_table === "object") {
         snapshot.family_table = m.family_table;
     }
-    // Structure/BOM tree — Features skip FEATTYPE_COMPONENT; Compare Revisions
+    // Structure/BOM tree — Features skip FEATTYPE_COMPONENT; Modifications
     // must use this same tree for assembly component add/remove.
     if (Array.isArray(m.bom) && m.bom.length) {
         snapshot.bom = m.bom;
@@ -4088,6 +4088,6 @@ function gatherModelMetadata(filename, filePath, options) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-compare-mod-clean"></script>
+  <script src="/client/app.js?v={{ app_version }}-modifications-tab"></script>
 </body>
 </html>

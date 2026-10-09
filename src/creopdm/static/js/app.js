@@ -10266,7 +10266,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           + "(or Save so it is in the local workspace), then try again."
       );
     }
-    // Same body as postAiSnapshotFromGather (what Compare Revisions stores).
+    // Same body as postAiSnapshotFromGather (what Modifications stores).
     const newerSnapshot = aiSnapshotBodyFromGather(snapshot);
     if (!newerSnapshot) {
       throw new Error(
@@ -12103,7 +12103,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   let aiSnapshotListCache = null;
   const aiSnapshotOutlineByVersion = new Map();
-  /** Newest-first revisions that have snapshots (Compare Revisions dropdowns). */
+  /** Newest-first revisions that have snapshots (Modifications dropdowns). */
   let aiSnapshotCompareVersions = [];
   /** Live workspace gather for pending Compare → Ask AI (compare-pending). */
   let aiSnapshotPendingGather = null;
@@ -12219,7 +12219,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function syncAiSnapshotTabChrome(mode) {
     /**
-     * Always "Compare Revisions":
+     * Always "Modifications":
      * compare = two History snaps (OLD/NEW) + Ask AI;
      * pending = Checked in tip vs Not checked in workspace (or boxed placeholder).
      */
@@ -12231,7 +12231,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       || document.querySelector('.tabs .tab[data-tab="compare-revisions"]');
     if (tab) {
       tab.dataset.tab = "snapshot";
-      tab.textContent = "Compare Revisions";
+      tab.textContent = "Modifications";
     }
     if (resolved === "pending") {
       const answer = $("#ai-snapshot-ai-answer");
@@ -13157,7 +13157,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const selectB = $("#ai-snapshot-rev-b");
     if (!selectA || !selectB) return;
     try {
-      // Always refresh list + outlines when opening Compare Revisions.
+      // Always refresh list + outlines when opening Modifications.
       clearAiSnapshotClientCache();
       {
         const response = await fetch(
@@ -13253,7 +13253,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return;
     }
     if (!objectId || !compare) {
-      showError($("#toolbar-error"), "Open Compare Revisions first.");
+      showError($("#toolbar-error"), "Open Modifications first.");
       return;
     }
     showError($("#toolbar-error"), "");
