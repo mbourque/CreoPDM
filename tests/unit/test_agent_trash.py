@@ -71,3 +71,36 @@ def test_clear_directory_contents_one_shot_recycle(tmp_path, monkeypatch):
     assert {p.name for p in batches[0]} == {"a.prt", "b.asm", "docs"}
     assert root.is_dir()
     assert list(root.iterdir()) == []
+
+
+def test_clear_directory_contents_sweeps_nested_leftovers(tmp_path, monkeypatch):
+    """Clear workspace must empty *everything* — cache index, nested junk, all types.
+
+    Simulate a partial recycle that leaves some children; the hard-purge sweep
+    must still leave the workspace folder empty.
+    """
+    root = tmp_path / "cache"
+    root.mkdir()
+    (root / "shaft.prt").write_bytes(b"prt")
+    (root / "notes.txt").write_text("notes", encoding="utf-8")
+    (root / ".creopdm_cache_index.json").write_text("{}", encoding="utf-8")
+    nested = root / "sub"
+    nested.mkdir()
+    (nested / "extra.txt").write_text("extra", encoding="utf-8")
+    (nested / "orphan.bin").write_bytes(b"x")
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setattr("creopdm_agent.trash.sys.platform", "win32")
+
+    def fake_many(paths: list[Path]) -> None:
+        # Recycle only the CAD tip — leave other files/nested behind.
+        for path in paths:
+            if path.name == "shaft.prt":
+                path.unlink()
+
+    monkeypatch.setattr("creopdm_agent.trash._windows_recycle_bin_many", fake_many)
+    removed, failed = clear_directory_contents(root)
+    assert failed == []
+    assert removed >= 1
+    assert root.is_dir()
+    assert list(root.iterdir()) == []

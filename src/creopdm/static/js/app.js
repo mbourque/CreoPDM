@@ -10997,7 +10997,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const confirmed = await confirmByProductName({
       title: "Clear workspace",
       lead:
-        "This clears this product’s local workspace on this PC (everything inside the workspace folder). "
+        "This clears this product’s local workspace on this PC (everything inside the workspace folder — "
+        + "CAD, folders, cache files, and any other file). "
         + "Local-only new files that were never added to the product are deleted. "
         + "The empty workspace folder stays so Creo’s working directory can remain set. "
         + "Vault copies and the product file list are not changed — open or rematerialize from the vault when you need files again.",

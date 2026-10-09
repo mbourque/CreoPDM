@@ -1659,6 +1659,7 @@ def test_agent_delete_product_cache_clears_contents_keeps_folder(tmp_path):
     nested.mkdir()
     (nested / "notes.txt").write_text("hi", encoding="utf-8")
     (cache / ".creopdm_cache_index.json").write_text("{}", encoding="utf-8")
+    (cache / "notes.txt").write_text("notes", encoding="utf-8")
     settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root))
     app = create_agent_app(settings)
     with TestClient(app) as client:

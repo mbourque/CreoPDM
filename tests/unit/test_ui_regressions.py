@@ -636,10 +636,15 @@ def test_delete_workspace_menu_warns_new_files_vault_safe():
     assert "async function deleteLocalProductWorkspace(" in script
     assert 'title: "Clear workspace"' in script
     assert "Local-only new files that were never added" in script
+    assert "any other file" in script
     assert "empty workspace folder stays" in script
     assert "Vault copies and the product file list are not changed" in script
     assert "requirePassword: false" in script
     assert "Same danger-confirm overlay" in script
+    trash = (
+        ROOT / "src" / "creopdm_agent" / "trash.py"
+    ).read_text(encoding="utf-8")
+    assert "def _hard_purge_remaining(" in trash
     assert "deleteWorkspaceBtn?.addEventListener(" in script
     assert "setToolbarActionVisible(deleteWorkspaceBtn, canDeleteWorkspace)" in script
     base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
@@ -655,6 +660,7 @@ def test_delete_workspace_menu_warns_new_files_vault_safe():
     assert "| Confirm |" in clear_section
     assert "Confirm with the correct product name" not in clear_section
     assert "delete the workspace folder itself" in clear_section
+    assert "hard-purge any leftovers" in clear_section
 
 
 def test_soft_nav_does_not_silently_drop_when_busy():

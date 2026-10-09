@@ -46,10 +46,14 @@ def move_to_trash(path: Path) -> None:
 
 
 def clear_directory_contents(directory: Path) -> tuple[int, list[str]]:
-    """Trash all direct children of ``directory`` in one shot; leave the folder.
+    """Trash every file and subfolder under ``directory``; leave the folder itself.
 
-    Creo's working directory often locks the workspace folder (WinError 32) while
-    still allowing children to be removed. Returns ``(removed_count, failures)``.
+    Clears *all* contents (CAD, cache index, nested folders — anything).
+    Creo's working directory often locks the workspace folder (WinError 32)
+    while still allowing children to be removed.
+
+    Returns ``(removed_count, failures)``. Failures are relative paths that
+    could not be removed (usually locked by Creo).
     """
     import shutil
 
@@ -60,10 +64,11 @@ def clear_directory_contents(directory: Path) -> tuple[int, list[str]]:
     if not children:
         return 0, []
 
+    removed = 0
+    failed: list[str] = []
+
     # Pytest / non-Windows: permanent delete (still one pass, not per-file Shell).
     if os.environ.get("PYTEST_CURRENT_TEST") or sys.platform != "win32":
-        removed = 0
-        failed: list[str] = []
         for child in children:
             label = child.name
             try:
@@ -77,15 +82,16 @@ def clear_directory_contents(directory: Path) -> tuple[int, list[str]]:
                     removed += 1
             except OSError as exc:
                 failed.append(f"{label}: {exc}")
+        sweep_removed, sweep_failed = _hard_purge_remaining(root)
+        removed += sweep_removed
+        failed.extend(sweep_failed)
         return removed, failed
 
-    # Windows: one SHFileOperation for every top-level child.
+    # Windows: one SHFileOperation for every top-level child (all names / types).
     try:
         _windows_recycle_bin_many(children)
     except OSError:
         # Fall back to per-child so we clear what we can and report the rest.
-        removed = 0
-        failed = []
         for child in children:
             label = child.name
             try:
@@ -96,10 +102,11 @@ def clear_directory_contents(directory: Path) -> tuple[int, list[str]]:
                     removed += 1
             except OSError as exc:
                 failed.append(f"{label}: {exc}")
-        return removed, failed
+        sweep_removed, sweep_failed = _hard_purge_remaining(root)
+        removed += sweep_removed
+        failed.extend(sweep_failed)
+        return removed, _dedupe_failures(failed)
 
-    failed = []
-    removed = 0
     for child in children:
         if child.exists():
             # Recycle left something behind (locked file) — try hard delete once.
@@ -117,6 +124,80 @@ def clear_directory_contents(directory: Path) -> tuple[int, list[str]]:
                 removed += 1
         else:
             removed += 1
+
+    # Final sweep: anything still nested under root (partial recycle, cache
+    # index, locked-then-unlocked leftovers) must go.
+    sweep_removed, sweep_failed = _hard_purge_remaining(root)
+    removed += sweep_removed
+    failed.extend(sweep_failed)
+    return removed, _dedupe_failures(failed)
+
+
+def _dedupe_failures(failed: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in failed:
+        if item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
+def _hard_purge_remaining(root: Path) -> tuple[int, list[str]]:
+    """Permanently delete every remaining file/dir under ``root`` (deepest first)."""
+    import shutil
+
+    if not root.is_dir():
+        return 0, []
+    removed = 0
+    failed: list[str] = []
+    leftovers = sorted(
+        (p for p in root.rglob("*")),
+        key=lambda p: len(p.parts),
+        reverse=True,
+    )
+    for path in leftovers:
+        if not path.exists():
+            continue
+        try:
+            rel = str(path.relative_to(root)).replace("\\", "/")
+        except ValueError:
+            rel = path.name
+        try:
+            if path.is_symlink() or path.is_file():
+                path.unlink()
+                removed += 1
+            elif path.is_dir():
+                try:
+                    path.rmdir()
+                except OSError:
+                    shutil.rmtree(path)
+                removed += 1
+            else:
+                path.unlink(missing_ok=True)
+                removed += 1
+        except OSError as exc:
+            failed.append(f"{rel}: {exc}")
+            continue
+        if path.exists():
+            failed.append(f"{rel}: still present after delete")
+    # Top-level again in case rglob missed a stubborn child.
+    for child in list(root.iterdir()):
+        if not child.exists():
+            continue
+        label = child.name
+        try:
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+            removed += 1
+        except OSError as exc:
+            failed.append(f"{label}: {exc}")
+            continue
+        if child.exists():
+            failed.append(f"{label}: still present after delete")
     return removed, failed
 
 
