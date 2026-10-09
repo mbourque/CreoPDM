@@ -12107,12 +12107,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   let aiSnapshotCompareVersions = [];
   /** Live workspace gather for pending Compare → Ask AI (compare-pending). */
   let aiSnapshotPendingGather = null;
+  /** Right NEW dropdown may list live Modified (Files Modified / newer local .N). */
+  let aiSnapshotIncludeModified = false;
+  /** selectB value for live workspace gather (API compare-pending still uses pending). */
+  const AI_SNAPSHOT_MODIFIED_VALUE = "pending";
 
   function clearAiSnapshotClientCache() {
     aiSnapshotListCache = null;
     aiSnapshotOutlineByVersion.clear();
     aiSnapshotCompareVersions = [];
     aiSnapshotPendingGather = null;
+    aiSnapshotIncludeModified = false;
+  }
+
+  function isAiSnapshotModifiedValue(value) {
+    const v = String(value || "").trim().toLowerCase();
+    return v === AI_SNAPSHOT_MODIFIED_VALUE || v === "modified";
   }
 
   function aiSnapshotCompareIndex(versionId) {
@@ -12123,15 +12133,86 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     );
   }
 
+  function fillAiSnapshotHistoryOptions(select, indexes, selectedIdx) {
+    select.replaceChildren();
+    indexes.forEach((idx) => {
+      const item = aiSnapshotCompareVersions[idx];
+      if (!item) return;
+      const option = document.createElement("option");
+      option.value = String(item.version_id || "");
+      option.textContent = String(item.display_revision || option.value);
+      select.appendChild(option);
+    });
+    const selected = aiSnapshotCompareVersions[selectedIdx];
+    if (selected) select.value = String(selected.version_id || "");
+  }
+
+  function prependAiSnapshotModifiedOption(selectB, selected) {
+    if (!selectB || !aiSnapshotIncludeModified) return;
+    const option = document.createElement("option");
+    option.value = AI_SNAPSHOT_MODIFIED_VALUE;
+    option.textContent = "Modified";
+    selectB.insertBefore(option, selectB.firstChild);
+    if (selected) selectB.value = AI_SNAPSHOT_MODIFIED_VALUE;
+  }
+
   function fillAiSnapshotOrderedSelects(preferOldId, preferNewId, changed) {
     /**
      * API list is newest-first, so smaller index = newer revision.
      * OLD may only pick indexes > NEW; NEW may only pick indexes < OLD.
+     * When Files would show Modified, NEW also lists **Modified** (live gather)
+     * and defaults to it — tip History snap stays selectable on OLD (e.g. A.2).
      */
     const selectA = $("#ai-snapshot-rev-a");
     const selectB = $("#ai-snapshot-rev-b");
     const n = aiSnapshotCompareVersions.length;
-    if (!selectA || !selectB || n < 2) return;
+    if (!selectA || !selectB || n < 1) return;
+    const panel = aiSnapshotPanel();
+    const tipId = String(panel?.dataset.tipVersion || "").trim();
+
+    // One History snap + live Modified: tip on left, Modified on right.
+    if (n === 1) {
+      if (!aiSnapshotIncludeModified) return;
+      const item = aiSnapshotCompareVersions[0];
+      selectA.replaceChildren();
+      const optionA = document.createElement("option");
+      optionA.value = String(item?.version_id || "");
+      optionA.textContent = String(item?.display_revision || optionA.value);
+      selectA.appendChild(optionA);
+      selectA.value = optionA.value;
+      selectA.disabled = true;
+      selectB.replaceChildren();
+      prependAiSnapshotModifiedOption(selectB, true);
+      selectB.disabled = true;
+      return;
+    }
+
+    const newIsModified =
+      aiSnapshotIncludeModified && isAiSnapshotModifiedValue(preferNewId);
+
+    if (newIsModified) {
+      // Left = any History snap (default tip A.n); right = Modified (+ History picks).
+      let oldIdx = aiSnapshotCompareIndex(preferOldId);
+      if (oldIdx < 0) oldIdx = aiSnapshotCompareIndex(tipId);
+      if (oldIdx < 0) oldIdx = 0;
+      const allIdx = [];
+      for (let i = 0; i < n; i += 1) allIdx.push(i);
+      fillAiSnapshotHistoryOptions(selectA, allIdx, oldIdx);
+      selectA.disabled = false;
+      selectB.replaceChildren();
+      prependAiSnapshotModifiedOption(selectB, true);
+      allIdx.forEach((idx) => {
+        const item = aiSnapshotCompareVersions[idx];
+        if (!item) return;
+        const option = document.createElement("option");
+        option.value = String(item.version_id || "");
+        option.textContent = String(item.display_revision || option.value);
+        selectB.appendChild(option);
+      });
+      selectB.value = AI_SNAPSHOT_MODIFIED_VALUE;
+      selectB.disabled = false;
+      return;
+    }
 
     let newIdx = aiSnapshotCompareIndex(preferNewId);
     let oldIdx = aiSnapshotCompareIndex(preferOldId);
@@ -12153,27 +12234,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       oldIdx = 1;
     }
 
-    const fill = (select, allowedIndexes, selectedIdx) => {
-      select.replaceChildren();
-      allowedIndexes.forEach((idx) => {
-        const item = aiSnapshotCompareVersions[idx];
-        if (!item) return;
-        const option = document.createElement("option");
-        option.value = String(item.version_id || "");
-        option.textContent = String(item.display_revision || option.value);
-        select.appendChild(option);
-      });
-      const selected = aiSnapshotCompareVersions[selectedIdx];
-      if (selected) select.value = String(selected.version_id || "");
-    };
-
     const oldAllowed = [];
     for (let i = newIdx + 1; i < n; i += 1) oldAllowed.push(i);
     const newAllowed = [];
     for (let i = 0; i < oldIdx; i += 1) newAllowed.push(i);
 
-    fill(selectA, oldAllowed, oldIdx);
-    fill(selectB, newAllowed, newIdx);
+    fillAiSnapshotHistoryOptions(selectA, oldAllowed, oldIdx);
+    fillAiSnapshotHistoryOptions(selectB, newAllowed, newIdx);
+    selectA.disabled = false;
+    selectB.disabled = false;
+    // Keep Modified available so you can switch back from A.2 → live tip.
+    prependAiSnapshotModifiedOption(selectB, false);
   }
 
   function aiSnapshotEmptyMessage(displayRevision) {
@@ -12205,16 +12276,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const askRow = $("#ai-snapshot-ask-row");
     if (!askRow) return;
     const mode = String($("#ai-snapshot-compare")?.dataset.mode || "");
+    const rightIsModified = isAiSnapshotModifiedValue(
+      $("#ai-snapshot-rev-b")?.value
+    );
     if (!aiFeaturesEnabled()) {
       askRow.hidden = true;
+      return;
+    }
+    // Live Modified gather — Ask AI only after outline is ready.
+    if (mode === "pending" || rightIsModified) {
+      askRow.hidden = !livePendingReady;
       return;
     }
     if (mode === "compare") {
       askRow.hidden = false;
       return;
     }
-    // Pending: only when a live workspace outline is on screen.
-    askRow.hidden = mode !== "pending" || !livePendingReady;
+    askRow.hidden = true;
   }
 
   function syncAiSnapshotTabChrome(mode) {
@@ -12266,7 +12344,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       }
       if (selectB) {
         selectB.disabled = true;
-        selectB.setAttribute("aria-label", "Workspace (not checked in)");
+        selectB.setAttribute("aria-label", "Modified (not checked in)");
       }
       const copyA = $("#ai-snapshot-copy-a");
       if (copyA) copyA.title = "Copy checked-in outline to the clipboard";
@@ -12556,7 +12634,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function fillAiSnapshotPendingSelects() {
     /**
      * Left = current tip History snap only (data-tip-version / A.1).
-     * Right = Workspace (not a History A.n). Never pick a newer snap for OLD.
+     * Right = Modified (not a History A.n). Never pick a newer snap for OLD.
      */
     const selectA = $("#ai-snapshot-rev-a");
     const selectB = $("#ai-snapshot-rev-b");
@@ -12578,10 +12656,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     selectA.value = optionA.value;
     selectB.replaceChildren();
     const optionB = document.createElement("option");
-    optionB.value = "pending";
-    optionB.textContent = "Workspace";
+    optionB.value = AI_SNAPSHOT_MODIFIED_VALUE;
+    optionB.textContent = "Modified";
     selectB.appendChild(optionB);
-    selectB.value = "pending";
+    selectB.value = AI_SNAPSHOT_MODIFIED_VALUE;
   }
 
   function setAiSnapshotPendingPlaceholder(body, copyBtn, message) {
@@ -12643,8 +12721,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     // Label the tip leaf only — do not mark Modified (clean rematerialize also has a .N).
     if (pending.diskName) {
       const selectB = $("#ai-snapshot-rev-b");
-      if (selectB?.options?.length) {
-        selectB.options[0].textContent = `Workspace · ${pending.diskName}`;
+      if (selectB?.options?.length && isAiSnapshotModifiedValue(selectB.value)) {
+        selectB.options[0].textContent = `Modified · ${pending.diskName}`;
       }
       if (pending.relative_path) {
         panel.dataset.relativePath = pending.relative_path;
@@ -12749,7 +12827,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (selectB && selectB.options.length) {
       const tip = String(info.filename || panel.dataset.filename || "").trim();
       const leaf = tip ? PathBasename(tip) : "";
-      selectB.options[0].textContent = leaf ? `Workspace · ${leaf}` : "Workspace";
+      const modOpt = [...selectB.options].find((opt) =>
+        isAiSnapshotModifiedValue(opt.value)
+      );
+      if (modOpt) {
+        modOpt.textContent = leaf ? `Modified · ${leaf}` : "Modified";
+      } else if (isAiSnapshotModifiedValue(selectB.value) || selectB.options.length === 1) {
+        selectB.options[0].textContent = leaf ? `Modified · ${leaf}` : "Modified";
+      }
     }
   }
 
@@ -12758,9 +12843,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     panel.setAttribute("data-modified-locally", "0");
     panel.setAttribute("data-workspace-pending", "0");
     const selectB = $("#ai-snapshot-rev-b");
-    if (selectB?.options?.length) {
-      selectB.options[0].textContent = "Workspace";
-    }
+    const modOpt = selectB
+      ? [...selectB.options].find((opt) => isAiSnapshotModifiedValue(opt.value))
+      : null;
+    if (modOpt) modOpt.textContent = "Modified";
   }
 
   async function waitForCreoAgentReady({ tries = 24, intervalMs = 250 } = {}) {
@@ -12921,8 +13007,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function renderAiSnapshotPending(objectId) {
     /**
-     * Left = pinned tip History snap (A.1) only — never a live gather.
-     * Right = live workspace gather only when Files would show Modified;
+     * Left = selected History snap (tip by default) — never a live gather.
+     * Right = live workspace gather when Files would show Modified;
      * clean workspace → boxed placeholder (Creo session alone is not enough).
      */
     const panel = aiSnapshotPanel();
@@ -12933,21 +13019,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const copyB = $("#ai-snapshot-copy-b");
     if (!selectA || !bodyA || !bodyB) return;
 
-    // Prefer data-tip-version so OLD stays on the checked-in tip snap.
     const tipVersion = String(panel?.dataset.tipVersion || "").trim();
-    if (tipVersion && selectA.value !== tipVersion) {
-      const tipItem = aiSnapshotCompareVersions.find(
-        (row) => String(row?.version_id || "") === tipVersion
-      );
-      if (tipItem) {
-        selectA.replaceChildren();
-        const optionA = document.createElement("option");
-        optionA.value = String(tipItem.version_id || "");
-        optionA.textContent = String(tipItem.display_revision || optionA.value);
-        selectA.appendChild(optionA);
-        selectA.value = optionA.value;
-      }
-    }
     const versionA = String(selectA.value || tipVersion || "").trim();
     const labelA = selectA.selectedOptions?.[0]?.textContent || versionA;
     aiSnapshotPendingGather = null;
@@ -12994,6 +13066,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     } catch {
       isModified = false;
     }
+    aiSnapshotIncludeModified = Boolean(isModified);
 
     if (!isModified) {
       if (textA) setAiSnapshotPlainBody(bodyA, copyA, textA, true);
@@ -13012,7 +13085,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (rowB?.outline) {
           const textB = formatAiSnapshotOutlineDisplay(
             "NEW",
-            "pending",
+            "Modified",
             rowB.outline
           );
           if (!textA) {
@@ -13056,17 +13129,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function renderAiSnapshotCompare(objectId) {
-    /** Shared renderer: pending = tip vs live NEW; compare = two History snaps. */
+    /**
+     * NEW = Modified → live gather; else History vs History.
+     * Mode pending (one snap, clean/dirty) also uses the live path when B is Modified.
+     */
+    const selectB = $("#ai-snapshot-rev-b");
     const compare = $("#ai-snapshot-compare");
     const mode =
       String(compare?.dataset.mode || "compare") === "pending" ? "pending" : "compare";
-    if (mode === "pending") {
+    if (mode === "pending" || isAiSnapshotModifiedValue(selectB?.value)) {
       await renderAiSnapshotPending(objectId);
       return;
     }
 
     const selectA = $("#ai-snapshot-rev-a");
-    const selectB = $("#ai-snapshot-rev-b");
     const bodyA = $("#ai-snapshot-body-a");
     const bodyB = $("#ai-snapshot-body-b");
     const copyA = $("#ai-snapshot-copy-a");
@@ -13167,9 +13243,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       // API lists newest-first. Defaults: NEW = latest snap, OLD = one prior.
       // OLD dropdown never lists a revision newer than NEW (and vice versa).
       aiSnapshotCompareVersions = items.filter((item) => item && item.has_snapshot);
-      const mode = aiSnapshotCompareVersions.length >= 2 ? "compare" : "pending";
+      let isModified = false;
+      try {
+        isModified = await refreshAiSnapshotPanelModifiedFlag(panel);
+      } catch {
+        isModified = false;
+      }
+      aiSnapshotIncludeModified = Boolean(isModified);
+      const n = aiSnapshotCompareVersions.length;
+      // Two+ History snaps, or one snap with live Modified → enabled OLD/NEW chrome.
+      const mode =
+        n >= 2 || (n >= 1 && isModified) ? "compare" : "pending";
       syncAiSnapshotTabChrome(mode);
-      if (!aiSnapshotCompareVersions.length) {
+      if (!n) {
         setAiSnapshotPlainBody(
           $("#ai-snapshot-body-a"),
           $("#ai-snapshot-copy-a"),
@@ -13183,14 +13269,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         );
         return;
       }
-      if (mode === "pending") {
-        fillAiSnapshotPendingSelects();
+      const tipId = String(panel.dataset.tipVersion || "").trim();
+      if (n >= 2) {
+        if (isModified) {
+          // Default NEW = Modified; OLD = tip History snap (e.g. A.2).
+          fillAiSnapshotOrderedSelects(tipId, AI_SNAPSHOT_MODIFIED_VALUE, null);
+        } else {
+          fillAiSnapshotOrderedSelects(
+            aiSnapshotCompareVersions[1]?.version_id,
+            aiSnapshotCompareVersions[0]?.version_id,
+            null
+          );
+        }
+      } else if (isModified) {
+        fillAiSnapshotOrderedSelects(tipId, AI_SNAPSHOT_MODIFIED_VALUE, null);
       } else {
-        fillAiSnapshotOrderedSelects(
-          aiSnapshotCompareVersions[1]?.version_id,
-          aiSnapshotCompareVersions[0]?.version_id,
-          null
-        );
+        fillAiSnapshotPendingSelects();
       }
       await renderAiSnapshotCompare(objectId);
       resetAiSnapshotScroll();
@@ -13280,7 +13374,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
     try {
       const payload = await withBusy("Asking AI what changed…", async () => {
-        if (mode === "pending") {
+        const olderId = String($("#ai-snapshot-rev-a")?.value || "").trim();
+        const newerId = String($("#ai-snapshot-rev-b")?.value || "").trim();
+        if (mode === "pending" || isAiSnapshotModifiedValue(newerId)) {
           const gather = aiSnapshotPendingGather;
           if (!gather?.snapshot) {
             throw new Error(
@@ -13291,15 +13387,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare-pending`,
             {
               newer_snapshot: gather.snapshot,
-              newer_display_revision: gather.displayRevision || "pending",
+              newer_display_revision: gather.displayRevision || "Modified",
+              older_version_id: olderId || null,
             }
           );
         }
         if (mode !== "compare") {
           throw new Error("Need two revisions with snapshots before asking AI what changed.");
         }
-        const olderId = String($("#ai-snapshot-rev-a")?.value || "").trim();
-        const newerId = String($("#ai-snapshot-rev-b")?.value || "").trim();
         if (!olderId || !newerId) {
           throw new Error("Choose older and newer snapshot revisions.");
         }

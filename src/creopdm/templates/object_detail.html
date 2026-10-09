@@ -545,7 +545,7 @@
         <div class="ai-snapshot-toolbar" data-pane="b">
           <label class="ai-snapshot-rev-label">
             <span class="muted small" id="ai-snapshot-label-b">{% if snapshot_tab_mode == "compare" %}NEW{% else %}Not checked in{% endif %}</span>
-            <select id="ai-snapshot-rev-b" class="ai-snapshot-rev" aria-label="{% if snapshot_tab_mode == "compare" %}NEW snapshot revision{% else %}Workspace (not checked in){% endif %}"{% if snapshot_tab_mode != "compare" %} disabled{% endif %}></select>
+            <select id="ai-snapshot-rev-b" class="ai-snapshot-rev" aria-label="{% if snapshot_tab_mode == "compare" %}NEW snapshot revision{% else %}Modified (not checked in){% endif %}"{% if snapshot_tab_mode != "compare" %} disabled{% endif %}></select>
           </label>
           <button type="button" class="btn" id="ai-snapshot-copy-b" disabled title="Copy outline to the clipboard">Copy</button>
         </div>

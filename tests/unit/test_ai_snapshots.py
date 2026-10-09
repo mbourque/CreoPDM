@@ -260,7 +260,11 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert 'labelA.textContent = "OLD"' in script
     assert 'labelA.textContent = "Checked in"' in script
     assert 'labelB.textContent = "Not checked in"' in script
-    assert 'optionB.textContent = "Workspace"' in script
+    assert 'optionB.textContent = "Modified"' in script
+    assert "AI_SNAPSHOT_MODIFIED_VALUE" in script
+    assert "aiSnapshotIncludeModified" in script
+    assert "prependAiSnapshotModifiedOption" in script
+    assert "isAiSnapshotModifiedValue" in script
     assert "function syncAiSnapshotAskVisibility(" in script
     assert "aiSnapshotPendingGather" in script
     assert "function formatAiSnapshotOutlineDisplay(" in script
@@ -298,7 +302,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
         "async function resolvePendingCheckinLocalPath(", 1
     )[1].split("async function askAiCheckinCommentForOne(", 1)[0]
     assert "body.identity.filename = pending.diskName" in gather_fn
-    assert "Workspace ·" in gather_fn or "Workspace · ${pending.diskName}" in gather_fn
+    assert "Modified ·" in gather_fn or "Modified · ${pending.diskName}" in gather_fn
     # Local Modified: higher Creo .N (base-plate.prt.2) + hash + checkin-queue.
     mod_fn = script.split("async function refreshAiSnapshotPanelModifiedFlag(", 1)[1].split(
         "async function renderAiSnapshotPending(", 1
@@ -334,7 +338,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "data-product-id=" in detail_html
     assert "data-vault-folder=" in detail_html
     base_html = BASE_HTML.read_text(encoding="utf-8")
-    assert "modifications-empty" in base_html
+    assert "modifications-dropdown" in base_html
     assert 'data-purgeable=' in base_html
     assert "function clearAiSnapshotPanelModified(" in script
     assert "function waitForCreoAgentReady(" in script
@@ -492,10 +496,10 @@ def test_snapshot_tab_template_and_docs():
     assert "Compare Revisions" in docs  # must-not: old tab name
     assert 'tab.textContent = "Modifications"' in script
     assert 'tab.textContent = "Compare Revisions"' not in script
-    assert "Checked in" in docs and "Not checked in" in docs
-    assert "Workspace" in docs
+    assert "Modified" in docs
+    assert "selects it by default" in docs
     assert "highest local Creo" in docs or ".N" in docs
-    assert "NEW snapshot (pending)" in docs
+    assert "NEW snapshot (Modified)" in docs
     assert "re-select the tab" in docs or "open/re-select" in docs
     assert "OLD" in docs and "NEW" in docs
     assert "light green" in docs and "light blue" in docs
