@@ -2259,6 +2259,10 @@ def test_admin_hub_panel_fills_full_width():
     assert 'href="/admin/email"' not in admin
     assert "Audit log" in admin
     assert ".admin-tile.is-disabled" in css
+    # Whole hub card clickable/hoverable via stretched title link (not title-only).
+    assert ".admin-tile:not(.is-disabled) h2 a::after" in css
+    assert "inset: 0" in css.split(".admin-tile:not(.is-disabled) h2 a::after", 1)[1][:120]
+    assert ".admin-tile:not(.is-disabled):hover" in css
     utilities = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities.html").read_text(
         encoding="utf-8"
     )
