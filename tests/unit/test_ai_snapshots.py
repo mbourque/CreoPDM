@@ -284,6 +284,8 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "/ai-snapshot/outline" in script
     assert "function setAiSnapshotPendingPlaceholder(" in script
     assert "aiSnapshotPendingCleanPlaceholder" in script
+    assert 'return "No modifications to compare."' in script
+    assert "No unchecked-in changes to compare" not in script
     assert "function latestLocalCacheTipForObject(" in script
     assert "function indexLocalCacheTipsByLogical(" in script
     assert "Highest on-disk Creo .N" in script
@@ -332,7 +334,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "data-product-id=" in detail_html
     assert "data-vault-folder=" in detail_html
     base_html = BASE_HTML.read_text(encoding="utf-8")
-    assert "modifications-tab" in base_html
+    assert "modifications-empty" in base_html
     assert 'data-purgeable=' in base_html
     assert "function clearAiSnapshotPanelModified(" in script
     assert "function waitForCreoAgentReady(" in script
@@ -484,7 +486,8 @@ def test_snapshot_tab_template_and_docs():
     assert "plain text, not JSON" not in html
     assert "Modifications" in docs
     assert "live" in docs.lower()
-    assert "boxed placeholder" in docs
+    assert "No modifications to compare" in docs
+    assert "boxed" in docs
     assert "label the tab **Snapshot**" in docs
     assert "Compare Revisions" in docs  # must-not: old tab name
     assert 'tab.textContent = "Modifications"' in script

@@ -12598,12 +12598,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function aiSnapshotPendingCleanPlaceholder() {
-    return (
-      "No unchecked-in changes to compare.\n\n"
-      + "When this model is Modified, the right pane shows a live outline from Creo "
-      + "(or the local tip) — the same gather Check In → Ask AI uses — "
-      + "without writing a History revision."
-    );
+    return "No modifications to compare.";
   }
 
   function aiSnapshotPendingGatherFailedPlaceholder() {
