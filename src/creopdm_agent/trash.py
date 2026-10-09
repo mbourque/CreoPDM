@@ -174,9 +174,10 @@ def _clear_windows_hidden_system(path: Path) -> None:
 
 
 def _iter_all_under(root: Path) -> list[Path]:
-    """Every file/dir under ``root`` (deepest first), including hidden/dot files.
+    """Every file/dir under ``root`` (deepest first), including Hidden/System.
 
-    ``Path.rglob('*')`` skips names starting with ``.`` — use ``os.walk`` instead.
+    Uses ``os.walk`` so nothing is missed; pair with ``_clear_windows_hidden_system``
+    before delete — Windows Hidden attribute (not just ``.`` names) can block recycle.
     """
     if not root.is_dir():
         return []
