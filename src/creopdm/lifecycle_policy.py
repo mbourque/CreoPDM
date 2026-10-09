@@ -23,7 +23,6 @@ LIFECYCLE_OPS: tuple[tuple[str, str], ...] = (
     ("remove", "Delete / Remove (vault)"),
     ("edit_metadata", "Edit Metadata"),
     ("rename", "Rename product"),
-    ("change_state", "Change Lifecycle State"),
     ("history", "View History / Audit"),
 )
 
@@ -46,7 +45,6 @@ def _perms(**overrides: bool) -> dict[str, bool]:
             "view": True,
             "download": True,
             "history": True,
-            "change_state": True,
         }
     )
     base.update(overrides)
@@ -136,7 +134,7 @@ class LifecyclePolicy:
         state = self.get(key)
         if state is None:
             # Unknown state: conservative — view/history only.
-            return op in {"view", "history", "change_state"}
+            return op in {"view", "history"}
         return state.allows(op)
 
     def allows_mutation(self, key: str | None) -> bool:

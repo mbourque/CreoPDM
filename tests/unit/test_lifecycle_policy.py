@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from creopdm.lifecycle_policy import (
+    LIFECYCLE_OP_KEYS,
     default_lifecycle_policy,
     policy_from_dicts,
     set_lifecycle_policy,
@@ -59,7 +60,6 @@ def test_custom_state_roundtrip_and_parse():
                 "remove": False,
                 "edit_metadata": False,
                 "rename": False,
-                "change_state": True,
                 "history": True,
             },
         }
@@ -93,3 +93,19 @@ def test_slugify_lifecycle_key():
     assert slugify_lifecycle_key("Proto A") == "PROTO_A"
     with pytest.raises(ValidationAppError):
         slugify_lifecycle_key("   ")
+
+
+def test_matrix_has_no_change_state_op():
+    """Leaving Locked must not depend on a Change Lifecycle State checkbox."""
+    assert "change_state" not in LIFECYCLE_OP_KEYS
+    for row in default_lifecycle_policy().to_settings_dicts():
+        assert "change_state" not in row["permissions"]
+    # Stale settings keys are dropped on merge.
+    rows = default_lifecycle_policy().to_settings_dicts()
+    for row in rows:
+        if row["key"] == "LOCKED":
+            row["permissions"]["change_state"] = False
+    policy = policy_from_dicts(rows)
+    locked = policy.get("LOCKED")
+    assert locked is not None
+    assert "change_state" not in locked.permissions

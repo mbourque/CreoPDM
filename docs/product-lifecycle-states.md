@@ -22,7 +22,9 @@ Admins can **add custom states**, edit labels/descriptions/order, and toggle All
 
 ## Operations in the matrix
 
-`view`, `download` (open/export), `checkout` (also Undo / Force Undo Checkout), `checkin` (add/upload/folders), `remove`, `edit_metadata`, `rename` (product), `change_state`, `history`.
+`view`, `download` (open/export), `checkout` (also Undo / Force Undo Checkout), `checkin` (add/upload/folders), `remove`, `edit_metadata`, `rename` (product), `history`.
+
+Changing a product’s lifecycle state on Administration → Products → Edit is **not** a matrix column — anyone with `products.edit` can move a product between states (including out of **Locked**).
 
 ## Enforcement
 

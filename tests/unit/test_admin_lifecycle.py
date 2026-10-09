@@ -40,6 +40,8 @@ def test_admin_lifecycle_page_lists_matrix(auth_client, auth_ctx):
     assert "Permission matrix" in page.text
     assert "Pre-Work" in page.text
     assert "Check Out" in page.text
+    # Matrix must not offer Change Lifecycle State (trapped Locked products).
+    assert "Change Lifecycle State" not in page.text
     assert 'class="data-table lifecycle-matrix"' in page.text
     assert "· built-in" not in page.text
     assert "IN_WORK ·" not in page.text

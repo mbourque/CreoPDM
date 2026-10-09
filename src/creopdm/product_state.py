@@ -156,7 +156,6 @@ def ensure_product_allows(
         "edit_metadata": "update metadata",
         "rename": "rename this product",
         "download": "open or download files from this product",
-        "change_state": "change lifecycle state",
     }.get(op, "modify this product")
     if product_allows_op(product, op):
         return

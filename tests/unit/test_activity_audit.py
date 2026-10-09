@@ -596,3 +596,28 @@ def test_product_state_change_records_state_changed_audit(client, data_dir):
         assert "renamed" in (updated[0].summary or "").lower()
         # Identity change must not put state fields on PRODUCT_UPDATED.
         assert "old_state" not in (updated[0].details or {})
+
+
+@requires_git
+def test_update_product_can_leave_locked(client, data_dir):
+    """Regression: no matrix Change Lifecycle State op trapping Locked products."""
+    created = client.post("/api/products", json={"name": "Leave Locked"})
+    assert created.status_code == 201, created.text
+    product = created.json()
+    ctx = client.app.state.ctx
+
+    with ctx.session_factory() as db:
+        loaded = ctx.products.get_product(db, product["uuid"])
+        loaded.state = "LOCKED"
+        db.commit()
+
+    with ctx.session_factory() as db:
+        updated = ctx.products.update_product(
+            db,
+            product["uuid"],
+            name="Leave Locked",
+            number=None,
+            description=None,
+            state="IN_WORK",
+        )
+        assert updated.state == "IN_WORK"

@@ -417,7 +417,6 @@ class LifecycleStatePermissions(BaseModel):
     remove: bool = False
     edit_metadata: bool = False
     rename: bool = False
-    change_state: bool = True
     history: bool = True
 
 

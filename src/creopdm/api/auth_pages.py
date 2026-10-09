@@ -2095,7 +2095,6 @@ async def admin_lifecycle_submit(
                         "remove": False,
                         "edit_metadata": False,
                         "rename": False,
-                        "change_state": True,
                         "history": True,
                     },
                 }

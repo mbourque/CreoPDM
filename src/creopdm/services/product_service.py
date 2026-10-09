@@ -25,7 +25,6 @@ from creopdm.exceptions import (
     ValidationAppError,
 )
 from creopdm.product_state import (
-    ensure_product_allows,
     ensure_product_deletable,
     parse_product_state,
 )
@@ -247,9 +246,8 @@ class ProductService:
         )
         old_name = product.name
         state_changed = new_state is not None and new_state != old_state
-        if state_changed:
-            # Matrix ``change_state`` on the *current* state controls whether leaving it is allowed.
-            ensure_product_allows(product, "change_state", action="change lifecycle state")
+        # Lifecycle state on product Edit/Save is not matrix-gated (no Change Lifecycle
+        # State column) — admins with products.edit can leave Locked / any state.
 
         # State lives in the DB only — do not touch the vault Git repo.
         # (A dirty vault with CAD files used to make "rename" commit fail on Save.)
