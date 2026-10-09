@@ -260,7 +260,9 @@ def test_home_page(client):
     assert "try_ListItems" in text
     assert "unbound_retrieve_handle" in text
     app_js = open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "deleteLocalWorkspacePathsForRemove" in app_js
     assert "deleteLocalWorkspacePathsBackground" in app_js
+    assert "Cleaning local workspace…" in app_js
     assert "applyAgentPickedPaths" in app_js
     assert "/add-paths" in app_js
     assert "limited to 250" not in app_js

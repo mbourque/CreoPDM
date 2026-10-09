@@ -29,7 +29,9 @@ def test_move_to_trash_prepares_hidden_before_delete(tmp_path, monkeypatch):
 
     monkeypatch.setattr("creopdm_agent.trash.prepare_path_for_delete", fake_prepare)
     move_to_trash(target)
-    assert prepared == [target]
+    # Prep runs before recycle and again on the force-gone path.
+    assert prepared
+    assert all(path == target for path in prepared)
     assert not target.exists()
 
 
@@ -163,7 +165,7 @@ def test_prepare_path_for_delete_clears_nested_hidden(tmp_path, monkeypatch):
         cleared.append(Path(path).name)
 
     monkeypatch.setattr("creopdm_agent.trash.sys.platform", "win32")
-    monkeypatch.setattr("creopdm_agent.trash._clear_windows_hidden_system", fake_clear)
+    monkeypatch.setattr("creopdm_agent.trash._clear_windows_delete_attrs", fake_clear)
     prepare_path_for_delete(root)
     assert "folder" in cleared
     assert "sub" in cleared

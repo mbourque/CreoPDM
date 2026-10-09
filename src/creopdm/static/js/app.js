@@ -7892,29 +7892,49 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return response.json();
   }
 
-  /** Fire-and-forget trash so Remove can refresh without waiting on thousands of files. */
-  function deleteLocalWorkspacePathsBackground(productId, relativePaths) {
-    const paths = [...new Set((relativePaths || []).map((item) => String(item || "").replace(/\\/g, "/").replace(/^\/+/, "")).filter(Boolean))];
-    if (!productId || !paths.length) return;
-    const url = `${agentBase()}/delete-paths`;
+  /**
+   * Trash workspace tips for Remove-from-Product (incl. Hidden Creo ``.N`` siblings).
+   * Must be awaited before soft-nav/reload — fire-and-forget was aborted mid-delete
+   * and left Hidden numbered tips behind (Clear workspace waited, so it looked fine).
+   */
+  async function deleteLocalWorkspacePathsForRemove(productId, relativePaths) {
+    const paths = [
+      ...new Set(
+        (relativePaths || [])
+          .map((item) => String(item || "").replace(/\\/g, "/").replace(/^\/+/, ""))
+          .filter(Boolean)
+      ),
+    ];
+    if (!productId || !paths.length) return { ok: [], failed: [], skipped: true };
+    const agent = await probeCreoAgent();
+    if (!agent) {
+      throw new Error(
+        "creopdm-agent is not running — local workspace on this PC was not deleted."
+      );
+    }
     const chunkSize = 150;
+    const combined = { ok: [], failed: [] };
     for (let i = 0; i < paths.length; i += chunkSize) {
       const slice = paths.slice(i, i + chunkSize);
-      try {
-        fetch(url, {
-          method: "POST",
-          headers: agentAuthHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({
-            product_id: productId,
-            vault_folder: currentVaultFolder(),
-            relative_paths: slice,
-          }),
-          keepalive: true,
-        });
-      } catch {
-        /* best-effort; page is about to refresh */
+      const done = Math.min(i + slice.length, paths.length);
+      if (paths.length > chunkSize) {
+        publishBusyMessage(`Cleaning local workspace… ${done} of ${paths.length}`);
       }
+      const body = await deleteLocalWorkspacePaths(productId, slice);
+      if (!body) {
+        throw new Error(
+          "creopdm-agent is not running — local workspace on this PC was not deleted."
+        );
+      }
+      combined.ok.push(...(body.ok || []));
+      combined.failed.push(...(body.failed || []));
     }
+    return combined;
+  }
+
+  /** @deprecated Prefer deleteLocalWorkspacePathsForRemove (awaited). */
+  function deleteLocalWorkspacePathsBackground(productId, relativePaths) {
+    deleteLocalWorkspacePathsForRemove(productId, relativePaths).catch(() => {});
   }
 
   async function purgeLocalVersionsOlderThanVault(productId, { dryRun = false } = {}) {
@@ -11244,7 +11264,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         return;
       }
       if (deleteWorkspaceFiles && productId && workspacePaths.length) {
-        deleteLocalWorkspacePathsBackground(productId, workspacePaths);
+        try {
+          await withBusy("Cleaning local workspace…", () =>
+            deleteLocalWorkspacePathsForRemove(productId, workspacePaths)
+          );
+        } catch (errWs) {
+          showError(
+            $("#toolbar-error"),
+            String(errWs?.message || errWs || "Local workspace cleanup failed.")
+          );
+        }
       }
       leavePage(productHome());
       return;
@@ -11268,11 +11297,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const warning = formatBatch(result);
     if (warning) showError($("#toolbar-error"), warning);
     if (result.ok?.length && deleteWorkspaceFiles && productId && workspacePaths.length) {
-      deleteLocalWorkspacePathsBackground(productId, workspacePaths);
-      if (!warning) {
-        showOk(
-          `${result.ok.length} item(s) removed from the product. Local workspace cleanup continues in the background.`
+      let wsWarning = "";
+      try {
+        const ws = await withBusy("Cleaning local workspace…", () =>
+          deleteLocalWorkspacePathsForRemove(productId, workspacePaths)
         );
+        if (ws?.failed?.length) {
+          wsWarning = `Local workspace: ${ws.failed.length} file(s) could not be deleted (often locked in Creo).`;
+        }
+      } catch (errWs) {
+        wsWarning = String(
+          errWs?.message || errWs || "Local workspace cleanup failed."
+        );
+      }
+      if (wsWarning) {
+        showError($("#toolbar-error"), warning ? `${warning} ${wsWarning}` : wsWarning);
+      } else if (!warning) {
+        showOk(`${result.ok.length} item(s) removed from the product.`);
       }
     } else if (result.ok?.length && !warning) {
       const files = (result.ok || []).filter((item) => item.status === "removed").length;

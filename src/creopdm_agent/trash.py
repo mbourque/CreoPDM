@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def prepare_path_for_delete(path: Path) -> None:
-    """Clear Windows Hidden/System on ``path`` (and nested contents if a folder).
+    """Clear Windows Hidden/System/Readonly on ``path`` (and nested if a folder).
 
     Single prep used by Clear workspace, Remove-from-Product workspace cleanup,
     and any other ``move_to_trash`` caller — CreoPDM marks older ``.N`` tips
@@ -17,50 +17,63 @@ def prepare_path_for_delete(path: Path) -> None:
     target = Path(path)
     if not target.exists():
         return
-    _clear_windows_hidden_system(target)
+    _clear_windows_delete_attrs(target)
     if target.is_dir():
         for nested in _iter_all_under(target):
-            _clear_windows_hidden_system(nested)
+            _clear_windows_delete_attrs(nested)
 
 
 def move_to_trash(path: Path) -> None:
     """Send ``path`` to the Recycle Bin on Windows; otherwise delete permanently.
 
-    Always runs :func:`prepare_path_for_delete` first (Hidden/System).
+    Always runs :func:`prepare_path_for_delete` first (Hidden/System/Readonly).
     Under pytest, always removes so agent tests do not fill the Recycle Bin.
     If the Shell recycle call fails, falls back to a permanent delete.
+    Raises ``OSError`` when the path still exists after all attempts.
     """
     import shutil
+    import stat as stat_mod
 
     target = Path(path)
     if not target.exists():
         return
     prepare_path_for_delete(target)
-    if os.environ.get("PYTEST_CURRENT_TEST"):
+
+    def _force_gone() -> None:
+        prepare_path_for_delete(target)
+        if not target.exists():
+            return
+        try:
+            mode = target.stat().st_mode
+            target.chmod(mode | stat_mod.S_IWRITE | stat_mod.S_IREAD)
+        except OSError:
+            pass
         if target.is_dir():
             shutil.rmtree(target, ignore_errors=False)
         else:
             target.unlink()
+
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        _force_gone()
+        if target.exists():
+            raise OSError(f"Still present after delete: {target}")
         return
     if sys.platform == "win32":
         try:
             _windows_recycle_bin(target)
         except OSError:
-            if target.is_dir():
-                shutil.rmtree(target)
-            else:
-                target.unlink()
+            _force_gone()
+            if target.exists():
+                raise
             return
         if target.exists():
-            if target.is_dir():
-                shutil.rmtree(target)
-            else:
-                target.unlink()
+            _force_gone()
+        if target.exists():
+            raise OSError(f"Still present after delete: {target}")
         return
-    if target.is_dir():
-        shutil.rmtree(target)
-    else:
-        target.unlink()
+    _force_gone()
+    if target.exists():
+        raise OSError(f"Still present after delete: {target}")
 
 
 def clear_directory_contents(directory: Path) -> tuple[int, list[str]]:
@@ -165,27 +178,41 @@ def _dedupe_failures(failed: list[str]) -> list[str]:
     return out
 
 
-def _clear_windows_hidden_system(path: Path) -> None:
-    """Drop Hidden/System attributes so delete/recycle can see the path."""
+def _clear_windows_delete_attrs(path: Path) -> None:
+    """Drop Readonly/Hidden/System so delete/recycle can take the path."""
     if sys.platform != "win32":
         return
     try:
         import ctypes
+        from ctypes import wintypes
 
         get_attrs = ctypes.windll.kernel32.GetFileAttributesW
         set_attrs = ctypes.windll.kernel32.SetFileAttributesW
-        attrs = get_attrs(str(path))
-        if attrs == -1:
+        get_attrs.argtypes = [wintypes.LPCWSTR]
+        get_attrs.restype = wintypes.DWORD
+        set_attrs.argtypes = [wintypes.LPCWSTR, wintypes.DWORD]
+        set_attrs.restype = wintypes.BOOL
+        target = str(Path(path).resolve())
+        attrs = int(get_attrs(target))
+        invalid = 0xFFFFFFFF
+        if attrs == invalid:
             return
+        file_attribute_readonly = 0x1
         file_attribute_hidden = 0x2
         file_attribute_system = 0x4
-        cleaned = attrs & ~(file_attribute_hidden | file_attribute_system)
+        cleaned = attrs & ~(
+            file_attribute_readonly | file_attribute_hidden | file_attribute_system
+        )
         if cleaned != attrs:
-            set_attrs(str(path), cleaned)
+            set_attrs(target, cleaned)
     except OSError:
         return
     except Exception:
         return
+
+
+# Back-compat name used by older tests / callers.
+_clear_windows_hidden_system = _clear_windows_delete_attrs
 
 
 def _iter_all_under(root: Path) -> list[Path]:

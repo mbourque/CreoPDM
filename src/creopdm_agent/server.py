@@ -880,6 +880,47 @@ def _remember_cache_file(cache_dir: Path, disk_name: str, content_hash: str, siz
     _save_cache_index(cache_dir, index)
 
 
+def _prune_cache_index_keys(cache_dir: Path, removed_keys: set[str]) -> None:
+    """Drop deleted tip keys from the hidden cache index; trash index when empty."""
+    keys = {str(item or "").replace("\\", "/").strip() for item in removed_keys if item}
+    if not keys or not cache_dir.is_dir():
+        return
+    index = _load_cache_index(cache_dir)
+    if index:
+        changed = False
+        for key in list(index):
+            norm = str(key or "").replace("\\", "/").strip()
+            base = Path(norm).name
+            if norm in keys or base in keys:
+                del index[key]
+                changed = True
+        if changed:
+            if index:
+                _save_cache_index(cache_dir, index)
+            else:
+                for name in (_CACHE_INDEX_NAME, _LEGACY_CACHE_INDEX_NAME):
+                    path = cache_dir / name
+                    if path.is_file():
+                        try:
+                            move_to_trash(path)
+                        except OSError as exc:
+                            logger.warning("Could not trash cache index %s: %s", path, exc)
+    # If the workspace only has the hidden index left, remove it too.
+    try:
+        leftover = [p for p in cache_dir.iterdir() if p.exists()]
+    except OSError:
+        return
+    only_index = leftover and all(
+        p.name in {_CACHE_INDEX_NAME, _LEGACY_CACHE_INDEX_NAME} for p in leftover
+    )
+    if only_index:
+        for path in leftover:
+            try:
+                move_to_trash(path)
+            except OSError as exc:
+                logger.warning("Could not trash leftover cache index %s: %s", path, exc)
+
+
 def _plan_cache_downloads(
     cache_dir: Path,
     items: list[CachePlanItem],
@@ -2168,11 +2209,17 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         failed: list[PushItemResult] = []
         seen: set[str] = set()
 
+        removed_index_keys: set[str] = set()
+
         def trash_one(local: Path, rel_label: str) -> None:
+            from creopdm_agent.trash import prepare_path_for_delete
+
             key = str(local.resolve()).casefold()
             if key in seen:
                 return
             seen.add(key)
+            # Clear Hidden/System/Readonly before is_file / recycle (same prep as Clear).
+            prepare_path_for_delete(local)
             if not local.is_file():
                 failed.append(
                     PushItemResult(
@@ -2193,10 +2240,22 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                     )
                 )
                 return
+            if local.exists():
+                failed.append(
+                    PushItemResult(
+                        object_id=product_id,
+                        filename=local.name,
+                        message=f"Still present after delete: {local.name}",
+                    )
+                )
+                return
             try:
                 rel_out = str(local.resolve().relative_to(cache_resolved)).replace("\\", "/")
             except ValueError:
                 rel_out = rel_label
+            removed_index_keys.add(local.name)
+            removed_index_keys.add(Path(rel_out).name)
+            removed_index_keys.add(rel_out.replace("\\", "/"))
             ok.append(
                 PushItemResult(
                     object_id=product_id,
@@ -2231,12 +2290,13 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
             wanted = CreoFileManager.logical_filename(local.name).lower()
             siblings: list[Path] = []
             if parent.is_dir() and wanted:
-                for path in parent.iterdir():
-                    if not path.is_file():
+                # listdir sees Hidden tips; clear attrs on each match before trash.
+                for name in os.listdir(parent):
+                    path = parent / name
+                    if CreoFileManager.logical_filename(path.name).lower() != wanted:
                         continue
-                    if CreoFileManager.logical_filename(path.name).lower() == wanted:
-                        siblings.append(path)
-            if not siblings and local.is_file():
+                    siblings.append(path)
+            if not siblings and local.exists():
                 siblings = [local]
             if not siblings:
                 failed.append(
@@ -2249,6 +2309,9 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
                 continue
             for path in siblings:
                 trash_one(path, rel)
+
+        if removed_index_keys:
+            _prune_cache_index_keys(cache_dir, removed_index_keys)
         return DeletePathsResponse(ok=ok, failed=failed)
 
     @app.post("/delete-product-cache", response_model=DeleteProductCacheResponse)

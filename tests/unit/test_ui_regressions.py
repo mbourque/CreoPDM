@@ -650,8 +650,11 @@ def test_delete_workspace_menu_warns_new_files_vault_safe():
     assert "def _hard_purge_remaining(" in trash
     assert "def prepare_path_for_delete(" in trash
     assert "prepare_path_for_delete(target)" in trash
+    assert "def _clear_windows_delete_attrs(" in trash
     assert "deleteWorkspaceBtn?.addEventListener(" in script
     assert "setToolbarActionVisible(deleteWorkspaceBtn, canDeleteWorkspace)" in script
+    assert "async function deleteLocalWorkspacePathsForRemove(" in script
+    assert "Cleaning local workspace…" in script
     base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
     assert 'id="danger-confirm-dialog"' in base
     assert 'id="danger-confirm-password-label"' in base
@@ -669,6 +672,7 @@ def test_delete_workspace_menu_warns_new_files_vault_safe():
     remove_section = docs.split("### Remove from Product…", 1)[1].split("## 13.", 1)[0]
     assert "same trash prep as **Clear workspace…" in remove_section
     assert "Hidden numbered siblings" in remove_section
+    assert "fire-and-forget" in remove_section
 
 
 def test_soft_nav_does_not_silently_drop_when_busy():

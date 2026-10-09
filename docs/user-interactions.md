@@ -366,7 +366,7 @@ Destructive actions ask you to enter your password ([§13](#13-entering-your-pas
 |--------|------------|--------------|
 | Select files and/or folders (including empty folders) | Enable **Remove from Product…** (ellipsis — opens the warning dialog) | Stay disabled just because a folder is empty; omit the ellipsis when it opens a confirm |
 | Confirm with your password | Remove from the product; delete vault copies; **rows disappear right away** | Leave the folder/file visible until F5 |
-| Optionally also delete local workspace | Clean local copies if you checked that box (same trash prep as **Clear workspace…** — clears Windows Hidden/System so older Creo `.N` tips and other hidden leftovers go too) | Delete your original CAD source folder unless you asked for workspace cleanup; leave Hidden numbered siblings behind when the delete succeeded |
+| Optionally also delete local workspace | Wait for local cleanup to finish (same trash prep as **Clear workspace…** — clears Windows Hidden/System/Readonly so older Creo `.N` tips and the hidden cache index go too) before refreshing | Delete your original CAD source folder unless you asked for workspace cleanup; fire-and-forget cleanup that leaves Hidden numbered siblings when the page reloads; leave Hidden numbered siblings behind when the delete succeeded |
 | Enter the wrong password | Show an error; change nothing | Remove anything |
 | Cancel | Change nothing | |
 | File checked out by someone else | Skip that file with an error; may still remove others | Quietly remove their locked file |

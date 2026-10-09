@@ -1724,6 +1724,11 @@ def test_agent_delete_paths_trashes_creo_numbered_siblings(tmp_path):
     (cache / "shaft.prt.1").write_bytes(b"v1")
     (cache / "shaft.prt.3").write_bytes(b"v3")
     (cache / "other.prt.1").write_bytes(b"keep")
+    # Hidden cache index must be pruned / removed when tips go away.
+    (cache / ".creopdm_cache_index.json").write_text(
+        '{"shaft.prt.1":{"hash":"a","size":1},"shaft.prt.3":{"hash":"b","size":1},"other.prt.1":{"hash":"c","size":1}}',
+        encoding="utf-8",
+    )
     settings = AgentConfig(host="127.0.0.1", port=8766, local_root=str(root), token="tok")
     app = create_agent_app(settings)
     with TestClient(app) as client:
@@ -1737,6 +1742,9 @@ def test_agent_delete_paths_trashes_creo_numbered_siblings(tmp_path):
         assert not (cache / "shaft.prt.1").exists()
         assert not (cache / "shaft.prt.3").exists()
         assert (cache / "other.prt.1").is_file()
+        index = (cache / ".creopdm_cache_index.json").read_text(encoding="utf-8")
+        assert "shaft.prt" not in index
+        assert "other.prt.1" in index
 
 
 def test_agent_add_paths_posts_multipart_to_pdm(tmp_path, monkeypatch):
