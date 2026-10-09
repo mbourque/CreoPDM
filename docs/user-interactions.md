@@ -34,6 +34,7 @@ Test in Creo’s built-in browser when you can (Creo connection matters there). 
 
 | You do | App should | App must not |
 |--------|------------|--------------|
+| Click **Help** in the top bar | Open `/help` in a named browser tab (`creopdm-help`) so CreoPDM stays in the original tab; later Help clicks reuse that help tab | Soft-nav Help into the Creo shell; open a new anonymous tab every click |
 | Click around the signed-in app (product, folder breadcrumb, **Details** / History tab, double-click a file, Administration including Products/Membership/Email/Utilities, System Settings, account password) | Soft-nav the shell so Creo **stays Connected**; if Creo.JS is live, the pill shows **Connected** (not a stale Session offline) when **Set Working Directory** is shown; inside Creo’s embedded browser while Creo.JS is still linking, show a **Connecting to Creo…** overlay that blocks clicks until Connected (or ~15s), then clear it — never in Chrome/Edge and **never on Logout → sign-in** (`/login` / auth pages — do not block typing for ~15s); on a **fresh open** of Creo’s browser (close/reopen), promote **Connected** as soon as the bridge is live (do not wait on creopdm-agent `/health`), start `/creojs.js` after a short grace if Creo has not injected it yet, and poll the overlay ~100ms so the spinner clears quickly; after a server update, soft-nav must pick up the new `app.js` (cache-bust) and refresh **Open Creo models with** on the Creo pill so Modified / New files Open does not stay on a stale Windows-association path; if soft-nav **Loading…** cannot get HTML within ~45s (server busy on Open / index), fall back to a normal navigation instead of spinning forever | Hard-reload shell pages (SSR Session offline / drop Creo.JS); flash Session offline while Set Working Directory is visible; treat Logout / Login / setup as soft-nav; leave the connecting overlay up in a standalone browse; leave **Connecting to Creo…** up on the sign-in page after Logout; leave **Loading…** stuck forever when the server worker is blocked; trap clicks forever when Session stays offline; keep running an old in-memory `app.js` after deploy while only the HTML shell updates; leave Open mode stuck on association after Settings → Embedded because the live Creo pill was not refreshed; wait several seconds for agent `/health` before showing Connected when Creo.JS is already live |
 | Sign in as **Viewer** | View products (`products.view`); open/download files and use **Details** (Overview/History) via the bottom toolbar or double-click (`objects.view`); Open without checking out (**no Open dialog** — only one choice) | See Add / Checkout / Check In / Remove / Export ▾ (including an empty **Checkout ▾** fly-up), New product, Copy to Vault, or “Check out … then open” in the Open dialog |
 | Sign in with Administration only (no `products.view`) | Land on **Administration**; breadcrumb has no **Products** link; visiting `/` redirects to `/admin` | See a JSON error; see a Products crumb that opens Files |
@@ -401,7 +402,7 @@ Phone-only **browse** mode (portrait or landscape). No Add / Checkout / Check In
 
 | You do | App should | App must not |
 |--------|------------|--------------|
-| Look at the top bar | Show CreoPDM brand and **Logout**; hide Administration, display name, and Creo status pills | Hide Logout; show Administration / Creo status / name pills on a phone |
+| Look at the top bar | Show CreoPDM brand and **Logout**; hide **Help**, Administration, display name, and Creo status pills | Hide Logout; show Help / Administration / Creo status / name pills on a phone |
 | Look at the product header | Show product name and search; hide **New**, gear, and metric chips (Files / Parts / …) | Show New product, product gear, or filter pills |
 | Look at the bottom | No toolbar | Show Set Working Directory, Add, Open, Checkout, Check In, or Remove |
 | Open a file’s Details page | No bottom Details toolbar (no Revert / Check In chrome); Creo stays Connected | Show the desktop Details action bar; hard-reload and drop Creo |
@@ -576,6 +577,7 @@ Try the same with **Add folder…**, **Add folders…**, and **Compressed data�
 
 Automated coverage lives mainly in:
 
+- `tests/unit/test_user_help.py` (Help pill left of Administration; `/help` named tab `creopdm-help`; packaged `static/help/index.html`)
 - `tests/unit/test_ui_regressions.py` (includes `test_mobile_browse_css_is_minimal`, `test_details_where_used_tab_gated_on_creo_models`, `test_files_search_survives_details_and_back`, `test_modified_tab_between_checked_out_and_new_files`, `test_locked_product_changes_help_does_not_offer_add_checkin`)
 - `tests/unit/test_ai_snapshots.py` (Modifications tab + `object_version_snapshots` API/service)
 - `tests/unit/test_user_interaction_validations.py`

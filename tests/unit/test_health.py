@@ -69,7 +69,10 @@ def test_home_page(client):
     assert APP_NAME in text
     assert f"Version {APP_VERSION}" in text
     assert "Status: Running" not in text
+    assert 'href="/help"' in text
+    assert 'target="creopdm-help"' in text
     assert 'href="/admin"' in text
+    assert text.index('href="/help"') < text.index('href="/admin"')
     assert 'href="/settings"' not in text.split('<main')[0]  # Settings lives under Administration
     assert 'id="creo-status"' in text
     assert '<dialog id="busy-overlay"' in text
@@ -98,7 +101,7 @@ def test_home_page(client):
     assert "push169" not in text
     assert "export3" not in text
     assert "compact-busy" not in text
-    assert "/client/app.js?v=" in text and "ai-settings-hub-only" in text
+    assert "/client/app.js?v=" in text and "help-pill" in text
     assert 'id="creo-connecting-overlay"' in text
     assert "Connecting to Creo…" in text
     assert "/static/css/app.css?v=" in text and "hub-tile-click" in text

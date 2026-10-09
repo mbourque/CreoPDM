@@ -401,6 +401,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         path === "/setup" ||
         path === "/forgot-password" ||
         path === "/reset-password" ||
+        path === "/help" ||
         path.startsWith("/api/") ||
         path.startsWith("/static/") ||
         path === "/creojs.js"

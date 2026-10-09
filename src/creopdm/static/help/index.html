@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CreoPDM Help — Getting around, files, and everyday work</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #16202c;
+      --ink-soft: #3a4a5c;
+      --muted: #5c6d7e;
+      --line: #c7d2dc;
+      --paper: #f4f7fa;
+      --panel: #ffffff;
+      --steel: #2f6f8f;
+      --steel-deep: #1f4f68;
+      --copper: #b4531e;
+      --ok: #1f6b4a;
+      --warn-bg: #fff6e8;
+      --warn-line: #e0b56a;
+      --shadow: 0 10px 28px rgba(22, 32, 44, 0.08);
+      --radius: 14px;
+      --nav-w: 15.5rem;
+      --max: 54rem;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100%;
+      color: var(--ink);
+      font-family: "Source Sans 3", "Segoe UI", sans-serif;
+      font-size: 1.05rem;
+      line-height: 1.55;
+      background:
+        radial-gradient(1200px 500px at 10% -10%, rgba(47, 111, 143, 0.16), transparent 55%),
+        radial-gradient(900px 420px at 90% 0%, rgba(180, 83, 30, 0.10), transparent 50%),
+        linear-gradient(180deg, #eef3f7 0%, var(--paper) 28%, #e9eef3 100%);
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.35;
+      background-image:
+        linear-gradient(rgba(22, 32, 44, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(22, 32, 44, 0.035) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: linear-gradient(180deg, #000 0%, transparent 85%);
+    }
+
+    a { color: var(--steel-deep); }
+    a:hover { color: var(--copper); }
+
+    .shell {
+      display: grid;
+      grid-template-columns: var(--nav-w) minmax(0, 1fr);
+      gap: 0;
+      max-width: 78rem;
+      margin: 0 auto;
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    .side {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      height: 100vh;
+      padding: 1.35rem 1rem 1.5rem 1.25rem;
+      border-right: 1px solid rgba(199, 210, 220, 0.85);
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(10px);
+      overflow: auto;
+    }
+    .brand {
+      font-family: "Space Grotesk", sans-serif;
+      font-weight: 700;
+      font-size: 1.35rem;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+      text-decoration: none;
+      display: block;
+      margin-bottom: 0.15rem;
+    }
+    .brand span {
+      display: block;
+      font-family: "Source Sans 3", sans-serif;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 0.15rem;
+    }
+    .side nav {
+      margin-top: 1.35rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .side nav a {
+      display: block;
+      padding: 0.42rem 0.55rem;
+      border-radius: 8px;
+      color: var(--ink-soft);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-left: 3px solid transparent;
+    }
+    .side nav a:hover,
+    .side nav a.is-active {
+      background: rgba(47, 111, 143, 0.08);
+      color: var(--steel-deep);
+      border-left-color: var(--steel);
+    }
+    .side .note {
+      margin-top: 1.5rem;
+      padding: 0.85rem 0.9rem;
+      border-radius: 10px;
+      background: var(--warn-bg);
+      border: 1px solid var(--warn-line);
+      color: #6a4a18;
+      font-size: 0.88rem;
+      line-height: 1.4;
+    }
+
+    .main {
+      padding: 1.5rem 1.75rem 4rem;
+    }
+    .hero {
+      max-width: var(--max);
+      padding: 1.6rem 0 1.9rem;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 2rem;
+      animation: rise 0.55s ease both;
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: none; }
+    }
+    .hero h1 {
+      font-family: "Space Grotesk", sans-serif;
+      font-size: clamp(2rem, 3.6vw, 2.85rem);
+      line-height: 1.1;
+      letter-spacing: -0.035em;
+      margin: 0 0 0.65rem;
+      font-weight: 700;
+    }
+    .hero p {
+      margin: 0;
+      max-width: 40rem;
+      color: var(--ink-soft);
+      font-size: 1.12rem;
+    }
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      margin-top: 1.15rem;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      background: rgba(47, 111, 143, 0.1);
+      color: var(--steel-deep);
+      font-size: 0.86rem;
+      font-weight: 700;
+      text-decoration: none;
+      border: 1px solid rgba(47, 111, 143, 0.18);
+    }
+    .chip:hover {
+      background: rgba(180, 83, 30, 0.12);
+      border-color: rgba(180, 83, 30, 0.28);
+      color: var(--copper);
+    }
+
+    section {
+      max-width: var(--max);
+      margin: 0 0 2.4rem;
+      scroll-margin-top: 1.2rem;
+      animation: rise 0.5s ease both;
+    }
+    section:nth-of-type(2) { animation-delay: 0.04s; }
+    section:nth-of-type(3) { animation-delay: 0.08s; }
+    h2 {
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 1.55rem;
+      letter-spacing: -0.03em;
+      margin: 0 0 0.55rem;
+      font-weight: 700;
+    }
+    h3 {
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 1.12rem;
+      margin: 1.35rem 0 0.4rem;
+      letter-spacing: -0.02em;
+    }
+    p { margin: 0 0 0.85rem; color: var(--ink-soft); }
+    .lead { font-size: 1.08rem; }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.15rem 1.25rem 1.2rem;
+      margin: 0.9rem 0;
+    }
+    .panel h3:first-child { margin-top: 0; }
+
+    ol.steps, ul.clean {
+      margin: 0.4rem 0 0.2rem;
+      padding-left: 1.2rem;
+      color: var(--ink-soft);
+    }
+    ol.steps li, ul.clean li { margin: 0.35rem 0; }
+    ol.steps strong, ul.clean strong { color: var(--ink); font-weight: 700; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.85rem;
+      margin: 0.9rem 0;
+    }
+    .tile {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1rem 1.05rem 1.05rem;
+      box-shadow: var(--shadow);
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .tile:hover {
+      transform: translateY(-2px);
+      border-color: rgba(47, 111, 143, 0.45);
+    }
+    .tile h3 {
+      margin: 0 0 0.35rem;
+      font-size: 1.05rem;
+    }
+    .tile p { margin: 0; font-size: 0.98rem; }
+
+    .callout {
+      border-left: 4px solid var(--steel);
+      background: rgba(47, 111, 143, 0.07);
+      padding: 0.85rem 1rem;
+      border-radius: 0 10px 10px 0;
+      margin: 0.9rem 0;
+      color: var(--ink-soft);
+    }
+    .callout.warn {
+      border-left-color: var(--copper);
+      background: var(--warn-bg);
+      color: #5d4218;
+    }
+    .callout strong { color: var(--ink); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.98rem;
+      margin: 0.75rem 0 0.2rem;
+    }
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 0.55rem 0.65rem;
+      border-bottom: 1px solid var(--line);
+    }
+    th {
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 0.82rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    td strong { color: var(--ink); }
+
+    .kbd {
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 0.82rem;
+      font-weight: 700;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-bottom-width: 2px;
+      border-radius: 6px;
+      padding: 0.05rem 0.4rem;
+      color: var(--ink);
+    }
+
+    .menu-btn {
+      display: none;
+      position: fixed;
+      top: 0.85rem;
+      right: 0.85rem;
+      z-index: 20;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.92);
+      border-radius: 999px;
+      padding: 0.45rem 0.85rem;
+      font-family: "Space Grotesk", sans-serif;
+      font-weight: 700;
+      color: var(--ink);
+      box-shadow: var(--shadow);
+      cursor: pointer;
+    }
+
+    @media (max-width: 900px) {
+      .shell { grid-template-columns: 1fr; }
+      .side {
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: min(18rem, 86vw);
+        transform: translateX(-105%);
+        transition: transform 0.2s ease;
+        z-index: 30;
+        box-shadow: var(--shadow);
+      }
+      body.nav-open .side { transform: none; }
+      .menu-btn { display: inline-flex; }
+      .main { padding: 1.1rem 1.1rem 3rem; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .hero { padding-top: 2.6rem; }
+    }
+  </style>
+</head>
+<body>
+  <button class="menu-btn" type="button" id="menuBtn" aria-expanded="false">Contents</button>
+  <div class="shell">
+    <aside class="side" id="sideNav">
+      <a class="brand" href="#top">CreoPDM<span>User help</span></a>
+      <nav aria-label="Help topics">
+        <a href="#start">Quick start</a>
+        <a href="#files">Files list</a>
+        <a href="#folders">Folders &amp; clicks</a>
+        <a href="#add">Add files</a>
+        <a href="#open">Open in Creo</a>
+        <a href="#checkout">Checkout</a>
+        <a href="#checkin">Check In</a>
+        <a href="#remove">Remove &amp; cleanup</a>
+        <a href="#watch">Watch &amp; email</a>
+        <a href="#details">Details &amp; history</a>
+        <a href="#tips">Tips &amp; troubleshooting</a>
+      </nav>
+      <p class="note">Prefer working in <strong>Creo’s built-in browser</strong> when you need Creo Connected (Open, Collect metadata, Ask AI). Chrome or Edge is fine for browsing and most toolbar work.</p>
+    </aside>
+
+    <main class="main" id="top">
+      <header class="hero">
+        <h1>How to use CreoPDM</h1>
+        <p>
+          CreoPDM keeps your product files in a shared vault, lets you check out work to edit,
+          and records every check-in with history. This page covers the day-to-day Files workflow.
+        </p>
+        <div class="hero-meta">
+          <a class="chip" href="#start">Start here</a>
+          <a class="chip" href="#checkout">Checkout → Check In</a>
+          <a class="chip" href="#open">Open assemblies</a>
+          <a class="chip" href="#tips">If something fails</a>
+        </div>
+      </header>
+
+      <section id="start">
+        <h2>Quick start</h2>
+        <p class="lead">A typical edit cycle takes a few minutes once you know the toolbar.</p>
+        <div class="panel">
+          <ol class="steps">
+            <li><strong>Pick a product</strong> in the left sidebar.</li>
+            <li><strong>Checkout</strong> the file (or files) you will change.</li>
+            <li><strong>Open</strong> the model in Creo and save your edits.</li>
+            <li>Use <strong>Check In</strong>, write a short comment, and finish.</li>
+            <li>The list updates on its own — you should not need to press F5.</li>
+          </ol>
+        </div>
+        <div class="grid-2">
+          <article class="tile">
+            <h3>What stays shared</h3>
+            <p>The vault holds the product’s official files and history. Everyone on the product sees those versions after check-in.</p>
+          </article>
+          <article class="tile">
+            <h3>What is yours locally</h3>
+            <p>Your workspace on the Creo PC holds working copies. Checkout locks a file so others cannot edit it at the same time.</p>
+          </article>
+        </div>
+        <div class="callout">
+          <strong>Product state matters.</strong> If a product is <strong>read only</strong> or not <strong>In work</strong>, Add / Checkout / Check In / Remove stay hidden or blocked. You can still browse, open, and download.
+        </div>
+      </section>
+
+      <section id="files">
+        <h2>The Files list</h2>
+        <p>Most work happens on the product Files page: a breadcrumb path, metric filters, Search, list tabs, and the bottom toolbar.</p>
+        <div class="panel">
+          <h3>List tabs</h3>
+          <table>
+            <thead>
+              <tr><th>Tab</th><th>What you see</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>Files</strong></td><td>Normal folder view for the current path. Search is available here.</td></tr>
+              <tr><td><strong>Checked out</strong></td><td>Files currently locked for edit.</td></tr>
+              <tr><td><strong>Modified</strong></td><td>Vault files with newer local or vault saves ready to check in.</td></tr>
+              <tr><td><strong>New files</strong></td><td>Files waiting to be added to the product (not yet in the vault as product objects).</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Finding things</h3>
+        <ul class="clean">
+          <li><strong>Search</strong> (Files tab) matches names, paths, revisions, Type labels, and more. Wildcards like <code>*.prt</code> work.</li>
+          <li><strong>Metric pills</strong> (Parts, Assemblies, Drawings, Modified, Folders, Top level assemblies, …) filter and select matching rows. Click again to clear.</li>
+          <li><strong>Column headers</strong> sort the list; click again to reverse.</li>
+        </ul>
+        <div class="callout">
+          After you open <strong>Details</strong> and press Back, CreoPDM keeps your search text, selection, and which list tab you were on.
+        </div>
+      </section>
+
+      <section id="folders">
+        <h2>Folders &amp; selection</h2>
+        <p>Folder rows and file rows use different click rules so you can open or select without surprises.</p>
+        <div class="panel">
+          <table>
+            <thead>
+              <tr><th>You click</th><th>What happens</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>Folder name</strong> (icon + name)</td><td>Opens that folder.</td></tr>
+              <tr><td><strong>Elsewhere on the folder row</strong></td><td>Selects the folder (for Remove, Export, and so on).</td></tr>
+              <tr><td><strong>File name / row</strong></td><td>Selects the file. Double-click opens Details / History.</td></tr>
+              <tr><td><span class="kbd">Ctrl</span> / <span class="kbd">Cmd</span> or <span class="kbd">Shift</span> click</td><td>Multi-select or range select.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Empty folders stay selectable and removable — you do not need a file inside them first.</p>
+      </section>
+
+      <section id="add">
+        <h2>Add files</h2>
+        <p>Use <strong>Add ▾</strong> when something new should become part of the product.</p>
+        <ul class="clean">
+          <li><strong>Add selected…</strong> — promote New files from the list into the product.</li>
+          <li><strong>Add files… / Add folder… / Add folders…</strong> — pick from disk (creopdm-agent helps on the Creo PC).</li>
+          <li><strong>Compressed data…</strong> — import a zip into the product.</li>
+          <li><strong>Create folder…</strong> — make an empty folder in the current location.</li>
+        </ul>
+        <div class="callout">
+          Large adds show a busy overlay (Where Used indexing, then metadata when Creo is Connected). Wait for it to finish — the list refreshes when the work is done.
+        </div>
+      </section>
+
+      <section id="open">
+        <h2>Open in Creo</h2>
+        <p>Open brings the model (and the companions Creo needs) into your local workspace, then launches it.</p>
+        <div class="panel">
+          <h3>If the file is not checked out to you</h3>
+          <ul class="clean">
+            <li><strong>Open without checking out</strong> — view / reference; no edit lock.</li>
+            <li><strong>Check out this file, then open</strong> — lock only this file.</li>
+            <li><strong>Check out this file and its dependencies, then open</strong> — lock the full tree Creo needs.</li>
+          </ul>
+          <p style="margin-top:0.75rem;margin-bottom:0">Viewers (and anyone who cannot checkout) skip the dialog and open immediately.</p>
+        </div>
+        <div class="callout warn">
+          <strong>Large assemblies can take a while.</strong> CreoPDM finds dependencies, downloads missing tips, then waits for Creo to finish Retrieve. Watch the busy messages; do not assume the session is offline just because a big open is still running.
+        </div>
+        <ul class="clean">
+          <li>Prefer Creo’s embedded browser when using <strong>Embedded</strong> open mode.</li>
+          <li><strong>Set Working Directory</strong> is optional and Creo-only — leave it off unless you need it.</li>
+          <li>If Open seems to do nothing, check the error line under the toolbar and that <strong>creopdm-agent</strong> is running on the Creo PC.</li>
+        </ul>
+      </section>
+
+      <section id="checkout">
+        <h2>Checkout</h2>
+        <p>Checkout locks files for you and downloads them for editing under logical tip names (for example <code>shaft.prt</code>), keeping vault folder paths in your workspace.</p>
+        <div class="grid-2">
+          <article class="tile">
+            <h3>Checkout selected</h3>
+            <p>Locks the files you selected. Will not take a file someone else already has checked out.</p>
+          </article>
+          <article class="tile">
+            <h3>Checkout product</h3>
+            <p>Locks everything that is free in the product. Handy for broad edits; still respects other people’s locks.</p>
+          </article>
+          <article class="tile">
+            <h3>Undo Checkout</h3>
+            <p>Releases <em>your</em> locks without creating a new version. Does not delete vault files.</p>
+          </article>
+          <article class="tile">
+            <h3>Force Undo Checkout</h3>
+            <p>Releases another user’s abandoned lock (permission required). Confirms first; may email that user.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="checkin">
+        <h2>Check In</h2>
+        <p>Check In records a new version in the vault and releases the lock when the work is saved.</p>
+        <div class="panel">
+          <ol class="steps">
+            <li>Open <strong>Check In ▾</strong> → <strong>Check in selected…</strong> or <strong>Check in product…</strong>.</li>
+            <li>Confirm the local tip shown in the dialog (for example <code>shaft.prt.2</code>). The vault stores the logical tip (<code>shaft.prt</code>).</li>
+            <li>Enter a <strong>comment</strong> — blank comments are blocked.</li>
+            <li>Optional in Creo when AI is enabled: <strong>Ask AI for comment</strong> drafts a summary you can edit.</li>
+            <li>Finish — the list and statuses update to match the vault.</li>
+          </ol>
+        </div>
+        <div class="callout">
+          <strong>New files</strong> (not yet in the product) are added with <strong>Add ▾ → Add selected…</strong>, not Check In. Check In is for modified vault tips and related pending saves.
+        </div>
+      </section>
+
+      <section id="remove">
+        <h2>Remove &amp; cleanup</h2>
+        <p>Use <strong>Remove ▾</strong> carefully — some actions only clean your PC; others change the shared product.</p>
+        <div class="panel">
+          <table>
+            <thead>
+              <tr><th>Action</th><th>Affects</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>Remove from Workspace…</strong></td><td>Local copies on this PC only. Vault unchanged.</td></tr>
+              <tr><td><strong>Purge workspace…</strong></td><td>Older local numbered saves below the vault tip. Vault unchanged.</td></tr>
+              <tr><td><strong>Clear workspace…</strong></td><td>Everything inside this product’s local workspace folder. Vault unchanged.</td></tr>
+              <tr><td><strong>Remove from Vault…</strong></td><td>Deletes CreoPDM vault copies. Your original CAD folders on disk are not the same thing.</td></tr>
+              <tr><td><strong>Remove from Product…</strong></td><td>Removes from the product and deletes vault copies. Confirms with your password.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn">
+          Destructive vault / product removes ask you to <strong>re-enter your password</strong>. Cancel if you are unsure — originals outside CreoPDM’s vault are not a substitute for a careful confirm.
+        </div>
+      </section>
+
+      <section id="watch">
+        <h2>Watch &amp; email</h2>
+        <p>When email notifications are enabled on the server, a <strong>bell</strong> appears next to the product gear.</p>
+        <ul class="clean">
+          <li><strong>Watch</strong> this product to get email summaries for adds, removes, checkout, undo checkout, check-in, restore, and product info changes.</li>
+          <li>Check-in emails include the <strong>check-in comment</strong>.</li>
+          <li>You are not emailed for your own actions.</li>
+          <li>Watching is per user — someone else’s Watch does not make you a watcher.</li>
+        </ul>
+      </section>
+
+      <section id="details">
+        <h2>Details, history &amp; modifications</h2>
+        <p>Open a file’s <strong>Details</strong> (toolbar or double-click) for overview information, history, and (when available) Creo structure and AI compare tools.</p>
+        <ul class="clean">
+          <li><strong>History</strong> lists versions and check-in comments. Restore / revert needs the matching permission.</li>
+          <li><strong>Modifications</strong> compares checked-in snapshots and, when the file is modified, a live gather of the current model.</li>
+          <li><strong>Ask AI what changed</strong> uses the prompt saved under System Settings → AI (when enabled).</li>
+        </ul>
+        <div class="callout">
+          <strong>Export ▾</strong> can zip the whole product or the current selection (files and folders). Confirm, wait for the busy overlay, then save the zip.
+        </div>
+      </section>
+
+      <section id="tips">
+        <h2>Tips &amp; troubleshooting</h2>
+        <div class="grid-2">
+          <article class="tile">
+            <h3>Creo stays Connected</h3>
+            <p>Moving around inside CreoPDM should not hard-reload the shell. If the pill flips to Session offline while you are still in Creo’s browser, try soft-navigating again or reopen Creo’s browser tab.</p>
+          </article>
+          <article class="tile">
+            <h3>Busy overlay &amp; Escape</h3>
+            <p>Add, Check In, and Open keep the busy overlay until finished. Escape cancels only jobs that say they can stop (for example Rebuild Where Used / Collect metadata).</p>
+          </article>
+          <article class="tile">
+            <h3>creopdm-agent</h3>
+            <p>Local workspace pickers, downloads, and many Open paths need the agent on the Creo PC. Start it if Choose Folder / Open fails with an agent message.</p>
+          </article>
+          <article class="tile">
+            <h3>Who can do what</h3>
+            <p>Menus follow your role. Viewers browse and open; Engineers edit; PDM Managers / Administrators get extra product and server tools under Administration.</p>
+          </article>
+        </div>
+        <div class="panel">
+          <h3>Short checklist when Open fails</h3>
+          <ol class="steps">
+            <li>Read the red/error line under the toolbar.</li>
+            <li>Confirm creopdm-agent is running.</li>
+            <li>For Embedded mode, use Creo’s built-in browser.</li>
+            <li>For huge assemblies, give Retrieve more time before retrying.</li>
+          </ol>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      var btn = document.getElementById("menuBtn");
+      var links = document.querySelectorAll(".side nav a");
+      var sections = [];
+      links.forEach(function (a) {
+        var id = (a.getAttribute("href") || "").replace("#", "");
+        var el = document.getElementById(id);
+        if (el) sections.push({ link: a, el: el });
+      });
+
+      function closeNav() {
+        document.body.classList.remove("nav-open");
+        if (btn) btn.setAttribute("aria-expanded", "false");
+      }
+
+      if (btn) {
+        btn.addEventListener("click", function () {
+          var open = document.body.classList.toggle("nav-open");
+          btn.setAttribute("aria-expanded", open ? "true" : "false");
+        });
+      }
+
+      function setActive(link) {
+        links.forEach(function (a) { a.classList.remove("is-active"); });
+        if (link) link.classList.add("is-active");
+      }
+
+      links.forEach(function (a) {
+        a.addEventListener("click", function () {
+          setActive(a);
+          closeNav();
+        });
+      });
+
+      function onScroll() {
+        if (!sections.length) return;
+        var doc = document.documentElement;
+        var nearBottom =
+          window.scrollY + window.innerHeight >= doc.scrollHeight - 48;
+        var current;
+        if (nearBottom) {
+          // Last section is often shorter than the viewport — still highlight it.
+          current = sections[sections.length - 1];
+        } else {
+          var y = window.scrollY + 120;
+          current = sections[0];
+          for (var i = 0; i < sections.length; i++) {
+            if (sections[i].el.offsetTop <= y) current = sections[i];
+          }
+        }
+        setActive(current && current.link);
+      }
+      window.addEventListener("scroll", onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>

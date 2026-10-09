@@ -9,7 +9,7 @@ import time
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
@@ -644,6 +644,19 @@ def object_detail(
             "pending_saves": pending_saves,
             "new_workspace_files": new_workspace_files,
         },
+    )
+
+
+@router.get("/help")
+def user_help_page() -> FileResponse:
+    """Standalone user help (opened from the top-bar Help pill in a named tab)."""
+    path = PACKAGE_DIR / "static" / "help" / "index.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Help page is not available.")
+    return FileResponse(
+        path,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
     )
 
 

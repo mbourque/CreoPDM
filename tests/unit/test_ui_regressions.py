@@ -709,6 +709,9 @@ def test_soft_nav_skips_creojs_reconnect():
     assert 'id="creo-status"' in base
     assert base.index("status-cluster") < base.index('<main class="shell">')
     assert base.index('id="creo-status"') < base.index('<main class="shell">')
+    assert 'href="/help"' in base
+    assert 'target="creopdm-help"' in base
+    assert base.index('href="/help"') < base.index('href="/admin"')
     assert 'href="/admin"' in base
     assert 'can_view_objects' in base
     assert 'can_view_products' in base
@@ -721,6 +724,7 @@ def test_soft_nav_skips_creojs_reconnect():
     assert 'path.startsWith("/account")' in soft_fn
     assert 'path === "/logout"' in soft_fn
     assert 'path === "/login"' in soft_fn
+    assert 'path === "/help"' in soft_fn
     assert 'path.startsWith("/api/")' in soft_fn
     assert "/products/" in soft_fn or r"/products\/" in soft_fn
     assert "objects" in soft_fn

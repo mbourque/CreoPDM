@@ -42,6 +42,8 @@
       </div>
     </a>
     <div class="status-cluster">
+      <a class="status-pill" href="/help" target="creopdm-help" rel="noopener noreferrer"
+         title="CreoPDM user help (opens in a separate tab)">Help</a>
       {% if can_manage_users or can_manage_settings or can_manage_ai or can_manage_roles or can_assign_products or can_manage_products or can_manage_email %}
       <a class="status-pill" href="/admin">Administration</a>
       {% endif %}
@@ -4088,6 +4090,6 @@ function gatherModelMetadata(filename, filePath, options) {
     }
 }
   </script>
-  <script src="/client/app.js?v={{ app_version }}-ai-settings-hub-only"></script>
+  <script src="/client/app.js?v={{ app_version }}-help-pill"></script>
 </body>
 </html>
