@@ -307,6 +307,8 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "resolveNewerLocalCacheSaves" in mod_fn
     assert "loadCheckinQueueParts" in mod_fn
     assert "checkinQueueHitForObject" in mod_fn
+    assert "probe=compare-mod-debug" in mod_fn
+    assert "return { modified:" in mod_fn or "modified: Boolean(modified)" in mod_fn
     assert "function checkinQueueHitForObject(" in script
     assert "function listAgentCacheFilesPreferringVault(" in script
     assert "function vaultTipSaveNumber(" in script
@@ -323,7 +325,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "data-product-id=" in detail_html
     assert "data-vault-folder=" in detail_html
     base_html = BASE_HTML.read_text(encoding="utf-8")
-    assert "compare-mod-tip" in base_html
+    assert "compare-mod-debug" in base_html
     assert "function clearAiSnapshotPanelModified(" in script
     assert "function waitForCreoAgentReady(" in script
     assert "wasPending" in script.split(
@@ -336,8 +338,11 @@ def test_app_js_posts_ai_snapshot_soft_fail():
         "async function renderAiSnapshotCompare(", 1
     )[0]
     assert "await refreshAiSnapshotPanelModifiedFlag(panel)" in pending_fn2
+    assert "aiSnapshotPendingCleanPlaceholder(modDebug)" in pending_fn2
     assert "if (!isModified)" in pending_fn2
     assert "pinned tip History snap" in pending_fn2
+    assert "--- Compare Modified probe" in script
+    assert "ai-snapshot-placeholder-debug" in script
     assert "vaultFolderOverride" in script.split(
         "async function resolveNewerLocalCacheSaves(", 1
     )[1].split("async function countLocalNewWorkspaceFiles(", 1)[0]

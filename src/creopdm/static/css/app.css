@@ -1676,6 +1676,12 @@ body.is-file-drag #file-drop-overlay {
   white-space: pre-wrap;
   word-break: break-word;
 }
+.ai-snapshot-placeholder.ai-snapshot-placeholder-debug {
+  text-align: left;
+  font-size: 0.85rem;
+  max-height: min(50vh, 22rem);
+  overflow: auto;
+}
 .ai-snapshot-head-row {
   display: flex;
   flex-direction: row;
