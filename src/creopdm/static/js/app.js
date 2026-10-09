@@ -8139,9 +8139,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return created;
   }
 
-  function newerLocalCacheSaves(cacheFiles, objects) {
-    // Prefer full vault-relative path. Older flat agent caches (basename only)
-    // still match when that basename is unique in the product.
+  function indexLocalCacheTipsByLogical(cacheFiles) {
+    /** Highest Creo .N per logical path (and unique basename) from agent /files. */
     const bestByLogical = new Map();
     const bestByBasename = new Map();
     (cacheFiles || []).forEach((item) => {
@@ -8173,6 +8172,52 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         bestByBasename.set(base, entry);
       }
     });
+    return { bestByLogical, bestByBasename };
+  }
+
+  function latestLocalCacheTipForObject(cacheFiles, objects, objectId) {
+    /**
+     * Highest on-disk Creo .N for this product object (base-plate.prt.6 over .prt.2).
+     * Does not require a vault hash mismatch — used for live Compare / Ask AI gather path.
+     */
+    const id = String(objectId || "").trim();
+    if (!id) return null;
+    const obj = (Array.isArray(objects) ? objects : []).find(
+      (row) => String(row?.uuid || "") === id
+    );
+    if (!obj) return null;
+    const vaultRel = String(obj.relative_path || obj.filename || "").replace(/\\/g, "/");
+    if (!vaultRel) return null;
+    const { bestByLogical, bestByBasename } = indexLocalCacheTipsByLogical(cacheFiles);
+    const key = logicalRelativePath(vaultRel).toLowerCase();
+    const safeKey = logicalRelativePath(agentCacheSafeRelativePath(vaultRel)).toLowerCase();
+    let local = bestByLogical.get(key) || bestByLogical.get(safeKey);
+    if (!local) {
+      const base = logicalUploadName(PathBasename(vaultRel)).toLowerCase();
+      let basenameCount = 0;
+      (Array.isArray(objects) ? objects : []).forEach((row) => {
+        const rel = String(row.relative_path || row.filename || "").replace(/\\/g, "/");
+        if (!rel) return;
+        if (logicalUploadName(PathBasename(rel)).toLowerCase() === base) {
+          basenameCount += 1;
+        }
+      });
+      if (basenameCount === 1) local = bestByBasename.get(base);
+    }
+    if (!local) return null;
+    return {
+      uuid: obj.uuid,
+      filename: local.filename,
+      relative_path: local.rel,
+      saveNumber: local.saveNumber,
+      size: local.item?.size,
+    };
+  }
+
+  function newerLocalCacheSaves(cacheFiles, objects) {
+    // Prefer full vault-relative path. Older flat agent caches (basename only)
+    // still match when that basename is unique in the product.
+    const { bestByLogical, bestByBasename } = indexLocalCacheTipsByLogical(cacheFiles);
     const vaultBasenameCounts = new Map();
     (Array.isArray(objects) ? objects : []).forEach((obj) => {
       const vaultRel = String(obj.relative_path || obj.filename || "").replace(/\\/g, "/");
@@ -10070,12 +10115,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         listAgentCacheFiles(productId, vaultFolder),
         ensureProductObjects(productId),
       ]);
-      const newer = (await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)).find(
-        (item) => String(item?.uuid || "") === id
-      );
-      if (newer?.filename) tipFilename = String(newer.filename).trim();
-      if (newer?.relative_path) {
-        rel = String(newer.relative_path).trim().replace(/\\/g, "/");
+      // Always prefer the highest Creo .N on disk (e.g. .prt.6 over .prt.2).
+      const latest = latestLocalCacheTipForObject(cacheFiles, objects, id);
+      if (latest?.filename) tipFilename = String(latest.filename).trim();
+      if (latest?.relative_path) {
+        rel = String(latest.relative_path).trim().replace(/\\/g, "/");
+      } else {
+        const newer = (
+          await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)
+        ).find((item) => String(item?.uuid || "") === id);
+        if (newer?.filename) tipFilename = String(newer.filename).trim();
+        if (newer?.relative_path) {
+          rel = String(newer.relative_path).trim().replace(/\\/g, "/");
+        }
       }
     } catch {
       /* agent offline — try pushItems / relative only */
@@ -10099,6 +10151,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       path: looksLikeLocalWindowsPath(path) ? path : "",
       diskName,
       logicalName: logicalName || diskName,
+      relative_path: String(cacheRel || "").replace(/\\/g, "/"),
+      saveNumber: creoSaveNumber(diskName),
     };
   }
 
@@ -12479,8 +12533,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function gatherLiveCompareNewSnapshot(panel) {
     /**
-     * Same path as Check In → Ask AI: tip snap is OLD; fresh session/disk
-     * gather is NEW (not stored as a History revision).
+     * Tip snap is OLD; fresh session / latest local .N gather is NEW.
+     * Hard refresh often opens Compare before Creo.JS is Connected — wait first.
+     * Always resolve the highest Creo .N (base-plate.prt.6) for the disk path
+     * and stamp that leaf into Model: … so the right pane shows the tip name.
      */
     const objectId = String(panel?.dataset.objectId || "").trim();
     const filename = String(panel?.dataset.filename || "").trim();
@@ -12492,6 +12548,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const panelVault = aiSnapshotPanelVaultFolder(panel);
     const openWs = $("#open-workspace-btn");
     if (openWs && panelVault) openWs.dataset.vaultFolder = panelVault;
+    // Soft-nav / hard refresh: tab click runs before the bridge is live.
+    await waitForCreoMetadataBridge({ tries: 48, intervalMs: 250 });
     if (checkinDialog) {
       checkinDialog.dataset.aiObjectId = objectId;
       checkinDialog.dataset.aiFilename = filename;
@@ -12504,13 +12562,32 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       vaultFolder: panelVault,
       relativePath,
     });
+    if (pending.diskName || pending.relative_path) {
+      markAiSnapshotPanelModified(panel, {
+        filename: pending.diskName || filename,
+        relative_path: pending.relative_path || relativePath,
+      });
+      const selectB = $("#ai-snapshot-rev-b");
+      if (selectB?.options?.length && pending.diskName) {
+        selectB.options[0].textContent = `Workspace · ${pending.diskName}`;
+      }
+    }
     const gatherName =
       pending.logicalName || logicalUploadName(filename) || filename;
-    let snapshot = await gatherCreoMetadataForFilename(gatherName, "", {
-      featureNames: true,
-    });
+    // Session when open (unsaved edits); else Retrieve the latest .N path.
+    let snapshot = await gatherCreoMetadataForFilename(
+      gatherName,
+      pending.path || "",
+      {
+        featureNames: true,
+        preferDisk: Boolean(pending.path),
+      }
+    );
     if (snapshot && snapshot.__error) snapshot = null;
-    let gatherSource = snapshot ? "session" : "";
+    let gatherSource = "unknown";
+    if (snapshot) {
+      gatherSource = pending.path ? "session_or_disk" : "session";
+    }
     if (!snapshot && pending.path) {
       snapshot = await gatherCreoMetadataForFilename(gatherName, pending.path, {
         featureNames: true,
@@ -12522,9 +12599,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!snapshot) return null;
     const body = aiSnapshotBodyFromGather(snapshot);
     if (!body) return null;
+    // Show Model: base-plate.prt.6 (PART) — Creo identity is usually logical tip.
     try {
+      if (!body.identity || typeof body.identity !== "object") body.identity = {};
+      if (pending.diskName) {
+        body.identity.filename = pending.diskName;
+      }
       if (!body.capture || typeof body.capture !== "object") body.capture = {};
       body.capture.compare_source = gatherSource || "unknown";
+      if (pending.diskName) body.capture.workspace_tip = pending.diskName;
     } catch {
       /* ignore */
     }
@@ -12585,7 +12668,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     const selectB = $("#ai-snapshot-rev-b");
     if (selectB && selectB.options.length) {
-      selectB.options[0].textContent = "Workspace";
+      const tip = String(info.filename || panel.dataset.filename || "").trim();
+      const leaf = tip ? PathBasename(tip) : "";
+      selectB.options[0].textContent = leaf ? `Workspace · ${leaf}` : "Workspace";
     }
   }
 

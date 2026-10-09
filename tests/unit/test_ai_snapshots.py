@@ -284,6 +284,19 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "/ai-snapshot/outline" in script
     assert "function setAiSnapshotPendingPlaceholder(" in script
     assert "aiSnapshotPendingCleanPlaceholder" in script
+    assert "function latestLocalCacheTipForObject(" in script
+    assert "function indexLocalCacheTipsByLogical(" in script
+    assert "Highest on-disk Creo .N" in script
+    # Live gather must wait for Creo.JS (hard refresh) and stamp tip .N on Model:.
+    gather_fn = script.split("async function gatherLiveCompareNewSnapshot(", 1)[1].split(
+        "async function postAiSnapshotOutline(", 1
+    )[0]
+    assert "waitForCreoMetadataBridge" in gather_fn
+    assert "latestLocalCacheTipForObject" in script.split(
+        "async function resolvePendingCheckinLocalPath(", 1
+    )[1].split("async function askAiCheckinCommentForOne(", 1)[0]
+    assert "body.identity.filename = pending.diskName" in gather_fn
+    assert "Workspace ·" in gather_fn or "Workspace · ${pending.diskName}" in gather_fn
     # Local Modified must match Files via refreshPendingCheckinIds (+ agent fallback).
     mod_fn = script.split("async function refreshAiSnapshotPanelModifiedFlag(", 1)[1].split(
         "async function renderAiSnapshotPending(", 1
@@ -304,7 +317,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "data-product-id=" in detail_html
     assert "data-vault-folder=" in detail_html
     base_html = BASE_HTML.read_text(encoding="utf-8")
-    assert "compare-live-ai" in base_html
+    assert "compare-live-tip" in base_html
     assert 'type: "same"' in script
     assert 'type: "removed"' in script
     assert 'type: "added"' in script
@@ -436,7 +449,9 @@ def test_snapshot_tab_template_and_docs():
     assert "label the tab **Snapshot**" in docs
     assert "Checked in" in docs and "Not checked in" in docs
     assert "Workspace" in docs
+    assert "highest local Creo" in docs or ".N" in docs
     assert "NEW snapshot (pending)" in docs
+    assert "re-select the tab" in docs or "open/re-select" in docs
     assert "OLD" in docs and "NEW" in docs
     assert "light green" in docs and "light blue" in docs
     assert "yellow" in docs
