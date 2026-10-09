@@ -648,6 +648,8 @@ def test_delete_workspace_menu_warns_new_files_vault_safe():
         ROOT / "src" / "creopdm_agent" / "trash.py"
     ).read_text(encoding="utf-8")
     assert "def _hard_purge_remaining(" in trash
+    assert "def prepare_path_for_delete(" in trash
+    assert "prepare_path_for_delete(target)" in trash
     assert "deleteWorkspaceBtn?.addEventListener(" in script
     assert "setToolbarActionVisible(deleteWorkspaceBtn, canDeleteWorkspace)" in script
     base = (ROOT / "src" / "creopdm" / "templates" / "base.html").read_text(encoding="utf-8")
@@ -664,6 +666,9 @@ def test_delete_workspace_menu_warns_new_files_vault_safe():
     assert "Confirm with the correct product name" not in clear_section
     assert "delete the workspace folder itself" in clear_section
     assert "hard-purge any leftovers" in clear_section
+    remove_section = docs.split("### Remove from Product…", 1)[1].split("## 13.", 1)[0]
+    assert "same trash prep as **Clear workspace…" in remove_section
+    assert "Hidden numbered siblings" in remove_section
 
 
 def test_soft_nav_does_not_silently_drop_when_busy():

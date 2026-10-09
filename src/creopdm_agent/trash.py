@@ -7,9 +7,26 @@ import sys
 from pathlib import Path
 
 
+def prepare_path_for_delete(path: Path) -> None:
+    """Clear Windows Hidden/System on ``path`` (and nested contents if a folder).
+
+    Single prep used by Clear workspace, Remove-from-Product workspace cleanup,
+    and any other ``move_to_trash`` caller — CreoPDM marks older ``.N`` tips
+    Hidden, and Shell/unlink can leave them behind without this.
+    """
+    target = Path(path)
+    if not target.exists():
+        return
+    _clear_windows_hidden_system(target)
+    if target.is_dir():
+        for nested in _iter_all_under(target):
+            _clear_windows_hidden_system(nested)
+
+
 def move_to_trash(path: Path) -> None:
     """Send ``path`` to the Recycle Bin on Windows; otherwise delete permanently.
 
+    Always runs :func:`prepare_path_for_delete` first (Hidden/System).
     Under pytest, always removes so agent tests do not fill the Recycle Bin.
     If the Shell recycle call fails, falls back to a permanent delete.
     """
@@ -18,6 +35,7 @@ def move_to_trash(path: Path) -> None:
     target = Path(path)
     if not target.exists():
         return
+    prepare_path_for_delete(target)
     if os.environ.get("PYTEST_CURRENT_TEST"):
         if target.is_dir():
             shutil.rmtree(target, ignore_errors=False)
@@ -88,12 +106,9 @@ def clear_directory_contents(directory: Path) -> tuple[int, list[str]]:
         return removed, failed
 
     # Windows: one SHFileOperation for every top-level child (all names / types,
-    # including Hidden/System — clear those attrs first so Shell will take them).
+    # including Hidden/System — prepare_path_for_delete clears attrs first).
     for child in children:
-        _clear_windows_hidden_system(child)
-        if child.is_dir():
-            for nested in _iter_all_under(child):
-                _clear_windows_hidden_system(nested)
+        prepare_path_for_delete(child)
     try:
         _windows_recycle_bin_many(children)
     except OSError:
@@ -206,7 +221,7 @@ def _hard_purge_remaining(root: Path) -> tuple[int, list[str]]:
             rel = str(path.relative_to(root)).replace("\\", "/")
         except ValueError:
             rel = path.name
-        _clear_windows_hidden_system(path)
+        prepare_path_for_delete(path)
         try:
             if path.is_symlink() or path.is_file():
                 path.unlink()
@@ -230,7 +245,7 @@ def _hard_purge_remaining(root: Path) -> tuple[int, list[str]]:
         if not child.exists():
             continue
         label = child.name
-        _clear_windows_hidden_system(child)
+        prepare_path_for_delete(child)
         try:
             if child.is_dir():
                 shutil.rmtree(child)

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from creopdm_agent.trash import clear_directory_contents, move_to_trash
+from creopdm_agent.trash import (
+    clear_directory_contents,
+    move_to_trash,
+    prepare_path_for_delete,
+)
 
 
 def test_move_to_trash_removes_file(tmp_path, monkeypatch):
@@ -10,6 +14,22 @@ def test_move_to_trash_removes_file(tmp_path, monkeypatch):
     target = tmp_path / "shaft.prt.1"
     target.write_bytes(b"1")
     move_to_trash(target)
+    assert not target.exists()
+
+
+def test_move_to_trash_prepares_hidden_before_delete(tmp_path, monkeypatch):
+    """Remove-from-Product /delete-paths must clear Hidden like Clear workspace."""
+    target = tmp_path / "shaft.prt.2"
+    target.write_bytes(b"2")
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "test_move_to_trash_prepares_hidden")
+    prepared: list[Path] = []
+
+    def fake_prepare(path):
+        prepared.append(Path(path))
+
+    monkeypatch.setattr("creopdm_agent.trash.prepare_path_for_delete", fake_prepare)
+    move_to_trash(target)
+    assert prepared == [target]
     assert not target.exists()
 
 
@@ -127,3 +147,46 @@ def test_hard_purge_finds_dotfiles_rglob_skips(tmp_path, monkeypatch):
     assert failed == []
     assert removed >= 1
     assert list(root.iterdir()) == []
+
+
+def test_prepare_path_for_delete_clears_nested_hidden(tmp_path, monkeypatch):
+    """One prep helper walks folders so Clear and Remove share the same path."""
+    root = tmp_path / "folder"
+    root.mkdir()
+    nested = root / "sub"
+    nested.mkdir()
+    tip = nested / "shaft.prt.1"
+    tip.write_bytes(b"1")
+    cleared: list[str] = []
+
+    def fake_clear(path):
+        cleared.append(Path(path).name)
+
+    monkeypatch.setattr("creopdm_agent.trash.sys.platform", "win32")
+    monkeypatch.setattr("creopdm_agent.trash._clear_windows_hidden_system", fake_clear)
+    prepare_path_for_delete(root)
+    assert "folder" in cleared
+    assert "sub" in cleared
+    assert "shaft.prt.1" in cleared
+
+
+def test_clear_directory_contents_uses_prepare_path_for_delete(tmp_path, monkeypatch):
+    """Clear workspace must go through the shared Hidden/System prep (DRY)."""
+    root = tmp_path / "cache"
+    root.mkdir()
+    (root / "a.prt").write_bytes(b"a")
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setattr("creopdm_agent.trash.sys.platform", "win32")
+    prepared: list[str] = []
+
+    def fake_prepare(path):
+        prepared.append(Path(path).name)
+
+    def fake_many(paths: list):
+        for path in paths:
+            Path(path).unlink()
+
+    monkeypatch.setattr("creopdm_agent.trash.prepare_path_for_delete", fake_prepare)
+    monkeypatch.setattr("creopdm_agent.trash._windows_recycle_bin_many", fake_many)
+    clear_directory_contents(root)
+    assert "a.prt" in prepared
