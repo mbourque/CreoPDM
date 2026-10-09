@@ -223,6 +223,18 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
             can_update_metadata=bool(payload.get("can_update_metadata")),
             can_revert_objects=bool(payload.get("can_revert_objects")),
         )
+    if "product_state_description" not in payload:
+        from creopdm.product_state import (
+            configured_product_state_descriptions,
+            product_state_value,
+        )
+
+        selected = payload.get("selected")
+        desc = ""
+        if selected is not None:
+            key = product_state_value(selected)
+            desc = (configured_product_state_descriptions().get(key) or "").strip()
+        payload["product_state_description"] = desc
     try:
         return templates.TemplateResponse(request, name, payload)
     except TypeError:

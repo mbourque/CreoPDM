@@ -97,6 +97,7 @@ def test_locked_product_hides_open_and_blocks_download(client, repo_parent):
     assert 'data-allows-content="0"' in page.text
     assert 'data-state="LOCKED"' in page.text
     assert "Locked" in page.text
+    assert "List files only" in page.text  # state Description on badge hover title
     assert 'id="open-menu"' not in page.text
     assert 'id="export-menu"' not in page.text
     assert 'id="add-menu"' not in page.text

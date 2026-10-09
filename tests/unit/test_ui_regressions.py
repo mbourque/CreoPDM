@@ -344,6 +344,7 @@ def test_product_state_badge_in_files_header():
     assert 'id="product-state-badge"' in html
     assert 'class="state product-state"' in html
     assert "selected.state.replace('_', ' ') | title" in html
+    assert "product_state_description or 'Product state'" in html
     assert "Read only" not in html
     assert "selected.read_only" not in html
     assert html.index('id="product-state-badge"') < html.index('id="search-form"')

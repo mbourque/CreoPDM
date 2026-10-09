@@ -46,7 +46,7 @@
         <h1{% if workspace_path %} title="{{ workspace_path }}"{% endif %}>{{ selected.name }}</h1>
         <span class="state product-state" id="product-state-badge"
               data-state="{{ selected.state }}"
-              title="Product state">{{ selected.state.replace('_', ' ') | title }}</span>
+              title="{{ product_state_description or 'Product state' }}">{{ selected.state.replace('_', ' ') | title }}</span>
         {% if email_notifications_enabled %}
         <button type="button" class="product-watch-btn{% if watching_product %} is-watching{% endif %}"
                 id="product-watch-btn"

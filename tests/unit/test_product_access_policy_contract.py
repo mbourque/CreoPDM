@@ -129,13 +129,14 @@ def test_product_ui_capability_fields_stay_wired():
         "show_download",
         "show_export_product",
         "show_export_objects",
-        "show_copy_to_vault",
-        "show_remove",
-        "show_remove_vault",
-        "show_remove_product",
-        "show_rename",
-        "show_delete_product",
-        "show_metadata_tools",
-        "show_revert",
-    }
+            "show_copy_to_vault",
+            "show_set_working_directory",
+            "show_remove",
+            "show_remove_vault",
+            "show_remove_product",
+            "show_rename",
+            "show_delete_product",
+            "show_metadata_tools",
+            "show_revert",
+        }
     assert fields == expected
