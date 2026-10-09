@@ -12163,6 +12163,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
      * When Files would show Modified, NEW also lists **Modified** (live gather)
      * and defaults to it — tip History snap stays selectable on OLD (e.g. A.2).
      * NEW History picks are only revisions newer than OLD (never older A.1).
+     * Landing on Modified advances OLD to the tip so the tip A.n is not also on NEW.
      */
     const selectA = $("#ai-snapshot-rev-a");
     const selectB = $("#ai-snapshot-rev-b");
@@ -12192,15 +12193,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       aiSnapshotIncludeModified && isAiSnapshotModifiedValue(preferNewId);
 
     if (newIsModified) {
-      // Left = any History snap (default tip A.n).
-      // Right = Modified + only History newer than OLD (never A.1 when OLD is A.2).
+      // NEW = Modified: advance OLD to tip (last known, e.g. A.2) unless the
+      // user just changed OLD. Right = Modified + History newer than OLD only
+      // (tip on left ⇒ drop A.2 from right; only Modified remains).
+      const tipIdx = aiSnapshotCompareIndex(tipId);
       let oldIdx = aiSnapshotCompareIndex(preferOldId);
-      if (oldIdx < 0) oldIdx = aiSnapshotCompareIndex(tipId);
-      if (oldIdx < 0) oldIdx = 0;
+      if (changed === "old" && oldIdx >= 0) {
+        /* keep the user's OLD pick */
+      } else if (tipIdx >= 0) {
+        oldIdx = tipIdx;
+      } else if (oldIdx < 0) {
+        oldIdx = 0;
+      }
       const allIdx = [];
       for (let i = 0; i < n; i += 1) allIdx.push(i);
       fillAiSnapshotHistoryOptions(selectA, allIdx, oldIdx);
       selectA.disabled = false;
+      // Newest-first: indexes < oldIdx are strictly newer than OLD.
       const newerThanOld = [];
       for (let i = 0; i < oldIdx; i += 1) newerThanOld.push(i);
       selectB.replaceChildren();

@@ -265,10 +265,12 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "aiSnapshotIncludeModified" in script
     assert "prependAiSnapshotModifiedOption" in script
     assert "isAiSnapshotModifiedValue" in script
-    assert "newerThanOld" in script.split("function fillAiSnapshotOrderedSelects(", 1)[1].split(
+    ordered_fn = script.split("function fillAiSnapshotOrderedSelects(", 1)[1].split(
         "function aiSnapshotEmptyMessage(", 1
     )[0]
-    assert "never A.1 when OLD is A.2" in script
+    assert "newerThanOld" in ordered_fn
+    assert "never A.1 when OLD is A.2" in script or "newer than OLD" in ordered_fn
+    assert "advance OLD to tip" in ordered_fn or "tipIdx" in ordered_fn
     assert "function syncAiSnapshotAskVisibility(" in script
     assert "aiSnapshotPendingGather" in script
     assert "function formatAiSnapshotOutlineDisplay(" in script
@@ -342,7 +344,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "data-product-id=" in detail_html
     assert "data-vault-folder=" in detail_html
     base_html = BASE_HTML.read_text(encoding="utf-8")
-    assert "modifications-new-newer" in base_html
+    assert "modifications-tip-old" in base_html
     assert 'data-purgeable=' in base_html
     assert "function clearAiSnapshotPanelModified(" in script
     assert "function waitForCreoAgentReady(" in script
