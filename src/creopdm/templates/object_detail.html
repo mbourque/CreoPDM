@@ -532,22 +532,22 @@
       </div>
       <div class="ai-snapshot-ai-answer-body" id="ai-snapshot-ai-answer-body" tabindex="0"></div>
     </div>
-    {# pending = tip OLD + live/placeholder NEW; compare = two History snaps + Ask AI. #}
+    {# pending = tip vs workspace gather; compare = two History snaps. Ask AI when both sides exist. #}
     <div class="ai-snapshot-compare" id="ai-snapshot-compare" data-mode="{{ snapshot_tab_mode }}">
       <div class="ai-snapshot-head-row">
         <div class="ai-snapshot-toolbar" data-pane="a">
           <label class="ai-snapshot-rev-label">
-            <span class="muted small" id="ai-snapshot-label-a">OLD</span>
-            <select id="ai-snapshot-rev-a" class="ai-snapshot-rev" aria-label="OLD snapshot revision"{% if snapshot_tab_mode != "compare" %} disabled{% endif %}></select>
+            <span class="muted small" id="ai-snapshot-label-a">{% if snapshot_tab_mode == "compare" %}OLD{% else %}Checked in{% endif %}</span>
+            <select id="ai-snapshot-rev-a" class="ai-snapshot-rev" aria-label="{% if snapshot_tab_mode == "compare" %}OLD snapshot revision{% else %}Checked-in tip revision{% endif %}"{% if snapshot_tab_mode != "compare" %} disabled{% endif %}></select>
           </label>
-          <button type="button" class="btn" id="ai-snapshot-copy-a" disabled title="Copy OLD snapshot outline to the clipboard">Copy</button>
+          <button type="button" class="btn" id="ai-snapshot-copy-a" disabled title="Copy outline to the clipboard">Copy</button>
         </div>
         <div class="ai-snapshot-toolbar" data-pane="b">
           <label class="ai-snapshot-rev-label">
-            <span class="muted small" id="ai-snapshot-label-b">NEW</span>
-            <select id="ai-snapshot-rev-b" class="ai-snapshot-rev" aria-label="NEW snapshot revision"{% if snapshot_tab_mode != "compare" %} disabled{% endif %}></select>
+            <span class="muted small" id="ai-snapshot-label-b">{% if snapshot_tab_mode == "compare" %}NEW{% else %}Not checked in{% endif %}</span>
+            <select id="ai-snapshot-rev-b" class="ai-snapshot-rev" aria-label="{% if snapshot_tab_mode == "compare" %}NEW snapshot revision{% else %}Workspace (not checked in){% endif %}"{% if snapshot_tab_mode != "compare" %} disabled{% endif %}></select>
           </label>
-          <button type="button" class="btn" id="ai-snapshot-copy-b" disabled title="Copy NEW snapshot outline to the clipboard">Copy</button>
+          <button type="button" class="btn" id="ai-snapshot-copy-b" disabled title="Copy outline to the clipboard">Copy</button>
         </div>
       </div>
       <div class="ai-snapshot-diff-row" id="ai-snapshot-diff-row">

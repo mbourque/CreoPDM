@@ -11980,11 +11980,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   const aiSnapshotOutlineByVersion = new Map();
   /** Newest-first revisions that have snapshots (Compare Revisions dropdowns). */
   let aiSnapshotCompareVersions = [];
+  /** Live workspace gather for pending Compare → Ask AI (compare-pending). */
+  let aiSnapshotPendingGather = null;
 
   function clearAiSnapshotClientCache() {
     aiSnapshotListCache = null;
     aiSnapshotOutlineByVersion.clear();
     aiSnapshotCompareVersions = [];
+    aiSnapshotPendingGather = null;
   }
 
   function aiSnapshotCompareIndex(versionId) {
@@ -12073,10 +12076,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return $("#panel-snapshot") || $("#panel-compare-revisions");
   }
 
+  function syncAiSnapshotAskVisibility(livePendingReady) {
+    const askRow = $("#ai-snapshot-ask-row");
+    if (!askRow) return;
+    const mode = String($("#ai-snapshot-compare")?.dataset.mode || "");
+    if (!aiFeaturesEnabled()) {
+      askRow.hidden = true;
+      return;
+    }
+    if (mode === "compare") {
+      askRow.hidden = false;
+      return;
+    }
+    // Pending: only when a live workspace outline is on screen.
+    askRow.hidden = mode !== "pending" || !livePendingReady;
+  }
+
   function syncAiSnapshotTabChrome(mode) {
     /**
-     * Always "Compare Revisions": compare = two History snaps + Ask AI;
-     * pending = tip OLD vs live Modified NEW (or boxed placeholder).
+     * Always "Compare Revisions":
+     * compare = two History snaps (OLD/NEW) + Ask AI;
+     * pending = Checked in tip vs Not checked in workspace (or boxed placeholder).
      */
     const resolved = mode === "compare" ? "compare" : "pending";
     const compare = $("#ai-snapshot-compare");
@@ -12088,35 +12108,45 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       tab.dataset.tab = "snapshot";
       tab.textContent = "Compare Revisions";
     }
-    const askRow = $("#ai-snapshot-ask-row");
-    if (askRow) {
-      askRow.hidden = resolved !== "compare" || !aiFeaturesEnabled();
-    }
-    if (resolved !== "compare") {
+    if (resolved === "pending") {
       const answer = $("#ai-snapshot-ai-answer");
       if (answer) answer.hidden = true;
     }
+    syncAiSnapshotAskVisibility(false);
     const labelA = $("#ai-snapshot-label-a");
     const labelB = $("#ai-snapshot-label-b");
     const selectA = $("#ai-snapshot-rev-a");
     const selectB = $("#ai-snapshot-rev-b");
-    if (labelA) labelA.textContent = "OLD";
-    if (labelB) labelB.textContent = "NEW";
-    if (selectA) {
-      selectA.disabled = resolved !== "compare";
-      selectA.setAttribute("aria-label", "OLD snapshot revision");
-    }
-    if (selectB) {
-      selectB.disabled = resolved !== "compare";
-      selectB.setAttribute("aria-label", "NEW snapshot revision");
-    }
-    const copyA = $("#ai-snapshot-copy-a");
-    if (copyA) {
-      copyA.title = "Copy OLD snapshot outline to the clipboard";
-    }
-    const copyB = $("#ai-snapshot-copy-b");
-    if (copyB) {
-      copyB.title = "Copy NEW snapshot outline to the clipboard";
+    if (resolved === "compare") {
+      if (labelA) labelA.textContent = "OLD";
+      if (labelB) labelB.textContent = "NEW";
+      if (selectA) {
+        selectA.disabled = false;
+        selectA.setAttribute("aria-label", "OLD snapshot revision");
+      }
+      if (selectB) {
+        selectB.disabled = false;
+        selectB.setAttribute("aria-label", "NEW snapshot revision");
+      }
+      const copyA = $("#ai-snapshot-copy-a");
+      if (copyA) copyA.title = "Copy OLD snapshot outline to the clipboard";
+      const copyB = $("#ai-snapshot-copy-b");
+      if (copyB) copyB.title = "Copy NEW snapshot outline to the clipboard";
+    } else {
+      if (labelA) labelA.textContent = "Checked in";
+      if (labelB) labelB.textContent = "Not checked in";
+      if (selectA) {
+        selectA.disabled = true;
+        selectA.setAttribute("aria-label", "Checked-in tip revision");
+      }
+      if (selectB) {
+        selectB.disabled = true;
+        selectB.setAttribute("aria-label", "Workspace (not checked in)");
+      }
+      const copyA = $("#ai-snapshot-copy-a");
+      if (copyA) copyA.title = "Copy checked-in outline to the clipboard";
+      const copyB = $("#ai-snapshot-copy-b");
+      if (copyB) copyB.title = "Copy workspace outline to the clipboard";
     }
   }
 
@@ -12398,10 +12428,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function fillAiSnapshotPendingSelects() {
-    /** Tip snapshot on OLD; NEW = next pending revision label (not a History snap). */
+    /** Tip revision on left; right = Workspace (not a History A.n). */
     const selectA = $("#ai-snapshot-rev-a");
     const selectB = $("#ai-snapshot-rev-b");
-    const panel = aiSnapshotPanel();
     if (!selectA || !selectB || !aiSnapshotCompareVersions.length) return;
     selectA.replaceChildren();
     const item = aiSnapshotCompareVersions[0];
@@ -12413,8 +12442,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     selectB.replaceChildren();
     const optionB = document.createElement("option");
     optionB.value = "pending";
-    optionB.textContent =
-      String(panel?.dataset.nextDisplay || "").trim() || "pending";
+    optionB.textContent = "Workspace";
     selectB.appendChild(optionB);
     selectB.value = "pending";
   }
@@ -12435,7 +12463,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   function aiSnapshotPendingCleanPlaceholder() {
     return (
       "No unchecked-in changes to compare.\n\n"
-      + "When this model is Modified, NEW shows a live outline from Creo "
+      + "When this model is Modified, the right pane shows a live outline from Creo "
       + "(or the local tip) — the same gather Check In → Ask AI uses — "
       + "without writing a History revision."
     );
@@ -12443,7 +12471,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function aiSnapshotPendingGatherFailedPlaceholder() {
     return (
-      "Could not gather a live NEW outline.\n\n"
+      "Could not gather a live workspace outline.\n\n"
       + "Keep the model open in Creo (Connected), or Save so a local tip "
       + "is in the workspace, then reopen this tab."
     );
@@ -12556,10 +12584,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         .replace(/\\/g, "/");
     }
     const selectB = $("#ai-snapshot-rev-b");
-    const nextLabel =
-      String(panel.dataset.nextDisplay || "").trim() || "pending";
     if (selectB && selectB.options.length) {
-      selectB.options[0].textContent = nextLabel;
+      selectB.options[0].textContent = "Workspace";
     }
   }
 
@@ -12615,13 +12641,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   async function renderAiSnapshotPending(objectId) {
     /**
-     * Tip History snap (OLD) vs live gather (NEW).
-     * Always try gather first — Modified flags were missing local tips and
-     * painted the clean placeholder incorrectly.
+     * Checked-in tip vs live workspace gather.
+     * Outline headers stay === OLD/NEW snapshot (…) === (same as History compare).
+     * Toolbar says Checked in / Not checked in — never invent A.2 for workspace.
+     * Always try gather first; colors + Copy + Ask AI when both sides load.
      */
     const panel = aiSnapshotPanel();
     const selectA = $("#ai-snapshot-rev-a");
-    const selectB = $("#ai-snapshot-rev-b");
     const bodyA = $("#ai-snapshot-body-a");
     const bodyB = $("#ai-snapshot-body-b");
     const copyA = $("#ai-snapshot-copy-a");
@@ -12630,16 +12656,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
     const versionA = String(selectA.value || "").trim();
     const labelA = selectA.selectedOptions?.[0]?.textContent || versionA;
+    aiSnapshotPendingGather = null;
+    syncAiSnapshotAskVisibility(false);
 
     setAiSnapshotPlainBody(bodyA, copyA, "Loading…", false);
     setAiSnapshotPlainBody(bodyB, copyB, "Loading…", false);
 
     // Kick Modified probe in parallel; do not gate gather on it.
     const modifiedProbe = refreshAiSnapshotPanelModifiedFlag(panel);
-    const labelB =
-      String(selectB?.selectedOptions?.[0]?.textContent || "").trim()
-      || String(panel?.dataset.nextDisplay || "").trim()
-      || "pending";
 
     let textA = "";
     try {
@@ -12650,6 +12674,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         if (!rowA?.outline) {
           setAiSnapshotPlainBody(bodyA, copyA, aiSnapshotEmptyMessage(labelA), false);
         } else {
+          // Same header shape History compare uses (not === Snapshot … ===).
           textA = formatAiSnapshotOutlineDisplay(
             "OLD",
             rowA.displayRevision || labelA,
@@ -12675,11 +12700,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     try {
       const newer = await gatherLiveCompareNewSnapshot(panel);
       if (newer) {
-        const rowB = await postAiSnapshotOutline(objectId, newer, labelB);
+        // "pending" — not the next History A.n (that only exists after Check In).
+        const rowB = await postAiSnapshotOutline(objectId, newer, "pending");
         if (rowB?.outline) {
           const textB = formatAiSnapshotOutlineDisplay(
             "NEW",
-            rowB.displayRevision || labelB,
+            "pending",
             rowB.outline
           );
           if (!textA) {
@@ -12695,6 +12721,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
             copyB.disabled = false;
             copyB.dataset.copyText = textB;
           }
+          aiSnapshotPendingGather = {
+            snapshot: newer,
+            displayRevision: "pending",
+          };
+          syncAiSnapshotAskVisibility(true);
           return;
         }
       }
@@ -12703,7 +12734,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       setAiSnapshotPendingPlaceholder(
         bodyB,
         copyB,
-        `Could not build live NEW outline (${err?.message || "error"}).\n\n`
+        `Could not build live workspace outline (${err?.message || "error"}).\n\n`
           + "Keep the model open in Creo (Connected), or Save a local tip, then retry."
       );
       return;
@@ -12909,6 +12940,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const answerBox = $("#ai-snapshot-ai-answer");
     const answerBody = $("#ai-snapshot-ai-answer-body");
     const answerMeta = $("#ai-snapshot-ai-answer-meta");
+    const mode = String(compare?.dataset.mode || "");
     if (!aiFeaturesEnabled()) {
       showError(
         $("#toolbar-error"),
@@ -12916,54 +12948,72 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       );
       return;
     }
-    if (!objectId || !compare || compare.dataset.mode !== "compare") {
-      showError(
-        $("#toolbar-error"),
-        "Need two revisions with snapshots before asking AI what changed."
-      );
-      return;
-    }
-    const olderId = String($("#ai-snapshot-rev-a")?.value || "").trim();
-    const newerId = String($("#ai-snapshot-rev-b")?.value || "").trim();
-    if (!olderId || !newerId) {
-      showError($("#toolbar-error"), "Choose older and newer snapshot revisions.");
-      return;
-    }
-    if (olderId === newerId) {
-      showError($("#toolbar-error"), "Pick two different revisions to compare.");
+    if (!objectId || !compare) {
+      showError($("#toolbar-error"), "Open Compare Revisions first.");
       return;
     }
     showError($("#toolbar-error"), "");
+
+    const postCompare = async (url, body) => {
+      let response;
+      try {
+        response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: abortSignalAfter(120_000),
+          body: JSON.stringify(body),
+        });
+      } catch (errFetch) {
+        const aborted =
+          errFetch?.name === "AbortError"
+          || /aborted|timeout/i.test(String(errFetch?.message || errFetch || ""));
+        throw new Error(
+          aborted
+            ? "Ollama timed out after 2 minutes. Is it running on the CreoPDM server and is the model loaded?"
+            : String(errFetch?.message || errFetch || "Could not reach CreoPDM for AI compare.")
+        );
+      }
+      if (!response.ok) throw new Error(await readError(response));
+      return response.json();
+    };
+
     try {
       const payload = await withBusy("Asking AI what changed…", async () => {
-        let response;
-        try {
-          response = await fetch(
-            `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare`,
+        if (mode === "pending") {
+          const gather = aiSnapshotPendingGather;
+          if (!gather?.snapshot) {
+            throw new Error(
+              "Gather a live workspace outline first (open the model in Creo or Save a local tip)."
+            );
+          }
+          return postCompare(
+            `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare-pending`,
             {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              credentials: "same-origin",
-              cache: "no-store",
-              signal: abortSignalAfter(120_000),
-              body: JSON.stringify({
-                older_version_id: olderId,
-                newer_version_id: newerId,
-              }),
+              newer_snapshot: gather.snapshot,
+              newer_display_revision: gather.displayRevision || "pending",
             }
           );
-        } catch (errFetch) {
-          const aborted =
-            errFetch?.name === "AbortError"
-            || /aborted|timeout/i.test(String(errFetch?.message || errFetch || ""));
-          throw new Error(
-            aborted
-              ? "Ollama timed out after 2 minutes. Is it running on the CreoPDM server and is the model loaded?"
-              : String(errFetch?.message || errFetch || "Could not reach CreoPDM for AI compare.")
-          );
         }
-        if (!response.ok) throw new Error(await readError(response));
-        return response.json();
+        if (mode !== "compare") {
+          throw new Error("Need two revisions with snapshots before asking AI what changed.");
+        }
+        const olderId = String($("#ai-snapshot-rev-a")?.value || "").trim();
+        const newerId = String($("#ai-snapshot-rev-b")?.value || "").trim();
+        if (!olderId || !newerId) {
+          throw new Error("Choose older and newer snapshot revisions.");
+        }
+        if (olderId === newerId) {
+          throw new Error("Pick two different revisions to compare.");
+        }
+        return postCompare(
+          `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare`,
+          {
+            older_version_id: olderId,
+            newer_version_id: newerId,
+          }
+        );
       });
       const summary = String(payload?.summary || "").trim();
       if (!summary) {

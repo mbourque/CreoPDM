@@ -258,8 +258,19 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "OLD may only pick indexes > NEW" in script
     assert 'pane === "a" ? "old" : "new"' in script
     assert 'labelA.textContent = "OLD"' in script
+    assert 'labelA.textContent = "Checked in"' in script
+    assert 'labelB.textContent = "Not checked in"' in script
+    assert 'optionB.textContent = "Workspace"' in script
+    assert "function syncAiSnapshotAskVisibility(" in script
+    assert "aiSnapshotPendingGather" in script
     assert "function formatAiSnapshotOutlineDisplay(" in script
     assert "=== Snapshot (${rev}) ===" not in script
+    pending_render = script.split("async function renderAiSnapshotPending(", 1)[1].split(
+        "async function renderAiSnapshotCompare(", 1
+    )[0]
+    assert "formatAiSnapshotOutlineDisplay(" in pending_render
+    assert '"pending"' in pending_render
+    assert "syncAiSnapshotAskVisibility(true)" in pending_render
     assert "function buildAiSnapshotLineDiff(" in script
     assert "function aiSnapshotLineIdentity(" in script
     assert "function aiSnapshotLinesAlign(" in script
@@ -293,7 +304,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "data-product-id=" in detail_html
     assert "data-vault-folder=" in detail_html
     base_html = BASE_HTML.read_text(encoding="utf-8")
-    assert "compare-live-new" in base_html
+    assert "compare-live-ai" in base_html
     assert 'type: "same"' in script
     assert 'type: "removed"' in script
     assert 'type: "added"' in script
@@ -312,8 +323,11 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "async function askAiSnapshotCompare(" in script
     assert "/ai-snapshot/compare" in script
     assert 'withBusy("Asking AI what changed…"' in script
-    assert 'askRow.hidden = resolved !== "compare"' in script
+    assert "function syncAiSnapshotAskVisibility(" in script
     assert "ai-snapshot-ai-answer-body" in script
+    assert "/ai-snapshot/compare-pending" in script.split(
+        "async function askAiSnapshotCompare(", 1
+    )[1].split("function bindAiSnapshotControls(", 1)[0]
     assert "async function askAiCheckinComment(" in script
     assert "async function askAiCheckinCommentForOne(" in script
     assert "async function synthesizeCheckinComment(" in script
@@ -406,7 +420,8 @@ def test_snapshot_tab_template_and_docs():
     assert 'id="ai-snapshot-rev-b"' in html
     assert 'id="ai-snapshot-label-a"' in html
     assert 'id="ai-snapshot-label-b"' in html
-    assert ">OLD<" in html and ">NEW<" in html
+    assert "Checked in" in html and "Not checked in" in html
+    assert "OLD" in html and "NEW" in html
     assert 'id="ai-snapshot-copy-a"' in html
     assert 'id="ai-snapshot-copy-b"' in html
     assert 'id="ai-snapshot-ask-ai"' in html
@@ -419,6 +434,9 @@ def test_snapshot_tab_template_and_docs():
     assert "live" in docs.lower()
     assert "boxed placeholder" in docs
     assert "label the tab **Snapshot**" in docs
+    assert "Checked in" in docs and "Not checked in" in docs
+    assert "Workspace" in docs
+    assert "NEW snapshot (pending)" in docs
     assert "OLD" in docs and "NEW" in docs
     assert "light green" in docs and "light blue" in docs
     assert "yellow" in docs
