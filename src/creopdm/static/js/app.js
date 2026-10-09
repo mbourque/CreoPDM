@@ -7797,20 +7797,51 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function listAgentCacheFiles(productId, vaultFolderOverride) {
-    if (!productId) return [];
+    /**
+     * null = agent offline /files failed (do not treat as empty workspace).
+     * [] = agent answered and the workspace folder has no listed tips.
+     */
+    if (!productId) return null;
     const agent = await probeCreoAgent();
-    if (!agent) return [];
+    if (!agent) return null;
     const vaultFolder =
       String(vaultFolderOverride || "").trim() || currentVaultFolder();
     const params = new URLSearchParams({ product_id: productId });
     if (vaultFolder) params.set("vault_folder", vaultFolder);
-    const response = await fetch(
-      `${agentBase()}/files?${params}`,
-      { method: "GET", headers: agentAuthHeaders() }
-    );
-    if (!response.ok) return [];
-    const body = await response.json().catch(() => null);
-    return Array.isArray(body?.files) ? body.files : [];
+    try {
+      const response = await fetch(
+        `${agentBase()}/files?${params}`,
+        { method: "GET", headers: agentAuthHeaders() }
+      );
+      if (!response.ok) return null;
+      const body = await response.json().catch(() => null);
+      if (!body || !Array.isArray(body.files)) return null;
+      return body.files;
+    } catch {
+      return null;
+    }
+  }
+
+  async function listAgentCacheFilesPreferringVault(productId, vaultFolderOverride) {
+    /** Try panel vault first, then page vault / product id — Details has no metric-filters. */
+    const candidates = [
+      String(vaultFolderOverride || "").trim(),
+      currentVaultFolder(),
+      String(productId || "").trim(),
+    ].filter(Boolean);
+    const seen = new Set();
+    let lastEmpty = null;
+    for (const vault of candidates) {
+      const key = vault.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const files = await listAgentCacheFiles(productId, vault);
+      if (files == null) continue;
+      if (files.length) return { files, vaultFolder: vault, listed: true };
+      lastEmpty = { files, vaultFolder: vault, listed: true };
+    }
+    if (lastEmpty) return lastEmpty;
+    return { files: [], vaultFolder: String(vaultFolderOverride || "").trim(), listed: false };
   }
 
   /** SHA-256 selected local cache paths (for same-size content-replace detection). */
@@ -11467,10 +11498,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return checkinQueueCache;
   }
 
-  async function loadCheckinQueueParts(productId) {
-    const [queueResponse, cacheFiles, objectsResponse] = await Promise.all([
+  async function loadCheckinQueueParts(productId, vaultFolderOverride) {
+    const listed = await listAgentCacheFilesPreferringVault(
+      productId,
+      vaultFolderOverride
+    );
+    const cacheFiles = Array.isArray(listed.files) ? listed.files : [];
+    const [queueResponse, objectsResponse] = await Promise.all([
       fetch(`/api/products/${productId}/checkin-queue`),
-      listAgentCacheFiles(productId),
       fetch(`/api/products/${encodeURIComponent(productId)}/objects`),
     ]);
     if (!queueResponse.ok) throw new Error("queue");
@@ -11494,9 +11529,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       saves.map((item) => String(item.uuid || "")).filter(Boolean)
     );
     const newerLocal = (
-      await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)
+      await resolveNewerLocalCacheSaves(
+        cacheFiles,
+        objects,
+        productId,
+        listed.vaultFolder || vaultFolderOverride
+      )
     ).filter((item) => !vaultSaveIds.has(String(item.uuid || "")));
-    const parts = { saves, created, newerLocal };
+    const parts = {
+      saves,
+      created,
+      newerLocal,
+      agentListed: Boolean(listed.listed),
+    };
     rememberCheckinQueueParts(productId, parts);
     return parts;
   }
@@ -12742,12 +12787,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     );
   }
 
+  function vaultTipSaveNumber(obj) {
+    if (!obj) return 0;
+    const vaultRel = String(obj.relative_path || obj.filename || "").replace(
+      /\\/g,
+      "/"
+    );
+    return Math.max(
+      creoSaveNumber(obj.filename || PathBasename(vaultRel)),
+      creoSaveNumber(obj.current_version?.filename || ""),
+      creoSaveNumber(PathBasename(vaultRel))
+    );
+  }
+
   async function refreshAiSnapshotPanelModifiedFlag(panel) {
     /**
-     * Same sources as Files → Modified tab (loadCheckinQueueParts): vault
-     * checkin-queue saves + agent "Newer local save" (hash-verified .N).
-     * Do not treat listAgentCacheFiles([]) as proved clean — that is also
-     * returned when the agent is offline or /files fails.
+     * Detect the same tip Files → Modified shows as "Newer local save"
+     * (e.g. base-plate.prt.2). Prefer a higher Creo .N on disk; also hash
+     * mismatch and vault checkin-queue. null from listAgentCacheFiles is not clean.
      */
     if (!panel) return false;
     const objectId = String(panel.dataset.objectId || "").trim();
@@ -12761,6 +12818,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const panelVault = aiSnapshotPanelVaultFolder(panel);
     if (openWs && panelVault) openWs.dataset.vaultFolder = panelVault;
     const wasPending = pendingCheckinIds.has(objectId);
+    const stickyPending =
+      wasPending || panel.getAttribute("data-workspace-pending") === "1";
     const cachedHit = checkinQueueHitForObject(productId, objectId);
     if (cachedHit) {
       markAiSnapshotPanelModified(panel, cachedHit);
@@ -12768,10 +12827,55 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return true;
     }
     await waitForCreoAgentReady();
-    let queueLoaded = false;
+
+    // Direct agent tip probe first — same leaf Modified tab lists.
+    let agentListed = false;
+    let workingVault = panelVault;
     try {
-      const parts = await loadCheckinQueueParts(productId);
-      queueLoaded = true;
+      const listed = await listAgentCacheFilesPreferringVault(
+        productId,
+        panelVault
+      );
+      agentListed = Boolean(listed.listed);
+      workingVault = listed.vaultFolder || panelVault;
+      const cacheFiles = Array.isArray(listed.files) ? listed.files : [];
+      const objects = await ensureProductObjects(productId, { force: true });
+      const latest = latestLocalCacheTipForObject(
+        cacheFiles,
+        objects,
+        objectId
+      );
+      if (latest) {
+        const obj = (objects || []).find(
+          (row) => String(row?.uuid || "") === objectId
+        );
+        const vaultNumber = vaultTipSaveNumber(obj);
+        // Higher on-disk .N than the checked-in tip (base-plate.prt.2) → live NEW.
+        if (latest.saveNumber > vaultNumber) {
+          markAiSnapshotPanelModified(panel, latest);
+          rememberPendingCheckinIds([objectId], { merge: true });
+          return true;
+        }
+      }
+      const newer = (
+        await resolveNewerLocalCacheSaves(
+          cacheFiles,
+          objects,
+          productId,
+          workingVault
+        )
+      ).find((item) => String(item?.uuid || "") === objectId);
+      if (newer) {
+        markAiSnapshotPanelModified(panel, newer);
+        rememberPendingCheckinIds([objectId], { merge: true });
+        return true;
+      }
+    } catch {
+      /* agent optional */
+    }
+
+    try {
+      const parts = await loadCheckinQueueParts(productId, workingVault);
       const hit = [...(parts.saves || []), ...(parts.newerLocal || [])].find(
         (item) => String(item?.uuid || "") === objectId
       );
@@ -12780,57 +12884,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         rememberPendingCheckinIds([objectId], { merge: true });
         return true;
       }
+      if (parts.agentListed || agentListed) {
+        clearAiSnapshotPanelModified(panel);
+        return false;
+      }
     } catch {
-      /* fall through — agent / queue optional */
+      /* queue optional */
     }
-    if (queueLoaded) {
-      // Same list Files → Modified uses: this tip is not there → clean.
-      clearAiSnapshotPanelModified(panel);
-      return false;
-    }
-    // Queue load failed — direct agent probe (must see a live agent, not []).
-    let agentListed = false;
-    let sawNewer = null;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      if (attempt) {
-        await new Promise((resolve) => window.setTimeout(resolve, 400));
-      }
-      try {
-        const agent = await probeCreoAgent();
-        if (!agent) continue;
-        const cacheFiles = await listAgentCacheFiles(productId, panelVault);
-        // Only trust a successful /files response (probe already passed).
-        agentListed = true;
-        const objects = await ensureProductObjects(productId, {
-          force: attempt === 0,
-        });
-        const newer = (
-          await resolveNewerLocalCacheSaves(
-            cacheFiles,
-            objects,
-            productId,
-            panelVault
-          )
-        ).find((item) => String(item?.uuid || "") === objectId);
-        if (newer) {
-          sawNewer = newer;
-          break;
-        }
-        break;
-      } catch {
-        /* retry */
-      }
-    }
-    if (sawNewer) {
-      markAiSnapshotPanelModified(panel, sawNewer);
-      rememberPendingCheckinIds([objectId], { merge: true });
-      return true;
-    }
+
     if (agentListed) {
       clearAiSnapshotPanelModified(panel);
       return false;
     }
-    if (wasPending || panel.getAttribute("data-workspace-pending") === "1") {
+    if (stickyPending) {
       markAiSnapshotPanelModified(panel);
       return true;
     }
