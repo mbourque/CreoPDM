@@ -160,6 +160,7 @@ class ProductWatchService:
         filenames: list[str],
         base_url: str,
         object_uuid: str | None = None,
+        comment: str | None = None,
         email_enabled: bool,
     ) -> None:
         if not email_enabled:
@@ -201,6 +202,8 @@ class ProductWatchService:
                 lines += f"\n  … and {extra} more"
             files_block = f"{len(files)} files:\n{lines}"
 
+        note = (comment or "").strip()
+        comment_block = f"Comment: {note}\n" if note else ""
         subject = f"CreoPDM: {action} in {product.name}"
         message = (
             f"Product: {product.name}\n"
@@ -208,6 +211,7 @@ class ProductWatchService:
             f"By: {actor_label}\n"
             f"When: {when}\n"
             f"Files: {files_block}\n"
+            f"{comment_block}"
             f"\nOpen: {link}\n"
         )
         logger.info(

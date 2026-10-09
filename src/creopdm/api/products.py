@@ -459,6 +459,25 @@ def product_checkin_queue(
         object_ids,
         add_paths,
     )
+    ok = list(result.get("ok") or [])
+    if ok:
+        from creopdm.api.watch_notify import notify_product_watchers
+
+        names = [str(item.get("filename") or "") for item in ok if item.get("filename")]
+        sole_uuid = None
+        if len(ok) == 1:
+            sole = str(ok[0].get("uuid") or "").strip()
+            sole_uuid = sole or None
+        notify_product_watchers(
+            request,
+            ctx,
+            db,
+            product,
+            action="Checked in",
+            filenames=names,
+            object_uuid=sole_uuid,
+            comment=payload.comment,
+        )
     return BatchOperationResponse.model_validate(
         {**result, "workspace_root": str(ctx.workspaces.vault_for(product))}
     )

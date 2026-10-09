@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -87,7 +88,9 @@ def test_watch_eligibility_does_not_import_email_validator(auth_ctx, monkeypatch
 
 
 @requires_git
-def test_product_watch_api_subscribe_unsubscribe_and_notify(auth_client, auth_ctx, repo_parent):
+def test_product_watch_api_subscribe_unsubscribe_and_notify(
+    auth_client, auth_ctx, repo_parent, data_dir
+):
     """Watchers get one PRODUCT_ACTIVITY email; actor is excluded; disabled email skips."""
     _setup_admin_and_users(
         auth_client,
@@ -201,6 +204,27 @@ def test_product_watch_api_subscribe_unsubscribe_and_notify(auth_client, auth_ct
     assert batch.status_code == 200, batch.text
     assert len(sent) == 1
     assert "watch.prt" in sent[0][2] and "other.prt" in sent[0][2]
+    assert "Comment:" not in sent[0][2]
+
+    # Check-in (queue) includes the check-in comment for watchers.
+    sent.clear()
+    product_info = auth_client.get(f"/api/products/{product_id}").json()
+    vault_folder = product_info.get("vault_folder") or product_id
+    workspace = Path(data_dir) / "vaults" / vault_folder / "watch.prt"
+    workspace.write_bytes(b"watch-revised")
+    checked_in = auth_client.post(
+        f"/api/products/{product_id}/checkin-queue",
+        json={
+            "comment": "Fixed hole pattern on base plate",
+            "object_ids": [object_id],
+            "add_relative_paths": [],
+        },
+    )
+    assert checked_in.status_code == 200, checked_in.text
+    assert len(sent) == 1
+    assert "Checked in" in sent[0][1]
+    assert "watch.prt" in sent[0][2]
+    assert "Comment: Fixed hole pattern on base plate" in sent[0][2]
 
     # Notifications disabled → no mail.
     auth_ctx.settings.email.enabled = False
@@ -302,6 +326,58 @@ def test_product_activity_event_requires_explicit_recipients():
         to="watcher@example.com",
     )
     email.send.assert_called_once_with(["watcher@example.com"], "S", "M")
+
+
+def test_product_activity_email_includes_checkin_comment(auth_ctx):
+    """Watch mail for Checked in adds a Comment line when a check-in note is present."""
+    from types import SimpleNamespace
+
+    sent: list[tuple] = []
+
+    def capture(to, subject, message):
+        sent.append((list(to) if isinstance(to, list) else [to], subject, message))
+
+    email = MagicMock(spec=EmailService)
+    email.send.side_effect = capture
+    watches = ProductWatchService(
+        NotificationService(get_config=lambda: auth_ctx.settings.email, email=email)
+    )
+    product = SimpleNamespace(id=1, uuid="prod-uuid", name="Wedge")
+    watches.list_watcher_emails = lambda db, product_id, exclude_user_id=None: [  # type: ignore[method-assign]
+        "watcher@example.com"
+    ]
+    watches.notify_product_activity(
+        MagicMock(),
+        product=product,  # type: ignore[arg-type]
+        action="Checked in",
+        actor=None,
+        actor_label="David (david)",
+        filenames=["base-plate.prt"],
+        base_url="http://creopdm.local:52113/",
+        object_uuid="obj-uuid",
+        comment="  Tightened clearance  ",
+        email_enabled=True,
+    )
+    assert len(sent) == 1
+    message = sent[0][2]
+    assert "Comment: Tightened clearance" in message
+    assert "Files: base-plate.prt" in message
+    assert "Open: http://creopdm.local:52113/products/prod-uuid/objects/obj-uuid" in message
+
+    sent.clear()
+    watches.notify_product_activity(
+        MagicMock(),
+        product=product,  # type: ignore[arg-type]
+        action="Checked out",
+        actor=None,
+        actor_label="David (david)",
+        filenames=["base-plate.prt"],
+        base_url="http://creopdm.local:52113/",
+        comment="   ",
+        email_enabled=True,
+    )
+    assert len(sent) == 1
+    assert "Comment:" not in sent[0][2]
 
 
 @requires_git

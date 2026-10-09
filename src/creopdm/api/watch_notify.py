@@ -26,6 +26,7 @@ def notify_product_watchers(
     action: str,
     filenames: list[str],
     object_uuid: str | None = None,
+    comment: str | None = None,
 ) -> None:
     """Fan out one summary email to watchers (excludes the actor). Failures stay logged."""
     auth_user = getattr(request.state, "auth_user", None)
@@ -42,6 +43,7 @@ def notify_product_watchers(
         filenames=filenames,
         base_url=str(request.base_url),
         object_uuid=object_uuid,
+        comment=comment,
         email_enabled=bool(ctx.settings.email.enabled),
     )
 

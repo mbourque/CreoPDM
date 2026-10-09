@@ -467,5 +467,6 @@ def checkin_object(
         action="Checked in",
         filenames=[obj.filename],
         object_uuid=obj.uuid,
+        comment=payload.comment,
     )
     return present_object(ctx, db, obj)
