@@ -114,9 +114,14 @@ def test_locked_product_rejects_all_mutation_apis(client, repo_parent):
         hint="from-zip",
     )
 
-    # Undo checkout remains allowed on locked products (release lock only).
-    undone = client.post(f"/api/objects/{oid}/undo-checkout")
-    assert undone.status_code == 200, undone.text
+    # Undo / Force Undo follow the matrix Check Out column (In Review = blocked).
+    _assert_locked(
+        client.post(f"/api/objects/{oid}/undo-checkout"),
+        hint="undo checkout",
+    )
+    still = client.get(f"/api/objects/{oid}")
+    assert still.status_code == 200, still.text
+    assert still.json()["owned_by_me"] is True
 
     # Product delete/forget must still purge locked products (password confirm).
     forgotten = client.post(f"/api/products/{pid}/forget", json={"confirm_password": "test-confirm"})

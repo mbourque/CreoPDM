@@ -18,7 +18,7 @@ from creopdm.exceptions import ValidationAppError
 LIFECYCLE_OPS: tuple[tuple[str, str], ...] = (
     ("view", "Read / View"),
     ("download", "Download / Export / Open"),
-    ("checkout", "Check Out"),
+    ("checkout", "Check Out / Undo Checkout"),
     ("checkin", "Check In / Add / Upload"),
     ("remove", "Delete / Remove (vault)"),
     ("edit_metadata", "Edit Metadata"),

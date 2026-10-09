@@ -60,10 +60,10 @@ def test_checkout_blocked_when_product_in_review(client, repo_parent):
     assert 'id="add-menu"' not in page.text
     assert 'id="checkin-menu"' not in page.text
     assert 'id="open-menu"' in page.text
-    assert 'id="checkout-menu"' in page.text
-    assert 'id="checkout-btn"' not in page.text
-    assert 'id="checkout-product-btn"' not in page.text
-    assert 'id="undo-btn"' in page.text
+    # Matrix Check Out column off → Undo / Force Undo / Checkout ▾ all hidden.
+    assert 'id="checkout-menu"' not in page.text
+    assert 'id="undo-btn"' not in page.text
+    assert 'id="force-undo-btn"' not in page.text
     assert 'data-state="locked"' in page.text
     # Role body flag may still be 1; list rows must not advertise checkout.
     assert page.text.count('data-can-checkout="1"') == 1
@@ -98,6 +98,8 @@ def test_locked_product_hides_open_and_blocks_download(client, repo_parent):
     assert 'id="export-menu"' not in page.text
     assert 'id="add-menu"' not in page.text
     assert 'id="checkin-menu"' not in page.text
+    assert 'id="checkout-menu"' not in page.text
+    assert 'id="undo-btn"' not in page.text
 
     content = client.get(f"/api/objects/{obj['uuid']}/content")
     assert content.status_code == 400, content.text
@@ -139,11 +141,9 @@ def test_read_only_product_hides_mutation_toolbar(client, repo_parent):
     assert 'id="rename-product-btn"' not in page.text
     # Delete product stays available on locked products (purge vault + DB).
     assert 'id="delete-product-btn"' in page.text
-    # Checkout menu stays for Undo only; selected/product checkout are omitted.
-    assert 'id="checkout-menu"' in page.text
-    assert 'id="undo-btn"' in page.text
-    assert 'id="checkout-btn"' not in page.text
-    assert 'id="checkout-product-btn"' not in page.text
+    # Read-only blocks matrix checkout → Undo / Checkout ▾ hidden too.
+    assert 'id="checkout-menu"' not in page.text
+    assert 'id="undo-btn"' not in page.text
     assert 'id="checkin-menu"' not in page.text
     # Role body flag may still be 1; list rows must not advertise checkout.
     assert page.text.count('data-can-checkout="1"') == 1

@@ -395,7 +395,7 @@
           </article>
         </div>
         <div class="callout">
-          <strong>Product state matters.</strong> Lifecycle permissions are configured under Administration → <strong>Lifecycle states</strong>. By default, <strong>Pre-Work</strong> / <strong>In Work</strong> / <strong>Under Change</strong> allow edits; <strong>Locked</strong> is list-only. New products start as <strong>In Work</strong>.
+          <strong>Product state matters.</strong> Lifecycle permissions are configured under Administration → <strong>Lifecycle states</strong>. By default, <strong>Pre-Work</strong> / <strong>In Work</strong> / <strong>Under Change</strong> allow edits; <strong>Locked</strong> is list-only (no Checkout, Undo, Open, or download). New products start as <strong>In Work</strong>.
         </div>
       </section>
 
@@ -496,11 +496,11 @@
           </article>
           <article class="tile">
             <h3>Undo Checkout</h3>
-            <p>Releases <em>your</em> locks without creating a new version. Does not delete vault files.</p>
+            <p>Releases <em>your</em> locks without creating a new version. Does not delete vault files. Hidden when the lifecycle matrix blocks Check Out (for example Locked or In Review).</p>
           </article>
           <article class="tile">
             <h3>Force Undo Checkout</h3>
-            <p>Releases another user’s abandoned lock (permission required). Confirms first; may email that user.</p>
+            <p>Releases another user’s abandoned lock (permission required). Confirms first; may email that user. Same matrix Check Out rule as Undo.</p>
           </article>
         </div>
       </section>

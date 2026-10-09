@@ -188,8 +188,8 @@ def test_product_ui_in_work_shows_mutation_controls():
     assert ui.show_revert is True
 
 
-def test_product_ui_in_review_hides_checkout_actions_keeps_undo_and_open():
-    """In Review / read-only: no Checkout selected/product or Check In; Undo + Open stay."""
+def test_product_ui_in_review_hides_checkout_undo_and_keeps_open():
+    """In Review: matrix blocks Check Out → Undo / Force Undo hide too; Open stays."""
     product = SimpleNamespace(uuid="p1", state=ProductState.IN_REVIEW.value, read_only=False)
     ui = product_ui_capabilities(product, **_full_role_caps())
     assert ui.allows_mutation is False
@@ -198,8 +198,8 @@ def test_product_ui_in_review_hides_checkout_actions_keeps_undo_and_open():
     assert ui.show_add is False
     assert ui.show_checkin is False
     assert ui.show_checkout is False
-    assert ui.show_undo_checkout is True
-    assert ui.show_force_undo_checkout is True
+    assert ui.show_undo_checkout is False
+    assert ui.show_force_undo_checkout is False
     assert ui.show_open is True
     assert ui.show_download is True
     assert ui.show_remove is True
@@ -211,7 +211,7 @@ def test_product_ui_in_review_hides_checkout_actions_keeps_undo_and_open():
     assert ui.show_revert is False
 
 
-def test_product_ui_locked_hides_open_download_export():
+def test_product_ui_locked_hides_open_download_and_undo():
     product = SimpleNamespace(uuid="p1", state=ProductState.LOCKED.value, read_only=False)
     ui = product_ui_capabilities(product, **_full_role_caps())
     assert ui.allows_mutation is False
@@ -224,16 +224,19 @@ def test_product_ui_locked_hides_open_download_export():
     assert ui.show_copy_to_vault is False
     assert ui.show_add is False
     assert ui.show_checkin is False
-    assert ui.show_undo_checkout is True
+    assert ui.show_checkout is False
+    assert ui.show_undo_checkout is False
+    assert ui.show_force_undo_checkout is False
     assert ui.show_delete_product is True
 
 
-def test_product_ui_read_only_hides_checkout_and_checkin():
+def test_product_ui_read_only_hides_checkout_checkin_and_undo():
     product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=True)
     ui = product_ui_capabilities(product, **_full_role_caps())
     assert ui.show_checkout is False
     assert ui.show_checkin is False
-    assert ui.show_undo_checkout is True
+    assert ui.show_undo_checkout is False
+    assert ui.show_force_undo_checkout is False
     assert ui.show_add is False
     assert ui.show_open is True
 
@@ -249,6 +252,7 @@ def test_product_ui_force_undo_checkout_without_checkout_hides_checkout_actions(
     )
     assert ui.show_checkout is False
     assert ui.show_undo_checkout is False
+    # Matrix still allows checkout on In Work — Force Undo shows when role has it.
     assert ui.show_force_undo_checkout is True
     assert ui.show_add is False
 

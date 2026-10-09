@@ -1546,9 +1546,12 @@ body.is-file-drag #file-drop-overlay {
   color: var(--ink);
   text-decoration: underline;
 }
-/* Primary/danger button links must keep button colors (`.detail a` is more specific). */
+/* Primary/danger button links must keep button colors (`.detail a` is more specific).
+   `.detail a { font: inherit }` would otherwise pull .detail's line-height (1.45) and
+   make <a class="btn"> taller than <button class="btn"> in the same .form-actions row. */
 .detail a.btn {
   text-decoration: none;
+  line-height: 1.2;
 }
 .detail a.btn:hover {
   text-decoration: none;

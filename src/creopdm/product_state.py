@@ -127,8 +127,9 @@ def product_ui_capabilities(
         show_access_banner=has_product and (not mutable or not content),
         show_add=can_add_objects and can_checkin_state,
         show_checkout=can_checkout and can_checkout_state,
-        show_undo_checkout=can_checkout,
-        show_force_undo_checkout=can_force_undo_checkout,
+        # Undo / Force Undo follow the matrix Check Out column (Locked = no lock changes).
+        show_undo_checkout=can_checkout and can_checkout_state,
+        show_force_undo_checkout=can_force_undo_checkout and can_checkout_state,
         show_checkin=can_checkin and can_checkin_state,
         show_open=can_view_objects and content,
         show_download=can_view_objects and content,
