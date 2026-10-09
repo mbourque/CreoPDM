@@ -12162,6 +12162,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
      * OLD may only pick indexes > NEW; NEW may only pick indexes < OLD.
      * When Files would show Modified, NEW also lists **Modified** (live gather)
      * and defaults to it — tip History snap stays selectable on OLD (e.g. A.2).
+     * NEW History picks are only revisions newer than OLD (never older A.1).
      */
     const selectA = $("#ai-snapshot-rev-a");
     const selectB = $("#ai-snapshot-rev-b");
@@ -12191,7 +12192,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       aiSnapshotIncludeModified && isAiSnapshotModifiedValue(preferNewId);
 
     if (newIsModified) {
-      // Left = any History snap (default tip A.n); right = Modified (+ History picks).
+      // Left = any History snap (default tip A.n).
+      // Right = Modified + only History newer than OLD (never A.1 when OLD is A.2).
       let oldIdx = aiSnapshotCompareIndex(preferOldId);
       if (oldIdx < 0) oldIdx = aiSnapshotCompareIndex(tipId);
       if (oldIdx < 0) oldIdx = 0;
@@ -12199,9 +12201,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       for (let i = 0; i < n; i += 1) allIdx.push(i);
       fillAiSnapshotHistoryOptions(selectA, allIdx, oldIdx);
       selectA.disabled = false;
+      const newerThanOld = [];
+      for (let i = 0; i < oldIdx; i += 1) newerThanOld.push(i);
       selectB.replaceChildren();
       prependAiSnapshotModifiedOption(selectB, true);
-      allIdx.forEach((idx) => {
+      newerThanOld.forEach((idx) => {
         const item = aiSnapshotCompareVersions[idx];
         if (!item) return;
         const option = document.createElement("option");
