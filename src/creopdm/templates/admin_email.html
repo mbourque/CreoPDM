@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Email — {{ app_name }}{% endblock %}
+{% block title %}Email — System Settings — {{ app_name }}{% endblock %}
 {% block content %}
 <article class="detail settings-page admin-page">
   <nav class="crumb">
@@ -9,6 +9,10 @@
     {% endif %}
     <a href="/admin">Administration</a>
     <span>/</span>
+    {% if can_manage_settings %}
+    <a href="/settings">System Settings</a>
+    <span>/</span>
+    {% endif %}
     <span>Email</span>
   </nav>
   <h1>Email</h1>
@@ -21,7 +25,7 @@
   <p class="error">{{ error }}</p>
   {% endif %}
 
-  <form method="post" action="/admin/email" class="settings-form" id="email-settings-form">
+  <form method="post" action="/settings/email" class="settings-form" id="email-settings-form">
     <section class="settings-card">
       <h2>Notifications</h2>
       <label class="choice">
@@ -90,6 +94,11 @@
 
     <p class="form-actions">
       <button type="submit" class="btn btn-primary" name="action" value="save">Save</button>
+      {% if can_manage_settings %}
+      <a class="btn" href="/settings">Back to System Settings</a>
+      {% else %}
+      <a class="btn" href="/admin">Back to Administration</a>
+      {% endif %}
     </p>
 
     <section class="settings-card">

@@ -665,18 +665,49 @@ def _require_ai_settings_page(request: Request, ctx: AppContext) -> HTMLResponse
     return None
 
 
+def _can_open_settings_hub(request: Request, ctx: AppContext) -> bool:
+    if not ctx.auth_enabled:
+        return True
+    return bool(
+        getattr(request.state, "can_manage_settings", False)
+        or getattr(request.state, "can_manage_ai", False)
+        or getattr(request.state, "can_manage_email", False)
+    )
+
+
+def _settings_hub_tiles(request: Request, ctx: AppContext):
+    from creopdm.settings_hub import SETTINGS_HUB_TILES
+
+    can_settings = not ctx.auth_enabled or bool(
+        getattr(request.state, "can_manage_settings", False)
+    )
+    can_ai = not ctx.auth_enabled or bool(getattr(request.state, "can_manage_ai", False))
+    can_email = not ctx.auth_enabled or bool(
+        getattr(request.state, "can_manage_email", False)
+    )
+    tiles = []
+    for tile in SETTINGS_HUB_TILES:
+        if tile.slug == "ai":
+            if can_ai:
+                tiles.append(tile)
+        elif tile.slug == "email":
+            if can_email:
+                tiles.append(tile)
+        elif can_settings:
+            tiles.append(tile)
+    return tuple(tiles)
+
+
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(
     request: Request,
     ctx: AppContext = Depends(get_context),
 ) -> HTMLResponse:
-    from creopdm.settings_hub import SETTINGS_HUB_TILES
-
-    blocked = _require_settings_page(request, ctx)
-    if blocked is not None:
-        return blocked
-    can_ai = not ctx.auth_enabled or bool(getattr(request.state, "can_manage_ai", False))
-    tiles = tuple(t for t in SETTINGS_HUB_TILES if t.slug != "ai" or can_ai)
+    if ctx.auth_enabled and not _can_open_settings_hub(request, ctx):
+        return HTMLResponse(
+            "<h1>403 Forbidden</h1><p>Only administrators can open Settings.</p>",
+            status_code=403,
+        )
     return render(
         request,
         "settings.html",
@@ -684,7 +715,7 @@ def settings_page(
             "app_name": APP_NAME,
             "app_version": APP_VERSION,
             **_creo_page(ctx),
-            "settings_tiles": tiles,
+            "settings_tiles": _settings_hub_tiles(request, ctx),
         },
     )
 
@@ -703,6 +734,9 @@ def settings_section_page(
         return RedirectResponse("/admin/utilities/availability", status_code=303)
 
     slug = (section or "").strip().lower()
+    # Email is owned by auth_pages (/settings/email) — registered before this router.
+    if slug == "email":
+        return RedirectResponse("/settings/email", status_code=303)
     if slug == "ai":
         blocked = _require_ai_settings_page(request, ctx)
     else:

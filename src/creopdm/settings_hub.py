@@ -97,6 +97,12 @@ SETTINGS_HUB_TILES: tuple[SettingsHubTile, ...] = (
         partial="database.html",
     ),
     SettingsHubTile(
+        slug="email",
+        title="Email",
+        blurb="SMTP / local Postfix, From address, and test email for notifications.",
+        page_template="admin_email.html",
+    ),
+    SettingsHubTile(
         slug="ai",
         title="AI",
         blurb="Enable AI, Ollama host URL, model, and snapshot compare prompt.",

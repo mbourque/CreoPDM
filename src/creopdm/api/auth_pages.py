@@ -2219,7 +2219,7 @@ def _require_utilities_or_settings(
 
 _DEFAULT_TEST_SUBJECT = "CreoPDM test email"
 _DEFAULT_TEST_MESSAGE = (
-    "This is a test message from CreoPDM Administration → Email.\n"
+    "This is a test message from CreoPDM System Settings → Email.\n"
 )
 
 
@@ -2335,6 +2335,12 @@ def _email_form_is_dirty(
 
 
 @router.get("/admin/email", response_class=HTMLResponse)
+def admin_email_page_redirect() -> RedirectResponse:
+    """Email moved under System Settings — keep old bookmarks working."""
+    return RedirectResponse("/settings/email", status_code=303)
+
+
+@router.get("/settings/email", response_class=HTMLResponse)
 def admin_email_page(
     request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)
 ):
@@ -2354,6 +2360,11 @@ def admin_email_page(
 
 
 @router.post("/admin/email", response_class=HTMLResponse)
+def admin_email_submit_redirect() -> RedirectResponse:
+    return RedirectResponse("/settings/email", status_code=303)
+
+
+@router.post("/settings/email", response_class=HTMLResponse)
 def admin_email_submit(
     request: Request,
     action: str = Form("save"),

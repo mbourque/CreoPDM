@@ -332,6 +332,7 @@ def test_product_activity_email_includes_checkin_comment(auth_ctx):
     """Watch mail for Checked in adds a Comment line when a check-in note is present."""
     from types import SimpleNamespace
 
+    auth_ctx.settings.email.enabled = True
     sent: list[tuple] = []
 
     def capture(to, subject, message):

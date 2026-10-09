@@ -195,7 +195,7 @@ def send_email_to_all_users(
     if sent == 0:
         raise ValidationAppError(
             "Could not send email to any user. "
-            + (errors[0] if errors else "Check Administration → Email delivery settings.")
+            + (errors[0] if errors else "Check System Settings → Email delivery settings.")
         )
     return BroadcastEmailResult(
         sent=sent,

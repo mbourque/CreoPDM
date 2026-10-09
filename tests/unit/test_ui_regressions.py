@@ -2255,7 +2255,8 @@ def test_admin_hub_panel_fills_full_width():
     assert 'href="/settings/ai"' not in admin
     assert ">AI</a>" not in admin
     assert "Coming soon: configure AI help" not in admin
-    assert "database, AI, and more" in admin
+    assert "database, Email, AI, and more" in admin
+    assert 'href="/admin/email"' not in admin
     assert "Audit log" in admin
     assert ".admin-tile.is-disabled" in css
     utilities = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities.html").read_text(

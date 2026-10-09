@@ -10,7 +10,7 @@
     <span>Administration</span>
   </nav>
   <h1>Administration</h1>
-  <p class="muted">Server tools for users, roles, products, membership, email, utilities, and system settings.</p>
+  <p class="muted">Server tools for users, roles, products, membership, utilities, and system settings.</p>
 
   <div class="admin-tile-grid">
     {% if can_manage_users %}
@@ -37,22 +37,16 @@
       <p>List every product on this server. Create, rename, or remove products.</p>
     </section>
     {% endif %}
-    {% if can_manage_email %}
-    <section class="admin-tile">
-      <h2><a href="/admin/email">Email</a></h2>
-      <p>SMTP setup, From address, and test email for notifications.</p>
-    </section>
-    {% endif %}
     {% if can_access_utilities %}
     <section class="admin-tile">
       <h2><a href="/admin/utilities">Utilities</a></h2>
       <p>Email all users, site availability, compact vault history, Delete products, Audit log, and server health checks.</p>
     </section>
     {% endif %}
-    {% if can_manage_settings %}
+    {% if can_manage_settings or can_manage_ai or can_manage_email %}
     <section class="admin-tile">
       <h2><a href="/settings">System Settings</a></h2>
-      <p>Server options hub: Open Creo models, Vault, file types, agent, database, AI, and more.</p>
+      <p>Server options hub: Open Creo models, Vault, file types, agent, database, Email, AI, and more.</p>
     </section>
     {% endif %}
   </div>

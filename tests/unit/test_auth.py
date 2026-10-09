@@ -444,10 +444,10 @@ def test_admin_can_open_settings(auth_client):
     assert "Add and edit accounts, assign a role, and set status." in hub.text
     assert "Click a user’s name" not in hub.text and "Click a user's name" not in hub.text
     assert 'href="/admin/products"' in hub.text
-    assert 'href="/admin/email"' in hub.text
+    assert 'href="/admin/email"' not in hub.text
     assert 'href="/admin/utilities"' in hub.text
     assert "Email all users, site availability, compact vault history, Delete products, Audit log, and server health checks." in hub.text
-    assert "Server options hub: Open Creo models, Vault, file types, agent, database, and more." in hub.text
+    assert "Server options hub: Open Creo models, Vault, file types, agent, database, Email, AI, and more." in hub.text
     assert "Availability, Open Creo models" not in hub.text
     # Admin chrome uses the same Creo pill as Files (not a bare "—").
     assert 'id="creo-status"' in hub.text
@@ -458,6 +458,8 @@ def test_admin_can_open_settings(auth_client):
     settings_page = auth_client.get("/settings")
     assert settings_page.status_code == 200
     assert "admin-page" in settings_page.text
+    assert 'href="/settings/email"' in settings_page.text
+    assert ">Email</a>" in settings_page.text
     assert auth_client.get("/api/settings").status_code == 200
     css = (Path(__file__).resolve().parents[2] / "src" / "creopdm" / "static" / "css" / "app.css").read_text(
         encoding="utf-8"
@@ -951,7 +953,7 @@ def test_admin_utilities_email_all_users(auth_client, auth_ctx):
 
 
 def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
-    """email.manage opens Email admin; save keeps blank password; others get 403."""
+    """email.manage opens System Settings → Email; save keeps blank password; others get 403."""
     auth_client.post(
         "/setup",
         data={
@@ -963,15 +965,21 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
         },
         follow_redirects=False,
     )
-    page = auth_client.get("/admin/email")
+    # Old Administration bookmark redirects into the settings hub page.
+    legacy = auth_client.get("/admin/email", follow_redirects=False)
+    assert legacy.status_code == 303
+    assert legacy.headers.get("location") == "/settings/email"
+
+    page = auth_client.get("/settings/email")
     assert page.status_code == 200
     assert "Delivery method" in page.text
     assert "Local Postfix" in page.text
     assert "Authenticated SMTP" in page.text
     assert 'value="local"' in page.text
+    assert 'action="/settings/email"' in page.text
 
     saved = auth_client.post(
-        "/admin/email",
+        "/settings/email",
         data={
             "action": "save",
             "enabled": "1",
@@ -989,7 +997,7 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
     assert auth_ctx.settings.email.from_address == "creopdm@example.com"
 
     saved_smtp = auth_client.post(
-        "/admin/email",
+        "/settings/email",
         data={
             "action": "save",
             "enabled": "1",
@@ -1015,7 +1023,7 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
     assert auth_ctx.settings.email.smtp_use_auth is True
 
     kept = auth_client.post(
-        "/admin/email",
+        "/settings/email",
         data={
             "action": "save",
             "enabled": "1",
@@ -1037,7 +1045,7 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
 
     # Switching to local keeps stored SMTP password for later.
     back_local = auth_client.post(
-        "/admin/email",
+        "/settings/email",
         data={
             "action": "save",
             "enabled": "1",
@@ -1054,7 +1062,7 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
 
     # Unsaved edits must not send a test (and must not persist).
     dirty_test = auth_client.post(
-        "/admin/email",
+        "/settings/email",
         data={
             "action": "test",
             "enabled": "1",
@@ -1069,7 +1077,7 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
     assert "Save your changes" in dirty_test.text
     assert auth_ctx.settings.email.from_address == "creopdm@example.com"
 
-    page = auth_client.get("/admin/email")
+    page = auth_client.get("/settings/email")
     assert 'id="email-test-btn"' in page.text
     assert 'name="test_subject"' in page.text
     assert 'name="test_message"' in page.text
@@ -1101,7 +1109,7 @@ def test_admin_email_settings_save_and_gate(auth_client, auth_ctx):
         data={"username": "pdm", "password": "PdmPass1"},
         follow_redirects=False,
     )
-    denied = auth_client.get("/admin/email", follow_redirects=False)
+    denied = auth_client.get("/settings/email", follow_redirects=False)
     assert denied.status_code == 403
 
 
@@ -1764,7 +1772,7 @@ def test_pdm_manager_can_create_not_delete_no_products_admin(auth_client, auth_c
 
     assert auth_client.get("/admin", follow_redirects=False).status_code == 403
     assert auth_client.get("/admin/products", follow_redirects=False).status_code == 403
-    assert auth_client.get("/admin/email", follow_redirects=False).status_code == 403
+    assert auth_client.get("/settings/email", follow_redirects=False).status_code == 403
     _assert_forbidden(auth_client.delete(f"/api/products/{product['uuid']}"))
     assert auth_client.get("/admin/users", follow_redirects=False).status_code == 403
     assert auth_client.get("/settings", follow_redirects=False).status_code == 403
@@ -3068,6 +3076,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
         PERMISSION_ROLES_MANAGE,
         PERMISSION_ROLES_ASSIGN,
         PERMISSION_PRODUCTS_ASSIGN,
+        PERMISSION_SETTINGS_AI,
         PERMISSION_SETTINGS_MANAGE,
         PERMISSION_USERS_MANAGE,
         PERMISSION_USERS_PASSWORD,
@@ -3226,6 +3235,7 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
                 PERMISSION_USERS_MANAGE in allowed
                 or PERMISSION_ROLES_MANAGE in allowed
                 or PERMISSION_SETTINGS_MANAGE in allowed
+                or PERMISSION_SETTINGS_AI in allowed
                 or PERMISSION_PRODUCTS_MANAGE in allowed
                 or PERMISSION_EMAIL_MANAGE in allowed
                 or bool(allowed & UTILITIES_PERMISSION_KEYS)
@@ -3251,8 +3261,9 @@ def test_every_starter_role_login_permission_matrix(auth_client, auth_ctx, repo_
             PERMISSION_USERS_MANAGE: auth_client.get("/admin/users", follow_redirects=False),
             PERMISSION_ROLES_MANAGE: auth_client.get("/admin/roles", follow_redirects=False),
             PERMISSION_SETTINGS_MANAGE: auth_client.get("/api/settings", follow_redirects=False),
+            PERMISSION_SETTINGS_AI: auth_client.get("/settings/ai", follow_redirects=False),
             PERMISSION_PRODUCTS_MANAGE: auth_client.get("/admin/products", follow_redirects=False),
-            PERMISSION_EMAIL_MANAGE: auth_client.get("/admin/email", follow_redirects=False),
+            PERMISSION_EMAIL_MANAGE: auth_client.get("/settings/email", follow_redirects=False),
             PERMISSION_UTILITIES_AVAILABILITY: auth_client.get(
                 "/admin/utilities/availability", follow_redirects=False
             ),

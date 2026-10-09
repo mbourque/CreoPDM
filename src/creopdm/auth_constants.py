@@ -74,7 +74,7 @@ BUILTIN_PERMISSIONS: tuple[tuple[str, str], ...] = (
     (PERMISSION_PRODUCTS_MANAGE, "Create, edit, and delete products in Administration"),
     (PERMISSION_SETTINGS_MANAGE, "Change global CreoPDM settings"),
     (PERMISSION_SETTINGS_AI, "Configure AI settings (Ollama, snapshot compare prompt)"),
-    (PERMISSION_EMAIL_MANAGE, "Configure email and notifications in Administration"),
+    (PERMISSION_EMAIL_MANAGE, "Configure email and notifications in System Settings"),
     (PERMISSION_UTILITIES_AVAILABILITY, "Utilities → Availability (site maintenance message)"),
     (PERMISSION_UTILITIES_EMAIL_USERS, "Utilities → Email all users"),
     (PERMISSION_UTILITIES_COMPACT_PRODUCT, "Utilities → Compact product vault history"),
