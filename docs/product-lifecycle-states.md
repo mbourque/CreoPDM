@@ -2,31 +2,33 @@
 
 CreoPDM product (project) lifecycle — separate from object `lifecycle_state`.
 
-## States (Administration → Products order)
+Configurable under **Administration → Lifecycle states** (stored in `settings.json` → `lifecycle`). Role permissions still apply on top (`state ∩ role`).
 
-| State | Description | Mutations | Open / download / export |
+## Built-in states (default order)
+
+| State | Description | Default mutations | Default open / download |
 |---|---|---|---|
-| **In Work** | Being created or modified. Not approved. | Yes (unless read-only) | Yes |
+| **Pre-Work** | Unrestricted experimentation without formal review or revision controls. | Yes | Yes |
+| **In Work** | Being created or modified. Not approved. **Default for new products.** | Yes | Yes |
 | **In Review** | Submitted for engineering review. | No | Yes |
 | **Approved** | Reviewed and approved but not necessarily released. | No | Yes |
 | **Released** | Official version approved for manufacturing or downstream use. | No | Yes |
-| **Under Change** | A modification is underway against a previously released design. | Yes (unless read-only) | Yes |
+| **Under Change** | A modification is underway against a previously released design. | Yes | Yes |
 | **Obsolete** | No longer valid for new designs or production. | No | Yes |
 | **Archived** | Retained for historical reference (hidden from normal Files list). | No | Yes |
-| **Locked** | List files only — administrative freeze stricter than read-only. | No | No |
+| **Locked** | List files only (default). | No | No |
 
-`read_only` remains an independent flag: freeze mutations without changing lifecycle state. Open / download still work when read-only (unlike **Locked**).
+Admins can **add custom states**, edit labels/descriptions/order, and toggle Allowed/Blocked per operation. Built-in keys cannot be deleted.
 
-## Legacy remaps
+## Operations in the matrix
 
-Migration `033_product_lifecycle` and `parse_product_state` aliases:
+`view`, `download` (open/export), `checkout`, `checkin` (add/upload/folders), `remove`, `edit_metadata`, `rename` (product), `change_state`, `history`.
 
-- `ON_HOLD` → `IN_REVIEW`
-- `CLOSED` → `OBSOLETE`
+`read_only` on a product still blocks mutation ops independently of the matrix.
 
 ## Enforcement
 
-- UI: `product_ui_capabilities()` → `product_ui.show_*` in templates
-- API: `ensure_product_mutable` / `ensure_product_content_accessible` / `ensure_product_deletable`
+- UI: `product_ui_capabilities()` → `product_ui.show_*`
+- API: `ensure_product_allows` / `ensure_product_mutable` / `ensure_product_content_accessible`
 - Contract: `tests/unit/test_product_access_policy_contract.py`
-- Behavior: `docs/user-interactions.md` (read-only / Locked rows)
+- UX: `docs/user-interactions.md`

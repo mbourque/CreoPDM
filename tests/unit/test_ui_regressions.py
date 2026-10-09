@@ -347,6 +347,7 @@ def test_product_state_badge_in_files_header():
     assert "Read only" in html
     assert html.index('id="product-state-badge"') < html.index('id="search-form"')
     assert ".title-row .product-state" in css
+    assert '.state[data-state="PRE_WORK"]::before' in css
     assert '.state[data-state="IN_REVIEW"]::before' in css
     assert '.state[data-state="UNDER_CHANGE"]::before' in css
     assert '.state[data-state="LOCKED"]::before' in css

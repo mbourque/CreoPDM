@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Lifecycle states — Administration — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page admin-page">
+  <nav class="crumb">
+    {% if can_view_products %}
+    <a href="/">Products</a>
+    <span>/</span>
+    {% endif %}
+    <a href="/admin">Administration</a>
+    <span>/</span>
+    <span>Lifecycle states</span>
+  </nav>
+  <h1>Lifecycle states</h1>
+  <p class="muted">Define product lifecycle states and which file operations each state allows. Role permissions still apply on top (state ∩ role). New products default to <strong>In Work</strong>.</p>
+
+  {% if success %}<p class="ok">{{ success }}</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  <form method="post" action="/admin/lifecycle" class="settings-form settings-form-wide">
+    <input type="hidden" name="action" value="save" id="lifecycle-action">
+    <section class="settings-card">
+      <h2>Permission matrix</h2>
+      <p class="muted small">Check = allowed for that state. Uncheck = blocked. <strong>Download / Export / Open</strong> controls vault content access. Built-in states cannot be deleted; custom states can.</p>
+      <div class="table-scroll">
+        <table class="data-table lifecycle-matrix">
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>State</th>
+              <th>Description</th>
+              {% for op_key, op_label in lifecycle_ops %}
+              <th class="col-op" title="{{ op_label }}">{{ op_label }}</th>
+              {% endfor %}
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for st in states %}
+            {% set state_i = loop.index0 %}
+            <tr>
+              <td>
+                <input type="hidden" name="key_{{ state_i }}" value="{{ st.key }}">
+                <input type="hidden" name="builtin_{{ state_i }}" value="{{ '1' if st.builtin else '0' }}">
+                <input name="order_{{ state_i }}" type="number" min="0" max="999" value="{{ st.order }}" style="width:4rem">
+              </td>
+              <td>
+                <input name="label_{{ state_i }}" type="text" value="{{ st.label }}" required maxlength="64" style="min-width:8rem">
+                <div class="muted small"><code>{{ st.key }}</code>{% if st.builtin %} · built-in{% endif %}</div>
+              </td>
+              <td>
+                <input name="description_{{ state_i }}" type="text" value="{{ st.description }}" maxlength="256" style="min-width:12rem">
+              </td>
+              {% for op_key, op_label in lifecycle_ops %}
+              <td class="col-op">
+                <label class="choice" title="{{ op_label }}">
+                  <input type="checkbox" name="perm_{{ state_i }}_{{ op_key }}" value="1"
+                    {% if st.permissions.get(op_key) %}checked{% endif %}>
+                </label>
+              </td>
+              {% endfor %}
+              <td>
+                {% if not st.builtin %}
+                <button type="submit" class="btn btn-danger" name="action" value="delete:{{ st.key }}"
+                        onclick="return confirm('Delete lifecycle state {{ st.label }}? Products using it must be changed first.');">Delete</button>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <input type="hidden" name="state_count" value="{{ states|length }}">
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" name="action" value="save">Save</button>
+        <button type="submit" class="btn" name="action" value="reset"
+                onclick="return confirm('Reset all lifecycle states and permissions to CreoPDM defaults? Custom states will be removed.');">Reset to defaults</button>
+        <a class="btn" href="/admin/products">Products</a>
+      </div>
+    </section>
+  </form>
+
+  <form method="post" action="/admin/lifecycle" class="settings-form settings-form-wide" style="margin-top:1rem">
+    <section class="settings-card">
+      <h2>Add lifecycle state</h2>
+      <p class="muted small">Creates a new state key from the name (for example <code>PROTO_A</code>). Default permissions match In Review (view / download / history; no edits).</p>
+      <label>Name
+        <input name="new_label" type="text" maxlength="64" placeholder="e.g. Prototype" autocomplete="off" required>
+      </label>
+      <label>Description <span class="muted small">(optional)</span>
+        <input name="new_description" type="text" maxlength="256" autocomplete="off">
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" name="action" value="add">Add state</button>
+      </div>
+    </section>
+  </form>
+</article>
+{% endblock %}

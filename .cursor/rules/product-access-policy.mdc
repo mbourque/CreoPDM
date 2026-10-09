@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Product access policy (single source)
 
-`src/creopdm/product_state.py` owns product lifecycle lock (In Work / Under Change + not `read_only`; **Locked** also blocks open/download) for **UI flags** and **API guards**.
+`src/creopdm/product_state.py` + `lifecycle_policy.py` own product lifecycle lock from the configurable matrix (Administration → Lifecycle states; `settings.json` → `lifecycle`). Role caps ∩ matrix ops; `read_only` still blocks mutations. New products default to In Work.
 
 ## When adding or changing a product mutation
 

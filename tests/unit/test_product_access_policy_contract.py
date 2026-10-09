@@ -41,8 +41,10 @@ def test_mutation_modules_call_ensure_product_gate():
         text = path.read_text(encoding="utf-8")
         assert path.is_file(), path
         assert (
-            "ensure_product_mutable" in text or "ensure_product_deletable" in text
-        ), f"{path.relative_to(ROOT)} must call ensure_product_mutable/deletable"
+            "ensure_product_mutable" in text
+            or "ensure_product_allows" in text
+            or "ensure_product_deletable" in text
+        ), f"{path.relative_to(ROOT)} must call ensure_product_mutable/allows/deletable"
 
 
 def test_content_modules_call_ensure_product_content_accessible():

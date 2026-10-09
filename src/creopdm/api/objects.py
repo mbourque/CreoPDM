@@ -264,10 +264,10 @@ def remove_batch(
     for group in grouped.values():
         summaries = [{"uuid": obj.uuid, "filename": obj.filename} for obj in group]
         try:
-            from creopdm.product_state import ensure_product_mutable
+            from creopdm.product_state import ensure_product_allows
 
             # Gate before purge/release so a locked product does not drop checkouts on failure.
-            ensure_product_mutable(group[0].product, action="remove files")
+            ensure_product_allows(group[0].product, "remove", action="remove files")
             ctx.workspaces.purge_local_many(group[0].product, group, ignore_locked=True)
             ctx.checkouts.release_mine_many(db, group)
             ctx.objects.delete_objects(db, group)

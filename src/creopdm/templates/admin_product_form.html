@@ -35,13 +35,13 @@
       <p class="muted small">Blank uses a unique folder name under the server vault. Custom names cannot contain spaces.</p>
       <label>Lifecycle state
         <select name="state">
-          {% for s in product_states %}
-          <option value="{{ s.value }}" {% if form.state == s.value %}selected{% endif %}
-                  title="{{ product_state_descriptions.get(s.value, '') }}">{{ product_state_labels.get(s.value, s.value) }}</option>
+          {% for key in product_states %}
+          <option value="{{ key }}" {% if form.state == key %}selected{% endif %}
+                  title="{{ product_state_descriptions.get(key, '') }}">{{ product_state_labels.get(key, key) }}</option>
           {% endfor %}
         </select>
       </label>
-      <p class="muted small"><strong>In Work</strong> and <strong>Under Change</strong> allow add, checkout, and check-in (unless Read only is on). <strong>Locked</strong> is list-only (no open or download).</p>
+      <p class="muted small">Default is <strong>In Work</strong>. Permissions per state are configured under <a href="/admin/lifecycle">Administration → Lifecycle states</a>.</p>
       <label class="choice">
         <input type="checkbox" name="read_only" value="1" {% if form.read_only %}checked{% endif %}>
         Read only — block modifications without changing lifecycle state
@@ -72,13 +72,13 @@
       <p class="muted small">Set at create; cannot be changed.</p>
       <label>Lifecycle state
         <select name="state">
-          {% for s in product_states %}
-          <option value="{{ s.value }}" {% if form.state == s.value %}selected{% endif %}
-                  title="{{ product_state_descriptions.get(s.value, '') }}">{{ product_state_labels.get(s.value, s.value) }}</option>
+          {% for key in product_states %}
+          <option value="{{ key }}" {% if form.state == key %}selected{% endif %}
+                  title="{{ product_state_descriptions.get(key, '') }}">{{ product_state_labels.get(key, key) }}</option>
           {% endfor %}
         </select>
       </label>
-      <p class="muted small"><strong>In Work</strong> and <strong>Under Change</strong> allow add, checkout, and check-in (unless Read only is on). <strong>Locked</strong> is list-only (no open or download). Other states are view-only for engineering changes.</p>
+      <p class="muted small">New products default to <strong>In Work</strong>. Edit the matrix under <a href="/admin/lifecycle">Administration → Lifecycle states</a>.</p>
       <label class="choice">
         <input type="checkbox" name="read_only" value="1" {% if form.read_only %}checked{% endif %}>
         Read only — block modifications without changing lifecycle state

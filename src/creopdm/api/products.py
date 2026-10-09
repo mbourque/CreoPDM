@@ -215,9 +215,9 @@ def update_product(
 ) -> ProductResponse:
     require_permission(request, ctx, PERMISSION_PRODUCTS_EDIT)
     product = load_accessible_product(request, ctx, db, product_id)
-    from creopdm.product_state import ensure_product_mutable
+    from creopdm.product_state import ensure_product_allows
 
-    ensure_product_mutable(product, action="rename this product")
+    ensure_product_allows(product, "rename", action="rename this product")
     product = ctx.products.update_product(
         db,
         product_id,
@@ -1324,11 +1324,11 @@ def start_zip_import_job(
     ctx: AppContext = Depends(get_context),
 ) -> ZipImportJobResponse:
     """Create a progress job for Compressed data… (browser polls while agent uploads)."""
-    from creopdm.product_state import ensure_product_mutable
+    from creopdm.product_state import ensure_product_allows
 
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
     product = load_accessible_product(request, ctx, db, product_id)
-    ensure_product_mutable(product, action="add files")
+    ensure_product_allows(product, "checkin", action="add files")
     return _zip_import_job_response(ctx.zip_imports.create(product_id))
 
 
@@ -1360,7 +1360,7 @@ async def import_from_zip(
     ctx: AppContext = Depends(get_context),
 ) -> BatchOperationResponse:
     """Upload one .zip, extract on the host, import like Add folders… (strip single root)."""
-    from creopdm.product_state import ensure_product_mutable
+    from creopdm.product_state import ensure_product_allows
     from creopdm.utils.zip_import import MAX_ZIP_IMPORT_BYTES, assert_zip_filename
 
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
@@ -1386,7 +1386,7 @@ async def import_from_zip(
     except ValueError:
         zip_bytes_hint = 0
     product = load_accessible_product(request, ctx, db, product_id)
-    ensure_product_mutable(product, action="add files")
+    ensure_product_allows(product, "checkin", action="add files")
 
     if job_id:
         status = ctx.zip_imports.get(job_id)

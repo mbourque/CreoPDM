@@ -409,6 +409,47 @@ class AiConfig(BaseModel):
         return str(value or "").strip()
 
 
+class LifecycleStatePermissions(BaseModel):
+    view: bool = True
+    download: bool = True
+    checkout: bool = False
+    checkin: bool = False
+    remove: bool = False
+    edit_metadata: bool = False
+    rename: bool = False
+    change_state: bool = True
+    history: bool = True
+
+
+class LifecycleStateConfig(BaseModel):
+    key: str
+    label: str = ""
+    description: str = ""
+    order: int = 0
+    builtin: bool = False
+    permissions: LifecycleStatePermissions = Field(default_factory=LifecycleStatePermissions)
+
+    @field_validator("key")
+    @classmethod
+    def normalize_key(cls, value: object) -> str:
+        key = str(value or "").strip().upper()
+        if not key:
+            raise ValueError("Lifecycle state key is required.")
+        return key
+
+
+class LifecycleConfig(BaseModel):
+    """Product lifecycle states + permission matrix (Administration → Lifecycle states)."""
+
+    states: list[LifecycleStateConfig] = Field(default_factory=list)
+
+    @classmethod
+    def default(cls) -> "LifecycleConfig":
+        from creopdm.lifecycle_policy import default_lifecycle_state_dicts
+
+        return cls.model_validate({"states": default_lifecycle_state_dicts()})
+
+
 class AppSettings(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
@@ -420,6 +461,7 @@ class AppSettings(BaseModel):
     ignore: IgnoreConfig = Field(default_factory=IgnoreConfig)
     email: EmailConfig = Field(default_factory=EmailConfig)
     ai: AiConfig = Field(default_factory=AiConfig)
+    lifecycle: LifecycleConfig = Field(default_factory=lambda: LifecycleConfig.default())
 
 
 _ADDED_DEFAULT_TYPE_LABELS = (
@@ -846,19 +888,44 @@ class ConfigManager:
             dirty = True
         if self._normalize_workspace_root(settings):
             dirty = True
+        # Seed / merge product lifecycle matrix (built-ins always present).
+        from creopdm.lifecycle_policy import policy_from_dicts, set_lifecycle_policy
+
+        life_raw = raw.get("lifecycle") if isinstance(raw, dict) else None
+        if not isinstance(life_raw, dict) or "states" not in life_raw or not life_raw.get("states"):
+            settings.lifecycle = LifecycleConfig.default()
+            dirty = True
+        else:
+            policy = policy_from_dicts([s.model_dump() for s in settings.lifecycle.states])
+            normalized = LifecycleConfig.model_validate({"states": policy.to_settings_dicts()})
+            if normalized.model_dump() != settings.lifecycle.model_dump():
+                settings.lifecycle = normalized
+                dirty = True
         if dirty:
             self.save(settings)
+        else:
+            set_lifecycle_policy(
+                policy_from_dicts([s.model_dump() for s in settings.lifecycle.states])
+            )
         self._settings = settings
         return settings
 
     def save(self, settings: AppSettings) -> None:
         self.ensure_layout()
+        from creopdm.lifecycle_policy import policy_from_dicts, set_lifecycle_policy
+
+        # Normalize lifecycle before write so built-ins and ops stay complete.
+        policy = policy_from_dicts(
+            [s.model_dump() for s in (settings.lifecycle.states or [])]
+        )
+        settings.lifecycle = LifecycleConfig.model_validate({"states": policy.to_settings_dicts()})
         payload: dict[str, Any] = settings.model_dump()
         self.settings_path.write_text(
             json.dumps(payload, indent=2) + "\n",
             encoding="utf-8",
         )
         self._settings = settings
+        set_lifecycle_policy(policy)
 
     @property
     def settings(self) -> AppSettings:

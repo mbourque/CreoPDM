@@ -24,7 +24,7 @@ from creopdm.exceptions import NotFoundError, ValidationAppError
 from creopdm.models.ai_snapshot import ObjectVersionSnapshot
 from creopdm.models.object import EngineeringObject
 from creopdm.models.version import ObjectVersion
-from creopdm.product_state import ensure_product_mutable
+from creopdm.product_state import ensure_product_allows
 from creopdm.schemas.common import (
     AiCheckinCommentSynthesizeResponse,
     AiSnapshotCompareResponse,
@@ -175,7 +175,7 @@ class AiSnapshotService:
         payload: AiSnapshotRequest,
     ) -> AiSnapshotResponse:
         obj = self._objects.get_object(session, object_uuid)
-        ensure_product_mutable(obj.product, action="save AI snapshot")
+        ensure_product_allows(obj.product, "edit_metadata", action="save AI snapshot")
         version = self._resolve_version(session, obj, payload.version_id)
         if version is None:
             raise ValidationAppError(

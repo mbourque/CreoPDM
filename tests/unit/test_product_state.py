@@ -6,9 +6,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from creopdm.constants import PRODUCT_STATE_LABELS, ProductState
+from creopdm.constants import ProductState
 from creopdm.exceptions import ValidationAppError
+from creopdm.lifecycle_policy import default_lifecycle_policy, set_lifecycle_policy
 from creopdm.product_state import (
+    configured_product_state_labels,
+    configured_product_states,
     ensure_product_content_accessible,
     ensure_product_deletable,
     ensure_product_mutable,
@@ -22,8 +25,16 @@ from creopdm.product_state import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _default_lifecycle_policy():
+    set_lifecycle_policy(default_lifecycle_policy())
+    yield
+    set_lifecycle_policy(default_lifecycle_policy())
+
+
 def test_product_state_order_matches_common_pdm_plus_locked():
-    assert [s.value for s in ProductState] == [
+    assert configured_product_states() == [
+        "PRE_WORK",
         "IN_WORK",
         "IN_REVIEW",
         "APPROVED",
@@ -33,8 +44,10 @@ def test_product_state_order_matches_common_pdm_plus_locked():
         "ARCHIVED",
         "LOCKED",
     ]
-    assert PRODUCT_STATE_LABELS[ProductState.IN_WORK.value] == "In Work"
-    assert PRODUCT_STATE_LABELS[ProductState.UNDER_CHANGE.value] == "Under Change"
+    labels = configured_product_state_labels()
+    assert labels[ProductState.PRE_WORK.value] == "Pre-Work"
+    assert labels[ProductState.IN_WORK.value] == "In Work"
+    assert labels[ProductState.UNDER_CHANGE.value] == "Under Change"
 
 
 def test_product_state_defaults_allow_mutation():
@@ -45,6 +58,13 @@ def test_product_state_defaults_allow_mutation():
     ensure_product_mutable(product)
     ensure_product_content_accessible(product)
     ensure_product_deletable(product)
+
+
+def test_pre_work_allows_mutation():
+    product = SimpleNamespace(uuid="p1", state=ProductState.PRE_WORK.value, read_only=False)
+    assert product_allows_mutation(product) is True
+    assert product_allows_content_access(product) is True
+    ensure_product_mutable(product, action="check out files")
 
 
 def test_under_change_allows_mutation():

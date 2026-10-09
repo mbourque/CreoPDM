@@ -46,9 +46,11 @@ class LifecycleState(StrEnum):
 class ProductState(StrEnum):
     """Product (project) lifecycle — separate from object LifecycleState.
 
-    Order matches Administration → Products dropdown (common PDM set, then Locked).
+    Order matches Administration → Products dropdown. New products default to IN_WORK
+    (not PRE_WORK).
     """
 
+    PRE_WORK = "PRE_WORK"
     IN_WORK = "IN_WORK"
     IN_REVIEW = "IN_REVIEW"
     APPROVED = "APPROVED"
@@ -61,6 +63,7 @@ class ProductState(StrEnum):
 
 
 PRODUCT_STATE_LABELS: dict[str, str] = {
+    ProductState.PRE_WORK.value: "Pre-Work",
     ProductState.IN_WORK.value: "In Work",
     ProductState.IN_REVIEW.value: "In Review",
     ProductState.APPROVED.value: "Approved",
@@ -73,6 +76,9 @@ PRODUCT_STATE_LABELS: dict[str, str] = {
 
 
 PRODUCT_STATE_DESCRIPTIONS: dict[str, str] = {
+    ProductState.PRE_WORK.value: (
+        "Unrestricted experimentation without formal review or revision controls."
+    ),
     ProductState.IN_WORK.value: "Being created or modified. Not approved.",
     ProductState.IN_REVIEW.value: "Submitted for engineering review.",
     ProductState.APPROVED.value: "Reviewed and approved but not necessarily released.",
@@ -92,8 +98,10 @@ PRODUCT_STATE_LEGACY_ALIASES: dict[str, str] = {
 
 
 # Engineering mutations (add / checkout / check-in / …) when not read_only.
+# Pre-Work / In Work / Under Change. New products still default to In Work.
 PRODUCT_MUTABLE_STATES: frozenset[str] = frozenset(
     {
+        ProductState.PRE_WORK.value,
         ProductState.IN_WORK.value,
         ProductState.UNDER_CHANGE.value,
     }

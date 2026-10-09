@@ -29,10 +29,7 @@ from creopdm.auth_session import (
 from creopdm.constants import (
     APP_NAME,
     APP_VERSION,
-    PRODUCT_STATE_DESCRIPTIONS,
-    PRODUCT_STATE_LABELS,
     ActivityAction,
-    ProductState,
 )
 from creopdm.context import AppContext
 from creopdm.exceptions import CreoPDMError
@@ -1914,6 +1911,20 @@ def admin_role_delete(
         )
 
 
+def _lifecycle_form_ctx() -> dict:
+    from creopdm.product_state import (
+        configured_product_state_descriptions,
+        configured_product_state_labels,
+        configured_product_states,
+    )
+
+    return {
+        "product_states": configured_product_states(),
+        "product_state_labels": configured_product_state_labels(),
+        "product_state_descriptions": configured_product_state_descriptions(),
+    }
+
+
 def _product_form(
     *,
     name: str = "",
@@ -1952,10 +1963,204 @@ def admin_products(request: Request, ctx: AppContext = Depends(get_context), db:
         {
             **_base_ctx(request, ctx, current_user=manager),
             "products": products,
-            "product_state_labels": PRODUCT_STATE_LABELS,
-            "product_state_descriptions": PRODUCT_STATE_DESCRIPTIONS,
+            **_lifecycle_form_ctx(),
         },
     )
+
+
+@router.get("/admin/lifecycle", response_class=HTMLResponse)
+def admin_lifecycle(request: Request, ctx: AppContext = Depends(get_context), db: Session = Depends(get_db)):
+    manager = _require_products_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    from creopdm.lifecycle_policy import LIFECYCLE_OPS, get_lifecycle_policy
+
+    policy = get_lifecycle_policy()
+    return templates.TemplateResponse(
+        request,
+        "admin_lifecycle.html",
+        {
+            **_base_ctx(request, ctx, current_user=manager),
+            "error": None,
+            "success": None,
+            "lifecycle_ops": LIFECYCLE_OPS,
+            "states": [
+                {
+                    "key": s.key,
+                    "label": s.label,
+                    "description": s.description,
+                    "order": s.order,
+                    "builtin": s.builtin,
+                    "permissions": {op: s.allows(op) for op, _ in LIFECYCLE_OPS},
+                }
+                for s in policy.ordered()
+            ],
+        },
+    )
+
+
+@router.post("/admin/lifecycle", response_class=HTMLResponse)
+async def admin_lifecycle_submit(
+    request: Request,
+    ctx: AppContext = Depends(get_context),
+    db: Session = Depends(get_db),
+):
+    manager = _require_products_manager(request, ctx, db)
+    if _is_blocked(manager):
+        return manager
+    from creopdm.config import LifecycleConfig
+    from creopdm.lifecycle_policy import (
+        LIFECYCLE_OP_KEYS,
+        LIFECYCLE_OPS,
+        default_lifecycle_state_dicts,
+        get_lifecycle_policy,
+        policy_from_dicts,
+        slugify_lifecycle_key,
+    )
+    from creopdm.models.product import Product
+    from sqlalchemy import func, select
+
+    form = await request.form()
+    action = str(form.get("action") or "save").strip()
+
+    def _render(*, error: str | None = None, success: str | None = None, status: int = 200):
+        policy = get_lifecycle_policy()
+        return templates.TemplateResponse(
+            request,
+            "admin_lifecycle.html",
+            {
+                **_base_ctx(request, ctx, current_user=manager),
+                "error": error,
+                "success": success,
+                "lifecycle_ops": LIFECYCLE_OPS,
+                "states": [
+                    {
+                        "key": s.key,
+                        "label": s.label,
+                        "description": s.description,
+                        "order": s.order,
+                        "builtin": s.builtin,
+                        "permissions": {op: s.allows(op) for op, _ in LIFECYCLE_OPS},
+                    }
+                    for s in policy.ordered()
+                ],
+            },
+            status_code=status,
+        )
+
+    try:
+        if action == "reset":
+            settings = ctx.settings.model_copy(deep=True)
+            settings.lifecycle = LifecycleConfig.model_validate(
+                {"states": default_lifecycle_state_dicts()}
+            )
+            ctx.config.save(settings)
+            ctx.settings = settings
+            return _render(success="Lifecycle states reset to CreoPDM defaults.")
+
+        if action == "add":
+            label = str(form.get("new_label") or "").strip()
+            description = str(form.get("new_description") or "").strip()
+            key = slugify_lifecycle_key(label)
+            policy = get_lifecycle_policy()
+            if key in policy.known_keys():
+                raise CreoPDMError(f'Lifecycle state "{key}" already exists.')
+            rows = policy.to_settings_dicts()
+            rows.append(
+                {
+                    "key": key,
+                    "label": label,
+                    "description": description,
+                    "order": max((r["order"] for r in rows), default=-1) + 1,
+                    "builtin": False,
+                    "permissions": {
+                        "view": True,
+                        "download": True,
+                        "checkout": False,
+                        "checkin": False,
+                        "remove": False,
+                        "edit_metadata": False,
+                        "rename": False,
+                        "change_state": True,
+                        "history": True,
+                    },
+                }
+            )
+            settings = ctx.settings.model_copy(deep=True)
+            settings.lifecycle = LifecycleConfig.model_validate(
+                {"states": policy_from_dicts(rows).to_settings_dicts()}
+            )
+            ctx.config.save(settings)
+            ctx.settings = settings
+            return _render(success=f'Added lifecycle state "{label}" ({key}).')
+
+        if action.startswith("delete:"):
+            key = action.split(":", 1)[1].strip().upper()
+            policy = get_lifecycle_policy()
+            state = policy.get(key)
+            if state is None:
+                raise CreoPDMError("That lifecycle state was not found.")
+            if state.builtin:
+                raise CreoPDMError("Built-in lifecycle states cannot be deleted.")
+            in_use = db.scalar(
+                select(func.count()).select_from(Product).where(Product.state == key)
+            ) or 0
+            if in_use:
+                raise CreoPDMError(
+                    f'Cannot delete "{state.label}": {in_use} product(s) still use that state. '
+                    "Change those products first."
+                )
+            rows = [r for r in policy.to_settings_dicts() if r["key"] != key]
+            settings = ctx.settings.model_copy(deep=True)
+            settings.lifecycle = LifecycleConfig.model_validate(
+                {"states": policy_from_dicts(rows).to_settings_dicts()}
+            )
+            ctx.config.save(settings)
+            ctx.settings = settings
+            return _render(success=f'Deleted lifecycle state "{state.label}".')
+
+        # save
+        try:
+            count = int(str(form.get("state_count") or "0"))
+        except ValueError:
+            count = 0
+        rows = []
+        for i in range(count):
+            key = str(form.get(f"key_{i}") or "").strip().upper()
+            if not key:
+                continue
+            try:
+                order = int(str(form.get(f"order_{i}") or i))
+            except ValueError:
+                order = i
+            label = str(form.get(f"label_{i}") or key).strip() or key
+            description = str(form.get(f"description_{i}") or "").strip()
+            builtin = str(form.get(f"builtin_{i}") or "") in {"1", "true", "on"}
+            perms = {
+                op: str(form.get(f"perm_{i}_{op}") or "") in {"1", "true", "on"}
+                for op in LIFECYCLE_OP_KEYS
+            }
+            rows.append(
+                {
+                    "key": key,
+                    "label": label,
+                    "description": description,
+                    "order": order,
+                    "builtin": builtin,
+                    "permissions": perms,
+                }
+            )
+        settings = ctx.settings.model_copy(deep=True)
+        settings.lifecycle = LifecycleConfig.model_validate(
+            {"states": policy_from_dicts(rows).to_settings_dicts()}
+        )
+        ctx.config.save(settings)
+        ctx.settings = settings
+        return _render(success="Lifecycle states saved.")
+    except CreoPDMError as exc:
+        return _render(error=exc.message, status=400)
+    except Exception as exc:  # noqa: BLE001 — surface validation to admin
+        return _render(error=str(exc), status=400)
 
 
 @router.get("/admin/products/new", response_class=HTMLResponse)
@@ -1972,9 +2177,7 @@ def admin_product_new(request: Request, ctx: AppContext = Depends(get_context), 
             "mode": "new",
             "form": _product_form(),
             "delete_error": None,
-            "product_states": list(ProductState),
-            "product_state_labels": PRODUCT_STATE_LABELS,
-            "product_state_descriptions": PRODUCT_STATE_DESCRIPTIONS,
+            **_lifecycle_form_ctx(),
         },
     )
 
@@ -2027,9 +2230,7 @@ def admin_product_create(
                 "mode": "new",
                 "form": form,
                 "delete_error": None,
-                "product_states": list(ProductState),
-                "product_state_labels": PRODUCT_STATE_LABELS,
-            "product_state_descriptions": PRODUCT_STATE_DESCRIPTIONS,
+                **_lifecycle_form_ctx(),
             },
             status_code=400,
         )
@@ -2068,9 +2269,7 @@ def admin_product_detail(
                 uuid=payload.uuid,
             ),
             "delete_error": None,
-            "product_states": list(ProductState),
-            "product_state_labels": PRODUCT_STATE_LABELS,
-            "product_state_descriptions": PRODUCT_STATE_DESCRIPTIONS,
+            **_lifecycle_form_ctx(),
         },
     )
 
@@ -2132,9 +2331,7 @@ def admin_product_update(
                 "mode": "edit",
                 "form": form,
                 "delete_error": None,
-                "product_states": list(ProductState),
-                "product_state_labels": PRODUCT_STATE_LABELS,
-            "product_state_descriptions": PRODUCT_STATE_DESCRIPTIONS,
+                **_lifecycle_form_ctx(),
             },
             status_code=400,
         )

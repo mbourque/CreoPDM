@@ -24,7 +24,11 @@ from creopdm.exceptions import (
     RepositoryError,
     ValidationAppError,
 )
-from creopdm.product_state import ensure_product_deletable, parse_product_state
+from creopdm.product_state import (
+    ensure_product_allows,
+    ensure_product_deletable,
+    parse_product_state,
+)
 from creopdm.utils.vault_folder import normalize_uuid_folder, validate_vault_folder
 from creopdm.logging_setup import get_logger
 from creopdm.models.checkout import Checkout
@@ -249,6 +253,9 @@ class ProductService:
         state_changed = new_state is not None and new_state != old_state
         read_only_changed = read_only is not None and bool(read_only) != old_read_only
         lifecycle_changed = state_changed or read_only_changed
+        if state_changed:
+            # Matrix ``change_state`` on the *current* state controls whether leaving it is allowed.
+            ensure_product_allows(product, "change_state", action="change lifecycle state")
 
         # State / read-only live in the DB only — do not touch the vault Git repo.
         # (A dirty vault with CAD files used to make "rename" commit fail on Save.)

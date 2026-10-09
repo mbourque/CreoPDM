@@ -849,6 +849,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (el.dataset.readOnly === "1") return "Read only";
     const key = String(el.dataset.productState || "").trim().toUpperCase();
     const labels = {
+      PRE_WORK: "Pre-Work",
       IN_WORK: "In Work",
       IN_REVIEW: "In Review",
       APPROVED: "Approved",
