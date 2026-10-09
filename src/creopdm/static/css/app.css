@@ -397,19 +397,26 @@ a.brand:hover { text-decoration: none; color: inherit; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Lifecycle permission matrix: vertical stripes so op columns stay readable. */
-.lifecycle-matrix th:nth-child(odd),
-.lifecycle-matrix td:nth-child(odd) {
-  background: #ffffff;
-}
-.lifecycle-matrix th:nth-child(even),
-.lifecycle-matrix td:nth-child(even) {
-  background: #e8eef4;
-}
+/* Lifecycle matrix: stripe + center only the permission checkbox columns. */
 .lifecycle-matrix th.col-op,
 .lifecycle-matrix td.col-op {
   text-align: center;
   vertical-align: middle;
+}
+.lifecycle-matrix th.col-op:nth-child(even),
+.lifecycle-matrix td.col-op:nth-child(even) {
+  background: #e8eef4;
+}
+.lifecycle-matrix th.col-op:nth-child(odd),
+.lifecycle-matrix td.col-op:nth-child(odd) {
+  background: #f7fafc;
+}
+.lifecycle-matrix td.col-op .choice {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0;
+  width: 100%;
 }
 .lifecycle-matrix th.col-op {
   font-size: 0.75rem;

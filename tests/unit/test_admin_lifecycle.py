@@ -41,6 +41,8 @@ def test_admin_lifecycle_page_lists_matrix(auth_client, auth_ctx):
     assert "Pre-Work" in page.text
     assert "Check Out" in page.text
     assert 'class="data-table lifecycle-matrix"' in page.text
+    assert "· built-in" not in page.text
+    assert "IN_WORK ·" not in page.text
     css = (
         Path(__file__).resolve().parents[2]
         / "src"
@@ -49,7 +51,7 @@ def test_admin_lifecycle_page_lists_matrix(auth_client, auth_ctx):
         / "css"
         / "app.css"
     ).read_text(encoding="utf-8")
-    assert ".lifecycle-matrix th:nth-child(even)" in css
+    assert ".lifecycle-matrix th.col-op:nth-child(even)" in css
     hub = auth_client.get("/admin")
     assert hub.status_code == 200
     assert 'href="/admin/lifecycle"' in hub.text
@@ -126,6 +128,7 @@ def test_admin_lifecycle_add_custom_state_appears_on_product_form(auth_client, a
     assert added.status_code == 200, added.text
     assert "Lab Trial" in added.text
     assert "LAB_TRIAL" in get_lifecycle_policy().known_keys()
+    assert "LAB_TRIAL" in added.text and "· custom" in added.text
 
     form = auth_client.get("/admin/products/new")
     assert form.status_code == 200, form.text

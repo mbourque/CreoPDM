@@ -46,7 +46,9 @@
               </td>
               <td>
                 <input name="label_{{ state_i }}" type="text" value="{{ st.label }}" required maxlength="64" style="min-width:8rem">
-                <div class="muted small"><code>{{ st.key }}</code>{% if st.builtin %} · built-in{% endif %}</div>
+                {% if not st.builtin %}
+                <div class="muted small"><code>{{ st.key }}</code> · custom</div>
+                {% endif %}
               </td>
               <td>
                 <input name="description_{{ state_i }}" type="text" value="{{ st.description }}" maxlength="256" style="min-width:12rem">
