@@ -1123,7 +1123,11 @@ def test_admin_ai_settings_gate(auth_client, auth_ctx):
     assert "Enable AI features" in page.text
     admin_hub = auth_client.get("/admin")
     assert admin_hub.status_code == 200
-    assert 'href="/settings/ai"' in admin_hub.text
+    assert 'href="/settings/ai"' not in admin_hub.text
+    assert ">AI</a>" not in admin_hub.text
+    settings_hub = auth_client.get("/settings")
+    assert settings_hub.status_code == 200
+    assert 'href="/settings/ai"' in settings_hub.text
 
     saved = auth_client.put(
         "/api/settings",

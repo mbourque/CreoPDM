@@ -2252,11 +2252,10 @@ def test_admin_hub_panel_fills_full_width():
     assert 'class="admin-tile is-disabled"' not in admin
     assert ">Audit</span>" not in admin
     assert "Coming soon: review sign-ins" not in admin
-    assert 'href="/settings/ai"' in admin
-    assert ">AI</a>" in admin
-    assert "can_manage_ai" in admin
+    assert 'href="/settings/ai"' not in admin
+    assert ">AI</a>" not in admin
     assert "Coming soon: configure AI help" not in admin
-    assert "Ollama host URL and model" in admin
+    assert "database, AI, and more" in admin
     assert "Audit log" in admin
     assert ".admin-tile.is-disabled" in css
     utilities = (ROOT / "src" / "creopdm" / "templates" / "admin_utilities.html").read_text(

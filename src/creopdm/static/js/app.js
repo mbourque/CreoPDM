@@ -10118,7 +10118,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     btn.disabled = !canAsk || !canGatherCreoMetadata();
     const large = candidates.length > 8;
     btn.title = !aiOn
-      ? "AI features are turned off under Administration → AI"
+      ? "AI features are turned off under System Settings → AI"
       : !canAsk
         ? "Ask AI for comment needs at least one modified Creo model in this check-in"
         : !canGatherCreoMetadata()
@@ -10389,7 +10389,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!aiFeaturesEnabled()) {
       showError(
         $("#checkin-error"),
-        "AI features are turned off. Open Administration → AI, check Enable AI features, and Save."
+        "AI features are turned off. Open System Settings → AI, check Enable AI features, and Save."
       );
       return;
     }
@@ -13350,7 +13350,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!aiFeaturesEnabled()) {
       showError(
         $("#toolbar-error"),
-        "AI features are turned off. Open Administration → AI, check Enable AI features, and Save."
+        "AI features are turned off. Open System Settings → AI, check Enable AI features, and Save."
       );
       return;
     }

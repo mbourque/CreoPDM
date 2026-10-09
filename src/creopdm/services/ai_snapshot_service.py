@@ -341,13 +341,13 @@ class AiSnapshotService:
     ) -> AiSnapshotCompareResponse:
         if not bool(settings.ai.enabled):
             raise ValidationAppError(
-                "AI features are turned off. Open Administration → AI, "
+                "AI features are turned off. Open System Settings → AI, "
                 "check Enable AI features, and Save."
             )
         model = str(settings.ai.ollama_model or "").strip()
         if not model:
             raise ValidationAppError(
-                "No Ollama model selected. Open Administration → AI, Refresh models, choose a model, and Save."
+                "No Ollama model selected. Open System Settings → AI, Refresh models, choose a model, and Save."
             )
         # One prompt path for Modifications Ask AI and Check In Ask AI
         # (parts, assemblies, drawings) — prepare lives inside build_*.
@@ -463,13 +463,13 @@ class AiSnapshotService:
         """Turn per-file Ask AI notes into one shared check-in comment."""
         if not bool(settings.ai.enabled):
             raise ValidationAppError(
-                "AI features are turned off. Open Administration → AI, "
+                "AI features are turned off. Open System Settings → AI, "
                 "check Enable AI features, and Save."
             )
         model = str(settings.ai.ollama_model or "").strip()
         if not model:
             raise ValidationAppError(
-                "No Ollama model selected. Open Administration → AI, Refresh models, "
+                "No Ollama model selected. Open System Settings → AI, Refresh models, "
                 "choose a model, and Save."
             )
         cleaned: list[dict[str, str]] = []

@@ -1,4 +1,4 @@
-"""Alembic migration: add settings.ai for Administration → AI.
+"""Alembic migration: add settings.ai for System Settings → AI.
 
 Revision ID: 032_settings_ai
 Revises: 031_ai_snapshots

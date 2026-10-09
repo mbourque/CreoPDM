@@ -90,7 +90,7 @@ def chat_ollama(
     model_name = str(model or "").strip()
     if not model_name:
         raise ValidationAppError(
-            "No Ollama model selected. Open Administration → AI, Refresh models, choose a model, and Save."
+            "No Ollama model selected. Open System Settings → AI, Refresh models, choose a model, and Save."
         )
     if not messages:
         raise ValidationAppError("Ollama chat requires at least one message.")

@@ -41,11 +41,11 @@ _KEEP_ZERO_PARAMS = _DRAWING_SYNTHETIC_PARAMS
 
 
 def resolve_snapshot_compare_prompt(saved: str | None) -> str:
-    """Require the Administration → AI snapshot compare prompt (no code fallback)."""
+    """Require the System Settings → AI snapshot compare prompt (no code fallback)."""
     text = str(saved or "").strip()
     if not text:
         raise ValidationAppError(
-            "No snapshot compare prompt is saved. Open Administration → AI, "
+            "No snapshot compare prompt is saved. Open System Settings → AI, "
             "paste your prompt, and Save."
         )
     return text
@@ -809,7 +809,7 @@ def format_snapshot_compare_diff_text(
         feat_removed = []
         feat_added = []
 
-    # Diff facts only — narrative instructions live in Administration → AI prompt.
+    # Diff facts only — narrative instructions live in System Settings → AI prompt.
     lines = ["=== Computed differences ==="]
     if has_structure:
         lines.extend(_bullet_block("Components removed", comp_removed))
@@ -1261,7 +1261,7 @@ def build_snapshot_compare_user_prompt(
     newer_text = format_snapshot_compare_text(newer_prepared)
     diff_text = format_snapshot_compare_diff_text(older_prepared, newer_prepared)
     # Labeled facts only. All narrative / cite rules live in the saved
-    # Administration → AI snapshot compare prompt (system message).
+    # System Settings → AI snapshot compare prompt (system message).
     return (
         f"=== OLD snapshot ({older_label}) ===\n"
         f"{older_text}\n\n"

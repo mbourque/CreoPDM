@@ -553,7 +553,7 @@ def test_snapshot_compare_prompt_requires_saved_text():
     assert "=== OLD snapshot (A.1) ===" in user
     assert "=== NEW snapshot (A.2) ===" in user
     assert "=== Computed differences ===" in user
-    # Narrative rules belong in Administration → AI prompt, not this user message.
+    # Narrative rules belong in System Settings → AI prompt, not this user message.
     assert "Do not swap them" not in user
     assert "following your instructions" not in user
     assert "Never claim a revision is missing" not in user

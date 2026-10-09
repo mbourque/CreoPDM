@@ -388,7 +388,7 @@ class AiConfig(BaseModel):
     enabled: bool = True
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = ""
-    # Editable on Administration → AI only (no code seed / reset).
+    # Editable on System Settings → AI only (no code seed / reset).
     snapshot_compare_prompt: str = ""
 
     @field_validator("ollama_base_url")

@@ -664,7 +664,7 @@ Do not hard-code these as universally required parameters.
 
 Administration → Email (`email.manage`) stores delivery settings in `settings.json`. Choose **Local Postfix** (`127.0.0.1:25`, no auth) or **Authenticated SMTP** (provider host, typically port 587 + TLS + username/app password). Also set From address / display name, administrator email, and use **Send test email** after saving. Application code sends only through `EmailService` / `NotificationService`. When email is enabled, users can watch products (Files title-row bell) and receive `PRODUCT_ACTIVITY` summaries for adds, removes, checkout, check-in, restore, and product updates.
 
-Administration → AI (`settings.ai`) configures Ollama host URL, model, **Enable AI features**, and the snapshot compare prompt. Administrator gets this by default (same as other CreoPDM Administration caps). `settings.manage` alone does not open or change AI settings.
+System Settings → AI (`settings.ai`) configures Ollama host URL, model, **Enable AI features**, and the snapshot compare prompt. Administrator gets this by default (same as other CreoPDM Administration caps). The AI tile lives only under the System Settings hub (not a separate Administration tile). `settings.manage` alone does not open or change AI settings.
 
 ---
 
