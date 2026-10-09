@@ -424,3 +424,67 @@ def test_top_level_assemblies_pill_wired_in_ui():
     assert "current folder only" in docs
     assert "turn **off** every other pill" in docs
     assert "Where Used" in docs
+
+
+def test_rebuild_where_used_links_same_named_drawing_to_part(
+    data_dir, identity: StaticUserProvider
+):
+    """Part + drawing share a Creo name — Where Used on the part must list the .drw.
+
+    Drawings store the model as a bare stem; unique_stems_only used to drop that
+    stem when peers were ``shaft.prt`` + ``shaft.drw``.
+    """
+    from sqlalchemy import select
+
+    ctx = build_context(ConfigManager(), users=identity)
+    vault = ctx.config.workspace_for_product("drw-wu")
+    vault.mkdir(parents=True, exist_ok=True)
+    (vault / "shaft.prt").write_bytes(b"prt body")
+    # Creo drawing tip: bare model name with null boundaries (no .prt suffix).
+    (vault / "shaft.drw").write_bytes(b"\x00shaft\x00drawing\x00")
+
+    with ctx.session_factory() as db:
+        product = Product(
+            uuid="prod-drw-wu",
+            name="DrwWU",
+            vault_folder="drw-wu",
+            repository_path=str(vault),
+            default_branch="main",
+        )
+        db.add(product)
+        db.flush()
+        part = _obj(
+            product.id,
+            filename="shaft.prt",
+            object_type="CREO_PART",
+            uuid="prt-shaft",
+        )
+        drawing = _obj(
+            product.id,
+            filename="shaft.drw",
+            object_type="CREO_DRAWING",
+            uuid="drw-shaft",
+        )
+        db.add_all([part, drawing])
+        db.commit()
+        product_uuid = product.uuid
+        product_id = product.id
+        part_id = part.id
+        drawing_id = drawing.id
+
+        ctx.metadata.rebuild_where_used_from_vault(db, product_uuid, offset=0, limit=40)
+        db.commit()
+        edges = list(
+            db.scalars(select(Dependency).where(Dependency.product_id == product_id))
+        )
+        assert any(
+            edge.parent_object_id == drawing_id
+            and edge.child_object_id == part_id
+            and edge.dependency_type == DependencyType.DRAWING_MODEL.value
+            for edge in edges
+        ), edges
+
+        where = ctx.metadata.where_used(db, "prt-shaft", vault_scan=False)
+        assert len(where.items) == 1
+        assert where.items[0].object_id == "drw-shaft"
+        assert where.items[0].dependency_type == DependencyType.DRAWING_MODEL.value

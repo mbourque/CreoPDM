@@ -564,13 +564,22 @@ class MetadataService:
                         debug_vault.append(entry)
                     if not matched:
                         continue
+                    parent_suffix = Path(
+                        CreoFileManager.normalize_creo_filename(other.filename)
+                    ).suffix.lower()
+                    dep_type = (
+                        DependencyType.DRAWING_MODEL.value
+                        if parent_suffix == ".drw"
+                        or (other.object_type or "").upper() == _DRAWING_PARENT
+                        else DependencyType.ASSEMBLY_MEMBER.value
+                    )
                     items_by_parent[other.uuid] = WhereUsedItem(
                         object_id=other.uuid,
                         filename=other.filename,
                         relative_path=other.relative_path,
                         display_revision=f"{other.revision}.{other.iteration}",
                         quantity=1.0,
-                        dependency_type=DependencyType.ASSEMBLY_MEMBER.value,
+                        dependency_type=dep_type,
                         object_type=other.object_type,
                         type_label=display_type_label(other.filename, other.object_type),
                     )

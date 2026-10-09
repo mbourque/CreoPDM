@@ -181,12 +181,27 @@ def logical_name_in_model(path: Path, filename: str) -> bool:
 
 
 def model_references_filename(path: Path, filename: str) -> bool:
-    """True when the vault Creo file mentions this model as ``name.ext``.
+    """True when the vault Creo file mentions this model.
 
-    Used for Where Used when Creo.JS BOM metadata was never captured. Stem-only
-    hits are ignored — they false-positive Top Level / Where Used.
+    Prefers bounded ``name.ext``. For parts/assemblies, also accepts a bounded
+    bare stem — drawings (and many assemblies) store extensionless model names.
+    Stem hits still require Creo name boundaries (no glued substrings).
     """
-    return logical_name_in_model(path, filename)
+    if logical_name_in_model(path, filename):
+        return True
+    logical = CreoFileManager.normalize_creo_filename(filename).lower()
+    if not logical or "." not in logical:
+        return False
+    suffix = Path(logical).suffix.lower()
+    if suffix not in {".prt", ".asm"}:
+        return False
+    stem = Path(logical).stem.lower()
+    # Align with Rebuild Where Used ``min_stem_len=4`` + datum blocklist.
+    if len(stem) < 4 or stem in _WHERE_USED_STEM_BLOCKLIST:
+        return False
+    token = stem.encode("ascii", "ignore")
+    lower = read_model_scan_blob(path)
+    return bool(lower) and find_bounded_token(lower, token)
 
 
 _MAX_OPEN_DEPENDENCY_POOL = 40

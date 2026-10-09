@@ -86,6 +86,25 @@ def test_matcher_prefers_asm_when_part_and_asm_share_stem():
     assert matcher.find(b"\x00shaft.prt\x00") == {"shaft.prt"}
 
 
+def test_matcher_maps_bare_stem_to_part_when_only_drawing_shares_name():
+    """Regression: part+drawing same name — Where Used on the part must see the .drw.
+
+    Creo drawings store the model as a bare name. unique_stems_only used to drop
+    the stem entirely when peers were ``shaft.prt`` + ``shaft.drw`` (no .asm).
+    """
+    matcher = CadNameMatcher(
+        ["shaft.prt", "shaft.drw", "other.prt"],
+        include_stems=True,
+        require_boundaries=True,
+        min_stem_len=4,
+        unique_stems_only=True,
+    )
+    assert matcher.find(b"\x00shaft\x00") == {"shaft.prt"}
+    assert matcher.find(b"\x00shaft.prt\x00") == {"shaft.prt"}
+    assert matcher.find(b"\x00shaft.drw\x00") == {"shaft.drw"}
+    assert matcher.find(b"\x00other\x00") == {"other.prt"}
+
+
 
 def test_matcher_with_stems_still_finds_extensionless_for_open():
     matcher = CadNameMatcher(["pin.prt", "Bracket.ASM"], include_stems=True)
@@ -97,13 +116,25 @@ def test_matcher_with_stems_still_finds_extensionless_for_open():
 def test_logical_name_in_model_requires_extension(tmp_path: Path):
     asm = tmp_path / "parent.asm"
     asm.write_bytes(b"noise 1003573 more noise")
+    # Extension-only helper stays strict; live Where Used also accepts bare stems.
     assert logical_name_in_model(asm, "1003573.asm") is False
-    assert model_references_filename(asm, "1003573.asm") is False
+    assert model_references_filename(asm, "1003573.asm") is True
     asm.write_bytes(b"member 1003573.asm here")
     assert logical_name_in_model(asm, "1003573.asm") is True
     assert model_references_filename(asm, "1003573.asm") is True
     asm.write_bytes(b"glued x1003573.asm end")
     assert logical_name_in_model(asm, "1003573.asm") is False
+    assert model_references_filename(asm, "1003573.asm") is False
+
+
+def test_model_references_filename_accepts_bounded_bare_stem_for_parts(tmp_path: Path):
+    """Live Where Used vault scan: drawings embed bare part names."""
+    drw = tmp_path / "shaft.drw"
+    drw.write_bytes(b"\x00shaft\x00drawing header\x00")
+    assert model_references_filename(drw, "shaft.prt") is True
+    assert logical_name_in_model(drw, "shaft.prt") is False
+    drw.write_bytes(b"\x00xshaft\x00")  # glued — must not match
+    assert model_references_filename(drw, "shaft.prt") is False
 
 
 def test_rebuild_clears_membership_edges_before_reindex():

@@ -101,7 +101,19 @@ class CadNameMatcher:
                     if unique_stems_only and len(peers) > 1:
                         # Prefer the sole .asm when part+asm share a Creo name.
                         asms = [row for row in peers if Path(row).suffix == ".asm"]
-                        allow_stem = len(asms) == 1 and asms[0] == logical
+                        if len(asms) == 1:
+                            allow_stem = asms[0] == logical
+                        else:
+                            # Part + drawing share a name (very common). Drawings
+                            # embed the bare model name — map that stem to the
+                            # solid (.prt/.asm), not the .drw, or Where Used on
+                            # the part never lists its drawing.
+                            solids = [
+                                row
+                                for row in peers
+                                if Path(row).suffix in {".prt", ".asm"}
+                            ]
+                            allow_stem = len(solids) == 1 and solids[0] == logical
                     if allow_stem:
                         tokens.add(stem.encode("ascii", "ignore"))
             for token in tokens:
