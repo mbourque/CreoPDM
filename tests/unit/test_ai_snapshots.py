@@ -307,13 +307,11 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "resolveNewerLocalCacheSaves" in mod_fn
     assert "loadCheckinQueueParts" in mod_fn
     assert "checkinQueueHitForObject" in mod_fn
-    assert "probe=compare-mod-purgeable" in mod_fn
-    assert "purgeableHasPrt=" in mod_fn
-    assert "return { modified:" in mod_fn or "modified: Boolean(modified)" in mod_fn
     assert "function checkinQueueHitForObject(" in script
     assert "function listAgentCacheFilesPreferringVault(" in script
     assert "function vaultTipSaveNumber(" in script
     assert "function defaultPurgeableExtensionSet(" in script
+    assert "defaultPurgeableExtensionSet" in mod_fn or "body data-purgeable" in mod_fn
     # Details has no #metric-filters — body/defaults must still recognize .prt.2.
     purge_fn = script.split("function purgeableExtensionSet(", 1)[1].split(
         "function isPurgeableVersionedExtension(", 1
@@ -334,7 +332,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "data-product-id=" in detail_html
     assert "data-vault-folder=" in detail_html
     base_html = BASE_HTML.read_text(encoding="utf-8")
-    assert "compare-mod-purgeable" in base_html
+    assert "compare-mod-clean" in base_html
     assert 'data-purgeable=' in base_html
     assert "function clearAiSnapshotPanelModified(" in script
     assert "function waitForCreoAgentReady(" in script
@@ -348,11 +346,14 @@ def test_app_js_posts_ai_snapshot_soft_fail():
         "async function renderAiSnapshotCompare(", 1
     )[0]
     assert "await refreshAiSnapshotPanelModifiedFlag(panel)" in pending_fn2
-    assert "aiSnapshotPendingCleanPlaceholder(modDebug)" in pending_fn2
+    assert "aiSnapshotPendingCleanPlaceholder()" in pending_fn2
     assert "if (!isModified)" in pending_fn2
     assert "pinned tip History snap" in pending_fn2
-    assert "--- Compare Modified probe" in script
-    assert "ai-snapshot-placeholder-debug" in script
+    assert "--- Compare Modified probe" not in script
+    assert "ai-snapshot-placeholder-debug" not in script
+    assert "ai-snapshot-placeholder-debug" not in (
+        (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    )
     assert "vaultFolderOverride" in script.split(
         "async function resolveNewerLocalCacheSaves(", 1
     )[1].split("async function countLocalNewWorkspaceFiles(", 1)[0]

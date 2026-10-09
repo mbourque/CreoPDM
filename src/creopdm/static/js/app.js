@@ -12589,38 +12589,20 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     body.replaceChildren();
     const box = document.createElement("div");
     box.className = "ai-snapshot-placeholder";
-    const text = String(message || "");
-    box.textContent = text;
-    // Probe dump is easier to read left-aligned.
-    if (text.includes("--- Compare Modified probe")) {
-      box.classList.add("ai-snapshot-placeholder-debug");
-    }
+    box.textContent = String(message || "");
     body.appendChild(box);
     if (copyBtn) {
       copyBtn.disabled = true;
-      // Allow Copy of the probe dump even when there is no live outline.
-      if (text.includes("--- Compare Modified probe")) {
-        copyBtn.disabled = false;
-        copyBtn.dataset.copyText = text;
-      } else {
-        delete copyBtn.dataset.copyText;
-      }
+      delete copyBtn.dataset.copyText;
     }
   }
 
-  function aiSnapshotPendingCleanPlaceholder(debugLines) {
-    const base =
+  function aiSnapshotPendingCleanPlaceholder() {
+    return (
       "No unchecked-in changes to compare.\n\n"
       + "When this model is Modified, the right pane shows a live outline from Creo "
       + "(or the local tip) — the same gather Check In → Ask AI uses — "
-      + "without writing a History revision.";
-    const lines = Array.isArray(debugLines)
-      ? debugLines.map((line) => String(line || "").trim()).filter(Boolean)
-      : [];
-    if (!lines.length) return base;
-    return (
-      `${base}\n\n--- Compare Modified probe (paste this) ---\n`
-      + lines.join("\n")
+      + "without writing a History revision."
     );
   }
 
@@ -12841,57 +12823,30 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
      * Detect the same tip Files → Modified shows as "Newer local save"
      * (e.g. base-plate.prt.2). Prefer a higher Creo .N on disk; also hash
      * mismatch and vault checkin-queue. null from listAgentCacheFiles is not clean.
-     * Returns { modified, debug } — debug lines go in the clean placeholder.
+     * Details relies on body data-purgeable / defaultPurgeableExtensionSet so
+     * creoSaveNumber recognizes .prt.2 without #metric-filters.
      */
-    const debug = ["probe=compare-mod-purgeable"];
-    const done = (modified, reason) => {
-      debug.push(`result=${modified ? "modified" : "clean"}`);
-      if (reason) debug.push(`reason=${reason}`);
-      return { modified: Boolean(modified), debug: [...debug] };
-    };
-    if (!panel) return done(false, "no-panel");
+    if (!panel) return false;
     const objectId = String(panel.dataset.objectId || "").trim();
-    if (!objectId) return done(false, "no-object-id");
+    if (!objectId) return false;
     const productId = aiSnapshotPanelProductId(panel);
-    debug.push(`objectId=${objectId}`);
-    debug.push(`productId=${productId || "(empty)"}`);
-    debug.push(`panelFilename=${panel.dataset.filename || ""}`);
-    debug.push(`panelRel=${panel.dataset.relativePath || ""}`);
-    debug.push(
-      `ssrPending=${panel.getAttribute("data-workspace-pending") || "0"}`
-    );
-    debug.push(
-      `purgeableHasPrt=${purgeableExtensionSet().has(".prt") ? "1" : "0"}`
-    );
-    debug.push(
-      `creoSavePrt2=${creoSaveNumber("base-plate.prt.2")}`
-    );
     if (!productId) {
       clearAiSnapshotPanelModified(panel);
-      return done(false, "no-product-id");
+      return false;
     }
     const openWs = $("#open-workspace-btn");
     const panelVault = aiSnapshotPanelVaultFolder(panel);
-    debug.push(`panelVault=${panelVault || "(empty)"}`);
-    debug.push(`pageVault=${currentVaultFolder() || "(empty)"}`);
     if (openWs && panelVault) openWs.dataset.vaultFolder = panelVault;
     const wasPending = pendingCheckinIds.has(objectId);
     const stickyPending =
       wasPending || panel.getAttribute("data-workspace-pending") === "1";
-    debug.push(`wasPending=${wasPending ? "1" : "0"}`);
-    debug.push(`stickyPending=${stickyPending ? "1" : "0"}`);
     const cachedHit = checkinQueueHitForObject(productId, objectId);
     if (cachedHit) {
-      debug.push(
-        `cacheHit=${cachedHit.filename || cachedHit.uuid || "yes"}`
-      );
       markAiSnapshotPanelModified(panel, cachedHit);
       rememberPendingCheckinIds([objectId], { merge: true });
-      return done(true, "checkin-queue-cache");
+      return true;
     }
-    debug.push("cacheHit=no");
-    const agentReady = await waitForCreoAgentReady();
-    debug.push(`agentReady=${agentReady ? "1" : "0"}`);
+    await waitForCreoAgentReady();
 
     // Direct agent tip probe first — same leaf Modified tab lists.
     let agentListed = false;
@@ -12904,22 +12859,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       agentListed = Boolean(listed.listed);
       workingVault = listed.vaultFolder || panelVault;
       const cacheFiles = Array.isArray(listed.files) ? listed.files : [];
-      debug.push(`agentListed=${agentListed ? "1" : "0"}`);
-      debug.push(`workingVault=${workingVault || "(empty)"}`);
-      debug.push(`cacheFiles=${cacheFiles.length}`);
-      const sample = cacheFiles
-        .slice(0, 8)
-        .map((item) => item.filename || item.relative_path || "?")
-        .join(", ");
-      if (sample) debug.push(`cacheSample=${sample}`);
       const objects = await ensureProductObjects(productId, { force: true });
-      debug.push(`objects=${Array.isArray(objects) ? objects.length : 0}`);
       const obj = (objects || []).find(
         (row) => String(row?.uuid || "") === objectId
-      );
-      debug.push(
-        `objInProduct=${obj ? "1" : "0"} filename=${obj?.filename || ""} `
-          + `rel=${obj?.relative_path || ""}`
       );
       const latest = latestLocalCacheTipForObject(
         cacheFiles,
@@ -12928,77 +12870,58 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       );
       if (latest) {
         const vaultNumber = vaultTipSaveNumber(obj);
-        debug.push(
-          `latestTip=${latest.filename || ""} save=${latest.saveNumber} `
-            + `vaultSave=${vaultNumber}`
-        );
         // Higher on-disk .N than the checked-in tip (base-plate.prt.2) → live NEW.
         if (latest.saveNumber > vaultNumber) {
           markAiSnapshotPanelModified(panel, latest);
           rememberPendingCheckinIds([objectId], { merge: true });
-          return done(true, "higher-local-N");
+          return true;
         }
-        debug.push("higherLocalN=no");
-      } else {
-        debug.push("latestTip=(none)");
       }
-      const newerRows = await resolveNewerLocalCacheSaves(
-        cacheFiles,
-        objects,
-        productId,
-        workingVault
-      );
-      debug.push(`newerLocalCount=${newerRows.length}`);
-      const newer = newerRows.find(
-        (item) => String(item?.uuid || "") === objectId
-      );
+      const newer = (
+        await resolveNewerLocalCacheSaves(
+          cacheFiles,
+          objects,
+          productId,
+          workingVault
+        )
+      ).find((item) => String(item?.uuid || "") === objectId);
       if (newer) {
-        debug.push(`newerLocalHit=${newer.filename || newer.uuid}`);
         markAiSnapshotPanelModified(panel, newer);
         rememberPendingCheckinIds([objectId], { merge: true });
-        return done(true, "newer-local-hash");
+        return true;
       }
-      debug.push("newerLocalHit=no");
-    } catch (err) {
-      debug.push(`agentProbeError=${err?.message || err || "error"}`);
+    } catch {
+      /* agent optional */
     }
 
     try {
       const parts = await loadCheckinQueueParts(productId, workingVault);
-      const saves = parts.saves || [];
-      const newerLocal = parts.newerLocal || [];
-      debug.push(
-        `queueSaves=${saves.length} queueNewerLocal=${newerLocal.length} `
-          + `queueAgentListed=${parts.agentListed ? "1" : "0"}`
-      );
-      const hit = [...saves, ...newerLocal].find(
+      const hit = [...(parts.saves || []), ...(parts.newerLocal || [])].find(
         (item) => String(item?.uuid || "") === objectId
       );
       if (hit) {
-        debug.push(`queueHit=${hit.filename || hit.uuid}`);
         markAiSnapshotPanelModified(panel, hit);
         rememberPendingCheckinIds([objectId], { merge: true });
-        return done(true, "checkin-queue");
+        return true;
       }
-      debug.push("queueHit=no");
       if (parts.agentListed || agentListed) {
         clearAiSnapshotPanelModified(panel);
-        return done(false, "queue-miss-agent-listed");
+        return false;
       }
-    } catch (err) {
-      debug.push(`queueError=${err?.message || err || "error"}`);
+    } catch {
+      /* queue optional */
     }
 
     if (agentListed) {
       clearAiSnapshotPanelModified(panel);
-      return done(false, "agent-listed-no-tip");
+      return false;
     }
     if (stickyPending) {
       markAiSnapshotPanelModified(panel);
-      return done(true, "sticky-pending");
+      return true;
     }
     clearAiSnapshotPanelModified(panel);
-    return done(false, "no-signal");
+    return false;
   }
 
   async function renderAiSnapshotPending(objectId) {
@@ -13071,23 +12994,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
     // Re-probe Modified every open — sticky SSR / session gather must not fake dirtiness.
     let isModified = false;
-    let modDebug = [];
     try {
-      const mod = await refreshAiSnapshotPanelModifiedFlag(panel);
-      if (mod && typeof mod === "object") {
-        isModified = Boolean(mod.modified);
-        modDebug = Array.isArray(mod.debug) ? mod.debug : [];
-      } else {
-        isModified = Boolean(mod);
-      }
-    } catch (err) {
+      isModified = await refreshAiSnapshotPanelModifiedFlag(panel);
+    } catch {
       isModified = false;
-      modDebug = [
-        "probe=compare-mod-purgeable",
-        `result=clean`,
-        `reason=probe-threw`,
-        `error=${err?.message || err || "error"}`,
-      ];
     }
 
     if (!isModified) {
@@ -13095,7 +13005,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       setAiSnapshotPendingPlaceholder(
         bodyB,
         copyB,
-        aiSnapshotPendingCleanPlaceholder(modDebug)
+        aiSnapshotPendingCleanPlaceholder()
       );
       return;
     }
