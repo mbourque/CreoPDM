@@ -314,9 +314,12 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "data-product-id=" in detail_html
     assert "data-vault-folder=" in detail_html
     base_html = BASE_HTML.read_text(encoding="utf-8")
-    assert "compare-tip-clean" in base_html
+    assert "compare-mod-probe" in base_html
     assert "function clearAiSnapshotPanelModified(" in script
-    assert "Always re-probe" in script
+    assert "function waitForCreoAgentReady(" in script
+    assert "wasPending" in script.split(
+        "async function refreshAiSnapshotPanelModifiedFlag(", 1
+    )[1].split("async function renderAiSnapshotPending(", 1)[0]
     assert "data-tip-version" in script.split("function fillAiSnapshotPendingSelects(", 1)[1].split(
         "function setAiSnapshotPendingPlaceholder(", 1
     )[0]
@@ -326,6 +329,9 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "await refreshAiSnapshotPanelModifiedFlag(panel)" in pending_fn2
     assert "if (!isModified)" in pending_fn2
     assert "pinned tip History snap" in pending_fn2
+    assert "vaultFolderOverride" in script.split(
+        "async function resolveNewerLocalCacheSaves(", 1
+    )[1].split("async function countLocalNewWorkspaceFiles(", 1)[0]
     assert 'type: "same"' in script
     assert 'type: "removed"' in script
     assert 'type: "added"' in script

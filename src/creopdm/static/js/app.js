@@ -7814,7 +7814,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   /** SHA-256 selected local cache paths (for same-size content-replace detection). */
-  async function hashAgentCachePaths(productId, relativePaths) {
+  async function hashAgentCachePaths(productId, relativePaths, vaultFolderOverride) {
     const paths = [
       ...new Set(
         (relativePaths || [])
@@ -7826,12 +7826,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!productId || !paths.length) return byPath;
     const agent = await probeCreoAgent();
     if (!agent) return byPath;
+    const vaultFolder =
+      String(vaultFolderOverride || "").trim() || currentVaultFolder();
     const response = await fetch(`${agentBase()}/hash-paths`, {
       method: "POST",
       headers: agentAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         product_id: productId,
-        vault_folder: currentVaultFolder(),
+        vault_folder: vaultFolder,
         relative_paths: paths,
       }),
     });
@@ -8273,7 +8275,12 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return { rows, needsHash };
   }
 
-  async function resolveNewerLocalCacheSaves(cacheFiles, objects, productId) {
+  async function resolveNewerLocalCacheSaves(
+    cacheFiles,
+    objects,
+    productId,
+    vaultFolderOverride
+  ) {
     const planned = newerLocalCacheSaves(cacheFiles, objects);
     const rows = [...(planned.rows || [])];
     const pending = planned.needsHash || [];
@@ -8297,7 +8304,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     try {
       const hashes = await hashAgentCachePaths(
         productId,
-        needHashPaths.map((item) => item.rel)
+        needHashPaths.map((item) => item.rel),
+        vaultFolderOverride
       );
       needHashPaths.forEach((item) => {
         const localHash = hashes.get(String(item.rel || "").toLowerCase()) || "";
@@ -12697,11 +12705,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  async function waitForCreoAgentReady({ tries = 24, intervalMs = 250 } = {}) {
+    for (let i = 0; i < tries; i += 1) {
+      try {
+        if (await probeCreoAgent()) return true;
+      } catch {
+        /* retry */
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+    }
+    return false;
+  }
+
   async function refreshAiSnapshotPanelModifiedFlag(panel) {
     /**
-     * Same sources as Files → Modified (refreshPendingCheckinIds + agent).
-     * Always re-probe — SSR data-workspace-pending sticks after a local clean
-     * until hard reload, and must not keep a stale live Compare on screen.
+     * Same sources as Files → Modified (pending ids + checkin-preview + agent).
+     * Do not treat a flaky agent probe as "clean" when Files already knew Modified
+     * (refreshPendingCheckinIds replaces the set and can drop the id).
      */
     if (!panel) return false;
     const objectId = String(panel.dataset.objectId || "").trim();
@@ -12714,29 +12734,76 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const openWs = $("#open-workspace-btn");
     const panelVault = aiSnapshotPanelVaultFolder(panel);
     if (openWs && panelVault) openWs.dataset.vaultFolder = panelVault;
+    // Soft-nav from Files often already has this tip in pendingCheckinIds.
+    const wasPending = pendingCheckinIds.has(objectId);
+    await waitForCreoAgentReady();
     try {
       await refreshPendingCheckinIds(productId);
     } catch {
-      /* agent/preview optional */
+      /* preview/agent optional */
     }
     if (pendingCheckinIds.has(objectId)) {
       markAiSnapshotPanelModified(panel);
       return true;
     }
     try {
-      const [cacheFiles, objects] = await Promise.all([
-        listAgentCacheFiles(productId, panelVault),
-        ensureProductObjects(productId),
-      ]);
-      const newer = (
-        await resolveNewerLocalCacheSaves(cacheFiles, objects, productId)
-      ).find((item) => String(item?.uuid || "") === objectId);
-      if (newer) {
-        markAiSnapshotPanelModified(panel, newer);
-        return true;
+      const preview = await fetch(
+        `/api/products/${encodeURIComponent(productId)}/checkin-preview`,
+        { credentials: "same-origin", cache: "no-store" }
+      );
+      if (preview.ok) {
+        const data = await preview.json().catch(() => null);
+        const ids = Array.isArray(data?.object_ids) ? data.object_ids : [];
+        if (ids.some((id) => String(id || "") === objectId)) {
+          markAiSnapshotPanelModified(panel);
+          return true;
+        }
       }
     } catch {
-      /* fall through — treat as clean */
+      /* optional */
+    }
+    let agentReached = false;
+    let sawNewer = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt) {
+        await new Promise((resolve) => window.setTimeout(resolve, 400));
+      }
+      try {
+        const cacheFiles = await listAgentCacheFiles(productId, panelVault);
+        if (Array.isArray(cacheFiles)) agentReached = true;
+        const objects = await ensureProductObjects(productId, {
+          force: attempt === 0,
+        });
+        const newer = (
+          await resolveNewerLocalCacheSaves(
+            cacheFiles,
+            objects,
+            productId,
+            panelVault
+          )
+        ).find((item) => String(item?.uuid || "") === objectId);
+        if (newer) {
+          sawNewer = newer;
+          break;
+        }
+        // Agent listed the workspace and this tip is not newer — proved clean.
+        if (agentReached) break;
+      } catch {
+        /* retry */
+      }
+    }
+    if (sawNewer) {
+      markAiSnapshotPanelModified(panel, sawNewer);
+      return true;
+    }
+    if (agentReached) {
+      clearAiSnapshotPanelModified(panel);
+      return false;
+    }
+    // Agent never answered — keep prior Files Modified / vault SSR pending.
+    if (wasPending || panel.getAttribute("data-workspace-pending") === "1") {
+      markAiSnapshotPanelModified(panel);
+      return true;
     }
     clearAiSnapshotPanelModified(panel);
     return false;
