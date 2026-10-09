@@ -24,7 +24,6 @@
           <th class="col-created">Created</th>
           <th class="col-number">Number</th>
           <th class="col-state">State</th>
-          <th class="col-access">Access</th>
           <th class="col-vault">Vault folder</th>
           <th>Description</th>
         </tr>
@@ -39,12 +38,11 @@
           <td class="col-created">{% if p.created_at %}<span title="{{ local_time_pretty(p.created_at) }}">{{ local_time(p.created_at) }}</span>{% else %}—{% endif %}</td>
           <td class="col-number">{{ p.number or "—" }}</td>
           <td class="col-state">{{ product_state_labels.get(p.state, p.state) }}</td>
-          <td class="col-access">{% if p.read_only %}Read only{% else %}—{% endif %}</td>
           <td class="mono col-vault" title="{{ p.vault_folder }}">{{ p.vault_folder }}</td>
           <td>{{ p.description or "—" }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="7" class="muted">No products yet.</td></tr>
+        <tr><td colspan="6" class="muted">No products yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>

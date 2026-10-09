@@ -1932,7 +1932,6 @@ def _product_form(
     description: str = "",
     vault_folder: str = "",
     state: str = "IN_WORK",
-    read_only: bool = False,
     uuid: str | None = None,
 ) -> dict:
     payload = {
@@ -1941,7 +1940,6 @@ def _product_form(
         "description": description,
         "vault_folder": vault_folder,
         "state": state or "IN_WORK",
-        "read_only": bool(read_only),
     }
     if uuid is not None:
         payload["uuid"] = uuid
@@ -2190,21 +2188,18 @@ def admin_product_create(
     description: str = Form(""),
     vault_folder: str = Form(""),
     state: str = Form("IN_WORK"),
-    read_only: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
     manager = _require_products_manager(request, ctx, db)
     if _is_blocked(manager):
         return manager
-    is_read_only = str(read_only or "").strip().lower() in {"1", "true", "on", "yes"}
     form = _product_form(
         name=name,
         number=number,
         description=description,
         vault_folder=vault_folder,
         state=state,
-        read_only=is_read_only,
     )
     try:
         product = ctx.products.create_product(
@@ -2214,7 +2209,6 @@ def admin_product_create(
             description=description or None,
             vault_folder=(vault_folder or "").strip() or None,
             state=state,
-            read_only=is_read_only,
         )
         ctx.user_accounts.grant_product_access(db, manager, product)
         db.commit()
@@ -2265,7 +2259,6 @@ def admin_product_detail(
                 description=payload.description or "",
                 vault_folder=payload.vault_folder,
                 state=payload.state,
-                read_only=payload.read_only,
                 uuid=payload.uuid,
             ),
             "delete_error": None,
@@ -2283,7 +2276,6 @@ def admin_product_update(
     description: str = Form(""),
     vault_folder: str = Form(""),
     state: str = Form("IN_WORK"),
-    read_only: str = Form(""),
     ctx: AppContext = Depends(get_context),
     db: Session = Depends(get_db),
 ):
@@ -2294,14 +2286,12 @@ def admin_product_update(
         product = ctx.products.get_product(db, product_uuid)
     except CreoPDMError:
         return RedirectResponse("/admin/products", status_code=303)
-    is_read_only = str(read_only or "").strip().lower() in {"1", "true", "on", "yes"}
     form = _product_form(
         name=name,
         number=number,
         description=description,
         vault_folder=product.vault_folder or product.uuid,
         state=state,
-        read_only=is_read_only,
         uuid=product.uuid,
     )
     try:
@@ -2316,7 +2306,6 @@ def admin_product_update(
             number=number or None,
             description=description or None,
             state=state,
-            read_only=is_read_only,
         )
         db.commit()
         return RedirectResponse("/admin/products", status_code=303)

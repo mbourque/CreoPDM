@@ -31,7 +31,7 @@ def _assert_locked(response, *, hint: str) -> None:
     body = response.json()["error"]
     assert body["code"] == "VALIDATION_ERROR", hint
     msg = body["message"].lower()
-    assert "in review" in msg or "read-only" in msg or "cannot" in msg, f"{hint}: {body['message']}"
+    assert "in review" in msg or "cannot" in msg, f"{hint}: {body['message']}"
 
 
 @requires_git

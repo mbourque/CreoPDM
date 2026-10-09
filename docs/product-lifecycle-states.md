@@ -24,8 +24,6 @@ Admins can **add custom states**, edit labels/descriptions/order, and toggle All
 
 `view`, `download` (open/export), `checkout` (also Undo / Force Undo Checkout), `checkin` (add/upload/folders), `remove`, `edit_metadata`, `rename` (product), `change_state`, `history`.
 
-`read_only` on a product still blocks mutation ops independently of the matrix.
-
 ## Enforcement
 
 - UI: `product_ui_capabilities()` → `product_ui.show_*`

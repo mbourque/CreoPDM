@@ -155,7 +155,6 @@ class ProductService:
         vault_folder: str | None = None,
         *,
         state: str | None = None,
-        read_only: bool = False,
     ) -> Product:
         if not name.strip():
             raise PathValidationError("A product name is required.")
@@ -201,7 +200,6 @@ class ProductService:
             repository_path="",
             default_branch=DEFAULT_BRANCH,
             state=initial_state,
-            read_only=bool(read_only),
             created_at=now,
             updated_at=now,
             active=True,
@@ -228,9 +226,8 @@ class ProductService:
         description: str | None = None,
         *,
         state: str | None = None,
-        read_only: bool | None = None,
     ) -> Product:
-        """Update name/number/description/state/read_only. Never changes vault_folder."""
+        """Update name/number/description/state. Never changes vault_folder."""
         product = self.get_product(session, product_uuid)
         new_name = name.strip()
         if not new_name:
@@ -243,7 +240,6 @@ class ProductService:
         old_number = (product.number or "").strip() or None
         old_description = (product.description or "").strip() or None
         old_state = product.state
-        old_read_only = bool(product.read_only)
         identity_changed = (
             new_name != product.name
             or new_number != old_number
@@ -251,13 +247,11 @@ class ProductService:
         )
         old_name = product.name
         state_changed = new_state is not None and new_state != old_state
-        read_only_changed = read_only is not None and bool(read_only) != old_read_only
-        lifecycle_changed = state_changed or read_only_changed
         if state_changed:
             # Matrix ``change_state`` on the *current* state controls whether leaving it is allowed.
             ensure_product_allows(product, "change_state", action="change lifecycle state")
 
-        # State / read-only live in the DB only — do not touch the vault Git repo.
+        # State lives in the DB only — do not touch the vault Git repo.
         # (A dirty vault with CAD files used to make "rename" commit fail on Save.)
         if identity_changed:
             vault = self._workspaces.ensure_vault(product)
@@ -292,8 +286,6 @@ class ProductService:
                     product.description = new_description
                     if new_state is not None:
                         product.state = new_state
-                    if read_only is not None:
-                        product.read_only = bool(read_only)
                     product.updated_at = datetime.now(timezone.utc)
                     session.flush()
                     self._activities.record(
@@ -310,7 +302,7 @@ class ProductService:
                             "description": new_description,
                         },
                     )
-                    if lifecycle_changed:
+                    if state_changed:
                         self._activities.record(
                             session,
                             ActivityAction.STATE_CHANGED,
@@ -319,8 +311,6 @@ class ProductService:
                             details={
                                 "old_state": old_state,
                                 "new_state": product.state,
-                                "old_read_only": old_read_only,
-                                "read_only": bool(product.read_only),
                             },
                         )
                 except Exception as exc:
@@ -334,11 +324,9 @@ class ProductService:
                         "The repository was restored.",
                         details={"name": new_name},
                     ) from exc
-        elif lifecycle_changed:
+        elif state_changed:
             if new_state is not None:
                 product.state = new_state
-            if read_only is not None:
-                product.read_only = bool(read_only)
             product.updated_at = datetime.now(timezone.utc)
             session.flush()
             self._activities.record(
@@ -349,8 +337,6 @@ class ProductService:
                 details={
                     "old_state": old_state,
                     "new_state": product.state,
-                    "old_read_only": old_read_only,
-                    "read_only": bool(product.read_only),
                 },
             )
 

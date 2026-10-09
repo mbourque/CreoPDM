@@ -24,7 +24,7 @@ def _svc() -> CheckoutService:
 
 
 def test_describe_available_when_product_mutable():
-    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value)
     obj = SimpleNamespace(
         product=product,
         lifecycle_state=LifecycleState.IN_WORK.value,
@@ -34,19 +34,8 @@ def test_describe_available_when_product_mutable():
     assert view.can_checkout is True
 
 
-def test_describe_read_only_not_available():
-    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=True)
-    obj = SimpleNamespace(
-        product=product,
-        lifecycle_state=LifecycleState.IN_WORK.value,
-    )
-    view = _svc().describe(obj, None)
-    assert view.label == "Read only"
-    assert view.can_checkout is False
-
-
 def test_describe_in_review_not_available():
-    product = SimpleNamespace(uuid="p1", state=ProductState.IN_REVIEW.value, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=ProductState.IN_REVIEW.value)
     obj = SimpleNamespace(
         product=product,
         lifecycle_state=LifecycleState.IN_WORK.value,
@@ -57,7 +46,7 @@ def test_describe_in_review_not_available():
 
 
 def test_describe_locked_not_available():
-    product = SimpleNamespace(uuid="p1", state=ProductState.LOCKED.value, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=ProductState.LOCKED.value)
     obj = SimpleNamespace(
         product=product,
         lifecycle_state=LifecycleState.IN_WORK.value,

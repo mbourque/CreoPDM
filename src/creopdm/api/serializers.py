@@ -23,7 +23,6 @@ def revision_display(revision: str, iteration: int) -> str:
 def product_to_response(product: Product) -> ProductResponse:
     remote_mode = RemoteMode.LOCAL_WITH_REMOTE if product.remote_url else RemoteMode.LOCAL_ONLY
     state = product_state_value(product)
-    read_only = bool(getattr(product, "read_only", False))
     return ProductResponse(
         uuid=product.uuid,
         name=product.name,
@@ -38,7 +37,6 @@ def product_to_response(product: Product) -> ProductResponse:
         active=product.active,
         remote_mode=remote_mode.value,
         state=state,
-        read_only=read_only,
         allows_mutation=product_allows_mutation(product),
         allows_content=product_allows_content_access(product),
     )

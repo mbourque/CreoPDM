@@ -388,8 +388,7 @@ a.brand:hover { text-decoration: none; color: inherit; }
 }
 .admin-products-table .col-created,
 .admin-products-table .col-number,
-.admin-products-table .col-state,
-.admin-products-table .col-access {
+.admin-products-table .col-state {
   white-space: nowrap;
 }
 .admin-products-table .col-vault {

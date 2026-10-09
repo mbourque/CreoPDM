@@ -543,7 +543,7 @@ def test_delete_product_keeps_prior_audit_and_records_deleted(client, data_dir):
 
 @requires_git
 def test_product_state_change_records_state_changed_audit(client, data_dir):
-    """Lifecycle/read-only Save must audit STATE_CHANGED, not Product updated."""
+    """Lifecycle state Save must audit STATE_CHANGED, not Product updated."""
     created = client.post("/api/products", json={"name": "State Audit"})
     assert created.status_code == 201, created.text
     product = created.json()
@@ -557,7 +557,6 @@ def test_product_state_change_records_state_changed_audit(client, data_dir):
             number=None,
             description=None,
             state="RELEASED",
-            read_only=True,
         )
 
     with ctx.session_factory() as db:
@@ -582,7 +581,6 @@ def test_product_state_change_records_state_changed_audit(client, data_dir):
             number=None,
             description=None,
             state="IN_REVIEW",
-            read_only=True,
         )
 
     with ctx.session_factory() as db:

@@ -1820,7 +1820,8 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert detail.text.count("settings-form-wide") == 1
     assert "Lifecycle state" in detail.text
     assert 'name="state"' in detail.text
-    assert 'name="read_only"' in detail.text
+    assert 'name="read_only"' not in detail.text
+    assert "Read only — block modifications" not in detail.text
     assert 'name="vault_folder"' in detail.text
     assert "readonly" in detail.text
     assert "disabled" in detail.text
@@ -1852,7 +1853,6 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
             "number": "AH-2",
             "description": "Updated",
             "state": "IN_REVIEW",
-            "read_only": "1",
         },
         follow_redirects=False,
     )
@@ -1861,14 +1861,14 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert body["name"] == "Admin Hub Renamed"
     assert body["vault_folder"] == original_vault
     assert body["state"] == "IN_REVIEW"
-    assert body["read_only"] is True
+    assert "read_only" not in body
     assert body["allows_mutation"] is False
 
     listed = auth_client.get("/admin/products")
     assert "In Review" in listed.text
-    assert "Read only" in listed.text
+    assert "col-access" not in listed.text
 
-    # Regression: vault with untracked CAD leftover must not block state/read-only Save
+    # Regression: vault with untracked CAD leftover must not block state Save
     # (old code used git is_dirty → commit and failed with "Could not record the product rename").
     vault = Path(auth_ctx.config.workspace_root()) / body["vault_folder"]
     leftover = vault / "orphan-untracked.prt"
@@ -1880,7 +1880,6 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
             "number": "AH-2",
             "description": "Updated",
             "state": "RELEASED",
-            "read_only": "1",
         },
         follow_redirects=False,
     )
@@ -1888,10 +1887,9 @@ def test_admin_products_crud_list_create_edit_delete(auth_client, auth_ctx, repo
     assert "Could not record the product rename" not in (state_only.text or "")
     after = auth_client.get(f"/api/products/{product['uuid']}").json()
     assert after["state"] == "RELEASED"
-    assert after["read_only"] is True
     assert leftover.is_file()
 
-    # Clear read-only and restore IN_WORK before delete path.
+    # Restore IN_WORK before delete path.
     restored = auth_client.post(
         f"/admin/products/{product['uuid']}",
         data={

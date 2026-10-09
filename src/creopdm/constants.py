@@ -97,7 +97,7 @@ PRODUCT_STATE_LEGACY_ALIASES: dict[str, str] = {
 }
 
 
-# Engineering mutations (add / checkout / check-in / …) when not read_only.
+# Engineering mutations (add / checkout / check-in / …) for default matrix.
 # Pre-Work / In Work / Under Change. New products still default to In Work.
 PRODUCT_MUTABLE_STATES: frozenset[str] = frozenset(
     {

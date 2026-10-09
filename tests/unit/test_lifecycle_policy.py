@@ -66,7 +66,7 @@ def test_custom_state_roundtrip_and_parse():
     )
     set_lifecycle_policy(policy_from_dicts(rows))
     assert parse_product_state("proto_a") == "PROTO_A"
-    product = SimpleNamespace(uuid="p1", state="PROTO_A", read_only=False)
+    product = SimpleNamespace(uuid="p1", state="PROTO_A")
     assert product_allows_op(product, "checkout") is True
     assert product_allows_mutation(product) is True
 
@@ -77,7 +77,7 @@ def test_matrix_can_block_in_work_checkout():
         if row["key"] == "IN_WORK":
             row["permissions"]["checkout"] = False
     set_lifecycle_policy(policy_from_dicts(rows))
-    product = SimpleNamespace(uuid="p1", state="IN_WORK", read_only=False)
+    product = SimpleNamespace(uuid="p1", state="IN_WORK")
     assert product_allows_op(product, "checkout") is False
     assert product_allows_op(product, "checkin") is True
     with pytest.raises(ValidationAppError):
@@ -85,7 +85,7 @@ def test_matrix_can_block_in_work_checkout():
 
 
 def test_locked_blocks_download():
-    product = SimpleNamespace(uuid="p1", state="LOCKED", read_only=False)
+    product = SimpleNamespace(uuid="p1", state="LOCKED")
     assert product_allows_content_access(product) is False
 
 

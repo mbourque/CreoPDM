@@ -118,20 +118,20 @@ def test_locked_product_hides_open_and_blocks_download(client, repo_parent):
 
 
 @requires_git
-def test_read_only_product_hides_mutation_toolbar(client, repo_parent):
+def test_released_product_hides_mutation_toolbar_keeps_delete(client, repo_parent):
+    """Released (matrix blocks mutations) hides edit chrome; Delete product stays."""
     product, obj, _location = _create_part(client, repo_parent)
     ctx = client.app.state.ctx
     with ctx.session_factory() as db:
         loaded = ctx.products.get_product(db, product["uuid"])
-        loaded.read_only = True
+        loaded.state = "RELEASED"
         db.commit()
 
     page = client.get(f"/?product={product['uuid']}")
     assert page.status_code == 200, page.text
     assert 'data-allows-mutation="0"' in page.text
-    assert "read only" in page.text.lower()
     assert 'id="product-state-badge"' in page.text
-    assert "Read only" in page.text
+    assert "Released" in page.text
     assert 'id="add-menu"' not in page.text
     assert 'id="checkin-menu"' not in page.text
     assert 'id="purge-workspace-btn"' not in page.text
@@ -141,10 +141,8 @@ def test_read_only_product_hides_mutation_toolbar(client, repo_parent):
     assert 'id="rename-product-btn"' not in page.text
     # Delete product stays available on locked products (purge vault + DB).
     assert 'id="delete-product-btn"' in page.text
-    # Read-only blocks matrix checkout → Undo / Checkout ▾ hidden too.
     assert 'id="checkout-menu"' not in page.text
     assert 'id="undo-btn"' not in page.text
-    assert 'id="checkin-menu"' not in page.text
     # Role body flag may still be 1; list rows must not advertise checkout.
     assert page.text.count('data-can-checkout="1"') == 1
     assert 'data-can-checkout="0"' in page.text
@@ -156,7 +154,7 @@ def test_read_only_product_hides_mutation_toolbar(client, repo_parent):
     assert detail.status_code == 200, detail.text
     assert detail.json()["can_checkout"] is False
     assert detail.json()["can_checkin"] is False
-    assert detail.json()["checkout_status"] == "Read only"
+    assert detail.json()["checkout_status"] == "Released"
     assert 'data-state="locked"' in page.text
 
     deleted = client.delete(f"/api/products/{product['uuid']}")

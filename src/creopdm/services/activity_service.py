@@ -720,10 +720,6 @@ def _event_summary(
         )
         if old_s and new_s and old_s != new_s:
             parts.append(f"state {old_s} → {new_s}")
-        old_ro = details.get("old_read_only")
-        new_ro = details.get("read_only")
-        if old_ro is not None and new_ro is not None and old_ro != new_ro:
-            parts.append(f"read_only {old_ro} → {new_ro}")
     if action in {ActivityAction.PRODUCT_UPDATED.value, "PRODUCT_UPDATED"}:
         old_name = details.get("old_name")
         new_name = details.get("name")

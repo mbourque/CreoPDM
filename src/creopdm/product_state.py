@@ -1,7 +1,7 @@
-"""Product lifecycle state + read-only access checks.
+"""Product lifecycle state access checks.
 
 UI capability flags and API ``ensure_*`` guards share the same rules here so
-templates and services do not re-encode lifecycle / Locked / read_only logic.
+templates and services do not re-encode lifecycle / Locked logic.
 Permission matrix lives in settings (see ``lifecycle_policy``).
 """
 
@@ -37,23 +37,18 @@ def product_is_locked(product: Any) -> bool:
 
 
 def product_allows_op(product: Any, op: str) -> bool:
-    """Matrix permission for ``op``, with read_only blocking mutation ops."""
+    """Matrix permission for ``op``."""
     if product is None:
         return True
     policy = get_lifecycle_policy()
     state = product_state_value(product)
-    if op in {"checkout", "checkin", "remove", "edit_metadata", "rename"}:
-        if bool(getattr(product, "read_only", False)):
-            return False
     return policy.allows(state, op)
 
 
 def product_allows_mutation(product: Any) -> bool:
-    """True when any engineering mutation op is allowed (and not read_only)."""
+    """True when any engineering mutation op is allowed for this state."""
     if product is None:
         return True
-    if bool(getattr(product, "read_only", False)):
-        return False
     return get_lifecycle_policy().allows_mutation(product_state_value(product))
 
 
@@ -112,7 +107,7 @@ def product_ui_capabilities(
     can_update_metadata: bool = False,
     can_revert_objects: bool = False,
 ) -> ProductUiCapabilities:
-    """Combine signed-in role permissions with lifecycle matrix / read_only."""
+    """Combine signed-in role permissions with lifecycle matrix."""
     mutable = product_allows_mutation(product)
     content = product_allows_content_access(product)
     can_checkout_state = product_allows_op(product, "checkout")
@@ -149,7 +144,7 @@ def product_ui_capabilities(
 def ensure_product_allows(
     product: Product, op: str, *, action: str | None = None
 ) -> None:
-    """Raise when the lifecycle matrix (or read_only) blocks ``op``."""
+    """Raise when the lifecycle matrix blocks ``op``."""
     verb = action or {
         "checkout": "check out files",
         "checkin": "check in or add files",
@@ -159,12 +154,6 @@ def ensure_product_allows(
         "download": "open or download files from this product",
         "change_state": "change lifecycle state",
     }.get(op, "modify this product")
-    if op in {"checkout", "checkin", "remove", "edit_metadata", "rename"}:
-        if bool(getattr(product, "read_only", False)):
-            raise ValidationAppError(
-                f"Product is read-only and cannot {verb}.",
-                details={"product": product.uuid, "read_only": True},
-            )
     if product_allows_op(product, op):
         return
     state = product_state_value(product)
@@ -175,12 +164,7 @@ def ensure_product_allows(
 
 
 def ensure_product_mutable(product: Product, *, action: str = "modify this product") -> None:
-    """Raise when no mutation ops are allowed (or product is read-only)."""
-    if bool(getattr(product, "read_only", False)):
-        raise ValidationAppError(
-            f"Product is read-only and cannot {action}.",
-            details={"product": product.uuid, "read_only": True},
-        )
+    """Raise when no mutation ops are allowed for this lifecycle state."""
     if product_allows_mutation(product):
         return
     state = product_state_value(product)
@@ -198,7 +182,7 @@ def ensure_product_content_accessible(
 
 
 def ensure_product_deletable(product: Product, *, action: str = "delete this product") -> None:
-    """Product delete/forget is not blocked by lifecycle or read-only."""
+    """Product delete/forget is not blocked by lifecycle state."""
     if product is None:
         raise ValidationAppError(f"Cannot {action}: product is missing.")
 

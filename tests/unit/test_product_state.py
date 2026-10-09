@@ -1,4 +1,4 @@
-"""Product lifecycle state (project) + read-only / Locked access."""
+"""Product lifecycle state (project) + Locked access."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def test_product_state_order_matches_common_pdm_plus_locked():
 
 
 def test_product_state_defaults_allow_mutation():
-    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value)
     assert product_allows_mutation(product) is True
     assert product_allows_content_access(product) is True
     assert product_allows_delete(product) is True
@@ -61,14 +61,14 @@ def test_product_state_defaults_allow_mutation():
 
 
 def test_pre_work_allows_mutation():
-    product = SimpleNamespace(uuid="p1", state=ProductState.PRE_WORK.value, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=ProductState.PRE_WORK.value)
     assert product_allows_mutation(product) is True
     assert product_allows_content_access(product) is True
     ensure_product_mutable(product, action="check out files")
 
 
 def test_under_change_allows_mutation():
-    product = SimpleNamespace(uuid="p1", state=ProductState.UNDER_CHANGE.value, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=ProductState.UNDER_CHANGE.value)
     assert product_allows_mutation(product) is True
     ensure_product_mutable(product, action="check out files")
 
@@ -85,7 +85,7 @@ def test_under_change_allows_mutation():
     ],
 )
 def test_non_mutable_states_block_mutation_but_allow_delete(state):
-    product = SimpleNamespace(uuid="p1", state=state, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=state)
     assert product_allows_mutation(product) is False
     assert product_allows_delete(product) is True
     with pytest.raises(ValidationAppError) as exc:
@@ -96,7 +96,7 @@ def test_non_mutable_states_block_mutation_but_allow_delete(state):
 
 
 def test_locked_blocks_content_access():
-    product = SimpleNamespace(uuid="p1", state=ProductState.LOCKED.value, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=ProductState.LOCKED.value)
     assert product_allows_content_access(product) is False
     with pytest.raises(ValidationAppError) as exc:
         ensure_product_content_accessible(product, action="download files from this product")
@@ -116,24 +116,14 @@ def test_locked_blocks_content_access():
     ],
 )
 def test_non_locked_states_allow_content_access(state):
-    product = SimpleNamespace(uuid="p1", state=state, read_only=True)
+    product = SimpleNamespace(uuid="p1", state=state)
     assert product_allows_content_access(product) is True
     ensure_product_content_accessible(product)
 
 
-def test_read_only_blocks_mutation_but_allows_delete():
-    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=True)
-    assert product_allows_mutation(product) is False
-    assert product_allows_delete(product) is True
-    with pytest.raises(ValidationAppError) as exc:
-        ensure_product_mutable(product)
-    assert "read-only" in exc.value.message.lower()
-    ensure_product_deletable(product, action="delete this product")
-
-
 def test_archived_helper():
-    assert product_is_archived(SimpleNamespace(state="ARCHIVED", read_only=False)) is True
-    assert product_is_archived(SimpleNamespace(state="IN_WORK", read_only=False)) is False
+    assert product_is_archived(SimpleNamespace(state="ARCHIVED")) is True
+    assert product_is_archived(SimpleNamespace(state="IN_WORK")) is False
 
 
 def test_parse_product_state_and_legacy_aliases():
@@ -164,7 +154,7 @@ def _full_role_caps() -> dict:
 
 
 def test_product_ui_in_work_shows_mutation_controls():
-    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value)
     ui = product_ui_capabilities(product, **_full_role_caps())
     assert ui.allows_mutation is True
     assert ui.allows_content is True
@@ -190,7 +180,7 @@ def test_product_ui_in_work_shows_mutation_controls():
 
 def test_product_ui_in_review_hides_checkout_undo_and_keeps_open():
     """In Review: matrix blocks Check Out → Undo / Force Undo hide too; Open stays."""
-    product = SimpleNamespace(uuid="p1", state=ProductState.IN_REVIEW.value, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=ProductState.IN_REVIEW.value)
     ui = product_ui_capabilities(product, **_full_role_caps())
     assert ui.allows_mutation is False
     assert ui.allows_content is True
@@ -212,7 +202,7 @@ def test_product_ui_in_review_hides_checkout_undo_and_keeps_open():
 
 
 def test_product_ui_locked_hides_open_download_and_undo():
-    product = SimpleNamespace(uuid="p1", state=ProductState.LOCKED.value, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=ProductState.LOCKED.value)
     ui = product_ui_capabilities(product, **_full_role_caps())
     assert ui.allows_mutation is False
     assert ui.allows_content is False
@@ -230,20 +220,9 @@ def test_product_ui_locked_hides_open_download_and_undo():
     assert ui.show_delete_product is True
 
 
-def test_product_ui_read_only_hides_checkout_checkin_and_undo():
-    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=True)
-    ui = product_ui_capabilities(product, **_full_role_caps())
-    assert ui.show_checkout is False
-    assert ui.show_checkin is False
-    assert ui.show_undo_checkout is False
-    assert ui.show_force_undo_checkout is False
-    assert ui.show_add is False
-    assert ui.show_open is True
-
-
 def test_product_ui_force_undo_checkout_without_checkout_hides_checkout_actions():
     """Force Undo alone must not show Checkout selected/product/Undo (needs objects.checkout)."""
-    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value)
     ui = product_ui_capabilities(
         product,
         can_checkout=False,
@@ -258,7 +237,7 @@ def test_product_ui_force_undo_checkout_without_checkout_hides_checkout_actions(
 
 
 def test_product_ui_without_checkin_hides_checkin_menu():
-    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value)
     ui = product_ui_capabilities(
         product,
         can_checkout=True,
@@ -272,7 +251,7 @@ def test_product_ui_without_checkin_hides_checkin_menu():
 
 
 def test_product_ui_respects_role_caps_when_mutable():
-    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value, read_only=False)
+    product = SimpleNamespace(uuid="p1", state=ProductState.IN_WORK.value)
     ui = product_ui_capabilities(
         product,
         can_add_objects=False,

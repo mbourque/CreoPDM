@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Product access policy (single source)
 
-`src/creopdm/product_state.py` + `lifecycle_policy.py` own product lifecycle lock from the configurable matrix (Administration → Lifecycle states; `settings.json` → `lifecycle`). Role caps ∩ matrix ops; `read_only` still blocks mutations. New products default to In Work.
+`src/creopdm/product_state.py` + `lifecycle_policy.py` own product lifecycle lock from the configurable matrix (Administration → Lifecycle states; `settings.json` → `lifecycle`). Role caps ∩ matrix ops. New products default to In Work.
 
 ## When adding or changing a product mutation
 
@@ -13,9 +13,9 @@ Anything that changes vault/product content or locks (Add, Checkout, Check In, R
 
 1. **API / service** — call `ensure_product_mutable`, `ensure_product_content_accessible` (open/download/export), or `ensure_product_deletable` (do not rely on hidden buttons).
 2. **Toolbar / gear** — add or reuse a flag on `ProductUiCapabilities` / `product_ui_capabilities()`; templates use `{% if product_ui.show_* %}` only.
-3. **`app.js`** — selection / agent / Creo visibility only. Do **not** re-check `read_only`, product `state`, or `data-allows-mutation` to hide mutation chrome (server-injected `data-allows-content` / omitted DOM is OK).
+3. **`app.js`** — selection / agent / Creo visibility only. Do **not** re-check product `state` or `data-allows-mutation` to hide mutation chrome (server-injected `data-allows-content` / omitted DOM is OK).
 4. **Tests** — extend `tests/unit/test_product_state.py` for the new flag; keep **`tests/unit/test_product_access_policy_contract.py`** green (modules must call `ensure_*`, templates use `product_ui`, no JS lock re-check); add/keep an API rejection in `tests/integration/test_product_lifecycle_lock.py` (or `test_checkout.py`) for the new endpoint.
-5. **Docs** — update the read-only / not In work rows in `docs/user-interactions.md` when UX changes (see `user-interactions.mdc`).
+5. **Docs** — update the lifecycle-lock rows in `docs/user-interactions.md` when UX changes (see `user-interactions.mdc`).
 
 `pages.render()` already injects `product_ui` from role caps ∩ product. Role permissions stay in `permissions.py` / `caps_dict`; combine them only inside `product_ui_capabilities`.
 

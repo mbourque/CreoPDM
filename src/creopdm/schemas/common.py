@@ -178,7 +178,6 @@ class ProductResponse(BaseModel):
     active: bool
     remote_mode: str
     state: str = "IN_WORK"
-    read_only: bool = False
     allows_mutation: bool = True
     allows_content: bool = True
 

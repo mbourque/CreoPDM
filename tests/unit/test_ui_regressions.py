@@ -344,7 +344,8 @@ def test_product_state_badge_in_files_header():
     assert 'id="product-state-badge"' in html
     assert 'class="state product-state"' in html
     assert "selected.state.replace('_', ' ') | title" in html
-    assert "Read only" in html
+    assert "Read only" not in html
+    assert "selected.read_only" not in html
     assert html.index('id="product-state-badge"') < html.index('id="search-form"')
     assert ".title-row .product-state" in css
     assert '.state[data-state="PRE_WORK"]::before' in css
@@ -383,7 +384,7 @@ def test_metadata_gear_items_require_creo_session():
     assert "data-allows-mutation" in app_html
     assert "Rebuild Where Used" in docs and "Collect all metadata" in docs
     assert "no Creo.JS" in docs or "server vault scan" in docs or "Chrome/Edge too" in docs
-    assert "read only" in docs.lower() or "read-only" in docs.lower()
+    assert "lifecycle matrix" in docs.lower() or "not **in work**" in docs.lower() or "in review" in docs.lower()
     # Collect blocks the UI like Add — progress on busy overlay, no mid-run soft-nav.
     loop = _between(script, "async function runMetadataCollectLoop(", "async function runCollectAllMetadata(")
     assert 'setBusy("Collecting Creo metadata…")' in loop

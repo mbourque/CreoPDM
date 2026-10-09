@@ -846,7 +846,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       return null;
     }
     if (el.dataset.allowsMutation === "1") return null;
-    if (el.dataset.readOnly === "1") return "Read only";
     const key = String(el.dataset.productState || "").trim().toUpperCase();
     const labels = {
       PRE_WORK: "Pre-Work",

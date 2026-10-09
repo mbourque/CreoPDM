@@ -29,7 +29,6 @@ class Product(Base):
     remote_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     # Product lifecycle (project state) — separate from object lifecycle_state.
     state: Mapped[str] = mapped_column(String(32), nullable=False, default="IN_WORK")
-    read_only: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

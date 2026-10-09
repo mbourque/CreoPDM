@@ -46,7 +46,7 @@
         <h1{% if workspace_path %} title="{{ workspace_path }}"{% endif %}>{{ selected.name }}</h1>
         <span class="state product-state" id="product-state-badge"
               data-state="{{ selected.state }}"
-              title="Product state{% if selected.read_only %} (read only){% endif %}">{{ selected.state.replace('_', ' ') | title }}{% if selected.read_only %} · Read only{% endif %}</span>
+              title="Product state">{{ selected.state.replace('_', ' ') | title }}</span>
         {% if email_notifications_enabled %}
         <button type="button" class="product-watch-btn{% if watching_product %} is-watching{% endif %}"
                 id="product-watch-btn"
@@ -113,12 +113,12 @@
       <p class="muted product-meta">{% if selected.number %}<span class="product-meta-number">{{ selected.number }}</span>{% endif %}{% if selected.number and selected.description %} · {% endif %}{% if selected.description %}{{ selected.description }}{% endif %}</p>
       {% endif %}
       {% if product_ui.show_access_banner %}
-      <p class="warn-note" id="product-access-banner">{% if selected.read_only %}This product is <strong>read only</strong>.{% else %}This product is <strong>{{ selected.state.replace('_', ' ') | title }}</strong>.{% endif %}</p>
+      <p class="warn-note" id="product-access-banner">This product is <strong>{{ selected.state.replace('_', ' ') | title }}</strong>.</p>
       {% endif %}
     </div>
 
     {% if selected and status %}
-    <ul class="metrics" id="metric-filters" data-product-objects="{{ product_object_count | default(0) }}" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-product="{{ selected.uuid }}" data-allows-mutation="{{ '1' if product_ui.allows_mutation else '0' }}" data-allows-content="{{ '1' if product_ui.allows_content else '0' }}" data-product-state="{{ selected.state }}" data-read-only="{{ '1' if selected.read_only else '0' }}" data-type-icons='{{ type_icons | tojson }}'{% if where_used_present %} data-top-level-assemblies="{{ top_level_assembly_uuids | join(',') }}"{% endif %}{% if not (product_object_count | default(0)) %} hidden{% endif %}>
+    <ul class="metrics" id="metric-filters" data-product-objects="{{ product_object_count | default(0) }}" data-cad-models="{{ cad_models_extensions | join(',') }}" data-documents="{{ document_extensions | join(',') }}" data-purgeable="{{ purgeable_extensions | join(',') }}" data-vault-folder="{{ selected.vault_folder or selected.uuid }}" data-product="{{ selected.uuid }}" data-allows-mutation="{{ '1' if product_ui.allows_mutation else '0' }}" data-allows-content="{{ '1' if product_ui.allows_content else '0' }}" data-product-state="{{ selected.state }}" data-type-icons='{{ type_icons | tojson }}'{% if where_used_present %} data-top-level-assemblies="{{ top_level_assembly_uuids | join(',') }}"{% endif %}{% if not (product_object_count | default(0)) %} hidden{% endif %}>
       <li><button type="button" class="metric" data-filter="folders" data-mode="off" title="Filter to folders and select them. Click again to clear."><strong>{{ status.folders | default(0) }}</strong> Folders</button></li>
       <li><button type="button" class="metric" data-filter="files" data-mode="off" title="Show and select all files. Clears type chips. Click again to clear."><strong>{{ status.files }}</strong> Files</button></li>
       <li><button type="button" class="metric" data-filter="cad_models" data-mode="off" title="Filter to Creo models and select them. Click again to clear."><strong>{{ status.cad_models }}</strong> Creo Models</button></li>

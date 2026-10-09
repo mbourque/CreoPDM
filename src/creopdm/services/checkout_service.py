@@ -142,15 +142,12 @@ class CheckoutService:
         if checkout is None:
             if not mutable:
                 # Do not say Available when checkout is blocked by product lock.
-                if product is not None and bool(getattr(product, "read_only", False)):
-                    label = "Read only"
-                else:
-                    label = product_state_label(product_state_value(product))
+                label = product_state_label(product_state_value(product))
                 return CheckoutView(None, label, False, False, False)
             return CheckoutView(None, "Available", False, True, False)
         owned = checkout.user_name == current.user_name
         label = "Checked out by me" if owned else f"Checked out by {checkout.user_name}"
-        # Check-in blocked when product is read-only / not IN_WORK; undo stays via owned_by_me.
+        # Check-in blocked when lifecycle matrix blocks mutations; undo follows checkout op.
         return CheckoutView(checkout, label, owned, False, owned and mutable)
 
     def checkout(self, session: Session, object_uuid: str) -> Checkout:
