@@ -1305,7 +1305,9 @@ def test_details_header_uses_product_state_badge_not_file_lifecycle():
     assert 'id="product-state-badge"' in meta
     assert "product.state" in meta
     assert "checkout_echoes_product" in meta
-    assert "object.lifecycle_state" not in meta
+    # Badge uses product.state — not {{ object.lifecycle_state }} (comment may mention it).
+    assert 'data-state="{{ product.state }}"' in meta
+    assert "{{ object.lifecycle_state }}" not in meta
 
 
 def test_inventory_name_column_keeps_grid_left_padding():

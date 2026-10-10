@@ -1615,10 +1615,12 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
 
     captured: dict = {}
 
-    def fake_chat(base_url, model, messages, *, timeout_s=300.0):
+    def fake_chat(base_url, model, messages, *, timeout_s=300.0, num_predict=None):
         captured["base_url"] = base_url
         captured["model"] = model
         captured["messages"] = messages
+        captured["num_predict"] = num_predict
+        assert num_predict == 1536
         assert messages[0]["content"] == "Use only facts from the JSON."
         assert "=== OLD" in messages[1]["content"]
         assert "=== NEW" in messages[1]["content"]
@@ -1727,8 +1729,9 @@ def test_ai_snapshot_compare_pending_uses_tip_and_client_newer(
         == 200
     )
 
-    def fake_chat(base_url, model, messages, *, timeout_s=300.0):
+    def fake_chat(base_url, model, messages, *, timeout_s=300.0, num_predict=None):
         assert model == "qwen3-8b-64k:latest"
+        assert num_predict == 1536
         assert messages[0]["content"] == "Facts only."
         assert "=== OLD" in messages[1]["content"]
         assert "=== NEW (A.2) ===" in messages[1]["content"]
@@ -1893,7 +1896,7 @@ def test_checkin_comment_synthesize_api(client, monkeypatch):
 
     captured: dict = {}
 
-    def fake_chat(base_url, model, messages, *, timeout_s=300.0):
+    def fake_chat(base_url, model, messages, *, timeout_s=300.0, num_predict=None):
         captured["messages"] = messages
         return "Updated shaft length and added a round on the cover."
 
