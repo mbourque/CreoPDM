@@ -870,9 +870,7 @@ def _simp_reps_diff_lines(
         if added:
             lines.append("Simplified representation rules changed (added):")
             lines.extend(f"- {item}" for item in added)
-    return lines
-
-def _simp_reps_outline_lines(snapshot: dict[str, Any]) -> list[str]:
+    return linesdef _simp_reps_outline_lines(snapshot: dict[str, Any]) -> list[str]:
     """Assembly simplified representation definitions (not BOM membership)."""
     simp = _simp_reps_dict(snapshot)
     if not simp:

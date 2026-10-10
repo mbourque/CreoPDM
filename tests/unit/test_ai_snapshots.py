@@ -396,7 +396,8 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "/ai-snapshot/compare" in script
     assert 'withBusy("Asking AI what changed…"' in script
     assert "function syncAiSnapshotAskVisibility(" in script
-    assert "ai-snapshot-ai-answer-body" in script
+    assert "ai-snapshot-result-body" in script
+    assert "openAiSnapshotResultDialog" in script
     assert "/ai-snapshot/compare-pending" in script.split(
         "async function askAiSnapshotCompare(", 1
     )[1].split("function bindAiSnapshotControls(", 1)[0]
@@ -503,8 +504,9 @@ def test_snapshot_tab_template_and_docs():
     assert 'id="ai-snapshot-copy-b"' in html
     assert 'id="ai-snapshot-what-changed"' in html
     assert "What changed" in html
-    assert 'id="ai-snapshot-what-changed-panel"' in html
-    assert 'id="ai-snapshot-what-changed-copy"' in html
+    assert 'id="ai-snapshot-result-dialog"' in html
+    assert "openAiSnapshotResultDialog" in script
+    assert "event.target === resultDialog" in script
     assert "/ai-snapshot/what-changed" in script
     assert "/ai-snapshot/what-changed-pending" in script
     assert "showAiWhatChanged" in script
@@ -512,10 +514,11 @@ def test_snapshot_tab_template_and_docs():
     assert "askAiBtn.hidden = !rowReady || !aiFeaturesEnabled()" in script
     assert 'id="ai-snapshot-ask-ai"' in html
     assert "Ask AI what changed" in html
-    assert 'id="ai-snapshot-ai-answer"' in html
+    assert 'id="ai-snapshot-ai-answer"' not in html
     assert 'id="ai-snapshot-ask-row" hidden' in html
     assert "What changed" in docs
     assert "works even when" in docs.lower() or "works with AI off" in docs
+    assert "modal" in docs.lower() or "Esc" in docs
     assert "Side-by-side outlines for two revisions" not in html
     assert "plain text, not JSON" not in html
     assert "Modifications" in docs

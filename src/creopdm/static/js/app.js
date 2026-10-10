@@ -12354,12 +12354,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       tab.dataset.tab = "snapshot";
       tab.textContent = "Modifications";
     }
-    if (resolved === "pending") {
-      const answer = $("#ai-snapshot-ai-answer");
-      if (answer) answer.hidden = true;
-      const whatChanged = $("#ai-snapshot-what-changed-panel");
-      if (whatChanged) whatChanged.hidden = true;
-    }
     syncAiSnapshotAskVisibility(false);
     const labelA = $("#ai-snapshot-label-a");
     const labelB = $("#ai-snapshot-label-b");
@@ -13377,6 +13371,36 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return "=== Computed differences ===\n(none)";
   }
 
+  function aiSnapshotResultDialog() {
+    return $("#ai-snapshot-result-dialog");
+  }
+
+  function openAiSnapshotResultDialog({ title, meta, body, showCopy }) {
+    const dialog = aiSnapshotResultDialog();
+    const titleEl = $("#ai-snapshot-result-title");
+    const metaEl = $("#ai-snapshot-result-meta");
+    const bodyEl = $("#ai-snapshot-result-body");
+    const copyBtn = $("#ai-snapshot-result-copy");
+    if (!dialog || typeof dialog.showModal !== "function") {
+      showError($("#toolbar-error"), "Could not open the result dialog.");
+      return;
+    }
+    if (titleEl) titleEl.textContent = String(title || "").trim() || "Result";
+    if (metaEl) metaEl.textContent = String(meta || "").trim();
+    const text = String(body || "");
+    if (bodyEl) bodyEl.textContent = text;
+    if (copyBtn) {
+      copyBtn.hidden = !showCopy;
+      copyBtn.dataset.copyText = showCopy ? text : "";
+    }
+    if (!dialog.open) dialog.showModal();
+  }
+
+  function closeAiSnapshotResultDialog() {
+    const dialog = aiSnapshotResultDialog();
+    if (dialog?.open) dialog.close();
+  }
+
   async function postAiSnapshotCompareUrl(url, body, timeoutMs, timeoutHint) {
     let response;
     try {
@@ -13444,17 +13468,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const panel = aiSnapshotPanel();
     const objectId = String(panel?.dataset.objectId || "").trim();
     const compare = $("#ai-snapshot-compare");
-    const outBox = $("#ai-snapshot-what-changed-panel");
-    const outBody = $("#ai-snapshot-what-changed-body");
-    const outMeta = $("#ai-snapshot-what-changed-meta");
-    const copyBtn = $("#ai-snapshot-what-changed-copy");
     if (!objectId || !compare) {
       showError($("#toolbar-error"), "Open Modifications first.");
       return;
     }
     showError($("#toolbar-error"), "");
     try {
-      const text = await withBusy("Building what changed…", async () => {
+      const { text, meta } = await withBusy("Building what changed…", async () => {
         const req = aiSnapshotCompareRequestBody();
         const url =
           req.kind === "pending"
@@ -13466,21 +13486,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           60_000,
           "Timed out building the What changed preview."
         );
-        if (outMeta) {
-          const olderRev = String(payload?.older_display_revision || "").trim();
-          const newerRev = String(payload?.newer_display_revision || "").trim();
-          outMeta.textContent =
-            olderRev && newerRev ? `${olderRev} → ${newerRev}` : "";
-        }
-        const formatted = formatAiWhatChangedPayload(payload);
-        if (copyBtn) copyBtn.dataset.copyText = formatted;
-        return formatted;
+        const olderRev = String(payload?.older_display_revision || "").trim();
+        const newerRev = String(payload?.newer_display_revision || "").trim();
+        return {
+          text: formatAiWhatChangedPayload(payload),
+          meta: olderRev && newerRev ? `${olderRev} → ${newerRev}` : "",
+        };
       });
-      if (outBody) outBody.textContent = text;
-      if (outBox) {
-        outBox.hidden = false;
-        outBox.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      }
+      openAiSnapshotResultDialog({
+        title: "What changed",
+        meta,
+        body: text,
+        showCopy: true,
+      });
     } catch (err) {
       showError(
         $("#toolbar-error"),
@@ -13493,9 +13511,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const panel = aiSnapshotPanel();
     const objectId = String(panel?.dataset.objectId || "").trim();
     const compare = $("#ai-snapshot-compare");
-    const answerBox = $("#ai-snapshot-ai-answer");
-    const answerBody = $("#ai-snapshot-ai-answer-body");
-    const answerMeta = $("#ai-snapshot-ai-answer-meta");
     if (!aiFeaturesEnabled()) {
       showError(
         $("#toolbar-error"),
@@ -13528,20 +13543,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         showError($("#toolbar-error"), "Ollama returned an empty summary.");
         return;
       }
-      if (answerBody) answerBody.textContent = summary;
-      if (answerMeta) {
-        const olderRev = String(payload?.older_display_revision || "").trim();
-        const newerRev = String(payload?.newer_display_revision || "").trim();
-        const model = String(payload?.model || "").trim();
-        const parts = [];
-        if (olderRev && newerRev) parts.push(`${olderRev} → ${newerRev}`);
-        if (model) parts.push(model);
-        answerMeta.textContent = parts.join(" · ");
-      }
-      if (answerBox) {
-        answerBox.hidden = false;
-        answerBox.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      }
+      const olderRev = String(payload?.older_display_revision || "").trim();
+      const newerRev = String(payload?.newer_display_revision || "").trim();
+      const model = String(payload?.model || "").trim();
+      const parts = [];
+      if (olderRev && newerRev) parts.push(`${olderRev} → ${newerRev}`);
+      if (model) parts.push(model);
+      openAiSnapshotResultDialog({
+        title: "AI summary",
+        meta: parts.join(" · "),
+        body: summary,
+        showCopy: true,
+      });
     } catch (err) {
       showError(
         $("#toolbar-error"),
@@ -13612,9 +13625,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     $("#ai-snapshot-what-changed")?.addEventListener("click", () => {
       void showAiWhatChanged();
     });
-    $("#ai-snapshot-what-changed-copy")?.addEventListener("click", async () => {
-      const btn = $("#ai-snapshot-what-changed-copy");
-      const body = $("#ai-snapshot-what-changed-body");
+    $("#ai-snapshot-ask-ai")?.addEventListener("click", () => {
+      void askAiSnapshotCompare();
+    });
+    const resultDialog = aiSnapshotResultDialog();
+    $("#ai-snapshot-result-close")?.addEventListener("click", () => {
+      closeAiSnapshotResultDialog();
+    });
+    $("#ai-snapshot-result-copy")?.addEventListener("click", async () => {
+      const btn = $("#ai-snapshot-result-copy");
+      const body = $("#ai-snapshot-result-body");
       let text = String(btn?.dataset.copyText || "").trim();
       if (!text && body) text = String(body.textContent || "").trim();
       if (!text) {
@@ -13629,10 +13649,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         );
         return;
       }
-      showOk("Copied Computed differences.");
+      showOk("Copied.");
     });
-    $("#ai-snapshot-ask-ai")?.addEventListener("click", () => {
-      void askAiSnapshotCompare();
+    // Esc is native <dialog> cancel; click the dimmed backdrop to close.
+    resultDialog?.addEventListener("click", (event) => {
+      if (event.target === resultDialog) closeAiSnapshotResultDialog();
     });
   }
 

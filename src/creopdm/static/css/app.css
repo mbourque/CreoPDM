@@ -1674,26 +1674,39 @@ body.is-file-drag #file-drop-overlay {
   gap: 0.5rem;
   margin: 0 0 0.75rem;
 }
-.ai-snapshot-ai-answer {
-  margin: 0 0 1rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border, #d8dde6);
-  border-radius: 4px;
-  background: var(--surface-2, #f6f7f9);
+.dialog.ai-snapshot-result-dialog {
+  width: min(720px, 94vw);
+  max-height: min(80vh, 40rem);
+}
+.ai-snapshot-result-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1.1rem;
+  min-height: 0;
+  max-height: min(80vh, 40rem);
 }
 .ai-snapshot-ai-answer-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem 0.75rem;
-  margin: 0 0 0.5rem;
+  margin: 0;
+}
+.ai-snapshot-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
 }
 .ai-snapshot-ai-answer-body {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.45;
-  max-height: min(40vh, 22rem);
+  min-height: 4rem;
+  max-height: min(60vh, 28rem);
   overflow: auto;
 }
 /*

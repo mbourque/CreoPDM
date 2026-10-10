@@ -531,22 +531,6 @@
         Ask AI what changed
       </button>
     </div>
-    <div class="ai-snapshot-ai-answer" id="ai-snapshot-what-changed-panel" hidden>
-      <div class="ai-snapshot-ai-answer-head">
-        <strong>What changed</strong>
-        <span class="muted small" id="ai-snapshot-what-changed-meta"></span>
-        <button type="button" class="btn" id="ai-snapshot-what-changed-copy"
-                title="Copy the full Ask AI payload to the clipboard">Copy</button>
-      </div>
-      <div class="ai-snapshot-ai-answer-body" id="ai-snapshot-what-changed-body" tabindex="0"></div>
-    </div>
-    <div class="ai-snapshot-ai-answer" id="ai-snapshot-ai-answer" hidden>
-      <div class="ai-snapshot-ai-answer-head">
-        <strong>AI summary</strong>
-        <span class="muted small" id="ai-snapshot-ai-answer-meta"></span>
-      </div>
-      <div class="ai-snapshot-ai-answer-body" id="ai-snapshot-ai-answer-body" tabindex="0"></div>
-    </div>
     {# pending = tip vs workspace gather; compare = two History snaps. Ask AI when both sides exist. #}
     <div class="ai-snapshot-compare" id="ai-snapshot-compare" data-mode="{{ snapshot_tab_mode }}">
       <div class="ai-snapshot-head-row">
@@ -766,6 +750,23 @@
     </div>
   </div>
 </footer>
+
+<dialog id="ai-snapshot-result-dialog" class="dialog ai-snapshot-result-dialog"
+        aria-labelledby="ai-snapshot-result-title">
+  <div class="ai-snapshot-result-inner">
+    <div class="ai-snapshot-ai-answer-head">
+      <strong id="ai-snapshot-result-title">What changed</strong>
+      <span class="muted small" id="ai-snapshot-result-meta"></span>
+      <div class="ai-snapshot-result-actions">
+        <button type="button" class="btn" id="ai-snapshot-result-copy" hidden
+                title="Copy to the clipboard">Copy</button>
+        <button type="button" class="btn" id="ai-snapshot-result-close"
+                title="Close (Esc)">Close</button>
+      </div>
+    </div>
+    <div class="ai-snapshot-ai-answer-body" id="ai-snapshot-result-body" tabindex="0"></div>
+  </div>
+</dialog>
 
 <dialog id="checkin-dialog" class="dialog">
   <form method="dialog" id="checkin-form">
