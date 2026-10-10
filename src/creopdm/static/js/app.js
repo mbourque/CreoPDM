@@ -13819,9 +13819,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     );
     // Sentence ends → blank line (Copy already had this; modal must show it too).
     text = text.replace(/([.!?])\s+(?=[A-Z0-9])/g, "$1\n\n");
-    // Section openers still stuck mid-paragraph.
+    // Title-case section openers still stuck mid-paragraph (no /i — "the removed
+    // features" must not become its own paragraph).
     text = text.replace(
-      /([^\n])\s+(?=(?:Added|Removed)\s+(?:components?|dimensions?|features?|simplified representations?)\b)/gi,
+      /([^\n])\s+(?=(?:Added|Removed)\s+(?:components?|dimensions?|features?|simplified representations?)\b)/g,
       "$1\n\n"
     );
     return text

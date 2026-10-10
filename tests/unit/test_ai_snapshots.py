@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -582,6 +585,46 @@ def test_snapshot_tab_template_and_docs():
     assert "fresh gather" in docs
     assert "prepare_snapshot_for_compare" in docs
     assert 'id="checkin-ask-ai"' in html
+    assert "Title-case section openers" in script
+
+
+def test_format_ai_summary_display_keeps_mid_sentence_removed_features():
+    """Ask AI prose: do not paragraph-break before lowercase 'removed features'."""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not installed")
+    script = APP_JS.read_text(encoding="utf-8")
+    m = re.search(
+        r"function formatAiSummaryDisplay\(rawSummary\) \{.*?\n  \}\n",
+        script,
+        flags=re.S,
+    )
+    assert m, "formatAiSummaryDisplay not found"
+    raw = (
+        "Removed the GROUP (594) and IFX_ID features (124, 243, 360, 477) "
+        "and replaced them with two chamfers (851 and 889) with dimensions "
+        "d48 = 221.9 mm and d49 = 31.8 mm. "
+        "Removed all previous dimensions associated with the removed features."
+    )
+    js = (
+        m.group(0)
+        + "\nconst out = formatAiSummaryDisplay("
+        + repr(raw)
+        + ");\n"
+        + "if (out.includes('the\\n\\nremoved') || out.includes('the\\nremoved')) {\n"
+        + "  console.error(out);\n  process.exit(1);\n}\n"
+        + "if (!out.includes('the removed features')) {\n"
+        + "  console.error(out);\n  process.exit(2);\n}\n"
+        + "if (!/mm\\.\\n\\nRemoved all previous/.test(out)) {\n"
+        + "  console.error(out);\n  process.exit(3);\n}\n"
+    )
+    result = subprocess.run(
+        [node, "-e", js],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
 
 
 def test_snapshot_compare_prompt_requires_saved_text():
