@@ -225,6 +225,10 @@ def remove_batch(
                 "Choose a product before removing folders.",
                 details={"folder_paths": folder_paths},
             )
+        from creopdm.product_state import ensure_product_allows
+
+        # Empty-folder remove has no object rows — still gate before vault delete.
+        ensure_product_allows(product, "remove", action="remove files")
         for folder in folder_paths:
             requested.extend(ctx.objects.uuids_under_folder(db, product.id, folder))
         requested = list(dict.fromkeys(requested))

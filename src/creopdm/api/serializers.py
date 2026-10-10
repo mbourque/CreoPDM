@@ -7,7 +7,12 @@ from creopdm.models.checkout import Checkout
 from creopdm.models.object import EngineeringObject
 from creopdm.models.product import Product
 from creopdm.models.version import ObjectVersion
-from creopdm.product_state import product_allows_content_access, product_allows_mutation, product_state_value
+from creopdm.product_state import (
+    product_allows_content_access,
+    product_allows_mutation,
+    product_allows_op,
+    product_state_value,
+)
 from creopdm.schemas.common import ObjectResponse, ObjectVersionResponse, ProductResponse
 from creopdm.services.checkout_service import CheckoutView
 from creopdm.utils.classify import display_type_label, resolve_type_icon
@@ -39,6 +44,7 @@ def product_to_response(product: Product) -> ProductResponse:
         state=state,
         allows_mutation=product_allows_mutation(product),
         allows_content=product_allows_content_access(product),
+        allows_edit_metadata=product_allows_op(product, "edit_metadata"),
     )
 
 

@@ -180,6 +180,7 @@ class ProductResponse(BaseModel):
     state: str = "IN_WORK"
     allows_mutation: bool = True
     allows_content: bool = True
+    allows_edit_metadata: bool = True
 
 
 class ProductWatchResponse(BaseModel):

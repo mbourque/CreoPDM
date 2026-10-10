@@ -523,6 +523,7 @@ def synthesize_checkin_comment(
 def start_rebuild_where_used(
     product_id: str,
     request: Request,
+    db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> WhereUsedIndexJobResponse:
     """Start background vault → Dependency indexing (no-op if already running).
@@ -532,6 +533,10 @@ def start_rebuild_where_used(
     require_any_permission(
         request, ctx, PERMISSION_OBJECTS_METADATA, PERMISSION_UTILITIES_REBUILD_PRODUCT
     )
+    product = load_accessible_product(request, ctx, db, product_id)
+    from creopdm.product_state import ensure_product_allows
+
+    ensure_product_allows(product, "edit_metadata", action="rebuild Where Used")
     status = ctx.where_used_index.start(product_id)
     return _where_used_job_response(status)
 
@@ -864,6 +869,9 @@ def import_from_disk(
 ) -> BatchOperationResponse:
     require_permission(request, ctx, PERMISSION_OBJECTS_ADD)
     product = load_accessible_product(request, ctx, db, product_id)
+    from creopdm.product_state import ensure_product_allows
+
+    ensure_product_allows(product, "checkin", action="add files")
     comment = (payload.comment or "").strip() or None
     batch_total = payload.batch_total if (payload.batch_total or 0) > 0 else None
     import_batch_id = (payload.import_batch_id or "").strip()[:80] or None

@@ -113,6 +113,21 @@ def test_locked_product_rejects_all_mutation_apis(client, repo_parent):
         ),
         hint="from-zip",
     )
+    _assert_locked(
+        client.post(
+            f"/api/products/{pid}/objects/from-disk",
+            json={"paths": ["C:/nope/extra.prt"], "comment": "Should block"},
+        ),
+        hint="from-disk",
+    )
+    _assert_locked(
+        client.post(f"/api/products/{pid}/rebuild-where-used"),
+        hint="rebuild where used",
+    )
+    listed = client.get(f"/api/products/{pid}")
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["allows_edit_metadata"] is False
+    assert listed.json()["allows_mutation"] is False
 
     # Undo / Force Undo follow the matrix Check Out column (In Review = blocked).
     _assert_locked(

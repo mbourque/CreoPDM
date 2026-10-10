@@ -1686,6 +1686,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const productId = $("#rebuild-where-used-btn")?.dataset.product || currentProductId();
     if (!productId) return;
     showError($("#toolbar-error"), "");
+    const gate = await reconcileProductLifecycleChrome(productId, {
+      requireEditMetadata: true,
+    });
+    if (!gate.ok) return;
     const outcome = await indexWhereUsedUnderBusy(productId);
     if (!outcome?.started) {
       showError($("#toolbar-error"), outcome?.error || "Could not start Where Used indexing.");
@@ -2293,10 +2297,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           await postAiSnapshotFromGather(target.uuid, target.versionId || null, snapshot, {
             objectFilename: target.filename,
           });
+          return { ok: true, reason: "" };
+        }
+        let detail = "";
+        try {
+          const errBody = await response.json();
+          detail = String(errBody?.error?.message || errBody?.detail || "").trim();
+        } catch {
+          /* ignore */
         }
         return {
-          ok: response.ok,
-          reason: response.ok ? "" : "post_failed",
+          ok: false,
+          reason: "post_failed",
+          detail: detail || `HTTP ${response.status}`,
         };
       } catch {
         return { ok: false, reason: "post_failed" };
@@ -2424,7 +2437,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           lastReason = String(result.reason || "");
         } else {
           failed += 1;
-          lastReason = String(result.reason || "skipped");
+          lastReason = String(result.detail || result.reason || "skipped");
+          // Lifecycle lock: stop burning Creo time on a product that rejects saves.
+          if (/cannot update metadata|in review|is locked/i.test(lastReason)) {
+            showError($("#toolbar-error"), lastReason);
+            saveMetadataCollectState(null);
+            await reconcileProductLifecycleChrome(state.productId, {
+              requireEditMetadata: true,
+              showError: false,
+            });
+            break;
+          }
         }
         index += 1;
         if (pendingErase.length >= 25) {
@@ -2488,6 +2511,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       showOk("Metadata collection is already running.");
       return;
     }
+    const gate = await reconcileProductLifecycleChrome(productId, {
+      requireEditMetadata: true,
+    });
+    if (!gate.ok) return;
     // Bridge often arrives after first paint — same wait as Resume.
     showOk("Waiting for Creo.JS…");
     const ready = await waitForCreoMetadataBridge();
@@ -2589,7 +2616,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   resumeMetadataCollectIfNeeded();
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) resumeMetadataCollectIfNeeded();
+    if (!document.hidden) {
+      resumeMetadataCollectIfNeeded();
+      const pid = currentProductId();
+      if (pid && document.getElementById("metric-filters")) {
+        void reconcileProductLifecycleChrome(pid, { showError: false });
+      }
+    }
   });
   window.addEventListener("pageshow", () => {
     resumeMetadataCollectIfNeeded();
@@ -5743,6 +5776,51 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       new URLSearchParams(window.location.search).get("product") ||
       ""
     );
+  }
+
+  /**
+   * Server is authoritative for lifecycle. Stale Files chrome (state changed in
+   * Administration without a hard refresh) still showed Collect / Rebuild — soft
+   * reload when state or metadata permission drifted.
+   */
+  async function reconcileProductLifecycleChrome(productId, options) {
+    const opts = options && typeof options === "object" ? options : {};
+    const pid = String(productId || currentProductId() || "").trim();
+    const metrics = document.getElementById("metric-filters");
+    if (!pid || !metrics) return { ok: true, reloaded: false };
+    let data;
+    try {
+      const response = await fetch(`/api/products/${encodeURIComponent(pid)}`);
+      if (!response.ok) return { ok: true, reloaded: false };
+      data = await response.json();
+    } catch {
+      return { ok: true, reloaded: false };
+    }
+    const state = String(data?.state || "").trim().toUpperCase();
+    const allowsMeta = data?.allows_edit_metadata !== false;
+    const allowsMut = data?.allows_mutation !== false;
+    const allowsContent = data?.allows_content !== false;
+    const prevState = String(metrics.dataset.productState || "").trim().toUpperCase();
+    metrics.dataset.productState = state || prevState;
+    metrics.dataset.allowsMutation = allowsMut ? "1" : "0";
+    metrics.dataset.allowsContent = allowsContent ? "1" : "0";
+    metrics.dataset.allowsEditMetadata = allowsMeta ? "1" : "0";
+    const stateDrifted = Boolean(prevState && state && prevState !== state);
+    const needMeta = opts.requireEditMetadata === true;
+    if (stateDrifted || (needMeta && !allowsMeta)) {
+      const msg = !allowsMeta
+        ? `Product is ${String(data?.state || "locked").replace(/_/g, " ")} and cannot update metadata.`
+        : "Product state changed — refreshing…";
+      if (opts.showError !== false) {
+        showError($("#toolbar-error"), msg);
+      }
+      await reloadPage({
+        keepBusy: Boolean(opts.keepBusy),
+        busyMessage: opts.busyMessage || "Refreshing…",
+      });
+      return { ok: false, reloaded: true, allows_edit_metadata: allowsMeta, state };
+    }
+    return { ok: true, reloaded: false, allows_edit_metadata: allowsMeta, state };
   }
 
   function currentVaultFolder() {

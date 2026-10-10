@@ -649,6 +649,8 @@ class MetadataService:
                 "Product not found.",
                 details={"product_id": product_uuid},
             )
+        # Lifecycle matrix — UI hide is not enough (stale Files tab after state change).
+        ensure_product_allows(product, "edit_metadata", action="rebuild Where Used")
         # Full rebuild: vault scan is source of truth for asm/drw membership.
         # Upsert-only left false Top Level / Where Used parents forever.
         start = max(0, int(offset))

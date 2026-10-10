@@ -186,6 +186,7 @@ class WorkspaceService:
         relative = normalize_folder_query(folder)
         if not relative:
             raise PathValidationError("A folder path is required to remove a folder.")
+        ensure_product_allows(product, "remove", action="remove files")
         relative = assert_safe_relative_path(relative).as_posix()
         vault = self.vault_for(product)
         target = ensure_within(vault, vault / relative)

@@ -111,6 +111,28 @@ def test_app_js_does_not_reencode_product_lock():
     assert "allowsMutation" not in sync
     assert "data-allows-content" in _APP_HTML.read_text(encoding="utf-8")
     assert "productAllowsContent" in script
+    # Stale Files after Admin state change: reconcile from GET /api/products before Collect.
+    assert "function reconcileProductLifecycleChrome(" in script
+    assert "allows_edit_metadata" in script
+    assert "requireEditMetadata" in script
+
+
+def test_rebuild_where_used_and_from_disk_call_ensure():
+    products_api = (SRC / "api" / "products.py").read_text(encoding="utf-8")
+    meta = (SRC / "services" / "metadata_service.py").read_text(encoding="utf-8")
+    workspace = (SRC / "services" / "workspace_service.py").read_text(encoding="utf-8")
+    assert 'ensure_product_allows(product, "edit_metadata", action="rebuild Where Used")' in (
+        products_api
+    )
+    assert 'ensure_product_allows(product, "edit_metadata", action="rebuild Where Used")' in meta
+    from_disk = products_api.split("def import_from_disk(", 1)[1].split(
+        "\ndef ", 1
+    )[0]
+    assert 'ensure_product_allows(product, "checkin", action="add files")' in from_disk
+    assert 'ensure_product_allows(product, "remove", action="remove files")' in workspace
+    assert "allows_edit_metadata" in (
+        SRC / "schemas" / "common.py"
+    ).read_text(encoding="utf-8")
 
 
 def test_product_ui_capability_fields_stay_wired():
