@@ -394,9 +394,11 @@ def test_computed_diff_reports_simp_reps_added_when_only_on_new():
         },
     }
     diff = format_snapshot_compare_diff_text(older, newer)
-    assert (
-        "Added simplified representations NO_HARDWARE and NO_PLATE." in diff
-    )
+    assert "Simplified representations added:" in diff
+    assert "- NO_HARDWARE" in diff
+    assert "- NO_PLATE" in diff
+    assert "\n\nSimplified representations added:" in diff
+    assert "Added simplified representations NO_HARDWARE" not in diff
     assert "now include" not in diff.lower()
     assert "include/exclude" not in diff.lower()
     assert "active: MASTER" not in diff
@@ -426,12 +428,10 @@ def test_computed_diff_reports_simp_rep_active_change():
         },
     }
     diff = format_snapshot_compare_diff_text(older, newer)
-    assert (
-        "Switched the active simplified representation from MASTER to LIGHT."
-        in diff
-    )
-    assert "Added simplified representations" not in diff
-    assert "Removed simplified representations" not in diff
+    assert "Active simplified representation changed:" in diff
+    assert "- MASTER → LIGHT" in diff
+    assert "Simplified representations added" not in diff
+    assert "Simplified representations removed" not in diff
 def test_computed_diff_omits_simp_reps_when_unchanged():
     simp = {
         "active": {"name": "MASTER", "is_master": True},

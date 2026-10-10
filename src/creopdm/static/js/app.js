@@ -13335,9 +13335,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
-  async function copyTextToClipboard(text) {
+  async function copyTextToClipboard(text, opts) {
     // Creo's embedded browser often lacks navigator.clipboard (or blocks it).
     // Prefer the Clipboard API, then execCommand('copy') via a temporary textarea.
+    // When a modal <dialog> is open, append the textarea inside it — body-level
+    // execCommand often fails while the dialog holds top-layer focus.
     const value = String(text || "");
     if (!value) return false;
     if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
@@ -13348,17 +13350,41 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         /* fall through to execCommand */
       }
     }
+    const openDialog = aiSnapshotResultDialog();
+    const host =
+      (opts && opts.root && opts.root.nodeType === 1)
+        ? opts.root
+        : (openDialog && openDialog.open ? openDialog : document.body);
     try {
       const ta = document.createElement("textarea");
       ta.value = value;
       ta.setAttribute("readonly", "");
-      ta.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0;";
-      document.body.appendChild(ta);
+      ta.style.cssText =
+        "position:fixed;left:0;top:0;width:1px;height:1px;padding:0;margin:0;"
+        + "border:0;opacity:0;overflow:hidden;";
+      host.appendChild(ta);
       ta.focus();
       ta.select();
       ta.setSelectionRange(0, value.length);
       const ok = document.execCommand("copy");
-      document.body.removeChild(ta);
+      host.removeChild(ta);
+      return Boolean(ok);
+    } catch {
+      return false;
+    }
+  }
+
+  function copyElementTextToClipboard(el) {
+    if (!el) return false;
+    try {
+      const sel = window.getSelection();
+      if (!sel) return false;
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      const ok = document.execCommand("copy");
+      sel.removeAllRanges();
       return Boolean(ok);
     } catch {
       return false;
@@ -13371,25 +13397,81 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return "=== Computed differences ===\n(none)";
   }
 
-  /** Modal view: drop the banner and empty “(none)” noise; keep section headers. */
+  function _englishListToBullets(title, listText) {
+    const raw = String(listText || "").replace(/\.$/, "").trim();
+    if (!raw) return [title + ":"];
+    const names = raw
+      .split(/\s*,\s*|\s+and\s+/i)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return [title + ":", ...names.map((n) => `- ${n}`)];
+  }
+
+  /** Modal view: drop the banner and empty “(none)” noise; space sections. */
   function formatAiWhatChangedDisplay(rawDiff) {
     const kept = [];
+    const pushSection = (lines) => {
+      if (!lines.length) return;
+      if (kept.length) kept.push("");
+      kept.push(...lines);
+    };
+    let pending = [];
+    const flushPending = () => {
+      if (!pending.length) return;
+      pushSection(pending);
+      pending = [];
+    };
     for (const raw of String(rawDiff || "").split(/\r?\n/)) {
       const line = raw.trimEnd();
       const t = line.trim();
       if (!t) continue;
       if (/^=== Computed differences ===$/i.test(t)) continue;
       if (/:\s*\(none\)\s*$/i.test(t)) continue;
-      // Blank line before each section header (…:) except the first.
-      if (
-        kept.length
-        && /:\s*$/.test(t)
-        && !t.startsWith("-")
-      ) {
-        kept.push("");
+
+      // Legacy prose SimpRep lines → same bullet sections as Components/Dimensions.
+      let m = t.match(/^Added simplified representations\s+(.+)$/i);
+      if (m) {
+        flushPending();
+        pushSection(_englishListToBullets("Simplified representations added", m[1]));
+        continue;
       }
-      kept.push(line);
+      m = t.match(/^Removed simplified representations\s+(.+)$/i);
+      if (m) {
+        flushPending();
+        pushSection(_englishListToBullets("Simplified representations removed", m[1]));
+        continue;
+      }
+      m = t.match(
+        /^Switched the active simplified representation from\s+(.+?)\s+to\s+(.+?)\.?$/i
+      );
+      if (m) {
+        flushPending();
+        pushSection([
+          "Active simplified representation changed:",
+          `- ${m[1].trim()} → ${m[2].trim()}`,
+        ]);
+        continue;
+      }
+      m = t.match(/^Active simplified representation changed:\s*(.+)$/i);
+      if (m) {
+        flushPending();
+        pushSection([
+          "Active simplified representation changed:",
+          `- ${m[1].trim()}`,
+        ]);
+        continue;
+      }
+
+      const isHeader = /:\s*$/.test(t) && !t.startsWith("-");
+      if (isHeader) {
+        flushPending();
+        pending = [line];
+        continue;
+      }
+      if (!pending.length) pending = [];
+      pending.push(line);
     }
+    flushPending();
     if (!kept.length) return "No computed differences.";
     return kept.join("\n");
   }
@@ -13545,12 +13627,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           meta: olderRev && newerRev ? `${olderRev} → ${newerRev}` : "",
         };
       });
+      const display = formatAiWhatChangedDisplay(text);
       openAiSnapshotResultDialog({
         title: "What changed",
         meta,
-        body: formatAiWhatChangedDisplay(text),
+        body: display,
         showCopy: true,
-        copyText: text,
+        copyText: display,
       });
     } catch (err) {
       showError(
@@ -13688,13 +13771,16 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     $("#ai-snapshot-result-copy")?.addEventListener("click", async () => {
       const btn = $("#ai-snapshot-result-copy");
       const body = $("#ai-snapshot-result-body");
-      let text = String(btn?.dataset.copyText || "").trim();
-      if (!text && body) text = String(body.textContent || "").trim();
+      const dialog = aiSnapshotResultDialog();
+      // Prefer what the user sees (formatted body); dataset is fallback.
+      let text = String(body?.textContent || "").trim();
+      if (!text) text = String(btn?.dataset.copyText || "").trim();
       if (!text) {
         showError($("#toolbar-error"), "Nothing to copy yet.");
         return;
       }
-      const ok = await copyTextToClipboard(text);
+      let ok = await copyTextToClipboard(text, { root: dialog || undefined });
+      if (!ok && body) ok = copyElementTextToClipboard(body);
       if (!ok) {
         showError(
           $("#toolbar-error"),
@@ -13702,7 +13788,15 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         );
         return;
       }
-      showOk("Copied.");
+      if (btn) {
+        const prev = btn.textContent;
+        btn.textContent = "Copied";
+        btn.disabled = true;
+        window.setTimeout(() => {
+          btn.textContent = prev || "Copy";
+          btn.disabled = false;
+        }, 1200);
+      }
     });
     // Esc is native <dialog> cancel; click the dimmed backdrop to close.
     resultDialog?.addEventListener("click", (event) => {

@@ -811,26 +811,31 @@ def _simp_reps_diff_lines(
     older_active = _simp_rep_active_name(older_simp)
     newer_active = _simp_rep_active_name(newer_simp)
 
+    def _bullet_names(title: str, names: list[str]) -> list[str]:
+        # Same shape as Components/Features — readable in What changed + Ask AI.
+        if not names:
+            return [f"{title}: (none)"]
+        return [f"{title}:", *[f"- {name}" for name in names]]
+
+    def _extend_block(block: list[str]) -> None:
+        if not block:
+            return
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.extend(block)
+
     if not older_has and newer_has:
-        # Present on NEW only — one plain fact line (names only; no rule chatter).
-        named = _english_name_list(newer_names)
-        if named:
-            lines.append(f"Added simplified representations {named}.")
-        else:
-            lines.append("Added simplified representations.")
-        return lines
+        return _bullet_names("Simplified representations added", newer_names)
 
     if older_has and not newer_has:
-        named = _english_name_list(older_names)
-        if named:
-            lines.append(f"Removed simplified representations {named}.")
-        else:
-            lines.append("Removed simplified representations.")
-        return lines
+        return _bullet_names("Simplified representations removed", older_names)
 
     if older_active and newer_active and older_active != newer_active:
-        lines.append(
-            f"Switched the active simplified representation from {older_active} to {newer_active}."
+        _extend_block(
+            [
+                "Active simplified representation changed:",
+                f"- {older_active} → {newer_active}",
+            ]
         )
 
     older_counts = _count_labels(older_labels)
@@ -859,19 +864,26 @@ def _simp_reps_diff_lines(
         for _ in range(newer_name_counts.get(n, 0) - older_name_counts.get(n, 0))
     ]
     if names_removed:
-        lines.append(f"Removed simplified representations {_english_name_list(names_removed)}.")
+        _extend_block(_bullet_names("Simplified representations removed", names_removed))
     if names_added:
-        lines.append(f"Added simplified representations {_english_name_list(names_added)}.")
+        _extend_block(_bullet_names("Simplified representations added", names_added))
     # Same names but rule/default text changed — only then show detail labels.
     if not names_removed and not names_added and (removed or added):
         if removed:
-            lines.append("Simplified representation rules changed (removed):")
-            lines.extend(f"- {item}" for item in removed)
+            _extend_block(
+                [
+                    "Simplified representation rules changed (removed):",
+                    *[f"- {item}" for item in removed],
+                ]
+            )
         if added:
-            lines.append("Simplified representation rules changed (added):")
-            lines.extend(f"- {item}" for item in added)
+            _extend_block(
+                [
+                    "Simplified representation rules changed (added):",
+                    *[f"- {item}" for item in added],
+                ]
+            )
     return lines
-
 
 def _simp_reps_outline_lines(snapshot: dict[str, Any]) -> list[str]:
     """Assembly simplified representation definitions (not BOM membership)."""
@@ -1019,6 +1031,14 @@ def format_snapshot_compare_diff_text(
             return [f"{title}: (none)"]
         return [f"{title}:", *[f"- {item}" for item in items]]
 
+    def _extend_section(dest: list[str], block: list[str]) -> None:
+        """Blank line between major sections (Components / Dimensions / SimpRep)."""
+        if not block:
+            return
+        if dest and dest[-1] != "" and dest[-1] != "=== Computed differences ===":
+            dest.append("")
+        dest.extend(block)
+
     # Both sides have Structure (BOM or inventory) → BOM/structure is
     # authoritative for assemblies. Pending Check In gathers often differ on
     # non-component features (ACS*/datums) even when Structure is unchanged.
@@ -1033,23 +1053,22 @@ def format_snapshot_compare_diff_text(
     # Diff facts only — narrative instructions live in System Settings → AI prompt.
     lines = ["=== Computed differences ==="]
     if has_structure:
-        lines.extend(_bullet_block("Components removed", comp_removed))
-        lines.extend(_bullet_block("Components added", comp_added))
-        lines.extend(_bullet_block("Components quantity changed", comp_qty_changed))
-    lines.extend(
-        [
-            *_bullet_block("Features removed", feat_removed),
-            *_bullet_block("Features added", feat_added),
-            *_bullet_block("Dimensions removed", dim_removed),
-            *_bullet_block("Dimensions changed (same symbol)", dim_changed),
-            *_bullet_block("Dimensions added", dim_added),
-        ]
-    )
+        _extend_section(lines, _bullet_block("Components removed", comp_removed))
+        _extend_section(lines, _bullet_block("Components added", comp_added))
+        _extend_section(lines, _bullet_block("Components quantity changed", comp_qty_changed))
+    for title, items in (
+        ("Features removed", feat_removed),
+        ("Features added", feat_added),
+        ("Dimensions removed", dim_removed),
+        ("Dimensions changed (same symbol)", dim_changed),
+        ("Dimensions added", dim_added),
+    ):
+        _extend_section(lines, _bullet_block(title, items))
     # SimpRep defs/active — keep out of Structure; force into Computed differences
     # so Ask AI cannot miss "NEW has Simplified representations, OLD does not."
     simp_diff = _simp_reps_diff_lines(older, newer)
     if simp_diff:
-        lines.extend(simp_diff)
+        _extend_section(lines, simp_diff)
     return "\n".join(lines)
 
 
