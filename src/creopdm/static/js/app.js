@@ -4981,22 +4981,24 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         pill.textContent = "Creo: Connected";
         pill.dataset.state = "ok";
         pill.title = "Creo.JS session linked. Local creopdm-agent is running.";
+        setCreoStatusPillAgentTrayHelp(pill, false);
       } else if (inSession && !agent) {
         pill.textContent = "Creo: Agent offline";
         pill.dataset.state = "idle";
-        pill.title =
-          "Creo.JS session is linked, but creopdm-agent is not running on this PC. Start creopdm-agent-tray for Embedded open.";
+        setCreoStatusPillAgentTrayHelp(pill, true);
       } else if (!inSession && agent) {
         // Agent health ≠ Creo.JS. SSR often says Session offline from the Linux host.
         pill.textContent = "Creo: Session offline";
         pill.dataset.state = "idle";
         pill.title =
           "creopdm-agent is running, but this page has no Creo.JS bridge (window.external.ptc). Open CreoPDM inside Creo's embedded browser — not Chrome/Edge — then hard-refresh.";
+        setCreoStatusPillAgentTrayHelp(pill, false);
       } else {
         pill.textContent = "Creo: Session offline";
         pill.dataset.state = "idle";
         pill.title =
           "No Creo.JS bridge and creopdm-agent is offline. Open CreoPDM in Creo's embedded browser and start the agent tray.";
+        setCreoStatusPillAgentTrayHelp(pill, false);
       }
       // Re-apply after agent await — first-pass visibility used to disagree with the pill.
       applyCreoSessionOnlyVisibility(inSession);
@@ -5025,9 +5027,49 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       pill.dataset.state = "idle";
       pill.title = "Opens Creo models as a browser download for the OS association";
     }
+    setCreoStatusPillAgentTrayHelp(pill, false);
     applyCreoSessionOnlyVisibility(inSession);
     syncProductSettingsVisibility();
     return agent;
+  }
+
+  function setCreoStatusPillAgentTrayHelp(pill, enabled) {
+    if (!pill) return;
+    if (enabled) {
+      pill.classList.add("is-clickable");
+      pill.dataset.agentTrayHelp = "1";
+      pill.setAttribute("role", "link");
+      pill.tabIndex = 0;
+      pill.title =
+        "Creo.JS is linked, but creopdm-agent is not running. Click for how to start, download, or autostart the tray.";
+    } else {
+      pill.classList.remove("is-clickable");
+      delete pill.dataset.agentTrayHelp;
+      pill.removeAttribute("role");
+      pill.removeAttribute("tabindex");
+    }
+  }
+
+  function openAgentTrayHelp() {
+    // Named tab like Help — keep the Files page / Creo.JS session in place.
+    window.open("/help/agent-tray", "creopdm-help");
+  }
+
+  if (!window.__creopdmAgentTrayPillBound) {
+    window.__creopdmAgentTrayPillBound = true;
+    origAddEventListener.call(document, "click", (event) => {
+      const pill = eventEl(event)?.closest("#creo-status");
+      if (!pill || pill.dataset.agentTrayHelp !== "1") return;
+      event.preventDefault();
+      openAgentTrayHelp();
+    });
+    origAddEventListener.call(document, "keydown", (event) => {
+      const pill = eventEl(event)?.closest("#creo-status");
+      if (!pill || pill.dataset.agentTrayHelp !== "1") return;
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openAgentTrayHelp();
+    });
   }
 
   function showCreoSessionControls() {

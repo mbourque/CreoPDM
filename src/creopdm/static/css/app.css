@@ -70,6 +70,20 @@ a.brand:hover { text-decoration: none; color: inherit; }
 .status-pill[data-state="ok"] { color: #8ee0b0; }
 .status-pill[data-state="idle"] { color: #f0d48a; }
 .status-pill[data-state="warn"] { color: #ffb4a8; border-color: #c45c4a; }
+.status-pill.is-clickable {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+.agent-tray-help .lead { max-width: 40rem; }
+.agent-tray-help section { margin-top: 1.5rem; }
+.agent-tray-help kbd {
+  font-size: 0.85em;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--border, #314252);
+  border-radius: 0.25rem;
+  background: var(--panel, #1b2732);
+}
 .site-unavailable-page {
   max-width: 36rem;
   margin: 2.5rem auto;

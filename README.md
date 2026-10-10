@@ -278,7 +278,26 @@ On a Windows machine that already has this repo’s venv:
 .\build-agent-tray.ps1
 ```
 
-Copy `dist\creopdm-agent-tray.exe` to the other Creo PC and run it. That is a real PyInstaller one-file build — not the venv launcher stub under `.venv\Scripts\`.
+That writes `dist\creopdm-agent-tray.exe` (a real PyInstaller one-file build — not the venv launcher stub under `.venv\Scripts\`).
+
+**Hand to a Creo PC directly:** copy the exe and run it.
+
+**Publish on the CreoPDM server (download from the Agent offline pill):** copy the same file into the host data directory’s `downloads` folder (created on startup):
+
+| Host | Path |
+|------|------|
+| Linux (default) | `~/.local/share/CreoPDM/downloads/creopdm-agent-tray.exe` |
+| Custom `--data-dir` / `CREOPDM_DATA_DIR` | `<data-dir>/downloads/creopdm-agent-tray.exe` |
+
+Example from your Windows build PC (adjust user/host):
+
+```powershell
+scp .\dist\creopdm-agent-tray.exe user@creopdm-host:~/.local/share/CreoPDM/downloads/creopdm-agent-tray.exe
+```
+
+Then users on Creo see **Creo: Agent offline** in the top bar → click the pill → **Download creopdm-agent-tray.exe** (or start an existing install / set Windows Startup). `./pull-restart.ps1` does **not** publish the exe — copy it after each tray rebuild you want on the server. URL: `/client/agent-tray`.
+
+**Autostart on the Creo PC:** after install, `Win+R` → `shell:startup` → put a shortcut to `creopdm-agent-tray.exe` in that folder so it starts at Windows sign-in.
 
 ### Use with Embedded Creo
 

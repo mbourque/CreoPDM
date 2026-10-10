@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}creopdm-agent tray — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="detail settings-page agent-tray-help">
+  <nav class="crumb" aria-label="Breadcrumb">
+    <a href="/">Products</a>
+    <span aria-hidden="true">/</span>
+    <span>creopdm-agent tray</span>
+  </nav>
+  <h1>creopdm-agent tray</h1>
+  <p class="lead">
+    Creo.JS is linked, but the local agent on this PC is not running.
+    Open, Checkout download, Add from disk, and the local workspace need
+    <strong>creopdm-agent-tray</strong> on this Windows Creo PC.
+  </p>
+
+  <section>
+    <h2>1. Start it (if you already have it)</h2>
+    <ol>
+      <li>Find <code>creopdm-agent-tray.exe</code> where you installed it (or the Start menu / taskbar if you pinned it).</li>
+      <li>Run it — a tray icon appears near the clock (no console window).</li>
+      <li>Return to CreoPDM and refresh; the top-bar pill should become <strong>Creo: Connected</strong>.</li>
+    </ol>
+    <p class="muted small">Quick check: open <code>http://127.0.0.1:8766/health</code> in a browser on this PC — it should respond when the tray is up.</p>
+  </section>
+
+  <section>
+    <h2>2. Download (if you do not have it yet)</h2>
+    {% if agent_tray_available %}
+    <p>Download the shareable tray app from this CreoPDM server, then run it on <strong>this</strong> Creo PC (not on the Linux host).</p>
+    <p>
+      <a class="btn" href="/client/agent-tray">Download creopdm-agent-tray.exe</a>
+    </p>
+    <p class="muted small">Save it somewhere stable (for example <code>%LOCALAPPDATA%\CreoPDM-agent\</code>), then double-click to start.</p>
+    {% else %}
+    <p class="muted">
+      This server does not have <code>creopdm-agent-tray.exe</code> published yet.
+      Ask an administrator to build it (<code>.\build-agent-tray.ps1</code>) and copy it into the CreoPDM
+      <code>downloads</code> folder (see the install README).
+    </p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>3. Start automatically when you sign in to Windows</h2>
+    <p>So you do not have to launch the tray every morning:</p>
+    <ol>
+      <li>Press <kbd>Win</kbd>+<kbd>R</kbd>, type <code>shell:startup</code>, press Enter — that opens your personal Startup folder.</li>
+      <li>Right-click <code>creopdm-agent-tray.exe</code> → <strong>Create shortcut</strong>, and move that shortcut into the Startup folder
+        (or copy the <code>.exe</code> itself there if you prefer).</li>
+      <li>Sign out and back in once to confirm the tray icon appears without opening it by hand.</li>
+    </ol>
+    <p class="muted small">
+      Keep the real <code>.exe</code> in a fixed folder; only put a shortcut in Startup if you move the file later.
+      You can also pin the tray to the taskbar for a one-click start when it is not set to autostart.
+    </p>
+  </section>
+
+  <p class="muted small">
+    The agent is separate from the CreoPDM server. It must run on the Windows PC that runs Creo.
+  </p>
+</article>
+{% endblock %}

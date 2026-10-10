@@ -680,6 +680,21 @@ def user_help_page() -> FileResponse:
     )
 
 
+@router.get("/help/agent-tray", response_class=HTMLResponse)
+def agent_tray_help_page(request: Request) -> HTMLResponse:
+    """Start / download / Windows autostart for creopdm-agent-tray (Agent offline pill)."""
+    ctx: AppContext = request.app.state.ctx
+    tray_path = ctx.config.agent_tray_exe_path()
+    return render(
+        request,
+        "help_agent_tray.html",
+        {
+            "agent_tray_available": tray_path.is_file(),
+            "agent_tray_name": ctx.config.AGENT_TRAY_DOWNLOAD_NAME,
+        },
+    )
+
+
 def _require_settings_page(request: Request, ctx: AppContext) -> HTMLResponse | None:
     if ctx.auth_enabled and not getattr(request.state, "can_manage_settings", False):
         return HTMLResponse(

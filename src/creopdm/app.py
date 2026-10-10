@@ -210,6 +210,25 @@ def create_app(context: AppContext | None = None) -> FastAPI:
             headers={"Cache-Control": "no-store"},
         )
 
+    @app.get("/client/agent-tray")
+    def client_agent_tray() -> FileResponse:
+        """Published creopdm-agent-tray.exe from data-dir/downloads/ (ops copy after build)."""
+        path = ctx.config.agent_tray_exe_path()
+        if not path.is_file():
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "creopdm-agent-tray.exe is not published on this server. "
+                    "Ask an administrator to copy it into the CreoPDM downloads folder."
+                ),
+            )
+        return FileResponse(
+            path,
+            media_type="application/octet-stream",
+            filename=ConfigManager.AGENT_TRAY_DOWNLOAD_NAME,
+            headers={"Cache-Control": "no-store"},
+        )
+
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     @app.middleware("http")

@@ -269,7 +269,12 @@ Otherwise the app asks how you want to open it (must show the chooser in Creo’
 
 If open seems to do nothing, check the error line under the toolbar, and that creopdm-agent is running on the Creo PC. Large downloads can take a while.
 
-**Settings → Open Creo models with:** **Embedded** options (help + Creo.JS path) sit under that radio and are grayed out when **OS file association** is selected. Embedded only uses Creo.JS inside Creo’s embedded browser; otherwise Open uses the OS association (including when the pill says **Creo: Session offline** in Chrome/Edge — do not tell the user to open from Creo’s built-in browser just because Embedded is selected). The top-bar Creo pill shows session only (**Creo: Connected** / **Creo: Session offline**), not the open-mode name.
+**Settings → Open Creo models with:** **Embedded** options (help + Creo.JS path) sit under that radio and are grayed out when **OS file association** is selected. Embedded only uses Creo.JS inside Creo’s embedded browser; otherwise Open uses the OS association (including when the pill says **Creo: Session offline** in Chrome/Edge — do not tell the user to open from Creo’s built-in browser just because Embedded is selected). The top-bar Creo pill shows session / agent status (**Creo: Connected** / **Creo: Agent offline** / **Creo: Session offline**), not the open-mode name.
+
+| You do | App should | App must not |
+|--------|------------|--------------|
+| See **Creo: Agent offline** (Embedded, Creo.JS linked, tray not running) | Make the pill clickable; open a help page (named tab like Help) that tells you to **start** an existing tray **or download** `creopdm-agent-tray.exe` from this server when published, plus **Windows Startup** (`shell:startup`) steps | Leave the pill inert; require admins-only paths to learn how to install the tray; download when the exe was never published (`downloads/` empty) without a clear “ask admin” message |
+| Click **Download creopdm-agent-tray.exe** on that page when the admin published it | Download `/client/agent-tray` as an attachment from `<data-dir>/downloads/` | Serve a git-tracked binary from the repo; claim the tray is on the Linux host for Creo work |
 
 **Set Working Directory** (toolbar) does the same WD step on its own; it only appears inside Creo’s browser when Creo.JS is connected, and only when the product allows download or a Check Out / Check In cycle.
 

@@ -745,6 +745,9 @@ def data_dir_from_environment() -> Path:
 class ConfigManager:
     """Loads, persists, and ensures the application data directory layout."""
 
+    # Published shareable tray build (not in git). See README → Creo agent.
+    AGENT_TRAY_DOWNLOAD_NAME = "creopdm-agent-tray.exe"
+
     def __init__(self, data_dir: Path | None = None) -> None:
         self.data_dir = (data_dir or data_dir_from_environment()).resolve()
         self.config_dir = self.data_dir / "config"
@@ -753,10 +756,15 @@ class ConfigManager:
         self.cache_dir = self.data_dir / "cache"
         self.vaults_dir = self.data_dir / VAULTS_DIRNAME
         self.temp_dir = self.data_dir / "temp"
+        self.downloads_dir = self.data_dir / "downloads"
         self.settings_path = self.config_dir / "settings.json"
         self.database_path = self.database_dir / "creopdm.db"
         self.log_path = self.logs_dir / "creopdm.log"
         self._settings: AppSettings | None = None
+
+    def agent_tray_exe_path(self) -> Path:
+        """Host path for the published creopdm-agent-tray.exe (may not exist yet)."""
+        return self.downloads_dir / self.AGENT_TRAY_DOWNLOAD_NAME
 
     @property
     def workspaces_dir(self) -> Path:
@@ -792,6 +800,7 @@ class ConfigManager:
             self.cache_dir,
             self.vaults_dir,
             self.temp_dir,
+            self.downloads_dir,
         ):
             directory.mkdir(parents=True, exist_ok=True)
 
