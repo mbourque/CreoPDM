@@ -738,6 +738,23 @@ def _simp_rep_active_name(simp: dict[str, Any] | None) -> str:
     return "MASTER" if active.get("is_master") else ""
 
 
+def _simp_rep_names(simp: dict[str, Any] | None) -> list[str]:
+    """Named saved representation names only (order preserved, no rule noise)."""
+    if not isinstance(simp, dict):
+        return []
+    reps = simp.get("representations")
+    if not isinstance(reps, list):
+        return []
+    names: list[str] = []
+    for rep in reps:
+        if not isinstance(rep, dict):
+            continue
+        name = str(rep.get("name") or "").strip()
+        if name:
+            names.append(name)
+    return names
+
+
 def _simp_rep_named_labels(simp: dict[str, Any] | None) -> list[str]:
     """Stable labels for named saved representations (definitions, not Structure)."""
     if not isinstance(simp, dict):
@@ -764,16 +781,29 @@ def _simp_rep_named_labels(simp: dict[str, Any] | None) -> list[str]:
     return labels
 
 
+def _english_name_list(names: list[str]) -> str:
+    clean = [n for n in names if n]
+    if not clean:
+        return ""
+    if len(clean) == 1:
+        return clean[0]
+    if len(clean) == 2:
+        return f"{clean[0]} and {clean[1]}"
+    return ", ".join(clean[:-1]) + f", and {clean[-1]}"
+
+
 def _simp_reps_diff_lines(
     older: dict[str, Any], newer: dict[str, Any]
 ) -> list[str]:
     """Authoritative SimpRep definition/active diffs for Computed differences."""
     older_simp = _simp_reps_dict(older)
     newer_simp = _simp_reps_dict(newer)
+    older_names = _simp_rep_names(older_simp)
+    newer_names = _simp_rep_names(newer_simp)
     older_labels = _simp_rep_named_labels(older_simp)
     newer_labels = _simp_rep_named_labels(newer_simp)
-    older_has = bool(older_labels) or bool(_simp_rep_active_name(older_simp))
-    newer_has = bool(newer_labels) or bool(_simp_rep_active_name(newer_simp))
+    older_has = bool(older_names) or bool(_simp_rep_active_name(older_simp))
+    newer_has = bool(newer_names) or bool(_simp_rep_active_name(newer_simp))
     if not older_has and not newer_has:
         return []
 
@@ -782,25 +812,25 @@ def _simp_reps_diff_lines(
     newer_active = _simp_rep_active_name(newer_simp)
 
     if not older_has and newer_has:
-        # Present on NEW only — never call this a removal.
-        lines.append("Simplified representations added:")
-        if newer_active:
-            lines.append(f"- active: {newer_active}")
-        for label in newer_labels:
-            lines.append(f"- {label}")
+        # Present on NEW only — one plain fact line (names only; no rule chatter).
+        named = _english_name_list(newer_names)
+        if named:
+            lines.append(f"Added simplified representations {named}.")
+        else:
+            lines.append("Added simplified representations.")
         return lines
 
     if older_has and not newer_has:
-        lines.append("Simplified representations removed:")
-        if older_active:
-            lines.append(f"- active: {older_active}")
-        for label in older_labels:
-            lines.append(f"- {label}")
+        named = _english_name_list(older_names)
+        if named:
+            lines.append(f"Removed simplified representations {named}.")
+        else:
+            lines.append("Removed simplified representations.")
         return lines
 
     if older_active and newer_active and older_active != newer_active:
         lines.append(
-            f"Active simplified representation: {older_active} → {newer_active}"
+            f"Switched the active simplified representation from {older_active} to {newer_active}."
         )
 
     older_counts = _count_labels(older_labels)
@@ -813,14 +843,34 @@ def _simp_reps_diff_lines(
             removed.extend([label] * (-delta))
         elif delta > 0:
             added.extend([label] * delta)
-    if removed:
-        lines.append("Simplified representations removed:")
-        lines.extend(f"- {item}" for item in removed)
-    if added:
-        lines.append("Simplified representations added:")
-        lines.extend(f"- {item}" for item in added)
+    # Prefer name-only when whole named reps appeared/disappeared.
+    older_name_counts = _count_labels(older_names)
+    newer_name_counts = _count_labels(newer_names)
+    names_removed = [
+        n
+        for n in sorted(set(older_name_counts) | set(newer_name_counts), key=str.lower)
+        if newer_name_counts.get(n, 0) < older_name_counts.get(n, 0)
+        for _ in range(older_name_counts.get(n, 0) - newer_name_counts.get(n, 0))
+    ]
+    names_added = [
+        n
+        for n in sorted(set(older_name_counts) | set(newer_name_counts), key=str.lower)
+        if newer_name_counts.get(n, 0) > older_name_counts.get(n, 0)
+        for _ in range(newer_name_counts.get(n, 0) - older_name_counts.get(n, 0))
+    ]
+    if names_removed:
+        lines.append(f"Removed simplified representations {_english_name_list(names_removed)}.")
+    if names_added:
+        lines.append(f"Added simplified representations {_english_name_list(names_added)}.")
+    # Same names but rule/default text changed — only then show detail labels.
+    if not names_removed and not names_added and (removed or added):
+        if removed:
+            lines.append("Simplified representation rules changed (removed):")
+            lines.extend(f"- {item}" for item in removed)
+        if added:
+            lines.append("Simplified representation rules changed (added):")
+            lines.extend(f"- {item}" for item in added)
     return lines
-
 
 def _simp_reps_outline_lines(snapshot: dict[str, Any]) -> list[str]:
     """Assembly simplified representation definitions (not BOM membership)."""
