@@ -1,0 +1,37 @@
+---
+description: Creo metadata walks must live in creo_inventory (probe-promoted), not inline in base.html
+alwaysApply: true
+---
+
+# Creo metadata → creo_inventory only
+
+All Creo.JS **model inventory / metadata walks** (features, assembly structure, drawing structure, simplified representations, and any new Collect fields) must live under `src/creopdm/static/creo_inventory/` — promoted from the matching probe via `scripts/wrap_creo_inventory.py`.
+
+| Domain | Probe source | Inventory (production) | Global entry |
+|---|---|---|---|
+| Features | `feature_probe/` | `creo_inventory/features.creojs` | `listFeaturesForModel` |
+| Assembly structure / SimpReps | `assembly_probe/` | `creo_inventory/assembly.creojs` | `listAssemblyStructureForModel`, `listAssemblySimpRepsForModel` |
+| Drawing structure | `drawing_probe/` | `creo_inventory/drawing.creojs` | `listDrawingStructureForModel` |
+
+## Do
+
+1. Implement / fix the walk in the **probe** `.creojs` first (iterate in Creo).
+2. Re-run `python scripts/wrap_creo_inventory.py` (or keep inventory in sync by hand) so `creo_inventory/*.creojs` exports the global.
+3. In `base.html` `gatherModelMetadata` / enrich — **only call** those globals and normalize the pack into the POST/snapshot shape (same pattern as Structure → `creoInventoryStructureRows`).
+4. Extend `wrap_creo_inventory.py` `extra_exports` when adding a new public list function.
+5. Contract-test that inventory (and probe when parity matters) contain the walk; `base.html` must reference the inventory function, not reimplement Toolkit `ListItems` / `GetInstructions` / feature walks.
+
+## Do not
+
+```text
+# ❌ BAD — new metadata Toolkit walk inlined in base.html / app.js
+function creoGatherSimpReps(model) { model.ListItems(ITEM_SIMPREP); … }
+
+# ❌ BAD — edit only creo_inventory/*.creojs and leave assembly_probe stale
+#     (wrap regenerates inventory from the probe)
+
+# ✅ GOOD — listAssemblySimpRepsForModel in assembly_probe → wrap → inventory
+# ✅ GOOD — gatherModelMetadata: if (typeof listAssemblySimpRepsForModel === "function") …
+```
+
+`base.html` may keep identity / parameters / materials / units / BOM helpers that are not probe inventories. **New inventory-shaped Capture** (tree/list of model items for Details / AI snapshot) goes through `creo_inventory`.
