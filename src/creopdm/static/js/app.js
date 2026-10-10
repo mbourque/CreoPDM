@@ -13371,24 +13371,40 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return "=== Computed differences ===\n(none)";
   }
 
-  /** Modal view: drop the banner and empty “(none)” noise. */
+  /** Modal view: drop the banner and empty “(none)” noise; keep section headers. */
   function formatAiWhatChangedDisplay(rawDiff) {
-    const lines = String(rawDiff || "")
-      .split(/\r?\n/)
-      .map((line) => line.trimEnd())
-      .filter((line) => {
-        const t = line.trim();
-        if (!t) return false;
-        if (/^=== Computed differences ===$/i.test(t)) return false;
-        if (/:\s*\(none\)\s*$/i.test(t)) return false;
-        return true;
-      });
-    if (!lines.length) return "No computed differences.";
-    return lines.join("\n");
+    const kept = [];
+    for (const raw of String(rawDiff || "").split(/\r?\n/)) {
+      const line = raw.trimEnd();
+      const t = line.trim();
+      if (!t) continue;
+      if (/^=== Computed differences ===$/i.test(t)) continue;
+      if (/:\s*\(none\)\s*$/i.test(t)) continue;
+      // Blank line before each section header (…:) except the first.
+      if (
+        kept.length
+        && /:\s*$/.test(t)
+        && !t.startsWith("-")
+      ) {
+        kept.push("");
+      }
+      kept.push(line);
+    }
+    if (!kept.length) return "No computed differences.";
+    return kept.join("\n");
   }
 
   function aiSnapshotResultDialog() {
     return $("#ai-snapshot-result-dialog");
+  }
+
+  function resetAiSnapshotResultScroll() {
+    const dialog = aiSnapshotResultDialog();
+    const form = $("#ai-snapshot-result-form");
+    const bodyEl = $("#ai-snapshot-result-body");
+    if (dialog) dialog.scrollTop = 0;
+    if (form) form.scrollTop = 0;
+    if (bodyEl) bodyEl.scrollTop = 0;
   }
 
   function openAiSnapshotResultDialog({ title, meta, body, showCopy, copyText }) {
@@ -13417,7 +13433,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         ? String(copyText != null ? copyText : text)
         : "";
     }
+    resetAiSnapshotResultScroll();
     if (!dialog.open) dialog.showModal();
+    // Do not let focus jump to Close at the bottom (scrolls long diffs off the top).
+    if (titleEl) {
+      if (!titleEl.hasAttribute("tabindex")) titleEl.setAttribute("tabindex", "-1");
+      try {
+        titleEl.focus({ preventScroll: true });
+      } catch {
+        titleEl.focus();
+      }
+    }
+    resetAiSnapshotResultScroll();
+    requestAnimationFrame(() => resetAiSnapshotResultScroll());
   }
 
   function closeAiSnapshotResultDialog() {
