@@ -2309,10 +2309,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         return {
           ok: false,
           reason: "post_failed",
+          status: response.status,
           detail: detail || `HTTP ${response.status}`,
         };
       } catch {
-        return { ok: false, reason: "post_failed" };
+        return { ok: false, reason: "post_failed", status: 0 };
       }
     } catch {
       return { ok: false, reason: "exception" };
@@ -2438,10 +2439,14 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         } else {
           failed += 1;
           lastReason = String(result.detail || result.reason || "skipped");
-          // Lifecycle lock: stop burning Creo time on a product that rejects saves.
-          if (/cannot update metadata|in review|is locked/i.test(lastReason)) {
+          // Lifecycle / validation: stop immediately — do not Creo-walk the rest.
+          const locked =
+            Number(result.status) === 400 ||
+            /cannot update metadata|in review|is locked|validation/i.test(lastReason);
+          if (locked) {
             showError($("#toolbar-error"), lastReason);
             saveMetadataCollectState(null);
+            metadataCollectJob.cancel = true;
             await reconcileProductLifecycleChrome(state.productId, {
               requireEditMetadata: true,
               showError: false,
@@ -5778,47 +5783,101 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     );
   }
 
+  function productStateDisplayLabel(state) {
+    const raw = String(state || "").trim();
+    if (!raw) return "locked";
+    return raw.replace(/_/g, " ");
+  }
+
+  /** Fresh product row from the API — never trust stale Files DOM for lifecycle. */
+  async function fetchProductAccess(productId) {
+    const pid = String(productId || "").trim();
+    if (!pid) throw new Error("No product is open.");
+    const response = await fetch(`/api/products/${encodeURIComponent(pid)}`);
+    if (!response.ok) {
+      throw new Error("Could not verify product access on the server.");
+    }
+    return response.json();
+  }
+
+  function productAllowsEditMetadataFromAccess(data) {
+    if (!data || typeof data !== "object") return false;
+    // Prefer explicit flag; fall back to allows_mutation (In Review is false for both).
+    if (typeof data.allows_edit_metadata === "boolean") {
+      return data.allows_edit_metadata;
+    }
+    return data.allows_mutation === true;
+  }
+
   /**
-   * Server is authoritative for lifecycle. Stale Files chrome (state changed in
-   * Administration without a hard refresh) still showed Collect / Rebuild — soft
-   * reload when state or metadata permission drifted.
+   * Server is authoritative. Fail closed when Collect/Rebuild need metadata edits.
+   * Soft-reload Files when Admin changed state while this tab stayed open.
    */
   async function reconcileProductLifecycleChrome(productId, options) {
     const opts = options && typeof options === "object" ? options : {};
+    const needMeta = opts.requireEditMetadata === true;
     const pid = String(productId || currentProductId() || "").trim();
     const metrics = document.getElementById("metric-filters");
-    if (!pid || !metrics) return { ok: true, reloaded: false };
+    const deny = (message, extra) => {
+      if (opts.showError !== false) {
+        showError($("#toolbar-error"), message);
+      }
+      return {
+        ok: false,
+        reloaded: Boolean(extra?.reloaded),
+        allows_edit_metadata: false,
+        state: String(extra?.state || ""),
+        message,
+      };
+    };
+    if (!pid) {
+      return needMeta ? deny("No product is open.") : { ok: true, reloaded: false };
+    }
     let data;
     try {
-      const response = await fetch(`/api/products/${encodeURIComponent(pid)}`);
-      if (!response.ok) return { ok: true, reloaded: false };
-      data = await response.json();
-    } catch {
-      return { ok: true, reloaded: false };
+      data = await fetchProductAccess(pid);
+    } catch (err) {
+      const msg = String(err?.message || err || "Could not verify product access.");
+      return needMeta ? deny(msg) : { ok: true, reloaded: false };
     }
     const state = String(data?.state || "").trim().toUpperCase();
-    const allowsMeta = data?.allows_edit_metadata !== false;
-    const allowsMut = data?.allows_mutation !== false;
+    const allowsMeta = productAllowsEditMetadataFromAccess(data);
+    const allowsMut = data?.allows_mutation === true;
     const allowsContent = data?.allows_content !== false;
-    const prevState = String(metrics.dataset.productState || "").trim().toUpperCase();
-    metrics.dataset.productState = state || prevState;
-    metrics.dataset.allowsMutation = allowsMut ? "1" : "0";
-    metrics.dataset.allowsContent = allowsContent ? "1" : "0";
-    metrics.dataset.allowsEditMetadata = allowsMeta ? "1" : "0";
-    const stateDrifted = Boolean(prevState && state && prevState !== state);
-    const needMeta = opts.requireEditMetadata === true;
-    if (stateDrifted || (needMeta && !allowsMeta)) {
-      const msg = !allowsMeta
-        ? `Product is ${String(data?.state || "locked").replace(/_/g, " ")} and cannot update metadata.`
-        : "Product state changed — refreshing…";
-      if (opts.showError !== false) {
-        showError($("#toolbar-error"), msg);
-      }
+    const prevState = metrics
+      ? String(metrics.dataset.productState || "").trim().toUpperCase()
+      : "";
+    if (metrics) {
+      metrics.dataset.productState = state || prevState;
+      metrics.dataset.allowsMutation = allowsMut ? "1" : "0";
+      metrics.dataset.allowsContent = allowsContent ? "1" : "0";
+      metrics.dataset.allowsEditMetadata = allowsMeta ? "1" : "0";
+    }
+    const stateDrifted = Boolean(state && prevState && prevState !== state);
+    if (needMeta && !allowsMeta) {
+      const msg = `Product is ${productStateDisplayLabel(state)} and cannot update metadata.`;
+      const result = deny(msg, { state });
       await reloadPage({
         keepBusy: Boolean(opts.keepBusy),
         busyMessage: opts.busyMessage || "Refreshing…",
       });
-      return { ok: false, reloaded: true, allows_edit_metadata: allowsMeta, state };
+      return { ...result, reloaded: true };
+    }
+    if (stateDrifted) {
+      const msg = "Product state changed — refreshing…";
+      const result = {
+        ok: false,
+        reloaded: true,
+        allows_edit_metadata: allowsMeta,
+        state,
+        message: msg,
+      };
+      if (opts.showError !== false) showError($("#toolbar-error"), msg);
+      await reloadPage({
+        keepBusy: Boolean(opts.keepBusy),
+        busyMessage: opts.busyMessage || "Refreshing…",
+      });
+      return result;
     }
     return { ok: true, reloaded: false, allows_edit_metadata: allowsMeta, state };
   }

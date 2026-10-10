@@ -111,10 +111,15 @@ def test_app_js_does_not_reencode_product_lock():
     assert "allowsMutation" not in sync
     assert "data-allows-content" in _APP_HTML.read_text(encoding="utf-8")
     assert "productAllowsContent" in script
-    # Stale Files after Admin state change: reconcile from GET /api/products before Collect.
+    # Stale Files after Admin state change: fail-closed GET /api/products before Collect.
     assert "function reconcileProductLifecycleChrome(" in script
+    assert "function fetchProductAccess(" in script
+    assert "function productAllowsEditMetadataFromAccess(" in script
     assert "allows_edit_metadata" in script
     assert "requireEditMetadata" in script
+    # Must not fail-open when the product GET fails.
+    assert 'return needMeta ? deny(msg)' in script or "Could not verify product access" in script
+    assert "Number(result.status) === 400" in script
 
 
 def test_rebuild_where_used_and_from_disk_call_ensure():

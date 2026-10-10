@@ -191,6 +191,8 @@ class AiSnapshotService:
         payload: AiSnapshotRequest,
     ) -> AiSnapshotResponse:
         obj = self._objects.get_object(session, object_uuid)
+        if obj.product is not None:
+            session.refresh(obj.product)
         ensure_product_allows(obj.product, "edit_metadata", action="save AI snapshot")
         version = self._resolve_version(session, obj, payload.version_id)
         if version is None:

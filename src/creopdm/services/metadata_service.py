@@ -157,6 +157,9 @@ class MetadataService:
         payload: CreoMetadataRequest,
     ) -> CreoMetadataResponse:
         obj = self._objects.get_object(session, object_uuid)
+        # Re-read product state — Admin may have locked the product while Files stayed open.
+        if obj.product is not None:
+            session.refresh(obj.product)
         ensure_product_allows(obj.product, "edit_metadata", action="update metadata")
         version = self._resolve_version(session, obj, payload.version_id)
         if version is None:
@@ -650,6 +653,7 @@ class MetadataService:
                 details={"product_id": product_uuid},
             )
         # Lifecycle matrix — UI hide is not enough (stale Files tab after state change).
+        session.refresh(product)
         ensure_product_allows(product, "edit_metadata", action="rebuild Where Used")
         # Full rebuild: vault scan is source of truth for asm/drw membership.
         # Upsert-only left false Top Level / Where Used parents forever.
