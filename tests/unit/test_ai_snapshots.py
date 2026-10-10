@@ -514,11 +514,16 @@ def test_snapshot_tab_template_and_docs():
     assert "formatAiSummaryDisplay" in script
     assert "formatAiSummaryDisplay(summary)" in script
     assert "formatAiWhatChangedDisplay(summary)" not in script
+    assert "fillAiSnapshotResultBody" in script
+    assert "ai-snapshot-result-para" in script
+    assert '".\\n\\nAdded $1"' in script or "Added $1" in script
+    assert "simplified representations?" in script
     assert "copyElementTextToClipboard" in script
     assert "root: dialog" in script
     assert "Simplified representations added" in script
     assert "No computed differences." in script
     assert "overflow-x: hidden" in css
+    assert ".ai-snapshot-result-para" in css
     assert 'div class="ai-snapshot-result-body"' in html or "<div class=\"ai-snapshot-result-body\"" in html
     assert "<pre class=\"ai-snapshot-result-body\"" not in html
     assert "num_predict=1536" in (

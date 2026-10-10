@@ -1712,7 +1712,6 @@ body.is-file-drag #file-drop-overlay {
   font: inherit;
   font-size: 0.92rem;
   line-height: 1.5;
-  white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: break-word;
   word-wrap: break-word;
@@ -1724,6 +1723,15 @@ body.is-file-drag #file-drop-overlay {
   box-sizing: border-box;
   overflow-x: hidden;
   overflow-y: auto;
+}
+.ai-snapshot-result-body > .ai-snapshot-result-para {
+  margin: 0 0 0.85em;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.ai-snapshot-result-body > .ai-snapshot-result-para:last-child {
+  margin-bottom: 0;
 }
 .ai-snapshot-result-body.is-empty {
   color: var(--muted, #6b7280);

@@ -13470,15 +13470,47 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return kept.join("\n");
   }
 
-  /** Ask AI modal: keep model prose; break after sentences so CEF wraps cleanly. */
+  /**
+   * Ask AI modal: keep model prose (no bullets). Split into short paragraphs so
+   * the modal matches Copy — models often glue SimpRep onto the dimensions line.
+   */
   function formatAiSummaryDisplay(rawSummary) {
-    const text = String(rawSummary || "").trim();
+    let text = String(rawSummary || "").trim();
     if (!text) return "";
-    // Insert a newline after sentence ends when the model dumped one long paragraph.
+    // ", and simplified representations X, Y" → its own sentence/paragraph.
+    text = text.replace(
+      /,\s*and\s+(simplified representations?\s+)/gi,
+      ".\n\nAdded $1"
+    );
+    // Sentence ends → blank line (Copy already had this; modal must show it too).
+    text = text.replace(/([.!?])\s+(?=[A-Z0-9])/g, "$1\n\n");
+    // Section openers still stuck mid-paragraph.
+    text = text.replace(
+      /([^\n])\s+(?=(?:Added|Removed)\s+(?:components?|dimensions?|features?|simplified representations?)\b)/gi,
+      "$1\n\n"
+    );
     return text
-      .replace(/([.!?])\s+(?=[A-Z0-9])/g, "$1\n\n")
       .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
       .trim();
+  }
+
+  /** Render paragraphs so CEF shows breaks (plain \\n in a div is easy to miss). */
+  function fillAiSnapshotResultBody(el, text) {
+    if (!el) return;
+    el.replaceChildren();
+    const raw = String(text || "");
+    const blocks = raw.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
+    if (!blocks.length) {
+      el.textContent = "";
+      return;
+    }
+    for (const block of blocks) {
+      const p = document.createElement("p");
+      p.className = "ai-snapshot-result-para";
+      p.textContent = block;
+      el.appendChild(p);
+    }
   }
 
   function aiSnapshotResultDialog() {
@@ -13508,7 +13540,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (metaEl) metaEl.textContent = String(meta || "").trim();
     const text = String(body || "");
     if (bodyEl) {
-      bodyEl.textContent = text;
+      fillAiSnapshotResultBody(bodyEl, text);
       bodyEl.classList.toggle(
         "is-empty",
         /^No computed differences\.?$/i.test(text.trim())
@@ -13779,9 +13811,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const btn = $("#ai-snapshot-result-copy");
       const body = $("#ai-snapshot-result-body");
       const dialog = aiSnapshotResultDialog();
-      // Prefer what the user sees (formatted body); dataset is fallback.
-      let text = String(body?.textContent || "").trim();
-      if (!text) text = String(btn?.dataset.copyText || "").trim();
+      // Prefer dataset (keeps \\n\\n); <p> textContent can collapse breaks.
+      let text = String(btn?.dataset.copyText || "").trim();
+      if (!text && body) text = String(body.textContent || "").trim();
       if (!text) {
         showError($("#toolbar-error"), "Nothing to copy yet.");
         return;
