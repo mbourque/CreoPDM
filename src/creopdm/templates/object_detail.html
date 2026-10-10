@@ -522,12 +522,10 @@
            data-workspace-pending="{% if workspace_pending %}1{% else %}0{% endif %}"
            data-modified-locally="{% if workspace_pending %}1{% else %}0{% endif %}">
     <div class="ai-snapshot-ask-row" id="ai-snapshot-ask-row" hidden>
-      <button type="button" class="btn" id="ai-snapshot-what-changed"
-              title="Show Computed differences for the selected OLD and NEW (same facts Ask AI gets; works when AI is off)">
+      <button type="button" class="btn" id="ai-snapshot-what-changed">
         What changed
       </button>
-      <button type="button" class="btn btn-primary" id="ai-snapshot-ask-ai" hidden
-              title="Send both OLD and NEW outlines and the compare prompt to the configured Ollama model">
+      <button type="button" class="btn btn-primary" id="ai-snapshot-ask-ai" hidden>
         Ask AI what changed
       </button>
     </div>
