@@ -511,10 +511,13 @@ def test_snapshot_tab_template_and_docs():
     assert "resetAiSnapshotResultScroll" in script
     assert "preventScroll: true" in script
     assert "formatAiWhatChangedDisplay" in script
+    assert "formatAiWhatChangedDisplay(summary)" in script
     assert "copyElementTextToClipboard" in script
     assert "root: dialog" in script
     assert "Simplified representations added" in script
     assert "No computed differences." in script
+    assert "overflow-wrap: anywhere" in css
+    assert "overflow-x: hidden" in css
     assert "event.target === resultDialog" in script
     assert 'id="ai-snapshot-result-body"' in html
     assert "<pre class=\"ai-snapshot-result-body\"" in html

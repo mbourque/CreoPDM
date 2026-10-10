@@ -13407,7 +13407,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return [title + ":", ...names.map((n) => `- ${n}`)];
   }
 
-  /** Modal view: drop the banner and empty “(none)” noise; space sections. */
+  /**
+   * Modal view for What changed + AI summary: drop banner / empty “(none)”,
+   * turn prose SimpRep lists into bullets, space sections (no one long line).
+   */
   function formatAiWhatChangedDisplay(rawDiff) {
     const kept = [];
     const pushSection = (lines) => {
@@ -13421,25 +13424,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       pushSection(pending);
       pending = [];
     };
-    for (const raw of String(rawDiff || "").split(/\r?\n/)) {
-      const line = raw.trimEnd();
-      const t = line.trim();
-      if (!t) continue;
-      if (/^=== Computed differences ===$/i.test(t)) continue;
-      if (/:\s*\(none\)\s*$/i.test(t)) continue;
-
-      // Legacy prose SimpRep lines → same bullet sections as Components/Dimensions.
-      let m = t.match(/^Added simplified representations\s+(.+)$/i);
+    const trySimpRepProse = (t) => {
+      let m = t.match(
+        /^(?:Added|Also added)\s+simplified representations\s+(.+)$/i
+      );
       if (m) {
         flushPending();
         pushSection(_englishListToBullets("Simplified representations added", m[1]));
-        continue;
+        return true;
       }
-      m = t.match(/^Removed simplified representations\s+(.+)$/i);
+      m = t.match(/^(?:Removed|Also removed)\s+simplified representations\s+(.+)$/i);
       if (m) {
         flushPending();
-        pushSection(_englishListToBullets("Simplified representations removed", m[1]));
-        continue;
+        pushSection(
+          _englishListToBullets("Simplified representations removed", m[1])
+        );
+        return true;
       }
       m = t.match(
         /^Switched the active simplified representation from\s+(.+?)\s+to\s+(.+?)\.?$/i
@@ -13450,7 +13450,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           "Active simplified representation changed:",
           `- ${m[1].trim()} → ${m[2].trim()}`,
         ]);
-        continue;
+        return true;
       }
       m = t.match(/^Active simplified representation changed:\s*(.+)$/i);
       if (m) {
@@ -13459,8 +13459,28 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           "Active simplified representation changed:",
           `- ${m[1].trim()}`,
         ]);
-        continue;
+        return true;
       }
+      // Mid-paragraph AI prose: “… Added simplified representations A, B, and C.”
+      m = t.match(
+        /^(.*?)(?:Added|Also added)\s+simplified representations\s+(.+)$/i
+      );
+      if (m && m[2]) {
+        const lead = String(m[1] || "").trim();
+        flushPending();
+        if (lead) pushSection([lead]);
+        pushSection(_englishListToBullets("Simplified representations added", m[2]));
+        return true;
+      }
+      return false;
+    };
+    for (const raw of String(rawDiff || "").split(/\r?\n/)) {
+      const line = raw.trimEnd();
+      const t = line.trim();
+      if (!t) continue;
+      if (/^=== Computed differences ===$/i.test(t)) continue;
+      if (/:\s*\(none\)\s*$/i.test(t)) continue;
+      if (trySimpRepProse(t)) continue;
 
       const isHeader = /:\s*$/.test(t) && !t.startsWith("-");
       if (isHeader) {
@@ -13685,11 +13705,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const parts = [];
       if (olderRev && newerRev) parts.push(`${olderRev} → ${newerRev}`);
       if (model) parts.push(model);
+      const display = formatAiWhatChangedDisplay(summary);
       openAiSnapshotResultDialog({
         title: "AI summary",
         meta: parts.join(" · "),
-        body: summary,
+        body: display,
         showCopy: true,
+        copyText: display,
       });
     } catch (err) {
       showError(

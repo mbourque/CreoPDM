@@ -1688,6 +1688,9 @@ body.is-file-drag #file-drop-overlay {
 .dialog.ai-snapshot-result-dialog form {
   max-height: min(78vh, 36rem);
   overflow: auto;
+  overflow-x: hidden;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .dialog.ai-snapshot-result-dialog #ai-snapshot-result-title:focus {
   outline: none;
@@ -1707,10 +1710,15 @@ body.is-file-drag #file-drop-overlay {
   font-size: 0.92rem;
   line-height: 1.5;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
+  word-wrap: break-word;
   min-height: 3.5rem;
   max-height: min(48vh, 20rem);
-  overflow: auto;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .ai-snapshot-result-body.is-empty {
   color: var(--muted, #6b7280);
