@@ -1296,6 +1296,18 @@ def test_mobile_browse_css_is_minimal():
     assert "Rotate the phone" in docs
 
 
+def test_details_header_uses_product_state_badge_not_file_lifecycle():
+    """Far-right Details badges: product state (+ checkout when not a lock echo), not file In Work."""
+    detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(
+        encoding="utf-8"
+    )
+    meta = detail.split('class="detail-meta"', 1)[1].split("</div>", 1)[0]
+    assert 'id="product-state-badge"' in meta
+    assert "product.state" in meta
+    assert "checkout_echoes_product" in meta
+    assert "object.lifecycle_state" not in meta
+
+
 def test_inventory_name_column_keeps_grid_left_padding():
     """Level-1 Name cells must not use padding-left: 0 (misaligns under the header)."""
     detail = (ROOT / "src" / "creopdm" / "templates" / "object_detail.html").read_text(

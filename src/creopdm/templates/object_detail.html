@@ -87,10 +87,19 @@
       </div>
     </div>
     <div class="detail-meta">
-      <span class="state" data-state="{{ object.lifecycle_state }}">{{ object.lifecycle_state.replace('_', ' ').title() }}</span>
+      {# Product lifecycle (same badge as Files) — not object.lifecycle_state (file tip). #}
+      {% set product_label = product.state.replace('_', ' ') | title %}
+      <span class="state product-state" id="product-state-badge"
+            data-state="{{ product.state }}"
+            title="{{ product_state_description or 'Product state' }}">{{ product_label }}</span>
+      {# Checkout column reuses product label when locked — do not show In Work + In Review. #}
+      {% set checkout_echoes_product = (object.checkout_status == product_label)
+           and not object.checkout_user and not object.can_checkout %}
+      {% if not checkout_echoes_product %}
       <span class="checkout-state"
             data-state="{% if object.owned_by_me %}mine{% elif object.checkout_user %}other{% elif object.can_checkout %}available{% else %}locked{% endif %}"
             {% if object.checkout_since %}title="Checked out {{ local_time_pretty(object.checkout_since) }}"{% endif %}>{{ object.checkout_status }}</span>
+      {% endif %}
       <span class="rev">{{ object.display_revision }}</span>
     </div>
   </header>

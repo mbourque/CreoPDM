@@ -84,6 +84,16 @@ def test_checkout_blocked_when_product_in_review(client, repo_parent):
     assert detail.json()["can_checkin"] is False
     assert detail.json()["checkout_status"] == "In Review"
 
+    # Details header: product badge In Review — not file In Work + checkout In Review.
+    detail_html = client.get(f"/products/{product['uuid']}/objects/{obj['uuid']}")
+    assert detail_html.status_code == 200, detail_html.text
+    meta = detail_html.text.split('class="detail-meta"', 1)[-1].split("</header>", 1)[0]
+    assert 'id="product-state-badge"' in meta
+    assert 'data-state="IN_REVIEW"' in meta
+    assert "In Review" in meta
+    assert "In Work" not in meta
+    assert "checkout-state" not in meta
+
 
 @requires_git
 def test_locked_product_hides_open_and_blocks_download(client, repo_parent):

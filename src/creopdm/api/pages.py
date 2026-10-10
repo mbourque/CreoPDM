@@ -229,7 +229,10 @@ def render(request: Request, name: str, context: dict) -> HTMLResponse:
             product_state_value,
         )
 
+        # Files uses selected; Details uses product — either carries state.
         selected = payload.get("selected")
+        if selected is None:
+            selected = payload.get("product")
         desc = ""
         if selected is not None:
             key = product_state_value(selected)
