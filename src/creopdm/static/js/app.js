@@ -13371,11 +13371,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return "=== Computed differences ===\n(none)";
   }
 
+  /** Modal view: drop the banner and empty “(none)” noise. */
+  function formatAiWhatChangedDisplay(rawDiff) {
+    const lines = String(rawDiff || "")
+      .split(/\r?\n/)
+      .map((line) => line.trimEnd())
+      .filter((line) => {
+        const t = line.trim();
+        if (!t) return false;
+        if (/^=== Computed differences ===$/i.test(t)) return false;
+        if (/:\s*\(none\)\s*$/i.test(t)) return false;
+        return true;
+      });
+    if (!lines.length) return "No computed differences.";
+    return lines.join("\n");
+  }
+
   function aiSnapshotResultDialog() {
     return $("#ai-snapshot-result-dialog");
   }
 
-  function openAiSnapshotResultDialog({ title, meta, body, showCopy }) {
+  function openAiSnapshotResultDialog({ title, meta, body, showCopy, copyText }) {
     const dialog = aiSnapshotResultDialog();
     const titleEl = $("#ai-snapshot-result-title");
     const metaEl = $("#ai-snapshot-result-meta");
@@ -13388,10 +13404,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (titleEl) titleEl.textContent = String(title || "").trim() || "Result";
     if (metaEl) metaEl.textContent = String(meta || "").trim();
     const text = String(body || "");
-    if (bodyEl) bodyEl.textContent = text;
+    if (bodyEl) {
+      bodyEl.textContent = text;
+      bodyEl.classList.toggle(
+        "is-empty",
+        /^No computed differences\.?$/i.test(text.trim())
+      );
+    }
     if (copyBtn) {
       copyBtn.hidden = !showCopy;
-      copyBtn.dataset.copyText = showCopy ? text : "";
+      copyBtn.dataset.copyText = showCopy
+        ? String(copyText != null ? copyText : text)
+        : "";
     }
     if (!dialog.open) dialog.showModal();
   }
@@ -13496,8 +13520,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       openAiSnapshotResultDialog({
         title: "What changed",
         meta,
-        body: text,
+        body: formatAiWhatChangedDisplay(text),
         showCopy: true,
+        copyText: text,
       });
     } catch (err) {
       showError(

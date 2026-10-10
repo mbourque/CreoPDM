@@ -754,17 +754,17 @@
 <dialog id="ai-snapshot-result-dialog" class="dialog ai-snapshot-result-dialog"
         aria-labelledby="ai-snapshot-result-title">
   <div class="ai-snapshot-result-inner">
-    <div class="ai-snapshot-ai-answer-head">
-      <strong id="ai-snapshot-result-title">What changed</strong>
-      <span class="muted small" id="ai-snapshot-result-meta"></span>
-      <div class="ai-snapshot-result-actions">
-        <button type="button" class="btn" id="ai-snapshot-result-copy" hidden
-                title="Copy to the clipboard">Copy</button>
-        <button type="button" class="btn" id="ai-snapshot-result-close"
-                title="Close (Esc)">Close</button>
-      </div>
+    <header class="ai-snapshot-result-head">
+      <h2 id="ai-snapshot-result-title">What changed</h2>
+      <p class="muted small" id="ai-snapshot-result-meta"></p>
+    </header>
+    <div class="ai-snapshot-result-body" id="ai-snapshot-result-body" tabindex="0"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="ai-snapshot-result-copy" hidden
+              title="Copy to the clipboard">Copy</button>
+      <button type="button" class="btn btn-primary" id="ai-snapshot-result-close"
+              title="Close (Esc)">Close</button>
     </div>
-    <div class="ai-snapshot-ai-answer-body" id="ai-snapshot-result-body" tabindex="0"></div>
   </div>
 </dialog>
 

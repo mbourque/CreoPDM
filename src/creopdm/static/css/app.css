@@ -1675,39 +1675,53 @@ body.is-file-drag #file-drop-overlay {
   margin: 0 0 0.75rem;
 }
 .dialog.ai-snapshot-result-dialog {
-  width: min(720px, 94vw);
-  max-height: min(80vh, 40rem);
+  width: min(560px, 94vw);
+  max-height: min(78vh, 36rem);
+}
+.dialog.ai-snapshot-result-dialog::backdrop {
+  background: rgba(16, 24, 32, 0.45);
 }
 .ai-snapshot-result-inner {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.75rem;
   padding: 1.1rem;
   min-height: 0;
-  max-height: min(80vh, 40rem);
+  max-height: min(78vh, 36rem);
 }
-.ai-snapshot-ai-answer-head {
+.ai-snapshot-result-head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
+  flex-direction: column;
+  gap: 0.2rem;
   margin: 0;
 }
-.ai-snapshot-result-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-}
-.ai-snapshot-ai-answer-body {
+.ai-snapshot-result-head h2 {
   margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+.ai-snapshot-result-head .muted.small {
+  margin: 0;
+}
+.ai-snapshot-result-body {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line, #d8dde6);
+  border-radius: 6px;
+  background: var(--surface-2, #f6f7f9);
+  color: var(--ink, #1c2430);
+  font: inherit;
+  font-size: 0.92rem;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.45;
-  min-height: 4rem;
-  max-height: min(60vh, 28rem);
+  min-height: 3.5rem;
+  max-height: min(52vh, 22rem);
   overflow: auto;
+}
+.ai-snapshot-result-body.is-empty {
+  color: var(--muted, #6b7280);
+  font-style: italic;
 }
 /*
  * IDE-style diff: OLD text | center scrollbar | NEW text.
