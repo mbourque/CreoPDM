@@ -343,6 +343,7 @@
       <a class="brand" href="#top">CreoPDM<span>User help</span></a>
       <nav aria-label="Help topics">
         <a href="#start">Quick start</a>
+        <a href="#agent">Agent tray (new users)</a>
         <a href="#files">Files list</a>
         <a href="#folders">Folders &amp; clicks</a>
         <a href="#add">Add files</a>
@@ -354,7 +355,7 @@
         <a href="#details">Details &amp; history</a>
         <a href="#tips">Tips &amp; troubleshooting</a>
       </nav>
-      <p class="note">Prefer working in <strong>Creo’s built-in browser</strong> when you need Creo Connected (Open, Collect metadata, Ask AI). Chrome or Edge is fine for browsing and most toolbar work.</p>
+      <p class="note">Prefer working in <strong>Creo’s built-in browser</strong> when you need Creo Connected (Open, Collect metadata, Ask AI). Chrome or Edge is fine for browsing and most toolbar work. New Creo users also need the <a href="#agent">agent tray</a> on this PC.</p>
     </aside>
 
     <main class="main" id="top">
@@ -366,6 +367,7 @@
         </p>
         <div class="hero-meta">
           <a class="chip" href="#start">Start here</a>
+          <a class="chip" href="#agent">Agent tray</a>
           <a class="chip" href="#checkout">Checkout → Check In</a>
           <a class="chip" href="#open">Open assemblies</a>
           <a class="chip" href="#tips">If something fails</a>
@@ -377,6 +379,7 @@
         <p class="lead">A typical edit cycle takes a few minutes once you know the toolbar.</p>
         <div class="panel">
           <ol class="steps">
+            <li>On a Creo PC, start <strong>creopdm-agent-tray</strong> (see <a href="#agent">Agent tray</a>) and open CreoPDM in <strong>Creo’s built-in browser</strong>.</li>
             <li><strong>Pick a product</strong> in the left sidebar.</li>
             <li><strong>Checkout</strong> the file (or files) you will change.</li>
             <li><strong>Open</strong> the model in Creo and save your edits.</li>
@@ -396,6 +399,69 @@
         </div>
         <div class="callout">
           <strong>Product state matters.</strong> Lifecycle permissions are configured under Administration → <strong>Lifecycle states</strong>. By default, <strong>Pre-Work</strong> / <strong>In Work</strong> / <strong>Under Change</strong> allow edits; <strong>Locked</strong> is list-only (no Checkout, Undo, Open, or download). New products start as <strong>In Work</strong>.
+        </div>
+      </section>
+
+      <section id="agent">
+        <h2>Agent tray (new users)</h2>
+        <p class="lead">
+          CreoPDM’s server holds the shared vault. On your Windows Creo PC you also need
+          <strong>creopdm-agent-tray</strong> — a small app in the system tray that downloads and uploads CAD
+          for Open, Checkout, Add, and the local workspace.
+        </p>
+        <div class="panel">
+          <h3>How to open the install help</h3>
+          <ol class="steps">
+            <li>Sign in to CreoPDM inside <strong>Creo’s built-in browser</strong> (Embedded open mode).</li>
+            <li>If Creo.JS is linked but the tray is not running, the top-bar pill shows
+              <strong>Creo: Agent offline</strong>.</li>
+            <li><strong>Click that pill</strong> — it opens a short page to <strong>start</strong> an existing tray,
+              <strong>download</strong> <code>creopdm-agent-tray.exe</code> from this server (when your admin published it),
+              and set <strong>Windows Startup</strong> so it launches at sign-in.</li>
+          </ol>
+          <p style="margin-top:0.75rem;margin-bottom:0">
+            You can also open that page anytime at
+            <a href="/help/agent-tray" target="creopdm-help" rel="noopener noreferrer"><code>/help/agent-tray</code></a>.
+          </p>
+        </div>
+        <div class="grid-2">
+          <article class="tile">
+            <h3>First-time download</h3>
+            <p>
+              From the Agent offline page, use <strong>Download creopdm-agent-tray.exe</strong>.
+              Save it somewhere stable (for example under
+              <code>%LOCALAPPDATA%\CreoPDM-agent\</code>), then double-click to start.
+              A tray icon appears near the clock (check the overflow ^ if needed).
+            </p>
+          </article>
+          <article class="tile">
+            <h3>Autostart</h3>
+            <p>
+              Press <span class="kbd">Win</span>+<span class="kbd">R</span>, run <code>shell:startup</code>,
+              and put a shortcut to the exe in that folder so the tray starts when you sign in to Windows.
+            </p>
+          </article>
+        </div>
+        <div class="panel">
+          <h3>Using the tray</h3>
+          <p>Right-click the tray icon:</p>
+          <ul class="clean">
+            <li><strong>Show status</strong> — port, version, cache folder</li>
+            <li><strong>Show logs</strong> — live log (also
+              <code>%LOCALAPPDATA%\CreoPDM-agent\logs\agent.log</code>)</li>
+            <li><strong>Open cache folder</strong> — local product workspaces
+              (<code>%LOCALAPPDATA%\CreoPDM-agent\workspaces</code>)</li>
+            <li><strong>Quit</strong> — stop the agent (CreoPDM will show Agent offline until you start it again)</li>
+          </ul>
+          <p style="margin-top:0.75rem;margin-bottom:0">
+            Quick check: open <code>http://127.0.0.1:8766/health</code> on this PC — it should respond when the tray is up.
+            The pill should read <strong>Creo: Connected</strong> in Creo’s browser when both Creo.JS and the agent are healthy.
+          </p>
+        </div>
+        <div class="callout">
+          Run the tray on the <strong>Windows Creo PC</strong>, not on the Linux CreoPDM host.
+          If Download is missing or fails, ask an administrator to publish the exe (install README →
+          <code>downloads/creopdm-agent-tray.exe</code>).
         </div>
       </section>
 
@@ -581,7 +647,8 @@
           </article>
           <article class="tile">
             <h3>creopdm-agent</h3>
-            <p>Local workspace pickers, downloads, and many Open paths need the agent on the Creo PC. Start it if Choose Folder / Open fails with an agent message.</p>
+            <p>Local workspace pickers, downloads, and many Open paths need the agent on the Creo PC.
+              See <a href="#agent">Agent tray (new users)</a> — or click <strong>Creo: Agent offline</strong> in the top bar when it appears.</p>
           </article>
           <article class="tile">
             <h3>Who can do what</h3>

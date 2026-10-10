@@ -44,9 +44,14 @@ def test_client_agent_tray_downloads_published_exe(client, data_dir):
 def test_help_agent_tray_page_start_download_autostart(client, data_dir):
     response = client.get("/help/agent-tray")
     assert response.status_code == 200, response.text
+    assert "How new users get here" in response.text
+    assert "Creo: Agent offline" in response.text
     assert "Start it" in response.text
     assert "Download" in response.text
     assert "shell:startup" in response.text
+    assert "Using the tray day to day" in response.text
+    assert "Show status" in response.text
+    assert "Open cache folder" in response.text
     assert "not published" in response.text.lower() or "does not have" in response.text.lower()
     (data_dir / "downloads").mkdir(parents=True, exist_ok=True)
     (data_dir / "downloads" / "creopdm-agent-tray.exe").write_bytes(b"MZ")
@@ -63,8 +68,10 @@ def test_agent_offline_pill_opens_help():
     assert 'dataset.agentTrayHelp = "1"' in script
     assert 'window.open("/help/agent-tray", "creopdm-help")' in script
     help_html = HELP_TMPL.read_text(encoding="utf-8")
+    assert "How new users get here" in help_html
     assert "shell:startup" in help_html
     assert "Start it" in help_html
+    assert "Using the tray day to day" in help_html
     assert "/client/agent-tray" in help_html
 
 

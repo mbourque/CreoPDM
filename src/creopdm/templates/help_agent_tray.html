@@ -9,34 +9,57 @@
   </nav>
   <h1>creopdm-agent tray</h1>
   <p class="lead">
-    Creo.JS is linked, but the local agent on this PC is not running.
-    Open, Checkout download, Add from disk, and the local workspace need
-    <strong>creopdm-agent-tray</strong> on this Windows Creo PC.
+    A small Windows app that runs in the system tray on <strong>your Creo PC</strong>.
+    CreoPDM on the server holds the vault; the tray downloads and uploads CAD on this machine
+    so Open, Checkout, Add, and the local workspace work.
   </p>
+
+  <section>
+    <h2>How new users get here</h2>
+    <ol>
+      <li>Sign in to CreoPDM in <strong>Creo’s built-in browser</strong> (Embedded open mode).</li>
+      <li>When Creo.JS is linked but the tray is not running, the top-bar pill shows
+        <strong>Creo: Agent offline</strong> (yellow).</li>
+      <li><strong>Click that pill</strong> — it opens this page (same named tab as Help).</li>
+    </ol>
+    <p class="muted small">
+      You can also open <code>/help/agent-tray</code> anytime while signed in.
+      In Chrome/Edge the pill usually says <strong>Creo: Session offline</strong> instead — use Creo’s browser for Embedded work.
+    </p>
+  </section>
 
   <section>
     <h2>1. Start it (if you already have it)</h2>
     <ol>
-      <li>Find <code>creopdm-agent-tray.exe</code> where you installed it (or the Start menu / taskbar if you pinned it).</li>
-      <li>Run it — a tray icon appears near the clock (no console window).</li>
-      <li>Return to CreoPDM and refresh; the top-bar pill should become <strong>Creo: Connected</strong>.</li>
+      <li>Find <code>creopdm-agent-tray.exe</code> where you saved it (or a taskbar / Startup shortcut).</li>
+      <li>Double-click it — a tray icon appears near the clock (no console window). Look in the overflow (^) if you do not see it.</li>
+      <li>Return to CreoPDM and soft-refresh or wait a moment; the pill should become <strong>Creo: Connected</strong>.</li>
     </ol>
-    <p class="muted small">Quick check: open <code>http://127.0.0.1:8766/health</code> in a browser on this PC — it should respond when the tray is up.</p>
+    <p class="muted small">Quick check on this PC: open <code>http://127.0.0.1:8766/health</code> in any browser — it should respond when the tray is up.</p>
   </section>
 
   <section>
     <h2>2. Download (if you do not have it yet)</h2>
     {% if agent_tray_available %}
-    <p>Download the shareable tray app from this CreoPDM server, then run it on <strong>this</strong> Creo PC (not on the Linux host).</p>
+    <p>
+      Download the shareable tray from <strong>this CreoPDM server</strong>, then run it on
+      <strong>this Windows Creo PC</strong> — not on the Linux host.
+    </p>
     <p>
       <a class="btn" href="/client/agent-tray">Download creopdm-agent-tray.exe</a>
     </p>
-    <p class="muted small">Save it somewhere stable (for example <code>%LOCALAPPDATA%\CreoPDM-agent\</code>), then double-click to start.</p>
+    <ol>
+      <li>Save it somewhere stable, for example
+        <code>%LOCALAPPDATA%\CreoPDM-agent\creopdm-agent-tray.exe</code>
+        (create the folder if needed).</li>
+      <li>Double-click to start — allow it if Windows SmartScreen asks (Run anyway) for a first local install.</li>
+      <li>Confirm the tray icon, then check that CreoPDM shows <strong>Creo: Connected</strong>.</li>
+    </ol>
     {% else %}
     <p class="muted">
       This server does not have <code>creopdm-agent-tray.exe</code> published yet.
       Ask an administrator to build it (<code>.\build-agent-tray.ps1</code>) and copy it into the CreoPDM
-      <code>downloads</code> folder (see the install README).
+      <code>downloads</code> folder (see the install README), then refresh this page.
     </p>
     {% endif %}
   </section>
@@ -46,14 +69,44 @@
     <p>So you do not have to launch the tray every morning:</p>
     <ol>
       <li>Press <kbd>Win</kbd>+<kbd>R</kbd>, type <code>shell:startup</code>, press Enter — that opens your personal Startup folder.</li>
-      <li>Right-click <code>creopdm-agent-tray.exe</code> → <strong>Create shortcut</strong>, and move that shortcut into the Startup folder
-        (or copy the <code>.exe</code> itself there if you prefer).</li>
+      <li>Right-click <code>creopdm-agent-tray.exe</code> → <strong>Create shortcut</strong>, and move that shortcut into the Startup folder.</li>
       <li>Sign out and back in once to confirm the tray icon appears without opening it by hand.</li>
     </ol>
     <p class="muted small">
-      Keep the real <code>.exe</code> in a fixed folder; only put a shortcut in Startup if you move the file later.
-      You can also pin the tray to the taskbar for a one-click start when it is not set to autostart.
+      Keep the real <code>.exe</code> in a fixed folder; put only a shortcut in Startup.
+      You can also pin the tray to the taskbar for a one-click start.
     </p>
+  </section>
+
+  <section>
+    <h2>Using the tray day to day</h2>
+    <p>Right-click the tray icon:</p>
+    <ul>
+      <li><strong>Show status</strong> — port, version, and local cache folder</li>
+      <li><strong>Show logs</strong> — live log window (also written under
+        <code>%LOCALAPPDATA%\CreoPDM-agent\logs\agent.log</code>)</li>
+      <li><strong>Open cache folder</strong> — Explorer on the local product workspaces
+        (default <code>%LOCALAPPDATA%\CreoPDM-agent\workspaces</code>)</li>
+      <li><strong>Quit</strong> — stop the agent (CreoPDM will show Agent offline again until you restart it)</li>
+    </ul>
+    <p>With the tray running and CreoPDM open in Creo’s browser:</p>
+    <ul>
+      <li><strong>Open / Checkout</strong> — files download into the local workspace, then Creo opens them</li>
+      <li><strong>Add</strong> — pick folders/files on this PC via the agent</li>
+      <li><strong>Open workspace</strong> — opens that product’s local folder in Explorer</li>
+      <li><strong>Check In</strong> — syncs local Creo saves back toward the vault</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>If something fails</h2>
+    <ul>
+      <li>Pill still <strong>Agent offline</strong> — confirm the tray icon is present; open
+        <code>http://127.0.0.1:8766/health</code>; try Quit then start the exe again.</li>
+      <li>Pill says <strong>Session offline</strong> — you are not in Creo’s embedded browser (or Creo.JS has not linked). Open CreoPDM from Creo, not only Chrome/Edge.</li>
+      <li>Open / Add errors mention the agent — start the tray, then retry.</li>
+      <li>Download button missing or 404 — ask an admin to publish the exe on the server (README).</li>
+    </ul>
   </section>
 
   <p class="muted small">
