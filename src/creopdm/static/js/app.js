@@ -13408,8 +13408,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   /**
-   * Modal view for What changed + AI summary: drop banner / empty “(none)”,
-   * turn prose SimpRep lists into bullets, space sections (no one long line).
+   * What changed modal only (Computed differences): drop banner / empty “(none)”,
+   * space sections. Does not rewrite Ask AI prose into bullets.
    */
   function formatAiWhatChangedDisplay(rawDiff) {
     const kept = [];
@@ -13424,33 +13424,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       pushSection(pending);
       pending = [];
     };
-    const trySimpRepProse = (t) => {
-      let m = t.match(
-        /^(?:Added|Also added)\s+simplified representations\s+(.+)$/i
-      );
+    for (const raw of String(rawDiff || "").split(/\r?\n/)) {
+      const line = raw.trimEnd();
+      const t = line.trim();
+      if (!t) continue;
+      if (/^=== Computed differences ===$/i.test(t)) continue;
+      if (/:\s*\(none\)\s*$/i.test(t)) continue;
+
+      // Server may still emit older one-line SimpRep prose in Computed differences.
+      let m = t.match(/^Added simplified representations\s+(.+)$/i);
       if (m) {
         flushPending();
         pushSection(_englishListToBullets("Simplified representations added", m[1]));
-        return true;
+        continue;
       }
-      m = t.match(/^(?:Removed|Also removed)\s+simplified representations\s+(.+)$/i);
+      m = t.match(/^Removed simplified representations\s+(.+)$/i);
       if (m) {
         flushPending();
         pushSection(
           _englishListToBullets("Simplified representations removed", m[1])
         );
-        return true;
-      }
-      m = t.match(
-        /^Switched the active simplified representation from\s+(.+?)\s+to\s+(.+?)\.?$/i
-      );
-      if (m) {
-        flushPending();
-        pushSection([
-          "Active simplified representation changed:",
-          `- ${m[1].trim()} → ${m[2].trim()}`,
-        ]);
-        return true;
+        continue;
       }
       m = t.match(/^Active simplified representation changed:\s*(.+)$/i);
       if (m) {
@@ -13459,28 +13453,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           "Active simplified representation changed:",
           `- ${m[1].trim()}`,
         ]);
-        return true;
+        continue;
       }
-      // Mid-paragraph AI prose: “… Added simplified representations A, B, and C.”
-      m = t.match(
-        /^(.*?)(?:Added|Also added)\s+simplified representations\s+(.+)$/i
-      );
-      if (m && m[2]) {
-        const lead = String(m[1] || "").trim();
-        flushPending();
-        if (lead) pushSection([lead]);
-        pushSection(_englishListToBullets("Simplified representations added", m[2]));
-        return true;
-      }
-      return false;
-    };
-    for (const raw of String(rawDiff || "").split(/\r?\n/)) {
-      const line = raw.trimEnd();
-      const t = line.trim();
-      if (!t) continue;
-      if (/^=== Computed differences ===$/i.test(t)) continue;
-      if (/:\s*\(none\)\s*$/i.test(t)) continue;
-      if (trySimpRepProse(t)) continue;
 
       const isHeader = /:\s*$/.test(t) && !t.startsWith("-");
       if (isHeader) {
@@ -13494,6 +13468,17 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     flushPending();
     if (!kept.length) return "No computed differences.";
     return kept.join("\n");
+  }
+
+  /** Ask AI modal: keep model prose; break after sentences so CEF wraps cleanly. */
+  function formatAiSummaryDisplay(rawSummary) {
+    const text = String(rawSummary || "").trim();
+    if (!text) return "";
+    // Insert a newline after sentence ends when the model dumped one long paragraph.
+    return text
+      .replace(/([.!?])\s+(?=[A-Z0-9])/g, "$1\n\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .trim();
   }
 
   function aiSnapshotResultDialog() {
@@ -13705,7 +13690,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       const parts = [];
       if (olderRev && newerRev) parts.push(`${olderRev} → ${newerRev}`);
       if (model) parts.push(model);
-      const display = formatAiWhatChangedDisplay(summary);
+      const display = formatAiSummaryDisplay(summary);
       openAiSnapshotResultDialog({
         title: "AI summary",
         meta: parts.join(" · "),

@@ -81,8 +81,14 @@ def chat_ollama(
     messages: list[dict[str, str]],
     *,
     timeout_s: float = DEFAULT_OLLAMA_CHAT_TIMEOUT_S,
+    num_predict: int = 256,
 ) -> str:
-    """POST /api/chat (non-streaming). Returns the assistant message text."""
+    """POST /api/chat (non-streaming). Returns the assistant message text.
+
+    Default ``num_predict`` stays short for check-in comments. Snapshot
+    Ask AI passes a higher limit so long component/dimension lists are not
+    cut off mid-sentence.
+    """
     try:
         root = normalize_ollama_base_url(base_url)
     except ValueError as exc:
@@ -94,6 +100,7 @@ def chat_ollama(
         )
     if not messages:
         raise ValidationAppError("Ollama chat requires at least one message.")
+    predict = max(32, int(num_predict or 256))
     url = f"{root}/api/chat"
     body: dict[str, Any] = {
         "model": model_name,
@@ -102,7 +109,7 @@ def chat_ollama(
         # Check-in comments need a short answer, not a long think chain.
         "think": False,
         # Keep change notices factual; higher temperature drifts into generic fluff.
-        "options": {"temperature": 0, "num_predict": 256},
+        "options": {"temperature": 0, "num_predict": predict},
     }
     timeout = httpx.Timeout(
         connect=min(30.0, float(timeout_s)),

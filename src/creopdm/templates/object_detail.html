@@ -755,7 +755,8 @@
   <form method="dialog" id="ai-snapshot-result-form">
     <h2 id="ai-snapshot-result-title">What changed</h2>
     <p class="muted small" id="ai-snapshot-result-meta"></p>
-    <pre class="ai-snapshot-result-body" id="ai-snapshot-result-body"></pre>
+    {# div (not pre): Creo CEF often refuses to wrap long <pre> lines. #}
+    <div class="ai-snapshot-result-body" id="ai-snapshot-result-body" role="region"></div>
     <div class="dialog-actions">
       <button type="button" class="btn" id="ai-snapshot-result-copy" hidden
               title="Copy to the clipboard">Copy</button>

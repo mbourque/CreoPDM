@@ -130,6 +130,39 @@ def test_chat_ollama_posts_messages(monkeypatch):
     assert text == "Diameter grew."
 
 
+def test_chat_ollama_honors_num_predict(monkeypatch):
+    seen = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"message": {"role": "assistant", "content": "ok"}}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, json=None):
+            seen["num_predict"] = json["options"]["num_predict"]
+            return FakeResponse()
+
+    monkeypatch.setattr("creopdm.services.ollama_service.httpx.Client", FakeClient)
+    chat_ollama(
+        "http://127.0.0.1:11434",
+        "qwen3:latest",
+        [{"role": "user", "content": "hi"}],
+        num_predict=1536,
+    )
+    assert seen["num_predict"] == 1536
+
+
 def test_chat_ollama_requires_model():
     with pytest.raises(ValidationAppError) as exc:
         chat_ollama("http://127.0.0.1:11434", "", [{"role": "user", "content": "hi"}])

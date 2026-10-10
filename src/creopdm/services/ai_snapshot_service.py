@@ -509,6 +509,8 @@ class AiSnapshotService:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
+            # Assembly diffs list many components/dims — 256 cuts off mid-sentence.
+            num_predict=1536,
         )
         return AiSnapshotCompareResponse(
             object_id=object_uuid,
