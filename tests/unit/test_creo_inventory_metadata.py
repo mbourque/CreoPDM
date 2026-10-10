@@ -28,16 +28,70 @@ def test_pack_unpack_features_json_envelope():
     assert raw.get("features") == normalize_feature_rows(features)
     assert raw.get("structure") == structure
 
-    round_features, round_structure = unpack_features_json(raw)
+    round_features, round_structure, round_simp = unpack_features_json(raw)
     assert round_features == normalize_feature_rows(features)
     assert round_structure == structure
+    assert round_simp is None
 
 
 def test_unpack_legacy_features_list():
     legacy = [{"id": 3, "name": "HOLE", "type": "HOLE", "level": 2, "status": "SUPRESSED"}]
-    feats, struct = unpack_features_json(legacy)
+    feats, struct, simp = unpack_features_json(legacy)
     assert struct is None
+    assert simp is None
     assert feats == normalize_feature_rows(legacy)
+
+
+def test_pack_unpack_simp_reps_in_envelope():
+    """Assembly SimpRep definitions ride the features_json v1 envelope."""
+    features = [{"id": 1, "name": "RIGHT", "type": "DATUM PLANE"}]
+    simp_reps = {
+        "active": {"id": None, "name": "MASTER", "is_master": True},
+        "representations": [
+            {
+                "id": 12,
+                "name": "GEOM_ONLY",
+                "type": "SIMPREP_USER_DEFINED",
+                "temporary": False,
+                "default_action": "SIMPREP_EXCLUDE",
+                "instructions_available": True,
+                "items": [
+                    {"path": [41], "path_kind": "component", "action": "SIMPREP_INCLUDE"}
+                ],
+            }
+        ],
+        "errors": [],
+    }
+    raw = pack_features_json(features, None, simp_reps)
+    assert isinstance(raw, dict)
+    assert raw.get("v") == 1
+    assert raw.get("simp_reps") == simp_reps
+    feats, struct, round_simp = unpack_features_json(raw)
+    assert feats == normalize_feature_rows(features)
+    assert struct == []
+    assert round_simp == simp_reps
+
+
+def test_assembly_inventory_gathers_simp_reps():
+    """SimpRep capture lives in assembly inventory (probe + wrapped creojs)."""
+    probe = (
+        ROOT / "src" / "creopdm" / "static" / "assembly_probe" / "assembly_probe.creojs"
+    ).read_text(encoding="utf-8")
+    asm = (INV_DIR / "assembly.creojs").read_text(encoding="utf-8")
+    for body, label in ((probe, "assembly_probe"), (asm, "creo_inventory/assembly")):
+        assert "function listAssemblySimpRepsForModel(" in body, label
+        assert "ITEM_SIMPREP" in body, label
+        assert "GetActiveSimpRep" in body, label
+        assert "GetInstructions" in body, label
+        assert "isSimpRepAssembly" in body, label
+    assert "function listAssemblySimpRepsForModel(" in asm
+    assert "listAssemblySimpRepsForModel: listAssemblySimpRepsForModel" in asm
+    text = BASE_HTML.read_text(encoding="utf-8")
+    assert "listAssemblySimpRepsForModel" in text
+    assert "simp_reps: simp_reps" in text
+    assert "active_simp_rep" in text
+    # Orchestration only — inventory owns the Toolkit walk.
+    assert "function creoGatherSimpReps(" not in text
 
 
 def test_normalize_feature_rows_keeps_inventory_fields():
@@ -95,6 +149,8 @@ def test_creo_inventory_wrapped_files_exist():
     assert "function listSessionFeatures(" in feat
     asm = (INV_DIR / "assembly.creojs").read_text(encoding="utf-8")
     assert "function listAssemblyStructureForModel(" in asm
+    assert "function listAssemblySimpRepsForModel(" in asm
+    assert "function listSessionAssemblySimpReps(" in asm
     drw = (INV_DIR / "drawing.creojs").read_text(encoding="utf-8")
     assert "function listDrawingStructureForModel(" in drw
     # Public globals must not collide (each file exports unique names only).
@@ -224,6 +280,44 @@ def test_compare_outline_uses_assembly_structure_inventory():
     assert "pin.prt" in text
     assert "Assembly features (non-component):" in text
     assert "DEFAULT_CS" in text
+
+
+def test_compare_outline_includes_assembly_simp_reps():
+    """SimpRep exclude rules appear as representation context, not Structure deletes."""
+    text = format_snapshot_compare_text(
+        {
+            "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+            "structure": [
+                {"name": "bracket.prt", "type": "PART", "level": 1, "status": "ACTIVE"},
+            ],
+            "features": [],
+            "simp_reps": {
+                "active": {"id": 12, "name": "GEOM_ONLY", "is_master": False},
+                "representations": [
+                    {
+                        "id": 12,
+                        "name": "GEOM_ONLY",
+                        "default_action": "SIMPREP_EXCLUDE",
+                        "instructions_available": True,
+                        "items": [
+                            {
+                                "path": [41],
+                                "path_kind": "component",
+                                "action": "SIMPREP_INCLUDE",
+                            }
+                        ],
+                    }
+                ],
+            },
+        }
+    )
+    assert "Simplified representations (active: GEOM_ONLY):" in text
+    assert "GEOM_ONLY" in text
+    assert "default SIMPREP_EXCLUDE" in text
+    assert "1 item rule(s)" in text
+    # Must not invent a Structure delete from exclude rules.
+    assert "Features removed" not in text
+    assert "deleted" not in text.lower()
 
 
 def test_compare_diff_detects_drawing_note_change():

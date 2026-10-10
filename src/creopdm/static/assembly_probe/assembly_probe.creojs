@@ -1356,6 +1356,222 @@ function appendCrossSectionStructureRows(flat, treeChildren, solid) {
   }
 }
 
+function isSimpRepAssembly(model, filename) {
+  /** Creo.JS SimpRep APIs support assemblies only (not parts; skip MFG). */
+  try {
+    if (typeof pfcModelType !== "undefined" && model && model.Type != null) {
+      if (model.Type === pfcModelType.MDL_ASSEMBLY) return true;
+    }
+  } catch (e) {}
+  return /\.asm$/i.test(String(filename || ""));
+}
+
+function simpRepEnumLabel(val) {
+  var s = enumString(val);
+  return s || null;
+}
+
+function simpRepSeqToIntArray(seq) {
+  var out = [];
+  var count = sequenceCount(seq);
+  for (var i = 0; i < count; i++) {
+    try {
+      var item = sequenceItem(seq, i);
+      if (item == null) continue;
+      var n = Number(item);
+      out.push(isNaN(n) ? item : n);
+    } catch (e) {}
+  }
+  return out;
+}
+
+function gatherSimpRepItemPath(itemPath) {
+  /**
+   * Component / feature paths on a SimpRep item.
+   * Exclude rules are representation context — never assembly deletes.
+   */
+  if (!itemPath) return { path: [], path_kind: null };
+  var path = [];
+  var kind = null;
+  try {
+    if (itemPath.ItemPath != null) {
+      path = simpRepSeqToIntArray(itemPath.ItemPath);
+      kind = "component";
+    }
+  } catch (e) {}
+  if (!path.length) {
+    try {
+      if (itemPath.FeatId != null) {
+        path = [Number(itemPath.FeatId)];
+        kind = "feature";
+      }
+    } catch (e2) {}
+  }
+  return { path: path, path_kind: kind };
+}
+
+function gatherSimpRepActionLabel(action) {
+  if (action == null) return null;
+  try {
+    if (action.Type != null) return simpRepEnumLabel(action.Type);
+  } catch (e) {}
+  return simpRepEnumLabel(action);
+}
+
+function gatherSimpRepOne(rep) {
+  if (!rep) return null;
+  var row = {
+    id: null,
+    name: "",
+    type: null,
+    temporary: null,
+    default_action: null,
+    instructions_available: false,
+    items: []
+  };
+  try {
+    if (rep.Id != null) row.id = Number(rep.Id);
+  } catch (e) {}
+  try {
+    if (typeof rep.GetName === "function") row.name = String(rep.GetName() || "").trim();
+    else if (rep.Name != null) row.name = String(rep.Name || "").trim();
+  } catch (e2) {}
+  try {
+    if (typeof rep.GetSimpRepType === "function") {
+      row.type = simpRepEnumLabel(rep.GetSimpRepType());
+    }
+  } catch (e3) {}
+  var instr = null;
+  try {
+    if (typeof rep.GetInstructions === "function") instr = rep.GetInstructions();
+  } catch (e4) {
+    instr = null;
+  }
+  if (instr == null) {
+    row.instructions_available = false;
+    return row;
+  }
+  row.instructions_available = true;
+  try {
+    if (instr.DefaultAction != null) {
+      row.default_action = simpRepEnumLabel(instr.DefaultAction);
+    }
+  } catch (e5) {}
+  try {
+    if (instr.IsTemporary != null) row.temporary = !!instr.IsTemporary;
+  } catch (e6) {}
+  var items = null;
+  try {
+    items = instr.Items;
+  } catch (e7) {
+    items = null;
+  }
+  var count = sequenceCount(items);
+  for (var i = 0; i < count; i++) {
+    var item = null;
+    try {
+      item = sequenceItem(items, i);
+    } catch (e8) {
+      item = null;
+    }
+    if (!item) continue;
+    var pathInfo = { path: [], path_kind: null };
+    try {
+      pathInfo = gatherSimpRepItemPath(item.ItemPath);
+    } catch (e9) {}
+    var actionLabel = null;
+    try {
+      actionLabel = gatherSimpRepActionLabel(item.Action);
+    } catch (e10) {}
+    row.items.push({
+      path: pathInfo.path,
+      path_kind: pathInfo.path_kind,
+      action: actionLabel
+    });
+  }
+  return row;
+}
+
+/**
+ * Assembly simplified representations (Creo.JS: assemblies only, not parts).
+ * GetActiveSimpRep null → Master. GetInstructions may return null.
+ */
+function listAssemblySimpRepsForModel(model, session) {
+  var fileName = "";
+  try {
+    fileName = String(model.FileName || "");
+  } catch (e) {
+    fileName = "";
+  }
+  fileName = logicalFileName(fileName) || fileName;
+  if (!isSimpRepAssembly(model, fileName)) {
+    return {
+      ok: false,
+      error: "Simplified representations are only collected for assemblies.",
+      fileName: fileName
+    };
+  }
+
+  var errors = [];
+  var active = { id: null, name: "MASTER", is_master: true };
+  try {
+    var solid = resolveStructureSolid(model, session) || model;
+    var activeRep = null;
+    if (solid && typeof solid.GetActiveSimpRep === "function") {
+      activeRep = solid.GetActiveSimpRep();
+    } else if (typeof model.GetActiveSimpRep === "function") {
+      activeRep = model.GetActiveSimpRep();
+    }
+    if (activeRep) {
+      active.is_master = false;
+      try {
+        if (activeRep.Id != null) active.id = Number(activeRep.Id);
+      } catch (e) {}
+      try {
+        if (typeof activeRep.GetName === "function") {
+          active.name = String(activeRep.GetName() || "").trim() || active.name;
+        }
+      } catch (e2) {}
+    }
+  } catch (errActive) {
+    errors.push("GetActiveSimpRep: " + describeError(errActive));
+  }
+
+  var representations = [];
+  try {
+    var itemType = null;
+    if (typeof pfcModelItemType !== "undefined" && pfcModelItemType.ITEM_SIMPREP != null) {
+      itemType = pfcModelItemType.ITEM_SIMPREP;
+    }
+    if (itemType == null) {
+      errors.push("ITEM_SIMPREP unavailable");
+    } else if (typeof model.ListItems === "function") {
+      var listed = model.ListItems(itemType);
+      var reps = featureItems(listed);
+      for (var i = 0; i < reps.length; i++) {
+        var row = gatherSimpRepOne(reps[i]);
+        if (row) representations.push(row);
+      }
+    }
+  } catch (errList) {
+    errors.push("ListItems(ITEM_SIMPREP): " + describeError(errList));
+  }
+
+  return {
+    ok: true,
+    fileName: fileName,
+    active: active,
+    representations: representations,
+    errors: errors
+  };
+}
+
+function listSessionAssemblySimpReps() {
+  var am = activeModel();
+  if (am.error) return { ok: false, error: am.error };
+  return listAssemblySimpRepsForModel(am.model, am.session);
+}
+
 function listSessionAssemblyStructure() {
   var am = activeModel();
   if (am.error) return { ok: false, error: am.error };

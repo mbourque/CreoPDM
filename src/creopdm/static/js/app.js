@@ -2279,6 +2279,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           ? snapshot.features
           : null,
         structure: Array.isArray(snapshot.structure) ? snapshot.structure : null,
+        simp_reps: snapshot.simp_reps && typeof snapshot.simp_reps === "object"
+          ? snapshot.simp_reps
+          : null,
       };
       try {
         const response = await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {
@@ -6843,6 +6846,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const structure = Array.isArray(ai.structure)
       ? ai.structure
       : (Array.isArray(gatherSnapshot?.structure) ? gatherSnapshot.structure : null);
+    const simp_reps = ai.simp_reps && typeof ai.simp_reps === "object"
+      ? ai.simp_reps
+      : (gatherSnapshot?.simp_reps && typeof gatherSnapshot.simp_reps === "object"
+        ? gatherSnapshot.simp_reps
+        : null);
     return {
       schema_version: Number(ai.schema_version) || 1,
       identity: ai.identity || null,
@@ -6854,6 +6862,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       family_table: ai.family_table && typeof ai.family_table === "object" ? ai.family_table : null,
       bom,
       structure,
+      simp_reps,
       capture,
     };
   }
@@ -7005,6 +7014,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           ? snapshot.features
           : null,
         structure: Array.isArray(snapshot.structure) ? snapshot.structure : null,
+        simp_reps: snapshot.simp_reps && typeof snapshot.simp_reps === "object"
+          ? snapshot.simp_reps
+          : null,
       };
       try {
         const response = await fetch(

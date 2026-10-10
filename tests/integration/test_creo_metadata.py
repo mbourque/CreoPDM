@@ -531,3 +531,56 @@ def test_where_used_tab_only_for_creo_models_extensions(client, repo_parent, tmp
     assert 'data-tab="where-used"' not in doc_page.text
     assert 'id="panel-where-used"' not in doc_page.text
     assert 'data-tab="history"' in doc_page.text
+
+
+@requires_git
+def test_assembly_simp_reps_roundtrip_on_creo_metadata(client, repo_parent, tmp_path):
+    """Saved SimpRep definitions + active context persist on the model version."""
+    product = _create_product(client, repo_parent)
+    frame = _add_part(client, product["uuid"], tmp_path, "frame.asm.1")
+    simp_reps = {
+        "active": {"id": None, "name": "MASTER", "is_master": True},
+        "representations": [
+            {
+                "id": 7,
+                "name": "LIGHT",
+                "type": "SIMPREP_USER_DEFINED",
+                "temporary": False,
+                "default_action": "SIMPREP_EXCLUDE",
+                "instructions_available": True,
+                "items": [
+                    {
+                        "path": [40, 41],
+                        "path_kind": "component",
+                        "action": "SIMPREP_INCLUDE",
+                    }
+                ],
+            }
+        ],
+        "errors": [],
+    }
+    posted = client.post(
+        f"/api/objects/{frame['uuid']}/creo-metadata",
+        json={
+            "identity": {"file_name": "frame.asm", "model_type": "ASSEMBLY"},
+            "structure": [
+                {
+                    "name": "bracket.prt",
+                    "type": "PART",
+                    "level": 1,
+                    "status": "ACTIVE",
+                    "path": "40",
+                }
+            ],
+            "simp_reps": simp_reps,
+        },
+    )
+    assert posted.status_code == 200, posted.text
+    body = posted.json()
+    assert body["simp_reps"] == simp_reps
+    assert body["structure"][0]["name"] == "bracket.prt"
+
+    fetched = client.get(f"/api/objects/{frame['uuid']}/creo-metadata")
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["simp_reps"]["representations"][0]["name"] == "LIGHT"
+    assert fetched.json()["simp_reps"]["active"]["is_master"] is True

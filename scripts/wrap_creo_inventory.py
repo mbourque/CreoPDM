@@ -33,7 +33,10 @@ CONFIGS = [
         "var": "__creoInvAssembly",
         "for_model": "listAssemblyStructureForModel",
         "session": "listSessionAssemblyStructure",
-        "extra_exports": [],
+        "extra_exports": [
+            {"name": "listAssemblySimpRepsForModel", "params": "model, session"},
+            {"name": "listSessionAssemblySimpReps", "params": ""},
+        ],
         "session_replace": (
             "function listSessionAssemblyStructure() {\n"
             "  var am = activeModel();\n"
@@ -94,7 +97,8 @@ function {cfg['session']}() {{
         f"    listForModel: {cfg['for_model']},",
         f"    listSession: {cfg['session']},",
     ]
-    for name in cfg["extra_exports"]:
+    for extra in cfg["extra_exports"]:
+        name = extra["name"] if isinstance(extra, dict) else extra
         exports.append(f"    {name}: {name},")
     export_block = "\n".join(exports)
 
@@ -102,10 +106,18 @@ function {cfg['session']}() {{
         f"function {cfg['for_model']}(model, session) {{ return {cfg['var']}.listForModel(model, session); }}",
         f"function {cfg['session']}() {{ return {cfg['var']}.listSession(); }}",
     ]
-    for name in cfg["extra_exports"]:
-        global_fns.append(
-            f"function {name}(featIds) {{ return {cfg['var']}.{name}(featIds); }}"
-        )
+    for extra in cfg["extra_exports"]:
+        if isinstance(extra, dict):
+            name = extra["name"]
+            params = str(extra.get("params") or "")
+            call_args = params
+            global_fns.append(
+                f"function {name}({params}) {{ return {cfg['var']}.{name}({call_args}); }}"
+            )
+        else:
+            global_fns.append(
+                f"function {extra}(featIds) {{ return {cfg['var']}.{extra}(featIds); }}"
+            )
 
     out_text = f"""/* CreoPDM inventory — promoted from {cfg['comment']} */
 var {cfg['var']} = (function () {{

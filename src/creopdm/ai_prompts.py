@@ -402,6 +402,9 @@ def prepare_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, A
     structure = out.get("structure")
     if isinstance(structure, list) and structure:
         out["structure"] = [dict(row) for row in structure if isinstance(row, dict)]
+    simp_reps = out.get("simp_reps")
+    if isinstance(simp_reps, dict) and simp_reps:
+        out["simp_reps"] = dict(simp_reps)
     # Stamp feature_name onto dims from feature id → name (for older snaps /
     # gathers that only stored feature_id).
     labels = _feature_id_label_map(out)
@@ -700,6 +703,55 @@ def _structure_outline_labels(snapshot: dict[str, Any]) -> list[str]:
     return [_structure_compare_label(row) for row in _structure_nodes(snapshot)]
 
 
+def _simp_reps_outline_lines(snapshot: dict[str, Any]) -> list[str]:
+    """Assembly simplified representation definitions (not BOM membership)."""
+    simp = snapshot.get("simp_reps")
+    if not isinstance(simp, dict):
+        return []
+    reps = simp.get("representations")
+    if not isinstance(reps, list) or not reps:
+        # Still surface active Master / named context when defs empty.
+        active = simp.get("active") if isinstance(simp.get("active"), dict) else None
+        if not active:
+            return []
+        name = str(active.get("name") or "").strip() or (
+            "MASTER" if active.get("is_master") else "—"
+        )
+        return [f"Simplified representations (active: {name}):", "- (none listed)"]
+    lines: list[str] = []
+    active = simp.get("active") if isinstance(simp.get("active"), dict) else None
+    active_name = ""
+    if active:
+        active_name = str(active.get("name") or "").strip() or (
+            "MASTER" if active.get("is_master") else ""
+        )
+    header = "Simplified representations:"
+    if active_name:
+        header = f"Simplified representations (active: {active_name}):"
+    lines.append(header)
+    for rep in reps:
+        if not isinstance(rep, dict):
+            continue
+        name = str(rep.get("name") or "").strip() or "—"
+        bits = [name]
+        typ = str(rep.get("type") or "").strip()
+        if typ:
+            bits.append(typ)
+        default = str(rep.get("default_action") or "").strip()
+        if default:
+            bits.append(f"default {default}")
+        if rep.get("temporary") is True:
+            bits.append("temporary")
+        items = rep.get("items")
+        n_items = len(items) if isinstance(items, list) else 0
+        if n_items:
+            bits.append(f"{n_items} item rule(s)")
+        elif rep.get("instructions_available") is False:
+            bits.append("instructions unavailable")
+        lines.append("- " + " · ".join(bits))
+    return lines
+
+
 def _count_labels(labels: list[str]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for label in labels:
@@ -943,6 +995,47 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
             }
             slim_struct.append({k: v for k, v in item.items() if v is not None})
         out["structure"] = slim_struct
+    simp_reps = snapshot.get("simp_reps")
+    if isinstance(simp_reps, dict) and simp_reps:
+        slim_simp: dict[str, Any] = {}
+        active = simp_reps.get("active")
+        if isinstance(active, dict):
+            slim_simp["active"] = {
+                k: active[k]
+                for k in ("id", "name", "is_master")
+                if k in active and active.get(k) is not None
+            }
+        reps = simp_reps.get("representations")
+        if isinstance(reps, list) and reps:
+            slim_reps: list[dict[str, Any]] = []
+            for rep in reps:
+                if not isinstance(rep, dict):
+                    continue
+                row = {
+                    k: rep.get(k)
+                    for k in (
+                        "id",
+                        "name",
+                        "type",
+                        "temporary",
+                        "default_action",
+                        "instructions_available",
+                    )
+                    if rep.get(k) is not None
+                }
+                items = rep.get("items")
+                if isinstance(items, list) and items:
+                    row["items"] = [
+                        dict(item)
+                        for item in items
+                        if isinstance(item, dict)
+                    ]
+                if row:
+                    slim_reps.append(row)
+            if slim_reps:
+                slim_simp["representations"] = slim_reps
+        if slim_simp:
+            out["simp_reps"] = slim_simp
     dimensions = snapshot.get("dimensions")
     if isinstance(dimensions, list):
         out["dimensions"] = []
@@ -976,6 +1069,9 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
             slim_cap["sheet_count"] = capture.get("sheet_count")
         if capture.get("drawing_models"):
             slim_cap["drawing_models"] = capture.get("drawing_models")
+        ctx = capture.get("assembly_context")
+        if isinstance(ctx, dict) and ctx:
+            slim_cap["assembly_context"] = dict(ctx)
         if slim_cap:
             out["capture"] = slim_cap
     return out
@@ -1119,6 +1215,10 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
             # Legacy BOM tree when inventory structure was not captured.
             lines.append("Structure:")
             lines.extend(_format_bom_outline_lines(bom_nodes))
+        simp_lines = _simp_reps_outline_lines(snapshot)
+        if simp_lines:
+            # Exclusion rules are representation context — not assembly deletes.
+            lines.extend(simp_lines)
         if is_asm and (bom_nodes or struct_rows):
             lines.append("Assembly features (non-component):")
         else:

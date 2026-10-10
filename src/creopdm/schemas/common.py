@@ -835,6 +835,8 @@ class CreoMetadataRequest(BaseModel):
     family_table: dict[str, object] | None = None
     features: list[dict[str, object]] | None = None
     structure: list[dict[str, object]] | None = None
+    # Assembly simplified representations (definitions + active capture context).
+    simp_reps: dict[str, object] | None = None
 
 
 class CreoMetadataResponse(BaseModel):
@@ -850,6 +852,7 @@ class CreoMetadataResponse(BaseModel):
     family_table: dict[str, object] | None = None
     features: list[dict[str, object]] | None = None
     structure: list[dict[str, object]] | None = None
+    simp_reps: dict[str, object] | None = None
     captured: bool = False
 
 

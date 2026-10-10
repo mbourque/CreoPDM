@@ -112,6 +112,9 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     # Assemblies: Structure/BOM must enrich the AI snapshot (Features skip COMPONENT).
     assert "snapshot.bom = m.bom" in text
     assert "bom: bom" in text
+    assert "snapshot.simp_reps = m.simp_reps" in text
+    assert "simp_reps: simp_reps" in text
+    assert "listAssemblySimpRepsForModel" in text
     assert "function creoBomTipFileName(" in text
     assert "replace(/<<[^>]*>>/g" in text
     assert "function creoMergeDimensionRows(" in text
@@ -254,6 +257,8 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "bom," in body_fn
     assert "structure" in body_fn
     assert "gatherSnapshot?.structure" in body_fn
+    assert "simp_reps" in body_fn
+    assert "gatherSnapshot?.simp_reps" in body_fn
     # Defaults: NEW = latest snap, OLD = one prior; dropdowns cannot invert order.
     assert "NEW = latest snap, OLD = one prior" in script
     assert "function fillAiSnapshotOrderedSelects(" in script

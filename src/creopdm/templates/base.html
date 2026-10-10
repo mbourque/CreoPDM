@@ -3430,6 +3430,26 @@ function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
     if (Array.isArray(m.structure) && m.structure.length) {
         snapshot.structure = m.structure;
     }
+    // Assembly simplified representations (definitions + active capture context).
+    // Exclusion rules must not be read as BOM deletes — keep separate from Structure.
+    if (m.simp_reps && typeof m.simp_reps === "object") {
+        snapshot.simp_reps = m.simp_reps;
+        if (!snapshot.capture || typeof snapshot.capture !== "object") {
+            snapshot.capture = { status: "ok", errors: [], assembly_context: null };
+        }
+        var activeCtx = m.simp_reps.active && typeof m.simp_reps.active === "object"
+            ? m.simp_reps.active
+            : null;
+        snapshot.capture.assembly_context = {
+            active_simp_rep: activeCtx
+        };
+        if (Array.isArray(m.simp_reps.errors) && m.simp_reps.errors.length) {
+            if (!Array.isArray(snapshot.capture.errors)) snapshot.capture.errors = [];
+            for (var si = 0; si < m.simp_reps.errors.length; si++) {
+                snapshot.capture.errors.push("simp_reps: " + String(m.simp_reps.errors[si]));
+            }
+        }
+    }
     // Merge Features-tab / inventory rows into snapshot (Compare + Ask AI).
     // Drawings: prefer metadata drawing inventory when present (same as Details).
     var snapIsDrw = false;
@@ -3939,6 +3959,7 @@ function gatherModelMetadata(filename, filePath, options) {
         var features = [];
         var structure = null;
         var bom = [];
+        var simp_reps = null;
         try {
             var type = model.Type;
             var isAsm = false;
@@ -3974,6 +3995,33 @@ function gatherModelMetadata(filename, filePath, options) {
                         if (structRows.length) structure = structRows;
                     }
                 } catch (errStruct) {}
+                // Assembly SimpReps live in assembly.creojs (same inventory as Structure).
+                try {
+                    if (typeof listAssemblySimpRepsForModel === "function") {
+                        var simpPack = listAssemblySimpRepsForModel(
+                            solidModel || model, session
+                        );
+                        if (simpPack && simpPack.ok) {
+                            simp_reps = {
+                                active: simpPack.active || {
+                                    id: null, name: "MASTER", is_master: true
+                                },
+                                representations: Array.isArray(simpPack.representations)
+                                    ? simpPack.representations
+                                    : [],
+                                errors: Array.isArray(simpPack.errors)
+                                    ? simpPack.errors
+                                    : []
+                            };
+                        }
+                    }
+                } catch (errSimp) {
+                    simp_reps = {
+                        active: { id: null, name: "MASTER", is_master: true },
+                        representations: [],
+                        errors: ["listAssemblySimpRepsForModel: " + creoToolkitErr(errSimp)]
+                    };
+                }
             }
             if (isDrwMeta) {
                 try {
@@ -4049,7 +4097,8 @@ function gatherModelMetadata(filename, filePath, options) {
                 parameters: parameters,
                 units: units,
                 family_table: family_table,
-                bom: bom
+                bom: bom,
+                simp_reps: simp_reps
             });
         } catch (errEnrich) {
             try {
@@ -4079,6 +4128,7 @@ function gatherModelMetadata(filename, filePath, options) {
             family_table: family_table,
             features: features,
             structure: structure || null,
+            simp_reps: simp_reps,
             ai_snapshot: ai_snapshot,
             // Consumed by app.js on a later Creo.JS turn (Erase is deferred by PTC).
             _pdm_erase_keys: eraseKeys
