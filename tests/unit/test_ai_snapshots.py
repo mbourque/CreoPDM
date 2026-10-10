@@ -389,7 +389,7 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "Git unified-diff markers" in script
     assert 'marker = side === "new" ? "+" : "-"' in script
     assert "async function fetchAiSnapshotOutline(" in script
-    assert "=== ${roleLabel} snapshot (${rev}) ===" in script
+    assert "=== ${roleLabel} (${rev}) ===" in script
     assert "function syncAiSnapshotScrollLayout(" in script
     assert "ai-snapshot-scroll-rail" in script or "ai-snapshot-scroll" in script
     assert "async function askAiSnapshotCompare(" in script
@@ -555,15 +555,15 @@ def test_snapshot_compare_prompt_requires_saved_text():
         older_revision="A.1",
         newer_revision="A.2",
     )
-    assert "=== OLD snapshot (A.1) ===" in user
-    assert "=== NEW snapshot (A.2) ===" in user
+    assert "=== OLD (A.1) ===" in user
+    assert "=== NEW (A.2) ===" in user
     assert "=== Computed differences ===" in user
     # Narrative rules belong in System Settings → AI prompt, not this user message.
     assert "Do not swap them" not in user
     assert "following your instructions" not in user
     assert "Never claim a revision is missing" not in user
-    assert user.index("=== OLD snapshot (A.1) ===") < user.index(
-        "=== NEW snapshot (A.2) ==="
+    assert user.index("=== OLD (A.1) ===") < user.index(
+        "=== NEW (A.2) ==="
     )
     assert "d0 = 6" in user
     assert "d0 = 8" in user
@@ -670,8 +670,8 @@ def test_snapshot_compare_prompt_requires_saved_text():
         older_revision="A.1",
         newer_revision="—",
     )
-    assert "=== NEW snapshot (newer) ===" in dash_prompt
-    assert "=== NEW snapshot (—) ===" not in dash_prompt
+    assert "=== NEW (newer) ===" in dash_prompt
+    assert "=== NEW (—) ===" not in dash_prompt
     prompt = build_snapshot_compare_user_prompt(
         older_snapshot=bulky,
         newer_snapshot={
@@ -710,8 +710,8 @@ def test_snapshot_compare_prompt_requires_saved_text():
         older_revision="A.1",
         newer_revision="A.2",
     )
-    assert fat_prompt.index("=== OLD snapshot (A.1) ===") < fat_prompt.index(
-        "=== NEW snapshot (A.2) ==="
+    assert fat_prompt.index("=== OLD (A.1) ===") < fat_prompt.index(
+        "=== NEW (A.2) ==="
     )
     # Pattern-member shells ("Feature 15775", IFX_ID_*) must collapse so Ollama
     # still sees a deleted PATTERN head (false "No model changes" on plate_3).
@@ -822,7 +822,7 @@ def test_snapshot_compare_prompt_requires_saved_text():
         newer_revision="A.2",
     )
     assert "Features:" in pat_prompt
-    older_half, after_old = pat_prompt.split("=== NEW snapshot (A.2) ===", 1)
+    older_half, after_old = pat_prompt.split("=== NEW (A.2) ===", 1)
     newer_half, _, diff_half = after_old.partition(
         "=== Computed differences ==="
     )
@@ -1499,8 +1499,8 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
         captured["model"] = model
         captured["messages"] = messages
         assert messages[0]["content"] == "Use only facts from the JSON."
-        assert "=== OLD snapshot" in messages[1]["content"]
-        assert "=== NEW snapshot" in messages[1]["content"]
+        assert "=== OLD" in messages[1]["content"]
+        assert "=== NEW" in messages[1]["content"]
         assert "=== Computed differences ===" in messages[1]["content"]
         assert "Do not swap them" not in messages[1]["content"]
         assert "following your instructions" not in messages[1]["content"]
@@ -1590,8 +1590,8 @@ def test_ai_snapshot_compare_pending_uses_tip_and_client_newer(
     def fake_chat(base_url, model, messages, *, timeout_s=300.0):
         assert model == "qwen3-8b-64k:latest"
         assert messages[0]["content"] == "Facts only."
-        assert "=== OLD snapshot" in messages[1]["content"]
-        assert "=== NEW snapshot (A.2) ===" in messages[1]["content"]
+        assert "=== OLD" in messages[1]["content"]
+        assert "=== NEW (A.2) ===" in messages[1]["content"]
         assert "=== Computed differences ===" in messages[1]["content"]
         assert "Do not swap them" not in messages[1]["content"]
         assert "120" in messages[1]["content"]

@@ -324,6 +324,10 @@ def test_compare_outline_includes_assembly_simp_reps():
     # Keep at end of outline (after Parameters), not buried under Structure.
     assert text.index("Parameters:") < text.index("Simplified representations")
     assert text.index("Structure:") < text.index("Simplified representations")
+    # Blank line between major outline sections (readable in Modifications / Ask AI).
+    assert "\n\nAssembly features (non-component):" in text
+    assert "\n\nParameters:" in text
+    assert "\n\nSimplified representations" in text
     # Never put SIMP_REP_* on Structure lines (Ask AI invents removals/adds).
     assert "SIMP_REP_SUPPRESSED" not in text
     assert "bracket.prt (PART)" in text
@@ -331,6 +335,36 @@ def test_compare_outline_includes_assembly_simp_reps():
     assert "Features removed" not in text
     assert "deleted" not in text.lower()
 
+
+def test_compare_outline_blank_divides_part_and_drawing_sections():
+    part = format_snapshot_compare_text(
+        {
+            "identity": {"filename": "pin.prt", "model_type": "PART"},
+            "features": [{"name": "EXTRUDE_1", "type": "SOLID", "id": 5}],
+            "dimensions": [{"symbol": "d0", "value": 1.0, "units": "in"}],
+            "parameters": [{"name": "DESCRIPTION", "value": "pin"}],
+        }
+    )
+    assert "\n\nFeatures:" in part
+    assert "\n\nDimensions:" in part
+    assert "\n\nParameters:" in part
+
+    drawing = format_snapshot_compare_text(
+        {
+            "identity": {"filename": "pin.drw", "model_type": "DRAWING"},
+            "capture": {
+                "sheet_count": 1,
+                "drawing_models": [{"filename": "pin.prt", "model_type": "PART"}],
+            },
+            "features": [
+                {"name": "FRONT", "type": "VIEW", "sheet": 1},
+                {"name": "NOTE (1)", "type": "NOTE", "sheet": 1, "detail": "A"},
+            ],
+            "parameters": [{"name": "TITLE", "value": "PIN"}],
+        }
+    )
+    assert "\n\nReferenced models:" in drawing or "\n\nDrawing inventory:" in drawing
+    assert "\n\nParameters:" in drawing
 
 def test_computed_diff_reports_simp_reps_added_when_only_on_new():
     """Ask AI must see SimpRep defs in Computed differences (not buried in Structure)."""
@@ -360,7 +394,8 @@ def test_computed_diff_reports_simp_reps_added_when_only_on_new():
         },
     }
     diff = format_snapshot_compare_diff_text(older, newer)
-    assert "Simplified representations added (definitions newly recorded on NEW):" in diff
+    assert "Simplified representations added:" in diff
+    assert "definitions newly recorded" not in diff
     assert "active: MASTER" in diff
     assert "NO_HARDWARE" in diff
     assert "NO_PLATE" in diff
@@ -391,10 +426,9 @@ def test_computed_diff_reports_simp_rep_active_change():
         },
     }
     diff = format_snapshot_compare_diff_text(older, newer)
-    assert "Simplified representation active changed: MASTER → LIGHT" in diff
+    assert "Active simplified representation: MASTER → LIGHT" in diff
     assert "Simplified representations added" not in diff
     assert "Simplified representations removed" not in diff
-
 
 def test_computed_diff_omits_simp_reps_when_unchanged():
     simp = {

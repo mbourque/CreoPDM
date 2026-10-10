@@ -782,10 +782,8 @@ def _simp_reps_diff_lines(
     newer_active = _simp_rep_active_name(newer_simp)
 
     if not older_has and newer_has:
-        # Definitions newly captured on NEW — never call this a removal.
-        lines.append(
-            "Simplified representations added (definitions newly recorded on NEW):"
-        )
+        # Present on NEW only — never call this a removal.
+        lines.append("Simplified representations added:")
         if newer_active:
             lines.append(f"- active: {newer_active}")
         for label in newer_labels:
@@ -793,9 +791,7 @@ def _simp_reps_diff_lines(
         return lines
 
     if older_has and not newer_has:
-        lines.append(
-            "Simplified representations unavailable on NEW (recorded on OLD only):"
-        )
+        lines.append("Simplified representations removed:")
         if older_active:
             lines.append(f"- active: {older_active}")
         for label in older_labels:
@@ -804,7 +800,7 @@ def _simp_reps_diff_lines(
 
     if older_active and newer_active and older_active != newer_active:
         lines.append(
-            f"Simplified representation active changed: {older_active} → {newer_active}"
+            f"Active simplified representation: {older_active} → {newer_active}"
         )
 
     older_counts = _count_labels(older_labels)
@@ -1204,6 +1200,12 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
     return out
 
 
+def _blank_before_section(lines: list[str]) -> None:
+    """Blank line between major outline sections (part / asm / drawing)."""
+    if lines and lines[-1] != "":
+        lines.append("")
+
+
 def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
     """Plain-language outline for Ollama (solids + drawings)."""
     if not isinstance(snapshot, dict):
@@ -1263,12 +1265,14 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
                 if val:
                     model_lines.append(f"- {val}")
         if model_lines:
+            _blank_before_section(lines)
             lines.append("Referenced models:")
             lines.extend(model_lines)
 
         views = [f for f in features if _is_view_feature(f)]
         if _drawing_has_rich_inventory(features):
             # Full drawing inventory (sheets / views / notes / tables / …).
+            _blank_before_section(lines)
             lines.append("Drawing inventory:")
             inv_rows = [
                 f
@@ -1293,6 +1297,7 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
                     f"View count: {len(views)} total, {visible} visible, {erased} erased"
                 )
         else:
+            _blank_before_section(lines)
             lines.append("Views:")
             if views:
                 lines.extend(_view_display_line(v) for v in views)
@@ -1336,12 +1341,15 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
         )
         if struct_rows:
             # Assembly inventory (groups / components / status) — same as Details.
+            _blank_before_section(lines)
             lines.append("Structure:")
             lines.extend(_inventory_outline_line(row) for row in struct_rows)
         elif bom_nodes:
             # Legacy BOM tree when inventory structure was not captured.
+            _blank_before_section(lines)
             lines.append("Structure:")
             lines.extend(_format_bom_outline_lines(bom_nodes))
+        _blank_before_section(lines)
         if is_asm and (bom_nodes or struct_rows):
             lines.append("Assembly features (non-component):")
         else:
@@ -1366,6 +1374,7 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
             f"- {_dimension_outline_line(dim, feature_labels=feat_labels)}"
             for dim in _iter_compare_dimensions(dimensions)
         ]
+        _blank_before_section(lines)
         lines.append("Dimensions:")
         lines.extend(dim_lines or ["- (none)"])
 
@@ -1379,6 +1388,7 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
                 if str(n).strip()
             ]
             if current or names:
+                _blank_before_section(lines)
                 if current:
                     lines.append(f"Material: {current}")
                 elif len(names) == 1:
@@ -1391,6 +1401,7 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
         # Always show Parameters for drawings when other model params exist;
         # skip empty "(none)" noise when drawing synthetics were the only ones.
         if param_rows:
+            _blank_before_section(lines)
             lines.append("Parameters:")
             for param in param_rows:
                 name = str(param.get("name") or "").strip()
@@ -1401,6 +1412,7 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
                     value_s = _format_dim_value(value)
                 lines.append(f"- {name} = {value_s}")
         elif not drawing:
+            _blank_before_section(lines)
             lines.append("Parameters:")
             lines.append("- (none)")
 
@@ -1409,10 +1421,10 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
         # rules are not read as component deletes.
         simp_lines = _simp_reps_outline_lines(snapshot)
         if simp_lines:
+            _blank_before_section(lines)
             lines.extend(simp_lines)
 
     return "\n".join(lines) if lines else "(empty snapshot)"
-
 
 CHECKIN_BATCH_COMMENT_SYSTEM = (
     "You write a single CreoPDM check-in comment. "
@@ -1493,9 +1505,9 @@ def build_snapshot_compare_user_prompt(
     # Labeled facts only. All narrative / cite rules live in the saved
     # System Settings → AI snapshot compare prompt (system message).
     return (
-        f"=== OLD snapshot ({older_label}) ===\n"
+        f"=== OLD ({older_label}) ===\n"
         f"{older_text}\n\n"
-        f"=== NEW snapshot ({newer_label}) ===\n"
+        f"=== NEW ({newer_label}) ===\n"
         f"{newer_text}\n\n"
         f"{diff_text}"
     )

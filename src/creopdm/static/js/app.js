@@ -12310,7 +12310,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const text = String(outline || "").trim();
     if (!text) return "";
     const roleLabel = String(role || "").trim().toUpperCase() || "OLD";
-    return `=== ${roleLabel} snapshot (${rev}) ===\n${text}`;
+    return `=== ${roleLabel} (${rev}) ===\n${text}`;
   }
 
   function aiSnapshotPanel() {
