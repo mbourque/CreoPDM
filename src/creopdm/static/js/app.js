@@ -2635,7 +2635,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (!document.getElementById("product-state-badge") && !document.getElementById("metric-filters")) {
       return;
     }
-    void refreshProductUiIfStale(pid);
+    void refreshProductUiIfStale(pid, { skipIfBusy: true });
   }
 
   document.addEventListener("visibilitychange", () => {
@@ -5916,6 +5916,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  /** True when a soft-reload would interrupt Add / Collect / dialogs / Open. */
+  function productLifecyclePollBlocked() {
+    if (busyDepth > 0) return true;
+    if (metadataCollectJob.running) return true;
+    if (window.__creopdmSoftNavBusy || softNavBusy) return true;
+    // addInFlight is declared later in this boot; read only after init.
+    if (typeof addInFlight !== "undefined" && addInFlight) return true;
+    const openDialog = document.querySelector("dialog[open]");
+    if (openDialog && openDialog.id !== "busy-overlay") return true;
+    return false;
+  }
+
   /**
    * Soft-reload Files when the open product's lifecycle state no longer matches
    * the page (Admin changed state while this tab stayed open).
@@ -5924,6 +5936,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const opts = options && typeof options === "object" ? options : {};
     const pid = String(productId || currentProductId() || "").trim();
     if (!pid) return { ok: true, reloaded: false };
+    // Background poll / focus: never yank the UI mid-job or with a modal open.
+    if (opts.skipIfBusy !== false && productLifecyclePollBlocked()) {
+      return { ok: true, reloaded: false, deferred: true };
+    }
     let data;
     try {
       data = await fetchProductAccess(pid);
@@ -5936,6 +5952,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const drifted = Boolean(state && uiState && state !== uiState);
     if (!drifted && opts.forceReload !== true) {
       return { ok: true, reloaded: false, state, access: data };
+    }
+    // Re-check busy after the GET — a Collect may have started while we waited.
+    if (opts.skipIfBusy !== false && productLifecyclePollBlocked()) {
+      return { ok: true, reloaded: false, deferred: true, state, access: data };
     }
     if (opts.notice) queueLifecycleSoftReload(opts.notice);
     else if (drifted) {
@@ -5991,6 +6011,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         // Reload first so badge/toolbar match In Review — do not leave stale In Work.
         await refreshProductUiIfStale(pid, {
           forceReload: true,
+          skipIfBusy: false,
           notice: msg,
           keepBusy: Boolean(opts.keepBusy),
           busyMessage: opts.busyMessage || "Refreshing…",
@@ -6002,6 +6023,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (stateDrifted && opts.reloadOnDrift !== false) {
       await refreshProductUiIfStale(pid, {
         forceReload: true,
+        skipIfBusy: false,
         notice: `Product is now ${productStateDisplayLabel(state)}.`,
         keepBusy: Boolean(opts.keepBusy),
         busyMessage: opts.busyMessage || "Refreshing…",
@@ -14930,6 +14952,19 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const ssrMod = Number(checkinBtn?.dataset?.pendingSaves || 0);
     const ssrNew = Number(checkinBtn?.dataset?.newFiles || 0);
     if (ssrMod || ssrNew) void prefetchCheckinQueueParts(watchProductId);
+  }
+
+  // Light lifecycle poll: Creo often never fires focus/visibility. Cheap GET;
+  // soft-reload only when badge state drifted; never while busy / modal open.
+  if (
+    currentProductId()
+    && (document.getElementById("product-state-badge") || document.getElementById("metric-filters"))
+  ) {
+    const LIFECYCLE_POLL_MS = 25_000;
+    trackedInterval(() => {
+      if (document.hidden) return;
+      scheduleProductLifecycleReconcile();
+    }, LIFECYCLE_POLL_MS);
   }
 
   document.querySelector("#detail-open-btn")?.addEventListener("click", async (event) => {

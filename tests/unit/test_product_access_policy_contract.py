@@ -115,7 +115,10 @@ def test_app_js_does_not_reencode_product_lock():
     assert "function assertProductAllows(" in script
     assert "function fetchProductAccess(" in script
     assert "function refreshProductUiIfStale(" in script
+    assert "function productLifecyclePollBlocked(" in script
     assert "function uiProductStateKey(" in script
+    assert "LIFECYCLE_POLL_MS" in script
+    assert "skipIfBusy" in script
     assert "PRODUCT_LIFECYCLE_OPS" in script
     assert 'assertProductAllows(productId, "edit_metadata")' in script
     assert 'assertProductAllows(currentProductId(), "checkout")' in script
