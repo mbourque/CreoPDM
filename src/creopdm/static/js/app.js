@@ -662,9 +662,22 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function reloadPage(options = {}) {
-    if (metadataCollectJob.running) {
+    const force = Boolean(options.force);
+    // Lifecycle refresh must not be blocked by a stuck Collect flag — that left
+    // In Work chrome after Admin → In Review while Checkout correctly 400'd.
+    if (metadataCollectJob.running && !force) {
       showOk("Finish Collect metadata (or wait for it) before refreshing.");
-      return;
+      return Promise.resolve();
+    }
+    if (force && metadataCollectJob.running) {
+      metadataCollectJob.cancel = true;
+      metadataCollectJob.running = false;
+      try {
+        saveMetadataCollectState(null);
+      } catch {
+        /* ignore */
+      }
+      syncMetadataCollectControls();
     }
     const keepBusy = Boolean(options.keepBusy);
     const busyMessage = options.busyMessage || "Refreshing…";
@@ -2616,17 +2629,27 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   });
 
   resumeMetadataCollectIfNeeded();
+  function scheduleProductLifecycleReconcile() {
+    const pid = currentProductId();
+    if (!pid) return;
+    if (!document.getElementById("product-state-badge") && !document.getElementById("metric-filters")) {
+      return;
+    }
+    void refreshProductUiIfStale(pid);
+  }
+
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
       resumeMetadataCollectIfNeeded();
-      const pid = currentProductId();
-      if (pid && document.getElementById("metric-filters")) {
-        void reconcileProductLifecycleChrome(pid, { showError: false });
-      }
+      scheduleProductLifecycleReconcile();
     }
+  });
+  window.addEventListener("focus", () => {
+    scheduleProductLifecycleReconcile();
   });
   window.addEventListener("pageshow", () => {
     resumeMetadataCollectIfNeeded();
+    scheduleProductLifecycleReconcile();
   });
   window.addEventListener("beforeunload", (event) => {
     if (!metadataCollectJob.running) return;
@@ -5875,6 +5898,59 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return prevState;
   }
 
+  function uiProductStateKey() {
+    const badge = document.getElementById("product-state-badge");
+    const fromBadge = String(badge?.dataset?.state || "").trim().toUpperCase();
+    if (fromBadge) return fromBadge;
+    const metrics = document.getElementById("metric-filters");
+    return String(metrics?.dataset?.productState || "").trim().toUpperCase();
+  }
+
+  function queueLifecycleSoftReload(message) {
+    const text = String(message || "").trim();
+    if (!text) return;
+    try {
+      sessionStorage.setItem("creopdmNotice", text);
+    } catch {
+      /* private mode */
+    }
+  }
+
+  /**
+   * Soft-reload Files when the open product's lifecycle state no longer matches
+   * the page (Admin changed state while this tab stayed open).
+   */
+  async function refreshProductUiIfStale(productId, options) {
+    const opts = options && typeof options === "object" ? options : {};
+    const pid = String(productId || currentProductId() || "").trim();
+    if (!pid) return { ok: true, reloaded: false };
+    let data;
+    try {
+      data = await fetchProductAccess(pid);
+    } catch {
+      return { ok: true, reloaded: false };
+    }
+    const state = String(data?.state || "").trim().toUpperCase();
+    const uiState = uiProductStateKey();
+    applyProductAccessToMetrics(data);
+    const drifted = Boolean(state && uiState && state !== uiState);
+    if (!drifted && opts.forceReload !== true) {
+      return { ok: true, reloaded: false, state, access: data };
+    }
+    if (opts.notice) queueLifecycleSoftReload(opts.notice);
+    else if (drifted) {
+      queueLifecycleSoftReload(
+        `Product is now ${productStateDisplayLabel(state)}. Refreshing the page…`
+      );
+    }
+    await reloadPage({
+      force: true,
+      keepBusy: Boolean(opts.keepBusy),
+      busyMessage: opts.busyMessage || "Refreshing…",
+    });
+    return { ok: false, reloaded: true, state, access: data };
+  }
+
   /**
    * Fail-closed lifecycle gate before any mutation. Soft-reloads Files when the
    * Admin changed product state while this tab stayed open.
@@ -5885,7 +5961,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const pid = String(productId || currentProductId() || "").trim();
     const errorEl = opts.errorEl || $("#toolbar-error");
     const deny = (message, extra) => {
-      if (opts.showError !== false) showError(errorEl, message);
+      if (opts.showError !== false && opts.reloadOnDeny === false) {
+        showError(errorEl, message);
+      }
       return {
         ok: false,
         reloaded: Boolean(extra?.reloaded),
@@ -5902,26 +5980,29 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     } catch (err) {
       return deny(String(err?.message || err || "Could not verify product access."));
     }
-    const prevState = applyProductAccessToMetrics(data);
+    applyProductAccessToMetrics(data);
     const state = String(data?.state || "").trim().toUpperCase();
+    const uiState = uiProductStateKey();
     const allowed = productAllowsOpFromAccess(data, op);
-    const stateDrifted = Boolean(state && prevState && prevState !== state);
+    const stateDrifted = Boolean(state && uiState && state !== uiState);
     if (!allowed) {
       const msg = `Product is ${productStateDisplayLabel(state)} and cannot ${spec.verb}.`;
-      const result = deny(msg, { state, access: data });
       if (opts.reloadOnDeny !== false) {
-        await reloadPage({
+        // Reload first so badge/toolbar match In Review — do not leave stale In Work.
+        await refreshProductUiIfStale(pid, {
+          forceReload: true,
+          notice: msg,
           keepBusy: Boolean(opts.keepBusy),
           busyMessage: opts.busyMessage || "Refreshing…",
         });
-        return { ...result, reloaded: true };
+        return deny(msg, { reloaded: true, state, access: data });
       }
-      return result;
+      return deny(msg, { state, access: data });
     }
     if (stateDrifted && opts.reloadOnDrift !== false) {
-      const msg = "Product state changed — refreshing…";
-      if (opts.showError !== false) showError(errorEl, msg);
-      await reloadPage({
+      await refreshProductUiIfStale(pid, {
+        forceReload: true,
+        notice: `Product is now ${productStateDisplayLabel(state)}.`,
         keepBusy: Boolean(opts.keepBusy),
         busyMessage: opts.busyMessage || "Refreshing…",
       });
@@ -5929,33 +6010,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         ok: false,
         reloaded: true,
         state,
-        message: msg,
+        message: `Product is now ${productStateDisplayLabel(state)}.`,
         access: data,
       };
     }
     return { ok: true, reloaded: false, state, access: data };
   }
 
-  /** @deprecated use assertProductAllows(productId, "edit_metadata") */
+  /** Background / focus: refresh Files when Admin changed product state. */
   async function reconcileProductLifecycleChrome(productId, options) {
     const opts = options && typeof options === "object" ? options : {};
     if (opts.requireEditMetadata) {
       return assertProductAllows(productId, "edit_metadata", opts);
     }
-    const pid = String(productId || currentProductId() || "").trim();
-    if (!pid) return { ok: true, reloaded: false };
-    try {
-      const data = await fetchProductAccess(pid);
-      const prev = applyProductAccessToMetrics(data);
-      const state = String(data?.state || "").trim().toUpperCase();
-      if (state && prev && prev !== state) {
-        await reloadPage({ busyMessage: "Refreshing…" });
-        return { ok: false, reloaded: true, state };
-      }
-      return { ok: true, reloaded: false, state, access: data };
-    } catch {
-      return { ok: true, reloaded: false };
-    }
+    return refreshProductUiIfStale(productId, {
+      keepBusy: Boolean(opts.keepBusy),
+      busyMessage: opts.busyMessage || "Refreshing…",
+    });
   }
 
   function currentVaultFolder() {

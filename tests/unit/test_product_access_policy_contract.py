@@ -111,9 +111,11 @@ def test_app_js_does_not_reencode_product_lock():
     assert "allowsMutation" not in sync
     assert "data-allows-content" in _APP_HTML.read_text(encoding="utf-8")
     assert "productAllowsContent" in script
-    # Stale Files after Admin state change: fail-closed GET /api/products before mutations.
+    # Stale Files after Admin state change: fail-closed GET + soft-reload UI.
     assert "function assertProductAllows(" in script
     assert "function fetchProductAccess(" in script
+    assert "function refreshProductUiIfStale(" in script
+    assert "function uiProductStateKey(" in script
     assert "PRODUCT_LIFECYCLE_OPS" in script
     assert 'assertProductAllows(productId, "edit_metadata")' in script
     assert 'assertProductAllows(currentProductId(), "checkout")' in script
@@ -121,6 +123,10 @@ def test_app_js_does_not_reencode_product_lock():
     assert 'assertProductAllows(productId, "remove")' in script
     assert 'assertProductAllows(productId, "checkin"' in script
     assert 'assertProductAllows(currentProductId(), "download")' in script
+    assert "force: true" in script
+    assert "refreshProductUiIfStale" in script
+    assert "scheduleProductLifecycleReconcile" in script
+    assert 'sessionStorage.setItem("creopdmNotice"' in script
     assert "Number(result.status) === 400" in script
     assert "allows_checkout" in (
         SRC / "schemas" / "common.py"
