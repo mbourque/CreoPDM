@@ -310,6 +310,23 @@ Then users on Creo see **Creo: Agent offline** in the top bar → click the pill
 
 Quick check that the agent is up: open `http://127.0.0.1:8766/health` in a normal browser on the Creo PC.
 
+## AI (Ask AI / check-in comments)
+
+CreoPDM can call a local **Ollama** model to draft check-in comments and Modifications “Ask AI” summaries from two revision outlines.
+
+**Shared prompt (paired with a model):**  
+[`docs/ai-snapshot-compare-prompt.qwen3-8b-64k.txt`](docs/ai-snapshot-compare-prompt.qwen3-8b-64k.txt)
+
+That file is labeled for **`qwen3-8b-64k:latest`**. To use it on a CreoPDM server:
+
+1. Install/pull that model in Ollama (or another model you prefer — results vary).
+2. Open **Administration → System Settings → AI**.
+3. Enable AI, set the Ollama host URL and model name (for example `qwen3-8b-64k:latest`).
+4. Open the prompt file, copy the prompt body (**omit the `#` header lines** at the top), and paste into **snapshot compare prompt**.
+5. Save. Details → Ask AI / Check In → Ask AI for comment use that system prompt with the OLD/NEW outlines CreoPDM builds.
+
+The live prompt lives in server settings (`settings.json`), not in git. The `docs/` file is the hand-out / backup copy for new installs.
+
 ## Tests
 
 With the venv active, run `pytest`. Tests use temporary directories. They never touch a real product repository.
