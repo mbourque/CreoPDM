@@ -5960,7 +5960,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (opts.notice) queueLifecycleSoftReload(opts.notice);
     else if (drifted) {
       queueLifecycleSoftReload(
-        `Product is now ${productStateDisplayLabel(state)}. Refreshing the page…`
+        `Product is now ${productStateDisplayLabel(state)}.`
       );
     }
     await reloadPage({

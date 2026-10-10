@@ -130,6 +130,8 @@ def test_app_js_does_not_reencode_product_lock():
     assert "refreshProductUiIfStale" in script
     assert "scheduleProductLifecycleReconcile" in script
     assert 'sessionStorage.setItem("creopdmNotice"' in script
+    assert "`Product is now ${productStateDisplayLabel(state)}.`" in script
+    assert "Refreshing the page" not in script
     assert "Number(result.status) === 400" in script
     assert "allows_checkout" in (
         SRC / "schemas" / "common.py"
