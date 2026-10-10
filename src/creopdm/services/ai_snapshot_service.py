@@ -15,6 +15,7 @@ from creopdm.ai_prompts import (
     build_checkin_batch_comment_user_prompt,
     build_snapshot_compare_user_prompt,
     format_checkin_batch_comment_fallback,
+    format_snapshot_compare_diff_text,
     format_snapshot_compare_text,
     prepare_snapshot_for_compare,
     resolve_snapshot_compare_prompt,
@@ -406,24 +407,18 @@ class AiSnapshotService:
         newer_revision: str,
         older_version_id: str,
         newer_version_id: str,
-        settings: AppSettings,
     ) -> AiSnapshotWhatChangedResponse:
-        """Same system + user messages Ask AI would send — no Ollama, AI may be off."""
-        system_prompt = str(settings.ai.snapshot_compare_prompt or "").strip()
-        user_prompt = build_snapshot_compare_user_prompt(
-            older_snapshot=older_snapshot,
-            newer_snapshot=newer_snapshot,
-            older_revision=older_revision,
-            newer_revision=newer_revision,
-        )
+        """Same Computed differences block Ask AI receives — no Ollama, AI may be off."""
+        older_prepared = prepare_snapshot_for_compare(older_snapshot)
+        newer_prepared = prepare_snapshot_for_compare(newer_snapshot)
+        diff_text = format_snapshot_compare_diff_text(older_prepared, newer_prepared)
         return AiSnapshotWhatChangedResponse(
             object_id=object_uuid,
             older_version_id=older_version_id,
             newer_version_id=newer_version_id,
             older_display_revision=older_revision,
             newer_display_revision=newer_revision,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
+            computed_differences=str(diff_text or "").strip(),
         )
 
     def what_changed(
@@ -432,9 +427,9 @@ class AiSnapshotService:
         object_uuid: str,
         older_version_id: str,
         newer_version_id: str,
-        settings: AppSettings,
+        _settings: AppSettings,
     ) -> AiSnapshotWhatChangedResponse:
-        """Preview the Ask AI payload for two History snapshots (works with AI off)."""
+        """Computed differences for two History snapshots (works with AI off)."""
         older, newer = self._load_compare_pair(
             session, object_uuid, older_version_id, newer_version_id
         )
@@ -446,7 +441,6 @@ class AiSnapshotService:
             newer_revision=newer.display_revision,
             older_version_id=older.version_id or older_version_id,
             newer_version_id=newer.version_id or newer_version_id,
-            settings=settings,
         )
 
     def what_changed_pending(
@@ -454,12 +448,12 @@ class AiSnapshotService:
         session: Session,
         object_uuid: str,
         newer_snapshot: dict[str, Any],
-        settings: AppSettings,
+        _settings: AppSettings,
         *,
         older_version_id: str | None = None,
         newer_display_revision: str = "pending",
     ) -> AiSnapshotWhatChangedResponse:
-        """Preview Ask AI payload for tip vs live gather (works with AI off)."""
+        """Computed differences for tip vs live gather (works with AI off)."""
         older, newer_snap, newer_label = self._load_compare_pending(
             session,
             object_uuid,
@@ -475,7 +469,6 @@ class AiSnapshotService:
             newer_revision=newer_label,
             older_version_id=older.version_id or "",
             newer_version_id="",
-            settings=settings,
         )
 
     def _chat_compare(
@@ -503,22 +496,18 @@ class AiSnapshotService:
         # One prompt path for Modifications Ask AI and Check In Ask AI
         # (parts, assemblies, drawings) — prepare lives inside build_*.
         system_prompt = resolve_snapshot_compare_prompt(settings.ai.snapshot_compare_prompt)
-        payload = self._build_what_changed(
-            object_uuid=object_uuid,
+        user_prompt = build_snapshot_compare_user_prompt(
             older_snapshot=older_snapshot,
             newer_snapshot=newer_snapshot,
             older_revision=older_revision,
             newer_revision=newer_revision,
-            older_version_id=older_version_id,
-            newer_version_id=newer_version_id,
-            settings=settings,
         )
         summary = chat_ollama(
             settings.ai.ollama_base_url,
             model,
             [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": payload.user_prompt},
+                {"role": "user", "content": user_prompt},
             ],
         )
         return AiSnapshotCompareResponse(

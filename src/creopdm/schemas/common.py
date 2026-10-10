@@ -974,15 +974,14 @@ class AiSnapshotCompareResponse(BaseModel):
 
 
 class AiSnapshotWhatChangedResponse(BaseModel):
-    """Full Ask AI payload preview (no Ollama). Works when AI features are off."""
+    """Computed differences only (no Ollama). Works when AI features are off."""
 
     object_id: str
     older_version_id: str
     newer_version_id: str = ""
     older_display_revision: str = ""
     newer_display_revision: str = ""
-    system_prompt: str = ""
-    user_prompt: str = ""
+    computed_differences: str = ""
 
 
 class AiCheckinFileNote(BaseModel):

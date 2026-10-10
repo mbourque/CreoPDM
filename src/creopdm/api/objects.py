@@ -532,7 +532,7 @@ def what_changed_ai_snapshots(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> AiSnapshotWhatChangedResponse:
-    """Return the Ask AI system + user messages (no Ollama; works when AI is off)."""
+    """Return Computed differences only (no Ollama; works when AI is off)."""
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     obj = ctx.objects.get_object(db, object_id)
     require_product_access(request, ctx, obj.product)
@@ -556,7 +556,7 @@ def what_changed_pending_ai_snapshot(
     db: Session = Depends(get_db),
     ctx: AppContext = Depends(get_context),
 ) -> AiSnapshotWhatChangedResponse:
-    """Ask AI payload preview for tip vs live gather (no Ollama; works when AI is off)."""
+    """Computed differences for tip vs live gather (no Ollama; works when AI is off)."""
     require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
     obj = ctx.objects.get_object(db, object_id)
     require_product_access(request, ctx, obj.product)

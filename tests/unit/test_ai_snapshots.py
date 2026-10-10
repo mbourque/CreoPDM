@@ -1562,12 +1562,13 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
     )
     assert preview.status_code == 200, preview.text
     preview_body = preview.json()
-    assert preview_body["system_prompt"] == "Use only facts from the JSON."
-    assert "=== OLD" in preview_body["user_prompt"]
-    assert "=== NEW" in preview_body["user_prompt"]
-    assert "=== Computed differences ===" in preview_body["user_prompt"]
-    assert "d0 = 5 mm" in preview_body["user_prompt"]
-    assert "d0 = 7.5 mm" in preview_body["user_prompt"]
+    diff = preview_body["computed_differences"]
+    assert diff.startswith("=== Computed differences ===")
+    assert "=== OLD" not in diff
+    assert "=== NEW" not in diff
+    assert "Use only facts from the JSON." not in diff
+    assert "d0" in diff
+    assert "5" in diff and "7.5" in diff
 
 
 @requires_git

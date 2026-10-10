@@ -13372,15 +13372,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function formatAiWhatChangedPayload(payload) {
-    const system = String(payload?.system_prompt || "").trim();
-    const user = String(payload?.user_prompt || "").trim();
-    const systemBlock = system
-      ? `=== System (Settings → AI) ===\n${system}`
-      : "=== System (Settings → AI) ===\n(empty — Ask AI needs a saved compare prompt)";
-    const userBlock = user
-      ? `=== User ===\n${user}`
-      : "=== User ===\n(empty)";
-    return `${systemBlock}\n\n${userBlock}`;
+    const diff = String(payload?.computed_differences || "").trim();
+    if (diff) return diff;
+    return "=== Computed differences ===\n(none)";
   }
 
   async function postAiSnapshotCompareUrl(url, body, timeoutMs, timeoutHint) {
@@ -13635,7 +13629,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         );
         return;
       }
-      showOk("Copied What changed payload.");
+      showOk("Copied Computed differences.");
     });
     $("#ai-snapshot-ask-ai")?.addEventListener("click", () => {
       void askAiSnapshotCompare();
