@@ -1726,7 +1726,7 @@ body.is-file-drag #file-drop-overlay {
 }
 .ai-snapshot-result-body > .ai-snapshot-result-para {
   margin: 0 0 0.85em;
-  white-space: pre-wrap;
+  white-space: normal;
   overflow-wrap: break-word;
   word-break: break-word;
 }

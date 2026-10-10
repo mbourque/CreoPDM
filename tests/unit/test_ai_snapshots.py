@@ -516,6 +516,7 @@ def test_snapshot_tab_template_and_docs():
     assert "formatAiWhatChangedDisplay(summary)" not in script
     assert "fillAiSnapshotResultBody" in script
     assert "ai-snapshot-result-para" in script
+    assert 'createElement("br")' in script
     assert '".\\n\\nAdded $1"' in script or "Added $1" in script
     assert "simplified representations?" in script
     assert "copyElementTextToClipboard" in script

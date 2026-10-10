@@ -13495,7 +13495,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       .trim();
   }
 
-  /** Render paragraphs so CEF shows breaks (plain \\n in a div is easy to miss). */
+  /**
+   * Render paragraphs + hard line breaks so CEF shows What changed bullets and
+   * AI summary sentence breaks (plain \\n / pre-wrap is unreliable there).
+   */
   function fillAiSnapshotResultBody(el, text) {
     if (!el) return;
     el.replaceChildren();
@@ -13508,7 +13511,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     for (const block of blocks) {
       const p = document.createElement("p");
       p.className = "ai-snapshot-result-para";
-      p.textContent = block;
+      const lines = block.split(/\n/);
+      lines.forEach((line, i) => {
+        if (i) p.appendChild(document.createElement("br"));
+        p.appendChild(document.createTextNode(line));
+      });
       el.appendChild(p);
     }
   }
