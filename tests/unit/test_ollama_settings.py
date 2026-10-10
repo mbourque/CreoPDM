@@ -238,6 +238,7 @@ def test_ai_settings_page_renders(client):
     assert "snapshot-compare-prompt-reset" not in page.text
     assert "Ask AI what changed" in page.text
     assert "Stored only in server settings" in page.text
+    assert "Nothing changed between" in page.text
     assert 'data-ai-enabled="1"' in page.text
     # Enabled by default — Ollama fields not disabled on first paint.
     assert "disabled" not in page.text.split('name="ollama_base_url"', 1)[1].split(">", 1)[0]

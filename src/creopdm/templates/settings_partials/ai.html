@@ -53,5 +53,5 @@
       {% if not settings.ai_enabled %}disabled{% endif %}
     >{{ settings.snapshot_compare_prompt }}</textarea>
   </label>
-  <p class="muted small">Stored only in server settings (not in code). Used as system instructions for <strong>Ask AI what changed</strong>; CreoPDM appends labeled <strong>OLD</strong> and <strong>NEW</strong> plain-language outlines after this text (not raw JSON). Paste, Save, then try again on Snapshot.</p>
+  <p class="muted small">Stored only in server settings (not in code). Used as system instructions for <strong>Ask AI what changed</strong>; CreoPDM appends labeled <strong>OLD</strong> and <strong>NEW</strong> plain-language outlines after this text (not raw JSON). When OLD and NEW match, tell the model to answer in one short natural sentence (e.g. “Nothing changed between A.1 and A.2.”) — not a checklist of feature/dimension/parameter categories. Paste, Save, then try again on Modifications.</p>
 </section>

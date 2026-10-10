@@ -1064,12 +1064,100 @@ def format_snapshot_compare_diff_text(
         ("Dimensions added", dim_added),
     ):
         _extend_section(lines, _bullet_block(title, items))
+
+    # Parameters / material — shown in OLD/NEW outlines but were missing from
+    # Computed differences (DESIGNATION-only edits looked like "No computed differences").
+    older_drawing = _is_drawing_snapshot(
+        older, older.get("identity") if isinstance(older.get("identity"), dict) else {}
+    )
+    newer_drawing = _is_drawing_snapshot(
+        newer, newer.get("identity") if isinstance(newer.get("identity"), dict) else {}
+    )
+    older_params = {
+        str(p.get("name") or "").strip().upper(): p
+        for p in _iter_compare_parameters(
+            older.get("parameters") if isinstance(older.get("parameters"), list) else [],
+            drawing=older_drawing,
+        )
+        if str(p.get("name") or "").strip()
+    }
+    newer_params = {
+        str(p.get("name") or "").strip().upper(): p
+        for p in _iter_compare_parameters(
+            newer.get("parameters") if isinstance(newer.get("parameters"), list) else [],
+            drawing=newer_drawing,
+        )
+        if str(p.get("name") or "").strip()
+    }
+    param_removed: list[str] = []
+    param_added: list[str] = []
+    param_changed: list[str] = []
+    for key in sorted(set(older_params) | set(newer_params), key=str.lower):
+        old_p = older_params.get(key)
+        new_p = newer_params.get(key)
+        if old_p is not None and new_p is None:
+            param_removed.append(_parameter_outline_line(old_p))
+        elif old_p is None and new_p is not None:
+            param_added.append(_parameter_outline_line(new_p))
+        elif old_p is not None and new_p is not None:
+            old_v = _parameter_value_str(old_p)
+            new_v = _parameter_value_str(new_p)
+            if old_v != new_v:
+                name = str(new_p.get("name") or old_p.get("name") or key).strip()
+                param_changed.append(f"{name}: {old_v} → {new_v}")
+
+    older_mat = _material_current_label(older)
+    newer_mat = _material_current_label(newer)
+    if older_mat != newer_mat and (older_mat or newer_mat):
+        _extend_section(
+            lines,
+            [
+                "Material changed:",
+                f"- {older_mat or '(none)'} → {newer_mat or '(none)'}",
+            ],
+        )
+    for title, items in (
+        ("Parameters removed", param_removed),
+        ("Parameters changed (same name)", param_changed),
+        ("Parameters added", param_added),
+    ):
+        _extend_section(lines, _bullet_block(title, items))
+
     # SimpRep defs/active — keep out of Structure; force into Computed differences
     # so Ask AI cannot miss "NEW has Simplified representations, OLD does not."
     simp_diff = _simp_reps_diff_lines(older, newer)
     if simp_diff:
         _extend_section(lines, simp_diff)
     return "\n".join(lines)
+
+
+def _parameter_value_str(param: dict[str, Any]) -> str:
+    value = param.get("value")
+    if isinstance(value, str):
+        return value.strip()
+    return _format_dim_value(value)
+
+
+def _parameter_outline_line(param: dict[str, Any]) -> str:
+    name = str(param.get("name") or "").strip() or "?"
+    return f"{name} = {_parameter_value_str(param)}"
+
+
+def _material_current_label(snapshot: dict[str, Any]) -> str:
+    materials = snapshot.get("materials")
+    if not isinstance(materials, dict):
+        return ""
+    current = str(materials.get("current") or "").strip()
+    if current:
+        return current
+    names = [
+        str(n).strip() for n in (materials.get("names") or []) if str(n).strip()
+    ]
+    if len(names) == 1:
+        return names[0]
+    if names:
+        return ", ".join(names)
+    return ""
 
 
 def _iter_compare_dimensions(dimensions: list[Any]) -> list[dict[str, Any]]:
@@ -1474,13 +1562,7 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
             _blank_before_section(lines)
             lines.append("Parameters:")
             for param in param_rows:
-                name = str(param.get("name") or "").strip()
-                value = param.get("value")
-                if isinstance(value, str):
-                    value_s = value.strip()
-                else:
-                    value_s = _format_dim_value(value)
-                lines.append(f"- {name} = {value_s}")
+                lines.append(f"- {_parameter_outline_line(param)}")
         elif not drawing:
             _blank_before_section(lines)
             lines.append("Parameters:")

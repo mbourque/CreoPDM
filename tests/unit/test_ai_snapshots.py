@@ -101,6 +101,42 @@ def test_feature_outline_lines_include_creo_id():
     assert "CHAMFER (168)" in diff
 
 
+def test_computed_diff_reports_parameter_and_material_change():
+    """What changed must surface DESIGNATION / material — not only features/dims."""
+    older = {
+        "identity": {"filename": "plate_3.prt", "model_type": "PART"},
+        "features": [{"id": 1, "name": "YZ", "type": "DATUM PLANE"}],
+        "materials": {"current": "STEEL_LOW_ALLOY"},
+        "parameters": [
+            {"name": "NAMING", "value": "PLATE"},
+            {"name": "DESIGNATION", "value": "41x205x0.5"},
+        ],
+    }
+    newer = {
+        "identity": {"filename": "plate_3.prt", "model_type": "PART"},
+        "features": [{"id": 1, "name": "YZ", "type": "DATUM PLANE"}],
+        "materials": {"current": "ALUMINUM"},
+        "parameters": [
+            {"name": "NAMING", "value": "PLATE"},
+            {"name": "DESIGNATION", "value": "41x235.9x0.5"},
+            {"name": "NEW_PARAM", "value": "1"},
+        ],
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Parameters changed (same name):" in diff
+    assert "DESIGNATION: 41x205x0.5 → 41x235.9x0.5" in diff
+    assert "NAMING" not in diff.split("Parameters changed (same name):", 1)[1].split(
+        "Parameters added", 1
+    )[0]
+    assert "Parameters added:" in diff
+    assert "NEW_PARAM = 1" in diff
+    assert "Material changed:" in diff
+    assert "STEEL_LOW_ALLOY → ALUMINUM" in diff
+    # Same geometry — feature/dim sections stay empty.
+    assert "Features removed: (none)" in diff
+    assert "Dimensions changed (same symbol): (none)" in diff
+
+
 def test_gather_ai_snapshot_contract_in_creo_js():
     text = BASE_HTML.read_text(encoding="utf-8")
     assert "function gatherAiModelSnapshot(" in text
