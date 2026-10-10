@@ -1,6 +1,6 @@
 ---
 description: Open Top Level / large assemblies — full companions + scaled Creo timeout (no JD regressions)
-globs: "**/creo_service.py,**/creo_dependencies.py,**/metadata_service.py,**/static/js/app.js,**/user-interactions.md,**/test_creo_*.py,**/test_open_*.py,**/test_ui_regressions.py"
+globs: "**/creo_service.py,**/creo_dependencies.py,**/metadata_service.py,**/static/js/app.js,**/static/js/open.js,**/user-interactions.md,**/test_creo_*.py,**/test_open_*.py,**/test_ui_regressions.py"
 alwaysApply: true
 ---
 
@@ -27,7 +27,7 @@ Opening a Top Level / large Creo assembly must materialize **all Creo-openable c
 
 1. **`CreoService._dependencies_for`** — Prefer Where Used DB BFS (`_MAX_DEP_DEPENDENCIES` ≥ 4000, depth ≥ 32). Vault-scan when empty/sparse (`_SPARSE_OPEN_WHERE_USED`). When a large WU tree is still short of product siblings, **product-fill every remaining vault tip** (`len(chosen) < len(companion_siblings)` — all objects except the primary, same set zip/Add stored; never filter fill through `is_creo_openable` alone). Never `_MAX_OPEN_FROM_WHERE_USED` discard.
 2. **Magnet prune** — `_MAX_WHERE_USED_ASM_PARENTS` stays high enough for shared sub-asms (200+); only drop true name-table magnets.
-3. **`app.js`** — `creoOpenModelTimeoutMs(preparedDependencyCount(…))` and a generous `openWorkTimeoutMs` for prepare + zip + open. No fixed 90s on vault Open. After Open, metadata is **session-only** (wait for model; no disk-Retrieve). Soft-refresh Files when Open metadata saves. Embedded Open does **not** set Creo WD by default (chooser checkbox / toolbar only).
+3. **`app.js` + `open.js`** (Open body is lazy in `static/js/open.js`; timeout helpers stay in `app.js`) — `creoOpenModelTimeoutMs(preparedDependencyCount(…))` and a generous `openWorkTimeoutMs` for prepare + zip + open. No fixed 90s on vault Open. After Open, metadata is **session-only** (wait for model; no disk-Retrieve). Soft-refresh Files when Open metadata saves. Embedded Open does **not** set Creo WD by default (chooser checkbox / toolbar only).
 4. **`base.html` `openModel`** — Prefer File > Open trail (`creoTryOpenViaTrail`) for native Creo tips before `OpenFile`/`RetrieveModel`; Assembly type (`db_1`) for `.asm`; on-disk basename for Inputname; `openAsmAsMfg` only after trail + Retrieve fail; ChangeDirectory only on Toolkit fallback.
 5. **Agent** — Materialize only the prepare list; Finding deps must **locate** only (no server `materialize(` in `_dependencies_for`).
 

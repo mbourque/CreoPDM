@@ -204,7 +204,9 @@ def test_settings_html_and_js_wire_availability(auth_client, auth_ctx):
     assert 'name="site_availability"' in page.text
     assert 'id="site-unavailable-message"' in page.text
     assert 'id="settings-form"' in page.text
-    script = auth_client.get("/static/js/app.js")
+    from tests.client_js import app_js_with_modules
+
+    script = app_js_with_modules(auth_client.get("/static/js/app.js"))
     assert script.status_code == 200
     assert "function syncSiteAvailabilityOptions(" in script.text
     assert "function syncUnavailableAdminPill(" in script.text

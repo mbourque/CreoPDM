@@ -101,6 +101,23 @@ def test_templates_gate_toolbar_via_product_ui_only():
     assert "data-requires-mutation" not in app
 
 
+def test_client_js_modules_do_not_reencode_product_lock():
+    """Lazy modules (add/open/metadata/…) must not hide mutation chrome from product state."""
+    js_dir = _APP_JS.parent
+    for name in (
+        "add.js",
+        "modifications.js",
+        "metadata.js",
+        "creo_workspace.js",
+        "open.js",
+    ):
+        text = (js_dir / name).read_text(encoding="utf-8")
+        assert "function productAllowsMutation" not in text, name
+        assert "function mutationActionAllowed" not in text, name
+        assert "data-allows-mutation" not in text, name
+        assert "productAllowsMutation(" not in text, name
+
+
 def test_app_js_does_not_reencode_product_lock():
     script = _APP_JS.read_text(encoding="utf-8")
     assert "function productAllowsMutation" not in script
@@ -125,14 +142,19 @@ def test_app_js_does_not_reencode_product_lock():
     assert 'assertProductAllows(currentProductId(), "checkin")' in script
     assert 'assertProductAllows(productId, "remove")' in script
     assert 'assertProductAllows(productId, "checkin"' in script
-    assert 'assertProductAllows(currentProductId(), "download")' in script
+    # Open gate lives in lazy open.js; export still uses download in the shell.
+    open_js = (_APP_JS.parent / "open.js").read_text(encoding="utf-8")
+    assert 'assertProductAllows(currentProductId(), "download")' in open_js
+    assert 'assertProductAllows(productId, "download")' in script
     assert "force: true" in script
     assert "refreshProductUiIfStale" in script
     assert "scheduleProductLifecycleReconcile" in script
     assert 'sessionStorage.setItem("creopdmNotice"' in script
     assert "`Product is now ${productStateDisplayLabel(state)}.`" in script
     assert "Refreshing the page" not in script
-    assert "Number(result.status) === 400" in script
+    # Collect lifecycle 400 stop lives in lazy metadata.js.
+    metadata_js = (_APP_JS.parent / "metadata.js").read_text(encoding="utf-8")
+    assert "Number(result.status) === 400" in metadata_js
     assert "allows_checkout" in (
         SRC / "schemas" / "common.py"
     ).read_text(encoding="utf-8")

@@ -607,8 +607,26 @@ Automated coverage lives mainly in:
 - `tests/integration/test_product_lifecycle_lock.py` (locked product rejects add/checkout/undo/check-in/remove/rename/metadata; forget/delete still purges)
 - `tests/integration/test_products.py` (`test_forget_archived_and_inactive_products_purges_db`)
 - `tests/unit/test_product_state.py` (allows_mutation / ensure helpers / `product_ui_capabilities`)
-- `tests/unit/test_product_access_policy_contract.py` (mutation modules call `ensure_*`; templates use `product_ui`; `app.js` does not re-encode lock)
+- `tests/unit/test_product_access_policy_contract.py` (mutation modules call `ensure_*`; templates use `product_ui`; `app.js` and the lazy client modules do not re-encode lock)
+- `tests/unit/test_client_js_modules_contract.py` (`app.js` feature split: bodies live in lazy modules, `shell.*` members exist, quiet Files browse does not eager-load heavy modules)
 - Related checkout / check-in / soft-nav tests
+
+### Client script layout (`app.js` + lazy modules)
+
+Testers do not see this, but it affects where regressions live. `app.js` is the shell (boot, selection, toolbar sync, busy overlay, soft-nav) and keeps **thin lazy wrappers** for heavy features. Classic scripts only — each module registers `window.__creopdmModules.<name>` with `init(shell)` and loads through `ensureModule("<name>")` from `/client/js/<name>.js`.
+
+| Module | Owns | Loaded when |
+|---|---|---|
+| `admin.js` | Settings / Admin chrome | Admin / Settings pages |
+| `modifications.js` | Ask AI check-in helper, History revert, Modifications (AI snapshot) tab | Details page / check-in Ask AI |
+| `add.js` | Add dialog, pickers, drops, compressed import | Add menu, or `dragenter` (preload for page drop) |
+| `metadata.js` | Collect job, Rebuild Where Used / Utilities rebuild, Where Used polling | Collect / Rebuild / Add index, or a stored Collect run / in-flight Where Used job |
+| `creo_workspace.js` | Creo session gather/push metadata, agent materialize (per-file + zip), re-materialize after Check In | First Open / Collect / Check In workspace sync |
+| `open.js` | Open chooser, checkout-before-open, prepare, File > Open trail, Windows association | First Open |
+
+Agent cache **listing / hash** helpers (`listAgentCacheFiles`, `hashAgentCachePaths`, `agentWorkdir`) stay in `app.js` because the Files list needs them on quiet boot (Modified / New local counts).
+
+Test helpers: `tests/client_js.py` (`client_js_bundle()`); slice one function with `_between` from the module file that owns it (see `test_open_large_assembly_contract.py`, `test_ui_regressions.py`).
 
 Mobile browse is CSS-only in `app.css`: `@media` with `pointer: coarse` and `hover: none` (plus width/height limits). Do **not** gate browse mode on `max-width` alone.
 

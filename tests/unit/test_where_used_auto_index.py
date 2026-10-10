@@ -97,7 +97,11 @@ def test_cancel_where_used_api_is_wired():
     products = (root / "src" / "creopdm" / "api" / "products.py").read_text(encoding="utf-8")
     assert "def cancel_rebuild_where_used" in products
     assert "ctx.where_used_index.cancel(product_id)" in products
-    script = (root / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    js_dir = root / "src" / "creopdm" / "static" / "js"
+    # Where Used polling / cancel lives in metadata.js; busy overlay plumbing in app.js.
+    script = (js_dir / "app.js").read_text(encoding="utf-8") + "\n" + (
+        js_dir / "metadata.js"
+    ).read_text(encoding="utf-8")
     assert 'method: "DELETE"' in script
     assert "forceClearBusy" in script
     assert "invokeBusyCancel" in script
@@ -147,18 +151,22 @@ def test_add_endpoints_do_not_start_where_used_mid_chunk():
 def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
     """After the last Add chunk, overlay stays up for indexing; then one reload."""
     root = Path(__file__).resolve().parents[2]
-    script = (root / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    js = root / "src" / "creopdm" / "static" / "js"
+    script = (js / "app.js").read_text(encoding="utf-8") + "\n" + (
+        js / "metadata.js"
+    ).read_text(encoding="utf-8")
+    add_script = (js / "add.js").read_text(encoding="utf-8")
     assert "async function awaitWhereUsedIndex(" in script
     assert "async function indexWhereUsedUnderBusy(" in script
     assert "async function runWhereUsedProgress(" in script
     # Nested under Add/zip busyDepth — do not clearBusy between import and index.
-    assert "if (busyDepth > 0)" in script
-    assert "no Files flash" in script
+    assert "if (getBusyDepth() > 0)" in script
+    assert "no Files flash" in add_script
     # Reject stale/early done so the overlay cannot finish before parents_done catches up.
     assert "sawActive" in script
     assert "doneCount < total" in script
-    add_tail = script.split("Keep the same busy overlay through Where Used", 1)[1].split(
-        "} finally {\n      addInFlight = false;",
+    add_tail = add_script.split('onPage(addForm, "submit"', 1)[1].split(
+        "} finally {\n        addInFlight = false;",
         1,
     )[0]
     assert "indexWhereUsedUnderBusy(productId)" in add_tail
@@ -172,7 +180,7 @@ def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
     assert "reloadPage({ keepBusy: true" in add_tail
     assert "indexing started in the background" not in add_tail
     # Compressed zip is a separate submit — must also index before refresh on one overlay.
-    zip_submit = script.split('compressedForm?.addEventListener("submit"', 1)[1].split(
+    zip_submit = add_script.split('onPage(compressedForm, "submit"', 1)[1].split(
         "function useNativePicker(",
         1,
     )[0]
@@ -212,7 +220,9 @@ def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
 def test_await_where_used_rejects_unfinished_done_status():
     """Regression: zip refresh with ~every asm as Top Level when poll accepted early done."""
     root = Path(__file__).resolve().parents[2]
-    script = (root / "src" / "creopdm" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    script = (root / "src" / "creopdm" / "static" / "js" / "metadata.js").read_text(
+        encoding="utf-8"
+    )
     await_fn = script.split("async function awaitWhereUsedIndex(", 1)[1].split(
         "function watchWhereUsedIndex(",
         1,

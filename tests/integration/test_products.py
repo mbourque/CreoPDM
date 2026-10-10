@@ -80,7 +80,9 @@ def test_create_list_and_get_product(client, repo_parent, data_dir):
     assert "Prototype robotic arm" in home.text
     assert 'title="PRJ-0027 — Prototype robotic arm"' in home.text
     assert home.text.count('title="PRJ-0027 — Prototype robotic arm"') >= 2
-    script = client.get("/static/js/app.js")
+    from tests.client_js import app_js_with_modules
+
+    script = app_js_with_modules(client.get("/static/js/app.js"))
     assert "function leavePage" in script.text
     assert "function closeOpenDialogs" in script.text
     assert "leavePage(`/?product=${encodeURIComponent(product.uuid)}`)" in script.text

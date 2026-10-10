@@ -1343,11 +1343,11 @@ def test_admin_membership_product_access_filters_products(auth_client, auth_ctx)
     assert "multiple" in mem_form.text
     from pathlib import Path
 
-    script = (
-        Path(__file__).resolve().parents[2] / "src" / "creopdm" / "static" / "js" / "app.js"
+    admin_js = (
+        Path(__file__).resolve().parents[2] / "src" / "creopdm" / "static" / "js" / "admin.js"
     ).read_text(encoding="utf-8")
-    assert "function syncProductAccessUi" in script
-    assert "__creopdmProductAccessBound" in script
+    assert "syncProductAccessUi" in admin_js
+    assert "__creopdmProductAccessBound" in admin_js
 
     restricted = auth_client.post(
         f"/admin/membership/users/{user_uuid}",

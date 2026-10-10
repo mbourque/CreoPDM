@@ -184,7 +184,9 @@ def test_search_objects_includes_nested_folders(client, repo_parent):
     assert ">pin.prt</button>" not in home.text
     assert 'id="search-scope"' in home.text
     assert "Showing matches from all folders." in home.text
-    script = client.get("/static/js/app.js")
+    from tests.client_js import app_js_with_modules
+
+    script = app_js_with_modules(client.get("/static/js/app.js"))
     assert script.status_code == 200
     assert "function searchAllFolders" in script.text
     assert "function updateMetricCounts" in script.text
@@ -270,7 +272,9 @@ def test_search_objects_supports_glob_wildcards(client, repo_parent):
     assert "^ = starts with" in home.text
     assert "$ = ends with" in home.text
     assert "^CAD/" in home.text
-    script = client.get("/static/js/app.js")
+    from tests.client_js import app_js_with_modules
+
+    script = app_js_with_modules(client.get("/static/js/app.js"))
     assert "function rowMatchesSearchQuery" in script.text
     assert "dataset.sortType" in script.text
     assert "Type column" in Path("docs/user-interactions.md").read_text(encoding="utf-8")
@@ -398,7 +402,9 @@ def test_choose_files_starts_in_product_folder(client, repo_parent):
     assert 'id="add-file-input"' in page.text
     assert 'id="add-folder-input"' in page.text
     assert 'webkitdirectory' in page.text
-    script = client.get("/static/js/app.js")
+    from tests.client_js import app_js_with_modules
+
+    script = app_js_with_modules(client.get("/static/js/app.js"))
     assert "function countLatestImportNames" in script.text
     assert "function formatReadyToAddSummary" in script.text
     assert "older numbered" in script.text

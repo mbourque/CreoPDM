@@ -13,15 +13,49 @@ from pathlib import Path
 
 import pytest
 
+from tests.client_js import client_js_bundle
+
 ROOT = Path(__file__).resolve().parents[2]
 APP_JS = ROOT / "src" / "creopdm" / "static" / "js" / "app.js"
+ADMIN_JS = ROOT / "src" / "creopdm" / "static" / "js" / "admin.js"
+ADD_JS = ROOT / "src" / "creopdm" / "static" / "js" / "add.js"
+MODIFICATIONS_JS = ROOT / "src" / "creopdm" / "static" / "js" / "modifications.js"
+METADATA_JS = ROOT / "src" / "creopdm" / "static" / "js" / "metadata.js"
+CREO_WORKSPACE_JS = ROOT / "src" / "creopdm" / "static" / "js" / "creo_workspace.js"
+OPEN_JS = ROOT / "src" / "creopdm" / "static" / "js" / "open.js"
 APP_CSS = ROOT / "src" / "creopdm" / "static" / "css" / "app.css"
 APP_HTML = ROOT / "src" / "creopdm" / "templates" / "app.html"
 ICONS = ROOT / "src" / "creopdm" / "static" / "icons"
 
 
 def _app_js() -> str:
+    """app.js shell + lazy feature modules (see tests/client_js.py)."""
+    return client_js_bundle()
+
+
+def _app_shell_js() -> str:
+    """app.js only — use when asserting something must stay in the shell."""
     return APP_JS.read_text(encoding="utf-8")
+
+
+def _metadata_js() -> str:
+    return METADATA_JS.read_text(encoding="utf-8")
+
+
+def _creo_workspace_js() -> str:
+    return CREO_WORKSPACE_JS.read_text(encoding="utf-8")
+
+
+def _open_js() -> str:
+    return OPEN_JS.read_text(encoding="utf-8")
+
+
+def _admin_js() -> str:
+    return ADMIN_JS.read_text(encoding="utf-8")
+
+
+def _add_js() -> str:
+    return ADD_JS.read_text(encoding="utf-8")
 
 
 def _between(text: str, start: str, end: str) -> str:
@@ -31,18 +65,44 @@ def _between(text: str, start: str, end: str) -> str:
     return chunk.split(end, 1)[0]
 
 
+def test_client_job_module_loader_contract():
+    """Shell lazy-loads /client/js/* and clears them when soft-nav hot-swaps app.js."""
+    script = _app_js()
+    assert "function ensureModule(" in script
+    assert "function clearClientJobModules(" in script
+    assert "function initJobModule(" in script
+    assert "window.__creopdmShell" in script
+    assert "clearClientJobModules()" in script
+    assert 'data-creopdm-job-module' in script or "creopdmJobModule" in script
+    assert "/client/js/" in script
+    assert "__creopdmModules.admin" in _admin_js()
+    assert "__creopdmModules.add" in _add_js()
+    assert 'initJobModule("modifications"' in _app_js() or "modifications" in _app_js()
+
+
 def test_app_js_has_no_syntax_error_via_node():
     """The `if label ||` typo killed the entire script — nothing was clickable."""
     node = shutil.which("node")
     if not node:
         pytest.skip("node not installed")
-    result = subprocess.run(
-        [node, "--check", str(APP_JS)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr or result.stdout
+    paths = [
+        APP_JS,
+        ADMIN_JS,
+        ADD_JS,
+        MODIFICATIONS_JS,
+        METADATA_JS,
+        CREO_WORKSPACE_JS,
+        OPEN_JS,
+    ]
+    for path in paths:
+        assert path.is_file(), f"missing client module {path.name}"
+        result = subprocess.run(
+            [node, "--check", str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr or result.stdout
 
 
 def test_resolve_type_icon_if_conditions_use_parens():
@@ -74,9 +134,11 @@ def test_add_toolbar_is_menu_with_modes():
     assert ">Add selected…<" in html
     assert 'id="create-folder-dialog"' in html
     script = _app_js()
-    assert 'openAddDialog("files")' in script
-    assert 'openAddDialog("folders")' in script
-    assert 'openAddDialog("folder")' in script
+    add_script = _add_js()
+    assert "withAddModule" in script
+    assert 'openAddDialog?.("files")' in script or 'openAddDialog("files")' in add_script
+    assert 'openAddDialog?.("folders")' in script or 'openAddDialog("folders")' in add_script
+    assert 'openAddDialog?.("folder")' in script or 'openAddDialog("folder")' in add_script
     assert "recursive" in script
     assert "/api/products/${productId}/folders" in script or '/api/products/${productId}/folders' in script
     # Add selected… only for New files queue rows (never Modified / Files).
@@ -139,12 +201,12 @@ def test_remove_rows_update_folder_tbody_cache_and_soft_reload():
 
 def test_choose_folder_uses_agent_before_browser_picker():
     """LAN http:// cannot use showDirectoryPicker; agent native folder pick must run first."""
-    script = _app_js()
+    script = _add_js()
     assert "function browseViaAgentFolderPicker" in script
     assert "/pick-folder" in script
     folder_click = _between(
         script,
-        '$("#choose-workspace-folder")?.addEventListener("click"',
+        'onPage($("#choose-workspace-folder"), "click"',
         "async function handleDroppedTransfer",
     )
     assert "browseViaAgentFolderPicker" in folder_click
@@ -159,23 +221,23 @@ def test_choose_folder_uses_agent_before_browser_picker():
 
 
 def test_choose_files_still_prefers_agent_picker():
+    add_script = _add_js()
     files_click = _between(
-        _app_js(),
-        '$("#choose-workspace-files")?.addEventListener("click"',
-        '$("#choose-workspace-folder")?.addEventListener("click"',
+        add_script,
+        'onPage($("#choose-workspace-files"), "click"',
+        'onPage($("#choose-workspace-folder"), "click"',
     )
     assert "browseViaAgentPicker" in files_click
     assert files_click.index("browseViaAgentPicker") < files_click.index("browseLocalFiles")
-    script = _app_js()
-    pick = _between(script, "async function browseViaAgentPicker(", "async function browseViaAgentFolderPicker(")
+    pick = _between(add_script, "async function browseViaAgentPicker(", "async function browseViaAgentFolderPicker(")
     assert 'setBusy("Waiting for file picker…")' in pick
     assert 'setBusy("Preparing selection…")' in pick
     assert "Add folders…" in pick
-    assert 'confirmLargeBulk("Add", bulkCount)' in script
+    assert 'confirmLargeBulk("Add", bulkCount)' in add_script
 
 
 def test_browser_folder_pick_explains_secure_context():
-    script = _app_js()
+    script = _add_js()
     body = _between(script, "async function browseLocalFolder(", "function bindDropTarget(")
     assert "canUseDirectoryPicker" in body
     assert "isSecureContext" in script
@@ -184,7 +246,7 @@ def test_browser_folder_pick_explains_secure_context():
 
 
 def test_add_paths_sends_agent_base_folder():
-    script = _app_js()
+    script = _add_js()
     assert "chosenAgentBaseFolder" in script
     assert "base_folder: baseFolder || \"\"" in script
     assert "parent_folder: parentFolder" in script
@@ -193,13 +255,14 @@ def test_add_paths_sends_agent_base_folder():
 
 def test_add_paths_sends_purgeable_extensions():
     """Regression: agent omit-older-saves must use Settings → Purgeable extensions."""
-    script = _app_js()
+    script = _add_js()
+    shell = _app_shell_js()
     assert "purgeable_extensions: [...purgeableExtensionSet()]" in script
-    assert "function purgeableExtensionSet" in script
+    assert "function purgeableExtensionSet" in shell
     pick_folder = _between(
         script,
         "async function browseViaAgentFolderPicker(",
-        '$("#choose-workspace-files")?.addEventListener("click"',
+        'onPage($("#choose-workspace-files"), "click"',
     )
     assert "purgeable_extensions" in pick_folder
     assert "recursive" in pick_folder
@@ -211,8 +274,8 @@ def test_add_paths_sends_purgeable_extensions():
     assert "purgeable_extensions" in add_chunk
     assert "effectiveComment" in add_chunk
     assert "defaultAddHistoryComment(" in add_chunk
-    assert "function defaultAddHistoryComment(" in script
-    assert "First check in:" in script
+    assert "function defaultAddHistoryComment(" in shell
+    assert "First check in:" in shell
     assert "import_batch_id: importBatchId" in add_chunk
     assert "client_total: batchTotal" in add_chunk
     assert "offset === 0 ? commentOnce" not in add_chunk
@@ -220,13 +283,13 @@ def test_add_paths_sends_purgeable_extensions():
     assert 'data.append("import_batch_id"' in script
     assert "agentImportBatchId" in script
     assert "importBatchId: agentImportBatchId" in script
-    assert "importExtensionSet" in script
+    assert "importExtensionSet" in shell
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "Add 5 files` just because the agent uploaded in 5-file chunks" in docs
     assert "First check in: Add 26 files" in docs
     assert "separate Audit row for every" in docs and "25-path" in docs
     # logicalUploadName must not strip .N from non-purgeable names (e.g. .snagx.1).
-    logical = _between(script, "function logicalUploadName(", "function purgeableExtensionSet(")
+    logical = _between(shell, "function logicalUploadName(", "function purgeableExtensionSet(")
     assert "isImportVersionedExtension" in logical
 
 
@@ -387,11 +450,14 @@ def test_metadata_gear_items_require_creo_session():
     assert "no Creo.JS" in docs or "server vault scan" in docs or "Chrome/Edge too" in docs
     assert "lifecycle matrix" in docs.lower() or "not **in work**" in docs.lower() or "in review" in docs.lower()
     # Collect blocks the UI like Add — progress on busy overlay, no mid-run soft-nav.
-    loop = _between(script, "async function runMetadataCollectLoop(", "async function runCollectAllMetadata(")
+    # Collect job body lives in metadata.js; Creo gather / materialize in creo_workspace.js.
+    meta_js = _metadata_js()
+    ws_js = _creo_workspace_js()
+    loop = _between(meta_js, "async function runMetadataCollectLoop(", "async function runCollectAllMetadata(")
     assert 'setBusy("Collecting Creo metadata…")' in loop
     assert "setBusyMessage(message)" in loop
     assert "clearBusy()" in loop
-    push = _between(script, "async function pushOneCreoMetadataTarget(", "async function runMetadataCollectLoop(")
+    push = _between(meta_js, "async function pushOneCreoMetadataTarget(", "async function attachCollectLocalPaths(")
     assert "No per-file JS timeout" in push
     assert "Promise.race" not in push
     assert "timedOut" not in loop
@@ -401,7 +467,7 @@ def test_metadata_gear_items_require_creo_session():
     assert "prepareLocalPathForMetadata(target.uuid, target.filename)" in push
     assert "featureNames: true" in loop
     assert "deferErase: true" in loop
-    assert "attachCollectLocalPaths" in loop or "function attachCollectLocalPaths" in script
+    assert "attachCollectLocalPaths" in loop or "function attachCollectLocalPaths" in meta_js
     assert "flushPendingMetadataErase" in loop
     assert "shouldRefreshList = captured > 0" in loop
     assert 'await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" })' in loop
@@ -411,7 +477,7 @@ def test_metadata_gear_items_require_creo_session():
     assert "sortMetadataCollectTargets(" in loop
     assert "parts first, assemblies next, drawings last" in docs
     prepare_meta = _between(
-        script, "async function prepareLocalPathForMetadata(", "async function gatherCreoMetadataForFilename("
+        ws_js, "async function prepareLocalPathForMetadata(", "async function gatherCreoMetadataForFilename("
     )
     assert "metadataNeedsOpenDependencies(filename)" in prepare_meta
     assert "include_dependencies: includeDependencies" in prepare_meta
@@ -420,7 +486,7 @@ def test_metadata_gear_items_require_creo_session():
     assert 'logical.endsWith(".drw")' in script
     assert "not in this directory" in script
     gather_meta = _between(
-        script, "async function gatherCreoMetadataForFilename(", "async function pushCreoMetadataForItems("
+        ws_js, "async function gatherCreoMetadataForFilename(", "async function pushCreoMetadataForItems("
     )
     assert "opts.featureNames !== false" in gather_meta
     assert "Boolean(opts.featureNames)" not in gather_meta
@@ -434,15 +500,15 @@ def test_metadata_gear_items_require_creo_session():
     assert "no per-file skip timeout" in docs
     # Opportunistic capture on day-to-day Creo use (Open / Add / Check In).
     assert "captureCreoMetadataAfterOpen" in script
-    assert "metadataItemsFromOpenResult" in script
-    assert 'withBusy("Capturing Creo metadata…"' in script
+    assert "metadataItemsFromOpenResult" in ws_js
+    assert 'withBusy("Capturing Creo metadata…"' in ws_js
     assert 'withBusy("Collecting Creo metadata…"' in script
     assert "function metadataBusyText(" in script
     assert "hostedCreoJS()" in _between(
         script, "function canGatherCreoMetadata(", "async function tryEraseModelsFromCreoSession("
     )
     push_items = _between(
-        script, "async function pushCreoMetadataForItems(", "function metadataItemsFromOpenResult("
+        ws_js, "async function pushCreoMetadataForItems(", "function metadataItemsFromOpenResult("
     )
     assert "sortMetadataCollectTargets(" in push_items
     assert "prepareLocalPathForMetadata(target.uuid, target.filename)" in push_items
@@ -456,7 +522,7 @@ def test_metadata_gear_items_require_creo_session():
     assert "if (response.ok)" in push_items
     assert "saved += 1" in push_items
     after_open = _between(
-        script, "async function captureCreoMetadataAfterOpen(", "function metadataTargetsFromResult("
+        ws_js, "async function captureCreoMetadataAfterOpen(", "async function rematerializeCheckedInLocalTips("
     )
     assert "sessionOnly: true" in after_open
     assert "featureNames: true" in after_open
@@ -479,7 +545,7 @@ def test_compressed_data_add_requires_agent_and_busy_overlay():
     """Add ▾ → Compressed data… explains first, then pick-files + import-zip."""
     app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
-    script = _app_js()
+    script = _add_js()
     assert 'id="add-compressed-btn"' in app_html
     assert 'id="compressed-dialog"' in app_html
     assert 'id="compressed-choose-btn"' in app_html
@@ -512,24 +578,24 @@ def test_compressed_data_add_requires_agent_and_busy_overlay():
 
 def test_agent_add_chunks_continue_after_http_error():
     """Regression: one failed /add-paths batch used to abort the rest of a large folder add."""
-    script = _app_js()
+    script = _add_js()
     start = script.index("async function addAgentPathChunks(")
     end = script.index("if (chosenAgentFolderBatches.length)", start)
     body = script[start:end]
     assert "continue;" in body
     assert "return combined.ok.length ? combined : null;" not in body
-    assert "addInFlight" in _app_js()
+    assert "addInFlight" in _add_js()
     assert "client_offset" in body
 
 
 def test_add_partial_failure_notice_survives_reload():
     """Regression: partial add errors were wiped by reloadPage before the user saw them."""
-    script = _app_js()
+    script = _add_js()
     assert 'sessionStorage.setItem("creopdmNotice"' in script
     assert "See creopdm-agent log" in script
     # Partial failures stash a notice before keepBusy reload (no local summarize helper).
-    add_tail = script.split("Keep the same busy overlay through Where Used", 1)[1].split(
-        "} finally {\n      addInFlight = false;",
+    add_tail = script.split('onPage(addForm, "submit"', 1)[1].split(
+        "} finally {\n        addInFlight = false;",
         1,
     )[0]
     assert "failedInside.length" in add_tail
@@ -538,7 +604,7 @@ def test_add_partial_failure_notice_survives_reload():
 
 def test_dropped_folder_keeps_nested_relative_paths():
     """Disk .path must not flatten a walked folder tree (subfolders would be lost)."""
-    script = _app_js()
+    script = _add_js()
     body = _between(script, "function applyDroppedFiles(", "function applyBrowserPickedFiles(")
     assert "nestedUploads" in body
     assert "commonParentDir" in script
@@ -605,16 +671,16 @@ def test_delete_product_confirms_with_password_not_product_name():
     assert "Type the product name" not in dialog
     assert "Type the product name" not in html
 
-    script = _app_js()
+    admin = _admin_js()
     delete_submit = _between(
-        script,
-        'deleteProductForm?.addEventListener("submit"',
-        "function showProductDialog(",
+        admin,
+        "onPage(deleteProductForm, \"submit\"",
+        "onPage($(\"#product-use-hash\")",
     )
     assert 'formData.get("confirm_password")' in delete_submit
     assert 'JSON.stringify({ confirm_password: password })' in delete_submit
     assert "/api/products/${productId}/forget" in delete_submit
-    assert "Type the product name exactly to delete it." not in script
+    assert "Type the product name exactly to delete it." not in admin
     assert "confirm_name" not in delete_submit
 
     schema = (ROOT / "src" / "creopdm" / "schemas" / "common.py").read_text(encoding="utf-8")
@@ -742,11 +808,14 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "roleCanCheckin" in _between(
         script, "function syncToolbar(", "function setCheckinQueueCounts("
     )
+    # Open chooser / prepare / Creo open live in open.js (lazy); materialize in creo_workspace.js.
+    open_js = _open_js()
+    ws_js = _creo_workspace_js()
     assert "userCanCheckout()" in _between(
-        script, "function promptOpenCheckout(", "function checkoutBeforeOpen("
+        open_js, "function promptOpenCheckout(", "function checkoutBeforeOpen("
     )
     prompt_fn = _between(
-        script, "function promptOpenCheckout(", "function checkoutBeforeOpen("
+        open_js, "function promptOpenCheckout(", "function checkoutBeforeOpen("
     )
     assert "hostedCreoJS()" in prompt_fn
     assert "skip a one-option dialog" in prompt_fn or "!allowCheckout" in prompt_fn
@@ -754,19 +823,19 @@ def test_soft_nav_skips_creojs_reconnect():
     # Set WD off by default on Open (locks workspace folder / WinError 32).
     assert "setWorkingDirectory: false" in prompt_fn
     assert "wdBox.checked = false" in prompt_fn
-    from_ui = _between(script, "async function openPdmObjectFromUi(", "async function probeCreoAgent(")
+    from_ui = _between(open_js, "async function openPdmObjectFromUi(", "async function openViaAgent(")
     assert "setWorkingDirectory: false" in from_ui
     assert "setWorkingDirectory: hostedCreoJS()" not in from_ui
     assert "agentPdmAuth" in script
     assert "...agentPdmAuth()" in script or "agentPdmAuth()" in script
-    open_fn = _between(script, "async function openPdmObjectWork(", "function openPdmLaunchResult(")
+    open_fn = _between(open_js, "async function openPdmObjectWork(", "function openPdmLaunchResult(")
     assert "Boolean(openOpts.setWorkingDirectory)" in open_fn
     assert "setCreoWorkingDirectory({ quiet: true })" in open_fn
     assert "hostedCreoJS() && embeddedMode" in open_fn or 'hostedCreoJS() && creoOpenMode() === "embedded"' in open_fn
     assert 'openViaAgent(openSpec.path, "association")' in open_fn
     assert "function likelyStandaloneBrowser(" in script
     standalone = _between(
-        script, "function likelyStandaloneBrowser(", "async function openPdmObjectWork("
+        script, "function likelyStandaloneBrowser(", "openBtn?.addEventListener("
     )
     # Loaded creojs.js must not block Windows-association fallback when Session offline.
     assert "looksLikeCreoEmbeddedBrowser()" in standalone
@@ -783,9 +852,9 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "spec.localCache && spec.relativePath" in open_fn
     assert "!spec.objectId" not in open_fn.split("spec.localCache && spec.relativePath", 1)[1].split("\n", 1)[0]
     assert "openLocalCacheRelative(" in open_fn
-    assert "function openLocalCacheRelative(" in script
+    assert "function openLocalCacheRelative(" in open_js
     assert "function joinLocalWorkspacePath(" in script
-    local_open = _between(script, "async function openLocalCacheRelative(", "async function openPdmObject(")
+    local_open = _between(open_js, "async function openLocalCacheRelative(", "async function openPdmObject(")
     assert "logicalUploadName(diskName)" in local_open
     assert 'CreoJS.openModel(directory, logicalName, "", diskName, fullPath)' in local_open
     open_spec = _between(script, "function openSpecFromRow(", "function stateSortToken(")
@@ -795,7 +864,7 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "Newer local save" in docs and "Vault file not found" in docs
     assert "**logical** tip" in docs
     assert "test-part.prt.1" in docs
-    open_wrap = _between(script, "async function openPdmObject(", "async function openPdmObjectWork(")
+    open_wrap = _between(open_js, "async function openPdmObject(", "async function openPdmObjectWork(")
     assert 'withBusy("Preparing…"' in open_wrap
     assert "withTimeout(" in open_wrap
     assert "openTimeoutMessage()" in open_wrap
@@ -807,13 +876,13 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "metadataSaved > 0" in open_wrap
     assert "isListPage || onDetail" in open_wrap
     assert 'url.hash = tab' in open_wrap
-    assert "function openTimeoutMessage(" in script
+    assert "function openTimeoutMessage(" in open_js
     assert "function creoOpenModelTimeoutMs(" in script
     assert "function openWorkTimeoutMs(" in script
     assert "creoOpenModelTimeoutMs(preparedDependencyCount(prepared))" in open_fn
     # Fixed 90s was too short for large JD Retrieve after materialize.
     assert "90000" not in open_fn
-    timeout_msg = _between(script, "function openTimeoutMessage(", "async function openPdmObject(")
+    timeout_msg = _between(open_js, "function openTimeoutMessage(", "async function openPdmObject(")
     assert "creopdm-agent is running" in timeout_msg
     assert "Creo is Connected" in timeout_msg
     assert "function setOpenPrepareBusyMessage(" in script
@@ -821,14 +890,14 @@ def test_soft_nav_skips_creojs_reconnect():
     assert 'setBusyMessage("Finding dependencies…")' in script
     assert "setOpenPrepareBusyMessage()" in open_fn
     assert "setOpenDownloadBusyMessage(prepared)" in open_fn
-    assert "prefer_local: Boolean(prepared.prefer_local)" in script
+    assert "prefer_local: Boolean(prepared.prefer_local)" in ws_js
     assert "openLocalCacheRelative(productId, spec.relativePath, {" in open_fn
     assert "objectId: spec.objectId || \"\"" in open_fn or 'objectId: spec.objectId || ""' in open_fn
     assert "creo_object: true" in local_open
     download_busy = _between(
         script,
         "function setOpenDownloadBusyMessage(",
-        "async function materializeViaAgentPerFile(",
+        "async function materializeViaAgent(",
     )
     assert "Checking local index (${total} files)" in download_busy
     assert "Updating local workspace… (${total} tips)" in download_busy
@@ -836,10 +905,10 @@ def test_soft_nav_skips_creojs_reconnect():
     assert "Syncing ${total} files to local workspace" not in download_busy
     assert "Downloading to local cache" not in download_busy
     assert "BULK_AGENT_CACHE_ZIP_THRESHOLD" in download_busy
-    mat = _between(script, "async function materializeViaAgent(", "async function materializeCheckedOutToAgentCacheZip(")
+    mat = _between(ws_js, "async function materializeViaAgent(", "async function materializeCheckedOutToAgentCacheZip(")
     assert "materializeCheckedOutToAgentCacheZip(unique, prepared)" in mat
-    assert "cachePlanItemsFromPrepared" in script
-    assert "items: planItems" in script
+    assert "cachePlanItemsFromPrepared" in ws_js
+    assert "items: planItems" in ws_js
     assert "materializeViaAgentPerFile(prepared, [], { quietBusy })" in mat
     assert "one zip from CreoPDM" in mat
     assert "Local workspace already up to date" in mat
@@ -874,10 +943,11 @@ def test_soft_nav_skips_creojs_reconnect():
     soft_nav = _between(script, "function softNavigate(", "function leavePage(")
     assert "innerHTML = nextShell.innerHTML" in soft_nav or "curShell.innerHTML" in soft_nav
     # Soft-nav does not execute inline scripts; product-access toggle is document-bound.
-    assert "function syncProductAccessUi" in script
-    assert "__creopdmProductAccessBound" in script
-    assert 'id !== "access-all-products"' in script
-    assert "syncProductAccessUi();" in script
+    admin = _admin_js()
+    assert "syncProductAccessUi" in admin
+    assert "__creopdmProductAccessBound" in admin
+    assert 'id !== "access-all-products"' in admin
+    assert 'initJobModule("admin"' in script
     assert "window.__creopdmBoot({ soft: true })" in soft_nav
     assert "Keep the live Creo.JS bridge" in soft_nav
     assert "softNavTail" in soft_nav
@@ -1130,11 +1200,12 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     )
     assert "canCopyToVault" in script
     # agentBase() lives near boot top (auth headers); openPdmObjectFromUi follows promptOpenCheckout.
+    open_js = _open_js()
     assert "setWorkingDirectory" in _between(
-        script, "async function openPdmObjectFromUi(", "async function probeCreoAgent("
+        open_js, "async function openPdmObjectFromUi(", "async function openViaAgent("
     )
     prompt_open = _between(
-        script, "function promptOpenCheckout(", "function checkoutBeforeOpen("
+        open_js, "function promptOpenCheckout(", "function checkoutBeforeOpen("
     )
     assert "Working directory only applies inside Creo's embedded browser" in prompt_open
     assert "skip a one-option dialog" in prompt_open
@@ -1149,7 +1220,7 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "Could not show the Open dialog" in prompt_open
     assert "instanceof HTMLDialogElement" not in prompt_open
     assert "Do not silently open when checkout was an option" in prompt_open
-    open_ui = _between(script, "async function openPdmObjectFromUi(", "async function probeCreoAgent(")
+    open_ui = _between(open_js, "async function openPdmObjectFromUi(", "async function openViaAgent(")
     assert 'kind === "mine"' in open_ui
     assert "Do not trust data-owned alone" in open_ui
     # Recover from real checkout/undo items only — not the Checkout fly-up shell.
@@ -1184,7 +1255,9 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
 def test_new_product_and_sidebar_collapse_handlers_present():
     script = _app_js()
     assert '$("#new-product-btn")?.addEventListener("click"' in script
-    assert "showProductDialog(\"create\")" in script or 'showProductDialog("create")' in script
+    assert 'initJobModule("admin")' in script
+    assert "openCreateProduct" in script
+    assert "openCreateProduct" in _admin_js()
     assert "sidebarCollapseBtn?.addEventListener(\"click\"" in script
     assert "is-sidebar-collapsed" in script
     assert 'id="new-product-btn"' in APP_HTML.read_text(encoding="utf-8")
@@ -1249,7 +1322,11 @@ def test_open_model_uses_nested_cache_folder():
     assert "logicalName !== shortDisk" in open_fn
     assert "numbered names alone often fail" in open_fn
     script = _app_js()
-    meta = _between(script, "async function prepareLocalPathForMetadata(", "async function gatherCreoMetadataForFilename(")
+    meta = _between(
+        _creo_workspace_js(),
+        "async function prepareLocalPathForMetadata(",
+        "async function gatherCreoMetadataForFilename(",
+    )
     assert "openSpec.path" in meta
     assert "looksLikeLocalWindowsPath(materialized)" in meta
     # Collect keeps "N of M" busy text — materialize must not flash workspace status.
@@ -1521,6 +1598,11 @@ def test_history_revert_only_for_older_versions():
         encoding="utf-8"
     )
     script = _app_js()
+    client_js = script + (
+        "\n" + MODIFICATIONS_JS.read_text(encoding="utf-8")
+        if MODIFICATIONS_JS.is_file()
+        else ""
+    )
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     css = (ROOT / "src" / "creopdm" / "static" / "css" / "app.css").read_text(encoding="utf-8")
     assert "{% if product_ui.show_revert and history|length > 1 %}" in detail
@@ -1556,10 +1638,10 @@ def test_history_revert_only_for_older_versions():
     assert 'data-can-revert=' in detail
     assert "version-row" in detail
     assert "function syncRevertVersionButton" in script
+    assert "setToolbarActionVisible(btn, canRevert)" in client_js
     assert "function syncDetailToolbar" in script
     assert "function syncDetailTabTitle" not in script
     assert "historyTabActive" not in script
-    assert "setToolbarActionVisible(btn, canRevert)" in script
     assert 'setToolbarActionVisible(openMenuBtn, false)' in script
     assert "Open ▾" in detail
     assert 'id="open-btn"' in detail
@@ -1570,7 +1652,11 @@ def test_history_revert_only_for_older_versions():
     assert "historyOlderRowSelected" not in script
     assert 'setToolbarActionVisible(checkoutMenuBtn, false)' in script
     assert 'setToolbarActionVisible(removeMenuBtn, false)' in script
-    detail_toolbar = _between(script, "function syncDetailToolbar(", "function selectHistoryVersionRow(")
+    detail_toolbar = _between(
+        script,
+        "function syncDetailToolbar(",
+        'document.querySelectorAll(".tabs .tab")',
+    )
     assert 'setToolbarActionVisible(openMenuBtn, false)' in detail_toolbar
     assert 'setToolbarActionVisible(checkoutMenuBtn, false)' in detail_toolbar
     assert 'setToolbarActionVisible(removeMenuBtn, false)' in detail_toolbar
@@ -1582,18 +1668,19 @@ def test_history_revert_only_for_older_versions():
     assert "never **Check In ▾**" in docs or "never **Check In" in docs
     assert "Check In stays on the Files page" in docs
     assert "Revert to selected…** only" in docs or "Revert to selected… only" in docs
-    assert "You do not need to Check In afterward" in script
-    assert "confirmByProductName({" in script
-    assert 'title: `Revert to ${display}`' in script
-    assert 'submitLabel: "Revert"' in script
+    assert "You do not need to Check In afterward" in client_js
+    assert "confirmByProductName({" in client_js
+    assert 'title: `Revert to ${display}`' in client_js
+    assert 'submitLabel: "Revert"' in client_js
     assert 'data-product-name="{{ product.name }}"' in detail
     # Revert uses password re-auth (same dialog as Remove) — no product-name gate.
     assert "function confirmByPassword(" in script
     assert "/api/account/confirm-password" in script
+    mod_js = MODIFICATIONS_JS.read_text(encoding="utf-8")
     revert_click = _between(
-        script,
-        '$("#revert-version-btn")?.addEventListener("click"',
-        'document.querySelectorAll(".tabs .tab")',
+        mod_js,
+        'onPage($("#revert-version-btn"), "click"',
+        "syncRevertVersionButton();",
     )
     assert "confirmByProductName" in revert_click
     assert "window.confirm" not in revert_click
@@ -1751,7 +1838,7 @@ def test_soft_nav_reloads_app_js_when_cache_bust_changes():
     assert 'getAttribute("data-creo-open-mode")' in _between(
         script, "function creoOpenMode(", "function creoExternalBridge("
     )
-    local_open = _between(script, "async function openLocalCacheRelative(", "async function openPdmObject(")
+    local_open = _between(_open_js(), "async function openLocalCacheRelative(", "async function openPdmObject(")
     assert "Waiting for Creo.JS…" in local_open
     assert "do not open via Windows file association from the embedded browser" in local_open
     assert "pick up the new `app.js`" in docs
@@ -2217,9 +2304,9 @@ def test_checkin_success_rematerializes_and_drops_local_n():
     assert "tryEraseModelsFromCreoSession" not in submit
     assert "removed from Creo session" not in submit
     helper = _between(
-        script,
+        _creo_workspace_js(),
         "async function rematerializeCheckedInLocalTips(",
-        "function whenCreoJSReady(",
+        "async function materializeViaAgentPerFile(",
     )
     assert "tryEraseModelsFromCreoSession" not in helper
     assert "replace_newer: true" in helper
@@ -2500,11 +2587,13 @@ def test_admin_hub_panel_fills_full_width():
     assert 'action === "rebuild_where_used"' in script
     assert 'action === "clear_metadata"' in script
     # Where Used on this form uses the same overlay/progress as the product gear.
+    meta_js = _metadata_js()
     assert "runUtilitiesRebuildWithWhereUsed" in script
-    assert "whereUsedBusyText" in script
-    assert "Indexing Where Used… ${doneCount} of ${total}" in script
-    assert "Indexing Where Used… preparing…" in script
-    assert "expectStartedAt" in script
+    assert "runUtilitiesRebuildWithWhereUsed" in meta_js
+    assert "whereUsedBusyText" in meta_js
+    assert "Indexing Where Used… ${doneCount} of ${total}" in meta_js
+    assert "Indexing Where Used… preparing…" in meta_js
+    assert "expectStartedAt" in meta_js
     assert "invokeBusyCancel" in script
     assert "forceClearBusy" in script
     assert "recoverStuckBusyOverlay" in script
@@ -2515,7 +2604,7 @@ def test_admin_hub_panel_fills_full_width():
     )
     assert 'id="busy-overlay"' in base_html
     assert 'id="busy-cancel-btn"' not in base_html
-    assert "Never preventDefault without a runner" in script
+    assert "Never preventDefault without a runner" in _admin_js()
     assert "Cancelling Where Used indexing…" in script
     assert "Cancelling metadata collection…" in script
     assert "__creopdmBusyCancelHandler" in script
@@ -2618,22 +2707,21 @@ def test_admin_hub_panel_fills_full_width():
     assert "/admin/utilities/availability" in docs or "Utilities**" in docs
     assert "Rebuild product database" in docs
     assert "Delete products" in docs
+    admin = _admin_js()
+    assert 'settingsForm.querySelector(\'[name="site_availability"]\')' in admin
+    assert 'settingsForm.querySelector(\'[name="ai_enabled"]\')' in admin
+    assert "document.body.dataset.aiEnabled" in admin
+    assert "function syncAiSettingsOptions(" in admin
+    assert "ai-ollama-settings" in admin
+    assert 'settingsForm.querySelector(\'[name="ollama_base_url"]\')' in admin
+    assert 'settingsForm.querySelector(\'[name="snapshot_compare_prompt"]\')' in admin
+    assert "snapshot-compare-prompt-reset" not in admin
+    assert "refreshOllamaModels" in admin
+    assert "/api/settings/ai/ollama/models" in admin
+    assert "listOllamaModelsFromBrowser" in admin
+    assert "/api/tags" in admin
     script = _app_js()
-    assert "Hub section pages only send fields present" in script
-    assert 'settingsForm.querySelector(\'[name="site_availability"]\')' in script
-    assert 'settingsForm.querySelector(\'[name="ai_enabled"]\')' in script
     assert "body.ai_enabled" in script
-    assert "document.body.dataset.aiEnabled" in script
-    assert "function syncAiSettingsOptions(" in script
-    assert "ai-ollama-settings" in script
-    assert "disabled Ollama fields still persist" in script
-    assert 'settingsForm.querySelector(\'[name="ollama_base_url"]\')' in script
-    assert 'settingsForm.querySelector(\'[name="snapshot_compare_prompt"]\')' in script
-    assert "snapshot-compare-prompt-reset" not in script
-    assert "refreshOllamaModels" in script
-    assert "/api/settings/ai/ollama/models" in script
-    assert "listOllamaModelsFromBrowser" in script
-    assert "/api/tags" in script
     assert "function aiFeaturesEnabled(" in script
     assert 'data-ai-enabled="' in (
         ROOT / "src" / "creopdm" / "templates" / "base.html"

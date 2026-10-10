@@ -21,6 +21,7 @@ from creopdm.constants import (
     PREVIOUS_DEFAULT_EXTRA_CAD_SETS,
 )
 from creopdm.utils.classify import extra_cad_set, unique_type_labels
+from tests.client_js import client_js_bundle
 
 
 def test_health(client):
@@ -30,6 +31,34 @@ def test_health(client):
     assert payload["status"] == "ok"
     assert payload["name"] == APP_NAME
     assert payload["version"] == APP_VERSION
+
+
+def test_client_job_js_route_serves_modules(client):
+    """Lazy feature scripts under /client/js/<name>.js (same no-store as app.js)."""
+    missing = client.get("/client/js/not-a-module.js")
+    assert missing.status_code == 404
+    for name in (
+        "admin",
+        "add",
+        "modifications",
+        "metadata",
+        "creo_workspace",
+        "open",
+    ):
+        resp = client.get(f"/client/js/{name}.js")
+        assert resp.status_code == 200, name
+        assert resp.headers.get("cache-control") == "no-store", name
+        assert f"window.__creopdmModules.{name}" in resp.text, name
+        assert "init(shell)" in resp.text, name
+    add = client.get("/client/js/add.js")
+    assert add.status_code == 200
+    assert add.headers.get("cache-control") == "no-store"
+    assert "window.__creopdmModules.add" in add.text
+    for name in ("modifications", "metadata", "creo_workspace", "open"):
+        mod = client.get(f"/client/js/{name}.js")
+        assert mod.status_code == 200, name
+        assert mod.headers.get("cache-control") == "no-store"
+        assert f"window.__creopdmModules.{name}" in mod.text
 
 
 def test_app_js_is_not_cached(client):
@@ -46,20 +75,23 @@ def test_app_js_is_not_cached(client):
     assert "__creopdmStatusPollId" in response.text
     assert "function agentAuthHeaders(" in response.text
     assert "Authorization" in response.text
+    # Shell keeps lazy wrappers; bodies live in creo_workspace.js / open.js / metadata.js.
     assert "pushCreoMetadataForItems" in response.text
     assert "gatherCreoMetadataForFilename" in response.text
     assert "canGatherCreoMetadata" in response.text
     assert "waitForCreoMetadataBridge" in response.text
-    assert "Waiting for Creo.JS…" in response.text
     assert "prepareLocalPathForMetadata" in response.text
-    assert "#panel-structure .object-open" in response.text
-    assert "browseViaAgentPicker" in response.text
-    assert "/pick-files" in response.text
-    assert "/pick-folder" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "snapshot.features.length" in response.text
-    assert "workspaceOption" in response.text
-    assert "workspacePathsForRemovedObjects" in response.text
-    assert "deleteWorkspaceFiles" in response.text
+    bundle = client_js_bundle()
+    assert "Waiting for Creo.JS…" in bundle
+    assert "#panel-structure .object-open" in bundle
+    add_js = open("src/creopdm/static/js/add.js", encoding="utf-8").read()
+    assert "browseViaAgentPicker" in add_js
+    assert "/pick-files" in add_js
+    assert "/pick-folder" in add_js
+    assert "snapshot.features.length" in bundle
+    assert "workspaceOption" in bundle
+    assert "workspacePathsForRemovedObjects" in bundle
+    assert "deleteWorkspaceFiles" in bundle
 
 
 def test_home_page(client):
@@ -171,7 +203,7 @@ def test_home_page(client):
     assert "Materialize start:" in open("src/creopdm_agent/server.py", encoding="utf-8").read()
     assert "PTC_MASTER_MATERIAL" in text
     assert "Always ChangeDirectory into the file's folder first" in text
-    assert "empty_identity" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "empty_identity" in open("src/creopdm/static/js/metadata.js", encoding="utf-8").read()
     assert "retrieve_failed" in text
     assert "function creoGatherMaterials" in text
     assert "function creoModelTypeLabel" in text
@@ -227,16 +259,22 @@ def test_home_page(client):
     assert "allowUndisplayed" in text
     assert "eraseUndisplayedModelsQuiet" in text
     assert "Do not RetrieveModel by bare name" in text
-    assert "watchWhereUsedIndex" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    meta_js = open("src/creopdm/static/js/metadata.js", encoding="utf-8").read()
+    assert "watchWhereUsedIndex" in meta_js
+    assert "runCollectAllMetadata" in meta_js
     assert "runCollectAllMetadata" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "creopdmMetadataCollect" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "resumeMetadataCollectIfNeeded" in meta_js
     assert "resumeMetadataCollectIfNeeded" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "collect-metadata-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "cancel-metadata-collect-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "resume-metadata-collect-btn" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
     assert "resume-metadata-collect-btn" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "No per-file JS timeout" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "No per-file JS timeout" in meta_js
     assert "captureCreoMetadataAfterOpen" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "captureCreoMetadataAfterOpen" in open(
+        "src/creopdm/static/js/creo_workspace.js", encoding="utf-8"
+    ).read()
     assert "where_used_index" in open("src/creopdm/schemas/common.py", encoding="utf-8").read()
     assert "CadNameMatcher" in open("src/creopdm/utils/cad_name_matcher.py", encoding="utf-8").read()
     assert "rebuild-where-used" in open("src/creopdm/templates/app.html", encoding="utf-8").read()
@@ -253,7 +291,7 @@ def test_home_page(client):
     assert "gather_debug" not in open("src/creopdm/schemas/common.py", encoding="utf-8").read()
     assert "Creo metadata gather debug" not in open("src/creopdm/api/objects.py", encoding="utf-8").read()
     assert "summarizeGatherDebugGaps" not in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
-    assert "Mass properties are not collected" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    assert "Mass properties are not collected" in meta_js
     assert "creoExternalBridge" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "Session offline" in open("src/creopdm/static/js/app.js", encoding="utf-8").read()
     assert "function checkCreoAvailable" in open("src/creopdm/static/vendor/creojs.js", encoding="utf-8").read()
@@ -264,7 +302,7 @@ def test_home_page(client):
     assert "Never OpenFile / CreateModelWindow here" in text
     assert "try_ListItems" in text
     assert "unbound_retrieve_handle" in text
-    app_js = open("src/creopdm/static/js/app.js", encoding="utf-8").read()
+    app_js = client_js_bundle()
     assert "deleteLocalWorkspacePathsForRemove" in app_js
     assert "deleteLocalWorkspacePathsBackground" in app_js
     assert "Cleaning local workspace…" in app_js

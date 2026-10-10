@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CREO_SERVICE = ROOT / "src" / "creopdm" / "services" / "creo_service.py"
 CREO_DEPS = ROOT / "src" / "creopdm" / "utils" / "creo_dependencies.py"
 APP_JS = ROOT / "src" / "creopdm" / "static" / "js" / "app.js"
+OPEN_JS = ROOT / "src" / "creopdm" / "static" / "js" / "open.js"
+CREO_WORKSPACE_JS = ROOT / "src" / "creopdm" / "static" / "js" / "creo_workspace.js"
 DOCS = ROOT / "docs" / "user-interactions.md"
 
 
@@ -67,13 +69,15 @@ def test_contract_creo_open_timeout_scales_with_dependency_count():
     assert "function creoOpenModelTimeoutMs(" in script
     assert "function openWorkTimeoutMs(" in script
     assert "function preparedDependencyCount(" in script
-    open_fn = script.split("async function openPdmObjectWork(", 1)[1].split(
+    # Open body lives in open.js (lazy); timeouts helpers stay in app.js shell.
+    open_script = OPEN_JS.read_text(encoding="utf-8")
+    open_fn = open_script.split("async function openPdmObjectWork(", 1)[1].split(
         "function openPdmLaunchResult(", 1
     )[0]
     assert "creoOpenModelTimeoutMs(preparedDependencyCount(prepared))" in open_fn
     assert "90000" not in open_fn
     # Outer Open budget must not stay at a hard 3 minutes for JD zip + Retrieve.
-    open_wrap = script.split("async function openPdmObject(", 1)[1].split(
+    open_wrap = open_script.split("async function openPdmObject(", 1)[1].split(
         "async function openPdmObjectWork(", 1
     )[0]
     assert "openWorkTimeoutMs(" in open_wrap
@@ -102,9 +106,10 @@ def test_contract_embedded_open_prefers_file_open_trail():
     assert "do NOT openAsmAsMfg here" in open_fn or "Do NOT openAsmAsMfg" in open_fn
     assert open_fn.index("creoTryOpenViaTrail(") < open_fn.index("openAsmAsMfg(")
     assert "Last-resort only" in base
-    script = APP_JS.read_text(encoding="utf-8")
-    after_open = script.split("async function captureCreoMetadataAfterOpen(", 1)[1].split(
-        "function metadataTargetsFromResult(", 1
+    script = OPEN_JS.read_text(encoding="utf-8")
+    workspace_script = CREO_WORKSPACE_JS.read_text(encoding="utf-8")
+    after_open = workspace_script.split("async function captureCreoMetadataAfterOpen(", 1)[1].split(
+        "async function rematerializeCheckedInLocalTips(", 1
     )[0]
     assert "sessionOnly: true" in after_open
     open_wrap = script.split("async function openPdmObject(", 1)[1].split(
@@ -121,7 +126,7 @@ def test_contract_embedded_open_prefers_file_open_trail():
     assert "setWorkingDirectory: false" in skip_branch
     assert "wdBox.checked = false" in prompt_fn
     from_ui = script.split("async function openPdmObjectFromUi(", 1)[1].split(
-        "async function probeCreoAgent(", 1
+        "async function openViaAgent(", 1
     )[0]
     assert "setWorkingDirectory: false" in from_ui
     assert "setWorkingDirectory: hostedCreoJS()" not in from_ui

@@ -551,7 +551,9 @@ def test_product_checkouts_lists_active_locks(client, repo_parent, identity):
     assert home.status_code == 200
     assert 'id="checked-out-table"' in home.text
     assert "Checked out ·" not in home.text
-    script = client.get("/static/js/app.js")
+    from tests.client_js import app_js_with_modules
+
+    script = app_js_with_modules(client.get("/static/js/app.js"))
     assert "function loadCheckedOutTab" in script.text
     assert "function listAgentCacheFiles" in script.text
     assert "function pushLocalNewPathsToVault" in script.text

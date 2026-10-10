@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -181,13 +181,40 @@ def create_app(context: AppContext | None = None) -> FastAPI:
             headers={"Cache-Control": "no-store"},
         )
 
+    client_js_dir = static_dir / "js"
+    _CLIENT_JS_NAME = frozenset(
+        {
+            "admin",
+            "add",
+            "open",
+            "metadata",
+            "modifications",
+            "creo_workspace",
+        }
+    )
+
+    @app.get("/client/js/{name}.js")
+    def client_job_js(name: str) -> FileResponse:
+        """Lazy feature-surface scripts (Add / Open / Collect / …)."""
+        key = str(name or "").strip().lower()
+        if key not in _CLIENT_JS_NAME:
+            raise HTTPException(status_code=404, detail="Unknown client script")
+        path = client_js_dir / f"{key}.js"
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="Client script missing")
+        return FileResponse(
+            path,
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-store"},
+        )
+
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     @app.middleware("http")
     async def no_store_app_js(request, call_next):
         response = await call_next(request)
         path = request.url.path or ""
-        if path.endswith("/app.js"):
+        if path.endswith("/app.js") or "/client/js/" in path:
             response.headers["Cache-Control"] = "no-store"
         # Authenticated HTML must not be reused across logins (stale watch bell / user pill).
         content_type = (response.headers.get("content-type") or "").lower()

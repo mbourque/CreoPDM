@@ -503,7 +503,9 @@ def test_creo_status_pill_session_label_not_open_mode(client):
     assert 'data-creo-open-mode="association"' in pill
     assert "· OS" not in pill
     assert "Opens Creo models as a browser download for the OS association" in pill
-    script = client.get("/static/js/app.js")
+    from tests.client_js import app_js_with_modules
+
+    script = app_js_with_modules(client.get("/static/js/app.js"))
     assert "function syncCreoStatusPill" in script.text
     assert 'pill.textContent = "Creo: Connected"' in script.text
     assert 'pill.textContent = "Creo: Session offline"' in script.text

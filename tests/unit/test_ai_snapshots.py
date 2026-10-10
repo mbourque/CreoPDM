@@ -27,7 +27,24 @@ from tests.conftest import requires_git
 
 ROOT = Path(__file__).resolve().parents[2]
 APP_JS = ROOT / "src" / "creopdm" / "static" / "js" / "app.js"
+MODIFICATIONS_JS = ROOT / "src" / "creopdm" / "static" / "js" / "modifications.js"
 BASE_HTML = ROOT / "src" / "creopdm" / "templates" / "base.html"
+
+
+def _modifications_js() -> str:
+    return (
+        MODIFICATIONS_JS.read_text(encoding="utf-8")
+        if MODIFICATIONS_JS.is_file()
+        else ""
+    )
+
+
+def _details_client_js() -> str:
+    """App boot + lazy Modifications module (Details tab / check-in Ask AI)."""
+    parts = [APP_JS.read_text(encoding="utf-8"), _modifications_js()]
+    for name in ("metadata.js", "creo_workspace.js", "open.js"):
+        parts.append((APP_JS.parent / name).read_text(encoding="utf-8"))
+    return "\n".join(parts)
 DETAIL_HTML = ROOT / "src" / "creopdm" / "templates" / "object_detail.html"
 DOCS = ROOT / "docs" / "user-interactions.md"
 
@@ -259,17 +276,24 @@ def test_drawing_ai_snapshot_skips_solid_walk():
 
 
 def test_app_js_posts_ai_snapshot_soft_fail():
-    script = APP_JS.read_text(encoding="utf-8")
-    assert "async function postAiSnapshotFromGather(" in script
+    app_script = APP_JS.read_text(encoding="utf-8")
+    script = _details_client_js()
+    assert MODIFICATIONS_JS.is_file(), "modifications.js module is missing"
+    assert "async function postAiSnapshotFromGather(" in app_script
     assert "/ai-snapshot" in script
-    assert "await postAiSnapshotFromGather(" in script
-    assert "Soft-fail — AI snapshot must not block Creo metadata save" in script
+    # Collect / Check In capture bodies live in metadata.js and creo_workspace.js.
+    feature_modules = "\n".join(
+        (APP_JS.parent / name).read_text(encoding="utf-8")
+        for name in ("metadata.js", "creo_workspace.js")
+    )
+    assert "await postAiSnapshotFromGather(" in feature_modules
+    assert "Soft-fail — AI snapshot must not block Creo metadata save" in app_script
     # Modified Collect must not poison tip snapshot (A.1/A.2 identical after view delete).
-    assert "function objectAiSnapshotTipIsStale(" in script
-    assert "objectAiSnapshotTipIsStale(objectUuid)" in script
-    assert "force: true" in script
-    assert "function clearAiSnapshotClientCache(" in script
-    assert "clearAiSnapshotClientCache()" in script
+    assert "function objectAiSnapshotTipIsStale(" in app_script
+    assert "objectAiSnapshotTipIsStale(objectUuid)" in app_script
+    assert "force: true" in app_script
+    assert "function clearAiSnapshotClientCache(" in app_script
+    assert "clearAiSnapshotClientCache()" in app_script
     assert "async function loadAiSnapshotTab(" in script
     assert "async function copyTextToClipboard(" in script
     assert "navigator.clipboard.writeText" in script
@@ -460,17 +484,19 @@ def test_app_js_posts_ai_snapshot_soft_fail():
         "async function resolvePendingCheckinLocalPath(", 1
     )[0]
     assert "dataset.aiCandidates" in script
-    assert "function aiFeaturesEnabled(" in script
+    assert "function aiFeaturesEnabled(" in app_script
     assert "aiFeaturesEnabled()" in script
     assert "AI features are turned off" in script
-    assert "function aiSnapshotBodyFromGather(" in script
+    assert "function aiSnapshotBodyFromGather(" in app_script
     # Tip snapshot vs local modified tip — never vault tip materialize.
     assert "function resolvePendingCheckinLocalPath(" in script
     assert "never Erase" in script
     assert 'gatherSource = snapshot ? "session"' in script
-    ask_fn = script.split("async function askAiCheckinComment(", 1)[1].split(
-        "checkinBtn?.addEventListener", 1
-    )[0]
+    assert "async function askAiCheckinComment(" in script
+    # Slice only the Ask AI check-in function in modifications.js (not the
+    # Details bundle / creo_workspace prepareLocalPathForMetadata definition).
+    ask_fn = _modifications_js().split("async function askAiCheckinComment(", 1)[1]
+    ask_fn = ask_fn.split("function selectedHistoryVersionRow(", 1)[0]
     assert "prepareLocalPathForMetadata(objectId, filename)" not in ask_fn
     # Multi-file: serial per-model gather/compare, then one shared comment (no carousel).
     assert "askAiCheckinCommentForOne" in ask_fn
@@ -481,8 +507,9 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "Never Erase" in base_html
     assert "creoEraseModelQuiet(stale)" not in base_html
     assert "VIEW_NAMES" in base_html
-    assert "objectFilename: target.filename" in script
-    assert "session stem matched wedge.prt" in script
+    # objectFilename guard lives in metadata / creo_workspace gathers; tip comment in app.js.
+    assert "objectFilename: target.filename" in feature_modules
+    assert "session stem matched wedge.prt" in app_script
     assert 'nextDisplay !== "—"' in script
     assert "abortSignalAfter(120_000)" in script
     assert "Ollama timed out after 2 minutes" in script
@@ -501,7 +528,8 @@ def test_app_js_posts_ai_snapshot_soft_fail():
 def test_snapshot_tab_template_and_docs():
     html = DETAIL_HTML.read_text(encoding="utf-8")
     docs = DOCS.read_text(encoding="utf-8")
-    script = APP_JS.read_text(encoding="utf-8")
+    script = _details_client_js()
+    assert MODIFICATIONS_JS.is_file(), "modifications.js module is missing"
     assert 'data-tab="snapshot"' in html
     assert "snapshot_tab_label" in html
     assert "show_snapshot_tab" in html
@@ -629,8 +657,12 @@ def test_format_ai_summary_display_keeps_mid_sentence_removed_features():
     node = shutil.which("node")
     if not node:
         pytest.skip("node not installed")
-    script = APP_JS.read_text(encoding="utf-8")
+    script = _modifications_js() or APP_JS.read_text(encoding="utf-8")
     m = re.search(
+        r"function formatAiSummaryDisplay\(rawSummary\) \{.*?\n    \}\n",
+        script,
+        flags=re.S,
+    ) or re.search(
         r"function formatAiSummaryDisplay\(rawSummary\) \{.*?\n  \}\n",
         script,
         flags=re.S,

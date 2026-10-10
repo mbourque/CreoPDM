@@ -106,7 +106,9 @@ def test_checkin_can_add_new_workspace_file(client, repo_parent, data_dir):
     assert 'id="checkin-new-pick"' in home.text
     assert 'value="none"' in home.text
     assert 'value="all"' in home.text
-    script = client.get("/static/js/app.js")
+    from tests.client_js import app_js_with_modules
+
+    script = app_js_with_modules(client.get("/static/js/app.js"))
     assert 'input.checked = selectedNew.has(item.relative_path);' in script.text
     assert "function applyNewFilePick" in script.text
     assert "function syncNewFilePick" in script.text
@@ -405,7 +407,9 @@ def test_product_would_checkin_lists_saves_and_new_files(client, repo_parent, da
     bushing = next(item for item in body["new_files"] if item["filename"] == "bushing.prt")
     assert bushing.get("saved_at")
     assert re.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", str(bushing["saved_at"]))
-    script = client.get("/static/js/app.js")
+    from tests.client_js import app_js_with_modules
+
+    script = app_js_with_modules(client.get("/static/js/app.js"))
     assert script.status_code == 200
     assert 'link.className = "object-open"' in script.text
     assert "body.relative_path = spec.relativePath" in script.text
@@ -514,7 +518,9 @@ def test_purge_workspace_paths_removes_new_files(client, repo_parent, data_dir):
     assert denied.json()["failed"]
     assert (workspace / "shaft.prt").is_file()
 
-    script = client.get("/static/js/app.js")
+    from tests.client_js import app_js_with_modules
+
+    script = app_js_with_modules(client.get("/static/js/app.js"))
     assert script.status_code == 200
     assert "workspace/purge-paths" in script.text
     assert "workspace/purge-floors" in script.text
