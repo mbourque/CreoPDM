@@ -9,6 +9,11 @@ Feature bodies live under ``static/js/`` and load via ``ensureModule(name)``:
 - ``metadata.js`` — Collect job, Where Used index / Rebuild
 - ``creo_workspace.js`` — Creo session gather/push + agent materialize
 - ``open.js`` — Open chooser, prepare, File > Open trail
+- ``checkout.js`` — Checkout / Undo / Force Undo
+- ``checkin.js`` — Check In / Add selected dialog + submit
+
+Folder list, selection, ``syncToolbar``, and metrics stay in ``app.js``
+(too coupled for a ``files.js`` split).
 
 Contract tests that only care that a string still ships to the browser use
 ``client_js_bundle()``. Tests that slice one function with ``_between`` should
@@ -29,6 +34,8 @@ MODIFICATIONS_JS = JS_DIR / "modifications.js"
 METADATA_JS = JS_DIR / "metadata.js"
 CREO_WORKSPACE_JS = JS_DIR / "creo_workspace.js"
 OPEN_JS = JS_DIR / "open.js"
+CHECKOUT_JS = JS_DIR / "checkout.js"
+CHECKIN_JS = JS_DIR / "checkin.js"
 
 # app.js first so `_between` start markers keep resolving to the shell wrappers
 # unless the marker only exists in a feature module.
@@ -40,6 +47,8 @@ CLIENT_JS_FILES = (
     METADATA_JS,
     CREO_WORKSPACE_JS,
     OPEN_JS,
+    CHECKOUT_JS,
+    CHECKIN_JS,
 )
 
 

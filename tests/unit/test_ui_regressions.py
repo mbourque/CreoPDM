@@ -23,6 +23,8 @@ MODIFICATIONS_JS = ROOT / "src" / "creopdm" / "static" / "js" / "modifications.j
 METADATA_JS = ROOT / "src" / "creopdm" / "static" / "js" / "metadata.js"
 CREO_WORKSPACE_JS = ROOT / "src" / "creopdm" / "static" / "js" / "creo_workspace.js"
 OPEN_JS = ROOT / "src" / "creopdm" / "static" / "js" / "open.js"
+CHECKOUT_JS = ROOT / "src" / "creopdm" / "static" / "js" / "checkout.js"
+CHECKIN_JS = ROOT / "src" / "creopdm" / "static" / "js" / "checkin.js"
 APP_CSS = ROOT / "src" / "creopdm" / "static" / "css" / "app.css"
 APP_HTML = ROOT / "src" / "creopdm" / "templates" / "app.html"
 ICONS = ROOT / "src" / "creopdm" / "static" / "icons"
@@ -56,6 +58,10 @@ def _admin_js() -> str:
 
 def _add_js() -> str:
     return ADD_JS.read_text(encoding="utf-8")
+
+
+def _checkin_js() -> str:
+    return CHECKIN_JS.read_text(encoding="utf-8")
 
 
 def _between(text: str, start: str, end: str) -> str:
@@ -93,6 +99,8 @@ def test_app_js_has_no_syntax_error_via_node():
         METADATA_JS,
         CREO_WORKSPACE_JS,
         OPEN_JS,
+        CHECKOUT_JS,
+        CHECKIN_JS,
     ]
     for path in paths:
         assert path.is_file(), f"missing client module {path.name}"
@@ -1160,7 +1168,11 @@ def test_checkout_checkin_toolbar_menus_and_open_wd():
     assert "canCheckoutProduct" in script
     assert "Nothing left to check out in this product" in script
     assert "pushLocalNewPathsToVault" in script
-    assert "localOnlyCacheFiles" in _between(script, "async function beginCheckin(", "$(\"#checkin-cancel\")")
+    assert "localOnlyCacheFiles" in _between(
+        CHECKIN_JS.read_text(encoding="utf-8"),
+        "async function beginCheckin(",
+        "onPage($(\"#checkin-cancel\")",
+    )
     assert "Preview is vault-only" in script
     assert "undoIds" in script
     assert "Releasing unchanged checkouts" in script
@@ -2287,13 +2299,14 @@ def test_checkin_dialog_keeps_local_tip_name():
 def test_checkin_success_rematerializes_and_drops_local_n():
     """Clean check-in must rematerialize logical tip and trash leftover .prt.2 locally."""
     script = _app_js()
+    checkin = _checkin_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "function rematerializeCheckedInLocalTips" in script
     assert "function checkedInItemsFromResult" in script
     submit = _between(
-        script,
-        'checkinForm?.addEventListener("submit"',
-        'historyBtn?.addEventListener("click"',
+        checkin,
+        'onPage(checkinForm, "submit"',
+        "mod.beginAddSelected = beginAddSelected",
     )
     assert "await rematerializeCheckedInLocalTips(result)" in submit
     assert "applyCheckedInResult(result)" in submit

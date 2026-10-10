@@ -110,6 +110,8 @@ def test_client_js_modules_do_not_reencode_product_lock():
         "metadata.js",
         "creo_workspace.js",
         "open.js",
+        "checkout.js",
+        "checkin.js",
     ):
         text = (js_dir / name).read_text(encoding="utf-8")
         assert "function productAllowsMutation" not in text, name
@@ -138,13 +140,15 @@ def test_app_js_does_not_reencode_product_lock():
     assert "skipIfBusy" in script
     assert "PRODUCT_LIFECYCLE_OPS" in script
     assert 'assertProductAllows(productId, "edit_metadata")' in script
-    assert 'assertProductAllows(currentProductId(), "checkout")' in script
-    assert 'assertProductAllows(currentProductId(), "checkin")' in script
     assert 'assertProductAllows(productId, "remove")' in script
     assert 'assertProductAllows(productId, "checkin"' in script
-    # Open gate lives in lazy open.js; export still uses download in the shell.
+    # Open / checkout / check-in gates live in lazy modules; export still uses download in the shell.
     open_js = (_APP_JS.parent / "open.js").read_text(encoding="utf-8")
+    checkout_js = (_APP_JS.parent / "checkout.js").read_text(encoding="utf-8")
+    checkin_js = (_APP_JS.parent / "checkin.js").read_text(encoding="utf-8")
     assert 'assertProductAllows(currentProductId(), "download")' in open_js
+    assert 'assertProductAllows(currentProductId(), "checkout")' in checkout_js
+    assert 'assertProductAllows(currentProductId(), "checkin")' in checkin_js
     assert 'assertProductAllows(productId, "download")' in script
     assert "force: true" in script
     assert "refreshProductUiIfStale" in script

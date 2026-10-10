@@ -15,6 +15,8 @@ from tests.client_js import (
     ADD_JS,
     ADMIN_JS,
     APP_JS,
+    CHECKIN_JS,
+    CHECKOUT_JS,
     CREO_WORKSPACE_JS,
     METADATA_JS,
     MODIFICATIONS_JS,
@@ -28,6 +30,8 @@ MODULES = {
     "metadata": METADATA_JS,
     "creo_workspace": CREO_WORKSPACE_JS,
     "open": OPEN_JS,
+    "checkout": CHECKOUT_JS,
+    "checkin": CHECKIN_JS,
 }
 
 # Large bodies that must not live in app.js any more (wrappers are single-line delegates).
@@ -48,6 +52,11 @@ MOVED_OUT_OF_APP = (
     "async function openViaAgent(",
     "function openPdmLaunchResult(",
     "function metadataItemsFromOpenResult(",
+    # checkout.js / checkin.js — body-only markers (thin wrappers keep the public names)
+    "Downloading checked-out files to local workspace…",
+    "Match New files tab: vault queue + local agent-cache",
+    "function syncCheckinAiAskRow(",
+    'withBusy(`Checking out… 0 of ${total}`',
 )
 
 
@@ -78,11 +87,16 @@ def test_feature_bodies_left_app_js():
         "async function openPdmObjectFromUi(",
         "async function materializeViaAgent(",
         "async function pushCreoMetadataForItems(",
+        "async function runCheckoutObjects(",
+        "async function beginCheckin(",
+        "async function beginAddSelected(",
     ):
         assert wrapper in app, wrapper
     assert 'initJobModule("metadata")' in app
     assert 'initJobModule("open")' in app
     assert 'initJobModule("creo_workspace")' in app
+    assert 'initJobModule("checkout"' in app
+    assert 'initJobModule("checkin"' in app
 
 
 def test_modules_only_read_shell_members_that_exist():
@@ -109,7 +123,7 @@ def test_quiet_browse_does_not_eager_load_heavy_modules():
     # Only admin chrome + modifications (Details) are initialised eagerly at boot.
     eager = re.findall(r'void initJobModule\("(\w+)"', boot_tail.split("} finally {", 1)[0])
     assert set(eager) <= {"admin", "modifications"}, eager
-    # Collect resume is gated on stored state; open/add/creo_workspace load on use.
+    # Collect resume is gated on stored state; open/add/checkout/checkin/creo_workspace load on use.
     assert "const state = loadMetadataCollectState();" in app
     assert 'if (!state || state.status !== "running")' in app
 
@@ -120,3 +134,21 @@ def test_open_module_keeps_large_assembly_contract():
     assert "openWorkTimeoutMs(5000)" in text
     assert "90000" not in text
     assert "if (wantSetWd)" in text
+
+
+def test_checkout_and_checkin_modules_export_job_apis():
+    checkout = CHECKOUT_JS.read_text(encoding="utf-8")
+    checkin = CHECKIN_JS.read_text(encoding="utf-8")
+    for name in (
+        "runCheckoutObjects",
+        "checkoutSelected",
+        "checkoutProduct",
+        "undoCheckout",
+        "forceUndoCheckout",
+    ):
+        assert f"mod.{name}" in checkout, name
+    for name in ("beginAddSelected", "beginCheckin", "syncCheckinAiAskRow"):
+        assert f"mod.{name}" in checkin, name
+    assert "async function beginCheckin(" in checkin
+    assert "function syncCheckinAiAskRow(" in checkin
+    assert "Downloading checked-out files to local workspace…" in checkout

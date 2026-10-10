@@ -42,8 +42,10 @@ def _modifications_js() -> str:
 def _details_client_js() -> str:
     """App boot + lazy Modifications module (Details tab / check-in Ask AI)."""
     parts = [APP_JS.read_text(encoding="utf-8"), _modifications_js()]
-    for name in ("metadata.js", "creo_workspace.js", "open.js"):
-        parts.append((APP_JS.parent / name).read_text(encoding="utf-8"))
+    for name in ("metadata.js", "creo_workspace.js", "open.js", "checkout.js", "checkin.js"):
+        path = APP_JS.parent / name
+        if path.is_file():
+            parts.append(path.read_text(encoding="utf-8"))
     return "\n".join(parts)
 DETAIL_HTML = ROOT / "src" / "creopdm" / "templates" / "object_detail.html"
 DOCS = ROOT / "docs" / "user-interactions.md"
@@ -480,8 +482,9 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "Collecting modified model…" in script
     assert "Summarizing check-in comment…" in script
     assert "function syncCheckinAiAskRow(" in script
-    assert "candidates.length > 0" in script.split("function syncCheckinAiAskRow(", 1)[1].split(
-        "async function resolvePendingCheckinLocalPath(", 1
+    checkin_js = (APP_JS.parent / "checkin.js").read_text(encoding="utf-8")
+    assert "candidates.length > 0" in checkin_js.split("function syncCheckinAiAskRow(", 1)[1].split(
+        "onPage($(\"#checkin-ask-ai\")", 1
     )[0]
     assert "dataset.aiCandidates" in script
     assert "function aiFeaturesEnabled(" in app_script

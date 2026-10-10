@@ -623,6 +623,10 @@ Testers do not see this, but it affects where regressions live. `app.js` is the 
 | `metadata.js` | Collect job, Rebuild Where Used / Utilities rebuild, Where Used polling | Collect / Rebuild / Add index, or a stored Collect run / in-flight Where Used job |
 | `creo_workspace.js` | Creo session gather/push metadata, agent materialize (per-file + zip), re-materialize after Check In | First Open / Collect / Check In workspace sync |
 | `open.js` | Open chooser, checkout-before-open, prepare, File > Open trail, Windows association | First Open |
+| `checkout.js` | Checkout selected / product, Undo Checkout, Force Undo Checkout | First Checkout / Undo / Force Undo |
+| `checkin.js` | Check In / Add selected dialog, preview, submit, Ask AI row on the dialog | First Check In / Add selected |
+
+`app.js` keeps the Files list, selection, `syncToolbar`, and metrics (too coupled for a `files.js` split). Quiet browse must **not** eager-load `checkout` / `checkin` / `open` / `add` / `metadata` / `creo_workspace` — only admin chrome and Details `modifications` load at boot when those pages are present.
 
 Agent cache **listing / hash** helpers (`listAgentCacheFiles`, `hashAgentCachePaths`, `agentWorkdir`) stay in `app.js` because the Files list needs them on quiet boot (Modified / New local counts).
 

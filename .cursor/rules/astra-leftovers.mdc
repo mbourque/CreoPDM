@@ -13,6 +13,6 @@ When the user asks about remaining Astra findings, leftover security/reliability
 | **7** | `from-disk` absolute paths on the server | Medium (if server can see those paths) |
 | **3** | Git commit before DB commit (check-in / add) — crash or request-end `db.commit()` failure can orphan Git tips; fix later with a pending-op / journal table + startup reconcile (not just in-request `restore_checkpoint`) | Failure-path correctness |
 | **2** | Recovery `git reset --hard` can wipe uncommitted vault edits | Failure-path only |
-| **10** | Split `app.js` | Don’t worry — **in progress / mostly landed**: lazy modules `admin`, `add`, `modifications`, `metadata`, `creo_workspace`, `open` under `static/js/`; `app.js` is the shell + thin wrappers. Remaining optional trims: Files list / check-in / checkout bodies still in `app.js`. |
+| **10** | Split `app.js` | Don’t worry — **mostly landed**: lazy modules `admin`, `add`, `modifications`, `metadata`, `creo_workspace`, `open`, `checkout`, `checkin` under `static/js/`; `app.js` is the shell + thin wrappers. Remaining optional: Files list / selection / `syncToolbar` (intentionally deferred — too coupled). |
 
 **Already done:** #1 push by `relative_path`, #4 stage guards, #5 batch product access, #8 cache hash (no size-alone skip), #9 `index.lock` full stale window, **#6** remove `/local-file` + drop CORS `*` (browser Origin allowlist + Bearer on non-`/health` agent calls).

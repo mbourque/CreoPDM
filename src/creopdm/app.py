@@ -187,6 +187,8 @@ def create_app(context: AppContext | None = None) -> FastAPI:
             "admin",
             "add",
             "open",
+            "checkout",
+            "checkin",
             "metadata",
             "modifications",
             "creo_workspace",
