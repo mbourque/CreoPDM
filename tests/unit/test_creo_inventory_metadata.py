@@ -288,7 +288,12 @@ def test_compare_outline_includes_assembly_simp_reps():
         {
             "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
             "structure": [
-                {"name": "bracket.prt", "type": "PART", "level": 1, "status": "ACTIVE"},
+                {
+                    "name": "bracket.prt",
+                    "type": "PART",
+                    "level": 1,
+                    "status": "SIMP_REP_SUPPRESSED",
+                },
             ],
             "features": [],
             "parameters": [{"name": "DESCRIPTION", "value": "x"}],
@@ -319,6 +324,9 @@ def test_compare_outline_includes_assembly_simp_reps():
     # Keep at end of outline (after Parameters), not buried under Structure.
     assert text.index("Parameters:") < text.index("Simplified representations")
     assert text.index("Structure:") < text.index("Simplified representations")
+    # Never put SIMP_REP_* on Structure lines (Ask AI invents removals/adds).
+    assert "SIMP_REP_SUPPRESSED" not in text
+    assert "bracket.prt (PART)" in text
     # Must not invent a Structure delete from exclude rules.
     assert "Features removed" not in text
     assert "deleted" not in text.lower()

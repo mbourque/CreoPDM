@@ -122,18 +122,36 @@ def _append_creo_feature_id(label: str, feat: dict[str, Any] | None) -> str:
     return f"{core} ({fid})"
 
 
+def _outline_status_extra(status: str) -> str | None:
+    """Statuses shown on Structure/Features outline lines.
+
+    SIMP_REP_* is active-representation capture context — never outline it as a
+    Structure status (Ask AI will invent "suppressed removed / components added").
+    Active + definitions belong only in the Simplified representations block.
+    """
+    text = str(status or "").strip()
+    if not text:
+        return None
+    upper = text.upper()
+    if upper in {"ACTIVE", ""}:
+        return None
+    if upper.startswith("SIMP_REP"):
+        return None
+    return text
+
+
 def _inventory_outline_line(row: dict[str, Any]) -> str:
     """Indented inventory line (same nesting idea as Details inventory tables)."""
     name = str(row.get("name") or "").strip() or "—"
     typ = str(row.get("type") or "").strip()
-    status = str(row.get("status") or "").strip()
+    status = _outline_status_extra(str(row.get("status") or ""))
     level = _inventory_level(row)
     indent = "  " * max(0, level - 1)
     nest = "└ " if level > 1 else ""
     extras: list[str] = []
     if typ and typ.upper() not in name.upper():
         extras.append(typ)
-    if status and status.upper() not in {"ACTIVE", ""}:
+    if status:
         extras.append(status)
     sheet = row.get("sheet")
     if sheet not in (None, "") and typ.upper() != "SHEET":
