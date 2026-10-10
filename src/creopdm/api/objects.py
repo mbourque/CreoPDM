@@ -33,6 +33,7 @@ from creopdm.schemas.common import (
     AiSnapshotOutlineResponse,
     AiSnapshotRequest,
     AiSnapshotResponse,
+    AiSnapshotWhatChangedResponse,
     BatchItemResult,
     BatchObjectRequest,
     BatchRemoveRequest,
@@ -521,6 +522,55 @@ def outline_ai_snapshot(
 
 
 @router.post(
+    "/api/objects/{object_id}/ai-snapshot/what-changed",
+    response_model=AiSnapshotWhatChangedResponse,
+)
+def what_changed_ai_snapshots(
+    object_id: str,
+    payload: AiSnapshotCompareRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> AiSnapshotWhatChangedResponse:
+    """Return the Ask AI system + user messages (no Ollama; works when AI is off)."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    return ctx.ai_snapshots.what_changed(
+        db,
+        object_id,
+        payload.older_version_id,
+        payload.newer_version_id,
+        ctx.settings,
+    )
+
+
+@router.post(
+    "/api/objects/{object_id}/ai-snapshot/what-changed-pending",
+    response_model=AiSnapshotWhatChangedResponse,
+)
+def what_changed_pending_ai_snapshot(
+    object_id: str,
+    payload: AiSnapshotComparePendingRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: AppContext = Depends(get_context),
+) -> AiSnapshotWhatChangedResponse:
+    """Ask AI payload preview for tip vs live gather (no Ollama; works when AI is off)."""
+    require_permission(request, ctx, PERMISSION_OBJECTS_VIEW)
+    obj = ctx.objects.get_object(db, object_id)
+    require_product_access(request, ctx, obj.product)
+    return ctx.ai_snapshots.what_changed_pending(
+        db,
+        object_id,
+        payload.newer_snapshot,
+        ctx.settings,
+        older_version_id=payload.older_version_id,
+        newer_display_revision=payload.newer_display_revision,
+    )
+
+
+@router.post(
     "/api/objects/{object_id}/ai-snapshot/compare",
     response_model=AiSnapshotCompareResponse,
 )
@@ -587,7 +637,6 @@ def compare_pending_ai_snapshot(
         len(result.summary or ""),
     )
     return result
-
 
 @router.get("/api/objects/{object_id}/where-used", response_model=WhereUsedResponse)
 def object_where_used(

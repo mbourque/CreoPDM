@@ -973,6 +973,18 @@ class AiSnapshotCompareResponse(BaseModel):
     summary: str = ""
 
 
+class AiSnapshotWhatChangedResponse(BaseModel):
+    """Full Ask AI payload preview (no Ollama). Works when AI features are off."""
+
+    object_id: str
+    older_version_id: str
+    newer_version_id: str = ""
+    older_display_revision: str = ""
+    newer_display_revision: str = ""
+    system_prompt: str = ""
+    user_prompt: str = ""
+
+
 class AiCheckinFileNote(BaseModel):
     """One per-file Ask AI note used to synthesize a batch check-in comment."""
 

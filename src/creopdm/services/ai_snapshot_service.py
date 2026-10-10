@@ -32,6 +32,7 @@ from creopdm.schemas.common import (
     AiSnapshotListResponse,
     AiSnapshotRequest,
     AiSnapshotResponse,
+    AiSnapshotWhatChangedResponse,
 )
 from creopdm.services.object_service import ObjectService
 from creopdm.services.ollama_service import chat_ollama
@@ -341,6 +342,142 @@ class AiSnapshotService:
         label = (display_revision or "").strip() or "pending"
         return str(text or "").strip(), label
 
+    def _load_compare_pair(
+        self,
+        session: Session,
+        object_uuid: str,
+        older_version_id: str,
+        newer_version_id: str,
+    ) -> tuple[AiSnapshotResponse, AiSnapshotResponse]:
+        older_id = (older_version_id or "").strip()
+        newer_id = (newer_version_id or "").strip()
+        if not older_id or not newer_id:
+            raise ValidationAppError("Choose both an older and a newer snapshot revision.")
+        if older_id == newer_id:
+            raise ValidationAppError("Pick two different revisions to compare.")
+
+        older = self.get(session, object_uuid, older_id)
+        newer = self.get(session, object_uuid, newer_id)
+        if not older.has_snapshot or not isinstance(older.snapshot, dict):
+            raise ValidationAppError(
+                f"Revision {older.display_revision or older_id} has no snapshot yet. "
+                "Collect metadata while that version is tip.",
+                details={"version_id": older_id},
+            )
+        if not newer.has_snapshot or not isinstance(newer.snapshot, dict):
+            raise ValidationAppError(
+                f"Revision {newer.display_revision or newer_id} has no snapshot yet. "
+                "Collect metadata while that version is tip.",
+                details={"version_id": newer_id},
+            )
+        return older, newer
+
+    def _load_compare_pending(
+        self,
+        session: Session,
+        object_uuid: str,
+        newer_snapshot: dict[str, Any],
+        *,
+        older_version_id: str | None = None,
+        newer_display_revision: str = "pending",
+    ) -> tuple[AiSnapshotResponse, dict[str, Any], str]:
+        if not isinstance(newer_snapshot, dict) or not newer_snapshot:
+            raise ValidationAppError("Newer snapshot JSON is required.")
+        older_id = (older_version_id or "").strip() or None
+        older = self.get(session, object_uuid, older_id)
+        if not older.version_id:
+            raise ValidationAppError("This file has no version to compare against.")
+        if not older.has_snapshot or not isinstance(older.snapshot, dict):
+            raise ValidationAppError(
+                f"Revision {older.display_revision or older.version_id} has no snapshot yet. "
+                "Collect metadata while that version is tip, then try again.",
+                details={"version_id": older.version_id},
+            )
+        newer_label = (newer_display_revision or "").strip() or "pending"
+        return older, newer_snapshot, newer_label
+
+    def _build_what_changed(
+        self,
+        *,
+        object_uuid: str,
+        older_snapshot: dict[str, Any],
+        newer_snapshot: dict[str, Any],
+        older_revision: str,
+        newer_revision: str,
+        older_version_id: str,
+        newer_version_id: str,
+        settings: AppSettings,
+    ) -> AiSnapshotWhatChangedResponse:
+        """Same system + user messages Ask AI would send — no Ollama, AI may be off."""
+        system_prompt = str(settings.ai.snapshot_compare_prompt or "").strip()
+        user_prompt = build_snapshot_compare_user_prompt(
+            older_snapshot=older_snapshot,
+            newer_snapshot=newer_snapshot,
+            older_revision=older_revision,
+            newer_revision=newer_revision,
+        )
+        return AiSnapshotWhatChangedResponse(
+            object_id=object_uuid,
+            older_version_id=older_version_id,
+            newer_version_id=newer_version_id,
+            older_display_revision=older_revision,
+            newer_display_revision=newer_revision,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
+
+    def what_changed(
+        self,
+        session: Session,
+        object_uuid: str,
+        older_version_id: str,
+        newer_version_id: str,
+        settings: AppSettings,
+    ) -> AiSnapshotWhatChangedResponse:
+        """Preview the Ask AI payload for two History snapshots (works with AI off)."""
+        older, newer = self._load_compare_pair(
+            session, object_uuid, older_version_id, newer_version_id
+        )
+        return self._build_what_changed(
+            object_uuid=object_uuid,
+            older_snapshot=older.snapshot,
+            newer_snapshot=newer.snapshot,
+            older_revision=older.display_revision,
+            newer_revision=newer.display_revision,
+            older_version_id=older.version_id or older_version_id,
+            newer_version_id=newer.version_id or newer_version_id,
+            settings=settings,
+        )
+
+    def what_changed_pending(
+        self,
+        session: Session,
+        object_uuid: str,
+        newer_snapshot: dict[str, Any],
+        settings: AppSettings,
+        *,
+        older_version_id: str | None = None,
+        newer_display_revision: str = "pending",
+    ) -> AiSnapshotWhatChangedResponse:
+        """Preview Ask AI payload for tip vs live gather (works with AI off)."""
+        older, newer_snap, newer_label = self._load_compare_pending(
+            session,
+            object_uuid,
+            newer_snapshot,
+            older_version_id=older_version_id,
+            newer_display_revision=newer_display_revision,
+        )
+        return self._build_what_changed(
+            object_uuid=object_uuid,
+            older_snapshot=older.snapshot,
+            newer_snapshot=newer_snap,
+            older_revision=older.display_revision,
+            newer_revision=newer_label,
+            older_version_id=older.version_id or "",
+            newer_version_id="",
+            settings=settings,
+        )
+
     def _chat_compare(
         self,
         *,
@@ -366,18 +503,22 @@ class AiSnapshotService:
         # One prompt path for Modifications Ask AI and Check In Ask AI
         # (parts, assemblies, drawings) — prepare lives inside build_*.
         system_prompt = resolve_snapshot_compare_prompt(settings.ai.snapshot_compare_prompt)
-        user_prompt = build_snapshot_compare_user_prompt(
+        payload = self._build_what_changed(
+            object_uuid=object_uuid,
             older_snapshot=older_snapshot,
             newer_snapshot=newer_snapshot,
             older_revision=older_revision,
             newer_revision=newer_revision,
+            older_version_id=older_version_id,
+            newer_version_id=newer_version_id,
+            settings=settings,
         )
         summary = chat_ollama(
             settings.ai.ollama_base_url,
             model,
             [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
+                {"role": "user", "content": payload.user_prompt},
             ],
         )
         return AiSnapshotCompareResponse(
@@ -399,35 +540,17 @@ class AiSnapshotService:
         settings: AppSettings,
     ) -> AiSnapshotCompareResponse:
         """Load two saved snapshots and ask the configured Ollama model what changed."""
-        older_id = (older_version_id or "").strip()
-        newer_id = (newer_version_id or "").strip()
-        if not older_id or not newer_id:
-            raise ValidationAppError("Choose both an older and a newer snapshot revision.")
-        if older_id == newer_id:
-            raise ValidationAppError("Pick two different revisions to compare.")
-
-        older = self.get(session, object_uuid, older_id)
-        newer = self.get(session, object_uuid, newer_id)
-        if not older.has_snapshot or not isinstance(older.snapshot, dict):
-            raise ValidationAppError(
-                f"Revision {older.display_revision or older_id} has no snapshot yet. "
-                "Collect metadata while that version is tip.",
-                details={"version_id": older_id},
-            )
-        if not newer.has_snapshot or not isinstance(newer.snapshot, dict):
-            raise ValidationAppError(
-                f"Revision {newer.display_revision or newer_id} has no snapshot yet. "
-                "Collect metadata while that version is tip.",
-                details={"version_id": newer_id},
-            )
+        older, newer = self._load_compare_pair(
+            session, object_uuid, older_version_id, newer_version_id
+        )
         return self._chat_compare(
             object_uuid=object_uuid,
             older_snapshot=older.snapshot,
             newer_snapshot=newer.snapshot,
             older_revision=older.display_revision,
             newer_revision=newer.display_revision,
-            older_version_id=older.version_id or older_id,
-            newer_version_id=newer.version_id or newer_id,
+            older_version_id=older.version_id or older_version_id,
+            newer_version_id=newer.version_id or newer_version_id,
             settings=settings,
         )
 
@@ -443,25 +566,19 @@ class AiSnapshotService:
     ) -> AiSnapshotCompareResponse:
         """Check In Ask AI: tip snapshot vs pending gather — same ``_chat_compare``
         as Modifications (parts, assemblies, drawings)."""
-        if not isinstance(newer_snapshot, dict) or not newer_snapshot:
-            raise ValidationAppError("Newer snapshot JSON is required.")
-        older_id = (older_version_id or "").strip() or None
-        older = self.get(session, object_uuid, older_id)
-        if not older.version_id:
-            raise ValidationAppError("This file has no version to compare against.")
-        if not older.has_snapshot or not isinstance(older.snapshot, dict):
-            raise ValidationAppError(
-                f"Revision {older.display_revision or older.version_id} has no snapshot yet. "
-                "Collect metadata while that version is tip, then try again.",
-                details={"version_id": older.version_id},
-            )
-        newer_label = (newer_display_revision or "").strip() or "pending"
+        older, newer_snap, newer_label = self._load_compare_pending(
+            session,
+            object_uuid,
+            newer_snapshot,
+            older_version_id=older_version_id,
+            newer_display_revision=newer_display_revision,
+        )
         # Same Ask AI path as compare_with_ollama → _chat_compare →
         # prepare_snapshot_for_compare + build_snapshot_compare_user_prompt.
         return self._chat_compare(
             object_uuid=object_uuid,
             older_snapshot=older.snapshot,
-            newer_snapshot=newer_snapshot,
+            newer_snapshot=newer_snap,
             older_revision=older.display_revision,
             newer_revision=newer_label,
             older_version_id=older.version_id,

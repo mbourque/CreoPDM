@@ -501,10 +501,21 @@ def test_snapshot_tab_template_and_docs():
     assert "OLD" in html and "NEW" in html
     assert 'id="ai-snapshot-copy-a"' in html
     assert 'id="ai-snapshot-copy-b"' in html
+    assert 'id="ai-snapshot-what-changed"' in html
+    assert "What changed" in html
+    assert 'id="ai-snapshot-what-changed-panel"' in html
+    assert 'id="ai-snapshot-what-changed-copy"' in html
+    assert "/ai-snapshot/what-changed" in script
+    assert "/ai-snapshot/what-changed-pending" in script
+    assert "showAiWhatChanged" in script
+    assert "formatAiWhatChangedPayload" in script
+    assert "askAiBtn.hidden = !rowReady || !aiFeaturesEnabled()" in script
     assert 'id="ai-snapshot-ask-ai"' in html
     assert "Ask AI what changed" in html
     assert 'id="ai-snapshot-ai-answer"' in html
     assert 'id="ai-snapshot-ask-row" hidden' in html
+    assert "What changed" in docs
+    assert "works even when" in docs.lower() or "works with AI off" in docs
     assert "Side-by-side outlines for two revisions" not in html
     assert "plain text, not JSON" not in html
     assert "Modifications" in docs
@@ -1539,6 +1550,24 @@ def test_ai_snapshot_compare_calls_ollama(client, repo_parent, tmp_path, monkeyp
         },
     )
     assert rejected.status_code == 400, rejected.text
+
+    # What changed preview still works with AI off / no model.
+    assert client.put("/api/settings", json={"ai_enabled": False}).status_code == 200
+    preview = client.post(
+        f"/api/objects/{object_id}/ai-snapshot/what-changed",
+        json={
+            "older_version_id": older_version_id,
+            "newer_version_id": newer_version_id,
+        },
+    )
+    assert preview.status_code == 200, preview.text
+    preview_body = preview.json()
+    assert preview_body["system_prompt"] == "Use only facts from the JSON."
+    assert "=== OLD" in preview_body["user_prompt"]
+    assert "=== NEW" in preview_body["user_prompt"]
+    assert "=== Computed differences ===" in preview_body["user_prompt"]
+    assert "d0 = 5 mm" in preview_body["user_prompt"]
+    assert "d0 = 7.5 mm" in preview_body["user_prompt"]
 
 
 @requires_git

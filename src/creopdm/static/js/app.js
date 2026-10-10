@@ -12319,25 +12319,23 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
 
   function syncAiSnapshotAskVisibility(livePendingReady) {
     const askRow = $("#ai-snapshot-ask-row");
+    const askAiBtn = $("#ai-snapshot-ask-ai");
     if (!askRow) return;
     const mode = String($("#ai-snapshot-compare")?.dataset.mode || "");
     const rightIsModified = isAiSnapshotModifiedValue(
       $("#ai-snapshot-rev-b")?.value
     );
-    if (!aiFeaturesEnabled()) {
-      askRow.hidden = true;
-      return;
-    }
-    // Live Modified gather — Ask AI only after outline is ready.
+    // What changed works with AI off; Ask AI stays gated.
+    let rowReady = false;
     if (mode === "pending" || rightIsModified) {
-      askRow.hidden = !livePendingReady;
-      return;
+      rowReady = Boolean(livePendingReady);
+    } else if (mode === "compare") {
+      rowReady = true;
     }
-    if (mode === "compare") {
-      askRow.hidden = false;
-      return;
+    askRow.hidden = !rowReady;
+    if (askAiBtn) {
+      askAiBtn.hidden = !rowReady || !aiFeaturesEnabled();
     }
-    askRow.hidden = true;
   }
 
   function syncAiSnapshotTabChrome(mode) {
@@ -12359,6 +12357,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     if (resolved === "pending") {
       const answer = $("#ai-snapshot-ai-answer");
       if (answer) answer.hidden = true;
+      const whatChanged = $("#ai-snapshot-what-changed-panel");
+      if (whatChanged) whatChanged.hidden = true;
     }
     syncAiSnapshotAskVisibility(false);
     const labelA = $("#ai-snapshot-label-a");
@@ -13371,6 +13371,130 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
   }
 
+  function formatAiWhatChangedPayload(payload) {
+    const system = String(payload?.system_prompt || "").trim();
+    const user = String(payload?.user_prompt || "").trim();
+    const systemBlock = system
+      ? `=== System (Settings → AI) ===\n${system}`
+      : "=== System (Settings → AI) ===\n(empty — Ask AI needs a saved compare prompt)";
+    const userBlock = user
+      ? `=== User ===\n${user}`
+      : "=== User ===\n(empty)";
+    return `${systemBlock}\n\n${userBlock}`;
+  }
+
+  async function postAiSnapshotCompareUrl(url, body, timeoutMs, timeoutHint) {
+    let response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        cache: "no-store",
+        signal: abortSignalAfter(timeoutMs),
+        body: JSON.stringify(body),
+      });
+    } catch (errFetch) {
+      const aborted =
+        errFetch?.name === "AbortError"
+        || /aborted|timeout/i.test(String(errFetch?.message || errFetch || ""));
+      throw new Error(
+        aborted
+          ? timeoutHint
+          : String(errFetch?.message || errFetch || "Could not reach CreoPDM.")
+      );
+    }
+    if (!response.ok) throw new Error(await readError(response));
+    return response.json();
+  }
+
+  function aiSnapshotCompareRequestBody() {
+    const mode = String($("#ai-snapshot-compare")?.dataset.mode || "");
+    const olderId = String($("#ai-snapshot-rev-a")?.value || "").trim();
+    const newerId = String($("#ai-snapshot-rev-b")?.value || "").trim();
+    if (mode === "pending" || isAiSnapshotModifiedValue(newerId)) {
+      const gather = aiSnapshotPendingGather;
+      if (!gather?.snapshot) {
+        throw new Error(
+          "Gather a live workspace outline first (open the model in Creo or Save a local tip)."
+        );
+      }
+      return {
+        kind: "pending",
+        body: {
+          newer_snapshot: gather.snapshot,
+          newer_display_revision: gather.displayRevision || "Modified",
+          older_version_id: olderId || null,
+        },
+      };
+    }
+    if (mode !== "compare") {
+      throw new Error("Need two revisions with snapshots before comparing.");
+    }
+    if (!olderId || !newerId) {
+      throw new Error("Choose older and newer snapshot revisions.");
+    }
+    if (olderId === newerId) {
+      throw new Error("Pick two different revisions to compare.");
+    }
+    return {
+      kind: "history",
+      body: {
+        older_version_id: olderId,
+        newer_version_id: newerId,
+      },
+    };
+  }
+
+  async function showAiWhatChanged() {
+    const panel = aiSnapshotPanel();
+    const objectId = String(panel?.dataset.objectId || "").trim();
+    const compare = $("#ai-snapshot-compare");
+    const outBox = $("#ai-snapshot-what-changed-panel");
+    const outBody = $("#ai-snapshot-what-changed-body");
+    const outMeta = $("#ai-snapshot-what-changed-meta");
+    const copyBtn = $("#ai-snapshot-what-changed-copy");
+    if (!objectId || !compare) {
+      showError($("#toolbar-error"), "Open Modifications first.");
+      return;
+    }
+    showError($("#toolbar-error"), "");
+    try {
+      const text = await withBusy("Building what changed…", async () => {
+        const req = aiSnapshotCompareRequestBody();
+        const url =
+          req.kind === "pending"
+            ? `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/what-changed-pending`
+            : `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/what-changed`;
+        const payload = await postAiSnapshotCompareUrl(
+          url,
+          req.body,
+          60_000,
+          "Timed out building the What changed preview."
+        );
+        if (outMeta) {
+          const olderRev = String(payload?.older_display_revision || "").trim();
+          const newerRev = String(payload?.newer_display_revision || "").trim();
+          outMeta.textContent =
+            olderRev && newerRev ? `${olderRev} → ${newerRev}` : "";
+        }
+        const formatted = formatAiWhatChangedPayload(payload);
+        if (copyBtn) copyBtn.dataset.copyText = formatted;
+        return formatted;
+      });
+      if (outBody) outBody.textContent = text;
+      if (outBox) {
+        outBox.hidden = false;
+        outBox.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    } catch (err) {
+      showError(
+        $("#toolbar-error"),
+        String(err?.message || err || "Could not build What changed.")
+      );
+    }
+  }
+
   async function askAiSnapshotCompare() {
     const panel = aiSnapshotPanel();
     const objectId = String(panel?.dataset.objectId || "").trim();
@@ -13378,7 +13502,6 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const answerBox = $("#ai-snapshot-ai-answer");
     const answerBody = $("#ai-snapshot-ai-answer-body");
     const answerMeta = $("#ai-snapshot-ai-answer-meta");
-    const mode = String(compare?.dataset.mode || "");
     if (!aiFeaturesEnabled()) {
       showError(
         $("#toolbar-error"),
@@ -13392,66 +13515,18 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     showError($("#toolbar-error"), "");
 
-    const postCompare = async (url, body) => {
-      let response;
-      try {
-        response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          cache: "no-store",
-          signal: abortSignalAfter(120_000),
-          body: JSON.stringify(body),
-        });
-      } catch (errFetch) {
-        const aborted =
-          errFetch?.name === "AbortError"
-          || /aborted|timeout/i.test(String(errFetch?.message || errFetch || ""));
-        throw new Error(
-          aborted
-            ? "Ollama timed out after 2 minutes. Is it running on the CreoPDM server and is the model loaded?"
-            : String(errFetch?.message || errFetch || "Could not reach CreoPDM for AI compare.")
-        );
-      }
-      if (!response.ok) throw new Error(await readError(response));
-      return response.json();
-    };
-
     try {
       const payload = await withBusy("Asking AI what changed…", async () => {
-        const olderId = String($("#ai-snapshot-rev-a")?.value || "").trim();
-        const newerId = String($("#ai-snapshot-rev-b")?.value || "").trim();
-        if (mode === "pending" || isAiSnapshotModifiedValue(newerId)) {
-          const gather = aiSnapshotPendingGather;
-          if (!gather?.snapshot) {
-            throw new Error(
-              "Gather a live workspace outline first (open the model in Creo or Save a local tip)."
-            );
-          }
-          return postCompare(
-            `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare-pending`,
-            {
-              newer_snapshot: gather.snapshot,
-              newer_display_revision: gather.displayRevision || "Modified",
-              older_version_id: olderId || null,
-            }
-          );
-        }
-        if (mode !== "compare") {
-          throw new Error("Need two revisions with snapshots before asking AI what changed.");
-        }
-        if (!olderId || !newerId) {
-          throw new Error("Choose older and newer snapshot revisions.");
-        }
-        if (olderId === newerId) {
-          throw new Error("Pick two different revisions to compare.");
-        }
-        return postCompare(
-          `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare`,
-          {
-            older_version_id: olderId,
-            newer_version_id: newerId,
-          }
+        const req = aiSnapshotCompareRequestBody();
+        const url =
+          req.kind === "pending"
+            ? `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare-pending`
+            : `/api/objects/${encodeURIComponent(objectId)}/ai-snapshot/compare`;
+        return postAiSnapshotCompareUrl(
+          url,
+          req.body,
+          120_000,
+          "Ollama timed out after 2 minutes. Is it running on the CreoPDM server and is the model loaded?"
         );
       });
       const summary = String(payload?.summary || "").trim();
@@ -13539,6 +13614,28 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     );
     window.addEventListener("resize", () => {
       syncAiSnapshotScrollLayout();
+    });
+    $("#ai-snapshot-what-changed")?.addEventListener("click", () => {
+      void showAiWhatChanged();
+    });
+    $("#ai-snapshot-what-changed-copy")?.addEventListener("click", async () => {
+      const btn = $("#ai-snapshot-what-changed-copy");
+      const body = $("#ai-snapshot-what-changed-body");
+      let text = String(btn?.dataset.copyText || "").trim();
+      if (!text && body) text = String(body.textContent || "").trim();
+      if (!text) {
+        showError($("#toolbar-error"), "Nothing to copy yet.");
+        return;
+      }
+      const ok = await copyTextToClipboard(text);
+      if (!ok) {
+        showError(
+          $("#toolbar-error"),
+          "Could not copy. Select the text and use Ctrl+C."
+        );
+        return;
+      }
+      showOk("Copied What changed payload.");
     });
     $("#ai-snapshot-ask-ai")?.addEventListener("click", () => {
       void askAiSnapshotCompare();
