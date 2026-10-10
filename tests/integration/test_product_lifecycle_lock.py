@@ -126,8 +126,14 @@ def test_locked_product_rejects_all_mutation_apis(client, repo_parent):
     )
     listed = client.get(f"/api/products/{pid}")
     assert listed.status_code == 200, listed.text
-    assert listed.json()["allows_edit_metadata"] is False
-    assert listed.json()["allows_mutation"] is False
+    body = listed.json()
+    assert body["allows_edit_metadata"] is False
+    assert body["allows_mutation"] is False
+    assert body["allows_checkout"] is False
+    assert body["allows_checkin"] is False
+    assert body["allows_remove"] is False
+    assert body["allows_rename"] is False
+    assert body["allows_download"] is True
 
     # Undo / Force Undo follow the matrix Check Out column (In Review = blocked).
     _assert_locked(

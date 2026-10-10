@@ -153,6 +153,8 @@ class CheckoutService:
     def checkout(self, session: Session, object_uuid: str) -> Checkout:
         obj = self._objects.get_object(session, object_uuid)
         product = obj.product
+        if product is not None:
+            session.refresh(product)
         ensure_product_allows(product, "checkout", action="check out files")
         user = self._users.get_current_user()
         with self._locks.acquire(product.uuid):
@@ -235,6 +237,8 @@ class CheckoutService:
     def undo_checkout(self, session: Session, object_uuid: str) -> None:
         obj = self._objects.get_object(session, object_uuid)
         product = obj.product
+        if product is not None:
+            session.refresh(product)
         ensure_product_allows(product, "checkout", action="undo checkout")
         user = self._users.get_current_user()
         with self._locks.acquire(product.uuid):
@@ -268,6 +272,8 @@ class CheckoutService:
         """
         obj = self._objects.get_object(session, object_uuid)
         product = obj.product
+        if product is not None:
+            session.refresh(product)
         ensure_product_allows(product, "checkout", action="force undo checkout")
         user = self._users.get_current_user()
         with self._locks.acquire(product.uuid):

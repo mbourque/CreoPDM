@@ -44,7 +44,12 @@ def product_to_response(product: Product) -> ProductResponse:
         state=state,
         allows_mutation=product_allows_mutation(product),
         allows_content=product_allows_content_access(product),
+        allows_checkout=product_allows_op(product, "checkout"),
+        allows_checkin=product_allows_op(product, "checkin"),
+        allows_remove=product_allows_op(product, "remove"),
+        allows_rename=product_allows_op(product, "rename"),
         allows_edit_metadata=product_allows_op(product, "edit_metadata"),
+        allows_download=product_allows_op(product, "download"),
     )
 
 

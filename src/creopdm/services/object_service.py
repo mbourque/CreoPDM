@@ -289,6 +289,8 @@ class ObjectService:
         """
         obj = self.get_object(session, object_uuid)
         product = obj.product
+        if product is not None:
+            session.refresh(product)
         ensure_product_allows(product, "remove", action="remove files")
         user = self._users.get_current_user()
         filename = obj.filename
@@ -522,6 +524,8 @@ class ObjectService:
 
         if not jobs:
             return []
+        if product is not None:
+            session.refresh(product)
         ensure_product_allows(product, "checkin", action="add files")
         # Numbered-save collapse follows Settings → Purgeable extensions.
         purgeable = self._purgeable_extensions()

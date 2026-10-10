@@ -47,6 +47,9 @@ def test_checkout_blocked_when_product_in_review(client, repo_parent):
     assert again.json()["allows_mutation"] is False
     assert again.json()["allows_content"] is True
     assert again.json()["allows_edit_metadata"] is False
+    assert again.json()["allows_checkout"] is False
+    assert again.json()["allows_checkin"] is False
+    assert again.json()["allows_download"] is True
 
     page = client.get(f"/?product={product['uuid']}")
     assert page.status_code == 200, page.text

@@ -111,15 +111,23 @@ def test_app_js_does_not_reencode_product_lock():
     assert "allowsMutation" not in sync
     assert "data-allows-content" in _APP_HTML.read_text(encoding="utf-8")
     assert "productAllowsContent" in script
-    # Stale Files after Admin state change: fail-closed GET /api/products before Collect.
-    assert "function reconcileProductLifecycleChrome(" in script
+    # Stale Files after Admin state change: fail-closed GET /api/products before mutations.
+    assert "function assertProductAllows(" in script
     assert "function fetchProductAccess(" in script
-    assert "function productAllowsEditMetadataFromAccess(" in script
-    assert "allows_edit_metadata" in script
-    assert "requireEditMetadata" in script
-    # Must not fail-open when the product GET fails.
-    assert 'return needMeta ? deny(msg)' in script or "Could not verify product access" in script
+    assert "PRODUCT_LIFECYCLE_OPS" in script
+    assert 'assertProductAllows(productId, "edit_metadata")' in script
+    assert 'assertProductAllows(currentProductId(), "checkout")' in script
+    assert 'assertProductAllows(currentProductId(), "checkin")' in script
+    assert 'assertProductAllows(productId, "remove")' in script
+    assert 'assertProductAllows(productId, "checkin"' in script
+    assert 'assertProductAllows(currentProductId(), "download")' in script
     assert "Number(result.status) === 400" in script
+    assert "allows_checkout" in (
+        SRC / "schemas" / "common.py"
+    ).read_text(encoding="utf-8")
+    assert "allows_checkout=product_allows_op" in (
+        SRC / "api" / "serializers.py"
+    ).read_text(encoding="utf-8")
 
 
 def test_rebuild_where_used_and_from_disk_call_ensure():

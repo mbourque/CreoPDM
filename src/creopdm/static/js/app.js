@@ -1686,9 +1686,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const productId = $("#rebuild-where-used-btn")?.dataset.product || currentProductId();
     if (!productId) return;
     showError($("#toolbar-error"), "");
-    const gate = await reconcileProductLifecycleChrome(productId, {
-      requireEditMetadata: true,
-    });
+    const gate = await assertProductAllows(productId, "edit_metadata");
     if (!gate.ok) return;
     const outcome = await indexWhereUsedUnderBusy(productId);
     if (!outcome?.started) {
@@ -2516,9 +2514,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       showOk("Metadata collection is already running.");
       return;
     }
-    const gate = await reconcileProductLifecycleChrome(productId, {
-      requireEditMetadata: true,
-    });
+    const gate = await assertProductAllows(productId, "edit_metadata");
     if (!gate.ok) return;
     // Bridge often arrives after first paint — same wait as Resume.
     showOk("Waiting for Creo.JS…");
@@ -2865,6 +2861,13 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     event.preventDefault();
     const data = new FormData(productForm);
     const renaming = productForm.dataset.mode === "rename";
+    if (renaming) {
+      const productId = $("#rename-product-btn")?.dataset.product || currentProductId();
+      const gate = await assertProductAllows(productId, "rename", {
+        errorEl: $("#product-error"),
+      });
+      if (!gate.ok) return;
+    }
     const body = {
       name: String(data.get("name") || "").trim(),
       number: String(data.get("number") || "").trim() || null,
@@ -3787,6 +3790,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       showError($("#compressed-error"), "Open a product first.");
       return;
     }
+    const zipGate = await assertProductAllows(productId, "checkin", {
+      errorEl: $("#compressed-error"),
+    });
+    if (!zipGate.ok) return;
     if (!chosenZipPath) {
       showError($("#compressed-error"), "Choose a .zip file first.");
       return;
@@ -4185,6 +4192,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     }
     const productId = addForm.dataset.product;
     if (!productId) return;
+    const addGate = await assertProductAllows(productId, "checkin", {
+      errorEl: $("#add-error"),
+    });
+    if (!addGate.ok) return;
     if (
       !chosenPaths.length
       && !chosenBaseFolder
@@ -5789,6 +5800,41 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return raw.replace(/_/g, " ");
   }
 
+  /** Lifecycle matrix ops — must match ProductResponse / product_state.ensure_*. */
+  const PRODUCT_LIFECYCLE_OPS = {
+    checkout: {
+      flag: "allows_checkout",
+      verb: "check out files",
+      fallbackMutation: true,
+    },
+    checkin: {
+      flag: "allows_checkin",
+      verb: "check in or add files",
+      fallbackMutation: true,
+    },
+    remove: {
+      flag: "allows_remove",
+      verb: "remove files",
+      fallbackMutation: true,
+    },
+    rename: {
+      flag: "allows_rename",
+      verb: "rename this product",
+      fallbackMutation: true,
+    },
+    edit_metadata: {
+      flag: "allows_edit_metadata",
+      verb: "update metadata",
+      fallbackMutation: true,
+    },
+    download: {
+      flag: "allows_download",
+      verb: "open or download files from this product",
+      fallbackMutation: false,
+      fallbackContent: true,
+    },
+  };
+
   /** Fresh product row from the API — never trust stale Files DOM for lifecycle. */
   async function fetchProductAccess(productId) {
     const pid = String(productId || "").trim();
@@ -5800,86 +5846,116 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return response.json();
   }
 
-  function productAllowsEditMetadataFromAccess(data) {
-    if (!data || typeof data !== "object") return false;
-    // Prefer explicit flag; fall back to allows_mutation (In Review is false for both).
-    if (typeof data.allows_edit_metadata === "boolean") {
-      return data.allows_edit_metadata;
-    }
-    return data.allows_mutation === true;
+  function productAllowsOpFromAccess(data, op) {
+    const spec = PRODUCT_LIFECYCLE_OPS[op];
+    if (!spec || !data || typeof data !== "object") return false;
+    const flagged = data[spec.flag];
+    if (typeof flagged === "boolean") return flagged;
+    if (spec.fallbackContent) return data.allows_content === true;
+    if (spec.fallbackMutation) return data.allows_mutation === true;
+    return false;
+  }
+
+  function applyProductAccessToMetrics(data) {
+    const metrics = document.getElementById("metric-filters");
+    if (!metrics || !data) return "";
+    const state = String(data.state || "").trim().toUpperCase();
+    const prevState = String(metrics.dataset.productState || "").trim().toUpperCase();
+    if (state) metrics.dataset.productState = state;
+    metrics.dataset.allowsMutation = data.allows_mutation === true ? "1" : "0";
+    metrics.dataset.allowsContent =
+      data.allows_content === true || data.allows_download === true ? "1" : "0";
+    metrics.dataset.allowsCheckout = productAllowsOpFromAccess(data, "checkout") ? "1" : "0";
+    metrics.dataset.allowsCheckin = productAllowsOpFromAccess(data, "checkin") ? "1" : "0";
+    metrics.dataset.allowsRemove = productAllowsOpFromAccess(data, "remove") ? "1" : "0";
+    metrics.dataset.allowsRename = productAllowsOpFromAccess(data, "rename") ? "1" : "0";
+    metrics.dataset.allowsEditMetadata = productAllowsOpFromAccess(data, "edit_metadata")
+      ? "1"
+      : "0";
+    return prevState;
   }
 
   /**
-   * Server is authoritative. Fail closed when Collect/Rebuild need metadata edits.
-   * Soft-reload Files when Admin changed state while this tab stayed open.
+   * Fail-closed lifecycle gate before any mutation. Soft-reloads Files when the
+   * Admin changed product state while this tab stayed open.
    */
-  async function reconcileProductLifecycleChrome(productId, options) {
+  async function assertProductAllows(productId, op, options) {
     const opts = options && typeof options === "object" ? options : {};
-    const needMeta = opts.requireEditMetadata === true;
+    const spec = PRODUCT_LIFECYCLE_OPS[op];
     const pid = String(productId || currentProductId() || "").trim();
-    const metrics = document.getElementById("metric-filters");
+    const errorEl = opts.errorEl || $("#toolbar-error");
     const deny = (message, extra) => {
-      if (opts.showError !== false) {
-        showError($("#toolbar-error"), message);
-      }
+      if (opts.showError !== false) showError(errorEl, message);
       return {
         ok: false,
         reloaded: Boolean(extra?.reloaded),
-        allows_edit_metadata: false,
         state: String(extra?.state || ""),
         message,
+        access: extra?.access || null,
       };
     };
-    if (!pid) {
-      return needMeta ? deny("No product is open.") : { ok: true, reloaded: false };
-    }
+    if (!spec) return deny("Unknown product action.");
+    if (!pid) return deny("No product is open.");
     let data;
     try {
       data = await fetchProductAccess(pid);
     } catch (err) {
-      const msg = String(err?.message || err || "Could not verify product access.");
-      return needMeta ? deny(msg) : { ok: true, reloaded: false };
+      return deny(String(err?.message || err || "Could not verify product access."));
     }
+    const prevState = applyProductAccessToMetrics(data);
     const state = String(data?.state || "").trim().toUpperCase();
-    const allowsMeta = productAllowsEditMetadataFromAccess(data);
-    const allowsMut = data?.allows_mutation === true;
-    const allowsContent = data?.allows_content !== false;
-    const prevState = metrics
-      ? String(metrics.dataset.productState || "").trim().toUpperCase()
-      : "";
-    if (metrics) {
-      metrics.dataset.productState = state || prevState;
-      metrics.dataset.allowsMutation = allowsMut ? "1" : "0";
-      metrics.dataset.allowsContent = allowsContent ? "1" : "0";
-      metrics.dataset.allowsEditMetadata = allowsMeta ? "1" : "0";
-    }
+    const allowed = productAllowsOpFromAccess(data, op);
     const stateDrifted = Boolean(state && prevState && prevState !== state);
-    if (needMeta && !allowsMeta) {
-      const msg = `Product is ${productStateDisplayLabel(state)} and cannot update metadata.`;
-      const result = deny(msg, { state });
-      await reloadPage({
-        keepBusy: Boolean(opts.keepBusy),
-        busyMessage: opts.busyMessage || "Refreshing…",
-      });
-      return { ...result, reloaded: true };
-    }
-    if (stateDrifted) {
-      const msg = "Product state changed — refreshing…";
-      const result = {
-        ok: false,
-        reloaded: true,
-        allows_edit_metadata: allowsMeta,
-        state,
-        message: msg,
-      };
-      if (opts.showError !== false) showError($("#toolbar-error"), msg);
-      await reloadPage({
-        keepBusy: Boolean(opts.keepBusy),
-        busyMessage: opts.busyMessage || "Refreshing…",
-      });
+    if (!allowed) {
+      const msg = `Product is ${productStateDisplayLabel(state)} and cannot ${spec.verb}.`;
+      const result = deny(msg, { state, access: data });
+      if (opts.reloadOnDeny !== false) {
+        await reloadPage({
+          keepBusy: Boolean(opts.keepBusy),
+          busyMessage: opts.busyMessage || "Refreshing…",
+        });
+        return { ...result, reloaded: true };
+      }
       return result;
     }
-    return { ok: true, reloaded: false, allows_edit_metadata: allowsMeta, state };
+    if (stateDrifted && opts.reloadOnDrift !== false) {
+      const msg = "Product state changed — refreshing…";
+      if (opts.showError !== false) showError(errorEl, msg);
+      await reloadPage({
+        keepBusy: Boolean(opts.keepBusy),
+        busyMessage: opts.busyMessage || "Refreshing…",
+      });
+      return {
+        ok: false,
+        reloaded: true,
+        state,
+        message: msg,
+        access: data,
+      };
+    }
+    return { ok: true, reloaded: false, state, access: data };
+  }
+
+  /** @deprecated use assertProductAllows(productId, "edit_metadata") */
+  async function reconcileProductLifecycleChrome(productId, options) {
+    const opts = options && typeof options === "object" ? options : {};
+    if (opts.requireEditMetadata) {
+      return assertProductAllows(productId, "edit_metadata", opts);
+    }
+    const pid = String(productId || currentProductId() || "").trim();
+    if (!pid) return { ok: true, reloaded: false };
+    try {
+      const data = await fetchProductAccess(pid);
+      const prev = applyProductAccessToMetrics(data);
+      const state = String(data?.state || "").trim().toUpperCase();
+      if (state && prev && prev !== state) {
+        await reloadPage({ busyMessage: "Refreshing…" });
+        return { ok: false, reloaded: true, state };
+      }
+      return { ok: true, reloaded: false, state, access: data };
+    } catch {
+      return { ok: true, reloaded: false };
+    }
   }
 
   function currentVaultFolder() {
@@ -7852,6 +7928,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function checkoutBeforeOpen(target, withDependencies) {
     const objectId = openTargetObjectId(target);
     if (!objectId) return [];
+    const gate = await assertProductAllows(currentProductId(), "checkout");
+    if (!gate.ok) return null;
     if (!withDependencies) {
       const result = await postAction(
         `/api/objects/${objectId}/checkout`,
@@ -7896,6 +7974,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   async function openPdmObjectFromUi(target, row) {
+    const openGate = await assertProductAllows(currentProductId(), "download");
+    if (!openGate.ok) return;
     const objectId = openTargetObjectId(target);
     const filename = openTargetFilename(target, row);
     const kind = rowCheckoutKind(row);
@@ -9217,6 +9297,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   async function runCheckoutObjects(objectIds) {
     const ids = [...new Set((objectIds || []).filter(Boolean))];
     if (!ids.length) return false;
+    const gate = await assertProductAllows(currentProductId(), "checkout");
+    if (!gate.ok) return false;
     if (!confirmLargeBulk("Check out", ids.length)) return false;
     showError($("#toolbar-error"), "");
     let checkoutResult = null;
@@ -9344,6 +9426,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   workspaceBtn?.addEventListener("click", async () => {
     const ids = selectedIds();
     if (!ids.length) return;
+    const gate = await assertProductAllows(currentProductId(), "checkin");
+    if (!gate.ok) return;
     const result = await postAction("/api/objects/batch/workspace", { object_ids: ids }, "POST", "Copying to vault…");
     if (!result) return;
     const warning = formatBatch(result);
@@ -9363,6 +9447,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       currentProductId() ||
       "";
     if (!productId) return;
+    const exportGate = await assertProductAllows(productId, "download");
+    if (!exportGate.ok) return;
     const ids = scopeSelected
       ? selectedRows().flatMap(rowObjectIds)
       : [];
@@ -9533,6 +9619,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const fallback = selectedIds();
     const objectIds = [...new Set((ids.length ? ids : fallback).filter(Boolean))];
     if (!objectIds.length) return;
+    const undoGate = await assertProductAllows(currentProductId(), "checkout");
+    if (!undoGate.ok) return;
     const count = objectIds.length;
     const slowNote =
       count > BULK_SLOW_WARN_THRESHOLD
@@ -9593,6 +9681,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const detailId = forceUndoBtn.dataset.uuid;
     const objectIds = [...new Set((ids.length ? ids : detailId ? [detailId] : []).filter(Boolean))];
     if (!objectIds.length) return;
+    const forceGate = await assertProductAllows(currentProductId(), "checkout");
+    if (!forceGate.ok) return;
     const count = objectIds.length;
     const slowNote =
       count > BULK_SLOW_WARN_THRESHOLD
@@ -9664,6 +9754,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const productScope = scope === "product";
     const selected = productScope ? [] : selectedRows();
     const addOnlySelection = !productScope && selectionIsAddOnly(selected);
+    const checkinGate = await assertProductAllows(currentProductId(), "checkin");
+    if (!checkinGate.ok) return;
     if (
       !productScope
       && !selectionCanCheckin(selected)
@@ -10637,6 +10729,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   $("#checkin-cancel")?.addEventListener("click", () => checkinDialog?.close());
   checkinForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const submitGate = await assertProductAllows(currentProductId(), "checkin", {
+      errorEl: $("#checkin-error"),
+      reloadOnDeny: false,
+    });
+    if (!submitGate.ok) return;
     const id = checkinDialog?.dataset.objectId || "";
     const comment = String($("#checkin-comment")?.value || "").trim();
     if (!comment) {
@@ -11212,6 +11309,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     event.preventDefault();
     const productId = createFolderForm.dataset.product || addForm?.dataset.product;
     if (!productId) return;
+    const folderGate = await assertProductAllows(productId, "checkin", {
+      errorEl: $("#create-folder-error"),
+    });
+    if (!folderGate.ok) return;
     const name = String(new FormData(createFolderForm).get("name") || "").trim();
     if (!name) {
       showError($("#create-folder-error"), "Enter a folder name.");
@@ -11521,6 +11622,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       || checkinBtn?.dataset.product
       || openWorkspaceBtn?.dataset.product
       || currentProductId();
+    const removeGate = await assertProductAllows(productId, "remove");
+    if (!removeGate.ok) return;
     const confirmed = await confirmByProductName({
       title:
         folderPaths.length && !ids.length
@@ -12144,6 +12247,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     const versionId = row?.dataset.versionUuid || "";
     const display = row?.dataset.versionDisplay || "this version";
     if (!btn || btn.disabled || !objectId || !versionId || row?.dataset.canRevert !== "1") return;
+    const revertGate = await assertProductAllows(currentProductId(), "checkin");
+    if (!revertGate.ok) return;
     const confirmed = await confirmByProductName({
       title: `Revert to ${display}`,
       lead:

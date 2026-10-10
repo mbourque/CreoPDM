@@ -180,7 +180,13 @@ class ProductResponse(BaseModel):
     state: str = "IN_WORK"
     allows_mutation: bool = True
     allows_content: bool = True
+    # Per lifecycle-matrix op (role caps still apply separately on the server).
+    allows_checkout: bool = True
+    allows_checkin: bool = True
+    allows_remove: bool = True
+    allows_rename: bool = True
     allows_edit_metadata: bool = True
+    allows_download: bool = True
 
 
 class ProductWatchResponse(BaseModel):
