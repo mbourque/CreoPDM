@@ -291,6 +291,7 @@ def test_compare_outline_includes_assembly_simp_reps():
                 {"name": "bracket.prt", "type": "PART", "level": 1, "status": "ACTIVE"},
             ],
             "features": [],
+            "parameters": [{"name": "DESCRIPTION", "value": "x"}],
             "simp_reps": {
                 "active": {"id": 12, "name": "GEOM_ONLY", "is_master": False},
                 "representations": [
@@ -315,6 +316,9 @@ def test_compare_outline_includes_assembly_simp_reps():
     assert "GEOM_ONLY" in text
     assert "default SIMPREP_EXCLUDE" in text
     assert "1 item rule(s)" in text
+    # Keep at end of outline (after Parameters), not buried under Structure.
+    assert text.index("Parameters:") < text.index("Simplified representations")
+    assert text.index("Structure:") < text.index("Simplified representations")
     # Must not invent a Structure delete from exclude rules.
     assert "Features removed" not in text
     assert "deleted" not in text.lower()

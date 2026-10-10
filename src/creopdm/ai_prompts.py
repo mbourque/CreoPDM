@@ -1215,10 +1215,6 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
             # Legacy BOM tree when inventory structure was not captured.
             lines.append("Structure:")
             lines.extend(_format_bom_outline_lines(bom_nodes))
-        simp_lines = _simp_reps_outline_lines(snapshot)
-        if simp_lines:
-            # Exclusion rules are representation context — not assembly deletes.
-            lines.extend(simp_lines)
         if is_asm and (bom_nodes or struct_rows):
             lines.append("Assembly features (non-component):")
         else:
@@ -1280,6 +1276,13 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
         elif not drawing:
             lines.append("Parameters:")
             lines.append("- (none)")
+
+    if not drawing:
+        # End of outline — easy to find; keep clear of Structure so exclude
+        # rules are not read as component deletes.
+        simp_lines = _simp_reps_outline_lines(snapshot)
+        if simp_lines:
+            lines.extend(simp_lines)
 
     return "\n".join(lines) if lines else "(empty snapshot)"
 
