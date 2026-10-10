@@ -721,10 +721,115 @@ def _structure_outline_labels(snapshot: dict[str, Any]) -> list[str]:
     return [_structure_compare_label(row) for row in _structure_nodes(snapshot)]
 
 
+def _simp_reps_dict(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    simp = snapshot.get("simp_reps")
+    return simp if isinstance(simp, dict) else None
+
+
+def _simp_rep_active_name(simp: dict[str, Any] | None) -> str:
+    if not isinstance(simp, dict):
+        return ""
+    active = simp.get("active")
+    if not isinstance(active, dict):
+        return ""
+    name = str(active.get("name") or "").strip()
+    if name:
+        return name
+    return "MASTER" if active.get("is_master") else ""
+
+
+def _simp_rep_named_labels(simp: dict[str, Any] | None) -> list[str]:
+    """Stable labels for named saved representations (definitions, not Structure)."""
+    if not isinstance(simp, dict):
+        return []
+    reps = simp.get("representations")
+    if not isinstance(reps, list):
+        return []
+    labels: list[str] = []
+    for rep in reps:
+        if not isinstance(rep, dict):
+            continue
+        name = str(rep.get("name") or "").strip()
+        if not name:
+            continue
+        bits = [name]
+        default = str(rep.get("default_action") or "").strip()
+        if default:
+            bits.append(f"default {default}")
+        items = rep.get("items")
+        n_items = len(items) if isinstance(items, list) else 0
+        if n_items:
+            bits.append(f"{n_items} item rule(s)")
+        labels.append(" · ".join(bits))
+    return labels
+
+
+def _simp_reps_diff_lines(
+    older: dict[str, Any], newer: dict[str, Any]
+) -> list[str]:
+    """Authoritative SimpRep definition/active diffs for Computed differences."""
+    older_simp = _simp_reps_dict(older)
+    newer_simp = _simp_reps_dict(newer)
+    older_labels = _simp_rep_named_labels(older_simp)
+    newer_labels = _simp_rep_named_labels(newer_simp)
+    older_has = bool(older_labels) or bool(_simp_rep_active_name(older_simp))
+    newer_has = bool(newer_labels) or bool(_simp_rep_active_name(newer_simp))
+    if not older_has and not newer_has:
+        return []
+
+    lines: list[str] = []
+    older_active = _simp_rep_active_name(older_simp)
+    newer_active = _simp_rep_active_name(newer_simp)
+
+    if not older_has and newer_has:
+        # Definitions newly captured on NEW — never call this a removal.
+        lines.append(
+            "Simplified representations added (definitions newly recorded on NEW):"
+        )
+        if newer_active:
+            lines.append(f"- active: {newer_active}")
+        for label in newer_labels:
+            lines.append(f"- {label}")
+        return lines
+
+    if older_has and not newer_has:
+        lines.append(
+            "Simplified representations unavailable on NEW (recorded on OLD only):"
+        )
+        if older_active:
+            lines.append(f"- active: {older_active}")
+        for label in older_labels:
+            lines.append(f"- {label}")
+        return lines
+
+    if older_active and newer_active and older_active != newer_active:
+        lines.append(
+            f"Simplified representation active changed: {older_active} → {newer_active}"
+        )
+
+    older_counts = _count_labels(older_labels)
+    newer_counts = _count_labels(newer_labels)
+    removed: list[str] = []
+    added: list[str] = []
+    for label in sorted(set(older_counts) | set(newer_counts), key=str.lower):
+        delta = newer_counts.get(label, 0) - older_counts.get(label, 0)
+        if delta < 0:
+            removed.extend([label] * (-delta))
+        elif delta > 0:
+            added.extend([label] * delta)
+    if removed:
+        lines.append("Simplified representations removed:")
+        lines.extend(f"- {item}" for item in removed)
+    if added:
+        lines.append("Simplified representations added:")
+        lines.extend(f"- {item}" for item in added)
+    return lines
+
+
 def _simp_reps_outline_lines(snapshot: dict[str, Any]) -> list[str]:
     """Assembly simplified representation definitions (not BOM membership)."""
-    simp = snapshot.get("simp_reps")
-    if not isinstance(simp, dict):
+    simp = _simp_reps_dict(snapshot)
+    if not simp:
         return []
     reps = simp.get("representations")
     if not isinstance(reps, list) or not reps:
@@ -768,7 +873,6 @@ def _simp_reps_outline_lines(snapshot: dict[str, Any]) -> list[str]:
             bits.append("instructions unavailable")
         lines.append("- " + " · ".join(bits))
     return lines
-
 
 def _count_labels(labels: list[str]) -> dict[str, int]:
     counts: dict[str, int] = {}
@@ -894,6 +998,11 @@ def format_snapshot_compare_diff_text(
             *_bullet_block("Dimensions added", dim_added),
         ]
     )
+    # SimpRep defs/active — keep out of Structure; force into Computed differences
+    # so Ask AI cannot miss "NEW has Simplified representations, OLD does not."
+    simp_diff = _simp_reps_diff_lines(older, newer)
+    if simp_diff:
+        lines.extend(simp_diff)
     return "\n".join(lines)
 
 

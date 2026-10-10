@@ -332,6 +332,97 @@ def test_compare_outline_includes_assembly_simp_reps():
     assert "deleted" not in text.lower()
 
 
+def test_computed_diff_reports_simp_reps_added_when_only_on_new():
+    """Ask AI must see SimpRep defs in Computed differences (not buried in Structure)."""
+    older = {
+        "identity": {"filename": "conveyor.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "tube.prt", "type": "PART", "level": 1}],
+        "features": [],
+    }
+    newer = {
+        "identity": {"filename": "conveyor.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "tube.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "simp_reps": {
+            "active": {"id": None, "name": "MASTER", "is_master": True},
+            "representations": [
+                {
+                    "name": "NO_HARDWARE",
+                    "default_action": "SIMPREP_EXCLUDE",
+                    "items": [{"path": [1]}],
+                },
+                {
+                    "name": "NO_PLATE",
+                    "default_action": "SIMPREP_EXCLUDE",
+                    "items": [{"path": [2]}],
+                },
+            ],
+        },
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Simplified representations added (definitions newly recorded on NEW):" in diff
+    assert "active: MASTER" in diff
+    assert "NO_HARDWARE" in diff
+    assert "NO_PLATE" in diff
+    assert "Components removed: (none)" in diff or "Components removed" in diff
+
+
+def test_computed_diff_reports_simp_rep_active_change():
+    older = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "a.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "simp_reps": {
+            "active": {"name": "MASTER", "is_master": True},
+            "representations": [
+                {"name": "LIGHT", "default_action": "SIMPREP_INCLUDE", "items": []},
+            ],
+        },
+    }
+    newer = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "a.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "simp_reps": {
+            "active": {"id": 12, "name": "LIGHT", "is_master": False},
+            "representations": [
+                {"name": "LIGHT", "default_action": "SIMPREP_INCLUDE", "items": []},
+            ],
+        },
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Simplified representation active changed: MASTER → LIGHT" in diff
+    assert "Simplified representations added" not in diff
+    assert "Simplified representations removed" not in diff
+
+
+def test_computed_diff_omits_simp_reps_when_unchanged():
+    simp = {
+        "active": {"name": "MASTER", "is_master": True},
+        "representations": [
+            {
+                "name": "NO_HARDWARE",
+                "default_action": "SIMPREP_EXCLUDE",
+                "items": [{"path": [1]}],
+            },
+        ],
+    }
+    older = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "a.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "simp_reps": simp,
+    }
+    newer = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "a.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "simp_reps": simp,
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Simplified representations" not in diff
+
+
 def test_compare_diff_detects_drawing_note_change():
     older = {
         "identity": {"filename": "plate.drw", "model_type": "DRAWING"},
