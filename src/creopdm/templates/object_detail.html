@@ -753,19 +753,18 @@
 
 <dialog id="ai-snapshot-result-dialog" class="dialog ai-snapshot-result-dialog"
         aria-labelledby="ai-snapshot-result-title">
-  <div class="ai-snapshot-result-inner">
-    <header class="ai-snapshot-result-head">
-      <h2 id="ai-snapshot-result-title">What changed</h2>
-      <p class="muted small" id="ai-snapshot-result-meta"></p>
-    </header>
+  {# Same .dialog form padding/chrome as Check In and other modals. #}
+  <form method="dialog" id="ai-snapshot-result-form">
+    <h2 id="ai-snapshot-result-title">What changed</h2>
+    <p class="muted small" id="ai-snapshot-result-meta"></p>
     <div class="ai-snapshot-result-body" id="ai-snapshot-result-body" tabindex="0"></div>
     <div class="dialog-actions">
       <button type="button" class="btn" id="ai-snapshot-result-copy" hidden
               title="Copy to the clipboard">Copy</button>
-      <button type="button" class="btn btn-primary" id="ai-snapshot-result-close"
-              title="Close (Esc)">Close</button>
+      <button type="submit" class="btn btn-primary" id="ai-snapshot-result-close"
+              value="close" title="Close (Esc)">Close</button>
     </div>
-  </div>
+  </form>
 </dialog>
 
 <dialog id="checkin-dialog" class="dialog">

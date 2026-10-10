@@ -505,12 +505,15 @@ def test_snapshot_tab_template_and_docs():
     assert 'id="ai-snapshot-what-changed"' in html
     assert "What changed" in html
     assert 'id="ai-snapshot-result-dialog"' in html
+    assert 'id="ai-snapshot-result-form"' in html
+    assert "method=\"dialog\"" in html
     assert "openAiSnapshotResultDialog" in script
     assert "formatAiWhatChangedDisplay" in script
     assert "No computed differences." in script
     assert "event.target === resultDialog" in script
     assert ".dialog.ai-snapshot-result-dialog::backdrop" in css
     assert "ai-snapshot-result-body" in css
+    assert "border: 1px solid #c5ccd6" in css
     assert "/ai-snapshot/what-changed" in script
     assert "/ai-snapshot/what-changed-pending" in script
     assert "showAiWhatChanged" in script
