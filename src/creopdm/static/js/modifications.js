@@ -863,13 +863,18 @@ window.__creopdmModules.modifications = {
     }
 
     function syncAiSnapshotScrollLayout() {
+      const panel = aiSnapshotPanel();
       const rail = $("#ai-snapshot-scroll");
       const spacer = $("#ai-snapshot-scroll-spacer");
       const bodyA = $("#ai-snapshot-body-a");
       const bodyB = $("#ai-snapshot-body-b");
       const clipA = $("#ai-snapshot-clip-a");
       if (!rail || !spacer || !bodyA || !bodyB) return;
+      // Hidden tab → clientHeight/scrollHeight are 0. Do not collapse the spacer
+      // (resize while on Overview used to kill center scroll until hard refresh).
+      if (panel?.hidden) return;
       const viewH = clipA?.clientHeight || rail.clientHeight || 0;
+      if (viewH < 8) return;
       const contentH = Math.max(
         bodyA.scrollHeight || 0,
         bodyB.scrollHeight || 0,
@@ -887,12 +892,18 @@ window.__creopdmModules.modifications = {
       if (bodyB) bodyB.style.transform = `translateY(${y}px)`;
     }
 
+    function scheduleAiSnapshotScrollSync() {
+      // Double rAF: first paint after unhide often still has clip height 0.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => syncAiSnapshotScrollLayout());
+      });
+    }
+
     function resetAiSnapshotScroll() {
       const rail = $("#ai-snapshot-scroll");
       if (rail) rail.scrollTop = 0;
       applyAiSnapshotScrollOffset(0);
-      // Layout after paint so clip heights are real.
-      requestAnimationFrame(() => syncAiSnapshotScrollLayout());
+      scheduleAiSnapshotScrollSync();
     }
 
     async function fetchAiSnapshotOutline(objectId, versionId) {
@@ -1597,6 +1608,7 @@ window.__creopdmModules.modifications = {
         if (body) {
           body.textContent = `Could not load snapshot list (${err?.message || "error"}).`;
         }
+        resetAiSnapshotScroll();
       }
     }
 
@@ -2013,8 +2025,11 @@ window.__creopdmModules.modifications = {
 
     function bindAiSnapshotControls() {
       const panel = aiSnapshotPanel();
-      if (!panel || panel.dataset.aiSnapshotBound === "1") return;
-      panel.dataset.aiSnapshotBound = "1";
+      if (!panel) return;
+      // Soft-boot aborts prior pageSignal listeners; always rebind. Do not gate on
+      // data-ai-snapshot-bound — that skipped wheel/scroll after abort and left
+      // center scroll dead until a hard refresh.
+      delete panel.dataset.aiSnapshotBound;
       const objectId = String(panel.dataset.objectId || "").trim();
       ["a", "b"].forEach((pane) => {
         onPage($(`#ai-snapshot-rev-${pane}`), "change", () => {
@@ -2051,9 +2066,8 @@ window.__creopdmModules.modifications = {
         });
       });
       const rail = $("#ai-snapshot-scroll");
-      const compare = $("#ai-snapshot-compare");
       onPage(rail, "scroll", () => {
-        applyAiSnapshotScrollOffset(rail.scrollTop || 0);
+        applyAiSnapshotScrollOffset(rail?.scrollTop || 0);
       });
       // Wheel over either text pane drives the center scrollbar only.
       const diffRow = $("#ai-snapshot-diff-row");
@@ -2061,16 +2075,34 @@ window.__creopdmModules.modifications = {
         diffRow,
         "wheel",
         (event) => {
-          if (!rail) return;
+          const liveRail = $("#ai-snapshot-scroll");
+          if (!liveRail) return;
           if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
           event.preventDefault();
-          rail.scrollTop += event.deltaY;
+          liveRail.scrollTop += event.deltaY;
         },
         { passive: false }
       );
       onPage(window, "resize", () => {
         syncAiSnapshotScrollLayout();
       });
+      // Unhide / flex settle: remeasure spacer when the compare row gets a real height.
+      if (diffRow && typeof ResizeObserver === "function") {
+        const ro = new ResizeObserver(() => {
+          syncAiSnapshotScrollLayout();
+        });
+        ro.observe(diffRow);
+        const pageSignal = shell.pageSignal;
+        if (pageSignal && typeof pageSignal.addEventListener === "function") {
+          pageSignal.addEventListener("abort", () => {
+            try {
+              ro.disconnect();
+            } catch {
+              /* ignore */
+            }
+          });
+        }
+      }
       onPage($("#ai-snapshot-what-changed"), "click", () => {
         void showAiWhatChanged();
       });

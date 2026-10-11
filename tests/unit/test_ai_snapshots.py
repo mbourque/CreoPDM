@@ -467,6 +467,18 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "=== ${roleLabel} (${rev}) ===" in script
     assert "function syncAiSnapshotScrollLayout(" in script
     assert "ai-snapshot-scroll-rail" in script or "ai-snapshot-scroll" in script
+    # Regression: center scroll dies after Overview resize / soft-boot if spacer
+    # is zeroed while the tab is hidden, or if bind skips after pageSignal abort.
+    assert "if (panel?.hidden) return;" in script
+    assert "if (viewH < 8) return;" in script
+    assert "function scheduleAiSnapshotScrollSync(" in script
+    assert "new ResizeObserver(" in script.split(
+        "function bindAiSnapshotControls(", 1
+    )[1].split("mod.loadAiSnapshotTab =", 1)[0]
+    assert 'delete panel.dataset.aiSnapshotBound;' in script
+    assert 'Do not gate on' in script.split(
+        "function bindAiSnapshotControls(", 1
+    )[1].split("mod.loadAiSnapshotTab =", 1)[0]
     assert "async function askAiSnapshotCompare(" in script
     assert "/ai-snapshot/compare" in script
     assert 'withBusy("Asking AI what changed…"' in script
