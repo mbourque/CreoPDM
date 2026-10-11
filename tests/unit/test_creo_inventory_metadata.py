@@ -164,6 +164,9 @@ def test_assembly_inventory_gathers_constraints():
         assert "captureComponentConstraints" in body, label
         # NotFound → empty list, not capture failure.
         assert "raw = []" in body, label
+        # Creo returns Offset=0 for Coincident — drop unless type allows offset.
+        assert "function constraintTypeAllowsOffset(" in body, label
+        assert "MATE_OFF" in body, label
     assert "listAssemblyConstraintsForModel: listAssemblyConstraintsForModel" in asm
     assert "function listSessionAssemblyConstraints(" in asm
     text = BASE_HTML.read_text(encoding="utf-8")
@@ -541,7 +544,7 @@ def test_computed_diff_omits_simp_reps_when_unchanged():
 
 def _sample_constraints_envelope(*, offset=5.0, order_flip=False, duplicate=False):
     c1 = {
-        "type": "ASM_CONSTRAINT_MATE",
+        "type": "ASM_CONSTRAINT_MATE_OFF",
         "offset": offset,
         "offset_units": "mm",
         "assembly_reference": {"model": "top.asm", "item_id": 1, "item_name": "FRONT"},
@@ -595,10 +598,102 @@ def test_compare_outline_includes_assembly_constraints():
     )
     assert "Assembly constraints:" in text
     assert "bracket.prt (40/41)" in text
-    assert "Mate" in text
+    assert "Mate Off" in text
     assert "offset 5 mm" in text
     assert text.index("Parameters:") < text.index("Assembly constraints:")
     assert "\n\nAssembly constraints:" in text
+
+
+def test_compare_outline_omits_offset_for_align_mate_coincident():
+    """API Offset=0 on Align/Mate is Creo UI noise (grayed) — do not outline it."""
+    text = format_snapshot_compare_text(
+        {
+            "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+            "features": [],
+            "constraints": {
+                "ok": True,
+                "components": [
+                    {
+                        "component_id": 41,
+                        "component_path": [41],
+                        "model_name": "base-plate.prt",
+                        "capture_status": "ok",
+                        "constraints": [
+                            {
+                                "type": "ASM_CONSTRAINT_ALIGN",
+                                "offset": 0,
+                                "offset_units": "mm",
+                            },
+                            {
+                                "type": "ASM_CONSTRAINT_MATE",
+                                "offset": 0.0,
+                                "offset_units": "mm",
+                            },
+                            {
+                                "type": "ASM_CONSTRAINT_MATE_OFF",
+                                "offset": 0.268,
+                                "offset_units": "mm",
+                            },
+                            {
+                                "type": "ASM_CONSTRAINT_MATE_OFF",
+                                "offset": 0,
+                                "offset_units": "mm",
+                            },
+                        ],
+                    }
+                ],
+            },
+        }
+    )
+    assert "Align" in text
+    assert "Mate" in text
+    assert "Mate Off · offset 0.268 mm" in text
+    assert "Mate Off · offset 0 mm" in text
+    # Coincident Align/Mate must not print offset 0.
+    assert "Align · offset" not in text
+    assert "Mate · offset" not in text
+
+
+def test_computed_diff_ignores_align_offset_zero_noise():
+    """Stored Align offset 0 vs null must not look like a constraint change."""
+    older = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "features": [],
+        "constraints": {
+            "ok": True,
+            "components": [
+                {
+                    "component_id": 1,
+                    "component_path": [1],
+                    "model_name": "a.prt",
+                    "capture_status": "ok",
+                    "constraints": [
+                        {"type": "ASM_CONSTRAINT_ALIGN", "offset": 0, "offset_units": "mm"}
+                    ],
+                }
+            ],
+        },
+    }
+    newer = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "features": [],
+        "constraints": {
+            "ok": True,
+            "components": [
+                {
+                    "component_id": 1,
+                    "component_path": [1],
+                    "model_name": "a.prt",
+                    "capture_status": "ok",
+                    "constraints": [
+                        {"type": "ASM_CONSTRAINT_ALIGN", "offset": None, "offset_units": None}
+                    ],
+                }
+            ],
+        },
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Assembly constraints" not in diff
 
 
 def test_computed_diff_reports_constraint_offset_change():
@@ -617,6 +712,7 @@ def test_computed_diff_reports_constraint_offset_change():
     diff = format_snapshot_compare_diff_text(older, newer)
     assert "Assembly constraints changed (bracket.prt (40/41)):" in diff
     assert "offset 5 mm → 10 mm" in diff
+    # Mate Off keeps a real offset; Align/Mate coincident zeros are stripped elsewhere.
 
 
 def test_computed_diff_omits_constraints_on_reorder_only():
@@ -706,6 +802,7 @@ def test_computed_diff_not_captured_when_constraints_missing_on_old():
 
 
 def test_computed_diff_null_offset_not_equal_to_zero():
+    """On Mate Offset, null vs numeric 0 is a real change (Offset UI enabled)."""
     older = {
         "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
         "structure": [{"name": "a.prt", "type": "PART", "level": 1}],
@@ -719,7 +816,11 @@ def test_computed_diff_null_offset_not_equal_to_zero():
                     "model_name": "a.prt",
                     "capture_status": "ok",
                     "constraints": [
-                        {"type": "ASM_CONSTRAINT_ALIGN", "offset": None, "offset_units": None}
+                        {
+                            "type": "ASM_CONSTRAINT_MATE_OFF",
+                            "offset": None,
+                            "offset_units": None,
+                        }
                     ],
                 }
             ],
@@ -738,7 +839,11 @@ def test_computed_diff_null_offset_not_equal_to_zero():
                     "model_name": "a.prt",
                     "capture_status": "ok",
                     "constraints": [
-                        {"type": "ASM_CONSTRAINT_ALIGN", "offset": 0.0, "offset_units": "mm"}
+                        {
+                            "type": "ASM_CONSTRAINT_MATE_OFF",
+                            "offset": 0.0,
+                            "offset_units": "mm",
+                        }
                     ],
                 }
             ],

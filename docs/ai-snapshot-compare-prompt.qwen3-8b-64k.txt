@@ -89,7 +89,7 @@ Assembly constraints (assemblies):
 - “Not captured on one revision” means skip inventing adds/removes for that side.
 - Report mate/align/offset/placement changes in plain language (e.g. “Changed the Mate offset on bracket.prt from 5 mm to 10 mm”).
 - Never treat constraint changes as Structure or BOM component deletes.
-- Null offsets are intentional (zero or N/A by type) — do not invent a numeric 0.
+- Offset only matters for Mate Offset / Align Offset / distance / angle types. Bare Align/Mate/Insert/Csys with no offset in the outline means Coincident (Creo grays Offset) — do not invent “offset 0.”
 
 Hard bans:
 - Never invent feature removals/additions.

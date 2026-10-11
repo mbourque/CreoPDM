@@ -733,6 +733,31 @@ def _simp_reps_dict(snapshot: dict[str, Any]) -> dict[str, Any] | None:
 _CONSTRAINT_OFFSET_EPS = 1e-6
 
 
+def _constraint_type_allows_offset(type_raw: Any) -> bool:
+    """True when Creo UI enables Offset (Mate Offset / Align Offset / dist / angle)."""
+    u = str(type_raw or "").upper().replace("PFCCOMPONENTCONSTRAINTTYPE_", "")
+    if not u:
+        return False
+    if "MATE_OFF" in u or "ALIGN_OFF" in u:
+        return True
+    if "_DIST" in u:
+        return True
+    if "_ANG" in u or "ANGLE" in u:
+        return True
+    if "ORIENT" in u:
+        return True
+    return False
+
+
+def _constraint_effective_offset(constraint: dict[str, Any]) -> Any:
+    """Offset value for compare/outline — null when type has no Offset (API often returns 0)."""
+    if not isinstance(constraint, dict):
+        return None
+    if not _constraint_type_allows_offset(constraint.get("type")):
+        return None
+    return constraint.get("offset")
+
+
 def _constraints_dict(snapshot: dict[str, Any]) -> dict[str, Any] | None:
     cons = snapshot.get("constraints")
     return cons if isinstance(cons, dict) else None
@@ -807,8 +832,8 @@ def _constraint_ref_key(ref: Any) -> str:
 
 
 def _constraint_offset_key(constraint: dict[str, Any]) -> str:
-    """Null-aware offset key — null is not the same as numeric 0."""
-    offset = constraint.get("offset")
+    """Null-aware offset key — null is not the same as numeric 0; N/A types → null."""
+    offset = _constraint_effective_offset(constraint)
     if offset is None:
         return "null"
     try:
@@ -820,8 +845,8 @@ def _constraint_offset_key(constraint: dict[str, Any]) -> str:
 
 
 def _constraint_offsets_equal(a: dict[str, Any], b: dict[str, Any]) -> bool:
-    ao = a.get("offset")
-    bo = b.get("offset")
+    ao = _constraint_effective_offset(a)
+    bo = _constraint_effective_offset(b)
     if ao is None and bo is None:
         return True
     if ao is None or bo is None:
@@ -866,7 +891,7 @@ def _constraint_fingerprint(constraint: dict[str, Any]) -> str:
 
 def _constraint_outline_line(constraint: dict[str, Any]) -> str:
     bits = [_constraint_type_label(constraint.get("type"))]
-    offset = constraint.get("offset")
+    offset = _constraint_effective_offset(constraint)
     if offset is not None:
         units = str(constraint.get("offset_units") or "").strip()
         try:
@@ -938,14 +963,15 @@ def _constraint_field_deltas(
         )
     if not _constraint_offsets_equal(older_c, newer_c):
         def _off_label(c: dict[str, Any]) -> str:
-            if c.get("offset") is None:
+            off = _constraint_effective_offset(c)
+            if off is None:
                 return "(null)"
             units = str(c.get("offset_units") or "").strip()
             try:
-                num = float(c["offset"])
+                num = float(off)
                 text = f"{num:g}"
             except (TypeError, ValueError):
-                text = str(c.get("offset"))
+                text = str(off)
             return f"{text} {units}".strip()
 
         deltas.append(f"offset {_off_label(older_c)} → {_off_label(newer_c)}")

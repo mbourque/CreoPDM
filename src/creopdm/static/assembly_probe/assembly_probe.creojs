@@ -1534,6 +1534,30 @@ function readPlacementFlags(component) {
   return placement;
 }
 
+/**
+ * Creo UI grays Offset for Coincident (Align/Mate), Insert, Csys, etc.
+ * Toolkit still returns Offset=0 — only keep offset for types that use it.
+ */
+function constraintTypeAllowsOffset(typeStr) {
+  var u = String(typeStr || "")
+    .toUpperCase()
+    .replace(/^PFCCOMPONENTCONSTRAINTTYPE_/, "");
+  if (!u) return false;
+  if (u.indexOf("MATE_OFF") >= 0) return true;
+  if (u.indexOf("ALIGN_OFF") >= 0) return true;
+  if (u.indexOf("_DIST") >= 0) return true;
+  if (u.indexOf("_ANG") >= 0 || u.indexOf("ANGLE") >= 0) return true;
+  if (u.indexOf("ORIENT") >= 0) return true;
+  return false;
+}
+
+function constraintDatumSideText(value) {
+  var s = constraintEnumText(value);
+  if (!s) return null;
+  if (/_nil$/i.test(s) || String(s).toUpperCase() === "NIL") return null;
+  return s;
+}
+
 function mapOneConstraint(constraint, offsetUnits) {
   if (!constraint) return null;
   var attributes = null;
@@ -1542,21 +1566,25 @@ function mapOneConstraint(constraint, offsetUnits) {
   } catch (e) {
     attributes = null;
   }
+  var typeLabel = constraintEnumText(constraint.Type);
   var offset = null;
   try {
     if (constraint.Offset !== undefined) offset = constraint.Offset;
   } catch (e2) {
     offset = null;
   }
-  // Preserve API null (zero or N/A by type) — never invent 0.
+  // Preserve API null; never invent 0. Drop numeric offset when type has no Offset UI.
   if (offset !== null && offset !== undefined) {
     var n = Number(offset);
     offset = isNaN(n) ? offset : n;
   } else {
     offset = null;
   }
+  if (!constraintTypeAllowsOffset(typeLabel)) {
+    offset = null;
+  }
   return {
-    type: constraintEnumText(constraint.Type),
+    type: typeLabel,
     offset: offset,
     offset_units: offset != null ? offsetUnits || null : null,
     assembly_reference: constraintReferenceData(
@@ -1577,7 +1605,7 @@ function mapOneConstraint(constraint, offsetUnits) {
         }
       })()
     ),
-    assembly_datum_side: constraintEnumText(
+    assembly_datum_side: constraintDatumSideText(
       (function () {
         try {
           return constraint.AssemblyDatumSide;
@@ -1586,7 +1614,7 @@ function mapOneConstraint(constraint, offsetUnits) {
         }
       })()
     ),
-    component_datum_side: constraintEnumText(
+    component_datum_side: constraintDatumSideText(
       (function () {
         try {
           return constraint.ComponentDatumSide;
