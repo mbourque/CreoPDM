@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import stat
 from pathlib import Path
 
 from tests.pytest_basetemp import cleanup_stale_pytest_tmp
@@ -31,6 +32,32 @@ def test_cleanup_stale_pytest_tmp_removes_plain_pytest_tmp(tmp_path: Path):
     assert not legacy.exists()
 
 
+def test_cleanup_stale_pytest_tmp_removes_readonly_tree(tmp_path: Path):
+    """Windows often leaves read-only files; cleanup must still wipe the tree."""
+    tree = tmp_path / "pytest-tmp-readonly"
+    nested = tree / "a" / "b"
+    nested.mkdir(parents=True)
+    locked = nested / "creopdm.db"
+    locked.write_bytes(b"x")
+    locked.chmod(stat.S_IREAD)
+    tree.chmod(stat.S_IREAD)
+    assert cleanup_stale_pytest_tmp(tmp_path, retries=2, retry_delay_s=0.01) == 1
+    assert not tree.exists()
+
+
+def test_cleanup_after_session_removes_all_without_keep():
+    """sessionfinish must scrub every pytest-tmp* (no keep of the current run)."""
+    root = Path(__file__).resolve().parents[2]
+    conftest = (root / "tests" / "conftest.py").read_text(encoding="utf-8")
+    finish = conftest.split("def pytest_sessionfinish", 1)[1].split(
+        "@pytest.fixture", 1
+    )[0]
+    assert "cleanup_stale_pytest_tmp(root" in finish
+    assert "keep=" not in finish
+    assert "retries=" in finish
+    assert "shutil.rmtree" not in finish
+
+
 def test_conftest_scrubs_before_and_after_session():
     """Any pytest invocation must hook cleanup in configure + sessionfinish."""
     root = Path(__file__).resolve().parents[2]
@@ -41,3 +68,6 @@ def test_conftest_scrubs_before_and_after_session():
     assert conftest.index("cleanup_stale_pytest_tmp(root)") < conftest.index(
         'config.option.basetemp = str(base)'
     )
+    helper = (root / "tests" / "pytest_basetemp.py").read_text(encoding="utf-8")
+    assert "def _rmtree_force(" in helper
+    assert "gc.collect()" in helper

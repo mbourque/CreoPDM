@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -45,15 +44,10 @@ def pytest_configure(config):
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """Drop this run's basetemp when possible so the tree does not pile up."""
+    """Remove every repo-root pytest-tmp* dir after the run (this run + leftovers)."""
     root = Path(session.config.rootpath)
-    configured = getattr(session.config.option, "basetemp", None)
-    if configured:
-        base = Path(str(configured))
-        if base.exists() and base.name.startswith("pytest-tmp"):
-            shutil.rmtree(base, ignore_errors=True)
-    # Second pass for anything left from parallel/aborted runs.
-    cleanup_stale_pytest_tmp(root)
+    # Retries + gc: Windows often still holds creopdm.db until handles close.
+    cleanup_stale_pytest_tmp(root, retries=5, retry_delay_s=0.2)
 
 
 @pytest.fixture(autouse=True)
