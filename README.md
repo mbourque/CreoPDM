@@ -325,7 +325,7 @@ That file is labeled for **`qwen3-8b-64k:latest`**. To use it on a CreoPDM serve
 4. Open the prompt file, copy the prompt body (**omit the `#` header lines** at the top), and paste into **snapshot compare prompt**.
 5. Save. Details → Ask AI / Check In → Ask AI for comment use that system prompt with the OLD/NEW outlines CreoPDM builds.
 
-The live prompt lives in server settings (`settings.json`), not in git. The `docs/` file is the hand-out / backup copy for new installs.
+The live prompt lives in server settings (`settings.json`), not in git. The `docs/` file is the hand-out / backup copy for new installs. After the hand-out file changes (for example assembly-constraints rules), re-paste into **snapshot compare prompt** and Save if you want the server to pick up the new wording.
 
 ## Tests
 

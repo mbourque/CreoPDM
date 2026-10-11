@@ -80,10 +80,13 @@ def _snapshot_with_bom_fallback(
             changed = True
     need_struct = not (isinstance(merged.get("structure"), list) and merged.get("structure"))
     need_simp = not (isinstance(merged.get("simp_reps"), dict) and merged.get("simp_reps"))
-    if need_struct or need_simp:
+    need_cons = not (
+        isinstance(merged.get("constraints"), dict) and merged.get("constraints")
+    )
+    if need_struct or need_simp or need_cons:
         from creopdm.services.metadata_service import unpack_features_json
 
-        _feats, struct, simp = unpack_features_json(
+        _feats, struct, simp, cons = unpack_features_json(
             _loads(getattr(version, "features_json", None))
         )
         if need_struct and isinstance(struct, list) and struct:
@@ -100,6 +103,9 @@ def _snapshot_with_bom_fallback(
                 simp.get("active"), dict
             ):
                 capture["assembly_context"] = {"active_simp_rep": simp.get("active")}
+        if need_cons and isinstance(cons, dict) and cons:
+            merged["constraints"] = cons
+            changed = True
     return merged if changed else snapshot
 
 

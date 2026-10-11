@@ -584,3 +584,73 @@ def test_assembly_simp_reps_roundtrip_on_creo_metadata(client, repo_parent, tmp_
     assert fetched.status_code == 200, fetched.text
     assert fetched.json()["simp_reps"]["representations"][0]["name"] == "LIGHT"
     assert fetched.json()["simp_reps"]["active"]["is_master"] is True
+
+
+@requires_git
+def test_assembly_constraints_roundtrip_on_creo_metadata(client, repo_parent, tmp_path):
+    """Saved assembly constraints persist on the model version envelope."""
+    product = _create_product(client, repo_parent)
+    frame = _add_part(client, product["uuid"], tmp_path, "frame.asm.1")
+    constraints = {
+        "ok": True,
+        "fileName": "frame.asm",
+        "components": [
+            {
+                "component_id": 41,
+                "component_path": [41],
+                "model_name": "bracket.prt",
+                "capture_status": "ok",
+                "error": None,
+                "placement": {
+                    "placed": True,
+                    "packaged": False,
+                    "underconstrained": False,
+                    "frozen": False,
+                },
+                "constraints": [
+                    {
+                        "type": "ASM_CONSTRAINT_MATE",
+                        "offset": 5.0,
+                        "offset_units": "mm",
+                        "assembly_reference": {
+                            "model": "frame.asm",
+                            "item_id": 1,
+                            "item_name": "FRONT",
+                        },
+                        "component_reference": {
+                            "model": "bracket.prt",
+                            "item_id": 2,
+                            "item_name": "TOP",
+                        },
+                        "attributes": {"ignore": False, "force": False},
+                    }
+                ],
+            }
+        ],
+        "errors": [],
+    }
+    posted = client.post(
+        f"/api/objects/{frame['uuid']}/creo-metadata",
+        json={
+            "identity": {"file_name": "frame.asm", "model_type": "ASSEMBLY"},
+            "structure": [
+                {
+                    "name": "bracket.prt",
+                    "type": "PART",
+                    "level": 1,
+                    "status": "ACTIVE",
+                    "path": "41",
+                }
+            ],
+            "constraints": constraints,
+        },
+    )
+    assert posted.status_code == 200, posted.text
+    body = posted.json()
+    assert body["constraints"] == constraints
+    assert body["structure"][0]["name"] == "bracket.prt"
+
+    fetched = client.get(f"/api/objects/{frame['uuid']}/creo-metadata")
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["constraints"]["components"][0]["model_name"] == "bracket.prt"
+    assert fetched.json()["constraints"]["components"][0]["constraints"][0]["offset"] == 5.0

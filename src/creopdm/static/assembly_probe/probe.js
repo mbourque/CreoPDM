@@ -4,6 +4,7 @@
   var statusNode = document.getElementById("status");
   var rowsNode = document.getElementById("rows");
   var btnList = document.getElementById("btn-list");
+  var btnConstraints = document.getElementById("btn-constraints");
   var btnCopy = document.getElementById("btn-copy");
   var lastPayload = null;
 
@@ -22,17 +23,16 @@
 
   function setBusy(busy) {
     btnList.disabled = busy;
+    if (btnConstraints) btnConstraints.disabled = busy;
     if (busy) btnCopy.disabled = true;
   }
 
-  function requireCreo() {
-    if (
-      typeof CreoJS === "undefined" ||
-      typeof CreoJS.listSessionAssemblyStructure !== "function"
-    ) {
+  function requireCreo(fnName) {
+    var name = fnName || "listSessionAssemblyStructure";
+    if (typeof CreoJS === "undefined" || typeof CreoJS[name] !== "function") {
       setStatus(
         "err",
-        "CreoJS.listSessionAssemblyStructure is missing. Open this page in Creo's embedded browser."
+        "CreoJS." + name + " is missing. Open this page in Creo's embedded browser."
       );
       return false;
     }
@@ -132,7 +132,7 @@
   }
 
   function listStructure() {
-    if (!requireCreo()) return;
+    if (!requireCreo("listSessionAssemblyStructure")) return;
     setBusy(true);
     setStatus("", "Listing…");
     CreoJS.listSessionAssemblyStructure()
@@ -157,7 +157,52 @@
       });
   }
 
+  function finishConstraints(result) {
+    setBusy(false);
+    if (result == null || typeof result !== "object") {
+      lastPayload = { ok: false, error: "listSessionAssemblyConstraints returned empty." };
+      setStatus("err", lastPayload.error);
+      btnCopy.disabled = false;
+      return;
+    }
+    if (result.ok === false) {
+      lastPayload = result;
+      setStatus("err", result.error || "listSessionAssemblyConstraints failed.");
+      btnCopy.disabled = false;
+      return;
+    }
+    lastPayload = result;
+    var n = Array.isArray(result.components) ? result.components.length : 0;
+    var errN = Array.isArray(result.errors) ? result.errors.length : 0;
+    setStatus(
+      "ok",
+      "Constraints: " + n + " component(s)" + (errN ? "; " + errN + " walk warning(s)" : "") +
+        ". Copy JSON to inspect."
+    );
+    btnCopy.disabled = false;
+  }
+
+  function listConstraints() {
+    if (!requireCreo("listSessionAssemblyConstraints")) return;
+    setBusy(true);
+    setStatus("", "Capturing constraints…");
+    CreoJS.listSessionAssemblyConstraints()
+      .then(function (result) {
+        finishConstraints(result);
+      })
+      .catch(function (error) {
+        setBusy(false);
+        lastPayload = {
+          ok: false,
+          error: error && error.message ? error.message : String(error)
+        };
+        setStatus("err", lastPayload.error);
+        btnCopy.disabled = false;
+      });
+  }
+
   btnList.addEventListener("click", listStructure);
+  if (btnConstraints) btnConstraints.addEventListener("click", listConstraints);
   btnCopy.addEventListener("click", function () {
     if (!lastPayload) return;
     var text = JSON.stringify(lastPayload, null, 2);

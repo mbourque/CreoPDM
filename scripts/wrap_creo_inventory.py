@@ -36,6 +36,8 @@ CONFIGS = [
         "extra_exports": [
             {"name": "listAssemblySimpRepsForModel", "params": "model, session"},
             {"name": "listSessionAssemblySimpReps", "params": ""},
+            {"name": "listAssemblyConstraintsForModel", "params": "model, session"},
+            {"name": "listSessionAssemblyConstraints", "params": ""},
         ],
         "session_replace": (
             "function listSessionAssemblyStructure() {\n"

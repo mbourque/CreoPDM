@@ -1035,7 +1035,9 @@ function emitComponentRow(
   pathPrefix,
   visited,
   flat,
-  treeChildren
+  treeChildren,
+  constraintCtx,
+  ownerPathIds
 ) {
   var id = featureIdOf(feat);
   var name = componentModelName(feat);
@@ -1086,6 +1088,11 @@ function emitComponentRow(
   };
   treeChildren.push(node);
 
+  var owners = ownerPathIds || [];
+  if (constraintCtx && isComponentFeature(feat) && id != null) {
+    captureComponentConstraints(feat, constraintCtx, owners, path, name || row.name);
+  }
+
   var childKey = String(name || id || "").toLowerCase();
   if (
     level < maxDepth &&
@@ -1096,6 +1103,8 @@ function emitComponentRow(
   ) {
     var nextSeen = copyVisited(visited);
     nextSeen[childKey] = true;
+    var nextOwners = owners.slice();
+    if (id != null) nextOwners.push(id);
     walkAssemblyStructure(
       childModel,
       session,
@@ -1104,7 +1113,9 @@ function emitComponentRow(
       path,
       nextSeen,
       flat,
-      node.children
+      node.children,
+      constraintCtx,
+      nextOwners
     );
   }
   return node;
@@ -1114,7 +1125,18 @@ function emitComponentRow(
  * Flattened structure rows + nested tree.
  * Groups nest recursively (workcell → op → sequences); members indent under parents.
  */
-function walkAssemblyStructure(model, session, level, maxDepth, pathPrefix, visited, flat, treeChildren) {
+function walkAssemblyStructure(
+  model,
+  session,
+  level,
+  maxDepth,
+  pathPrefix,
+  visited,
+  flat,
+  treeChildren,
+  constraintCtx,
+  ownerPathIds
+) {
   if (level > maxDepth) return;
   var solid = resolveStructureSolid(model, session);
   var mfgRoot = false;
@@ -1130,6 +1152,7 @@ function walkAssemblyStructure(model, session, level, maxDepth, pathPrefix, visi
   var nestedUnderGroup = maps.nestedUnderGroup;
   var groupMemberOrder = maps.groupMemberOrder;
   var emitted = {};
+  var owners = ownerPathIds || [];
 
   function emitFeat(feat, featLevel, featPathPrefix, parentChildren) {
     if (!feat) return;
@@ -1166,6 +1189,7 @@ function walkAssemblyStructure(model, session, level, maxDepth, pathPrefix, visi
       parentChildren.push(gnode);
       var members = (skey && groupMemberOrder[skey]) || [];
       for (var mi = 0; mi < members.length; mi++) {
+        // Groups are not ComponentPath ids — keep the same owner path for members.
         emitFeat(members[mi], featLevel + 1, gpath, gnode.children);
       }
       return;
@@ -1179,7 +1203,9 @@ function walkAssemblyStructure(model, session, level, maxDepth, pathPrefix, visi
       featPathPrefix,
       visited,
       flat,
-      parentChildren
+      parentChildren,
+      constraintCtx,
+      owners
     );
   }
 
@@ -1356,6 +1382,304 @@ function appendCrossSectionStructureRows(flat, treeChildren, solid) {
   }
 }
 
+function isToolkitNotFound(error) {
+  if (error == null) return false;
+  try {
+    if (typeof pfcXToolkitNotFound !== "undefined" && error instanceof pfcXToolkitNotFound) {
+      return true;
+    }
+  } catch (e) {}
+  try {
+    if (typeof error.getClassName === "function") {
+      var cn = String(error.getClassName() || "");
+      if (/NotFound/i.test(cn)) return true;
+    }
+  } catch (e2) {}
+  try {
+    var msg = String(error.message || error.Message || error || "");
+    if (/XToolkitNotFound|pfcXToolkitNotFound/i.test(msg)) return true;
+  } catch (e3) {}
+  return false;
+}
+
+function constraintEnumText(value) {
+  if (value == null) return null;
+  var s = enumString(value);
+  return s || null;
+}
+
+function constraintItemName(item) {
+  if (!item) return null;
+  try {
+    if (typeof item.GetName === "function") {
+      var n = item.GetName();
+      return n != null && String(n) ? String(n) : null;
+    }
+  } catch (error) {
+    if (isToolkitNotFound(error)) return null;
+  }
+  try {
+    if (item.Name != null && String(item.Name)) return String(item.Name);
+  } catch (e2) {}
+  return null;
+}
+
+function constraintPathIds(path) {
+  if (!path) return null;
+  try {
+    if (path.ComponentIds != null) {
+      return simpRepSeqToIntArray(path.ComponentIds);
+    }
+  } catch (e) {}
+  return null;
+}
+
+function constraintReferenceData(selection) {
+  if (!selection) return null;
+  var item = null;
+  var model = null;
+  var path = null;
+  try {
+    item = selection.SelItem;
+  } catch (e) {}
+  try {
+    model = selection.SelModel;
+  } catch (e2) {}
+  try {
+    path = selection.Path;
+  } catch (e3) {}
+  var modelName = null;
+  try {
+    if (model && model.FileName != null) {
+      modelName = logicalFileName(String(model.FileName)) || String(model.FileName);
+    }
+  } catch (e4) {}
+  var pathRoot = null;
+  try {
+    if (path && path.Root && path.Root.FileName != null) {
+      pathRoot = logicalFileName(String(path.Root.FileName)) || String(path.Root.FileName);
+    }
+  } catch (e5) {}
+  var itemId = null;
+  try {
+    if (item && item.Id != null) itemId = Number(item.Id);
+  } catch (e6) {}
+  return {
+    model: modelName,
+    path_root: pathRoot,
+    component_path: constraintPathIds(path),
+    item_id: itemId,
+    item_type: item ? constraintEnumText(item.Type) : null,
+    item_name: constraintItemName(item)
+  };
+}
+
+function assemblyLengthUnitLabel(model) {
+  if (!model) return null;
+  try {
+    var units = null;
+    if (typeof model.GetPrincipalUnits === "function") units = model.GetPrincipalUnits();
+    else if (model.PrincipalUnits != null) units = model.PrincipalUnits;
+    if (!units) return null;
+    var length = null;
+    try {
+      if (typeof units.GetUnit === "function" && typeof pfcUnitType !== "undefined") {
+        length = units.GetUnit(pfcUnitType.UNIT_LENGTH);
+      }
+    } catch (e) {}
+    if (!length) {
+      try {
+        length = units.LengthUnit || units.Length;
+      } catch (e2) {}
+    }
+    if (!length) return null;
+    try {
+      if (typeof length.GetName === "function") {
+        var n = String(length.GetName() || "").trim();
+        if (n) return n;
+      }
+    } catch (e3) {}
+    try {
+      if (length.Name != null) {
+        var n2 = String(length.Name || "").trim();
+        if (n2) return n2;
+      }
+    } catch (e4) {}
+  } catch (eAll) {}
+  return null;
+}
+
+function readPlacementFlags(component) {
+  var placement = {
+    placed: null,
+    packaged: null,
+    underconstrained: null,
+    frozen: null
+  };
+  if (!component) return placement;
+  try {
+    if (typeof component.IsPlaced !== "undefined") placement.placed = !!component.IsPlaced;
+  } catch (e) {}
+  try {
+    if (typeof component.IsPackaged !== "undefined") placement.packaged = !!component.IsPackaged;
+  } catch (e2) {}
+  try {
+    if (typeof component.IsUnderconstrained !== "undefined") {
+      placement.underconstrained = !!component.IsUnderconstrained;
+    }
+  } catch (e3) {}
+  try {
+    if (typeof component.IsFrozen !== "undefined") placement.frozen = !!component.IsFrozen;
+  } catch (e4) {}
+  return placement;
+}
+
+function mapOneConstraint(constraint, offsetUnits) {
+  if (!constraint) return null;
+  var attributes = null;
+  try {
+    attributes = constraint.Attributes;
+  } catch (e) {
+    attributes = null;
+  }
+  var offset = null;
+  try {
+    if (constraint.Offset !== undefined) offset = constraint.Offset;
+  } catch (e2) {
+    offset = null;
+  }
+  // Preserve API null (zero or N/A by type) — never invent 0.
+  if (offset !== null && offset !== undefined) {
+    var n = Number(offset);
+    offset = isNaN(n) ? offset : n;
+  } else {
+    offset = null;
+  }
+  return {
+    type: constraintEnumText(constraint.Type),
+    offset: offset,
+    offset_units: offset != null ? offsetUnits || null : null,
+    assembly_reference: constraintReferenceData(
+      (function () {
+        try {
+          return constraint.AssemblyReference;
+        } catch (e3) {
+          return null;
+        }
+      })()
+    ),
+    component_reference: constraintReferenceData(
+      (function () {
+        try {
+          return constraint.ComponentReference;
+        } catch (e4) {
+          return null;
+        }
+      })()
+    ),
+    assembly_datum_side: constraintEnumText(
+      (function () {
+        try {
+          return constraint.AssemblyDatumSide;
+        } catch (e5) {
+          return null;
+        }
+      })()
+    ),
+    component_datum_side: constraintEnumText(
+      (function () {
+        try {
+          return constraint.ComponentDatumSide;
+        } catch (e6) {
+          return null;
+        }
+      })()
+    ),
+    attributes: attributes
+      ? {
+          ignore: !!attributes.Ignore,
+          force: !!attributes.Force
+        }
+      : null
+  };
+}
+
+/**
+ * Capture placement + constraints for one component occurrence.
+ * Always uses GetConstraintsWithCompPath(ownerPath); NotFound → empty list.
+ */
+function captureComponentConstraints(feat, constraintCtx, ownerPathIds, pathStr, modelName) {
+  if (!constraintCtx || !feat) return;
+  var id = featureIdOf(feat);
+  if (id == null) return;
+  var owners = ownerPathIds || [];
+  var componentPath = owners.concat([id]);
+  var result = {
+    component_id: id,
+    component_path: componentPath.slice(),
+    path: pathStr || componentPath.join("/"),
+    model_name: modelName || "",
+    capture_status: "ok",
+    error: null,
+    placement: readPlacementFlags(feat),
+    constraints: null
+  };
+  try {
+    try {
+      if (feat.ModelDescr) {
+        var full = "";
+        try {
+          if (typeof feat.ModelDescr.GetFullName === "function") {
+            full = String(feat.ModelDescr.GetFullName() || "");
+          }
+        } catch (eFn) {}
+        if (full) result.model_name = logicalFileName(full) || full;
+      }
+    } catch (eMd) {}
+
+    var ownerPath = null;
+    if (typeof pfcCreateComponentPath === "function" && constraintCtx.rootAssembly) {
+      ownerPath = pfcCreateComponentPath(constraintCtx.rootAssembly, owners.slice());
+    }
+    var raw = null;
+    try {
+      if (ownerPath != null && typeof feat.GetConstraintsWithCompPath === "function") {
+        raw = feat.GetConstraintsWithCompPath(ownerPath);
+      } else if (typeof feat.GetConstraintsWithCompPath === "function") {
+        // Fallback when CreateComponentPath missing — still prefer WithCompPath API.
+        raw = feat.GetConstraintsWithCompPath(null);
+      } else {
+        throw new Error("GetConstraintsWithCompPath unavailable");
+      }
+    } catch (errGet) {
+      if (isToolkitNotFound(errGet)) {
+        raw = [];
+      } else {
+        throw errGet;
+      }
+    }
+    var items = featureItems(raw || []);
+    var mapped = [];
+    for (var i = 0; i < items.length; i++) {
+      var row = mapOneConstraint(items[i], constraintCtx.offsetUnits || null);
+      if (row) mapped.push(row);
+    }
+    result.constraints = mapped;
+  } catch (error) {
+    result.capture_status = "unavailable";
+    result.constraints = null;
+    try {
+      result.error =
+        error && typeof error.getClassName === "function"
+          ? String(error.getClassName())
+          : describeError(error);
+    } catch (eErr) {
+      result.error = String(error);
+    }
+  }
+  constraintCtx.sink.push(result);
+}
+
 function isSimpRepAssembly(model, filename) {
   /** Creo.JS SimpRep APIs support assemblies only (not parts; skip MFG). */
   try {
@@ -1493,6 +1817,70 @@ function gatherSimpRepOne(rep) {
 }
 
 /**
+ * Per-occurrence assembly constraints (Creo.JS ComponentFeat).
+ * Uses GetConstraintsWithCompPath with owner path for external refs.
+ */
+function listAssemblyConstraintsForModel(model, session) {
+  var fileName = "";
+  try {
+    fileName = String(model.FileName || "");
+  } catch (e) {
+    fileName = "";
+  }
+  fileName = logicalFileName(fileName) || fileName;
+  if (!isAssemblyModel(model, fileName)) {
+    return {
+      ok: false,
+      error: "Assembly constraints are only collected for assemblies or manufacturing models.",
+      fileName: fileName
+    };
+  }
+
+  var flat = [];
+  var treeChildren = [];
+  var sink = [];
+  var errors = [];
+  var rootKey = String(fileName || "").toLowerCase();
+  var visited = {};
+  if (rootKey) visited[rootKey] = true;
+  var constraintCtx = {
+    rootAssembly: model,
+    sink: sink,
+    offsetUnits: assemblyLengthUnitLabel(model),
+    errors: errors
+  };
+  try {
+    walkAssemblyStructure(
+      model,
+      session,
+      1,
+      MAX_STRUCTURE_DEPTH,
+      "",
+      visited,
+      flat,
+      treeChildren,
+      constraintCtx,
+      []
+    );
+  } catch (errWalk) {
+    errors.push("walkAssemblyStructure: " + describeError(errWalk));
+  }
+
+  return {
+    ok: true,
+    fileName: fileName,
+    components: sink,
+    errors: errors
+  };
+}
+
+function listSessionAssemblyConstraints() {
+  var am = activeModel();
+  if (am.error) return { ok: false, error: am.error };
+  return listAssemblyConstraintsForModel(am.model, am.session);
+}
+
+/**
  * Assembly simplified representations (Creo.JS: assemblies only, not parts).
  * GetActiveSimpRep null → Master. GetInstructions may return null.
  */
@@ -1598,7 +1986,18 @@ function listSessionAssemblyStructure() {
   var rootKey = String(fileName || "").toLowerCase();
   var visited = {};
   if (rootKey) visited[rootKey] = true;
-  walkAssemblyStructure(model, session, 1, MAX_STRUCTURE_DEPTH, "", visited, flat, treeChildren);
+  walkAssemblyStructure(
+    model,
+    session,
+    1,
+    MAX_STRUCTURE_DEPTH,
+    "",
+    visited,
+    flat,
+    treeChildren,
+    null,
+    []
+  );
 
   var solid = resolveStructureSolid(model, session);
   appendCrossSectionStructureRows(flat, treeChildren, solid);

@@ -844,6 +844,8 @@ class CreoMetadataRequest(BaseModel):
     structure: list[dict[str, object]] | None = None
     # Assembly simplified representations (definitions + active capture context).
     simp_reps: dict[str, object] | None = None
+    # Per-occurrence assembly constraints (placement + mates/aligns).
+    constraints: dict[str, object] | None = None
 
 
 class CreoMetadataResponse(BaseModel):
@@ -860,6 +862,7 @@ class CreoMetadataResponse(BaseModel):
     features: list[dict[str, object]] | None = None
     structure: list[dict[str, object]] | None = None
     simp_reps: dict[str, object] | None = None
+    constraints: dict[str, object] | None = None
     captured: bool = False
 
 

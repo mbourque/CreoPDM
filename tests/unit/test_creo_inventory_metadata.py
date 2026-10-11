@@ -28,17 +28,19 @@ def test_pack_unpack_features_json_envelope():
     assert raw.get("features") == normalize_feature_rows(features)
     assert raw.get("structure") == structure
 
-    round_features, round_structure, round_simp = unpack_features_json(raw)
+    round_features, round_structure, round_simp, round_cons = unpack_features_json(raw)
     assert round_features == normalize_feature_rows(features)
     assert round_structure == structure
     assert round_simp is None
+    assert round_cons is None
 
 
 def test_unpack_legacy_features_list():
     legacy = [{"id": 3, "name": "HOLE", "type": "HOLE", "level": 2, "status": "SUPRESSED"}]
-    feats, struct, simp = unpack_features_json(legacy)
+    feats, struct, simp, cons = unpack_features_json(legacy)
     assert struct is None
     assert simp is None
+    assert cons is None
     assert feats == normalize_feature_rows(legacy)
 
 
@@ -66,10 +68,64 @@ def test_pack_unpack_simp_reps_in_envelope():
     assert isinstance(raw, dict)
     assert raw.get("v") == 1
     assert raw.get("simp_reps") == simp_reps
-    feats, struct, round_simp = unpack_features_json(raw)
+    feats, struct, round_simp, round_cons = unpack_features_json(raw)
     assert feats == normalize_feature_rows(features)
     assert struct == []
     assert round_simp == simp_reps
+    assert round_cons is None
+
+
+def test_pack_unpack_constraints_in_envelope():
+    """Assembly constraints ride the features_json v1 envelope beside simp_reps."""
+    features = [{"id": 1, "name": "RIGHT", "type": "DATUM PLANE"}]
+    constraints = {
+        "ok": True,
+        "fileName": "top.asm",
+        "components": [
+            {
+                "component_id": 41,
+                "component_path": [41],
+                "model_name": "bracket.prt",
+                "capture_status": "ok",
+                "placement": {
+                    "placed": True,
+                    "packaged": False,
+                    "underconstrained": False,
+                    "frozen": False,
+                },
+                "constraints": [
+                    {
+                        "type": "ASM_CONSTRAINT_MATE",
+                        "offset": 5.0,
+                        "offset_units": "mm",
+                        "assembly_reference": {
+                            "model": "top.asm",
+                            "item_id": 1,
+                            "item_type": "ITEM_SURFACE",
+                            "item_name": "FRONT",
+                        },
+                        "component_reference": {
+                            "model": "bracket.prt",
+                            "item_id": 2,
+                            "item_type": "ITEM_SURFACE",
+                            "item_name": "TOP",
+                        },
+                        "attributes": {"ignore": False, "force": False},
+                    }
+                ],
+            }
+        ],
+        "errors": [],
+    }
+    raw = pack_features_json(features, None, None, constraints)
+    assert isinstance(raw, dict)
+    assert raw.get("v") == 1
+    assert raw.get("constraints") == constraints
+    feats, struct, simp, round_cons = unpack_features_json(raw)
+    assert feats == normalize_feature_rows(features)
+    assert struct == []
+    assert simp is None
+    assert round_cons == constraints
 
 
 def test_assembly_inventory_gathers_simp_reps():
@@ -92,6 +148,28 @@ def test_assembly_inventory_gathers_simp_reps():
     assert "active_simp_rep" in text
     # Orchestration only — inventory owns the Toolkit walk.
     assert "function creoGatherSimpReps(" not in text
+
+
+def test_assembly_inventory_gathers_constraints():
+    """Constraint capture uses GetConstraintsWithCompPath + owner path (probe + inventory)."""
+    probe = (
+        ROOT / "src" / "creopdm" / "static" / "assembly_probe" / "assembly_probe.creojs"
+    ).read_text(encoding="utf-8")
+    asm = (INV_DIR / "assembly.creojs").read_text(encoding="utf-8")
+    for body, label in ((probe, "assembly_probe"), (asm, "creo_inventory/assembly")):
+        assert "function listAssemblyConstraintsForModel(" in body, label
+        assert "GetConstraintsWithCompPath" in body, label
+        assert "pfcCreateComponentPath" in body, label
+        assert "isToolkitNotFound" in body, label
+        assert "captureComponentConstraints" in body, label
+        # NotFound → empty list, not capture failure.
+        assert "raw = []" in body, label
+    assert "listAssemblyConstraintsForModel: listAssemblyConstraintsForModel" in asm
+    assert "function listSessionAssemblyConstraints(" in asm
+    text = BASE_HTML.read_text(encoding="utf-8")
+    assert "listAssemblyConstraintsForModel" in text
+    assert "constraints: constraints" in text
+    assert "function creoGatherConstraints(" not in text
 
 
 def test_normalize_feature_rows_keeps_inventory_fields():
@@ -151,6 +229,8 @@ def test_creo_inventory_wrapped_files_exist():
     assert "function listAssemblyStructureForModel(" in asm
     assert "function listAssemblySimpRepsForModel(" in asm
     assert "function listSessionAssemblySimpReps(" in asm
+    assert "function listAssemblyConstraintsForModel(" in asm
+    assert "function listSessionAssemblyConstraints(" in asm
     drw = (INV_DIR / "drawing.creojs").read_text(encoding="utf-8")
     assert "function listDrawingStructureForModel(" in drw
     # Public globals must not collide (each file exports unique names only).
@@ -457,6 +537,216 @@ def test_computed_diff_omits_simp_reps_when_unchanged():
     }
     diff = format_snapshot_compare_diff_text(older, newer)
     assert "Simplified representations" not in diff
+
+
+def _sample_constraints_envelope(*, offset=5.0, order_flip=False, duplicate=False):
+    c1 = {
+        "type": "ASM_CONSTRAINT_MATE",
+        "offset": offset,
+        "offset_units": "mm",
+        "assembly_reference": {"model": "top.asm", "item_id": 1, "item_name": "FRONT"},
+        "component_reference": {"model": "bracket.prt", "item_id": 2, "item_name": "TOP"},
+        "attributes": {"ignore": False, "force": False},
+    }
+    c2 = {
+        "type": "ASM_CONSTRAINT_ALIGN",
+        "offset": None,
+        "offset_units": None,
+        "assembly_reference": {"model": "top.asm", "item_id": 3, "item_name": "RIGHT"},
+        "component_reference": {"model": "bracket.prt", "item_id": 4, "item_name": "RIGHT"},
+        "attributes": {"ignore": False, "force": False},
+    }
+    constraints = [c2, c1] if order_flip else [c1, c2]
+    if duplicate:
+        constraints = [c1, dict(c1)]
+    return {
+        "ok": True,
+        "fileName": "top.asm",
+        "components": [
+            {
+                "component_id": 41,
+                "component_path": [40, 41],
+                "model_name": "bracket.prt",
+                "capture_status": "ok",
+                "placement": {
+                    "placed": True,
+                    "packaged": False,
+                    "underconstrained": False,
+                    "frozen": False,
+                },
+                "constraints": constraints,
+            }
+        ],
+        "errors": [],
+    }
+
+
+def test_compare_outline_includes_assembly_constraints():
+    text = format_snapshot_compare_text(
+        {
+            "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+            "structure": [
+                {"name": "bracket.prt", "type": "PART", "level": 1, "path": "40/41"},
+            ],
+            "features": [],
+            "parameters": [{"name": "DESCRIPTION", "value": "x"}],
+            "constraints": _sample_constraints_envelope(),
+        }
+    )
+    assert "Assembly constraints:" in text
+    assert "bracket.prt (40/41)" in text
+    assert "Mate" in text
+    assert "offset 5 mm" in text
+    assert text.index("Parameters:") < text.index("Assembly constraints:")
+    assert "\n\nAssembly constraints:" in text
+
+
+def test_computed_diff_reports_constraint_offset_change():
+    older = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "bracket.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "constraints": _sample_constraints_envelope(offset=5.0),
+    }
+    newer = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "bracket.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "constraints": _sample_constraints_envelope(offset=10.0),
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Assembly constraints changed (bracket.prt (40/41)):" in diff
+    assert "offset 5 mm → 10 mm" in diff
+
+
+def test_computed_diff_omits_constraints_on_reorder_only():
+    older = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "bracket.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "constraints": _sample_constraints_envelope(order_flip=False),
+    }
+    newer = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "bracket.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "constraints": _sample_constraints_envelope(order_flip=True),
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Assembly constraints" not in diff
+
+
+def test_computed_diff_preserves_duplicate_constraints():
+    """Two identical mates: removing one must show a removal (multiset)."""
+    older = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "bracket.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "constraints": _sample_constraints_envelope(duplicate=True),
+    }
+    newer = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "bracket.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "constraints": _sample_constraints_envelope(duplicate=False),
+    }
+    # duplicate=False still has Mate+Align; duplicate=True has Mate+Mate — Align removed, one Mate removed conceptually
+    # Build a clearer duplicate case:
+    older["constraints"] = {
+        "ok": True,
+        "components": [
+            {
+                "component_id": 41,
+                "component_path": [41],
+                "model_name": "bracket.prt",
+                "capture_status": "ok",
+                "constraints": [
+                    {"type": "ASM_CONSTRAINT_MATE", "offset": 1.0, "offset_units": "mm"},
+                    {"type": "ASM_CONSTRAINT_MATE", "offset": 1.0, "offset_units": "mm"},
+                ],
+            }
+        ],
+    }
+    newer["constraints"] = {
+        "ok": True,
+        "components": [
+            {
+                "component_id": 41,
+                "component_path": [41],
+                "model_name": "bracket.prt",
+                "capture_status": "ok",
+                "constraints": [
+                    {"type": "ASM_CONSTRAINT_MATE", "offset": 1.0, "offset_units": "mm"},
+                ],
+            }
+        ],
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Assembly constraints removed" in diff
+    assert "Mate" in diff
+
+
+def test_computed_diff_not_captured_when_constraints_missing_on_old():
+    """Missing envelope must not invent mass removals/adds."""
+    older = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "bracket.prt", "type": "PART", "level": 1}],
+        "features": [],
+    }
+    newer = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "bracket.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "constraints": _sample_constraints_envelope(),
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Not captured" in diff
+    assert "Assembly constraints added" not in diff
+    assert "Assembly constraints removed" not in diff
+
+
+def test_computed_diff_null_offset_not_equal_to_zero():
+    older = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "a.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "constraints": {
+            "ok": True,
+            "components": [
+                {
+                    "component_id": 1,
+                    "component_path": [1],
+                    "model_name": "a.prt",
+                    "capture_status": "ok",
+                    "constraints": [
+                        {"type": "ASM_CONSTRAINT_ALIGN", "offset": None, "offset_units": None}
+                    ],
+                }
+            ],
+        },
+    }
+    newer = {
+        "identity": {"filename": "top.asm", "model_type": "ASSEMBLY"},
+        "structure": [{"name": "a.prt", "type": "PART", "level": 1}],
+        "features": [],
+        "constraints": {
+            "ok": True,
+            "components": [
+                {
+                    "component_id": 1,
+                    "component_path": [1],
+                    "model_name": "a.prt",
+                    "capture_status": "ok",
+                    "constraints": [
+                        {"type": "ASM_CONSTRAINT_ALIGN", "offset": 0.0, "offset_units": "mm"}
+                    ],
+                }
+            ],
+        },
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Assembly constraints changed" in diff
+    assert "offset" in diff
 
 
 def test_compare_diff_detects_drawing_note_change():

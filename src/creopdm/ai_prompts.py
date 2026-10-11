@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing import Any
 
 from creopdm.exceptions import ValidationAppError
@@ -423,6 +424,9 @@ def prepare_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, A
     simp_reps = out.get("simp_reps")
     if isinstance(simp_reps, dict) and simp_reps:
         out["simp_reps"] = dict(simp_reps)
+    constraints = out.get("constraints")
+    if isinstance(constraints, dict) and constraints:
+        out["constraints"] = dict(constraints)
     # Stamp feature_name onto dims from feature id → name (for older snaps /
     # gathers that only stored feature_id).
     labels = _feature_id_label_map(out)
@@ -724,6 +728,432 @@ def _structure_outline_labels(snapshot: dict[str, Any]) -> list[str]:
 def _simp_reps_dict(snapshot: dict[str, Any]) -> dict[str, Any] | None:
     simp = snapshot.get("simp_reps")
     return simp if isinstance(simp, dict) else None
+
+
+_CONSTRAINT_OFFSET_EPS = 1e-6
+
+
+def _constraints_dict(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    cons = snapshot.get("constraints")
+    return cons if isinstance(cons, dict) else None
+
+
+def _constraint_occ_components(cons: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(cons, dict):
+        return []
+    comps = cons.get("components")
+    if not isinstance(comps, list):
+        return []
+    return [c for c in comps if isinstance(c, dict)]
+
+
+def _constraint_path_key(path: Any) -> str:
+    if isinstance(path, list):
+        return "/".join(str(x) for x in path)
+    if path is None:
+        return ""
+    return str(path).strip()
+
+
+def _constraint_occ_key(comp: dict[str, Any]) -> str:
+    path = comp.get("component_path")
+    if path is None:
+        path = comp.get("path")
+    cid = comp.get("component_id")
+    if cid is None:
+        cid = comp.get("id")
+    return f"{_constraint_path_key(path)}|{cid}"
+
+
+def _constraint_occ_display(comp: dict[str, Any]) -> str:
+    name = str(comp.get("model_name") or comp.get("name") or "").strip() or "component"
+    path = comp.get("component_path")
+    if path is None:
+        path = comp.get("path")
+    path_s = _constraint_path_key(path)
+    if path_s:
+        return f"{name} ({path_s})"
+    cid = comp.get("component_id")
+    if cid is None:
+        cid = comp.get("id")
+    if cid is not None:
+        return f"{name} ({cid})"
+    return name
+
+
+def _constraint_type_label(raw: Any) -> str:
+    text = str(raw or "").strip()
+    if not text:
+        return "Constraint"
+    upper = text.upper()
+    for prefix in ("ASM_CONSTRAINT_", "CONSTRAINT_", "PFCCOMPONENTCONSTRAINTTYPE_"):
+        if upper.startswith(prefix):
+            text = text[len(prefix) :]
+            break
+    return text.replace("_", " ").strip().title() or "Constraint"
+
+
+def _constraint_ref_key(ref: Any) -> str:
+    if not isinstance(ref, dict):
+        return ""
+    bits = [
+        str(ref.get("model") or ""),
+        _constraint_path_key(ref.get("component_path")),
+        str(ref.get("item_id") if ref.get("item_id") is not None else ""),
+        str(ref.get("item_type") or ""),
+        str(ref.get("item_name") or ""),
+    ]
+    return "|".join(bits)
+
+
+def _constraint_offset_key(constraint: dict[str, Any]) -> str:
+    """Null-aware offset key — null is not the same as numeric 0."""
+    offset = constraint.get("offset")
+    if offset is None:
+        return "null"
+    try:
+        num = float(offset)
+    except (TypeError, ValueError):
+        return f"raw:{offset}"
+    units = str(constraint.get("offset_units") or "").strip().lower()
+    return f"{num:.9g}|{units}"
+
+
+def _constraint_offsets_equal(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    ao = a.get("offset")
+    bo = b.get("offset")
+    if ao is None and bo is None:
+        return True
+    if ao is None or bo is None:
+        return False
+    try:
+        an = float(ao)
+        bn = float(bo)
+    except (TypeError, ValueError):
+        return str(ao) == str(bo)
+    units_a = str(a.get("offset_units") or "").strip().lower()
+    units_b = str(b.get("offset_units") or "").strip().lower()
+    if units_a != units_b:
+        return False
+    return abs(an - bn) <= _CONSTRAINT_OFFSET_EPS
+
+
+def _constraint_attrs_key(constraint: dict[str, Any]) -> str:
+    attrs = constraint.get("attributes")
+    if not isinstance(attrs, dict):
+        # Legacy flat ignore/force
+        ignore = constraint.get("ignore")
+        force = constraint.get("force")
+        if ignore is None and force is None:
+            return ""
+        return f"{bool(ignore)}|{bool(force)}"
+    return f"{bool(attrs.get('ignore'))}|{bool(attrs.get('force'))}"
+
+
+def _constraint_fingerprint(constraint: dict[str, Any]) -> str:
+    return "|".join(
+        [
+            str(constraint.get("type") or ""),
+            _constraint_offset_key(constraint),
+            _constraint_ref_key(constraint.get("assembly_reference") or constraint.get("asm_ref")),
+            _constraint_ref_key(constraint.get("component_reference") or constraint.get("comp_ref")),
+            str(constraint.get("assembly_datum_side") or ""),
+            str(constraint.get("component_datum_side") or ""),
+            _constraint_attrs_key(constraint),
+        ]
+    )
+
+
+def _constraint_outline_line(constraint: dict[str, Any]) -> str:
+    bits = [_constraint_type_label(constraint.get("type"))]
+    offset = constraint.get("offset")
+    if offset is not None:
+        units = str(constraint.get("offset_units") or "").strip()
+        try:
+            num = float(offset)
+            off_s = f"{num:g}"
+        except (TypeError, ValueError):
+            off_s = str(offset)
+        bits.append(f"offset {off_s}" + (f" {units}" if units else ""))
+    attrs = constraint.get("attributes")
+    if isinstance(attrs, dict):
+        if attrs.get("ignore"):
+            bits.append("ignore")
+        if attrs.get("force"):
+            bits.append("force")
+    elif constraint.get("ignore"):
+        bits.append("ignore")
+    return " · ".join(bits)
+
+
+def _constraint_occ_outline_line(comp: dict[str, Any]) -> str:
+    head = _constraint_occ_display(comp)
+    status = str(comp.get("capture_status") or "").strip().lower()
+    if status and status not in ("ok",):
+        err = str(comp.get("error") or "").strip()
+        return f"{head}: capture {status}" + (f" ({err})" if err else "")
+    placement = comp.get("placement") if isinstance(comp.get("placement"), dict) else {}
+    place_bits: list[str] = []
+    if placement.get("packaged") is True:
+        place_bits.append("packaged")
+    if placement.get("underconstrained") is True:
+        place_bits.append("underconstrained")
+    if placement.get("frozen") is True:
+        place_bits.append("frozen")
+    if placement.get("placed") is False:
+        place_bits.append("not placed")
+    constraints = comp.get("constraints")
+    if not isinstance(constraints, list):
+        constraints = []
+    cons_bits = [_constraint_outline_line(c) for c in constraints if isinstance(c, dict)]
+    tail_bits = place_bits + cons_bits
+    if not tail_bits:
+        return f"{head}: (no constraints)"
+    return f"{head}: " + "; ".join(tail_bits)
+
+
+def _constraints_outline_lines(snapshot: dict[str, Any]) -> list[str]:
+    cons = _constraints_dict(snapshot)
+    if not cons:
+        return []
+    comps = _constraint_occ_components(cons)
+    lines = ["Assembly constraints:"]
+    if not comps:
+        lines.append("- (none)")
+        return lines
+    for comp in comps:
+        lines.append(f"- {_constraint_occ_outline_line(comp)}")
+    return lines
+
+
+def _constraint_field_deltas(
+    older_c: dict[str, Any], newer_c: dict[str, Any]
+) -> list[str]:
+    """Return human single-field change phrases when exactly one semantic field differs."""
+    deltas: list[str] = []
+    if str(older_c.get("type") or "") != str(newer_c.get("type") or ""):
+        deltas.append(
+            f"type {_constraint_type_label(older_c.get('type'))} → "
+            f"{_constraint_type_label(newer_c.get('type'))}"
+        )
+    if not _constraint_offsets_equal(older_c, newer_c):
+        def _off_label(c: dict[str, Any]) -> str:
+            if c.get("offset") is None:
+                return "(null)"
+            units = str(c.get("offset_units") or "").strip()
+            try:
+                num = float(c["offset"])
+                text = f"{num:g}"
+            except (TypeError, ValueError):
+                text = str(c.get("offset"))
+            return f"{text} {units}".strip()
+
+        deltas.append(f"offset {_off_label(older_c)} → {_off_label(newer_c)}")
+    if _constraint_ref_key(
+        older_c.get("assembly_reference") or older_c.get("asm_ref")
+    ) != _constraint_ref_key(
+        newer_c.get("assembly_reference") or newer_c.get("asm_ref")
+    ):
+        deltas.append("assembly reference changed")
+    if _constraint_ref_key(
+        older_c.get("component_reference") or older_c.get("comp_ref")
+    ) != _constraint_ref_key(
+        newer_c.get("component_reference") or newer_c.get("comp_ref")
+    ):
+        deltas.append("component reference changed")
+    if str(older_c.get("assembly_datum_side") or "") != str(
+        newer_c.get("assembly_datum_side") or ""
+    ) or str(older_c.get("component_datum_side") or "") != str(
+        newer_c.get("component_datum_side") or ""
+    ):
+        deltas.append("datum side changed")
+    if _constraint_attrs_key(older_c) != _constraint_attrs_key(newer_c):
+        deltas.append("ignore/force changed")
+    return deltas
+
+
+def _diff_constraint_lists(
+    older_list: list[dict[str, Any]], newer_list: list[dict[str, Any]]
+) -> tuple[list[str], list[str], list[str]]:
+    """Multiset match constraints; return (removed, added, changed) display lines."""
+    older_fp = [_constraint_fingerprint(c) for c in older_list]
+    newer_fp = [_constraint_fingerprint(c) for c in newer_list]
+    older_counts = Counter(older_fp)
+    newer_counts = Counter(newer_fp)
+    # Perfect multiset equality → no per-constraint noise (reorder-only).
+    if older_counts == newer_counts:
+        return [], [], []
+
+    remaining_old = list(older_list)
+    remaining_new = list(newer_list)
+    removed: list[str] = []
+    added: list[str] = []
+    changed: list[str] = []
+
+    # Exact fingerprint matches consume pairs.
+    used_new: set[int] = set()
+    kept_old: list[dict[str, Any]] = []
+    for oc in remaining_old:
+        fp = _constraint_fingerprint(oc)
+        matched = False
+        for ni, nc in enumerate(remaining_new):
+            if ni in used_new:
+                continue
+            if _constraint_fingerprint(nc) == fp:
+                used_new.add(ni)
+                matched = True
+                break
+        if not matched:
+            kept_old.append(oc)
+    kept_new = [nc for ni, nc in enumerate(remaining_new) if ni not in used_new]
+
+    # Pair unambiguous single-field deltas by type.
+    still_old = list(kept_old)
+    still_new = list(kept_new)
+    paired_old: set[int] = set()
+    paired_new: set[int] = set()
+    for oi, oc in enumerate(still_old):
+        candidates: list[tuple[int, list[str]]] = []
+        for ni, nc in enumerate(still_new):
+            if ni in paired_new:
+                continue
+            deltas = _constraint_field_deltas(oc, nc)
+            if len(deltas) == 1:
+                candidates.append((ni, deltas))
+        if len(candidates) == 1:
+            ni, deltas = candidates[0]
+            # Ensure only one old maps to this new
+            reverse = [
+                oj
+                for oj, o2 in enumerate(still_old)
+                if oj not in paired_old
+                and len(_constraint_field_deltas(o2, still_new[ni])) == 1
+            ]
+            if reverse == [oi]:
+                paired_old.add(oi)
+                paired_new.add(ni)
+                changed.append(deltas[0])
+    for oi, oc in enumerate(still_old):
+        if oi not in paired_old:
+            removed.append(_constraint_outline_line(oc))
+    for ni, nc in enumerate(still_new):
+        if ni not in paired_new:
+            added.append(_constraint_outline_line(nc))
+    return removed, added, changed
+
+
+def _constraints_diff_lines(
+    older: dict[str, Any], newer: dict[str, Any]
+) -> list[str]:
+    """Authoritative assembly constraint diffs — missing envelope → Not captured."""
+    older_cons = _constraints_dict(older)
+    newer_cons = _constraints_dict(newer)
+    if older_cons is None and newer_cons is None:
+        return []
+    if older_cons is None or newer_cons is None:
+        return [
+            "Assembly constraints: Not captured on one revision "
+            "(not treated as removals or adds)."
+        ]
+
+    older_by = {_constraint_occ_key(c): c for c in _constraint_occ_components(older_cons)}
+    newer_by = {_constraint_occ_key(c): c for c in _constraint_occ_components(newer_cons)}
+    keys = sorted(set(older_by) | set(newer_by), key=str.lower)
+    lines: list[str] = []
+
+    def _extend_block(block: list[str]) -> None:
+        if not block:
+            return
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.extend(block)
+
+    for key in keys:
+        old_c = older_by.get(key)
+        new_c = newer_by.get(key)
+        label = _constraint_occ_display(new_c or old_c or {})
+        if old_c is None and new_c is not None:
+            cons = new_c.get("constraints") if isinstance(new_c.get("constraints"), list) else []
+            bits = [_constraint_outline_line(c) for c in cons if isinstance(c, dict)]
+            add_block = [f"Assembly constraints added ({label}):"]
+            add_block.extend([f"- {b}" for b in bits] if bits else ["- (occurrence added)"])
+            _extend_block(add_block)
+            continue
+        if old_c is not None and new_c is None:
+            cons = old_c.get("constraints") if isinstance(old_c.get("constraints"), list) else []
+            bits = [_constraint_outline_line(c) for c in cons if isinstance(c, dict)]
+            rem_block = [f"Assembly constraints removed ({label}):"]
+            rem_block.extend(
+                [f"- {b}" for b in bits] if bits else ["- (occurrence removed)"]
+            )
+            _extend_block(rem_block)
+            continue
+        assert old_c is not None and new_c is not None
+        # Placement flag changes
+        old_p = old_c.get("placement") if isinstance(old_c.get("placement"), dict) else {}
+        new_p = new_c.get("placement") if isinstance(new_c.get("placement"), dict) else {}
+        place_changes: list[str] = []
+        for flag in ("placed", "packaged", "underconstrained", "frozen"):
+            if old_p.get(flag) != new_p.get(flag) and (
+                old_p.get(flag) is not None or new_p.get(flag) is not None
+            ):
+                place_changes.append(f"{flag}: {old_p.get(flag)} → {new_p.get(flag)}")
+        old_list = [
+            c for c in (old_c.get("constraints") or []) if isinstance(c, dict)
+        ] if isinstance(old_c.get("constraints"), list) else []
+        new_list = [
+            c for c in (new_c.get("constraints") or []) if isinstance(c, dict)
+        ] if isinstance(new_c.get("constraints"), list) else []
+        # Unavailable vs ok — surface status, do not invent mass removals from null.
+        old_status = str(old_c.get("capture_status") or "ok")
+        new_status = str(new_c.get("capture_status") or "ok")
+        if old_status != new_status and (
+            old_c.get("constraints") is None or new_c.get("constraints") is None
+        ):
+            _extend_block(
+                [
+                    f"Assembly constraints capture status ({label}):",
+                    f"- {old_status} → {new_status}",
+                ]
+            )
+            if place_changes:
+                _extend_block(
+                    [
+                        f"Assembly placement changed ({label}):",
+                        *[f"- {p}" for p in place_changes],
+                    ]
+                )
+            continue
+        removed, added, changed = _diff_constraint_lists(old_list, new_list)
+        if place_changes:
+            _extend_block(
+                [
+                    f"Assembly placement changed ({label}):",
+                    *[f"- {p}" for p in place_changes],
+                ]
+            )
+        if removed:
+            _extend_block(
+                [
+                    f"Assembly constraints removed ({label}):",
+                    *[f"- {r}" for r in removed],
+                ]
+            )
+        if added:
+            _extend_block(
+                [
+                    f"Assembly constraints added ({label}):",
+                    *[f"- {a}" for a in added],
+                ]
+            )
+        if changed:
+            _extend_block(
+                [
+                    f"Assembly constraints changed ({label}):",
+                    *[f"- {c}" for c in changed],
+                ]
+            )
+    return lines
 
 
 def _simp_rep_active_name(simp: dict[str, Any] | None) -> str:
@@ -1128,6 +1558,9 @@ def format_snapshot_compare_diff_text(
     simp_diff = _simp_reps_diff_lines(older, newer)
     if simp_diff:
         _extend_section(lines, simp_diff)
+    cons_diff = _constraints_diff_lines(older, newer)
+    if cons_diff:
+        _extend_section(lines, cons_diff)
     return "\n".join(lines)
 
 
@@ -1317,6 +1750,39 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
                 slim_simp["representations"] = slim_reps
         if slim_simp:
             out["simp_reps"] = slim_simp
+    constraints = snapshot.get("constraints")
+    if isinstance(constraints, dict) and constraints:
+        slim_cons: dict[str, Any] = {}
+        if constraints.get("ok") is not None:
+            slim_cons["ok"] = constraints.get("ok")
+        if constraints.get("fileName") is not None:
+            slim_cons["fileName"] = constraints.get("fileName")
+        comps = constraints.get("components")
+        if isinstance(comps, list) and comps:
+            slim_comps: list[dict[str, Any]] = []
+            for comp in comps:
+                if not isinstance(comp, dict):
+                    continue
+                row = {
+                    k: comp.get(k)
+                    for k in (
+                        "component_id",
+                        "component_path",
+                        "path",
+                        "model_name",
+                        "capture_status",
+                        "error",
+                        "placement",
+                        "constraints",
+                    )
+                    if comp.get(k) is not None
+                }
+                if row:
+                    slim_comps.append(row)
+            if slim_comps:
+                slim_cons["components"] = slim_comps
+        if slim_cons:
+            out["constraints"] = slim_cons
     dimensions = snapshot.get("dimensions")
     if isinstance(dimensions, list):
         out["dimensions"] = []
@@ -1575,6 +2041,10 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
         if simp_lines:
             _blank_before_section(lines)
             lines.extend(simp_lines)
+        cons_lines = _constraints_outline_lines(snapshot)
+        if cons_lines:
+            _blank_before_section(lines)
+            lines.extend(cons_lines)
 
     return "\n".join(lines) if lines else "(empty snapshot)"
 

@@ -204,6 +204,9 @@ window.__creopdmModules.creo_workspace = {
           simp_reps: snapshot.simp_reps && typeof snapshot.simp_reps === "object"
             ? snapshot.simp_reps
             : null,
+          constraints: snapshot.constraints && typeof snapshot.constraints === "object"
+            ? snapshot.constraints
+            : null,
         };
         try {
           const response = await fetch(

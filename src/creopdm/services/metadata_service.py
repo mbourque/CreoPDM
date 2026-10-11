@@ -58,13 +58,19 @@ def pack_features_json(
     features: list[dict[str, Any]] | None,
     structure: list[dict[str, Any]] | None,
     simp_reps: dict[str, Any] | None = None,
+    constraints: dict[str, Any] | None = None,
 ) -> Any:
-    """Store features list, or v1 envelope when structure / simp_reps are present."""
-    if features is None and structure is None and simp_reps is None:
+    """Store features list, or v1 envelope when structure / simp_reps / constraints present."""
+    if (
+        features is None
+        and structure is None
+        and simp_reps is None
+        and constraints is None
+    ):
         return None
     feat_list = normalize_feature_rows(features or [])
     struct_list = [dict(row) for row in structure or [] if isinstance(row, dict)]
-    if struct_list or simp_reps is not None:
+    if struct_list or simp_reps is not None or constraints is not None:
         envelope: dict[str, Any] = {
             "v": _FEATURES_JSON_ENVELOPE_VERSION,
             "features": feat_list,
@@ -72,6 +78,8 @@ def pack_features_json(
         }
         if simp_reps is not None and isinstance(simp_reps, dict):
             envelope["simp_reps"] = dict(simp_reps)
+        if constraints is not None and isinstance(constraints, dict):
+            envelope["constraints"] = dict(constraints)
         return envelope
     return feat_list
 
@@ -82,10 +90,11 @@ def unpack_features_json(
     list[dict[str, Any]] | None,
     list[dict[str, Any]] | None,
     dict[str, Any] | None,
+    dict[str, Any] | None,
 ]:
-    """Return (features, structure, simp_reps) from legacy list or v1 envelope."""
+    """Return (features, structure, simp_reps, constraints) from legacy list or v1 envelope."""
     if raw is None:
-        return None, None, None
+        return None, None, None, None
     if isinstance(raw, dict) and raw.get("v") == _FEATURES_JSON_ENVELOPE_VERSION:
         feats = raw.get("features")
         struct = raw.get("structure")
@@ -95,10 +104,12 @@ def unpack_features_json(
         )
         simp_raw = raw.get("simp_reps")
         simp_reps = dict(simp_raw) if isinstance(simp_raw, dict) else None
-        return features, structure, simp_reps
+        cons_raw = raw.get("constraints")
+        constraints = dict(cons_raw) if isinstance(cons_raw, dict) else None
+        return features, structure, simp_reps, constraints
     if isinstance(raw, list):
-        return normalize_feature_rows(raw), None, None
-    return None, None, None
+        return normalize_feature_rows(raw), None, None, None
+    return None, None, None, None
 
 
 def normalize_feature_rows(features: Any) -> list[dict[str, Any]]:
@@ -192,14 +203,23 @@ class MetadataService:
             payload.features is not None
             or payload.structure is not None
             or payload.simp_reps is not None
+            or payload.constraints is not None
         ):
-            existing_features, existing_structure, existing_simp = unpack_features_json(
-                _loads(version.features_json)
-            )
+            (
+                existing_features,
+                existing_structure,
+                existing_simp,
+                existing_constraints,
+            ) = unpack_features_json(_loads(version.features_json))
             feats = payload.features if payload.features is not None else existing_features
             struct = payload.structure if payload.structure is not None else existing_structure
             simp = payload.simp_reps if payload.simp_reps is not None else existing_simp
-            version.features_json = _dumps(pack_features_json(feats, struct, simp))
+            cons = (
+                payload.constraints
+                if payload.constraints is not None
+                else existing_constraints
+            )
+            version.features_json = _dumps(pack_features_json(feats, struct, simp, cons))
 
         bom_payload = payload.bom
         if bom_payload is not None:
@@ -268,7 +288,7 @@ class MetadataService:
         mass = _loads(version.mass_json)
         family_table = _loads(version.family_table_json)
         features_raw = _loads(version.features_json)
-        features, structure, simp_reps = unpack_features_json(features_raw)
+        features, structure, simp_reps, constraints = unpack_features_json(features_raw)
         captured = bool(
             identity
             or materials
@@ -279,6 +299,7 @@ class MetadataService:
             or features
             or structure
             or simp_reps
+            or constraints
             or params
             or dep_payloads
         )
@@ -306,6 +327,7 @@ class MetadataService:
             features=features,
             structure=structure,
             simp_reps=simp_reps,
+            constraints=constraints,
             captured=captured,
         )
 

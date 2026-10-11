@@ -3450,6 +3450,19 @@ function creoEnrichAiSnapshotFromMetadata(snapshot, meta) {
             }
         }
     }
+    // Assembly constraints (per-occurrence placement + mates/aligns).
+    if (m.constraints && typeof m.constraints === "object") {
+        snapshot.constraints = m.constraints;
+        if (!snapshot.capture || typeof snapshot.capture !== "object") {
+            snapshot.capture = { status: "ok", errors: [], assembly_context: null };
+        }
+        if (Array.isArray(m.constraints.errors) && m.constraints.errors.length) {
+            if (!Array.isArray(snapshot.capture.errors)) snapshot.capture.errors = [];
+            for (var ci = 0; ci < m.constraints.errors.length; ci++) {
+                snapshot.capture.errors.push("constraints: " + String(m.constraints.errors[ci]));
+            }
+        }
+    }
     // Merge Features-tab / inventory rows into snapshot (Compare + Ask AI).
     // Drawings: prefer metadata drawing inventory when present (same as Details).
     var snapIsDrw = false;
@@ -3960,6 +3973,7 @@ function gatherModelMetadata(filename, filePath, options) {
         var structure = null;
         var bom = [];
         var simp_reps = null;
+        var constraints = null;
         try {
             var type = model.Type;
             var isAsm = false;
@@ -4020,6 +4034,31 @@ function gatherModelMetadata(filename, filePath, options) {
                         active: { id: null, name: "MASTER", is_master: true },
                         representations: [],
                         errors: ["listAssemblySimpRepsForModel: " + creoToolkitErr(errSimp)]
+                    };
+                }
+                // Per-occurrence constraints (GetConstraintsWithCompPath) — same inventory.
+                try {
+                    if (typeof listAssemblyConstraintsForModel === "function") {
+                        var consPack = listAssemblyConstraintsForModel(
+                            solidModel || model, session
+                        );
+                        if (consPack && consPack.ok) {
+                            constraints = {
+                                ok: true,
+                                fileName: consPack.fileName || identity.file_name || filename || "",
+                                components: Array.isArray(consPack.components)
+                                    ? consPack.components
+                                    : [],
+                                errors: Array.isArray(consPack.errors) ? consPack.errors : []
+                            };
+                        }
+                    }
+                } catch (errCons) {
+                    constraints = {
+                        ok: false,
+                        fileName: identity.file_name || filename || "",
+                        components: [],
+                        errors: ["listAssemblyConstraintsForModel: " + creoToolkitErr(errCons)]
                     };
                 }
             }
@@ -4098,7 +4137,8 @@ function gatherModelMetadata(filename, filePath, options) {
                 units: units,
                 family_table: family_table,
                 bom: bom,
-                simp_reps: simp_reps
+                simp_reps: simp_reps,
+                constraints: constraints
             });
         } catch (errEnrich) {
             try {
@@ -4129,6 +4169,7 @@ function gatherModelMetadata(filename, filePath, options) {
             features: features,
             structure: structure || null,
             simp_reps: simp_reps,
+            constraints: constraints,
             ai_snapshot: ai_snapshot,
             // Consumed by app.js on a later Creo.JS turn (Erase is deferred by PTC).
             _pdm_erase_keys: eraseKeys

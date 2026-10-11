@@ -173,6 +173,9 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "snapshot.simp_reps = m.simp_reps" in text
     assert "simp_reps: simp_reps" in text
     assert "listAssemblySimpRepsForModel" in text
+    assert "snapshot.constraints = m.constraints" in text
+    assert "constraints: constraints" in text
+    assert "listAssemblyConstraintsForModel" in text
     assert "function creoBomTipFileName(" in text
     assert "replace(/<<[^>]*>>/g" in text
     assert "function creoMergeDimensionRows(" in text
@@ -324,6 +327,8 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "gatherSnapshot?.structure" in body_fn
     assert "simp_reps" in body_fn
     assert "gatherSnapshot?.simp_reps" in body_fn
+    assert "constraints" in body_fn
+    assert "gatherSnapshot?.constraints" in body_fn
     # Defaults: NEW = latest snap, OLD = one prior; dropdowns cannot invert order.
     assert "NEW = latest snap, OLD = one prior" in script
     assert "function fillAiSnapshotOrderedSelects(" in script
