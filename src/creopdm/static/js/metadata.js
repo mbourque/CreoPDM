@@ -495,6 +495,9 @@ window.__creopdmModules.metadata = {
           constraints: snapshot.constraints && typeof snapshot.constraints === "object"
             ? snapshot.constraints
             : null,
+          relations: snapshot.relations && typeof snapshot.relations === "object"
+            ? snapshot.relations
+            : null,
         };
         try {
           const response = await fetch(`/api/objects/${encodeURIComponent(target.uuid)}/creo-metadata`, {

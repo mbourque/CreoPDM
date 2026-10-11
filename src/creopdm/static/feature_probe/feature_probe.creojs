@@ -1419,6 +1419,127 @@ function appendCrossSectionFeatureRows(features, solid) {
   return list;
 }
 
+/**
+ * Normalize Relations / PostRegenerationRelations sequences to trimmed strings.
+ * Creo.JS returns string arrays or null when empty.
+ */
+function relationLinesFrom(raw) {
+  var out = [];
+  if (raw == null) return out;
+  var items = featureItems(raw);
+  if (!items.length && typeof raw.length === "number") {
+    for (var i = 0; i < raw.length; i++) {
+      try {
+        items.push(raw[i]);
+      } catch (e) {}
+    }
+  }
+  for (var j = 0; j < items.length; j++) {
+    var line = items[j];
+    if (line == null) continue;
+    var text = String(line).replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+    if (text) out.push(text);
+  }
+  return out;
+}
+
+function featureRelationsName(feat) {
+  if (!feat) return "";
+  try {
+    if (typeof feat.GetName === "function") {
+      var n = String(feat.GetName() || "").trim();
+      if (n) return n;
+    }
+  } catch (e) {}
+  try {
+    if (feat.Name != null) {
+      var n2 = String(feat.Name || "").trim();
+      if (n2) return n2;
+    }
+  } catch (e2) {}
+  return "";
+}
+
+/**
+ * Model Relations + PostRegenerationRelations + non-empty feature Relations.
+ * Read-only — never DeleteRelations / RegenerateRelations.
+ */
+function listModelRelationsForModel(model, session) {
+  var fileName = "";
+  try {
+    fileName = String(model.FileName || "");
+  } catch (e) {
+    fileName = "";
+  }
+  fileName = logicalFileName(fileName) || fileName;
+  var errors = [];
+  var normal = [];
+  var post = [];
+  var featureRows = [];
+
+  var relTarget = model;
+  try {
+    var solid = resolveFeatureSolid(model, session);
+    if (solid) relTarget = solid;
+  } catch (eSolid) {}
+
+  try {
+    normal = relationLinesFrom(relTarget.Relations);
+  } catch (errPre) {
+    errors.push("Relations: " + describeError(errPre));
+    normal = [];
+  }
+  try {
+    post = relationLinesFrom(relTarget.PostRegenerationRelations);
+  } catch (errPost) {
+    errors.push("PostRegenerationRelations: " + describeError(errPost));
+    post = [];
+  }
+
+  try {
+    var items = listFeaturesOnSolid(relTarget);
+    for (var i = 0; i < items.length; i++) {
+      var casted = null;
+      try {
+        casted = asFeature(items[i]).feat || items[i];
+      } catch (eCast) {
+        casted = items[i];
+      }
+      if (!casted) continue;
+      var lines = [];
+      try {
+        lines = relationLinesFrom(casted.Relations);
+      } catch (eFeat) {
+        lines = [];
+      }
+      if (!lines.length) continue;
+      var fid = featureIdOf(casted);
+      featureRows.push({
+        feature_id: fid,
+        feature_name: featureRelationsName(casted),
+        relations: lines
+      });
+    }
+  } catch (errFeatWalk) {
+    errors.push("feature Relations: " + describeError(errFeatWalk));
+  }
+
+  return {
+    ok: true,
+    fileName: fileName,
+    normal: normal,
+    post_regeneration: post,
+    features: featureRows,
+    errors: errors
+  };
+}
+
+function listSessionModelRelations() {
+  var am = activeModel();
+  if (am.error) return { ok: false, error: am.error };
+  return listModelRelationsForModel(am.model, am.session);
+}
+
 function listSessionFeatures() {
   var am = activeModel();
   if (am.error) return { ok: false, error: am.error };

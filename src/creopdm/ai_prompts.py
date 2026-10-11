@@ -427,6 +427,9 @@ def prepare_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, A
     constraints = out.get("constraints")
     if isinstance(constraints, dict) and constraints:
         out["constraints"] = dict(constraints)
+    relations = out.get("relations")
+    if isinstance(relations, dict) and relations:
+        out["relations"] = dict(relations)
     # Stamp feature_name onto dims from feature id → name (for older snaps /
     # gathers that only stored feature_id).
     labels = _feature_id_label_map(out)
@@ -1182,6 +1185,143 @@ def _constraints_diff_lines(
     return lines
 
 
+def _relations_dict(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    rel = snapshot.get("relations")
+    return rel if isinstance(rel, dict) else None
+
+
+def _relation_trim_lines(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        text = str(item or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        if text:
+            out.append(text)
+    return out
+
+
+def _relation_line_multiset_delta(
+    older_lines: list[str], newer_lines: list[str]
+) -> tuple[list[str], list[str]]:
+    """Return (removed, added); reorder-only → empty. Preserves duplicates."""
+    older_counts = Counter(older_lines)
+    newer_counts = Counter(newer_lines)
+    if older_counts == newer_counts:
+        return [], []
+    removed: list[str] = []
+    added: list[str] = []
+    for line in sorted(set(older_counts) | set(newer_counts), key=str.lower):
+        delta = newer_counts.get(line, 0) - older_counts.get(line, 0)
+        if delta < 0:
+            removed.extend([line] * (-delta))
+        elif delta > 0:
+            added.extend([line] * delta)
+    return removed, added
+
+
+def _relations_outline_lines(snapshot: dict[str, Any]) -> list[str]:
+    rel = _relations_dict(snapshot)
+    if not rel:
+        return []
+    lines: list[str] = []
+    normal = _relation_trim_lines(rel.get("normal"))
+    post = _relation_trim_lines(rel.get("post_regeneration"))
+    feat_rows = rel.get("features") if isinstance(rel.get("features"), list) else []
+    feat_rows = [f for f in feat_rows if isinstance(f, dict)]
+
+    # Always outline when envelope present (even all-empty) so Diff can mark first capture.
+    lines.append("Relations:")
+    if normal:
+        lines.extend([f"- {b}" for b in normal])
+    else:
+        lines.append("- (none)")
+    if post:
+        lines.append("")
+        lines.append("Post-regeneration relations:")
+        lines.extend([f"- {b}" for b in post])
+    if feat_rows:
+        lines.append("")
+        lines.append("Feature relations:")
+        for feat in feat_rows:
+            fid = feat.get("feature_id")
+            name = str(feat.get("feature_name") or "").strip() or "feature"
+            head = f"{name} ({fid})" if fid is not None else name
+            feat_lines = _relation_trim_lines(feat.get("relations"))
+            if not feat_lines:
+                lines.append(f"- {head}: (none)")
+            else:
+                lines.append(f"- {head}:")
+                for fl in feat_lines:
+                    lines.append(f"  - {fl}")
+    return lines
+
+
+def _relations_diff_lines(
+    older: dict[str, Any], newer: dict[str, Any]
+) -> list[str]:
+    """Authoritative relation line diffs — missing envelope → Not captured."""
+    older_rel = _relations_dict(older)
+    newer_rel = _relations_dict(newer)
+    if older_rel is None and newer_rel is None:
+        return []
+    if older_rel is None or newer_rel is None:
+        return [
+            "Relations: Not captured on one revision "
+            "(not treated as removals or adds)."
+        ]
+
+    lines: list[str] = []
+
+    def _extend_block(block: list[str]) -> None:
+        if not block:
+            return
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.extend(block)
+
+    for title, key in (
+        ("Relations", "normal"),
+        ("Post-regeneration relations", "post_regeneration"),
+    ):
+        old_lines = _relation_trim_lines(older_rel.get(key))
+        new_lines = _relation_trim_lines(newer_rel.get(key))
+        removed, added = _relation_line_multiset_delta(old_lines, new_lines)
+        if removed:
+            _extend_block([f"{title} removed:", *[f"- {r}" for r in removed]])
+        if added:
+            _extend_block([f"{title} added:", *[f"- {a}" for a in added]])
+
+    older_feats = {
+        str(f.get("feature_id")): f
+        for f in (older_rel.get("features") or [])
+        if isinstance(f, dict) and f.get("feature_id") is not None
+    }
+    newer_feats = {
+        str(f.get("feature_id")): f
+        for f in (newer_rel.get("features") or [])
+        if isinstance(f, dict) and f.get("feature_id") is not None
+    }
+    for key in sorted(set(older_feats) | set(newer_feats), key=str.lower):
+        old_f = older_feats.get(key)
+        new_f = newer_feats.get(key)
+        label_src = new_f or old_f or {}
+        name = str(label_src.get("feature_name") or "").strip() or "feature"
+        label = f"{name} ({label_src.get('feature_id')})"
+        old_lines = _relation_trim_lines(old_f.get("relations") if old_f else [])
+        new_lines = _relation_trim_lines(new_f.get("relations") if new_f else [])
+        removed, added = _relation_line_multiset_delta(old_lines, new_lines)
+        if removed:
+            _extend_block(
+                [f"Feature relations removed ({label}):", *[f"- {r}" for r in removed]]
+            )
+        if added:
+            _extend_block(
+                [f"Feature relations added ({label}):", *[f"- {a}" for a in added]]
+            )
+    return lines
+
+
 def _simp_rep_active_name(simp: dict[str, Any] | None) -> str:
     if not isinstance(simp, dict):
         return ""
@@ -1587,6 +1727,9 @@ def format_snapshot_compare_diff_text(
     cons_diff = _constraints_diff_lines(older, newer)
     if cons_diff:
         _extend_section(lines, cons_diff)
+    rel_diff = _relations_diff_lines(older, newer)
+    if rel_diff:
+        _extend_section(lines, rel_diff)
     return "\n".join(lines)
 
 
@@ -1809,6 +1952,36 @@ def slim_snapshot_for_compare(snapshot: dict[str, Any] | None) -> dict[str, Any]
                 slim_cons["components"] = slim_comps
         if slim_cons:
             out["constraints"] = slim_cons
+    relations = snapshot.get("relations")
+    if isinstance(relations, dict) and relations:
+        slim_rel: dict[str, Any] = {}
+        if relations.get("ok") is not None:
+            slim_rel["ok"] = relations.get("ok")
+        if relations.get("fileName") is not None:
+            slim_rel["fileName"] = relations.get("fileName")
+        for key in ("normal", "post_regeneration"):
+            vals = _relation_trim_lines(relations.get(key))
+            if vals:
+                slim_rel[key] = vals
+            elif isinstance(relations.get(key), list):
+                slim_rel[key] = []
+        feat_rows = relations.get("features")
+        if isinstance(feat_rows, list) and feat_rows:
+            slim_feats: list[dict[str, Any]] = []
+            for feat in feat_rows:
+                if not isinstance(feat, dict):
+                    continue
+                row = {
+                    k: feat.get(k)
+                    for k in ("feature_id", "feature_name", "relations")
+                    if feat.get(k) is not None
+                }
+                if row:
+                    slim_feats.append(row)
+            if slim_feats:
+                slim_rel["features"] = slim_feats
+        if slim_rel:
+            out["relations"] = slim_rel
     dimensions = snapshot.get("dimensions")
     if isinstance(dimensions, list):
         out["dimensions"] = []
@@ -2071,6 +2244,10 @@ def format_snapshot_compare_text(snapshot: dict[str, Any] | None) -> str:
         if cons_lines:
             _blank_before_section(lines)
             lines.extend(cons_lines)
+        rel_lines = _relations_outline_lines(snapshot)
+        if rel_lines:
+            _blank_before_section(lines)
+            lines.extend(rel_lines)
 
     return "\n".join(lines) if lines else "(empty snapshot)"
 

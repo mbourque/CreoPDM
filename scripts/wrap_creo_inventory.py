@@ -16,7 +16,11 @@ CONFIGS = [
         "var": "__creoInvFeatures",
         "for_model": "listFeaturesForModel",
         "session": "listSessionFeatures",
-        "extra_exports": ["exportSessionInfo"],
+        "extra_exports": [
+            "exportSessionInfo",
+            {"name": "listModelRelationsForModel", "params": "model, session"},
+            {"name": "listSessionModelRelations", "params": ""},
+        ],
         "session_replace": (
             "function listSessionFeatures() {\n"
             "  var am = activeModel();\n"

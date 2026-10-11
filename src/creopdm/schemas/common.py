@@ -846,6 +846,8 @@ class CreoMetadataRequest(BaseModel):
     simp_reps: dict[str, object] | None = None
     # Per-occurrence assembly constraints (placement + mates/aligns).
     constraints: dict[str, object] | None = None
+    # Model Relations / PostRegenerationRelations + feature Relations.
+    relations: dict[str, object] | None = None
 
 
 class CreoMetadataResponse(BaseModel):
@@ -863,6 +865,7 @@ class CreoMetadataResponse(BaseModel):
     structure: list[dict[str, object]] | None = None
     simp_reps: dict[str, object] | None = None
     constraints: dict[str, object] | None = None
+    relations: dict[str, object] | None = None
     captured: bool = False
 
 

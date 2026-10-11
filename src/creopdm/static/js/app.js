@@ -4705,6 +4705,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       : (gatherSnapshot?.constraints && typeof gatherSnapshot.constraints === "object"
         ? gatherSnapshot.constraints
         : null);
+    const relations = ai.relations && typeof ai.relations === "object"
+      ? ai.relations
+      : (gatherSnapshot?.relations && typeof gatherSnapshot.relations === "object"
+        ? gatherSnapshot.relations
+        : null);
     return {
       schema_version: Number(ai.schema_version) || 1,
       identity: ai.identity || null,
@@ -4718,6 +4723,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
       structure,
       simp_reps,
       constraints,
+      relations,
       capture,
     };
   }

@@ -176,6 +176,9 @@ def test_gather_ai_snapshot_contract_in_creo_js():
     assert "snapshot.constraints = m.constraints" in text
     assert "constraints: constraints" in text
     assert "listAssemblyConstraintsForModel" in text
+    assert "snapshot.relations = m.relations" in text
+    assert "relations: relations" in text
+    assert "listModelRelationsForModel" in text
     assert "function creoBomTipFileName(" in text
     assert "replace(/<<[^>]*>>/g" in text
     assert "function creoMergeDimensionRows(" in text
@@ -329,6 +332,8 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "gatherSnapshot?.simp_reps" in body_fn
     assert "constraints" in body_fn
     assert "gatherSnapshot?.constraints" in body_fn
+    assert "relations" in body_fn
+    assert "gatherSnapshot?.relations" in body_fn
     # Defaults: NEW = latest snap, OLD = one prior; dropdowns cannot invert order.
     assert "NEW = latest snap, OLD = one prior" in script
     assert "function fillAiSnapshotOrderedSelects(" in script

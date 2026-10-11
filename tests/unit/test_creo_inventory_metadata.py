@@ -28,19 +28,23 @@ def test_pack_unpack_features_json_envelope():
     assert raw.get("features") == normalize_feature_rows(features)
     assert raw.get("structure") == structure
 
-    round_features, round_structure, round_simp, round_cons = unpack_features_json(raw)
+    round_features, round_structure, round_simp, round_cons, round_rels = (
+        unpack_features_json(raw)
+    )
     assert round_features == normalize_feature_rows(features)
     assert round_structure == structure
     assert round_simp is None
     assert round_cons is None
+    assert round_rels is None
 
 
 def test_unpack_legacy_features_list():
     legacy = [{"id": 3, "name": "HOLE", "type": "HOLE", "level": 2, "status": "SUPRESSED"}]
-    feats, struct, simp, cons = unpack_features_json(legacy)
+    feats, struct, simp, cons, rels = unpack_features_json(legacy)
     assert struct is None
     assert simp is None
     assert cons is None
+    assert rels is None
     assert feats == normalize_feature_rows(legacy)
 
 
@@ -68,11 +72,12 @@ def test_pack_unpack_simp_reps_in_envelope():
     assert isinstance(raw, dict)
     assert raw.get("v") == 1
     assert raw.get("simp_reps") == simp_reps
-    feats, struct, round_simp, round_cons = unpack_features_json(raw)
+    feats, struct, round_simp, round_cons, round_rels = unpack_features_json(raw)
     assert feats == normalize_feature_rows(features)
     assert struct == []
     assert round_simp == simp_reps
     assert round_cons is None
+    assert round_rels is None
 
 
 def test_pack_unpack_constraints_in_envelope():
@@ -121,11 +126,41 @@ def test_pack_unpack_constraints_in_envelope():
     assert isinstance(raw, dict)
     assert raw.get("v") == 1
     assert raw.get("constraints") == constraints
-    feats, struct, simp, round_cons = unpack_features_json(raw)
+    feats, struct, simp, round_cons, round_rels = unpack_features_json(raw)
     assert feats == normalize_feature_rows(features)
     assert struct == []
     assert simp is None
     assert round_cons == constraints
+    assert round_rels is None
+
+
+def test_pack_unpack_relations_in_envelope():
+    """Model Relations ride the features_json v1 envelope."""
+    features = [{"id": 1, "name": "RIGHT", "type": "DATUM PLANE"}]
+    relations = {
+        "ok": True,
+        "fileName": "cover.prt",
+        "normal": ["d1 = d2 * 2"],
+        "post_regeneration": ["od = id + 1"],
+        "features": [
+            {
+                "feature_id": 12,
+                "feature_name": "EXTRUDE_1",
+                "relations": ["width = height"],
+            }
+        ],
+        "errors": [],
+    }
+    raw = pack_features_json(features, None, None, None, relations)
+    assert isinstance(raw, dict)
+    assert raw.get("v") == 1
+    assert raw.get("relations") == relations
+    feats, struct, simp, cons, round_rels = unpack_features_json(raw)
+    assert feats == normalize_feature_rows(features)
+    assert struct == []
+    assert simp is None
+    assert cons is None
+    assert round_rels == relations
 
 
 def test_assembly_inventory_gathers_simp_reps():
@@ -173,6 +208,25 @@ def test_assembly_inventory_gathers_constraints():
     assert "listAssemblyConstraintsForModel" in text
     assert "constraints: constraints" in text
     assert "function creoGatherConstraints(" not in text
+
+
+def test_feature_inventory_gathers_relations():
+    """Relations capture lives in feature inventory (probe + wrapped creojs)."""
+    probe = (
+        ROOT / "src" / "creopdm" / "static" / "feature_probe" / "feature_probe.creojs"
+    ).read_text(encoding="utf-8")
+    feat = (INV_DIR / "features.creojs").read_text(encoding="utf-8")
+    for body, label in ((probe, "feature_probe"), (feat, "creo_inventory/features")):
+        assert "function listModelRelationsForModel(" in body, label
+        assert "PostRegenerationRelations" in body, label
+        assert "relationLinesFrom" in body, label
+        assert ".Relations" in body, label
+    assert "listModelRelationsForModel: listModelRelationsForModel" in feat
+    assert "function listSessionModelRelations(" in feat
+    text = BASE_HTML.read_text(encoding="utf-8")
+    assert "listModelRelationsForModel" in text
+    assert "relations: relations" in text
+    assert "function creoGatherRelations(" not in text
 
 
 def test_normalize_feature_rows_keeps_inventory_fields():
@@ -228,6 +282,8 @@ def test_creo_inventory_wrapped_files_exist():
     feat = (INV_DIR / "features.creojs").read_text(encoding="utf-8")
     assert "function listFeaturesForModel(" in feat
     assert "function listSessionFeatures(" in feat
+    assert "function listModelRelationsForModel(" in feat
+    assert "function listSessionModelRelations(" in feat
     asm = (INV_DIR / "assembly.creojs").read_text(encoding="utf-8")
     assert "function listAssemblyStructureForModel(" in asm
     assert "function listAssemblySimpRepsForModel(" in asm
@@ -799,6 +855,140 @@ def test_computed_diff_not_captured_when_constraints_missing_on_old():
     assert "Not captured" in diff
     assert "Assembly constraints added" not in diff
     assert "Assembly constraints removed" not in diff
+
+
+def _sample_relations_envelope(*, reorder=False):
+    normal = ["d2 = d1", "od = id + 2"] if reorder else ["od = id + 2", "d2 = d1"]
+    return {
+        "ok": True,
+        "fileName": "cover.prt",
+        "normal": normal,
+        "post_regeneration": ["clearance = 0.1"],
+        "features": [
+            {
+                "feature_id": 12,
+                "feature_name": "EXTRUDE_1",
+                "relations": ["width = height"],
+            }
+        ],
+        "errors": [],
+    }
+
+
+def test_compare_outline_includes_relations():
+    text = format_snapshot_compare_text(
+        {
+            "identity": {"filename": "cover.prt", "model_type": "PART"},
+            "features": [],
+            "parameters": [{"name": "DESCRIPTION", "value": "x"}],
+            "relations": _sample_relations_envelope(),
+        }
+    )
+    assert "Relations:" in text
+    assert "od = id + 2" in text
+    assert "Post-regeneration relations:" in text
+    assert "clearance = 0.1" in text
+    assert "Feature relations:" in text
+    assert "EXTRUDE_1 (12)" in text
+    assert "width = height" in text
+    assert text.index("Parameters:") < text.index("Relations:")
+    assert "\n\nRelations:" in text
+
+
+def test_computed_diff_reports_relation_line_added():
+    older = {
+        "identity": {"filename": "cover.prt", "model_type": "PART"},
+        "features": [],
+        "relations": {
+            "ok": True,
+            "normal": ["od = id + 2"],
+            "post_regeneration": [],
+            "features": [],
+        },
+    }
+    newer = {
+        "identity": {"filename": "cover.prt", "model_type": "PART"},
+        "features": [],
+        "relations": {
+            "ok": True,
+            "normal": ["od = id + 2", "d2 = d1"],
+            "post_regeneration": [],
+            "features": [],
+        },
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Relations added:" in diff
+    assert "- d2 = d1" in diff
+
+
+def test_computed_diff_omits_relations_on_reorder_only():
+    older = {
+        "identity": {"filename": "cover.prt", "model_type": "PART"},
+        "features": [],
+        "relations": _sample_relations_envelope(reorder=False),
+    }
+    newer = {
+        "identity": {"filename": "cover.prt", "model_type": "PART"},
+        "features": [],
+        "relations": _sample_relations_envelope(reorder=True),
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Relations" not in diff
+
+
+def test_computed_diff_not_captured_when_relations_missing_on_old():
+    older = {
+        "identity": {"filename": "cover.prt", "model_type": "PART"},
+        "features": [],
+    }
+    newer = {
+        "identity": {"filename": "cover.prt", "model_type": "PART"},
+        "features": [],
+        "relations": _sample_relations_envelope(),
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Not captured" in diff
+    assert "Relations added" not in diff
+
+
+def test_computed_diff_feature_relations_bucket():
+    older = {
+        "identity": {"filename": "cover.prt", "model_type": "PART"},
+        "features": [],
+        "relations": {
+            "ok": True,
+            "normal": [],
+            "post_regeneration": [],
+            "features": [
+                {
+                    "feature_id": 12,
+                    "feature_name": "EXTRUDE_1",
+                    "relations": ["width = height"],
+                }
+            ],
+        },
+    }
+    newer = {
+        "identity": {"filename": "cover.prt", "model_type": "PART"},
+        "features": [],
+        "relations": {
+            "ok": True,
+            "normal": [],
+            "post_regeneration": [],
+            "features": [
+                {
+                    "feature_id": 12,
+                    "feature_name": "EXTRUDE_1",
+                    "relations": ["width = height * 2"],
+                }
+            ],
+        },
+    }
+    diff = format_snapshot_compare_diff_text(older, newer)
+    assert "Feature relations removed (EXTRUDE_1 (12)):" in diff
+    assert "- width = height" in diff
+    assert "Feature relations added (EXTRUDE_1 (12)):" in diff
+    assert "- width = height * 2" in diff
 
 
 def test_computed_diff_null_offset_not_equal_to_zero():

@@ -4,6 +4,7 @@
   var statusNode = document.getElementById("status");
   var rowsNode = document.getElementById("rows");
   var btnList = document.getElementById("btn-list");
+  var btnRelations = document.getElementById("btn-relations");
   var btnCopy = document.getElementById("btn-copy");
   var lastPayload = null;
 
@@ -22,14 +23,16 @@
 
   function setBusy(busy) {
     btnList.disabled = busy;
+    if (btnRelations) btnRelations.disabled = busy;
     if (busy) btnCopy.disabled = true;
   }
 
-  function requireCreo() {
-    if (typeof CreoJS === "undefined" || typeof CreoJS.listSessionFeatures !== "function") {
+  function requireCreo(fnName) {
+    var name = fnName || "listSessionFeatures";
+    if (typeof CreoJS === "undefined" || typeof CreoJS[name] !== "function") {
       setStatus(
         "err",
-        "CreoJS.listSessionFeatures is missing. Open this page in Creo's embedded browser."
+        "CreoJS." + name + " is missing. Open this page in Creo's embedded browser."
       );
       return false;
     }
@@ -366,7 +369,7 @@
   }
 
   function listFeatures() {
-    if (!requireCreo()) return;
+    if (!requireCreo("listSessionFeatures")) return;
     setBusy(true);
     setStatus("", "Listing…");
     // CallPromise.then does not await native Promises — never return Promise.resolve.
@@ -392,7 +395,52 @@
       });
   }
 
+  function finishRelations(result) {
+    setBusy(false);
+    if (result == null || typeof result !== "object") {
+      lastPayload = { ok: false, error: "listSessionModelRelations returned empty." };
+      setStatus("err", lastPayload.error);
+      btnCopy.disabled = false;
+      return;
+    }
+    if (result.ok === false) {
+      lastPayload = result;
+      setStatus("err", result.error || "listSessionModelRelations failed.");
+      btnCopy.disabled = false;
+      return;
+    }
+    lastPayload = result;
+    var n = Array.isArray(result.normal) ? result.normal.length : 0;
+    var p = Array.isArray(result.post_regeneration) ? result.post_regeneration.length : 0;
+    var f = Array.isArray(result.features) ? result.features.length : 0;
+    setStatus(
+      "ok",
+      "Relations: " + n + " normal, " + p + " post-regen, " + f + " feature row(s). Copy JSON to inspect."
+    );
+    btnCopy.disabled = false;
+  }
+
+  function listRelations() {
+    if (!requireCreo("listSessionModelRelations")) return;
+    setBusy(true);
+    setStatus("", "Capturing relations…");
+    CreoJS.listSessionModelRelations()
+      .then(function (result) {
+        finishRelations(result);
+      })
+      .catch(function (error) {
+        setBusy(false);
+        lastPayload = {
+          ok: false,
+          error: error && error.message ? error.message : String(error)
+        };
+        setStatus("err", lastPayload.error);
+        btnCopy.disabled = false;
+      });
+  }
+
   btnList.addEventListener("click", listFeatures);
+  if (btnRelations) btnRelations.addEventListener("click", listRelations);
   btnCopy.addEventListener("click", function () {
     if (!lastPayload) return;
     var text = JSON.stringify(lastPayload, null, 2);

@@ -654,3 +654,48 @@ def test_assembly_constraints_roundtrip_on_creo_metadata(client, repo_parent, tm
     assert fetched.status_code == 200, fetched.text
     assert fetched.json()["constraints"]["components"][0]["model_name"] == "bracket.prt"
     assert fetched.json()["constraints"]["components"][0]["constraints"][0]["offset"] == 5.0
+
+
+@requires_git
+def test_model_relations_roundtrip_on_creo_metadata(client, repo_parent, tmp_path):
+    """Saved model / feature Relations persist on the version envelope."""
+    product = _create_product(client, repo_parent)
+    part = _add_part(client, product["uuid"], tmp_path, "cover.prt.1")
+    relations = {
+        "ok": True,
+        "fileName": "cover.prt",
+        "normal": ["od = id + 2", "d2 = d1"],
+        "post_regeneration": ["clearance = 0.1"],
+        "features": [
+            {
+                "feature_id": 12,
+                "feature_name": "EXTRUDE_1",
+                "relations": ["width = height"],
+            }
+        ],
+        "errors": [],
+    }
+    posted = client.post(
+        f"/api/objects/{part['uuid']}/creo-metadata",
+        json={
+            "identity": {"file_name": "cover.prt", "model_type": "PART"},
+            "features": [
+                {
+                    "id": 12,
+                    "name": "EXTRUDE_1",
+                    "type": "PROTRUSION",
+                    "level": 1,
+                    "status": "ACTIVE",
+                }
+            ],
+            "relations": relations,
+        },
+    )
+    assert posted.status_code == 200, posted.text
+    body = posted.json()
+    assert body["relations"] == relations
+
+    fetched = client.get(f"/api/objects/{part['uuid']}/creo-metadata")
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["relations"]["normal"][0] == "od = id + 2"
+    assert fetched.json()["relations"]["features"][0]["feature_name"] == "EXTRUDE_1"
