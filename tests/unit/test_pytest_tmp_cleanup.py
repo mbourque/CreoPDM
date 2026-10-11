@@ -1,4 +1,4 @@
-"""Repo-root pytest-tmp / pytest-tmp-* dirs are scrubbed before/after each pytest run."""
+"""Repo-root pytest-tmp* / pytest-cache are scrubbed before/after each pytest run."""
 
 from __future__ import annotations
 
@@ -32,6 +32,16 @@ def test_cleanup_stale_pytest_tmp_removes_plain_pytest_tmp(tmp_path: Path):
     assert not legacy.exists()
 
 
+def test_cleanup_removes_pytest_cache_dir(tmp_path: Path):
+    """pyproject cache_dir = pytest-cache must be scrubbed with temps."""
+    cache = tmp_path / "pytest-cache"
+    cache.mkdir()
+    (cache / "v").mkdir()
+    (cache / "v" / "cache").write_text("x", encoding="utf-8")
+    assert cleanup_stale_pytest_tmp(tmp_path) == 1
+    assert not cache.exists()
+
+
 def test_cleanup_stale_pytest_tmp_removes_readonly_tree(tmp_path: Path):
     """Windows often leaves read-only files; cleanup must still wipe the tree."""
     tree = tmp_path / "pytest-tmp-readonly"
@@ -45,17 +55,19 @@ def test_cleanup_stale_pytest_tmp_removes_readonly_tree(tmp_path: Path):
     assert not tree.exists()
 
 
-def test_cleanup_after_session_removes_all_without_keep():
-    """sessionfinish must scrub every pytest-tmp* (no keep of the current run)."""
+def test_cleanup_after_session_removes_all_and_schedules_deferred():
+    """sessionfinish must scrub everything and schedule a post-exit child."""
     root = Path(__file__).resolve().parents[2]
     conftest = (root / "tests" / "conftest.py").read_text(encoding="utf-8")
     finish = conftest.split("def pytest_sessionfinish", 1)[1].split(
         "@pytest.fixture", 1
     )[0]
     assert "cleanup_stale_pytest_tmp(root" in finish
+    assert "schedule_deferred_pytest_tmp_cleanup(root" in finish
     assert "keep=" not in finish
-    assert "retries=" in finish
-    assert "shutil.rmtree" not in finish
+    helper = (root / "tests" / "pytest_basetemp.py").read_text(encoding="utf-8")
+    assert "pytest-cache" in helper
+    assert "DETACHED_PROCESS" in helper
 
 
 def test_conftest_scrubs_before_and_after_session():
@@ -71,3 +83,4 @@ def test_conftest_scrubs_before_and_after_session():
     helper = (root / "tests" / "pytest_basetemp.py").read_text(encoding="utf-8")
     assert "def _rmtree_force(" in helper
     assert "gc.collect()" in helper
+    assert "def schedule_deferred_pytest_tmp_cleanup(" in helper

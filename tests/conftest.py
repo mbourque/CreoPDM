@@ -14,7 +14,10 @@ from creopdm.app import build_context, create_app
 from creopdm.config import ConfigManager
 from creopdm.services.git_service import GitService
 from creopdm.utils.identity import StaticUserProvider
-from tests.pytest_basetemp import cleanup_stale_pytest_tmp
+from tests.pytest_basetemp import (
+    cleanup_stale_pytest_tmp,
+    schedule_deferred_pytest_tmp_cleanup,
+)
 
 PYTEST_LAST_LOG = "pytest-last.log"
 
@@ -44,10 +47,13 @@ def pytest_configure(config):
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """Remove every repo-root pytest-tmp* dir after the run (this run + leftovers)."""
+    """Remove repo-root pytest-tmp* and pytest-cache after the run."""
     root = Path(session.config.rootpath)
-    # Retries + gc: Windows often still holds creopdm.db until handles close.
+    # Immediate pass (often enough when nothing is locked).
     cleanup_stale_pytest_tmp(root, retries=5, retry_delay_s=0.2)
+    # Windows: SQLite may still lock creopdm.db until this process exits —
+    # a detached child finishes the scrub a moment later.
+    schedule_deferred_pytest_tmp_cleanup(root, delay_s=2.0)
 
 
 @pytest.fixture(autouse=True)
