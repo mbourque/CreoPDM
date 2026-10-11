@@ -15,7 +15,10 @@ def test_help_page_is_packaged():
     assert "How to use CreoPDM" in text
     assert 'id="tips"' in text
     assert 'id="agent"' in text
-    assert "Agent tray (new users)" in text
+    assert "Agent tray" in text
+    assert "Agent tray (new users)" not in text
+    assert "Space Grotesk" not in text
+    assert "fonts.googleapis.com" not in text
     assert "/help/agent-tray" in text
     assert "shell:startup" in text
     assert "Creo: Agent offline" in text
@@ -28,7 +31,8 @@ def test_help_route_serves_page(client):
     assert "text/html" in (response.headers.get("content-type") or "")
     assert "How to use CreoPDM" in response.text
     assert "Quick start" in response.text
-    assert "Agent tray (new users)" in response.text
+    assert "Agent tray" in response.text
+    assert "Agent tray (new users)" not in response.text
     assert "Creo: Agent offline" in response.text
 
 
