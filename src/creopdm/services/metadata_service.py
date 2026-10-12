@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +55,54 @@ _GENERIC_FEATURE_NAME_LABELS = frozenset({"general", "none", "default", "edge"})
 _FEATURES_JSON_ENVELOPE_VERSION = 1
 
 
+_CAD_STRUCTURE_TIP_RE = re.compile(
+    r"\.(prt|asm|mfg|drw|frm|sec|lay|neu|xas|xpr)(\.\d+)?$",
+    re.IGNORECASE,
+)
+
+
+def is_assembly_structure_noise_row(row: dict[str, Any]) -> bool:
+    """True for datum/CSYS/xsec-as-COMPONENT rows that belong on Features, not Structure."""
+    typ = str(row.get("type") or "").strip().upper()
+    name = str(row.get("name") or "").strip()
+    if typ in {
+        "PART",
+        "ASSEMBLY",
+        "MFG",
+        "SKELETON",
+        "BULK",
+        "GROUP",
+        "CROSS_SECTION",
+        "WORKPIECE",
+        "FIXTURE",
+    }:
+        return False
+    if any(
+        token in typ
+        for token in ("DATUM", "COORD_SYS", "COORDINATE", "CURVE", "CROSS_SEC", "XSEC", "XSECTION")
+    ):
+        return True
+    # Fake COMPONENT: feature label (ASM_RIGHT, A, …) without a CAD tip suffix.
+    if typ in {"COMPONENT", "FEATURE", ""} and name:
+        if not _CAD_STRUCTURE_TIP_RE.search(name):
+            return True
+    return False
+
+
+def filter_assembly_structure_rows(
+    structure: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]] | None:
+    """Drop non-component Structure rows (datums / CSYS / bare xsec COMPONENT)."""
+    if structure is None:
+        return None
+    out = [
+        dict(row)
+        for row in structure
+        if isinstance(row, dict) and not is_assembly_structure_noise_row(row)
+    ]
+    return out
+
+
 def pack_features_json(
     features: list[dict[str, Any]] | None,
     structure: list[dict[str, Any]] | None,
@@ -71,7 +120,9 @@ def pack_features_json(
     ):
         return None
     feat_list = normalize_feature_rows(features or [])
-    struct_list = [dict(row) for row in structure or [] if isinstance(row, dict)]
+    struct_list = filter_assembly_structure_rows(
+        [dict(row) for row in structure or [] if isinstance(row, dict)]
+    ) or []
     if (
         struct_list
         or simp_reps is not None
@@ -110,7 +161,11 @@ def unpack_features_json(
         struct = raw.get("structure")
         features = normalize_feature_rows(feats) if isinstance(feats, list) else None
         structure = (
-            [dict(row) for row in struct if isinstance(row, dict)] if isinstance(struct, list) else None
+            filter_assembly_structure_rows(
+                [dict(row) for row in struct if isinstance(row, dict)]
+            )
+            if isinstance(struct, list)
+            else None
         )
         simp_raw = raw.get("simp_reps")
         simp_reps = dict(simp_raw) if isinstance(simp_raw, dict) else None

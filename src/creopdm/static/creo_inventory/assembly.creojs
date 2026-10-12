@@ -341,6 +341,10 @@ function descrFileName(descr) {
  * Prefer referenced model tip for COMPONENT rows.
  * IFX assemble features often GetName() === "no_name" while ModelDescr/GetModel
  * carry the real .prt/.asm tip — never surface the literal placeholder.
+ *
+ * Do NOT fall back to feat.GetName()/Name here: those are feature labels
+ * (ASM_RIGHT, ASM_DEF_CSYS, cross-section "A") and would fake Structure
+ * COMPONENT rows. Feature display names belong in featureStoredName only.
  */
 function componentModelName(feat) {
   var raw = "";
@@ -374,18 +378,6 @@ function componentModelName(feat) {
         );
       }
     } catch (e4) {}
-  }
-  if (!raw) {
-    try {
-      if (feat && typeof feat.GetName === "function") {
-        raw = usableComponentLabel(feat.GetName());
-      }
-    } catch (e5) {}
-  }
-  if (!raw) {
-    try {
-      if (feat && feat.Name != null) raw = usableComponentLabel(feat.Name);
-    } catch (e6) {}
   }
   return raw ? logicalFileName(raw) : "";
 }
@@ -445,27 +437,51 @@ function featureTypeHints(feat) {
   return bits.join(" ").toUpperCase();
 }
 
+/**
+ * Datums / CSYS / cross-sections / curves belong on Features — never Structure.
+ * (Creo.JS sometimes exposes CompType or a Name that looked like a component.)
+ */
+function isNonComponentAssemblyFeature(feat) {
+  if (!feat) return false;
+  var t = featureTypeHints(feat);
+  if (!t) {
+    try {
+      t = String(feat.FeatTypeName || "").toUpperCase();
+    } catch (e) {
+      t = "";
+    }
+  }
+  // Datums / CSYS / curves / xsecs — Features tab only (not Structure components).
+  return (
+    t.indexOf("DATUM") >= 0 ||
+    t.indexOf("COORD_SYS") >= 0 ||
+    t.indexOf("COORDINATE") >= 0 ||
+    t.indexOf("CURVE") >= 0 ||
+    /CROSS_?SEC|X_?SEC|XSECTION/.test(t)
+  );
+}
+
 function isComponentFeature(feat) {
   if (!feat) return false;
+  if (isNonComponentAssemblyFeature(feat)) return false;
   try {
     if (typeof pfcFeatureType !== "undefined" && feat.FeatType === pfcFeatureType.FEATTYPE_COMPONENT) {
       return true;
     }
   } catch (e) {}
   var t = featureTypeHints(feat);
-  if (t.indexOf("COMPONENT") >= 0) return true;
-  if (t.indexOf("WORKPIECE") >= 0 || t.indexOf("FIXTURE") >= 0) return true;
+  // Require COMPONENT as a feature type — not a loose CompType on every solid feat.
+  if (t.indexOf("FEATTYPE_COMPONENT") >= 0) return true;
   try {
-    var ct = enumString(
-      feat.CompType || (typeof feat.GetCompType === "function" ? feat.GetCompType() : null)
-    );
-    if (ct) return true;
+    if (String(feat.FeatTypeName || "").toUpperCase() === "COMPONENT") return true;
   } catch (e2) {}
+  if (t.indexOf("WORKPIECE") >= 0 || t.indexOf("FIXTURE") >= 0) return true;
   return false;
 }
 
 function featureHasRefModel(feat) {
   if (!feat) return false;
+  if (isNonComponentAssemblyFeature(feat)) return false;
   try {
     if (feat.ModelDescr != null) return true;
   } catch (e) {}
@@ -475,12 +491,14 @@ function featureHasRefModel(feat) {
   try {
     if (typeof feat.GetModel === "function" && feat.GetModel()) return true;
   } catch (e3) {}
+  // componentModelName is model-tip only (no feature Name fallback).
   return !!componentModelName(feat);
 }
 
 /** Component / workpiece / fixture / anything with a referenced model. */
 function isStructureMemberFeature(feat) {
   if (!feat) return false;
+  if (isNonComponentAssemblyFeature(feat)) return false;
   if (isGroupHeadFeature(feat)) return true;
   if (isComponentFeature(feat)) return true;
   return featureHasRefModel(feat);
@@ -1212,6 +1230,8 @@ function walkAssemblyStructure(
     var ckey = cid != null ? String(cid) : null;
     if (ckey && nestedUnderGroup[ckey]) continue;
     if (ckey && emitted[ckey]) continue;
+    // Datums / CSYS / xsecs are Features — never Structure rows (even MFG fallback).
+    if (isNonComponentAssemblyFeature(feat)) continue;
 
     if (isGroupHeadFeature(feat)) {
       emitFeat(feat, level, pathPrefix, treeChildren);

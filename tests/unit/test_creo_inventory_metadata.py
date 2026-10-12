@@ -354,7 +354,90 @@ def test_assembly_probe_and_inventory_prefer_ref_model_over_no_name():
         assert 'if (!/^IFX_/.test(gstored)) continue;' in body, label
         # Must resolve child tip even when componentModelName was empty.
         assert "if (!name && childModel)" in body, label
-        assert "usableComponentLabel(feat.GetName())" in body, label
+        # featureStoredName still uses GetName; componentModelName must not
+        # (that painted ASM_RIGHT / xsec A as fake Structure COMPONENTs).
+        assert "function featureStoredName(" in body, label
+        assert "function componentModelName(" in body, label
+        model_name_fn = body.split("function componentModelName(", 1)[1].split(
+            "\nfunction ", 1
+        )[0]
+        assert "GetModelDescr" in model_name_fn, label
+        assert "feat.GetName()" not in model_name_fn, label
+        assert "feat.Name" not in model_name_fn, label
+
+
+def test_assembly_structure_excludes_datums_and_bare_feature_names():
+    """Structure is components (+ groups / xsec group) — not ASM_RIGHT / CSYS / xsec-as-COMPONENT."""
+    probe = (
+        ROOT / "src" / "creopdm" / "static" / "assembly_probe" / "assembly_probe.creojs"
+    ).read_text(encoding="utf-8")
+    asm = (INV_DIR / "assembly.creojs").read_text(encoding="utf-8")
+    for body, label in ((probe, "assembly_probe"), (asm, "creo_inventory/assembly")):
+        assert "function isNonComponentAssemblyFeature(" in body, label
+        assert "isNonComponentAssemblyFeature(feat)" in body, label
+        assert 't.indexOf("DATUM") >= 0' in body, label
+        assert "Do NOT fall back to feat.GetName()/Name here" in body, label
+        # CompType alone must not promote every solid feat to a component.
+        assert "if (ct) return true;" not in body.split(
+            "function isComponentFeature(", 1
+        )[1].split("\nfunction ", 1)[0], label
+
+    from creopdm.services.metadata_service import (
+        filter_assembly_structure_rows,
+        is_assembly_structure_noise_row,
+        pack_features_json,
+        unpack_features_json,
+    )
+
+    assert is_assembly_structure_noise_row(
+        {"name": "ASM_RIGHT", "type": "COMPONENT", "id": 1}
+    )
+    assert is_assembly_structure_noise_row(
+        {"name": "ASM_DEF_CSYS", "type": "COMPONENT", "id": 7}
+    )
+    assert is_assembly_structure_noise_row(
+        {"name": "A", "type": "COMPONENT", "id": 462}
+    )
+    assert not is_assembly_structure_noise_row(
+        {"name": "BASE-PLATE.prt", "type": "PART", "id": 40}
+    )
+    assert not is_assembly_structure_noise_row(
+        {"name": "A", "type": "CROSS_SECTION", "id": 462}
+    )
+    assert not is_assembly_structure_noise_row(
+        {"name": "Model cross-sections", "type": "GROUP", "id": None}
+    )
+
+    cleaned = filter_assembly_structure_rows(
+        [
+            {"name": "ASM_RIGHT", "type": "COMPONENT", "id": 1},
+            {"name": "shaft.prt", "type": "PART", "id": 10},
+            {"name": "A", "type": "COMPONENT", "id": 462},
+            {"name": "Model cross-sections", "type": "GROUP", "id": None},
+            {"name": "A", "type": "CROSS_SECTION", "id": 462},
+        ]
+    )
+    assert [r["name"] for r in cleaned] == [
+        "shaft.prt",
+        "Model cross-sections",
+        "A",
+    ]
+    packed = pack_features_json([], cleaned)
+    _, struct, _, _, _ = unpack_features_json(packed)
+    assert [r["name"] for r in struct] == [
+        "shaft.prt",
+        "Model cross-sections",
+        "A",
+    ]
+
+    base = (
+        ROOT / "src" / "creopdm" / "templates" / "base.html"
+    ).read_text(encoding="utf-8")
+    struct_fn = base.split("function creoInventoryStructureRows(", 1)[1].split(
+        "\nfunction ", 1
+    )[0]
+    assert "tipRe" in struct_fn
+    assert "COMPONENT" in struct_fn
 
 
 def test_compare_outline_uses_drawing_inventory():

@@ -1936,13 +1936,29 @@ function creoInventoryStructureRows(result) {
     var rows = [];
     if (!result || result.ok === false) return rows;
     var list = result.components || [];
+    var tipRe = /\.(prt|asm|mfg|drw|frm|sec|lay|neu|xas|xpr)(\.\d+)?$/i;
     for (var i = 0; i < list.length; i++) {
         var r = list[i];
         if (!r) continue;
+        var type = String(r.type || "").trim();
+        var name = String(r.name || "").trim();
+        var typU = type.toUpperCase();
+        // Datums / CSYS / bare feature labels are Features — not Structure.
+        // Keep type CROSS_SECTION (Model cross-sections group); drop fake COMPONENT tips.
+        if (/DATUM|COORD_SYS|COORDINATE|\bCURVE\b/.test(typU)) {
+            continue;
+        }
+        if (
+            (typU === "COMPONENT" || typU === "FEATURE" || !typU)
+            && name
+            && !tipRe.test(name)
+        ) {
+            continue;
+        }
         rows.push({
             id: r.id != null ? r.id : null,
-            name: String(r.name || "").trim(),
-            type: String(r.type || "").trim(),
+            name: name,
+            type: type,
             subtype: String(r.subType || r.subtype || "").trim(),
             level: r.level != null ? r.level : null,
             status: String(r.status || "").trim(),
