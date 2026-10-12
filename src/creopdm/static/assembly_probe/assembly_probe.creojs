@@ -2046,9 +2046,7 @@ function listSessionAssemblyStructure() {
     null,
     []
   );
-
-  var solid = resolveStructureSolid(model, session);
-  appendCrossSectionStructureRows(flat, treeChildren, solid);
+  // Cross-sections stay on Features — do not append to Structure.
 
   var rootType = rootStructureType(model, fileName);
   var tree = [

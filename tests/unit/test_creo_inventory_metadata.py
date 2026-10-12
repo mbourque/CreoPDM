@@ -401,11 +401,14 @@ def test_assembly_structure_excludes_datums_and_bare_feature_names():
     assert not is_assembly_structure_noise_row(
         {"name": "BASE-PLATE.prt", "type": "PART", "id": 40}
     )
-    assert not is_assembly_structure_noise_row(
+    assert is_assembly_structure_noise_row(
         {"name": "A", "type": "CROSS_SECTION", "id": 462}
     )
+    assert is_assembly_structure_noise_row(
+        {"name": "Model cross-sections", "type": "GROUP", "id": None, "subtype": "CROSS_SECTION"}
+    )
     assert not is_assembly_structure_noise_row(
-        {"name": "Model cross-sections", "type": "GROUP", "id": None}
+        {"name": "IFX_ID_1", "type": "GROUP", "id": 99}
     )
 
     cleaned = filter_assembly_structure_rows(
@@ -415,20 +418,18 @@ def test_assembly_structure_excludes_datums_and_bare_feature_names():
             {"name": "A", "type": "COMPONENT", "id": 462},
             {"name": "Model cross-sections", "type": "GROUP", "id": None},
             {"name": "A", "type": "CROSS_SECTION", "id": 462},
+            {"name": "IFX_ID_1", "type": "GROUP", "id": 99},
         ]
     )
-    assert [r["name"] for r in cleaned] == [
-        "shaft.prt",
-        "Model cross-sections",
-        "A",
-    ]
+    assert [r["name"] for r in cleaned] == ["shaft.prt", "IFX_ID_1"]
     packed = pack_features_json([], cleaned)
     _, struct, _, _, _ = unpack_features_json(packed)
-    assert [r["name"] for r in struct] == [
-        "shaft.prt",
-        "Model cross-sections",
-        "A",
-    ]
+    assert [r["name"] for r in struct] == ["shaft.prt", "IFX_ID_1"]
+
+    for body, label in ((probe, "assembly_probe"), (asm, "creo_inventory/assembly")):
+        assert "do not append to Structure" in body, label
+        # Call site removed (helper may remain unused in the probe file).
+        assert "appendCrossSectionStructureRows(flat, treeChildren, solid);" not in body, label
 
     base = (
         ROOT / "src" / "creopdm" / "templates" / "base.html"
@@ -438,6 +439,7 @@ def test_assembly_structure_excludes_datums_and_bare_feature_names():
     )[0]
     assert "tipRe" in struct_fn
     assert "COMPONENT" in struct_fn
+    assert "model cross-sections" in struct_fn
 
 
 def test_compare_outline_uses_drawing_inventory():

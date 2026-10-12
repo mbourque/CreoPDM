@@ -1943,9 +1943,20 @@ function creoInventoryStructureRows(result) {
         var type = String(r.type || "").trim();
         var name = String(r.name || "").trim();
         var typU = type.toUpperCase();
-        // Datums / CSYS / bare feature labels are Features — not Structure.
-        // Keep type CROSS_SECTION (Model cross-sections group); drop fake COMPONENT tips.
-        if (/DATUM|COORD_SYS|COORDINATE|\bCURVE\b/.test(typU)) {
+        // Datums / CSYS / cross-sections / bare labels are Features — not Structure.
+        var subU = String(r.subType || r.subtype || "").trim().toUpperCase();
+        if (
+            /DATUM|COORD_SYS|COORDINATE|\bCURVE\b|CROSS_SEC|XSEC|XSECTION/.test(typU)
+            || typU === "CROSS_SECTION"
+            || (
+                typU === "GROUP"
+                && (
+                    name.toLowerCase() === "model cross-sections"
+                    || subU === "CROSS_SECTION"
+                    || /CROSS_SEC/.test(subU)
+                )
+            )
+        ) {
             continue;
         }
         if (

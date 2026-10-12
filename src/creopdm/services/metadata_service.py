@@ -62,9 +62,17 @@ _CAD_STRUCTURE_TIP_RE = re.compile(
 
 
 def is_assembly_structure_noise_row(row: dict[str, Any]) -> bool:
-    """True for datum/CSYS/xsec-as-COMPONENT rows that belong on Features, not Structure."""
+    """True for feature rows that belong on Features, not Structure."""
     typ = str(row.get("type") or "").strip().upper()
     name = str(row.get("name") or "").strip()
+    sub = str(row.get("subtype") or row.get("subType") or "").strip().upper()
+    # Cross-sections (and their old Structure group) live on Features only.
+    if typ == "CROSS_SECTION" or "CROSS_SEC" in typ or "XSECTION" in typ or typ == "XSEC":
+        return True
+    if typ == "GROUP" and (
+        name.lower() == "model cross-sections" or "CROSS_SEC" in sub or sub == "CROSS_SECTION"
+    ):
+        return True
     if typ in {
         "PART",
         "ASSEMBLY",
@@ -72,7 +80,6 @@ def is_assembly_structure_noise_row(row: dict[str, Any]) -> bool:
         "SKELETON",
         "BULK",
         "GROUP",
-        "CROSS_SECTION",
         "WORKPIECE",
         "FIXTURE",
     }:
@@ -92,7 +99,7 @@ def is_assembly_structure_noise_row(row: dict[str, Any]) -> bool:
 def filter_assembly_structure_rows(
     structure: list[dict[str, Any]] | None,
 ) -> list[dict[str, Any]] | None:
-    """Drop non-component Structure rows (datums / CSYS / bare xsec COMPONENT)."""
+    """Drop non-component Structure rows (datums / CSYS / cross-sections)."""
     if structure is None:
         return None
     out = [
