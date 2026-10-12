@@ -367,7 +367,7 @@ def test_assembly_probe_and_inventory_prefer_ref_model_over_no_name():
 
 
 def test_assembly_structure_excludes_datums_and_bare_feature_names():
-    """Structure is components (+ groups / xsec group) — not ASM_RIGHT / CSYS / xsec-as-COMPONENT."""
+    """Structure is real components/groups only — not datums, CSYS, or cross-sections."""
     probe = (
         ROOT / "src" / "creopdm" / "static" / "assembly_probe" / "assembly_probe.creojs"
     ).read_text(encoding="utf-8")
