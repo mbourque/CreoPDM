@@ -1626,7 +1626,8 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert 'th class="mono"' not in detail
     assert "object-open mono bom-name" not in detail
     assert "object-open bom-name" not in detail
-    assert 'class="bom-name" href="/products/{{ product.uuid }}/objects/' in detail
+    assert 'href="/products/{{ product.uuid }}/objects/' in detail
+    assert "bom-name" in detail and "thumb-preview-target" in detail
     assert "Details for" in detail
     script = _app_js()
     assert "Do not wire those to openPdmObjectFromUi" in script
@@ -1891,16 +1892,17 @@ def test_search_and_files_omit_path_under_filename():
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     path_line = _between(script, "function searchPathLineHtml(", "function searchRowHtml(")
+    assert "vault path is not shown under the name" in path_line
     assert 'return "";' in path_line or "return '';" in path_line
     assert 'class="muted small search-path"' not in path_line
+    assert "truncateMiddlePath(full)" not in path_line
     row = _between(script, "function searchRowHtml(", "function showFolderView(")
     assert "searchPathLineHtml(relative, filename)" in row
-    assert "no vault path under the name" in docs.lower() or "filename only" in docs.lower()
-    assert "gray vault path line under the filename" in docs.lower()
-    # Server-rendered Files rows must not print relative_path under the name.
-    name_cell = app_html.split('class="object-open"', 1)[1].split("</td>", 1)[0]
-    assert "relative_path" not in name_cell or "data-" in name_cell
+    docs_l = docs.lower()
+    assert "no vault path under the name" in docs_l
+    assert "gray vault path line under the filename" in docs_l
     assert 'class="muted small">{{ obj.relative_path }}' not in app_html
+    assert 'class="muted small">{{ item.relative_path }}' not in app_html
 
 
 def test_search_form_only_on_files_tab():
