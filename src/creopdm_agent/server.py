@@ -2831,20 +2831,30 @@ def create_agent_app(settings: AgentConfig) -> FastAPI:
         return _proxy_toolkit_get(path, timeout=120.0)
 
     @app.get("/toolkit/snapshot")
-    def toolkit_snapshot(filename: str = "", domains: str = "") -> dict[str, object]:
+    def toolkit_snapshot(
+        filename: str = "",
+        domains: str = "",
+        path: str = "",
+    ) -> dict[str, object]:
         """Collect via Toolkit and map to a Creo.JS gather-shaped snapshot.
 
         No Creo.JS fallback here — if Toolkit is down or identity is missing, 502.
+        Optional ``path`` is forwarded so Toolkit can silent-Retrieve (no window).
         """
         tip = (filename or "").strip()
+        disk_path = (path or "").strip()
         domain_list = (domains or "").strip() or (domains_for_filename(tip) if tip else "")
         if not domain_list:
             raise HTTPException(
                 status_code=400,
                 detail="Pass filename=… or domains=… for Toolkit collect.",
             )
-        path = f"/collect?domains={quote(domain_list, safe=',')}"
-        raw = _proxy_toolkit_get(path, timeout=120.0)
+        q: list[str] = [f"domains={quote(domain_list, safe=',')}"]
+        if tip:
+            q.append(f"fileName={quote(tip)}")
+        if disk_path:
+            q.append(f"path={quote(disk_path)}")
+        raw = _proxy_toolkit_get(f"/collect?{'&'.join(q)}", timeout=120.0)
         snapshot = map_toolkit_collect_to_snapshot(raw)
         if not snapshot:
             raise HTTPException(

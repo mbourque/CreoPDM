@@ -602,6 +602,9 @@ def object_detail(
             mass.get("mass") is not None
             or mass.get("volume") is not None
             or mass.get("density") is not None
+            or mass.get("surface_area") is not None
+            or mass.get("gravity_center") is not None
+            or mass.get("principal_moments") is not None
         )
     )
     show_family_tab = bool(

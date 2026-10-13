@@ -140,39 +140,11 @@ window.__creopdmModules.creo_workspace = {
             __detail: "Toolkit /health via agent was not ok.",
           };
         }
-        const activeName = String(
-          healthBody?.toolkit?.model?.fileName || healthBody?.toolkit?.fileName || ""
-        ).trim();
-        const want = logicalCreoTipName(tip);
-        const have = logicalCreoTipName(activeName);
-        if (have && want && have !== want) {
-          // Open into session only — not Creo.JS inventory gather.
-          const path = String(filePath || "").trim();
-          if (path && typeof window.CreoJS?.openModel === "function") {
-            try {
-              await whenCreoJSReady();
-              const slash = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
-              const directory = slash >= 0 ? path.slice(0, slash) : "";
-              const diskName = slash >= 0 ? path.slice(slash + 1) : path;
-              await window.CreoJS.openModel(directory, tip, "", diskName, path);
-            } catch (openErr) {
-              return {
-                __error: "toolkit_wrong_model",
-                __detail:
-                  `Toolkit active model is ${activeName || "(none)"}; wanted ${tip}. ` +
-                  `Open failed: ${openErr?.message || openErr}`,
-              };
-            }
-          } else {
-            return {
-              __error: "toolkit_wrong_model",
-              __detail:
-                `Toolkit active model is ${activeName || "(none)"}; wanted ${tip}. ` +
-                "Open the tip in Creo (or pass a local path) before Collect.",
-            };
-          }
-        }
+        // Never CreoJS.openModel here — that creates windows and hits Creo's
+        // open-tabs limit (18) during Collect all. Toolkit must silent-Retrieve.
+        const path = String(filePath || "").trim();
         const query = new URLSearchParams({ filename: tip });
+        if (path) query.set("path", path);
         const snapResp = await fetch(`${base}/toolkit/snapshot?${query}`, {
           headers: agentAuthHeaders(),
           signal: abortSignalAfter(120000),

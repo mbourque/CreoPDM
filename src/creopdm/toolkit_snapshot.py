@@ -7,9 +7,15 @@ untouched as the Creo.JS fallback.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 DEFAULT_TOOLKIT_BASE_URL = "http://127.0.0.1:8767"
+
+_CAD_STRUCTURE_TIP_RE = re.compile(
+    r"\.(prt|asm|mfg|drw|frm|sec|lay|neu|xas|xpr)(\.\d+)?$",
+    re.IGNORECASE,
+)
 
 
 def domains_for_filename(filename: str) -> str:
@@ -55,6 +61,140 @@ def _list_field(block: dict[str, Any] | None, *keys: str) -> list[Any] | None:
     return None
 
 
+def _structure_row_name(row: dict[str, Any]) -> str:
+    for key in (
+        "name",
+        "model_name",
+        "file_name",
+        "filename",
+        "fileName",
+        "component_name",
+        "tip",
+        "model",
+    ):
+        value = row.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def normalize_toolkit_structure_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Align Toolkit structure rows with Creo.JS Structure (tip name + PART/ASSEMBLY).
+
+    CreoPDM drops COMPONENT rows whose name is not a CAD tip (datums / CSYS noise).
+    Toolkit often emits type COMPONENT with ``shaft.prt`` — promote those to PART/ASSEMBLY
+    so the Details Structure tab is not empty after filter_assembly_structure_rows.
+    """
+    out = dict(row)
+    name = _structure_row_name(out)
+    typ = str(out.get("type") or "").strip().upper()
+    role = str(out.get("role") or "").strip().upper()
+    sub = str(out.get("subtype") or out.get("subType") or out.get("model_type") or "").strip().upper()
+    lower = name.lower()
+
+    if _CAD_STRUCTURE_TIP_RE.search(lower):
+        if re.search(r"\.asm(\.\d+)?$", lower):
+            typ = "ASSEMBLY"
+        elif re.search(r"\.mfg(\.\d+)?$", lower):
+            typ = "MFG"
+        elif re.search(r"\.prt(\.\d+)?$", lower):
+            typ = "PART"
+    elif role in {"REF_MODEL", "WORKPIECE", "FIXTURE"}:
+        if name and not _CAD_STRUCTURE_TIP_RE.search(name):
+            name = f"{name}.prt"
+        if role == "WORKPIECE":
+            typ = "WORKPIECE"
+        elif role == "FIXTURE":
+            typ = "FIXTURE"
+        else:
+            typ = "PART"
+    elif typ in {"COMPONENT", "FEATURE", ""} and name:
+        if "ASM" in sub or sub == "ASSEMBLY":
+            if not _CAD_STRUCTURE_TIP_RE.search(name):
+                name = f"{name}.asm"
+            typ = "ASSEMBLY"
+        elif "PRT" in sub or sub == "PART" or sub in {"MDL_PART", "SOLID"}:
+            if not _CAD_STRUCTURE_TIP_RE.search(name):
+                name = f"{name}.prt"
+            typ = "PART"
+
+    if name:
+        out["name"] = name
+    if typ:
+        out["type"] = typ
+    return out
+
+
+def normalize_toolkit_structure_rows(
+    rows: list[Any] | None,
+) -> list[dict[str, Any]] | None:
+    if rows is None:
+        return None
+    return [
+        normalize_toolkit_structure_row(row)
+        for row in rows
+        if isinstance(row, dict)
+    ]
+
+
+_MASS_KEY_ALIASES = {
+    "mass": "mass",
+    "volume": "volume",
+    "density": "density",
+    "surface_area": "surface_area",
+    "surfacearea": "surface_area",
+    "area": "surface_area",
+    "gravity_center": "gravity_center",
+    "gravitycenter": "gravity_center",
+    "cog": "gravity_center",
+    "center_of_gravity": "gravity_center",
+    "principal_moments": "principal_moments",
+    "principalmoments": "principal_moments",
+}
+
+
+def normalize_toolkit_mass(block: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Flatten Toolkit /mass into Details Mass-tab keys (mass/volume/density/…)."""
+    if not isinstance(block, dict):
+        return None
+    skip = {"ok", "filename", "error", "partial", "partial_missing", "type"}
+    candidates: list[dict[str, Any]] = [block]
+    for nest_key in ("mass", "properties", "mass_properties", "MassProperty", "data"):
+        nested = block.get(nest_key)
+        if isinstance(nested, dict):
+            candidates.append(nested)
+
+    out: dict[str, Any] = {}
+    for src in candidates:
+        for key, value in src.items():
+            if value is None:
+                continue
+            key_l = str(key or "").strip()
+            if not key_l or key_l.lower() in skip:
+                continue
+            # Domain-level mass: number — keep as mass.
+            if key_l.lower() == "mass" and isinstance(value, (int, float)) and not isinstance(
+                value, bool
+            ):
+                out.setdefault("mass", value)
+                continue
+            if isinstance(value, dict):
+                continue
+            canon = _MASS_KEY_ALIASES.get(key_l.lower().replace("-", "_"))
+            if not canon:
+                # Accept already-canonical or pass through unknown scalars.
+                if key_l.lower() in _MASS_KEY_ALIASES.values():
+                    canon = key_l.lower()
+                else:
+                    continue
+            out.setdefault(canon, value)
+
+    useful = ("mass", "volume", "density", "surface_area", "gravity_center", "principal_moments")
+    if not any(k in out for k in useful):
+        return None
+    return out
+
+
 def map_toolkit_collect_to_snapshot(payload: dict[str, Any] | None) -> dict[str, Any] | None:
     """Return a Creo.JS-gather-shaped snapshot, or None when identity is missing."""
     if not isinstance(payload, dict) or payload.get("ok") is False:
@@ -83,7 +223,17 @@ def map_toolkit_collect_to_snapshot(payload: dict[str, Any] | None) -> dict[str,
     parameters = _list_field(parameters_block, "parameters") or []
 
     features = _list_field(_ok_domain(payload, "features"), "features")
-    structure = _list_field(_ok_domain(payload, "structure"), "structure", "features", "components")
+    structure = normalize_toolkit_structure_rows(
+        _list_field(
+            _ok_domain(payload, "structure"),
+            "structure",
+            "features",
+            "components",
+            "rows",
+            "items",
+            "members",
+        )
+    )
 
     drawing_block = _ok_domain(payload, "drawing")
     if drawing_block:
@@ -96,7 +246,7 @@ def map_toolkit_collect_to_snapshot(payload: dict[str, Any] | None) -> dict[str,
         mfg_feats = _list_field(mfg_block, "features")
         if mfg_feats is not None:
             features = mfg_feats
-        models = _list_field(mfg_block, "models")
+        models = normalize_toolkit_structure_rows(_list_field(mfg_block, "models"))
         if models is not None:
             structure = models
 
@@ -112,17 +262,7 @@ def map_toolkit_collect_to_snapshot(payload: dict[str, Any] | None) -> dict[str,
                 if k not in {"ok", "fileName", "error", "partial", "partial_missing"}
             } or None
 
-    mass_block = _ok_domain(payload, "mass")
-    mass = None
-    if mass_block:
-        if isinstance(mass_block.get("mass"), dict):
-            mass = mass_block["mass"]
-        else:
-            mass = {
-                k: v
-                for k, v in mass_block.items()
-                if k not in {"ok", "fileName", "error", "partial", "partial_missing"}
-            } or None
+    mass = normalize_toolkit_mass(_ok_domain(payload, "mass"))
 
     units_block = _ok_domain(payload, "units")
     units = None

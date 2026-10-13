@@ -499,7 +499,10 @@ def test_metadata_gear_items_require_creo_session():
     assert "/toolkit/health" in gather_meta
     assert "/toolkit/snapshot" in gather_meta
     assert "toolkit_agent_offline" in gather_meta
+    assert "openModel" not in gather_meta
+    assert "Never CreoJS.openModel" in gather_meta
     assert "gatherModelMetadata" not in gather_meta
+    assert 'query.set("path", path)' in gather_meta
     gather_entry = _between(
         ws_js, "async function gatherCreoMetadataForFilename(", "async function pushCreoMetadataForItems("
     )

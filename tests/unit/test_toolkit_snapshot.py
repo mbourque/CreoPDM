@@ -1,6 +1,12 @@
 """Toolkit /collect → Creo.JS-gather-shaped snapshot mapping."""
 
-from creopdm.toolkit_snapshot import domains_for_filename, map_toolkit_collect_to_snapshot
+from creopdm.services.metadata_service import filter_assembly_structure_rows
+from creopdm.toolkit_snapshot import (
+    domains_for_filename,
+    map_toolkit_collect_to_snapshot,
+    normalize_toolkit_mass,
+    normalize_toolkit_structure_row,
+)
 
 
 def test_domains_for_filename_by_extension():
@@ -88,3 +94,54 @@ def test_map_drawing_and_mfg_use_domain_features():
 def test_map_rejects_missing_identity():
     assert map_toolkit_collect_to_snapshot({"ok": True, "domains": {}}) is None
     assert map_toolkit_collect_to_snapshot({"ok": False}) is None
+
+
+def test_normalize_toolkit_mass_accepts_common_shapes():
+    flat = normalize_toolkit_mass(
+        {"ok": True, "fileName": "a.prt", "mass": 1.5, "volume": 2.0, "density": 0.1}
+    )
+    assert flat == {"mass": 1.5, "volume": 2.0, "density": 0.1}
+
+    nested = normalize_toolkit_mass(
+        {"ok": True, "mass": {"Volume": 9.0, "Density": 0.2, "Mass": 1.8}}
+    )
+    assert nested == {"volume": 9.0, "density": 0.2, "mass": 1.8}
+
+    assert normalize_toolkit_mass({"ok": True, "fileName": "a.prt"}) is None
+
+
+def test_toolkit_structure_component_tips_survive_noise_filter():
+    """COMPONENT + tip name must become PART so Details Structure is not empty."""
+    promoted = normalize_toolkit_structure_row(
+        {"name": "shaft.prt", "type": "COMPONENT", "level": 2, "status": "ACTIVE"}
+    )
+    assert promoted["type"] == "PART"
+    assert filter_assembly_structure_rows([promoted]) == [promoted]
+
+    snap = map_toolkit_collect_to_snapshot(
+        {
+            "ok": True,
+            "fileName": "top.asm",
+            "domains": {
+                "identity": {
+                    "ok": True,
+                    "identity": {"file_name": "top.asm", "model_type": "ASSEMBLY"},
+                },
+                "parameters": {"ok": True, "parameters": []},
+                "structure": {
+                    "ok": True,
+                    "features": [
+                        {"name": "shaft.prt", "type": "COMPONENT", "level": 2},
+                        {"name": "ASM_RIGHT", "type": "COMPONENT", "level": 1},
+                        {"name": "bracket.asm", "type": "COMPONENT", "level": 2},
+                    ],
+                },
+            },
+        }
+    )
+    assert snap is not None
+    kept = filter_assembly_structure_rows(snap["structure"])
+    assert kept is not None
+    names = {row["name"] for row in kept}
+    assert names == {"shaft.prt", "bracket.asm"}
+    assert {row["type"] for row in kept} == {"PART", "ASSEMBLY"}
