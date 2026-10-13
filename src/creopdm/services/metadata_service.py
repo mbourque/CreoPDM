@@ -78,6 +78,8 @@ def is_assembly_structure_noise_row(row: dict[str, Any]) -> bool:
         "ASSEMBLY",
         "MFG",
         "SKELETON",
+        "HARNESS",
+        "CABLING_DATA",
         "BULK",
         "GROUP",
         "WORKPIECE",

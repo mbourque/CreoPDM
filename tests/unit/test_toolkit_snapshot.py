@@ -274,3 +274,24 @@ def test_toolkit_structure_preserves_skeleton_type_on_prt_tip():
         {"name": "skel.prt", "type": "COMPONENT", "subtype": "SKELETON", "level": 1}
     )
     assert by_sub["type"] == "SKELETON"
+
+
+def test_toolkit_structure_preserves_harness_type_on_prt_tip():
+    """Cabling harness members must stay on Details Structure (not filtered as noise)."""
+    row = normalize_toolkit_structure_row(
+        {
+            "name": "600640041454.prt",
+            "type": "HARNESS",
+            "subtype": "HARNESS",
+            "is_harness": True,
+            "level": 1,
+        }
+    )
+    assert row["type"] == "HARNESS"
+    assert filter_assembly_structure_rows([row]) == [row]
+
+    as_part = normalize_toolkit_structure_row(
+        {"name": "cable.prt", "type": "PART", "is_harness": True, "level": 2}
+    )
+    assert as_part["type"] == "HARNESS"
+    assert filter_assembly_structure_rows([as_part]) == [as_part]

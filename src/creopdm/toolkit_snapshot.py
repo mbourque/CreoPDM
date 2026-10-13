@@ -90,6 +90,21 @@ def _structure_row_is_skeleton(row: dict[str, Any], typ: str, sub: str) -> bool:
     return False
 
 
+def _structure_row_is_harness(row: dict[str, Any], typ: str, sub: str) -> bool:
+    """True when Toolkit marked a structure member as a cabling harness."""
+    if typ in {"HARNESS", "HARNESS_PART"} or sub in {"HARNESS", "HARNESS_PART"}:
+        return True
+    role = str(row.get("role") or row.get("model_role") or "").strip().upper()
+    if role in {"HARNESS", "HARNESS_PART"}:
+        return True
+    flag = row.get("is_harness")
+    if flag is True or flag == 1:
+        return True
+    if isinstance(flag, str) and flag.strip().lower() in {"1", "true", "yes"}:
+        return True
+    return False
+
+
 def normalize_toolkit_structure_row(row: dict[str, Any]) -> dict[str, Any]:
     """Align Toolkit structure rows with Creo.JS Structure (tip name + PART/ASSEMBLY).
 
@@ -97,8 +112,8 @@ def normalize_toolkit_structure_row(row: dict[str, Any]) -> dict[str, Any]:
     Toolkit often emits type COMPONENT with ``shaft.prt`` — promote those to PART/ASSEMBLY
     so the Details Structure tab is not empty after filter_assembly_structure_rows.
 
-    Skeleton tips are still ``*.prt``; never overwrite Toolkit ``SKELETON`` /
-    ``is_skeleton`` with PART from the extension alone.
+    Skeleton / harness tips are still ``*.prt``; never overwrite Toolkit ``SKELETON`` /
+    ``HARNESS`` with PART from the extension alone.
     """
     out = dict(row)
     name = _structure_row_name(out)
@@ -107,6 +122,7 @@ def normalize_toolkit_structure_row(row: dict[str, Any]) -> dict[str, Any]:
     sub = str(out.get("subtype") or out.get("subType") or out.get("model_type") or "").strip().upper()
     lower = name.lower()
     skeleton = _structure_row_is_skeleton(out, typ, sub)
+    harness = _structure_row_is_harness(out, typ, sub)
 
     if _CAD_STRUCTURE_TIP_RE.search(lower):
         if re.search(r"\.asm(\.\d+)?$", lower):
@@ -114,11 +130,15 @@ def normalize_toolkit_structure_row(row: dict[str, Any]) -> dict[str, Any]:
         elif re.search(r"\.mfg(\.\d+)?$", lower):
             typ = "MFG"
         elif re.search(r"\.prt(\.\d+)?$", lower):
-            # Keep Toolkit skeleton typing (type / subtype / is_skeleton).
+            # Keep Toolkit skeleton / harness typing.
             if skeleton or typ == "SKELETON":
                 typ = "SKELETON"
                 if not sub:
                     sub = "SKELETON"
+            elif harness or typ in {"HARNESS", "HARNESS_PART"}:
+                typ = "HARNESS"
+                if not sub:
+                    sub = "HARNESS"
             elif typ in {"", "COMPONENT", "FEATURE", "PART"}:
                 typ = "PART"
     elif role in {"REF_MODEL", "WORKPIECE", "FIXTURE"}:
@@ -140,6 +160,11 @@ def normalize_toolkit_structure_row(row: dict[str, Any]) -> dict[str, Any]:
                 name = f"{name}.prt"
             typ = "SKELETON"
             sub = "SKELETON"
+        elif sub in {"HARNESS", "HARNESS_PART"} or harness:
+            if not _CAD_STRUCTURE_TIP_RE.search(name):
+                name = f"{name}.prt"
+            typ = "HARNESS"
+            sub = "HARNESS"
         elif "PRT" in sub or sub == "PART" or sub in {"MDL_PART", "SOLID"}:
             if not _CAD_STRUCTURE_TIP_RE.search(name):
                 name = f"{name}.prt"
