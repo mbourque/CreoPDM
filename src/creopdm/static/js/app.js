@@ -4682,11 +4682,46 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return (await withCreoWorkspace()).gatherCreoMetadataForFilename(filename, filePath, options);
   }
 
+  function aiSnapshotIdentityFromGather(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    const out = { ...raw };
+    // Toolkit uses file_name; Creo.JS AI snap often uses filename.
+    const tip = String(out.filename || out.file_name || out.full_name || "").trim();
+    if (tip) {
+      if (!out.filename) out.filename = tip;
+      if (!out.file_name) out.file_name = tip;
+    }
+    return tip ? out : null;
+  }
+
   function aiSnapshotBodyFromGather(gatherSnapshot) {
-    const ai = gatherSnapshot && typeof gatherSnapshot === "object"
-      ? gatherSnapshot.ai_snapshot
-      : null;
-    if (!ai || typeof ai !== "object") return null;
+    if (!gatherSnapshot || typeof gatherSnapshot !== "object") return null;
+    let ai = gatherSnapshot.ai_snapshot;
+    // Toolkit gather is flat (no nested ai_snapshot) — synthesize for Ask AI / Collect.
+    if (!ai || typeof ai !== "object") {
+      const identity = aiSnapshotIdentityFromGather(gatherSnapshot.identity);
+      if (!identity) return null;
+      ai = {
+        schema_version: 1,
+        identity,
+        features: Array.isArray(gatherSnapshot.features) ? gatherSnapshot.features : [],
+        dimensions: Array.isArray(gatherSnapshot.dimensions) ? gatherSnapshot.dimensions : [],
+        parameters: Array.isArray(gatherSnapshot.parameters) ? gatherSnapshot.parameters : [],
+        materials: gatherSnapshot.materials || null,
+        units: gatherSnapshot.units || null,
+        family_table: gatherSnapshot.family_table || null,
+        bom: gatherSnapshot.bom || null,
+        structure: gatherSnapshot.structure || null,
+        simp_reps: gatherSnapshot.simp_reps || null,
+        constraints: gatherSnapshot.constraints || null,
+        relations: gatherSnapshot.relations || null,
+        capture: {
+          status: "ok",
+          errors: [],
+          source: String(gatherSnapshot._pdm_source || "gather"),
+        },
+      };
+    }
     const capture = ai.capture && typeof ai.capture === "object" ? ai.capture : {};
     // Prefer snapshot.bom / structure (enriched); fall back to gather metadata.
     const bom = Array.isArray(ai.bom)
@@ -4712,7 +4747,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         : null);
     return {
       schema_version: Number(ai.schema_version) || 1,
-      identity: ai.identity || null,
+      identity: aiSnapshotIdentityFromGather(ai.identity) || ai.identity || null,
       features: Array.isArray(ai.features) ? ai.features : [],
       dimensions: Array.isArray(ai.dimensions) ? ai.dimensions : [],
       parameters: Array.isArray(ai.parameters) ? ai.parameters : [],

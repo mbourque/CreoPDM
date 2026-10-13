@@ -334,6 +334,10 @@ def test_app_js_posts_ai_snapshot_soft_fail():
     assert "gatherSnapshot?.constraints" in body_fn
     assert "relations" in body_fn
     assert "gatherSnapshot?.relations" in body_fn
+    # Toolkit gather has no nested ai_snapshot — synthesize from flat fields.
+    assert "Toolkit / flat gather" in body_fn
+    assert "aiSnapshotIdentityFromGather" in script
+    assert "function aiSnapshotIdentityFromGather(" in script
     # Defaults: NEW = latest snap, OLD = one prior; dropdowns cannot invert order.
     assert "NEW = latest snap, OLD = one prior" in script
     assert "function fillAiSnapshotOrderedSelects(" in script

@@ -327,6 +327,27 @@ def map_toolkit_collect_to_snapshot(payload: dict[str, Any] | None) -> dict[str,
                 if k not in {"ok", "fileName", "error", "partial", "partial_missing"}
             } or None
 
+    # Nested ai_snapshot so Ask AI / postAiSnapshotFromGather work without Creo.JS.
+    identity_ai = dict(identity)
+    tip = str(identity_ai.get("file_name") or identity_ai.get("full_name") or "").strip()
+    if tip:
+        identity_ai.setdefault("filename", tip)
+    ai_snapshot = {
+        "schema_version": 1,
+        "identity": identity_ai,
+        "features": features or [],
+        "dimensions": [],
+        "parameters": parameters or [],
+        "materials": materials,
+        "units": units,
+        "family_table": None,
+        "bom": None,
+        "structure": structure,
+        "simp_reps": simp_reps,
+        "constraints": constraints,
+        "relations": None,
+        "capture": {"status": "ok", "errors": [], "source": "toolkit"},
+    }
     return {
         "identity": identity,
         "parameters": parameters,
@@ -341,5 +362,6 @@ def map_toolkit_collect_to_snapshot(payload: dict[str, Any] | None) -> dict[str,
         "simp_reps": simp_reps,
         "constraints": constraints,
         "relations": None,
+        "ai_snapshot": ai_snapshot,
         "_pdm_source": "toolkit",
     }

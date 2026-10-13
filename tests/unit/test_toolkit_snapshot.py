@@ -47,6 +47,8 @@ def test_map_part_collect_identity_features_mass():
     assert snap["materials"]["name"] == "STEEL"
     assert snap["_pdm_source"] == "toolkit"
     assert snap["relations"] is None
+    assert snap["ai_snapshot"]["identity"]["filename"] == "wedge.prt"
+    assert snap["ai_snapshot"]["capture"]["source"] == "toolkit"
 
 
 def test_map_drawing_and_mfg_use_domain_features():
