@@ -889,7 +889,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
         const openBtn = row.querySelector(".object-open");
         if (openBtn) {
           openBtn.textContent = item.filename;
-          openBtn.title = item.filename;
+          openBtn.removeAttribute("title");
+          openBtn.dataset.filename = item.filename;
         }
       }
       if (item.display_revision) {
@@ -2430,7 +2431,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
               data-detail="/products/${escapeHtml(productId)}/objects/${escapeHtml(obj.uuid)}"
               class="object-row"
               style="--depth: 0">
-            <td title="${escapeHtml(filename)}">
+            <td>
               <span class="name-with-icon">${icon}<button type="button" class="object-open" data-uuid="${escapeHtml(obj.uuid)}" data-filename="${escapeHtml(filename)}">${escapeHtml(filename)}</button></span>
               ${pathLine}
             </td>
