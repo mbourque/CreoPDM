@@ -83,7 +83,7 @@ def test_app_js_is_not_cached(client):
     assert "prepareLocalPathForMetadata" in response.text
     bundle = client_js_bundle()
     assert "Waiting for Creo.JS…" in bundle
-    assert "#panel-structure .object-open" in bundle
+    assert "Structure / BOM tip names are plain <a href> to Details" in bundle
     add_js = open("src/creopdm/static/js/add.js", encoding="utf-8").read()
     assert "browseViaAgentPicker" in add_js
     assert "/pick-files" in add_js

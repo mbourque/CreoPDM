@@ -2028,26 +2028,20 @@ body.is-file-drag #file-drop-overlay {
 .bom-legend { margin: 0.25rem 0 0.5rem; }
 .bom-legend-in { color: var(--accent, #0b57d0); font-weight: 600; }
 .bom-legend-out { color: var(--ink); font-weight: 600; }
-.bom-line .object-open.bom-name {
+.bom-line a.bom-name,
+.filename-cell a.bom-name {
   font-size: inherit;
   padding: 0;
   border: 0;
   background: transparent;
   cursor: pointer;
-  color: var(--accent, #0b57d0);
+  color: var(--ink);
+  text-decoration: none;
 }
-.bom-line .bom-name:not(.object-open) { color: var(--ink); }
-.bom-line .object-open.bom-name:hover,
-.filename-cell .object-open.bom-name:hover { text-decoration: underline; }
-.filename-cell .object-open.bom-name {
-  font-size: inherit;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  color: var(--accent, #0b57d0);
-}
-.filename-cell .bom-name:not(.object-open) { color: var(--ink); }
+.bom-line a.bom-name:hover,
+.filename-cell a.bom-name:hover { text-decoration: underline; }
+.bom-line .bom-name:not(a),
+.filename-cell .bom-name:not(a) { color: var(--ink); }
 .bom-indent { display: inline-block; }
 .grid tr.is-root td { font-weight: 650; }
 .meta-empty { margin-top: 0.75rem; }

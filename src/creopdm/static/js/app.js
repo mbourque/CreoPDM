@@ -7968,21 +7968,8 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     });
   });
 
-  document.addEventListener("click", (event) => {
-    const link = eventEl(event)?.closest("#panel-structure .object-open, #panel-bom .object-open");
-    if (!link) return;
-    event.preventDefault();
-    const id = link.dataset.uuid;
-    if (!id) return;
-    void openPdmObjectFromUi(id, {
-      dataset: {
-        filename: link.textContent?.trim() || id,
-        // Object may be free; userCap is enforced in promptOpenCheckout via body data-can-checkout.
-        canCheckout: "1",
-        owned: "0",
-      },
-    });
-  });
+  // Structure / BOM tip names are plain <a href> to Details — soft-nav handles them.
+  // Do not wire those to openPdmObjectFromUi (Open in Creo / Windows).
 
   // Keep Creo.JS connected: soft-navigate shell pages (products, folders, settings, detail).
   // Do not gate on inCreoBrowser — a false negative caused hard reloads that SSR-paint

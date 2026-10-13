@@ -218,7 +218,9 @@ def test_post_get_creo_metadata_and_where_used(client, repo_parent, tmp_path):
     assert "pin.prt" in text
     assert "bom-tree-root" in text
     assert f'data-uuid="{shaft["uuid"]}"' in text
-    assert 'class="object-open bom-name"' in text
+    assert 'class="bom-name"' in text
+    assert f'/products/{product["uuid"]}/objects/{shaft["uuid"]}' in text
+    assert 'class="object-open bom-name"' not in text
     assert 'class="object-open mono bom-name"' not in text
 
     shaft_detail = client.get(f"/products/{product['uuid']}/objects/{shaft['uuid']}")

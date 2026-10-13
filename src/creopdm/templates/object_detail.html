@@ -24,8 +24,8 @@
 {% endmacro %}
 {% macro bom_name_link(node) %}
   {% if node.object_id %}
-  <button type="button" class="object-open bom-name" data-uuid="{{ node.object_id }}"
-          title="{% if node.open_as %}Open generic {{ node.open_as }}{% else %}Open {{ node.filename }}{% endif %}">{{ node.filename or "—" }}</button>
+  <a class="bom-name" href="/products/{{ product.uuid }}/objects/{{ node.object_id }}"
+     title="{% if node.open_as %}Details for generic {{ node.open_as }}{% else %}Details for {{ node.filename }}{% endif %}">{{ node.filename or "—" }}</a>
   {% else %}
   <span class="bom-name" title="Not in this product">{{ node.filename or "—" }}</span>
   {% endif %}
@@ -33,8 +33,8 @@
 {% macro structure_name_link(row) %}
   {% set tip = row.name or row.filename or "—" %}
   {% if row.object_id %}
-  <button type="button" class="object-open bom-name" data-uuid="{{ row.object_id }}"
-          title="{% if row.open_as %}Open generic {{ row.open_as }}{% else %}Open {{ tip }}{% endif %}">{{ tip }}</button>
+  <a class="bom-name" href="/products/{{ product.uuid }}/objects/{{ row.object_id }}"
+     title="{% if row.open_as %}Details for generic {{ row.open_as }}{% else %}Details for {{ tip }}{% endif %}">{{ tip }}</a>
   {% else %}
   <span class="bom-name" title="Not in this product">{{ tip }}</span>
   {% endif %}

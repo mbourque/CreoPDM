@@ -1603,7 +1603,12 @@ def test_details_overview_dedupes_identity_and_unifies_fonts():
     assert 'td class="mono"' not in detail
     assert 'th class="mono"' not in detail
     assert "object-open mono bom-name" not in detail
+    assert "object-open bom-name" not in detail
+    assert 'class="bom-name" href="/products/{{ product.uuid }}/objects/' in detail
+    assert "Details for" in detail
     script = _app_js()
+    assert "Do not wire those to openPdmObjectFromUi" in script
+    assert "#panel-structure .object-open, #panel-bom .object-open" not in script
     assert "function formatStampPretty" in script
     assert "function formatLocalPrettyDate" in script
     assert "local_time_pretty" in APP_HTML.read_text(encoding="utf-8")
