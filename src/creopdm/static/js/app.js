@@ -4635,9 +4635,11 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
   }
 
   function isCreoMetadataCandidate(filename) {
+    // Toolkit /collect only accepts .prt/.asm/.drw/.mfg (optionally .N). Do not
+    // queue .sec/.frm/.lay/… — that surfaces toolkit_collect_failed mid-Rebuild.
     const base = String(filename || "");
     const logical = base.replace(/\.(\d+)$/i, "");
-    return /\.(prt|asm|drw|frm|mfg|lay|sec|dgm|rep)$/i.test(logical);
+    return /\.(prt|asm|drw|mfg)$/i.test(logical);
   }
 
   function metadataCollectLogicalName(filename) {

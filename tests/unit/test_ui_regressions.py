@@ -485,6 +485,11 @@ def test_metadata_gear_items_require_creo_session():
     assert 'id="rebuild-metadata-btn"' in app_html
     assert ">Rebuild metadata<" in app_html
     assert "runRebuildAllMetadata" in script
+    # Toolkit only accepts prt/asm/drw/mfg — do not queue .sec mid-Collect.
+    assert "function isCreoMetadataCandidate(filename)" in script
+    cand = _between(script, "function isCreoMetadataCandidate(filename) {", "function metadataCollectLogicalName(")
+    assert "/\\.(prt|asm|drw|mfg)$/i.test(logical)" in cand
+    assert "lay|sec|dgm|rep" not in cand
     push = _between(meta_js, "async function pushOneCreoMetadataTarget(", "async function flushPendingMetadataErase(")
     assert "No per-file JS timeout" in push
     assert "Promise.race" not in push
