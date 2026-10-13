@@ -26,8 +26,9 @@ logger = get_logger("backfill_thumbnails")
 
 
 def main() -> int:
-    setup_logging()
-    ctx = build_context(ConfigManager())
+    manager = ConfigManager()
+    setup_logging(manager.log_path)
+    ctx = build_context(manager)
     if ctx.thumbnails is None:
         logger.error("Thumbnail service not configured")
         return 1
