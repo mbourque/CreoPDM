@@ -1885,24 +1885,22 @@ def test_files_search_survives_details_and_back():
     assert "Clear search or show the empty folder list just because you opened Details" in docs
 
 
-def test_search_path_middle_truncation():
-    """Long vault-relative paths under search hits truncate in the middle."""
+def test_search_and_files_omit_path_under_filename():
+    """Name column shows filename only — no gray vault path under the name."""
     script = _app_js()
     docs = (ROOT / "docs" / "user-interactions.md").read_text(encoding="utf-8")
-    css = APP_CSS.read_text(encoding="utf-8")
-    trunc = _between(script, "function truncateMiddlePath(", "function searchPathLineHtml(")
-    assert '"…"' in trunc or "…/" in trunc
-    assert "parts.slice(-2)" in trunc
-    assert "/…/" in trunc
+    app_html = (ROOT / "src" / "creopdm" / "templates" / "app.html").read_text(encoding="utf-8")
     path_line = _between(script, "function searchPathLineHtml(", "function searchRowHtml(")
-    assert "truncateMiddlePath(full)" in path_line
-    assert 'class="muted small search-path"' in path_line
-    assert "title=" in path_line
+    assert 'return "";' in path_line or "return '';" in path_line
+    assert 'class="muted small search-path"' not in path_line
     row = _between(script, "function searchRowHtml(", "function showFolderView(")
     assert "searchPathLineHtml(relative, filename)" in row
-    assert "middle truncated" in docs.lower()
-    assert "hover the path for the full string" in docs.lower()
-    assert ".search-path" in css
+    assert "no vault path under the name" in docs.lower() or "filename only" in docs.lower()
+    assert "gray vault path line under the filename" in docs.lower()
+    # Server-rendered Files rows must not print relative_path under the name.
+    name_cell = app_html.split('class="object-open"', 1)[1].split("</td>", 1)[0]
+    assert "relative_path" not in name_cell or "data-" in name_cell
+    assert 'class="muted small">{{ obj.relative_path }}' not in app_html
 
 
 def test_search_form_only_on_files_tab():

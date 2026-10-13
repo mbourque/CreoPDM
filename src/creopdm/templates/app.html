@@ -247,9 +247,6 @@
                         data-filename="{{ obj.filename }}"
                         data-extension="{{ obj.extension }}">{{ obj.filename }}</button>
               </span>
-              {% if entry.depth == 0 and obj.relative_path and obj.relative_path != obj.filename %}
-              <div class="muted small">{{ obj.relative_path }}</div>
-              {% endif %}
             </td>
             <td title="{{ obj.display_revision }}">{{ obj.display_revision }}</td>
             {% set state_modified = obj.modified_locally and (obj.owned_by_me or obj.can_checkin) %}
@@ -372,9 +369,6 @@
                   {% endif %}
                   <span class="object-open" role="link" tabindex="0" data-relative-path="{{ item.relative_path }}" data-filename="{{ item.filename }}">{{ item.filename }}</span>
                 </span>
-                {% if item.relative_path and item.relative_path != item.filename %}
-                <div class="muted small">{{ item.relative_path }}</div>
-                {% endif %}
               </td>
               <td>{% if product_ui.show_add %}Not in the product yet. Select and click Add.{% else %}Not in the product yet.{% endif %}</td>
               <td title="{{ item.size }} bytes">{{ item.size | byte_size }}</td>

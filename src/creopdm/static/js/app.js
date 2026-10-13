@@ -2366,12 +2366,9 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return `${s.slice(0, head)}${ellip}${s.slice(-tail)}`;
   }
 
-  function searchPathLineHtml(relative, filename) {
-    const full = String(relative || "").replace(/\\/g, "/");
-    const name = String(filename || "");
-    if (!full || full === name) return "";
-    const shown = truncateMiddlePath(full);
-    return `<div class="muted small search-path" title="${escapeHtml(full)}">${escapeHtml(shown)}</div>`;
+  function searchPathLineHtml(_relative, _filename) {
+    // Filename only in the Name column — vault path is not shown under the name.
+    return "";
   }
 
   function searchRowHtml(obj, productId) {
