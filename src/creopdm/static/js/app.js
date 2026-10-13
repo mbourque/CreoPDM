@@ -4676,6 +4676,10 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     return (await withCreoWorkspace()).prepareLocalPathForMetadata(objectId, filename);
   }
 
+  async function attachCollectLocalPaths(productId, targets) {
+    return (await withCreoWorkspace()).attachCollectLocalPaths(productId, targets);
+  }
+
   async function gatherCreoMetadataForFilename(filename, filePath, options) {
     // Cheap guard before loading the module (same as the module's first line).
     if (!canGatherCreoMetadata() || !filename) return null;
@@ -4871,6 +4875,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           uuid: item.uuid,
           filename: item.filename,
           path: item.path || "",
+          relative_path: item.relative_path || item.relativePath || "",
           version_id: item.version_id || "",
           current_version: item.current_version || null,
         }));
@@ -4881,6 +4886,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
           uuid: result.uuid,
           filename: result.filename,
           path: result.path || "",
+          relative_path: result.relative_path || result.relativePath || "",
           version_id: result.current_version?.uuid || "",
           current_version: result.current_version || null,
         },
@@ -8173,6 +8179,7 @@ window.__creopdmBoot = function creopdmBoot(options = {}) {
     sortMetadataCollectTargets,
     isCreoMetadataCandidate,
     prepareLocalPathForMetadata,
+    attachCollectLocalPaths,
     postAiSnapshotFromGather,
     reconcileProductLifecycleChrome,
     // Live bindings: app.js reassigns these (let), so modules must read via the shell.

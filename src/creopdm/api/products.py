@@ -997,6 +997,7 @@ def import_from_disk(
                         filename=outcome.filename,
                         status="added",
                         path=str(outcome.source),
+                        relative_path=str(outcome.obj.relative_path or "") or None,
                     )
                 )
             else:
@@ -1179,6 +1180,7 @@ async def import_from_uploads(
                             uuid=outcome.obj.uuid,
                             filename=outcome.filename,
                             status="added",
+                            relative_path=str(outcome.obj.relative_path or "") or None,
                         )
                     )
                 else:
@@ -1299,6 +1301,7 @@ def _zip_extract_and_import(
                         uuid=outcome.obj.uuid,
                         filename=outcome.filename,
                         status="added",
+                        relative_path=str(outcome.obj.relative_path or "") or None,
                     )
                 )
             else:

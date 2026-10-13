@@ -31,6 +31,54 @@ window.__creopdmModules.creo_workspace = {
     const postAiSnapshotFromGather = shell.postAiSnapshotFromGather;
     const setOpenDownloadBusyMessage = shell.setOpenDownloadBusyMessage;
     const BULK_AGENT_CACHE_ZIP_THRESHOLD = shell.BULK_AGENT_CACHE_ZIP_THRESHOLD;
+    const agentWorkdir = shell.agentWorkdir;
+    const listAgentCacheFiles = shell.listAgentCacheFiles;
+    const joinLocalWorkspacePath = shell.joinLocalWorkspacePath;
+    const PathBasename = shell.PathBasename;
+    const logicalUploadName = shell.logicalUploadName;
+
+    async function attachCollectLocalPaths(productId, targets) {
+      // One agent workdir + cache list so Add/Collect skips per-file open+materialize.
+      if (!productId || !Array.isArray(targets) || !targets.length) return;
+      try {
+        const [workdir, cacheFiles] = await Promise.all([
+          agentWorkdir(productId, currentVaultFolder()).catch(() => ""),
+          listAgentCacheFiles(productId),
+        ]);
+        if (!workdir || !Array.isArray(cacheFiles) || !cacheFiles.length) return;
+        const byRel = new Map();
+        const byLogical = new Map();
+        cacheFiles.forEach((item) => {
+          const rel = String(item?.relative_path || item?.path || "")
+            .replace(/\\/g, "/")
+            .replace(/^\/+/, "");
+          if (!rel) return;
+          const full = joinLocalWorkspacePath(workdir, rel);
+          if (!full || !looksLikeLocalWindowsPath(full)) return;
+          byRel.set(rel.toLowerCase(), full);
+          const base = PathBasename(rel);
+          const logical = (logicalUploadName(base) || base).toLowerCase();
+          if (logical && !byLogical.has(logical)) byLogical.set(logical, full);
+        });
+        targets.forEach((target) => {
+          // Prefer agent-cache tip when present (Add may pass a source path).
+          const rel = String(target.relativePath || target.relative_path || "")
+            .replace(/\\/g, "/")
+            .replace(/^\/+/, "");
+          if (rel && byRel.has(rel.toLowerCase())) {
+            target.path = byRel.get(rel.toLowerCase());
+            return;
+          }
+          const logical = (logicalUploadName(target.filename) || target.filename || "").toLowerCase();
+          if (logical && byLogical.has(logical)) {
+            target.path = byLogical.get(logical);
+          }
+          // else keep existing path (e.g. from-disk source) for Toolkit
+        });
+      } catch {
+        /* prepare-per-file still works */
+      }
+    }
 
     async function prepareLocalPathForMetadata(objectId, filename) {
       if (!objectId) return null;
@@ -232,12 +280,25 @@ window.__creopdmModules.creo_workspace = {
             uuid: String(item?.uuid || item?.object_id || "").trim(),
             filename: String(item?.filename || "").trim(),
             path: String(item?.path || "").trim(),
+            relativePath: String(
+              item?.relativePath || item?.relative_path || ""
+            ).trim(),
             versionId: String(item?.version_id || item?.current_version?.uuid || "").trim(),
           }))
           .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename))
       );
       let saved = 0;
       if (!targets.length || !canGatherCreoMetadata()) return saved;
+      // Add / Check In / Collect: resolve local tip paths once (same as Collect all).
+      if (!sessionOnly) {
+        const productId = String(opts.productId || currentProductId() || "").trim();
+        if (productId) {
+          if (showProgress) {
+            publishBusyMessage("Checking local workspace tips…");
+          }
+          await attachCollectLocalPaths(productId, targets);
+        }
+      }
       for (let i = 0; i < targets.length; i += 1) {
         const target = targets[i];
         if (showProgress) {
@@ -615,6 +676,7 @@ window.__creopdmModules.creo_workspace = {
       return { agentOffline: false, ok, failed };
     }
 
+    mod.attachCollectLocalPaths = attachCollectLocalPaths;
     mod.prepareLocalPathForMetadata = prepareLocalPathForMetadata;
     mod.gatherCreoMetadataForFilename = gatherCreoMetadataForFilename;
     mod.pushCreoMetadataForItems = pushCreoMetadataForItems;

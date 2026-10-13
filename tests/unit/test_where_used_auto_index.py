@@ -207,6 +207,12 @@ def test_add_runs_where_used_under_busy_overlay_then_reloads_once():
     )[0]
     assert 'status === "added"' in targets_fn
     assert 'status === "checked_in"' in targets_fn
+    assert "relative_path" in targets_fn
+    ws_js = (root / "src" / "creopdm" / "static" / "js" / "creo_workspace.js").read_text(
+        encoding="utf-8"
+    )
+    assert "attachCollectLocalPaths(productId, targets)" in ws_js
+    assert "Checking local workspace tips…" in ws_js
     docs = (root / "docs" / "user-interactions.md").read_text(encoding="utf-8")
     assert "keep the busy overlay and run **Where Used** indexing there" in docs
     assert "never clear the overlay and return to Files before indexing finishes" in docs

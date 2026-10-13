@@ -28,13 +28,9 @@ window.__creopdmModules.metadata = {
     const isCreoMetadataCandidate = shell.isCreoMetadataCandidate;
     const looksLikeLocalWindowsPath = shell.looksLikeLocalWindowsPath;
     const prepareLocalPathForMetadata = shell.prepareLocalPathForMetadata;
+    const attachCollectLocalPaths = shell.attachCollectLocalPaths;
     const gatherCreoMetadataForFilename = shell.gatherCreoMetadataForFilename;
     const postAiSnapshotFromGather = shell.postAiSnapshotFromGather;
-    const agentWorkdir = shell.agentWorkdir;
-    const listAgentCacheFiles = shell.listAgentCacheFiles;
-    const joinLocalWorkspacePath = shell.joinLocalWorkspacePath;
-    const PathBasename = shell.PathBasename;
-    const logicalUploadName = shell.logicalUploadName;
     const reconcileProductLifecycleChrome = shell.reconcileProductLifecycleChrome;
     const metadataCollectJob = shell.metadataCollectJob;
     const saveMetadataCollectState = shell.saveMetadataCollectState;
@@ -536,46 +532,6 @@ window.__creopdmModules.metadata = {
         }
       } catch {
         return { ok: false, reason: "exception" };
-      }
-    }
-
-    async function attachCollectLocalPaths(productId, targets) {
-      // Warm workspace: resolve tip paths once so Collect skips per-file open-prepare.
-      if (!productId || !Array.isArray(targets) || !targets.length) return;
-      try {
-        const [workdir, cacheFiles] = await Promise.all([
-          agentWorkdir(productId, currentVaultFolder()).catch(() => ""),
-          listAgentCacheFiles(productId),
-        ]);
-        if (!workdir || !Array.isArray(cacheFiles) || !cacheFiles.length) return;
-        const byRel = new Map();
-        const byLogical = new Map();
-        cacheFiles.forEach((item) => {
-          const rel = String(item?.relative_path || item?.path || "")
-            .replace(/\\/g, "/")
-            .replace(/^\/+/, "");
-          if (!rel) return;
-          const full = joinLocalWorkspacePath(workdir, rel);
-          if (!full || !looksLikeLocalWindowsPath(full)) return;
-          byRel.set(rel.toLowerCase(), full);
-          const base = PathBasename(rel);
-          const logical = (logicalUploadName(base) || base).toLowerCase();
-          if (logical && !byLogical.has(logical)) byLogical.set(logical, full);
-        });
-        targets.forEach((target) => {
-          if (looksLikeLocalWindowsPath(target.path)) return;
-          const rel = String(target.relativePath || "").replace(/\\/g, "/").replace(/^\/+/, "");
-          if (rel && byRel.has(rel.toLowerCase())) {
-            target.path = byRel.get(rel.toLowerCase());
-            return;
-          }
-          const logical = (logicalUploadName(target.filename) || target.filename || "").toLowerCase();
-          if (logical && byLogical.has(logical)) {
-            target.path = byLogical.get(logical);
-          }
-        });
-      } catch {
-        /* prepare-per-file still works */
       }
     }
 

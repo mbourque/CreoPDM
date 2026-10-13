@@ -471,7 +471,7 @@ def test_metadata_gear_items_require_creo_session():
     assert "creo_metadata_captured" in collect_all
     assert "already have metadata" in collect_all
     assert "confirmCollectMetadata(targets.length, already.length)" in collect_all
-    push = _between(meta_js, "async function pushOneCreoMetadataTarget(", "async function attachCollectLocalPaths(")
+    push = _between(meta_js, "async function pushOneCreoMetadataTarget(", "async function flushPendingMetadataErase(")
     assert "No per-file JS timeout" in push
     assert "Promise.race" not in push
     assert "timedOut" not in loop
@@ -481,7 +481,9 @@ def test_metadata_gear_items_require_creo_session():
     assert "prepareLocalPathForMetadata(target.uuid, target.filename)" in push
     assert "featureNames: true" in loop
     assert "deferErase: true" in loop
-    assert "attachCollectLocalPaths" in loop or "function attachCollectLocalPaths" in meta_js
+    assert "attachCollectLocalPaths" in loop
+    assert "async function attachCollectLocalPaths(" in ws_js
+    assert "Checking local workspace tips…" in ws_js
     assert "flushPendingMetadataErase" in loop
     assert "shouldRefreshList = captured > 0" in loop
     assert 'await reloadPage({ keepBusy: true, busyMessage: "Refreshing…" })' in loop
@@ -511,8 +513,10 @@ def test_metadata_gear_items_require_creo_session():
     assert "ensureToolkitAgentHealthy(" in gather_meta
     assert "/toolkit/snapshot" in gather_meta
     assert "toolkit_agent_offline" in ensure_health or "toolkit_agent_offline" in gather_meta
-    assert "openModel" not in gather_meta
+    # Ban comment may say openModel; must not call it (Creo open-tabs limit).
     assert "Never CreoJS.openModel" in gather_meta
+    assert "openModel(" not in gather_meta
+    assert "CreoJS.openModel" not in gather_meta.replace("Never CreoJS.openModel", "")
     assert "gatherModelMetadata" not in gather_meta
     assert 'query.set("path", path)' in gather_meta
     gather_entry = _between(
@@ -542,6 +546,7 @@ def test_metadata_gear_items_require_creo_session():
     )
     assert "sortMetadataCollectTargets(" in push_items
     assert "prepareLocalPathForMetadata(target.uuid, target.filename)" in push_items
+    assert "attachCollectLocalPaths(productId, targets)" in push_items
     # Open: session-only gather; Add/Check In: path-first (no empty-session probe).
     assert "sessionOnly || sessionWaitRounds > 0" in push_items
     assert 'gatherCreoMetadataForFilename(target.filename, "", {' in push_items

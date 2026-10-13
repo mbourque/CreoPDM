@@ -522,6 +522,8 @@ class BatchItemResult(BaseModel):
     filename: str
     status: str | None = None
     path: str | None = None
+    # Vault tip relative path — Collect warms local agent-cache paths from this.
+    relative_path: str | None = None
     code: str | None = None
     message: str | None = None
 
