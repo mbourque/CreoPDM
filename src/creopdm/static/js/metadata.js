@@ -398,17 +398,21 @@ window.__creopdmModules.metadata = {
       window.setTimeout(tick, 800);
     }
 
-    function confirmCollectMetadata(total) {
+    function confirmCollectMetadata(total, alreadySkipped) {
       const dialog = $("#collect-metadata-dialog");
       const form = $("#collect-metadata-form");
       const lead = $("#collect-metadata-lead");
       const warn = $("#collect-metadata-warn");
+      const skipped = Math.max(0, Number(alreadySkipped) || 0);
       if (!(dialog instanceof HTMLDialogElement) || !form || !lead) {
         return Promise.resolve(window.confirm(`Collect Creo metadata for ${total} model(s)?`));
       }
       lead.textContent =
-        `Capture parameters, materials, units, features, and BOM/structure for ${total} Creo model(s) in this product. ` +
-        "Each model is collected via the Creo Toolkit (agent → Toolkit). Mass is stored for parts when Toolkit returns it.";
+        `Capture parameters, materials, units, features, and BOM/structure for ${total} Creo model(s) that still need metadata. ` +
+        "Each model is collected via the Creo Toolkit (agent → Toolkit). Mass is stored for parts when Toolkit returns it."
+        + (skipped
+          ? ` Skipping ${skipped} tip(s) that already have metadata for the current version.`
+          : "");
       if (warn) {
         if (total > METADATA_COLLECT_WARN_THRESHOLD) {
           warn.hidden = false;
@@ -756,8 +760,17 @@ window.__creopdmModules.metadata = {
         return;
       }
       const rows = await ensureProductObjects(productId, { force: true });
+      const candidates = (Array.isArray(rows) ? rows : []).filter(
+        (row) =>
+          String(row?.uuid || "").trim()
+          && String(row?.filename || "").trim()
+          && isCreoMetadataCandidate(row.filename)
+      );
+      // Skip tips that already have Collect identity/materials for this version.
+      const already = candidates.filter((row) => Boolean(row.creo_metadata_captured));
       const targets = sortMetadataCollectTargets(
-        (Array.isArray(rows) ? rows : [])
+        candidates
+          .filter((row) => !row.creo_metadata_captured)
           .map((row) => ({
             uuid: String(row.uuid || "").trim(),
             filename: String(row.filename || "").trim(),
@@ -765,13 +778,16 @@ window.__creopdmModules.metadata = {
             relativePath: String(row.relative_path || "").trim(),
             versionId: String(row.current_version?.uuid || row.version_id || "").trim(),
           }))
-          .filter((item) => item.uuid && item.filename && isCreoMetadataCandidate(item.filename))
       );
       if (!targets.length) {
-        showOk("No Creo parts, assemblies, or drawings to capture.");
+        showOk(
+          already.length
+            ? `All ${already.length} Creo model(s) already have metadata for the current tip — nothing to collect.`
+            : "No Creo parts, assemblies, or drawings to capture."
+        );
         return;
       }
-      const okToStart = await confirmCollectMetadata(targets.length);
+      const okToStart = await confirmCollectMetadata(targets.length, already.length);
       if (!okToStart) return;
 
       const state = {

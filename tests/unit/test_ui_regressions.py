@@ -465,6 +465,12 @@ def test_metadata_gear_items_require_creo_session():
     assert 'setBusy("Collecting Creo metadata…")' in loop
     assert "setBusyMessage(message)" in loop
     assert "clearBusy()" in loop
+    collect_all = _between(
+        meta_js, "async function runCollectAllMetadata(", "async function resumeMetadataCollectIfNeeded("
+    )
+    assert "creo_metadata_captured" in collect_all
+    assert "already have metadata" in collect_all
+    assert "confirmCollectMetadata(targets.length, already.length)" in collect_all
     push = _between(meta_js, "async function pushOneCreoMetadataTarget(", "async function attachCollectLocalPaths(")
     assert "No per-file JS timeout" in push
     assert "Promise.race" not in push
@@ -493,12 +499,18 @@ def test_metadata_gear_items_require_creo_session():
     assert "include_dependencies: true" not in prepare_meta
     assert 'logical.endsWith(".drw")' in script
     assert "not in this directory" in script
+    assert "async function ensureToolkitAgentHealthy(" in ws_js
+    ensure_health = _between(
+        ws_js, "async function ensureToolkitAgentHealthy(", "async function gatherViaToolkitAgent("
+    )
+    assert "/toolkit/health" in ensure_health
+    assert "_toolkitHealthOkUntil" in ensure_health
     gather_meta = _between(
         ws_js, "async function gatherViaToolkitAgent(", "async function gatherCreoMetadataForFilename("
     )
-    assert "/toolkit/health" in gather_meta
+    assert "ensureToolkitAgentHealthy(" in gather_meta
     assert "/toolkit/snapshot" in gather_meta
-    assert "toolkit_agent_offline" in gather_meta
+    assert "toolkit_agent_offline" in ensure_health or "toolkit_agent_offline" in gather_meta
     assert "openModel" not in gather_meta
     assert "Never CreoJS.openModel" in gather_meta
     assert "gatherModelMetadata" not in gather_meta
@@ -530,9 +542,11 @@ def test_metadata_gear_items_require_creo_session():
     )
     assert "sortMetadataCollectTargets(" in push_items
     assert "prepareLocalPathForMetadata(target.uuid, target.filename)" in push_items
+    # Open: session-only gather; Add/Check In: path-first (no empty-session probe).
+    assert "sessionOnly || sessionWaitRounds > 0" in push_items
     assert 'gatherCreoMetadataForFilename(target.filename, "", {' in push_items
+    assert "path-first" in push_items or "Empty-session probes" in push_items
     assert "featureNames," in push_items
-    assert "Session first" in push_items
     assert "sessionOnly" in push_items
     assert "showProgress" in push_items
     assert "metadataBusyText(" in push_items

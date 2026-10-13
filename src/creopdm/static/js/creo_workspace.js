@@ -109,14 +109,15 @@ window.__creopdmModules.creo_workspace = {
      * failures return __error so Collect/Open can show Toolkit did not work.
      * Creo.JS may still open/Retrieve the tip into session when filePath is set.
      */
-    async function gatherViaToolkitAgent(filename, filePath) {
-      const tip = String(filename || "").trim();
-      if (!tip) {
-        return { __error: "toolkit_bad_filename", __detail: "Missing filename." };
-      }
+    // Toolkit /health once per ~60s — Collect all was paying this every tip.
+    let _toolkitHealthOkUntil = 0;
+
+    async function ensureToolkitAgentHealthy() {
+      if (Date.now() < _toolkitHealthOkUntil) return { ok: true };
       const agentOnline = await probeCreoAgent();
       if (!agentOnline) {
         return {
+          ok: false,
           __error: "toolkit_agent_offline",
           __detail: "creopdm-agent is offline (need /toolkit proxy).",
         };
@@ -128,18 +129,48 @@ window.__creopdmModules.creo_workspace = {
           signal: abortSignalAfter(5000),
         });
         if (!healthResp.ok) {
+          _toolkitHealthOkUntil = 0;
           return {
+            ok: false,
             __error: "toolkit_health_failed",
             __detail: await readToolkitAgentError(healthResp, `HTTP ${healthResp.status}`),
           };
         }
         const healthBody = await healthResp.json();
         if (!healthBody || healthBody.ok === false) {
+          _toolkitHealthOkUntil = 0;
           return {
+            ok: false,
             __error: "toolkit_health_failed",
             __detail: "Toolkit /health via agent was not ok.",
           };
         }
+        _toolkitHealthOkUntil = Date.now() + 60000;
+        return { ok: true };
+      } catch (exc) {
+        _toolkitHealthOkUntil = 0;
+        return {
+          ok: false,
+          __error: "toolkit_exception",
+          __detail: String(exc?.message || exc || "toolkit health failed"),
+        };
+      }
+    }
+
+    async function gatherViaToolkitAgent(filename, filePath) {
+      const tip = String(filename || "").trim();
+      if (!tip) {
+        return { __error: "toolkit_bad_filename", __detail: "Missing filename." };
+      }
+      const health = await ensureToolkitAgentHealthy();
+      if (!health.ok) {
+        return {
+          __error: String(health.__error || "toolkit_health_failed"),
+          __detail: String(health.__detail || ""),
+        };
+      }
+      const base = agentBase();
+      try {
         // Never CreoJS.openModel here — that creates windows and hits Creo's
         // open-tabs limit (18) during Collect all. Toolkit must silent-Retrieve.
         const path = String(filePath || "").trim();
@@ -212,17 +243,20 @@ window.__creopdmModules.creo_workspace = {
         if (showProgress) {
           publishBusyMessage(metadataBusyText(i + 1, targets.length, target.filename));
         }
-        // Session first (Open / Check In often already have the model) — avoids
-        // re-Retrieve + erase of a model the user just opened.
         let snapshot = null;
-        for (let round = 0; round <= sessionWaitRounds; round += 1) {
-          snapshot = await gatherCreoMetadataForFilename(target.filename, "", {
-            featureNames,
-          });
-          if (snapshot && snapshot.__error) snapshot = null;
-          if (snapshot) break;
-          if (round < sessionWaitRounds) {
-            await new Promise((resolve) => window.setTimeout(resolve, sessionWaitMs));
+        // Open (sessionOnly / wait rounds): model is already in Creo — gather by
+        // tip name only. Add / Check In / batch: go straight to path= (one /collect).
+        // Empty-session probes logged retrieved=0 total=0ms and doubled every tip.
+        if (sessionOnly || sessionWaitRounds > 0) {
+          for (let round = 0; round <= sessionWaitRounds; round += 1) {
+            snapshot = await gatherCreoMetadataForFilename(target.filename, "", {
+              featureNames,
+            });
+            if (snapshot && snapshot.__error) snapshot = null;
+            if (snapshot) break;
+            if (round < sessionWaitRounds) {
+              await new Promise((resolve) => window.setTimeout(resolve, sessionWaitMs));
+            }
           }
         }
         // After File > Open trail, do not Retrieve from disk — that re-floods the

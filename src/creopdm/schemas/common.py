@@ -244,6 +244,8 @@ class ObjectResponse(BaseModel):
     can_checkout: bool = True
     can_checkin: bool = False
     in_workspace: bool = False
+    # Tip already has Collect identity/materials — Collect all can skip Toolkit.
+    creo_metadata_captured: bool = False
     created_at: datetime | None
     updated_at: datetime | None
     current_version: ObjectVersionResponse | None = None
